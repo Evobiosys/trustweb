@@ -88,6 +88,7 @@ import { createIdentity } from '../../src/did.ts'
 import { createRelayChannel } from '../../src/relay.ts'
 import { derivePairKey, fromB64u, open } from '../../src/crypto.ts'
 import { decide, interpret, maskAnswerPlaintext, sealAnswerEnvelope, truncateSharedJson } from '../../src/gate.ts'
+import { answerKeyFor, sealRelayAnswer } from '../../src/answer_key.ts'
 import { addInventoryItem, threadsInScope } from '../../src/state.ts'
 import { freeTextTemplate } from '../../src/data/free_text_query.ts'
 import { matchTemplate } from '../../src/match/lexical.ts'
@@ -616,6 +617,60 @@ async function main() {
     + '(proves the redaction happened in the PAYLOAD, before sealing -- not only in how a screen renders it; '
     + 'checked as raw UTF-8 bytes, not a latin1-decoded string, so multi-byte characters cannot hide a leak)',
     plain9Buf !== null && !plain9Buf.includes(addressBytes))
+
+  // ===== LEG 10: THE NO-PEER RELAY FINALISATION (follow-up 1 of the
+  // C-02/F-01 crypto review, section 7.1 of
+  // DEVLOG/wot-iv-review/iv-review_of-web-of-trust_report.txt).
+  //
+  // A relays a real answer back to a requester she holds NO peer record for
+  // (`s.peers.find((p) => p.id === q.from.id)` came back undefined --
+  // reachable because relay ingress matches on the wire's `fromDid` while
+  // this lookup matches on the envelope's own `q.from.id`, and the two are
+  // independent). `createRelayDispatch.resolvePayload` used to seal the real
+  // relayed payload under `derivePairKey(q.qid, q.qid)` -- a key computable
+  // by anyone who saw the cleartext qid.
+  //
+  // Sealed here through the SAME functions main.ts now calls (answer_key.ts,
+  // which exists so that this is not a proxy), and pushed over the LIVE
+  // relay so the bytes asserted on are bytes that really crossed it. The
+  // OUTER wrap uses keyAB only so B's drain will hand the inner envelope
+  // back for inspection; in the shipped app fire() would not send at all
+  // without `peer?.did`, which is the second reason the no-peer payload has
+  // no recipient. ==========================================================
+  const q10 = {
+    v: 1, t: 'query', from: bIdentity, templateId: ACCOMMODATION_TEMPLATE_ID, templateVersion: 1,
+    qid: `qid-2hop-leg10-${Math.random().toString(36).slice(2, 10)}`, issuedAt: Date.now(),
+  }
+  const NO_PEER_SECRET = 'Geheime Wohnung, nur fuer B.'
+  const ak10 = await answerKeyFor(null, q10.qid, async () => { throw new Error('unreachable: no peer') }, () => {})
+  ok('leg 10: with no peer record, answerKeyFor refuses -- blocked', ak10.blocked === true)
+  const env10 = await sealRelayAnswer(q10.qid, q10.templateId, {
+    from: '', templateId: q10.templateId, items: [{ text: NO_PEER_SECRET, when: 'Mitte August', context: 'Relay' }],
+  }, ak10)
+  await aChannel.send(bId.did, env10, keyAB)
+  await waitFor(() => bAnswers.some((e) => e.qid === q10.qid), DELIVERY_TIMEOUT_MS)
+  const wire10 = bAnswers.find((e) => e.qid === q10.qid)
+  ok('leg 10: the no-peer answer really crossed the live relay', Boolean(wire10))
+  // The attacker's whole capability: the qid, which rides in cleartext in
+  // this very envelope.
+  const eavesKey10 = await derivePairKey(q10.qid, q10.qid)
+  const combined10 = fromB64u(wire10.body)
+  ok('leg 10: an observer holding ONLY the cleartext qid cannot decrypt it (the defect, closed)',
+    (await open(eavesKey10, combined10.slice(0, 12), combined10.slice(12))) === null)
+  ok('leg 10: interpret() under the qid key reads "nothing", never the payload',
+    (await interpret(wire10, eavesKey10)).outcome === 'nothing')
+  ok('leg 10: B, holding the real pair key, also reads "nothing" -- a device that does not know you says nothing',
+    (await interpret(wire10, keyAB)).outcome === 'nothing')
+  ok('leg 10: the payload never appears in the RAW WIRE BYTES',
+    !Buffer.from(combined10).includes(Buffer.from(NO_PEER_SECRET, 'utf8')))
+  ok('leg 10: the envelope is the SAME WIRE SHAPE as leg 9\'s genuine shared answer (I3: no absent-answer tell)',
+    wire10.body.length === env9.body.length
+    && JSON.stringify(Object.keys(wire10).sort()) === JSON.stringify(Object.keys(env9).sort()))
+  // NOT added to `nothingBodies`: that proof decrypts every entry under
+  // keyAB and compares plaintexts, and this one is deliberately
+  // decryptable by NOBODY -- including B. Its I3 guarantee is therefore
+  // made at the wire-shape level, asserted directly above, which is the
+  // only level at which an observer can compare it to anything.
 
   // ===== THE PROOF: every "nothing" cause decrypts to the identical
   // all-zero plaintext, independently, under the real A<->B pair key -- the

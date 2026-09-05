@@ -170,6 +170,38 @@ export async function deriveEcdhPairKey(sharedSecret: Uint8Array): Promise<Crypt
   )
 }
 
+/**
+ * A fresh AES-GCM 256 key from the CSPRNG, bound to nothing and kept by
+ * nobody.
+ *
+ * SECURITY (2026-09-06, follow-up 1 of the C-02/F-01 crypto review): this
+ * exists so that a code path with NO pair key never falls back to deriving
+ * one from data that travels in cleartext. `main.ts` used to answer a query
+ * from an unknown sender under `derivePairKey(q.qid, q.qid)`; `qid` rides
+ * unencrypted in both the QueryEnvelope and the AnswerEnvelope, so that key
+ * was recomputable by anyone who saw either -- HKDF over public input is not
+ * a secret. It was also recomputable ONLY by an eavesdropper: the asker
+ * derives `pairKey(their own record of us)` and never the qid key, so
+ * nothing sealed that way was ever readable by the one party entitled to
+ * read it. The construction gave everything away and bought nothing.
+ *
+ * The replacement is deliberately a key nobody can reproduce, including us:
+ * `generateKey` with `extractable: false`, never stored, never exported,
+ * dropped the moment the seal returns. The resulting envelope is
+ * undecryptable by everyone -- which is exactly right, because it only ever
+ * carries the all-zero "nothing" plaintext (see `main.ts`'s `answerKeyFor`
+ * and `gate.ts`'s `maskAnswerPlaintext`). Emitting a same-shape,
+ * same-length, unreadable envelope keeps I3 intact; emitting nothing at all
+ * would itself announce "this device does not know you".
+ */
+export async function randomThrowawayKey(): Promise<CryptoKey> {
+  return globalThis.crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
+}
+
 /** AES-GCM encrypt. `iv` must be 12 bytes (the WebCrypto/NIST recommendation). */
 export async function seal(
   key: CryptoKey,
