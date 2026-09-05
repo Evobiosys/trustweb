@@ -153,6 +153,12 @@ let pendingConnectLink: ConnectLinkParams | null =
  * "Anfrage bestätigen" tap per person, never a bulk accept. Keyed by `did`
  * (unique per requester's relay identity); a second ack from a did already
  * pending replaces that one entry rather than adding a duplicate card.
+ *
+ * Persisted to `state.pendingAcceptRequests` (state.ts) at every mutation
+ * site below and hydrated from it in `boot()`, so a reload no longer loses a
+ * request that already arrived -- previously plain in-memory state, root-
+ * caused alongside the visibility bug this list shares (see
+ * `pendingRequestBubble()`'s doc comment further down).
  */
 let pendingAcceptRequests: { did: string; from: Identity }[] = []
 
@@ -429,6 +435,12 @@ function handleRawWire(fromDid: string, payload: string): boolean {
     const idx = pendingAcceptRequests.findIndex((r) => r.did === env.did)
     if (idx >= 0) pendingAcceptRequests[idx] = req
     else pendingAcceptRequests.push(req)
+    // Persist alongside the in-memory list so a reload before Jakob taps
+    // "Anfrage bestätigen" does not lose the request -- see that list's own
+    // doc comment. Fire-and-forget: nothing here blocks on the write, same
+    // as every other saveState() call reachable from an inbound wire.
+    s.pendingAcceptRequests = pendingAcceptRequests
+    void saveState(s)
     // Full re-render only where the card itself lives (unchanged: still
     // avoids wiping an in-progress chat draft elsewhere -- see
     // pendingRequestBubble()'s doc comment). The bubble refresh below is
@@ -483,6 +495,7 @@ async function acceptPendingRequest(did: string): Promise<void> {
   if (!s || idx < 0) return
   const req = pendingAcceptRequests[idx]
   pendingAcceptRequests.splice(idx, 1)
+  s.pendingAcceptRequests = pendingAcceptRequests
   upsertPeer(s, {
     id: req.from.id,
     displayName: req.from.displayName,
@@ -517,6 +530,10 @@ let justAccepted: string | null = null
 
 function declinePendingRequest(did: string): void {
   pendingAcceptRequests = pendingAcceptRequests.filter((r) => r.did !== did)
+  if (state) {
+    state.pendingAcceptRequests = pendingAcceptRequests
+    void saveState(state)
+  }
   render()
 }
 
@@ -813,9 +830,12 @@ function netBubble(): HTMLElement | null {
  * received and queued (and, after the ack fix above, correctly acked
  * because it WAS genuinely handled) -- it simply never became visible,
  * because nothing ever re-rendered `screenHome()`/`screenConnect()` to show
- * it, and `pendingAcceptRequests` is plain in-memory state (never persisted
+ * it, and `pendingAcceptRequests` was plain in-memory state (never persisted
  * via `saveState`), so even a reload could not recover it: reproduced live,
- * deterministically (5/5), against the deployed build.
+ * deterministically (5/5), against the deployed build. The persistence half
+ * is now fixed too (state.ts's `pendingAcceptRequests` field, synced at
+ * every mutation site and hydrated in `boot()`) -- this doc comment is kept
+ * for the visibility fix's own history, not as an open TODO.
  *
  * The fix: a second bubble, exactly like `netBubble()` above but for
  * `pendingAcceptRequests` instead of `state.peers`, mounted the same way
@@ -4360,6 +4380,11 @@ async function boot(): Promise<void> {
   registerWorker()
   initI18n()
   state = await loadState()
+  // Restore any request that arrived and was acked before a reload wiped the
+  // module-level list below -- see that list's own doc comment. `render()`
+  // a few lines down (and `pendingRequestBubble()`) then picks this up like
+  // any other boot-time state, no special-casing needed at the call site.
+  pendingAcceptRequests = state?.pendingAcceptRequests ?? []
   // Demo 20: "no persona picker" on the laptop (handover) means the laptop
   // never shows screenStart() at all. The one case that reaches boot() with
   // no state AND no pending connect link IS the laptop opening this build
