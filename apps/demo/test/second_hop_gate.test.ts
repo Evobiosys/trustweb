@@ -20,18 +20,36 @@ import { ANSWER_BODY_LEN } from '../src/types'
  *   (d) A forwards it, and Jakob has nothing (his own no-match/below-k).
  *   (e) A forwards it, and Jakob never answers within the shared deadline
  *       (unreachable, offline, or simply too slow).
- * All five must produce a BYTE-IDENTICAL ciphertext, for the same qid and
- * the same A<->B pair key -- proven directly below, not inferred from
- * screen text.
+ * All five must produce a BYTE-IDENTICAL PLAINTEXT and an equal-length
+ * body, for the same qid and the same A<->B pair key -- proven directly
+ * below, not inferred from screen text.
+ *
+ * UPDATED 2026-09-05 (C-02/F-01): the claim used to be byte-identical
+ * CIPHERTEXT, which held only because `sealAnswerEnvelope` derived its
+ * AES-GCM IV from `qid`. That deterministic IV was an AES-GCM nonce-reuse
+ * hole (see gate.ts's SECURITY note) and is gone. The property that
+ * actually carries I3 is unchanged and still proven here two ways:
+ *   - with the IV pinned (`FIXED_IV`), the construction is byte-identical,
+ *     which is the real claim about `maskAnswerPlaintext`/`truncateSharedJson`;
+ *   - with the production random IV, the bodies are equal-LENGTH and decrypt
+ *     to the identical all-zero plaintext.
+ * A third test below pins the new requirement: two seals of the same
+ * (key, qid) must NOT collide on an IV.
  */
 
 const QID = 'qid-secondhop-proof-0001'
 const TEMPLATE_ID = 'wot.freetext.ask'
+/** Pinned IV, so a test can still assert on the CONSTRUCTION's bytes. */
+const FIXED_IV = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
-async function finalPlaintextAndEnvelope(payload: SharedPayload | null, key: CryptoKey) {
+async function finalPlaintextAndEnvelope(
+  payload: SharedPayload | null,
+  key: CryptoKey,
+  iv?: Uint8Array,
+) {
   const jsonBytes = truncateSharedJson(payload ?? { from: '', templateId: TEMPLATE_ID, items: [] })
   const plaintext = maskAnswerPlaintext(Boolean(payload), jsonBytes)
-  const envelope = await sealAnswerEnvelope(QID, plaintext, key)
+  const envelope = await sealAnswerEnvelope(QID, plaintext, key, iv)
   return { plaintext, envelope }
 }
 
@@ -68,8 +86,16 @@ describe('demo 21: A -> B final answer is byte-identical across every "nothing" 
       // which of the five distinct LOCAL reasons produced payload === null.
       expect(Array.from(one.plaintext)).toEqual(new Array(ANSWER_BODY_LEN).fill(0))
     }
+    // Equal LENGTH on the wire, always -- the property an observer sees.
     const bodies = all.map((one) => one.envelope.body)
-    for (const body of bodies) expect(body).toBe(bodies[0])
+    for (const body of bodies) expect(body.length).toBe(bodies[0].length)
+
+    // And byte-identical once the IV is pinned: that isolates the
+    // CONSTRUCTION (mask + truncate + frame) from the per-call nonce.
+    const pinned = await Promise.all(
+      all.map(() => finalPlaintextAndEnvelope(null, key, FIXED_IV)),
+    )
+    for (const one of pinned) expect(one.envelope.body).toBe(pinned[0].envelope.body)
 
     // Decrypt each independently and confirm the PLAINTEXTS are identical
     // too, not merely the ciphertext lengths -- same discipline
@@ -115,7 +141,17 @@ describe('demo 21: A -> B final answer is byte-identical across every "nothing" 
     expect(outcome).toBe('declined') // A's own local audit label, per renderSecondHopRelayCard's doc comment
 
     const nothing = await finalPlaintextAndEnvelope(null, key)
-    expect(envelope.body).toBe(nothing.envelope.body)
+    expect(envelope.body.length).toBe(nothing.envelope.body.length)
+
+    // Same construction, proven at the byte level with the nonce held fixed
+    // on both sides (see this file's header on why ciphertext equality
+    // across two SEPARATE seals is no longer -- and must not be -- a claim).
+    const pinnedDecline = await decide(
+      { query, template, match: noteMatch, consent: false, blocked: false, key },
+      FIXED_IV,
+    )
+    const pinnedNothing = await finalPlaintextAndEnvelope(null, key, FIXED_IV)
+    expect(pinnedDecline.envelope.body).toBe(pinnedNothing.envelope.body)
   })
 
   it('a genuine relay SUCCESS produces a DIFFERENT ciphertext from every nothing cause', async () => {
@@ -128,6 +164,11 @@ describe('demo 21: A -> B final answer is byte-identical across every "nothing" 
     }
     const success = await finalPlaintextAndEnvelope(shared, key)
     expect(success.envelope.body).not.toBe(nothing.envelope.body)
+    // Pinned too, so this is a claim about the PAYLOAD and not merely about
+    // two random nonces differing.
+    const successPinned = await finalPlaintextAndEnvelope(shared, key, FIXED_IV)
+    const nothingPinned = await finalPlaintextAndEnvelope(null, key, FIXED_IV)
+    expect(successPinned.envelope.body).not.toBe(nothingPinned.envelope.body)
     expect(success.plaintext[0]).toBe(1) // tag byte: shared
     expect(nothing.plaintext[0]).toBe(0) // tag byte: nothing
   })

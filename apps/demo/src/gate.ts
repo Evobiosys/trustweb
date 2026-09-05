@@ -39,7 +39,7 @@
  *     divergence.
  */
 
-import { ivFromQid, open, seal, toB64u, fromB64u } from './crypto'
+import { open, randomBytes, seal, toB64u, fromB64u } from './crypto'
 import type {
   AnswerEnvelope,
   DecodedAnswer,
@@ -310,20 +310,58 @@ export function truncateSharedJson(payload: SharedPayload): Uint8Array {
   return best
 }
 
+/** WebCrypto/NIST-recommended AES-GCM IV length, prepended to every body. */
+const IV_LEN = 12
+
 /**
  * Seal an already-built plaintext (ANSWER_BODY_LEN bytes, from
  * `maskAnswerPlaintext`) into the same AnswerEnvelope shape `decide()`
- * produces -- same deterministic-IV-from-qid scheme, same base64url framing.
+ * produces -- fresh random IV, same base64url `iv || ciphertext` framing.
  * Factored out so `decide()` and demo 21's relay finalisation share one
  * sealing path rather than two copies of the AEAD framing.
+ *
+ * SECURITY (2026-09-05, C-02/F-01): the IV is RANDOM per call, never
+ * derived from `qid`. The former `ivFromQid(qid)` scheme made the IV a pure
+ * function of the query id while the key (`pairKey(peer)`) is a pure
+ * function of the pair, so any two seals for one (pair key, qid) collided
+ * on the AES-GCM nonce. That is reachable: nothing dedupes `qid` on the
+ * answering side, `relay.ts` deliberately leaves an unacked wire to be
+ * REDELIVERED, and `main.ts`'s consent ceremony has no once-only guard --
+ * so the same query can be answered twice, and the second answer's
+ * plaintext need not equal the first's (the corpus, the note, the block
+ * flag or the human's own yes/no can all have changed in between).
+ * `maskAnswerPlaintext(false, ...)` is an ALL-ZERO plaintext by
+ * construction, so a "nothing" and a "shared" answer colliding on one nonce
+ * gives C_nothing XOR C_shared = the shared payload EXACTLY -- total
+ * plaintext recovery of the one thing this module exists to hide, plus
+ * GHASH authentication-key recovery from the two tags.
+ *
+ * The old scheme bought nothing for the cost: the IV was ALREADY prepended
+ * to the body and `interpret()` below has ALWAYS read it back off the wire
+ * (`combined.slice(0, IV_LEN)`) rather than recomputing it. Randomising the
+ * IV is therefore wire-format-compatible in both directions -- an envelope
+ * sealed under the old deterministic IV still decrypts unchanged, which
+ * `gate_iv.test.ts` pins -- and costs zero extra bytes.
+ *
+ * Indistinguishability (I3) is unaffected and slightly improved: it rests
+ * on every "nothing" cause producing the same fixed-length ALL-ZERO
+ * plaintext, not on the ciphertext bytes matching. Identical ciphertext was
+ * in fact its own small leak -- an observer could tell "the same answer
+ * twice" apart from "two different answers". Random IVs remove that too.
  */
 export async function sealAnswerEnvelope(
   qid: string,
   plaintext: Uint8Array,
   key: CryptoKey,
+  /**
+   * Pin the AES-GCM IV instead of drawing a fresh random one. For tests
+   * and backward-compatibility proofs only -- production code must never
+   * pass this, because a caller-chosen IV reopens exactly the nonce-reuse
+   * hole described above.
+   */
   ivOverride?: Uint8Array,
 ): Promise<AnswerEnvelope> {
-  const iv = ivOverride ?? (await ivFromQid(qid))
+  const iv = ivOverride ?? randomBytes(IV_LEN)
   const ciphertext = await seal(key, iv, plaintext)
   const combined = new Uint8Array(iv.length + ciphertext.length)
   combined.set(iv, 0)
@@ -338,10 +376,10 @@ export async function sealAnswerEnvelope(
 export async function decide(
   input: GateInput,
   /**
-   * Test-only: force the AES-GCM IV instead of deriving it from `qid`. Used
-   * by gate_identity.test.ts to make envelope comparisons deterministic
-   * across separate `decide()` calls without relying on Date.now()/qid
-   * plumbing. Never pass this from production code.
+   * Test-only: pin the AES-GCM IV instead of drawing a fresh random one.
+   * Used by gate_identity.test.ts to make envelope comparisons
+   * byte-deterministic across separate `decide()` calls. Never pass this
+   * from production code -- see `sealAnswerEnvelope`'s SECURITY note.
    */
   ivOverride?: Uint8Array,
 ): Promise<{ outcome: LocalOutcome; envelope: AnswerEnvelope }> {
@@ -366,8 +404,6 @@ export async function decide(
 
   return { outcome, envelope }
 }
-
-const IV_LEN = 12
 
 export async function interpret(env: AnswerEnvelope, key: CryptoKey): Promise<DecodedAnswer> {
   try {

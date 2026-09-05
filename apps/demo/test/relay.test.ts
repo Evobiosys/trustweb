@@ -340,9 +340,17 @@ describe("handleWire's ack decision (via a scripted mock drain socket)", () => {
     // handleWire is `void`-dispatched from the message handler
     // (`void handleWire(...).then(...)`), and its chain includes a REAL
     // `crypto.subtle.decrypt` call (decryptEnvelope), which does not
-    // necessarily settle within pure microtask turns -- a macrotask tick is
+    // necessarily settle within pure microtask turns -- macrotask ticks are
     // the reliable way to let it fully resolve before asserting.
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    //
+    // Several short ticks rather than one 10ms one: a single fixed sleep was
+    // enough on an idle machine but flaked under a fully loaded parallel
+    // suite (WebCrypto is dispatched off-thread, so the wall-clock budget it
+    // needs is not constant). Same total order of magnitude, ~5x the
+    // headroom, and it still returns as soon as the chain has settled.
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
   }
 
   function acksFor(socket: MockDrainSocket, id: string): boolean {

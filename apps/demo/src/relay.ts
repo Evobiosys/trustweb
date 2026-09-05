@@ -78,8 +78,9 @@ const AES_GCM_IV_LEN = 12
  * AES-GCM-encrypts `envelope` under `pairKey` and returns
  * base64url(iv || ciphertext) -- the IV is fresh per call and PREPENDED to
  * the ciphertext (one field on the wire, per the handover brief), never
- * reused, so nothing here depends on a deterministic IV the way gate.ts's
- * `ivFromQid` scheme deliberately does.
+ * reused. Since 2026-09-05 (C-02/F-01) gate.ts's inner answer seal follows
+ * the same rule: its `ivFromQid` scheme is gone, so no layer in this app
+ * derives an AES-GCM nonce from anything but the CSPRNG.
  */
 export async function encryptEnvelope(envelope: Envelope, pairKey: CryptoKey): Promise<string> {
   const iv = randomBytes(AES_GCM_IV_LEN)

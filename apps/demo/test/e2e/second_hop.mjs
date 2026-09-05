@@ -419,14 +419,24 @@ async function main() {
   nothingBodies.leg6_genuine_no_match = env6.body
 
   // ===== Leg 7: SAME QID, two different nothing-causes, both over the live
-  // relay -- the strict ciphertext-byte-identity claim (legs 2-6 above each
-  // used their own fresh qid, which is realistic but means AES-GCM's
-  // deterministic-IV-from-qid scheme makes their CIPHERTEXT differ even
-  // though the PLAINTEXT underneath is identical -- see below). This leg
-  // pins the qid so the strict claim is proven against REAL bytes that
-  // actually crossed the live relay twice, not only in the pure-function
-  // unit test (test/second_hop_gate.test.ts), which proves the same claim
-  // without a network round trip at all. =====================================
+  // relay. This leg IS the C-02/F-01 reproduction: it answers ONE qid twice
+  // under ONE A<->B pair key, over the real relay -- exactly the sequence a
+  // redelivered (un-acked) wire produces in production, since nothing
+  // dedupes qid on the answering side.
+  //
+  // UPDATED 2026-09-05: it used to assert the two ciphertexts were
+  // BYTE-IDENTICAL, which was true only because the AES-GCM IV was
+  // SHA-256(qid) while the key is a function of the pair alone -- i.e. the
+  // assertion was pinning a nonce-reuse bug in place. Had these two answers
+  // differed in content (a note added between deliveries, a human tapping
+  // yes the second time), the shared nonce would have leaked the shared
+  // payload outright: "nothing" is an all-zero plaintext, so
+  // C_nothing XOR C_shared = P_shared exactly. The IV is random per seal
+  // now, so the claim this leg proves is inverted: the NONCES must DIFFER,
+  // while the wire shape and the decrypted plaintext stay identical (the
+  // latter is checked with every other nothing-cause at the bottom of this
+  // file, since both bodies are added to `nothingBodies`).
+  // =========================================================================
   const SHARED_QID = `qid-2hop-leg7-shared-${Math.random().toString(36).slice(2, 10)}`
   const q7a = { ...q1, qid: SHARED_QID } // A declines to relay
   await bChannel.send(aId.did, q7a, keyAB)
@@ -434,8 +444,15 @@ async function main() {
   const q7b = { ...q1, qid: SHARED_QID } // Jakob declines
   await bChannel.send(aId.did, q7b, keyAB)
   const env7b = await aHandlesQuery(q7b, { jakobConsents: false })
-  ok('leg 7 (same qid, live relay both ways): "A declines" and "Jakob declines" are BYTE-IDENTICAL ciphertext',
-    env7a.body === env7b.body, `${env7a.body.slice(0, 32)}... vs ${env7b.body.slice(0, 32)}...`)
+  const iv7a = fromB64u(env7a.body).slice(0, 12)
+  const iv7b = fromB64u(env7b.body).slice(0, 12)
+  ok('leg 7 (same qid, live relay both ways): the two answers do NOT share an AES-GCM nonce [C-02]',
+    !Buffer.from(iv7a).equals(Buffer.from(iv7b)),
+    `${Buffer.from(iv7a).toString('hex')} vs ${Buffer.from(iv7b).toString('hex')}`)
+  ok('leg 7 (same qid, live relay both ways): "A declines" and "Jakob declines" are identical in wire shape',
+    env7a.body.length === env7b.body.length, `${env7a.body.length} vs ${env7b.body.length}`)
+  nothingBodies.leg7a_a_declines_shared_qid = env7a.body
+  nothingBodies.leg7b_jakob_declines_shared_qid = env7b.body
 
   // ===== Leg 8: TIMING WIRING (fixed-at-receipt dispatch, real relay) ======
   // Reproduces main.ts's createRelayDispatch pattern directly, BOTH modes
@@ -603,8 +620,11 @@ async function main() {
   // ===== THE PROOF: every "nothing" cause decrypts to the identical
   // all-zero plaintext, independently, under the real A<->B pair key -- the
   // property that actually matters to B, proven across genuinely different
-  // qids (realistic) AND, for leg 7 above, across identical ciphertext
-  // bytes at a fixed qid (strict). =========================================
+  // qids (realistic) AND, for leg 7 above, across two answers that share one
+  // qid and one pair key -- the case a redelivered wire produces. Note that
+  // "identical PLAINTEXT under distinct nonces" is the honest form of this
+  // claim; identical CIPHERTEXT is not required for I3 and, before C-02,
+  // was only achievable by reusing an AES-GCM nonce. =======================
   const nothingEntries = Object.entries(nothingBodies)
   const plaintexts = []
   for (const [label, body] of nothingEntries) {

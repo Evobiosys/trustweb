@@ -210,18 +210,3 @@ export async function open(
     return null
   }
 }
-
-/**
- * Deterministic 12-byte AES-GCM IV derived from a query id. Both the
- * answering side (gate.decide) and the asking side (gate.interpret) compute
- * this independently from the same `qid`, so no extra field is needed on the
- * wire to carry the IV. SHA-256 (not a raw slice of qid) so this works
- * regardless of qid's own length/encoding.
- */
-export async function ivFromQid(qid: string): Promise<Uint8Array> {
-  const digest = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(qid),
-  )
-  return new Uint8Array(digest).slice(0, 12)
-}
