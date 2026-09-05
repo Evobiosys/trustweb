@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WoT Central Instance Status</title>
+  <style>
+    :root {
+      --bg: #f9f9f9;
+      --fg: #333;
+      --border: #ddd;
+      --notice-bg: #fff8e1;
+      --notice-border: #ffe082;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a1a;
+        --fg: #e0e0e0;
+        --border: #444;
+        --notice-bg: #332200;
+        --notice-border: #664400;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+    }
+
+    .notice {
+      background-color: var(--notice-bg);
+      border-left: 4px solid var(--notice-border);
+      padding: 1rem;
+      margin-bottom: 2rem;
+      border-radius: 2px;
+    }
+
+    .notice p {
+      margin: 0.5rem 0;
+    }
+
+    .notice strong {
+      font-weight: 600;
+    }
+
+    .section {
+      margin-bottom: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg);
+      opacity: 0.8;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      font-weight: 500;
+    }
+
+    .info-value {
+      text-align: right;
+    }
+
+    .loading {
+      color: var(--fg);
+      opacity: 0.7;
+      font-style: italic;
+    }
+
+    .error {
+      color: #d32f2f;
+      padding: 1rem;
+      background-color: rgba(211, 47, 47, 0.1);
+      border-left: 4px solid #d32f2f;
+      border-radius: 2px;
+      margin-bottom: 1rem;
+    }
+
+    code {
+      background-color: rgba(0, 0, 0, 0.1);
+      padding: 0.25rem 0.5rem;
+      border-radius: 2px;
+      font-family: "Courier New", monospace;
+      font-size: 0.9em;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      code {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+    }
+
+    p {
+      margin: 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WoT Central Instance</h1>
+
+    <div class="notice">
+      <p><strong>Beta. Use at your own risk.</strong> This instance is in beta. Data may be lost, modified, or the service may change or become unavailable without notice.</p>
+    </div>
+
+    <div id="content" class="loading">
+      <p>Loading instance information...</p>
+    </div>
+  </div>
+
+  <script>
+    async function loadStatus() {
+      const contentDiv = document.getElementById('content');
+      try {
+        const response = await fetch('/jurisdiction');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const config = await response.json();
+
+        const retentionText = config.retentionDays === 1
+          ? '1 day'
+          : `${config.retentionDays} days`;
+
+        contentDiv.innerHTML = `
+          <div class="section">
+            <h2>Instance Details</h2>
+            <div class="info-row">
+              <span class="info-label">Instance ID</span>
+              <span class="info-value"><code>${escapeHtml(config.instanceId)}</code></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Display Name</span>
+              <span class="info-value">${escapeHtml(config.displayName)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Data Residency</span>
+              <span class="info-value"><strong>${escapeHtml(config.residency)}</strong></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Operator Contact</span>
+              <span class="info-value"><a href="mailto:${escapeHtml(config.operatorContact)}">${escapeHtml(config.operatorContact)}</a></span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Retention Period</span>
+              <span class="info-value">${retentionText}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Legal Basis</span>
+              <span class="info-value">${escapeHtml(config.lawfulBasis)}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Data Residency Statement</h2>
+            <p>All data stored on this instance is kept in the <strong>${escapeHtml(config.residency)}</strong> jurisdiction.</p>
+          </div>
+
+          <div class="section">
+            <h2>Your Data</h2>
+            <p>To see everything you have published to this instance and when you published it, query the backtrace endpoint:</p>
+            <p><code>GET /declarations?authorCommitment=&lt;your-commitment-hash&gt;</code></p>
+            <p>To withdraw all of your publications and clear this instance completely:</p>
+            <p><code>POST /clear</code></p>
+          </div>
+        `;
+      } catch (err) {
+        contentDiv.innerHTML = `
+          <div class="error">
+            <p><strong>Unable to load instance information.</strong></p>
+            <p>${escapeHtml(err instanceof Error ? err.message : 'Unknown error')}</p>
+          </div>
+          <div class="section">
+            <p>The instance may be unavailable or misconfigured. Please try again in a moment, or contact the operator at <code>connect@japossert.com</code>.</p>
+          </div>
+        `;
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadStatus();
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+version: '3.9'
+
+services:
+  wot-central:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      - "127.0.0.1:4187:4187"
+    environment:
+      WOT_CENTRAL_JURISDICTION: at
+      WOT_CENTRAL_PORT: "4187"
+      WOT_CENTRAL_DATA: /data
+    volumes:
+      - wot-central-data:/data
+    restart: unless-stopped
+
+volumes:
+  wot-central-data:
+    driver: local
