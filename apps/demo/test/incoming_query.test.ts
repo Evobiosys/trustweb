@@ -53,4 +53,24 @@ describe('classifyIncomingQuery', () => {
     const r = classifyIncomingQuery(NO_MATCH, true, false)
     expect(r.surface).toBe(false)
   })
+
+  // cooldown.ts, 2026-09-06: muted and cooldown-blocked never surface,
+  // regardless of how strong the match is -- same precedent `blocked`
+  // already sets above.
+  it('does not surface a muted peer even with a real match above the floor', () => {
+    expect(classifyIncomingQuery(ABOVE_K, false, true, true, false)).toEqual({ surface: false, outcome: 'muted' })
+  })
+
+  it('does not surface an ask that violates the cooldown view, even with a real match above the floor', () => {
+    expect(classifyIncomingQuery(ABOVE_K, false, true, false, true)).toEqual({ surface: false, outcome: 'cooldown' })
+  })
+
+  it('blocked outranks muted outranks cooldown when more than one applies at once', () => {
+    expect(classifyIncomingQuery(ABOVE_K, true, true, true, true)).toEqual({ surface: false, outcome: 'blocked' })
+    expect(classifyIncomingQuery(ABOVE_K, false, true, true, true)).toEqual({ surface: false, outcome: 'muted' })
+  })
+
+  it('muted/cooldownBlocked default to false, so every pre-existing call site is unaffected', () => {
+    expect(classifyIncomingQuery(ABOVE_K, false, true)).toEqual({ surface: true, outcome: null })
+  })
 })

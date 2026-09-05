@@ -90,35 +90,41 @@ function baseInput(overrides: Partial<GateInput> = {}): GateInput {
 }
 
 describe('gate byte-identity: the central privacy contract', () => {
-  it('no-match, below-k, declined, blocked are byte-for-byte identical', async () => {
+  it('no-match, below-k, declined, blocked, cooldown, muted are byte-for-byte identical', async () => {
     const noMatchIn = baseInput({ match: makeMatch(0, false), consent: true, blocked: false })
     const belowKIn = baseInput({ match: makeMatch(1, false), consent: true, blocked: false })
     const declinedIn = baseInput({ match: makeMatch(3, true), consent: false, blocked: false })
     const blockedIn = baseInput({ match: makeMatch(5, true), consent: true, blocked: true })
+    // cooldown.ts, 2026-09-06: the two NEW "nothing" reasons must collapse
+    // into the exact same wire envelope as the original four -- this is the
+    // whole point of gating them through `decide()` rather than dropping
+    // the ask at a layer that never builds a wire message at all.
+    const cooldownIn = baseInput({ match: makeMatch(4, true), consent: true, blocked: false, cooldownBlocked: true })
+    const mutedIn = baseInput({ match: makeMatch(6, true), consent: true, blocked: false, muted: true })
 
     const rNoMatch = await decide(noMatchIn, FIXED_IV)
     const rBelowK = await decide(belowKIn, FIXED_IV)
     const rDeclined = await decide(declinedIn, FIXED_IV)
     const rBlocked = await decide(blockedIn, FIXED_IV)
+    const rCooldown = await decide(cooldownIn, FIXED_IV)
+    const rMuted = await decide(mutedIn, FIXED_IV)
 
     expect(rNoMatch.outcome).toBe('no-match')
     expect(rBelowK.outcome).toBe('below-k')
     expect(rDeclined.outcome).toBe('declined')
     expect(rBlocked.outcome).toBe('blocked')
+    expect(rCooldown.outcome).toBe('cooldown')
+    expect(rMuted.outcome).toBe('muted')
 
-    const envelopes = [rNoMatch.envelope, rBelowK.envelope, rDeclined.envelope, rBlocked.envelope]
+    const envelopes = [rNoMatch.envelope, rBelowK.envelope, rDeclined.envelope, rBlocked.envelope, rCooldown.envelope, rMuted.envelope]
 
     // Full JSON string equality.
     const jsonStrings = envelopes.map((e) => JSON.stringify(e))
-    expect(jsonStrings[0]).toBe(jsonStrings[1])
-    expect(jsonStrings[0]).toBe(jsonStrings[2])
-    expect(jsonStrings[0]).toBe(jsonStrings[3])
+    for (const s of jsonStrings.slice(1)) expect(s).toBe(jsonStrings[0])
 
     // Decoded body bytes equality (belt and braces beyond the string compare).
     const bodyBytes = envelopes.map((e) => Array.from(atobLike(e.body)))
-    expect(bodyBytes[0]).toEqual(bodyBytes[1])
-    expect(bodyBytes[0]).toEqual(bodyBytes[2])
-    expect(bodyBytes[0]).toEqual(bodyBytes[3])
+    for (const b of bodyBytes.slice(1)) expect(b).toEqual(bodyBytes[0])
   })
 
   it('the shared envelope has the same length as the nothing envelope', async () => {
@@ -133,12 +139,14 @@ describe('gate byte-identity: the central privacy contract', () => {
     expect(JSON.stringify(rShared.envelope).length).toBe(JSON.stringify(rNothing.envelope).length)
   })
 
-  it('interpret() on all four nothing envelopes returns exactly {outcome:"nothing"}', async () => {
+  it('interpret() on all six nothing envelopes returns exactly {outcome:"nothing"}', async () => {
     const inputs: GateInput[] = [
       baseInput({ match: makeMatch(0, false), consent: true, blocked: false }),
       baseInput({ match: makeMatch(1, false), consent: true, blocked: false }),
       baseInput({ match: makeMatch(3, true), consent: false, blocked: false }),
       baseInput({ match: makeMatch(5, true), consent: true, blocked: true }),
+      baseInput({ match: makeMatch(4, true), consent: true, blocked: false, cooldownBlocked: true }),
+      baseInput({ match: makeMatch(6, true), consent: true, blocked: false, muted: true }),
     ]
 
     for (const input of inputs) {
@@ -183,15 +191,22 @@ describe('gate byte-identity: the central privacy contract', () => {
       const aboveThreshold = hitCount > 0 && Math.random() < 0.5
       const consent = Math.random() < 0.5
       const blocked = Math.random() < 0.5
+      // cooldown.ts, 2026-09-06: fuzz the two new reasons alongside the
+      // original four -- every combination must still collapse to the SAME
+      // canonical "nothing" envelope whenever any reason applies.
+      const muted = Math.random() < 0.5
+      const cooldownBlocked = Math.random() < 0.5
 
       const input = baseInput({
         match: makeMatch(hitCount, aboveThreshold),
         consent,
         blocked,
+        muted,
+        cooldownBlocked,
       })
       const result = await decide(input, FIXED_IV)
 
-      const expectShared = !blocked && aboveThreshold && consent
+      const expectShared = !blocked && !muted && !cooldownBlocked && aboveThreshold && consent
       expect(result.outcome === 'shared').toBe(expectShared)
 
       if (result.outcome === 'shared') {

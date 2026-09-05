@@ -37,10 +37,24 @@ export interface QueryClassification {
   outcome: LocalOutcome | null
 }
 
+/**
+ * `muted`/`cooldownBlocked` (cooldown.ts, 2026-09-06): two more standing,
+ * ahead-of-any-match reasons this device silences an ask, checked in the
+ * same position as `blocked` and for the same reason -- see that
+ * parameter's own established precedent in this function. Order matters
+ * only in which LocalOutcome gets recorded when more than one would apply
+ * at once (blocked outranks muted outranks cooldown, matching gate.ts's own
+ * `decide()` ordering so the two functions never disagree about which
+ * label wins); the wire-visible result (silent, "nothing") is identical
+ * regardless of the order, since all three fold into the same `!surface`
+ * branch.
+ */
 export function classifyIncomingQuery(
   match: MatchResult,
   blocked: boolean,
   templateResolved: boolean,
+  muted = false,
+  cooldownBlocked = false,
 ): QueryClassification {
   if (!templateResolved) {
     // An unresolvable template id (corrupt payload, unknown/expired id) and
@@ -51,6 +65,8 @@ export function classifyIncomingQuery(
     return { surface: false, outcome: 'no-match' }
   }
   if (blocked) return { surface: false, outcome: 'blocked' }
+  if (muted) return { surface: false, outcome: 'muted' }
+  if (cooldownBlocked) return { surface: false, outcome: 'cooldown' }
   if (!match.aboveThreshold) {
     return { surface: false, outcome: match.hits.length === 0 ? 'no-match' : 'below-k' }
   }

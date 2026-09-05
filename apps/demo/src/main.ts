@@ -5,7 +5,8 @@ import { renderQr, keepAwake } from './ui/qr'
 import { scanQr, cameraPlausible } from './ui/scanner'
 import {
   loadState, saveState, resetAll, threadsInScope, upsertPeer, findPeerByDid, PERSONAS,
-  deviceMode, applyModePosture,
+  deviceMode, applyModePosture, evaluateIncomingAsk, askIdentityKey,
+  escalationHintAvailable, recordEscalationHintSent,
 } from './state'
 import { logAndDispatch } from './answer_log'
 import type { DeviceState, Peer, Mode } from './state'
@@ -1666,6 +1667,9 @@ function logOutcomeLabel(o: LocalOutcome): string {
     case 'below-k': return t('logOutcomeBelowK')
     case 'no-match': return t('logOutcomeNoMatch')
     case 'blocked': return t('logOutcomeBlocked')
+    // cooldown.ts, 2026-09-06 -- see types.ts's LocalOutcome doc comment.
+    case 'cooldown': return t('logOutcomeCooldown')
+    case 'muted': return t('logOutcomeMuted')
     // Demo 21 (secondHop) only -- see types.ts's LocalOutcome doc comment.
     case 'relayed': return t('logOutcomeRelayed')
     case 'relay-nothing': return t('logOutcomeRelayNothing')
@@ -2402,13 +2406,20 @@ async function handleAmbientQuery(q: QueryEnvelope): Promise<void> {
   const tpl = resolveIncomingTemplate(q)
   const peer = s.peers.find((p) => p.id === q.from.id) ?? null
   const blocked = peer?.blocked ?? true
+  // Repeat-ask cooldown + mute (cooldown.ts, 2026-09-06): evaluated ahead of
+  // matching, same position `blocked` already occupies -- see
+  // classifyIncomingQuery's own doc comment on why order matches gate.ts's
+  // `decide()`. Memoised by qid (state.ts's `evaluateIncomingAsk`), so the
+  // ambient-surfaced path calling into `runConsentCeremony` again below does
+  // not re-spend a single-use escalation or shift the window twice.
+  const ask = evaluateIncomingAsk(s, q.qid, q.from.id, askIdentityKey(q), q.escalated === true)
 
   let match: MatchResult = { hits: [], distinctAuthors: 0, aboveThreshold: false }
   if (tpl) {
     match = isAddressBearingTemplate(tpl) ? matchAccommodation() : prune(matchTemplate(tpl, threadsInScope(s)))
   }
 
-  const { surface } = classifyIncomingQuery(match, blocked, Boolean(tpl))
+  const { surface } = classifyIncomingQuery(match, blocked, Boolean(tpl), ask.outcome === 'muted', ask.outcome === 'cooldown')
 
   if (surface) {
     if (wotScenario() === 'geologengasse') {
@@ -2443,7 +2454,11 @@ async function handleAmbientQuery(q: QueryEnvelope): Promise<void> {
     return
   }
 
-  await emitAnswer(q, tpl ?? UNRESOLVED_TEMPLATE, match, false, peer, { silent: true })
+  await emitAnswer(q, tpl ?? UNRESOLVED_TEMPLATE, match, false, peer, {
+    silent: true,
+    muted: ask.outcome === 'muted',
+    cooldownBlocked: ask.outcome === 'cooldown',
+  })
 }
 
 function screenAsk(): void {
@@ -2457,9 +2472,30 @@ function screenAsk(): void {
     placeholder: t('askFreeTextPlaceholder'),
     maxlength: String(FREE_TEXT_MAX_LEN),
   }) as HTMLInputElement
+  // "This is very important" (cooldown.ts, 2026-09-06): a single checkbox
+  // for whichever ask is submitted next, since only one ask can be composed
+  // at a time on this screen. Read at submit time, not stored beyond it --
+  // this is a REQUEST (QueryEnvelope.escalated), never a grant; the
+  // receiving device decides for itself whether this asker actually has an
+  // unspent escalation for that (asker, template-or-query-text) pair (see
+  // cooldown.ts's `decideAsk`). `escalateCheckbox` is reset after every
+  // send so ticking it once does not silently escalate a LATER, different
+  // ask the asker never meant to mark as urgent.
+  const escalateCheckbox = el('input', { type: 'checkbox', id: 'wot-escalate' }) as HTMLInputElement
+  const escalateRow = el('div', { class: 'card' }, [
+    el('label', { for: 'wot-escalate', style: 'display:flex;align-items:center;gap:8px' }, [
+      escalateCheckbox,
+      document.createTextNode(t('askEscalateLabel')),
+    ]),
+    el('p', { class: 'note' }, [t('askEscalateHint')]),
+  ])
   const submitFreeText = () => {
     const text = freeTextInput.value.trim()
-    if (text) void askWith(freeTextTemplate(text), text)
+    if (!text) return
+    const escalated = escalateCheckbox.checked
+    escalateCheckbox.checked = false
+    if (escalated && peer) { recordEscalationHintSent(s, peer.id, text); void saveState(s) }
+    void askWith(freeTextTemplate(text), text, escalated)
   }
   freeTextInput.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submitFreeText() })
   const secondHop = wotScenario() === 'secondHop'
@@ -2497,6 +2533,7 @@ function screenAsk(): void {
     peer && wotMode() === 'webrtc' && webrtcNotOpen
       ? el('p', { class: 'note' }, [t('webrtcCardTitle') + ': ' + t('noConnection')])
       : null,
+    peer ? escalateRow : null,
     // "Ins Netzwerk rufen": free text, not one of the five fixed templates
     // below -- travels to every connected peer (askWith()'s broadcast
     // branch), matched against inventory AND chat content exactly like a
@@ -2540,10 +2577,24 @@ function screenAsk(): void {
         // template, same k=1 crutch) gets it too rather than silently
         // omitting it just because the scenario differs.
         isAddressBearingTemplate(tpl) ? el('p', { class: 'note' }, [t('geoKHonesty')]) : null,
+        // Best-effort UI hint only (state.ts's `escalationHintAvailable` --
+        // see DeviceState.escalationHints' own doc comment on why this can
+        // never be authoritative): tells the asker up front, per question,
+        // when THIS device believes it already spent its one-time
+        // escalation for this peer -- the receiving device enforces the
+        // real rule independently either way.
+        peer && !escalationHintAvailable(s, peer.id, tpl.id)
+          ? el('p', { class: 'note' }, [t('askEscalateUnavailable')])
+          : null,
         el('button', {
           class: 'btn primary',
           ...(peer ? {} : { disabled: true }),
-          onclick: () => void askWith(tpl),
+          onclick: () => {
+            const escalated = escalateCheckbox.checked
+            escalateCheckbox.checked = false
+            if (escalated && peer) { recordEscalationHintSent(s, peer.id, tpl.id); void saveState(s) }
+            void askWith(tpl, undefined, escalated)
+          },
         }, [t('showQuery')]),
       ]),
     ),
@@ -2581,12 +2632,12 @@ function screenAsk(): void {
  * 20 already does. The exclusion has now been lifted and demo 20's ask path
  * verified in a browser against the live relay.
  */
-async function askWith(tpl: QueryTemplate, freeText?: string): Promise<void> {
+async function askWith(tpl: QueryTemplate, freeText?: string, escalated?: boolean): Promise<void> {
   const s = state as DeviceState
   const mode = wotMode()
   const relayPeers = mode === 'relay' ? s.peers.filter((p) => p.did) : []
   if (relayChannel && relayPeers.length > 1) {
-    await askNetwork(tpl, freeText, relayPeers)
+    await askNetwork(tpl, freeText, relayPeers, escalated)
     return
   }
   const peer = s.peers[0]
@@ -2596,6 +2647,7 @@ async function askWith(tpl: QueryTemplate, freeText?: string): Promise<void> {
     templateId: tpl.id, templateVersion: tpl.version,
     qid: randomId(12), issuedAt: Date.now(),
     ...(freeText ? { freeText } : {}),
+    ...(escalated ? { escalated } : {}),
   }
   if (mode === 'relay' && peer.did && relayChannel) {
     lastRung = 'relay'
@@ -2648,7 +2700,7 @@ async function askWith(tpl: QueryTemplate, freeText?: string): Promise<void> {
  * individually, so nobody outside this function -- and nobody reading the
  * result screen -- can tell those two cases apart for any one named peer.
  */
-async function askNetwork(tpl: QueryTemplate, freeText: string | undefined, peers: Peer[]): Promise<void> {
+async function askNetwork(tpl: QueryTemplate, freeText: string | undefined, peers: Peer[], escalated?: boolean): Promise<void> {
   const s = state as DeviceState
   lastRung = 'relay'
   const requests = peers.map((peer) => ({
@@ -2658,6 +2710,7 @@ async function askNetwork(tpl: QueryTemplate, freeText: string | undefined, peer
       templateId: tpl.id, templateVersion: tpl.version,
       qid: randomId(12), issuedAt: Date.now(),
       ...(freeText ? { freeText } : {}),
+      ...(escalated ? { escalated: true as const } : {}),
     } as QueryEnvelope,
   }))
 
@@ -3068,6 +3121,15 @@ async function runConsentCeremony(q: QueryEnvelope): Promise<void> {
   const lang = getLang()
   const geo = wotScenario() === 'geologengasse'
   if (geo) geoCeremonyBusy = true
+  // Repeat-ask cooldown + mute (cooldown.ts, 2026-09-06): the SAME check
+  // handleAmbientQuery already ran for an ambient-surfaced query -- memoised
+  // by qid (state.ts's `evaluateIncomingAsk`), so re-running it here for
+  // that case is a no-op, and this call is also what covers the manual
+  // QR-scan path (`scanQuery`), which never goes through handleAmbientQuery
+  // at all. Enforced below by forcing emitAnswer's outcome, never by hiding
+  // this ceremony -- a human who just scanned a code chose to look, same
+  // precedent `blocked` already sets for this function.
+  const ask = evaluateIncomingAsk(s, q.qid, q.from.id, askIdentityKey(q), q.escalated === true)
 
   // 1. A fixed-length "checking" beat. The match itself is far faster than this;
   //    the delay is here so the machine's answer time does not depend on whether
@@ -3106,7 +3168,10 @@ async function runConsentCeremony(q: QueryEnvelope): Promise<void> {
     // the existing "answer sent" confirmation screen is the honest thing to
     // show, same as any other manually-scanned query.
     const peer = s.peers.find((p) => p.id === q.from.id) ?? null
-    await emitAnswer(q, UNRESOLVED_TEMPLATE, match, false, peer)
+    await emitAnswer(q, UNRESOLVED_TEMPLATE, match, false, peer, {
+      muted: ask.outcome === 'muted',
+      cooldownBlocked: ask.outcome === 'cooldown',
+    })
     geoCeremonyBusy = false
     return
   }
@@ -3130,7 +3195,10 @@ async function runConsentCeremony(q: QueryEnvelope): Promise<void> {
   }
 
   const finish = (consent: boolean) => {
-    void emitAnswer(q, tpl, match, consent, peer).finally(() => {
+    void emitAnswer(q, tpl, match, consent, peer, {
+      muted: ask.outcome === 'muted',
+      cooldownBlocked: ask.outcome === 'cooldown',
+    }).finally(() => {
       // The decision has been made and the answer sent (or the send has
       // failed onto its own honest fallback screen) -- from here on a NEW
       // arriving query is safe to route to, not something to steal focus
@@ -3162,6 +3230,12 @@ async function runConsentCeremony(q: QueryEnvelope): Promise<void> {
       has && relayedFromStranger
         ? el('p', { class: 'note' }, [t('secondHopNamedIntroNote').replace(/\{who\}/g, q.from.displayName)])
         : null,
+      // cooldown.ts, 2026-09-06: this ask only reached this screen at all
+      // because a single-use "this is very important" escalation was just
+      // spent -- see cooldown.ts's `decideAsk`. Shown regardless of `has`,
+      // since the honest fact ("this asker used their one-time pass") is
+      // about the ASK, not about whether anything matched it.
+      ask.escalationGranted ? el('p', { class: 'note escalated' }, [t('askEscalatedMarker')]) : null,
     ]),
     // The reveal toggle never renders for the address-bearing template --
     // see isAddressBearingTemplate()'s doc comment above. Every other
@@ -3789,6 +3863,12 @@ async function emitAnswer(
   peer: Peer | null,
   opts: {
     silent?: boolean
+    /** cooldown.ts, 2026-09-06: this asker is on this device's mute list. */
+    muted?: boolean
+    /** cooldown.ts, 2026-09-06: this ask violates this device's own
+     *  repeat-ask cooldown view (state.ts's `evaluateIncomingAsk`, called
+     *  by the caller BEFORE emitAnswer). */
+    cooldownBlocked?: boolean
   } = {},
 ): Promise<void> {
   // Demo 21 (secondHop) does NOT route through this function at all -- see
@@ -3818,6 +3898,8 @@ async function emitAnswer(
     match,
     consent,
     blocked: peer?.blocked ?? true,
+    muted: opts.muted ?? false,
+    cooldownBlocked: opts.cooldownBlocked ?? false,
     key,
     identity: state?.me,
   })
