@@ -54,10 +54,35 @@ export interface CentralServerOptions {
   publicDir?: string;
 }
 
+/** Loopback addresses this server is allowed to bind while withdrawal proofs are unverified. */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+/**
+ * Withdrawal and clear currently act on a plain `id` / `authorCommitment` with no signature
+ * check (see README "Known gap" and docs/central-rag.md). An `authorCommitment` is a
+ * deterministic hash, not a secret, so on a reachable network anyone who learns one could
+ * wipe that holder's declarations. That is a capability the local-first path grants to
+ * nobody, and this layer must never widen exposure beyond the local-first policy model.
+ *
+ * Until a signature scheme lands, binding anything other than loopback is refused outright
+ * rather than left to deployment discipline. `WOT_CENTRAL_UNSAFE_BIND=1` exists only so the
+ * refusal can be exercised in a test; it is not a supported deployment option and says so.
+ */
+function assertBindAllowed(host: string): void {
+  if (LOOPBACK_HOSTS.has(host)) return;
+  if (process.env.WOT_CENTRAL_UNSAFE_BIND === '1') return;
+  throw new Error(
+    `wot-central-index refuses to bind ${host}: withdrawal and clear are not signature-verified ` +
+      'yet, so a reachable instance would let anyone who learns an authorCommitment wipe that ' +
+      "holder's declarations. Bind loopback only until the signing scheme lands.",
+  );
+}
+
 export function createCentralServer(opts: CentralServerOptions): CentralServer {
   const store = new DeclarationStore(opts.dataDir);
   const jurisdiction = loadJurisdiction(opts.jurisdiction);
   const host = opts.host ?? '127.0.0.1';
+  assertBindAllowed(host);
   const publicDir = opts.publicDir;
 
   let boundPort = 0;

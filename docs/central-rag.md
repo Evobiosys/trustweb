@@ -5,6 +5,21 @@ declarations a holder deliberately published, coarsened and consent-recorded, pl
 per-jurisdiction hosting shape. It reads (a) and (c) of the feasibility note's three central-RAG
 options, never (b). It never computes over vault, chat, or inventory contents.
 
+## Loopback only, and why (read this before deploying anything)
+
+`DELETE /declarations/:id` and `POST /clear` accept a withdrawal proof and do not verify it.
+An `authorCommitment` is a deterministic hash, not a secret: the client computes it and the
+server stores it. On a reachable network, anyone who learned one could wipe that holder's
+declarations. The local-first path grants that capability to nobody, and this layer must never
+widen exposure beyond the local-first policy model, so `createCentralServer` refuses to bind
+anything other than loopback until a signature scheme lands. The refusal is enforced in code
+and pinned by `test/loopback_only.test.ts`, not left to deployment discipline.
+
+Consequence for the hosting shape: the `Containerfile`, `podman-compose.yml` and `DEPLOY.md`
+describe a deployment that is DESIGNED, not deployable. They stay in the tree because the
+jurisdiction shape is what Jakob asked to see, and they become deployable when withdrawal and
+clear are signature-verified. Until then this index runs on the holder's own machine only.
+
 ## Two stores, two rulings
 
 The Web of Trust project has two server-side stores that must never be confused with one

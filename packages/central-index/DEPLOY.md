@@ -1,5 +1,14 @@
 # Deployment: WoT Central Index
 
+## Status: DESIGNED, not deployable yet
+
+Do not put this on a reachable host. `DELETE /declarations/:id` and `POST /clear` accept a
+withdrawal proof and do not verify it, and an `authorCommitment` is a deterministic hash rather
+than a secret, so a reachable instance would let anyone who learned one wipe that holder's
+declarations. The server refuses to bind anything other than loopback for exactly that reason.
+Everything below describes the jurisdiction shape and becomes usable once withdrawal and clear
+are signature-verified. Until then this runs on the holder's own machine only.
+
 ## Build and Run with Podman
 
 Build the container:
