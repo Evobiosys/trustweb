@@ -33,6 +33,7 @@ describe('loadState() normalizes a pre-Profile/Inventory record', () => {
     expect(s!.inventory).toEqual([])
     expect(s!.profile).toEqual({ displayName: 'Alte Version', bio: '', neighbourhood: '', languages: [] })
     expect(s!.queryLog).toEqual([])
+    expect(s!.pendingAcceptRequests).toEqual([])
     expect(() => threadsInScope(s!)).not.toThrow()
     expect(threadsInScope(s!)).toEqual([])
   })

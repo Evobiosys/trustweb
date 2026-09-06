@@ -258,6 +258,17 @@ export interface DeviceState {
    * guess, it is simply naming what that state already does.
    */
   mode?: Mode
+  /**
+   * Demo 20 (geologengasse) only: guests who have scanned in and sent a
+   * `connect-ack` but whom Jakob has not yet tapped "Anfrage bestätigen"
+   * for. Previously a plain module-level array in main.ts, never written
+   * here, so a reload lost it outright -- reproduced live, deterministically
+   * (5/5), against the deployed build (see main.ts's `pendingRequestBubble()`
+   * doc comment for the sibling visibility bug this was found alongside).
+   * `withDefaults` backfills `[]` for a state saved before this field
+   * existed, same pattern as `inventory`/`profile`/`queryLog` above.
+   */
+  pendingAcceptRequests?: { did: string; from: Identity }[]
 }
 
 /** Exported so test/state_defaults.test.ts can write a legacy-shaped record
@@ -365,6 +376,7 @@ function withDefaults(s: DeviceState): DeviceState {
     profile: s.profile ?? emptyProfile(s.me.displayName),
     queryLog: s.queryLog ?? [],
     secondBrainNotes: s.secondBrainNotes ?? (legacy.secondBrainNote ? [legacy.secondBrainNote] : s.secondBrainNotes),
+    pendingAcceptRequests: s.pendingAcceptRequests ?? [],
   }
 }
 
