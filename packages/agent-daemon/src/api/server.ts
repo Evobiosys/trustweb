@@ -62,7 +62,12 @@ const BODY_TOO_LARGE = Symbol("body-too-large");
  * ECONNRESET to the client instead of a clean 413. Returns BODY_TOO_LARGE
  * (never a string) in that case; the caller just returns.
  */
-async function readBoundedBody(req: IncomingMessage, res: ServerResponse, maxBytes: number): Promise<string | typeof BODY_TOO_LARGE> {
+async function readBoundedBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBytes: number,
+  corsHeaders: Record<string, string>
+): Promise<string | typeof BODY_TOO_LARGE> {
   const chunks: Buffer[] = [];
   let received = 0;
   for await (const chunk of req) {
@@ -70,7 +75,7 @@ async function readBoundedBody(req: IncomingMessage, res: ServerResponse, maxByt
     received += buf.length;
     if (received > maxBytes) {
       if (!res.headersSent) {
-        res.writeHead(413, { ...CORS_HEADERS, "content-type": "application/json; charset=utf-8", connection: "close" });
+        res.writeHead(413, { ...corsHeaders, "content-type": "application/json; charset=utf-8", connection: "close" });
         res.end(JSON.stringify({ error: `request body exceeds ${maxBytes} bytes` }));
       }
       req.destroy();
@@ -174,13 +179,41 @@ export interface ServerExtras {
    * mock/matrix transports).
    */
   relayServer?: RelayMediator;
+  /**
+   * Opt-in bearer-token auth (Finding 4, UH-findings handover 2026-09-06,
+   * docs/API.md's "Opt-in auth + CORS allowlist" section). Also settable via
+   * env AGENT_DAEMON_AUTH_TOKEN so
+   * main.ts needs no extra plumbing. When set, every request except the
+   * CORS preflight (OPTIONS) must carry `Authorization: Bearer <token>`
+   * matching this value exactly, or the daemon returns 401 (still with the
+   * correct CORS headers, so a browser can read the rejection). Absent (the
+   * default): completely unauthenticated, byte-identical to before this
+   * change — every local and LAN demo keeps working with zero config.
+   */
+  authToken?: string;
+  /**
+   * Opt-in CORS origin allowlist (Finding 4, docs/API.md's "Opt-in auth +
+   * CORS allowlist" section). Also settable via env
+   * AGENT_DAEMON_CORS_ALLOWED_ORIGINS. Absent (the
+   * default) or `"*"`: unchanged `Access-Control-Allow-Origin: *` — the
+   * deployed idea2.site draft and any LAN device-ui/mobile-ui session keep
+   * working exactly as today, which is why this is opt-in rather than a new
+   * default. `"localhost"`: allow only http(s)://localhost[:port] and
+   * http(s)://127.0.0.1[:port]. A comma-separated string (or an array):
+   * allow exactly those origins. A disallowed origin gets a response with
+   * no Access-Control-Allow-Origin header at all, which browsers block.
+   */
+  corsAllowedOrigins?: string | string[];
 }
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
+/** CORS headers that never depend on the allowlist mode or the request's origin. */
+const CORS_METHOD_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "content-type",
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
 };
+
+/** Matches http(s)://localhost[:port] and http(s)://127.0.0.1[:port] — the "localhost" CORS allowlist mode. */
+const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 async function readTextBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -194,17 +227,6 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const raw = await readTextBody(req);
   if (!raw) return {};
   return JSON.parse(raw);
-}
-
-/** Every response (success, 4xx, or the top-level 500 catch) goes through this — CORS is unconditional (brief). */
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, { ...CORS_HEADERS, "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(payload) });
-  res.end(payload);
-}
-
-function badRequest(res: ServerResponse, error: string): void {
-  sendJson(res, 400, { error });
 }
 
 /** WS event payload shapes, per docs/API.md's WS section. */
@@ -225,6 +247,79 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
   const sockets = new Set<WebSocket>();
   const host = extras.host ?? process.env.API_HOST ?? "127.0.0.1";
   const connectionStore: ConnectionRecordStore = extras.connectionStore ?? new InMemoryConnectionRecordStore();
+
+  // --- Finding 4 (2026-09-06 UH-findings handover): opt-in auth + CORS allowlist ---
+  // Read once at startup, not per-request — a running daemon's auth/CORS
+  // posture does not change without a restart, same as `host` above.
+  const authToken = extras.authToken ?? process.env.AGENT_DAEMON_AUTH_TOKEN;
+  const corsConfig = extras.corsAllowedOrigins ?? process.env.AGENT_DAEMON_CORS_ALLOWED_ORIGINS;
+  const corsMode: "wildcard" | "localhost" | string[] =
+    corsConfig === undefined || corsConfig === "*"
+      ? "wildcard"
+      : corsConfig === "localhost"
+        ? "localhost"
+        : Array.isArray(corsConfig)
+          ? corsConfig
+          : corsConfig.split(",").map((s) => s.trim()).filter(Boolean);
+
+  /**
+   * Base CORS headers for a response. In wildcard mode (the default) this is
+   * byte-identical to the old module-level CORS_HEADERS constant. In
+   * allowlist mode it deliberately OMITS Access-Control-Allow-Origin — the
+   * origin-specific value (if any) is set via `res.setHeader` in
+   * `applyCorsAllowlist` below, and Node merges `res.setHeader` values into a
+   * later `res.writeHead(status, headers)` call for any header key that
+   * `headers` does not itself specify, which is exactly the case here.
+   */
+  function baseCorsHeaders(): Record<string, string> {
+    if (corsMode === "wildcard") return { "Access-Control-Allow-Origin": "*", ...CORS_METHOD_HEADERS };
+    return { ...CORS_METHOD_HEADERS };
+  }
+
+  /**
+   * In allowlist mode, reflects the request's own Origin header back via
+   * `res.setHeader` when it is on the list. No-op in wildcard mode (the
+   * default), so the deployed draft and any LAN demo are untouched.
+   */
+  function applyCorsAllowlist(req: IncomingMessage, res: ServerResponse): void {
+    if (corsMode === "wildcard") return;
+    const origin = req.headers.origin;
+    if (typeof origin !== "string") return;
+    const allowed = corsMode === "localhost" ? LOCALHOST_ORIGIN_PATTERN.test(origin) : corsMode.includes(origin);
+    if (allowed) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+  }
+
+  /**
+   * Opt-in bearer-token check. Returns an error string to send as a 401, or
+   * undefined to let the request proceed. Always undefined when authToken is
+   * unset (the default) — every route stays exactly as unauthenticated as it
+   * was before this change. Never applied to OPTIONS (see call site): a CORS
+   * preflight never carries an Authorization header by construction, so
+   * gating it on one would break the preflight itself, not the real request.
+   */
+  function checkAuthToken(req: IncomingMessage): string | undefined {
+    if (authToken === undefined) return undefined;
+    if (req.headers.authorization !== `Bearer ${authToken}`) return "unauthorized";
+    return undefined;
+  }
+
+  /**
+   * Every response (success, 4xx, or the top-level 500 catch) goes through
+   * this — CORS is unconditional (brief). A closure (not module-level, as
+   * before Finding 4) so it can read the mode-aware `baseCorsHeaders()`.
+   */
+  function sendJson(res: ServerResponse, status: number, body: unknown): void {
+    const payload = JSON.stringify(body);
+    res.writeHead(status, { ...baseCorsHeaders(), "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(payload) });
+    res.end(payload);
+  }
+
+  function badRequest(res: ServerResponse, error: string): void {
+    sendJson(res, 400, { error });
+  }
 
   function broadcast(event: WsEvent): void {
     const payload = JSON.stringify(event);
@@ -255,10 +350,26 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
     const method = req.method ?? "GET";
     const path = url.pathname;
 
+    // Finding 4: reflect the request's own Origin when it is on the
+    // allowlist. No-op in wildcard mode (the default) — see its own doc.
+    applyCorsAllowlist(req, res);
+
     // CORS preflight — every route accepts it, no auth/route matching needed.
+    // A preflight never carries Authorization by construction, so the auth
+    // check below only ever runs for the real request that follows it.
     if (method === "OPTIONS") {
-      res.writeHead(204, CORS_HEADERS);
+      res.writeHead(204, baseCorsHeaders());
       res.end();
+      return;
+    }
+
+    // Finding 4: opt-in bearer-token auth. `checkAuthToken` is always
+    // undefined when AGENT_DAEMON_AUTH_TOKEN/extras.authToken is unset (the
+    // default), so every route below stays exactly as unauthenticated as it
+    // was before this change.
+    const authError = checkAuthToken(req);
+    if (authError !== undefined) {
+      sendJson(res, 401, { error: authError });
       return;
     }
 
@@ -705,7 +816,7 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
       }
       // finding 2: bound the streamed body on the REAL alpha ingress path
       // (this handler, NOT RelayServer.listen()). Oversize → 413, no submit().
-      const rawWire = await readBoundedBody(req, res, RELAY_MAX_BODY_BYTES);
+      const rawWire = await readBoundedBody(req, res, RELAY_MAX_BODY_BYTES, baseCorsHeaders());
       if (rawWire === BODY_TOO_LARGE) return; // 413 already written + socket closed
       const result = extras.relayServer.submit(rawWire);
       // Non-informative success (finding 1): the mediator returns

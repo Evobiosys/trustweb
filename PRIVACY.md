@@ -61,7 +61,7 @@ The alpha (D17) adds owner-*published* surfaces on top of the ask/consent core. 
 | **Loan (borrow lifecycle)** | Connected-only (a trust edge is required). Only the coarse state (`requested…complete`) crosses the wire; a "not yet" check-in note is a local-only annotation, never sent. |
 | **DM thread** | Connected-only on both send and receive (`sendDm`/`receiveDm` require a trust edge — defense in depth). |
 
-**No-auth caveat (alpha only):** `pnpm alpha` binds every daemon to `0.0.0.0` with **no authentication** — anyone on the same WiFi who can reach `http://<ip>:410N` can call the REST API directly, and `?public=1`'s strip is *client-cooperation only* (no auth boundary enforces it). This is a deliberate closed-room opt-in; see [ALPHA.md](ALPHA.md)'s security box. It does not change the protocol-level residuals above.
+**No-auth caveat (alpha only):** `pnpm alpha` binds every daemon to `0.0.0.0` with **no authentication by default** — anyone on the same WiFi who can reach `http://<ip>:410N` can call the REST API directly, and `?public=1`'s strip is *client-cooperation only* (no auth boundary enforces it). This is a deliberate closed-room opt-in; see [ALPHA.md](ALPHA.md)'s security box, including the opt-in bearer-token/CORS-allowlist env vars added 2026-09-06. It does not change the protocol-level residuals above.
 
 ## Rung 1 — next version [S1 spike exists behind a feature flag, if built]
 

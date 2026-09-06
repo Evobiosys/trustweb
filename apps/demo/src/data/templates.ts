@@ -257,6 +257,15 @@ export const TEMPLATES: QueryTemplate[] = [
     // longer show a hit against a single seeded group chat; that is the
     // accepted cost of closing C-03, not an oversight.
     //
+    // Finding 2 (2026-09-06 UH-findings handover): this `kThreshold` is
+    // k-ANONYMITY over distinct AUTHORS in an aggregate match
+    // (docs/k-parameters.md's "k1") -- distinct from vouch-count k for
+    // credential presentation (VOUCH_K, "k2") and trust-distance weighting
+    // (DEFAULT_MIN_CONTRIBUTORS, "k3"). ❗ Below, four other templates in
+    // this file hardcode the literal 7 rather than importing DEFAULT_K
+    // (currently 3) -- a live instance of Finding 3's fork-drift, not fixed
+    // by this handover; see docs/k-parameters.md.
+    //
     // B-08 (2026-09-06): match/lexical.ts's owner-declared bypass does NOT
     // help this template -- the corpus it matches against is real seeded
     // chat messages (thread.source: 'seed'), never an inventory or
@@ -286,7 +295,12 @@ export const TEMPLATES: QueryTemplate[] = [
     // (childcare waiting lists in this very corpus). Require boosted or
     // multi-term confirmation.
     minScore: 2,
-    kThreshold: 7, // production default, per catalogue doc section 1 (DEFAULT_K)
+    // ❗ Finding 3 (2026-09-06): hardcoded literal, NOT imported DEFAULT_K
+    // (which is 3, not 7) -- see docs/k-parameters.md's "known drift" note.
+    // Left at 7, unchanged, rather than silently relaxed to 3 or reconciled
+    // upward; that is a product call for the project owner, not this
+    // handover's to make.
+    kThreshold: 7,
     sensitivity: 'high',
     ttlSeconds: 2_592_000, // 30 days
   },
@@ -306,6 +320,7 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T3_KASSENARZT_OPEN_BOOST_TERMS,
     excludeTerms: T3_KASSENARZT_OPEN_EXCLUDE_TERMS,
     minScore: 1,
+    // ❗ Finding 3: same hardcoded-literal drift as wot.vienna.housing.nachmieter_genossenschaft above -- see docs/k-parameters.md.
     kThreshold: 7,
     sensitivity: 'medium',
     ttlSeconds: 1_209_600, // 14 days
@@ -326,6 +341,7 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T4_HANDWERKER_RELIABLE_BOOST_TERMS,
     excludeTerms: T4_HANDWERKER_RELIABLE_EXCLUDE_TERMS,
     minScore: 1,
+    // ❗ Finding 3: same hardcoded-literal drift as wot.vienna.housing.nachmieter_genossenschaft above -- see docs/k-parameters.md.
     kThreshold: 7,
     sensitivity: 'low',
     ttlSeconds: 604_800, // 7 days
@@ -346,6 +362,7 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T5_CHILDCARE_PLACE_OPEN_BOOST_TERMS,
     excludeTerms: T5_CHILDCARE_PLACE_OPEN_EXCLUDE_TERMS,
     minScore: 1,
+    // ❗ Finding 3: same hardcoded-literal drift as wot.vienna.housing.nachmieter_genossenschaft above -- see docs/k-parameters.md.
     kThreshold: 7,
     sensitivity: 'medium',
     ttlSeconds: 2_592_000, // 30 days

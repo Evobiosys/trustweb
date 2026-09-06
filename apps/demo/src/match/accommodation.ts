@@ -51,7 +51,12 @@ export const ACCOMMODATION_TEMPLATE: QueryTemplate = {
   excludeTerms: [],
   minScore: 1,
   // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
-  // ("must not ship"), replaced with the workspace DEFAULT_K (3). The corpus
+  // ("must not ship"), replaced with the workspace DEFAULT_K (3). This
+  // `kThreshold` is k-ANONYMITY over distinct AUTHORS in an aggregate match
+  // (docs/k-parameters.md's "k1") -- it is NOT the vouch-count k a relying
+  // party checks for credential presentation (VOUCH_K, docs/k-parameters.md's
+  // "k2") and NOT trust-distance weighting (DEFAULT_MIN_CONTRIBUTORS,
+  // feat/trust-weighting, "k3"). The corpus
   // here is ONE flat and ONE calendar, so a genuine chat-message match
   // against this template can no longer clear the floor -- known and
   // accepted: closing C-03 outranks that. Said honestly in the UI (main.ts's

@@ -49,9 +49,14 @@ that no listener is left behind on the ports it used.
 
 ## ⚠️ Security — alpha only
 
-- **No authentication.** Anyone who can reach a persona's `http://<ip>:410N`
-  port can call its REST API directly — there is no login, token, or pairing
-  check in front of it.
+- **No authentication by default.** Anyone who can reach a persona's
+  `http://<ip>:410N` port can call its REST API directly — there is no
+  login, token, or pairing check in front of it unless an operator opts in.
+  `AGENT_DAEMON_AUTH_TOKEN` (bearer token) and `AGENT_DAEMON_CORS_ALLOWED_ORIGINS`
+  (`localhost` or an explicit origin list, in place of the default wildcard
+  CORS) are both opt-in env vars read by `startServer` in
+  `packages/agent-daemon/src/api/server.ts` — leaving them unset keeps this
+  alpha's `pnpm alpha` demo exactly as unauthenticated as before.
 - **LAN-open by design.** `pnpm alpha` binds every agent-daemon and the
   mobile-ui dev server to `0.0.0.0` (all interfaces) so phones can reach them.
   Anyone else on the same WiFi can also reach them.

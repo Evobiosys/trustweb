@@ -57,8 +57,27 @@ State changes also arrive via WS.
 Errors: 4xx `{ "error": string }`. CORS (`Access-Control-Allow-Origin: *`, `-Headers: content-type`,
 `-Methods: GET,POST,DELETE,OPTIONS`) is set on **every** response including 4xx/5xx; `OPTIONS` on any
 path returns `204` with no body. Bind host defaults to `127.0.0.1`; set `API_HOST=0.0.0.0` (or a LAN IP)
-to opt into LAN exposure (Task 5/8's alpha-test mode) — **there is no auth**, so this is a deliberate,
-explicit opt-in, never the default.
+to opt into LAN exposure (Task 5/8's alpha-test mode) — **there is no auth by default**, so this is a
+deliberate, explicit opt-in, never the default.
+
+**Opt-in auth + CORS allowlist (Finding 4, 2026-09-06 UH-findings handover, docs/k-parameters.md's
+sibling security note):** two env vars, both read once at `startServer` startup, both unset by
+default so every existing demo/deployment is byte-identical unless an operator opts in.
+- `AGENT_DAEMON_AUTH_TOKEN` — when set, every request except the `OPTIONS` preflight must carry
+  `Authorization: Bearer <token>` matching exactly, or the daemon returns `401` (still with the
+  correct CORS headers, so a browser can read the rejection body). A preflight never carries
+  `Authorization` by construction, so it is never gated on this.
+- `AGENT_DAEMON_CORS_ALLOWED_ORIGINS` — `"localhost"` allows only `http(s)://localhost[:port]` and
+  `http(s)://127.0.0.1[:port]`; a comma-separated origin list (or `"*"`, the default) allows exactly
+  those origins (or the wildcard). A disallowed origin gets a response with no
+  `Access-Control-Allow-Origin` header at all, which browsers block. If restricting this by default
+  would break a deployment whose demo UI runs from a non-localhost origin against a local/LAN daemon
+  (e.g. a browser page served from an https origin calling a `127.0.0.1`/LAN-IP daemon), this stays
+  strictly opt-in for exactly that reason.
+
+Both extras are also settable programmatically via `ServerExtras.authToken` / `.corsAllowedOrigins` in
+`packages/agent-daemon/src/api/server.ts` for embedding contexts (tests, `scripts/alpha_server.ts`)
+that do not want to go through process env.
 
 ### Task 5 — trust management
 
@@ -167,4 +186,6 @@ Env: `PERSONA_NAME`, `PEER_ID`, `AGENT_PORT`, `DB_PATH`, `TRUSTED_PEERS_PATH`, `
 `MATRIX_HOMESERVER_URL`, `MATRIX_ACCESS_TOKEN` or (`MATRIX_REGISTRATION_SECRET` + auto-provision),
 `OLLAMA_URL`, `CHAT_MODEL`, `EMBED_MODEL`, `STATUS_DELAY_MS` (default 30000 — uniform, no jitter, I3),
 `TRANSPORT` = `matrix` | `mock` | `didcomm`, `API_HOST` (Task 5, default `127.0.0.1` — LAN exposure is
-opt-in only).
+opt-in only), `AGENT_DAEMON_AUTH_TOKEN?` (Finding 4, opt-in bearer-token auth), `AGENT_DAEMON_CORS_ALLOWED_ORIGINS?`
+(Finding 4, opt-in CORS allowlist — `"localhost"` or a comma-separated origin list; unset/`"*"` keeps
+the wildcard default).
