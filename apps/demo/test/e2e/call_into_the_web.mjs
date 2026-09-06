@@ -58,7 +58,7 @@
  */
 import { createIdentity } from '../../src/did.ts'
 import { createRelayChannel } from '../../src/relay.ts'
-import { derivePairKey, open, ivFromQid, fromB64u } from '../../src/crypto.ts'
+import { derivePairKey, open, fromB64u } from '../../src/crypto.ts'
 import { decide, interpret } from '../../src/gate.ts'
 import { addInventoryItem, threadsInScope, appendQueryLog } from '../../src/state.ts'
 import { logAndDispatch } from '../../src/answer_log.ts'
@@ -315,13 +315,34 @@ async function main() {
 
   const declinedCipher = fromB64u(declined.envelope.body)
   const noMatchCipher = fromB64u(noMatch.envelope.body)
-  ok('[side-channel check] the two ANSWER ENVELOPES are byte-identical on the wire', declined.envelope.body === noMatch.envelope.body,
-    `${declined.envelope.body.slice(0, 32)}... vs ${noMatch.envelope.body.slice(0, 32)}...`)
 
-  const iv = await ivFromQid(sideChannelQid)
-  const declinedPlain = await open(keyMarlene, iv, declinedCipher.slice(iv.length))
-  const noMatchPlain = await open(keyMarlene, iv, noMatchCipher.slice(iv.length))
-  ok('[side-channel check] the DECRYPTED PLAINTEXTS are also byte-identical (not just ciphertext length)',
+  // UPDATED 2026-09-05 (C-02/F-01): this used to assert the two bodies were
+  // byte-identical, which held only because the AES-GCM IV was derived from
+  // `qid`. That deterministic IV was a nonce-reuse hole (gate.ts's SECURITY
+  // note) and is gone, so the IV -- and therefore the ciphertext -- is now
+  // fresh per seal, by design. What I3 actually requires, and what is
+  // asserted instead, is that the wire-visible SHAPE is identical and the
+  // DECRYPTED PLAINTEXTS are byte-identical. Identical ciphertext was in
+  // fact its own small leak ("the same answer twice" was distinguishable
+  // from "two different answers"); this is strictly stronger, not weaker.
+  ok('[side-channel check] the two ANSWER ENVELOPES are identical in wire shape (equal length, same fields)',
+    declined.envelope.body.length === noMatch.envelope.body.length &&
+    JSON.stringify(Object.keys(declined.envelope)) === JSON.stringify(Object.keys(noMatch.envelope)) &&
+    JSON.stringify(declined.envelope).length === JSON.stringify(noMatch.envelope).length,
+    `${declined.envelope.body.length} vs ${noMatch.envelope.body.length}`)
+
+  // The IV travels in the body (`iv || ciphertext`) and always has -- read
+  // it off the wire rather than recomputing it, exactly as interpret() does.
+  const IV_LEN = 12
+  const declinedIv = declinedCipher.slice(0, IV_LEN)
+  const noMatchIv = noMatchCipher.slice(0, IV_LEN)
+  ok('[nonce check, C-02] two seals of the SAME (pair key, qid) do NOT share an AES-GCM nonce',
+    !Buffer.from(declinedIv).equals(Buffer.from(noMatchIv)),
+    `${Buffer.from(declinedIv).toString('hex')} vs ${Buffer.from(noMatchIv).toString('hex')}`)
+
+  const declinedPlain = await open(keyMarlene, declinedIv, declinedCipher.slice(IV_LEN))
+  const noMatchPlain = await open(keyMarlene, noMatchIv, noMatchCipher.slice(IV_LEN))
+  ok('[side-channel check] the DECRYPTED PLAINTEXTS are byte-identical (the property I3 actually rests on)',
     declinedPlain !== null && noMatchPlain !== null && Buffer.from(declinedPlain).equals(Buffer.from(noMatchPlain)))
 
   // Now the LOCAL log for this same pair -- built with the real
