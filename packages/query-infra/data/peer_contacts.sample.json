@@ -1,0 +1,17 @@
+[
+  {
+    "requester": "anna@example.org",
+    "preferred_channel": "matrix",
+    "matrix": "@anna:matrix.myceli.al"
+  },
+  {
+    "requester": "Ben Okafor <ben@example.org>",
+    "preferred_channel": "signal",
+    "signal": "+43 660 1234567"
+  },
+  {
+    "requester": "Cyn Park <cyn@example.org>",
+    "matrix": "@cynpark:matrix.myceli.al",
+    "signal": "+1 415 555 0134"
+  }
+]

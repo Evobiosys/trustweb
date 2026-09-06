@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>inventory-store</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <h1>Inventory</h1>
+  <p class="hint">Editable dashboard — every edit is a supersession, never a mutation.</p>
+
+  <section id="records-section">
+    <h2>Current resources</h2>
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th>name</th><th>category</th><th>status</th><th>care_if_lost</th>
+          <th>circle</th><th>availability_note</th><th>claimed_at</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="records-body"></tbody>
+    </table>
+    <button id="reload-records">Reload</button>
+    <a id="md-link" href="/api/md" target="_blank">View generated markdown</a>
+  </section>
+
+  <section id="new-record-section">
+    <h2>New resource</h2>
+    <form id="new-record-form"></form>
+  </section>
+
+  <section id="supersede-section">
+    <h2>Supersede a resource</h2>
+    <form id="supersede-form"></form>
+  </section>
+
+  <section id="query-section">
+    <h2>Query trace</h2>
+    <form id="query-form">
+      <label>requester <input name="requester" required /></label>
+      <label>text <input name="text" required size="50" /></label>
+      <button type="submit">Run query</button>
+    </form>
+    <div id="query-trace"></div>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>
