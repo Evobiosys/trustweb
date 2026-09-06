@@ -8,6 +8,7 @@ import {
   deviceMode, applyModePosture,
 } from './state'
 import { logAndDispatch } from './answer_log'
+import { answerKeyFor, sealRelayAnswer } from './answer_key'
 import type { DeviceState, Peer, Mode } from './state'
 import { renderProfile } from './screens/profile'
 import { renderModePicker, modeTitleKey } from './screens/mode_picker'
@@ -47,7 +48,7 @@ import {
 import { SEED_GRAPH_NODES } from './data/geologengasse'
 import type { GraphNode } from './data/geologengasse'
 import { JAKOB_LADDER_INVENTORY_TEXT, A_NOTE_ABOUT_JAKOB_TEXT, A_NOTE_ABOUT_JAKOB_FLAT_TEXT } from './data/second_hop'
-import { RELAY_DEADLINE_MS, maskAnswerPlaintext, truncateSharedJson, sealAnswerEnvelope } from './gate'
+import { RELAY_DEADLINE_MS } from './gate'
 import type { SharedItem, SharedPayload } from './types'
 import type { SecondBrainNote } from './state'
 
@@ -1970,6 +1971,18 @@ async function pairKey(p: Peer): Promise<CryptoKey> {
   return derivePairKey(a, b)
 }
 
+/**
+ * `answer_key.ts`'s `answerKeyFor` with this module's own `pairKey` bound
+ * in. The whole rule -- no answer is ever sealed under a key derivable from
+ * public data, and "no peer" means blocked -- lives THERE, in a module a
+ * test can import; this is only the injection point. See that module's doc
+ * comment for the defect it closes and for why refusing beats deriving a
+ * key from the relay wrap's ephemeral material.
+ */
+async function answerKey(peer: Peer | null, qid: string): Promise<{ key: CryptoKey; blocked: boolean }> {
+  return answerKeyFor(peer, qid, pairKey)
+}
+
 // ---------------------------------------------------------------------------
 // webrtc ceremony (demo 3 / demo 6): two QR codes open a data channel, no
 // server anywhere in the path. See webrtc.ts's module doc for the exact
@@ -3337,10 +3350,8 @@ function createRelayDispatch(
       // same wire ending as a genuine no-match anywhere else in this app,
       // built through the same mask trick, never a separate code path.
       outcome = 'no-match'
-      const key = peer ? await pairKey(peer) : await derivePairKey(q.qid, q.qid)
-      const jsonBytes = truncateSharedJson({ from: '', templateId: q.templateId, items: [] })
-      const plaintext = maskAnswerPlaintext(false, jsonBytes)
-      envelope = await sealAnswerEnvelope(q.qid, plaintext, key)
+      const ak = await answerKey(peer, q.qid)
+      envelope = await sealRelayAnswer(q.qid, q.templateId, null, ak)
     }
 
     return logAndDispatch(s, {
@@ -3351,7 +3362,9 @@ function createRelayDispatch(
       outcome,
     }, async () => {
       if (!(peer?.did && relayChannel)) return
-      const key = peer ? await pairKey(peer) : await derivePairKey(q.qid, q.qid)
+      // Past the guard above `peer` is non-null by construction, so this is
+      // the real pair key -- never the refusal branch of answerKeyFor().
+      const key = await pairKey(peer)
       try {
         await relayChannel.send(peer.did, envelope, key)
       } catch {
@@ -3376,16 +3389,26 @@ function createRelayDispatch(
     async resolvePayload(kind, payload, outcome, localFromLabel) {
       // Convenience for callers that hold a SharedPayload rather than an
       // already-sealed envelope (forwardToOwner's relay-success ending) --
-      // same key this dispatch's own fire() will use (`peer` is the SAME
-      // closed-over value both places read), so sealing here vs. sealing
-      // inside fire() produces byte-identical output either way; doing it
-      // here just lets forwardToOwner hand over a fully-built resolution
-      // rather than reaching back into this closure for the key.
+      // the same key this dispatch's own fire() would use, from the same
+      // closed-over `peer`, so sealing here rather than inside fire() only
+      // lets forwardToOwner hand over a fully-built resolution instead of
+      // reaching back into this closure for the key. (It no longer produces
+      // byte-identical output either way: since C-02 the IV is drawn fresh
+      // per seal, so two seals of one plaintext differ in bytes while
+      // decrypting identically. Nothing depended on the byte-identity; the
+      // wire shape and length, which I3 does depend on, are unchanged.)
       if (dispatched) return // too late -- see resolve()'s own doc comment
-      const key = peer ? await pairKey(peer) : await derivePairKey(q.qid, q.qid)
-      const jsonBytes = truncateSharedJson(payload ?? { from: '', templateId: q.templateId, items: [] })
-      const plaintext = maskAnswerPlaintext(Boolean(payload), jsonBytes)
-      const envelope = await sealAnswerEnvelope(q.qid, plaintext, key)
+      // SECURITY (follow-up 1 of C-02/F-01): this was the ONE path that
+      // sealed a REAL payload without consulting `blocked` -- every other
+      // no-peer site forces `blocked: peer?.blocked ?? true` and therefore
+      // seals zeros. With no peer record there is no pair key, so
+      // answerKeyFor() refuses: throwaway key AND `blocked`, which the mask
+      // below turns into the same all-zero "nothing" every other cause
+      // produces. See answerKeyFor's own doc comment for why no legitimate
+      // no-peer delivery is being given up here (fire() cannot send without
+      // `peer?.did` anyway).
+      const ak = await answerKey(peer, q.qid)
+      const envelope = await sealRelayAnswer(q.qid, q.templateId, payload, ak)
       if (dispatched) return // the timer could have fired while we awaited above
       resolved = {
         outcome,
@@ -3516,9 +3539,9 @@ function renderSecondHopDirectCard(
   const s = state as DeviceState
   const finish = (consent: boolean): void => {
     void (async () => {
-      const key = peer ? await pairKey(peer) : await derivePairKey(q.qid, q.qid)
+      const { key, blocked } = await answerKey(peer, q.qid)
       const { outcome, envelope } = await decide({
-        query: q, template: tpl, match, consent, blocked: peer?.blocked ?? true, key, identity: s.me,
+        query: q, template: tpl, match, consent, blocked, key, identity: s.me,
       })
       dispatch.resolve('direct', outcome, envelope, outcome === 'shared' ? () => pushLocalShare(tpl, match) : undefined)
       renderSecondHopPendingScreen()
@@ -3562,9 +3585,9 @@ function renderSecondHopRelayCard(
     // Held to the shared deadline via dispatch.resolve(), same as every
     // other ending on this hop -- never sent the moment A taps.
     void (async () => {
-      const key = peer ? await pairKey(peer) : await derivePairKey(q.qid, q.qid)
+      const { key, blocked } = await answerKey(peer, q.qid)
       const { outcome, envelope } = await decide({
-        query: q, template: tpl, match: noteMatch, consent: false, blocked: peer?.blocked ?? true, key,
+        query: q, template: tpl, match: noteMatch, consent: false, blocked, key,
         identity: s.me,
       })
       dispatch.resolve('relay', outcome, envelope)
@@ -3622,9 +3645,14 @@ function renderSecondHopRelayCard(
  * note, Jakob declined, Jakob had nothing, Jakob never answered in time)
  * follows from `maskAnswerPlaintext`'s existing mask trick: `wouldShare`
  * false makes `jsonBytes` irrelevant to the output, so every one of those
- * five callers converges on the identical all-zero plaintext, the identical
- * IV (deterministic from `q.qid`), and therefore identical ciphertext --
- * see test/second_hop_gate.test.ts for the assertion.
+ * five callers converges on the identical all-zero PLAINTEXT, at identical
+ * length, and therefore an identically-shaped envelope. Not identical
+ * CIPHERTEXT: since C-02/F-01 the IV is drawn fresh from the CSPRNG on every
+ * seal rather than derived from `q.qid`, so the bytes differ per call while
+ * the plaintext, the length and the outcome an asker can observe do not --
+ * which is what I3 ever rested on (see gate.ts's sealAnswerEnvelope SECURITY
+ * note, and test/second_hop_gate.test.ts, which now asserts equal wire
+ * length plus byte-identity with the nonce pinned).
  */
 async function forwardToOwner(
   q: QueryEnvelope, note: SecondBrainNote, ownerPeer: Peer, dispatch: RelayDispatch,
@@ -3807,17 +3835,25 @@ async function emitAnswer(
       el('p', {}, [el('span', { class: 'spin' }), document.createTextNode(' ' + t('checking'))]),
     ]))
   }
-  // Without a peer record we cannot derive a key; treat it as blocked, which is
-  // one of the four indistinguishable "nothing" reasons.
-  const key = peer
-    ? await pairKey(peer)
-    : await derivePairKey(q.qid, q.qid)
+  // Without a peer record there is no pair key at all, so answerKeyFor()
+  // refuses: a throwaway key plus `blocked`, which is one of the four
+  // indistinguishable "nothing" reasons. It used to fall back to
+  // `derivePairKey(q.qid, q.qid)` here, which anyone who saw the cleartext
+  // `qid` could recompute -- and this is the path that reaches the QR rung
+  // (`encodeForQr` is plain `JSON.stringify`, no transport encryption at
+  // all) and the WebRTC rung (no outer AES-GCM wrap), so the envelope really
+  // did go out under a public-derivable key. The plaintext was already the
+  // all-zero "nothing" here, so nothing leaked, but an observer who tried
+  // the qid key and got a clean decrypt learned that this device holds no
+  // record of the asker -- an I3 distinction, told to exactly the wrong
+  // party. See answerKeyFor's own doc comment.
+  const { key, blocked } = await answerKey(peer, q.qid)
   const { outcome, envelope } = await decide({
     query: q,
     template: tpl,
     match,
     consent,
-    blocked: peer?.blocked ?? true,
+    blocked,
     key,
     identity: state?.me,
   })
