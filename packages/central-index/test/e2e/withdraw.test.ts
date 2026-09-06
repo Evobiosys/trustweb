@@ -17,7 +17,9 @@ import {
   post,
   del,
   makeFacets,
+  makeSigner,
   publishDistinctAuthors,
+  withdrawPayload,
   type TestServer,
   TEST_TIMEOUT_MS,
   LONG_TEST_TIMEOUT_MS,
@@ -51,10 +53,12 @@ describe('e2e: withdraw removes the record', () => {
       expect((above.json as { hits: unknown[] }).hits.length).toBe(7);
 
       const idToWithdraw = ids[0];
-      const withdrawRes = await del(t.baseUrl, `/declarations/${encodeURIComponent(idToWithdraw)}`, {
-        proof: 'placeholder-signed-withdrawal-proof',
-      });
-      expect(withdrawRes.status).toBe(204);
+      const withdrawRes = await del(
+        t.baseUrl,
+        `/declarations/${encodeURIComponent(idToWithdraw)}`,
+        await publishes[0].signer.signAction(withdrawPayload(idToWithdraw, 'author-0')),
+      );
+      expect(withdrawRes.status, JSON.stringify(withdrawRes.json)).toBe(204);
 
       const after = await post(t.baseUrl, '/query', { facets: makeFacets(facetOverrides) });
       expect(after.status).toBe(200);
@@ -63,8 +67,26 @@ describe('e2e: withdraw removes the record', () => {
     LONG_TEST_TIMEOUT_MS,
   );
 
-  it('withdraw is idempotent: withdrawing an unknown id returns 204, not 404', async () => {
-    const res = await del(t.baseUrl, '/declarations/never-existed-e2e', { proof: 'x' });
+  it('withdraw is idempotent: a validly signed withdraw of an unknown id returns 204, not 404', async () => {
+    // The no-existence-oracle invariant, restated for the signed world: an
+    // AUTHORISED caller learns nothing about whether an id ever existed, because
+    // the answer is 204 either way. (An unauthorised caller learns nothing
+    // either: they get the same 403 for every id, real or invented.)
+    const signer = await makeSigner();
+    const id = 'never-existed-e2e';
+    const res = await del(
+      t.baseUrl,
+      `/declarations/${encodeURIComponent(id)}`,
+      await signer.signAction(withdrawPayload(id, 'author-never-existed')),
+    );
     expect(res.status).toBe(204);
+  });
+
+  it('an unsigned withdraw is refused 403 and says why, rather than silently doing nothing', async () => {
+    const res = await del(t.baseUrl, '/declarations/whatever-e2e', {
+      proof: 'placeholder-signed-withdrawal-proof',
+    });
+    expect(res.status).toBe(403);
+    expect((res.json as { reason: string }).reason).toBe('signature-required');
   });
 });

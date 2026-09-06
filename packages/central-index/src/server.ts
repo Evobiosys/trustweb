@@ -22,6 +22,17 @@
 // parsed and validated, before anything else touches the payload. Nothing
 // in this file logs a request body, and no query is ever persisted — only
 // publish and tombstone records reach the store.
+//
+// Signed withdraw and clear (B-20 option A, 2026-09-06): a holder registers an
+// Ed25519 verification key WITH each declaration at publish time, and every
+// later DELETE /declarations/:id and POST /clear must carry a signature over
+// the canonical message {action, target, authorCommitment, nonce, expiresAt}.
+// The canonicalisation and the verify live in @resource-web/wot-policy, shared
+// with the device; the single-use nonce registry and the per-key rate limiter
+// are server state and live next door in nonces.ts and rate_limit.ts. Old,
+// unsigned requests are refused with 403 { reason: 'signature-required' }, out
+// loud rather than silently, because a holder whose clear did not happen has to
+// find out. This is what makes the non-loopback bind below defensible at all.
 
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -33,9 +44,14 @@ import {
   protectAsker,
   indistinguishableNo,
   settleAt,
+  verifySignedAction,
   CENTRAL_BUDGET_MS,
+  CLEAR_ALL_TARGET,
+  fromB64u,
 } from '@resource-web/wot-policy';
 import { loadJurisdiction, type JurisdictionConfig } from './jurisdiction.js';
+import { NonceRegistry } from './nonces.js';
+import { RateLimiter, DEFAULT_RATE_LIMIT, type RateLimitConfig } from './rate_limit.js';
 import { DeclarationStore } from './store.js';
 import type { DeclarationFacets, DeclarationHit, PublishedDeclaration } from './types.js';
 
@@ -52,29 +68,50 @@ export interface CentralServerOptions {
   jurisdiction?: string;
   host?: string;
   publicDir?: string;
+  /**
+   * Overrides the jurisdiction config's `allowPublicBind` for in-process
+   * callers. `src/bin.ts` deliberately never passes it, so the ONLY way a real
+   * deployment reaches a non-loopback address is the residency config file --
+   * an operator writing it down, in the same file that declares the residency
+   * and the lawful basis, not a flag someone typed once on a command line.
+   */
+  allowPublicBind?: boolean;
+  /** Withdraw/clear rate limit per holder public key. Defaults to DEFAULT_RATE_LIMIT. */
+  rateLimit?: RateLimitConfig;
 }
 
-/** Loopback addresses this server is allowed to bind while withdrawal proofs are unverified. */
+/** Loopback addresses, always allowed. */
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 
 /**
- * Withdrawal and clear currently act on a plain `id` / `authorCommitment` with no signature
- * check (see README "Known gap" and docs/central-rag.md). An `authorCommitment` is a
- * deterministic hash, not a secret, so on a reachable network anyone who learns one could
- * wipe that holder's declarations. That is a capability the local-first path grants to
- * nobody, and this layer must never widen exposure beyond the local-first policy model.
+ * Bind policy, in three layers that must stay separate.
  *
- * Until a signature scheme lands, binding anything other than loopback is refused outright
- * rather than left to deployment discipline. `WOT_CENTRAL_UNSAFE_BIND=1` exists only so the
- * refusal can be exercised in a test; it is not a supported deployment option and says so.
+ * 1. Loopback is always allowed. It is the default and the development shape.
+ * 2. `WOT_CENTRAL_UNSAFE_BIND=1` is a TEST-ONLY escape hatch, unchanged from
+ *    the pre-signing build, kept separate on purpose so the residency-config
+ *    route below can never be tested through it or confused with it. It is not
+ *    a supported deployment option and never was.
+ * 3. `allowPublicBind: true` in the jurisdiction (residency) config is the
+ *    supported route to a reachable instance. It became defensible only once
+ *    withdraw and clear started verifying a holder signature (B-20 option A):
+ *    before that, an `authorCommitment` -- a deterministic hash, not a secret --
+ *    was enough for any passer-by to wipe a holder's declarations, a capability
+ *    the local-first path grants to nobody. That hole is closed; what remains
+ *    on a reachable instance is the ordinary transport-security work named in
+ *    DEPLOY.md (TLS terminated at the jurisdiction host).
+ *
+ * Anything else still refuses to start, rather than being left to deployment
+ * discipline.
  */
-function assertBindAllowed(host: string): void {
+function assertBindAllowed(host: string, allowPublicBind: boolean): void {
   if (LOOPBACK_HOSTS.has(host)) return;
   if (process.env.WOT_CENTRAL_UNSAFE_BIND === '1') return;
+  if (allowPublicBind) return;
   throw new Error(
-    `wot-central-index refuses to bind ${host}: withdrawal and clear are not signature-verified ` +
-      'yet, so a reachable instance would let anyone who learns an authorCommitment wipe that ' +
-      "holder's declarations. Bind loopback only until the signing scheme lands.",
+    `wot-central-index refuses to bind ${host}: this instance's jurisdiction config does not set ` +
+      'allowPublicBind. Withdraw and clear are signature-verified, so a reachable bind is ' +
+      'supported, but an operator has to declare it in the residency config rather than reach it ' +
+      'by accident. Set "allowPublicBind": true in the jurisdiction file, or bind loopback.',
   );
 }
 
@@ -82,13 +119,20 @@ export function createCentralServer(opts: CentralServerOptions): CentralServer {
   const store = new DeclarationStore(opts.dataDir);
   const jurisdiction = loadJurisdiction(opts.jurisdiction);
   const host = opts.host ?? '127.0.0.1';
-  assertBindAllowed(host);
+  // `=== true` OUTSIDE the ??, not inside it: an option that arrived as the
+  // string 'true' or the number 1 must fall through to refused, the same way
+  // the jurisdiction loader treats its own field. Conservative defaults (I9).
+  assertBindAllowed(host, (opts.allowPublicBind ?? jurisdiction.allowPublicBind) === true);
   const publicDir = opts.publicDir;
+  const guards: ActionGuards = {
+    nonces: new NonceRegistry(),
+    limiter: new RateLimiter(opts.rateLimit ?? DEFAULT_RATE_LIMIT),
+  };
 
   let boundPort = 0;
 
   const httpServer: HttpServer = createHttpServer((req, res) => {
-    void handleRequest(req, res, store, jurisdiction, publicDir);
+    void handleRequest(req, res, store, jurisdiction, publicDir, guards);
   });
 
   return {
@@ -120,12 +164,20 @@ export function createCentralServer(opts: CentralServerOptions): CentralServer {
 // Routing
 // ---------------------------------------------------------------------------
 
+/** The stateful half of a signed action: replay protection and abuse limiting.
+ *  One instance per server, never per request. */
+export interface ActionGuards {
+  nonces: NonceRegistry;
+  limiter: RateLimiter;
+}
+
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   store: DeclarationStore,
   jurisdiction: JurisdictionConfig,
   publicDir: string | undefined,
+  guards: ActionGuards,
 ): Promise<void> {
   const t0 = Date.now();
   try {
@@ -154,11 +206,7 @@ async function handleRequest(
 
     const withdrawMatch = method === 'DELETE' ? /^\/declarations\/([^/]+)$/.exec(url.pathname) : null;
     if (withdrawMatch) {
-      await drainBody(req); // the signed withdrawal proof; see README for verification status
-      const id = decodeURIComponent(withdrawMatch[1]);
-      store.withdraw(id);
-      // 204 for unknown ids too: a 404 here would leak whether an id ever existed.
-      await respondEmpty(res, t0, 204);
+      await handleWithdraw(req, res, t0, store, guards, decodeURIComponent(withdrawMatch[1]));
       return;
     }
 
@@ -183,7 +231,7 @@ async function handleRequest(
     }
 
     if (method === 'POST' && url.pathname === '/clear') {
-      await handleClear(req, res, t0, store);
+      await handleClear(req, res, t0, store, guards);
       return;
     }
 
@@ -233,6 +281,9 @@ async function handlePublish(
     id: randomUUID(),
     facets: request.facets,
     sealedBody: request.sealedBody, // opaque; never decoded, never inspected
+    // Registered here and nowhere else: this is the only moment a key is bound
+    // to a declaration, and every later withdraw or clear is checked against it.
+    holderPubKey: request.holderPubKey,
     publishedAt: new Date().toISOString(),
     instanceId: jurisdiction.instanceId,
     residency: jurisdiction.residency,
@@ -286,20 +337,107 @@ async function handleQuery(req: IncomingMessage, res: ServerResponse, t0: number
   await respondJson(res, t0, 200, { hits });
 }
 
-async function handleClear(req: IncomingMessage, res: ServerResponse, t0: number, store: DeclarationStore): Promise<void> {
+// ---------------------------------------------------------------------------
+// Signed actions: withdraw and clear (B-20 option A)
+// ---------------------------------------------------------------------------
+
+/**
+ * The crypto check (shared with the device, in @resource-web/wot-policy) plus
+ * this server's own stateful checks, in the order that fails cheapest first.
+ *
+ * Rate limiting sits AFTER verification and BEFORE the nonce claim, on purpose:
+ * after, so an unsigned flood never creates limiter entries and never lets an
+ * attacker fill the table under keys they do not hold; before, so a rejected
+ * burst does not burn the holder's own nonce -- a rate-limited request can be
+ * retried with the same signature once the window clears.
+ */
+async function authorizeAction(
+  body: unknown,
+  expectedAction: 'withdraw' | 'clear',
+  expectedTarget: string,
+  guards: ActionGuards,
+): Promise<{ ok: true; publicKey: string; authorCommitment: string } | { ok: false; status: number; reason: string }> {
+  const verdict = await verifySignedAction({ body, expectedAction, expectedTarget });
+  if (verdict.kind === 'rejected') return { ok: false, status: 403, reason: verdict.reason };
+
+  const { payload, publicKey } = verdict.request;
+  if (!guards.limiter.allow(publicKey)) return { ok: false, status: 429, reason: 'rate-limited' };
+  if (!guards.nonces.claim(payload.nonce, payload.expiresAt)) {
+    return { ok: false, status: 403, reason: 'nonce-reused' };
+  }
+  return { ok: true, publicKey, authorCommitment: payload.authorCommitment };
+}
+
+/**
+ * DELETE /declarations/:id
+ *
+ * NOT AN EXISTENCE ORACLE. The pre-signing build already answered 204 for
+ * unknown ids so a 404 could not confirm that an id had ever existed, and that
+ * invariant survives verification intact: a VALID signature always gets 204,
+ * whether the id exists, was already withdrawn, or belongs to another holder.
+ * Only an unauthorised caller sees anything else, and what they see (403) says
+ * nothing about the id -- they would get the identical 403 for an id that does
+ * not exist. The erase itself happens only when the record exists AND its
+ * registered key is the key that signed.
+ */
+async function handleWithdraw(
+  req: IncomingMessage,
+  res: ServerResponse,
+  t0: number,
+  store: DeclarationStore,
+  guards: ActionGuards,
+  id: string,
+): Promise<void> {
   let parsed: unknown;
   try {
     parsed = await readJsonBody(req);
   } catch {
-    await respondJson(res, t0, 400, { reason: 'malformed-request' });
+    parsed = undefined; // an unparseable body is an unsigned one; authorizeAction names it
+  }
+  const auth = await authorizeAction(parsed, 'withdraw', id, guards);
+  if (!auth.ok) {
+    await respondJson(res, t0, auth.status, { reason: auth.reason });
     return;
   }
-  const authorCommitment = validateClearRequest(parsed);
-  if (!authorCommitment) {
-    await respondJson(res, t0, 400, { reason: 'authorCommitment-required' });
+
+  const record = store.get(id);
+  if (record && record.holderPubKey === auth.publicKey) store.withdraw(id);
+  await respondEmpty(res, t0, 204);
+}
+
+/**
+ * POST /clear -- the debrief's "direct channel to clear the app".
+ *
+ * The authorCommitment is read from the SIGNED payload and never from a
+ * top-level body field: a value the caller can set outside the signature would
+ * re-open the exact hole this scheme closes. Scope is doubly bounded -- the
+ * commitment AND the registered key must both match (see store.clearAuthor) --
+ * so a valid signature can only ever erase what that key itself published.
+ *
+ * 204 regardless of how many records were removed, including zero: a count, or
+ * a 404 on "no such holder", would turn this endpoint into a probe for whether
+ * a given commitment has ever published anything.
+ */
+async function handleClear(
+  req: IncomingMessage,
+  res: ServerResponse,
+  t0: number,
+  store: DeclarationStore,
+  guards: ActionGuards,
+): Promise<void> {
+  let parsed: unknown;
+  try {
+    parsed = await readJsonBody(req);
+  } catch {
+    parsed = undefined;
+  }
+  const auth = await authorizeAction(parsed, 'clear', CLEAR_ALL_TARGET, guards);
+  if (!auth.ok) {
+    await respondJson(res, t0, auth.status, { reason: auth.reason });
     return;
   }
-  store.clearAuthor(authorCommitment);
+
+  store.clearAuthor(auth.authorCommitment, auth.publicKey);
   await respondEmpty(res, t0, 204);
 }
 
@@ -352,10 +490,6 @@ function serveStatusPage(res: ServerResponse, publicDir: string | undefined): vo
 // Body reading and validation
 // ---------------------------------------------------------------------------
 
-async function drainBody(req: IncomingMessage): Promise<void> {
-  await readBody(req);
-}
-
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const raw = await readBody(req);
   if (raw.length === 0) return {};
@@ -391,16 +525,37 @@ function isDeclarationFacets(value: unknown): value is DeclarationFacets {
 interface PublishRequest {
   facets: DeclarationFacets;
   sealedBody: string;
+  holderPubKey: string;
   soleAuthorAck?: boolean;
 }
 
+/** A base64url raw Ed25519 verification key: exactly 32 bytes, nothing else. */
+function isHolderPubKey(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const bytes = fromB64u(value);
+  return bytes !== null && bytes.length === 32;
+}
+
+/**
+ * `holderPubKey` is REQUIRED, not optional. An optional key would mean a
+ * declaration could exist that nobody can ever prove they published, and the
+ * only ways to remove it would be the retention window or the operator -- the
+ * irreversible central exposure this layer is forbidden to add. Refusing the
+ * publish is the conservative default (I9).
+ */
 function validatePublishRequest(value: unknown): PublishRequest | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
   if (!isDeclarationFacets(v.facets)) return null;
   if (typeof v.sealedBody !== 'string') return null;
+  if (!isHolderPubKey(v.holderPubKey)) return null;
   if (v.soleAuthorAck !== undefined && typeof v.soleAuthorAck !== 'boolean') return null;
-  return { facets: v.facets, sealedBody: v.sealedBody, soleAuthorAck: v.soleAuthorAck };
+  return {
+    facets: v.facets,
+    sealedBody: v.sealedBody,
+    holderPubKey: v.holderPubKey,
+    soleAuthorAck: v.soleAuthorAck,
+  };
 }
 
 interface QueryRequest {
@@ -416,10 +571,4 @@ function validateQueryRequest(value: unknown): QueryRequest | null {
   if (v.askerDid !== undefined && typeof v.askerDid !== 'string') return null;
   if (v.askerLabel !== undefined && typeof v.askerLabel !== 'string') return null;
   return { facets: v.facets, askerDid: v.askerDid, askerLabel: v.askerLabel };
-}
-
-function validateClearRequest(value: unknown): string | null {
-  if (!value || typeof value !== 'object') return null;
-  const v = value as Record<string, unknown>;
-  return typeof v.authorCommitment === 'string' ? v.authorCommitment : null;
 }

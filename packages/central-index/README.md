@@ -16,11 +16,11 @@ index rebuilt from the log on start.
 | `GET` | `/health` | `{ ok: true, instanceId }` |
 | `GET` | `/jurisdiction` | the loaded `JurisdictionConfig`, verbatim |
 | `GET` | `/` | serves `publicDir/status.html` if `publicDir` is configured; 404 otherwise |
-| `POST` | `/declarations` | publish; `409` if a structurally single-author facet set is sent without `soleAuthorAck: true` |
-| `DELETE` | `/declarations/:id` | withdraw; always `204`, idempotent, unknown ids included (no existence leak) |
+| `POST` | `/declarations` | publish; requires `holderPubKey` (raw 32-byte Ed25519, base64url); `409` if a structurally single-author facet set is sent without `soleAuthorAck: true` |
+| `DELETE` | `/declarations/:id` | withdraw; signed (see below); `204` for any valid signature, idempotent, unknown ids included (no existence leak); `403 { reason }` / `429` otherwise |
 | `GET` | `/declarations?authorCommitment=` | the holder's own backtrace list: id, publishedAt, residency |
 | `POST` | `/query` | `200` with `{ hits }` above the floor, or the byte-identical no otherwise |
-| `POST` | `/clear` | withdraws every declaration for one `authorCommitment`; always `204` |
+| `POST` | `/clear` | signed (see below); withdraws every declaration for one `authorCommitment` that the signing key published; `204` for any valid signature |
 
 Every response on the table above (JSON API surface) is padded to `CENTRAL_BUDGET_MS` via
 `settleAt`, timed from the first line of the request handler. `GET /` is the one exception: it is
@@ -41,16 +41,31 @@ paths is separately serialized. Covered by `test/indistinguishable_no.test.ts`.
 the device. A `/query` hit never includes `authorCommitment`: returning it would let an asker
 cluster hits by author and quietly erode the k-anonymity the floor just enforced.
 
-## Known gap (SPECULATIVE, not this unit's contract)
+## Signing scheme (CLOSED 2026-09-06, decision B-20 option A)
 
-`DELETE /declarations/:id` and `POST /clear` both take "a signed withdrawal proof" per the
-handover's §4 table, but no signing/verification scheme, key material, or DID-recovery package is
-part of this build's fixed contracts. Today both endpoints read and discard the request body and
-act on the plain `id` / `authorCommitment` supplied — there is no cryptographic check that the
-caller is the original publisher. This is a deliberate scope gap, not an oversight: closing it
-needs a signature scheme decision that belongs with the DID/crypto packages (`packages/transport`,
-`packages/wot-policy`), not with this HTTP surface. Flag before shipping withdrawal/clear to any
-untrusted network.
+This section used to be "Known gap": `DELETE /declarations/:id` and `POST /clear` read and
+discarded the request body and acted on the plain `id` / `authorCommitment`, with no check that
+the caller was the original publisher. Closed.
+
+- `POST /declarations` now requires `holderPubKey`, a base64url raw 32-byte Ed25519 verification
+  key, stored ON the declaration. Required, not optional: a declaration nobody can prove they
+  published would be one nobody could ever withdraw.
+- `DELETE /declarations/:id` and `POST /clear` require
+  `{ payload: {action, target, authorCommitment, nonce, expiresAt}, signature, publicKey }`.
+  Canonicalisation and verification are `@resource-web/wot-policy`'s `canonicalActionString` and
+  `verifySignedAction`, the same functions the device uses, so the server cannot be more
+  permissive than the device.
+- Nonces are single-use (`src/nonces.ts`) and expiry is bounded above (two minutes), so a captured
+  request is neither replayable nor a bearer token.
+- `POST /clear` removes only declarations whose registered `holderPubKey` matches the signing key.
+- Withdraw and clear are rate limited per public key (`src/rate_limit.ts`), never per IP and never
+  per `authorCommitment` — limiting on a commitment would let a passer-by lock a holder out of
+  clearing her own records.
+- Unsigned requests get `403 { reason: 'signature-required' }`, out loud.
+- Still unsigned, on purpose: `GET /declarations?authorCommitment=`. A leaked commitment can still
+  enumerate that holder's declaration ids, timestamps and residency. Tracked in the central
+  handover's "Signing scheme" section; do not read this section as "a leaked commitment is now
+  worthless".
 
 ## Environment (CLI, `src/bin.ts`)
 
@@ -60,7 +75,15 @@ untrusted network.
 | `WOT_CENTRAL_JURISDICTION` | `at` |
 | `WOT_CENTRAL_DATA` | `./data` |
 
-Binds `127.0.0.1` always. Shuts down cleanly on `SIGINT`/`SIGTERM` (closes all connections, then
+## Bind policy
+
+Binds `127.0.0.1` by default. A non-loopback bind is refused unless the instance's jurisdiction
+(residency) config sets `"allowPublicBind": true`; both shipped configs keep it `false`.
+`WOT_CENTRAL_UNSAFE_BIND=1` is a separate, test-only escape hatch so the refusal itself stays
+testable, and is not a deployment option. See `DEPLOY.md` for what an operator still owes before
+flipping the flag.
+
+Shuts down cleanly on `SIGINT`/`SIGTERM` (closes all connections, then
 the listener, then exits). If `public/status.html` exists next to the built package, it is served
 at `GET /` automatically — no separate env var for this, since the file ships with the package.
 

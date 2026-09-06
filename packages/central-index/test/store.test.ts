@@ -19,6 +19,7 @@ function makeDeclaration(overrides: Partial<PublishedDeclaration> = {}): Publish
       ...overrides.facets,
     },
     sealedBody: 'sealed-opaque-base64url',
+    holderPubKey: 'holder-key-a',
     publishedAt: new Date().toISOString(),
     instanceId: 'wot-central-at',
     residency: 'AT',
@@ -116,7 +117,7 @@ describe('DeclarationStore', () => {
     store.publish(makeDeclaration({ id: 'a2', facets: { category: 'c2', regionCode: 'r2', authorCommitment: 'author-x', sensitive: false } }));
     store.publish(makeDeclaration({ id: 'b1', facets: { category: 'c', regionCode: 'r', authorCommitment: 'author-y', sensitive: false } }));
 
-    const cleared = store.clearAuthor('author-x');
+    const cleared = store.clearAuthor('author-x', 'holder-key-a');
 
     expect(cleared).toBe(2);
     expect(store.listByAuthor('author-x')).toHaveLength(0);
@@ -126,6 +127,24 @@ describe('DeclarationStore', () => {
     const rebuilt = new DeclarationStore(dataDir);
     expect(rebuilt.listByAuthor('author-x')).toHaveLength(0);
     expect(rebuilt.listByAuthor('author-y')).toHaveLength(1);
+  });
+
+  it('clearAuthor is scoped to the registered key: the same commitment under another key survives', () => {
+    // The B-20 scope rule at store level. An authorCommitment is not a secret,
+    // so matching on it alone would be exactly the capability the signing
+    // scheme exists to remove; the key that signed has to match too.
+    const store = new DeclarationStore(dataDir);
+    const facets = { category: 'c', regionCode: 'r', authorCommitment: 'author-shared', sensitive: false };
+    store.publish(makeDeclaration({ id: 'mine', facets, holderPubKey: 'holder-key-a' }));
+    store.publish(makeDeclaration({ id: 'theirs', facets, holderPubKey: 'holder-key-b' }));
+
+    expect(store.clearAuthor('author-shared', 'holder-key-a')).toBe(1);
+    expect(store.get('mine')).toBeUndefined();
+    expect(store.get('theirs')).toBeDefined();
+
+    // And a key that published nothing under this commitment clears nothing.
+    expect(store.clearAuthor('author-shared', 'holder-key-c')).toBe(0);
+    expect(store.get('theirs')).toBeDefined();
   });
 
   it('allFacets exposes every currently-indexed facet set, for requiresSoleAuthorAck corpus checks', () => {

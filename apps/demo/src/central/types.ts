@@ -34,7 +34,14 @@ export interface DeclarationFacets {
 // API sketch (handover section 4)
 // ---------------------------------------------------------------------------
 
-/** Body of `POST /declarations`. */
+/**
+ * Body of `POST /declarations`, as the CALLER supplies it.
+ *
+ * `holderPubKey` is deliberately absent: `client.ts`'s `publish` adds it from
+ * the device's own signing key (see `./signing.ts`). A caller cannot choose
+ * which key a declaration registers, because a declaration whose registered key
+ * is not this device's would be one this device could never withdraw.
+ */
 export interface PublishRequest {
   facets: DeclarationFacets
   /** Base64url-framed, AES-GCM-sealed holder abstraction. See coarsen.ts. */

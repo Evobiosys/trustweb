@@ -63,10 +63,21 @@ export class DeclarationStore {
     return existed;
   }
 
-  /** Withdraws every declaration for one author. Returns the number withdrawn. */
-  clearAuthor(authorCommitment: string): number {
+  /**
+   * Withdraws every declaration for one author THAT THIS KEY PUBLISHED.
+   * Returns the number withdrawn.
+   *
+   * The `holderPubKey` half of the filter is the scope rule from B-20 option A:
+   * a clear may only reach records whose registered verification key is the one
+   * that signed the clear. An authorCommitment is a deterministic hash and
+   * therefore not a secret, so a commitment-only filter would let anyone who
+   * ever saw a commitment wipe that holder -- the exact capability this scheme
+   * exists to remove. It also bounds the blast radius of a device that a holder
+   * re-keyed away from: the old key clears only what the old key published.
+   */
+  clearAuthor(authorCommitment: string, holderPubKey: string): number {
     const ids = [...this.index.values()]
-      .filter((d) => d.facets.authorCommitment === authorCommitment)
+      .filter((d) => d.facets.authorCommitment === authorCommitment && d.holderPubKey === holderPubKey)
       .map((d) => d.id);
     for (const id of ids) this.withdraw(id);
     return ids.length;

@@ -9,6 +9,18 @@ export interface JurisdictionConfig {
   lawfulBasis: string;
   retentionDays: number;
   displayName: string;
+  /**
+   * Whether this instance may bind a reachable (non-loopback) address.
+   *
+   * Defaults to false when the config omits it: a jurisdiction file written
+   * before this flag existed, or one whose operator never thought about it,
+   * stays loopback-only. Turning it on is the operator saying out loud that
+   * this deployment is meant to be reachable -- it is not, and must never
+   * become, a side effect of any other setting. Withdrawal and clear are
+   * signature-verified (B-20 option A), which is what makes a reachable bind
+   * defensible at all; see README, "Bind policy".
+   */
+  allowPublicBind?: boolean;
 }
 
 export function loadJurisdiction(name?: string): JurisdictionConfig {
@@ -63,5 +75,9 @@ export function loadJurisdiction(name?: string): JurisdictionConfig {
     lawfulBasis: String(obj.lawfulBasis),
     retentionDays: Number(obj.retentionDays),
     displayName: String(obj.displayName),
+    // Absent, null, 'true', 1 -- anything but the boolean true -- reads as
+    // false. Same conservative fall-through shape as the demo's mode.ts: an
+    // accident must land on the side that adds no exposure.
+    allowPublicBind: obj.allowPublicBind === true,
   };
 }

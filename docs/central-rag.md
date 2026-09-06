@@ -5,20 +5,36 @@ declarations a holder deliberately published, coarsened and consent-recorded, pl
 per-jurisdiction hosting shape. It reads (a) and (c) of the feasibility note's three central-RAG
 options, never (b). It never computes over vault, chat, or inventory contents.
 
-## Loopback only, and why (read this before deploying anything)
+## Signed withdraw and clear, and the bind policy (read this before deploying anything)
 
-`DELETE /declarations/:id` and `POST /clear` accept a withdrawal proof and do not verify it.
-An `authorCommitment` is a deterministic hash, not a secret: the client computes it and the
-server stores it. On a reachable network, anyone who learned one could wipe that holder's
-declarations. The local-first path grants that capability to nobody, and this layer must never
-widen exposure beyond the local-first policy model, so `createCentralServer` refuses to bind
-anything other than loopback until a signature scheme lands. The refusal is enforced in code
-and pinned by `test/loopback_only.test.ts`, not left to deployment discipline.
+Superseded 2026-09-06 (decision B-20, option A). This section previously read "loopback only,
+and why": withdraw and clear acted on a plain id or `authorCommitment` with no proof of
+holdership, and an `authorCommitment` is a deterministic hash rather than a secret, so on a
+reachable network anyone who had ever seen one could wipe that holder's declarations. That is
+closed.
 
-Consequence for the hosting shape: the `Containerfile`, `podman-compose.yml` and `DEPLOY.md`
-describe a deployment that is DESIGNED, not deployable. They stay in the tree because the
-jurisdiction shape is what Jakob asked to see, and they become deployable when withdrawal and
-clear are signature-verified. Until then this index runs on the holder's own machine only.
+`DELETE /declarations/:id` and `POST /clear` now require an Ed25519 signature over the canonical
+message `{action, target, authorCommitment, nonce, expiresAt}`, verified server-side against the
+public key the holder registered WITH the declaration at publish time. Nonces are single-use,
+expiry is short (two minutes maximum, one minute in practice), a clear removes only declarations
+whose registered key matches the key that signed, and unsigned requests are refused
+`403 { reason: 'signature-required' }` out loud rather than silently doing nothing. The
+canonicalisation and the verify live in `@resource-web/wot-policy`, shared with the device; the
+nonce registry and the per-key rate limiter are server state in `packages/central-index`.
+
+Bind policy, three separate gates:
+
+1. loopback (`127.0.0.1`, `localhost`, `::1`) is always allowed, and stays the default;
+2. `WOT_CENTRAL_UNSAFE_BIND=1` is a test-only escape hatch, unchanged, never a deployment option;
+3. `"allowPublicBind": true` in the jurisdiction (residency) config is the supported route to a
+   reachable instance.
+
+Anything else still refuses to start. Both shipped configs (`at.json`, `eu.json`) keep
+`allowPublicBind: false`, so an instance becomes reachable because an operator wrote it down,
+never by accident. Pinned by `test/loopback_only.test.ts`.
+
+What a reachable instance still needs, and this file does not provide: TLS terminated at the
+jurisdiction host (the existing Caddy pattern), and the operational decisions in `DEPLOY.md`.
 
 ## Two stores, two rulings
 
@@ -57,11 +73,11 @@ this JSON table, and padding a human loading a status page buys no privacy.
 |---|---|---|---|---|
 | `GET` | `/health` | none | `{ ok: true, instanceId }` | SHIPPED |
 | `GET` | `/jurisdiction` | none | the jurisdiction config, verbatim | SHIPPED |
-| `POST` | `/declarations` | `{ facets, sealedBody, soleAuthorAck? }` | `201 { id, publishedAt, instanceId, residency }`, or `409 { reason: 'sole-author-ack-required' }` | SHIPPED |
-| `DELETE` | `/declarations/:id` | a withdrawal proof | `204`, idempotent (unknown or already-withdrawn ids also return `204`, never `404`, so as not to leak whether an id ever existed) | SHIPPED end to end; the proof is accepted and its bytes are drained, but nothing verifies a signature over it yet, so treat "signed withdrawal proof" as DESIGNED, not enforced |
-| `GET` | `/declarations?authorCommitment=` | none | `{ declarations: [{ id, publishedAt, residency }, ...] }`, the holder's own backtrace list | SHIPPED |
+| `POST` | `/declarations` | `{ facets, sealedBody, holderPubKey, soleAuthorAck? }` | `201 { id, publishedAt, instanceId, residency }`, `409 { reason: 'sole-author-ack-required' }`, or `400 { reason: 'malformed-request' }` when `holderPubKey` is missing or is not a raw 32-byte Ed25519 key | SHIPPED. `holderPubKey` is REQUIRED: a declaration nobody can prove they published could never be withdrawn |
+| `DELETE` | `/declarations/:id` | `{ payload: {action:'withdraw', target:<id>, authorCommitment, nonce, expiresAt}, signature, publicKey }` | `204` for any valid signature, idempotent (an unknown id, an already-withdrawn id and another holder's id all return `204`, never `404`, so as not to leak whether an id ever existed); `403 { reason }` for an unsigned, malformed, expired, replayed or wrong-key request; `429 { reason: 'rate-limited' }` past the per-key limit | SHIPPED, signature enforced |
+| `GET` | `/declarations?authorCommitment=` | none | `{ declarations: [{ id, publishedAt, residency }, ...] }`, the holder's own backtrace list | SHIPPED, and deliberately NOT signature-gated: a leaked `authorCommitment` still enumerates that holder's declaration ids, timestamps and residency here. See the threat notes in the central handover's "Signing scheme" section |
 | `POST` | `/query` | `{ facets, askerDid?, askerLabel? }` | `200`, either `{ hits: [...] }` above the floor or the byte-identical no | SHIPPED |
-| `POST` | `/clear` | `{ authorCommitment }` | `204`, withdraws every declaration of that holder | SHIPPED end to end; same caveat as `DELETE /declarations/:id`: the "signed proof" is a plain field the server accepts as-is, with no signature check |
+| `POST` | `/clear` | `{ payload: {action:'clear', target:'all', authorCommitment, nonce, expiresAt}, signature, publicKey }` | `204`, withdraws every declaration of that holder THAT THIS KEY PUBLISHED; same `403`/`429` refusals as withdraw | SHIPPED, signature enforced. The `authorCommitment` is read from the signed payload only, never from a top-level field |
 
 ## The floor, the sole-author rule, and the indistinguishable no
 
@@ -111,13 +127,14 @@ instance status page. That wiring is DESIGNED, not built.
   response; the two jurisdiction configs and the status page; the client adapter's off-by-default
   behaviour and residency allowlist gate; the end-to-end test suite in
   `packages/central-index/test/e2e/`.
-- DESIGNED: signature verification on the withdrawal proof (`DELETE /declarations/:id`) and the
-  clear proof (`POST /clear`). The API sketch in the handover calls both a "signed proof", and
-  the server accepts a body shaped that way, but nothing in `server.ts` verifies a signature over
-  either one today: a withdrawal or a clear currently succeeds for any caller who can name the
-  right id or `authorCommitment`, with no proof of holdership checked. This is a real gap between
-  the spec and the shipped code, not a design choice, and should be treated as open rather than
-  quietly assumed closed. Also DESIGNED: wiring the opt-in panel into the demo UI itself.
+- SHIPPED since 2026-09-06 (B-20 option A): Ed25519 signature verification on
+  `DELETE /declarations/:id` and `POST /clear`, publish-time registration of the holder's
+  verification key, single-use nonces, bounded expiry, key-scoped clear, per-key rate limiting,
+  and the residency-config route to a non-loopback bind. The device half is
+  `apps/demo/src/central/signing.ts`; `apps/demo/test/central_backtrace_clear_e2e.test.ts` walks
+  the debrief's backtrace-and-clear path against the shipped `src/bin.ts` over real HTTP.
+- DESIGNED, still open: signing the backtrace READ (`GET /declarations?authorCommitment=`), and
+  wiring the opt-in panel into the demo UI itself.
 - SPECULATIVE: the 3-of-5 secret-sharing threshold for metadata residency (B-15, threat model
   unruled); the Mode 1 hosted vault backup (D-11, deferred) and any computation over it, which
   remains forbidden by the ruling at the top of this document regardless of how Mode 1 itself

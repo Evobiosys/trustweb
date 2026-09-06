@@ -1,13 +1,24 @@
 # Deployment: WoT Central Index
 
-## Status: DESIGNED, not deployable yet
+## Status: loopback by default; a reachable bind is now possible, and is an operator decision
 
-Do not put this on a reachable host. `DELETE /declarations/:id` and `POST /clear` accept a
-withdrawal proof and do not verify it, and an `authorCommitment` is a deterministic hash rather
-than a secret, so a reachable instance would let anyone who learned one wipe that holder's
-declarations. The server refuses to bind anything other than loopback for exactly that reason.
-Everything below describes the jurisdiction shape and becomes usable once withdrawal and clear
-are signature-verified. Until then this runs on the holder's own machine only.
+Superseded 2026-09-06 (B-20 option A). This section previously said "do not put this on a
+reachable host", because withdraw and clear verified nothing and an `authorCommitment` is a
+deterministic hash rather than a secret. Both endpoints now verify an Ed25519 signature against
+the key registered with each declaration at publish time, so that reason is gone.
+
+The bind still defaults to loopback and refuses anything else unless the jurisdiction (residency)
+config for this instance sets `"allowPublicBind": true`. Both shipped configs keep it `false`.
+Before flipping it on a real host, an operator still owes:
+
+- TLS terminated in front of this process (the existing Caddy pattern); the server speaks plain
+  HTTP and always has.
+- The residency, lawful basis, operator contact and retention days in the jurisdiction file being
+  true of the actual deployment, since `GET /jurisdiction` and the status page publish them.
+- A note that `GET /declarations?authorCommitment=` is not signature-gated: a leaked commitment
+  still enumerates that holder's declaration ids and timestamps.
+
+`WOT_CENTRAL_UNSAFE_BIND=1` is a test-only escape hatch and is not a deployment option.
 
 ## Build and Run with Podman
 
@@ -41,6 +52,10 @@ environment:
 ```
 
 Available jurisdictions: `at` (Austria, default), `eu` (European Union).
+
+Each jurisdiction file also carries `allowPublicBind` (default `false`). Leave it `false` for a
+loopback instance. Set it to `true`, and publish the container on a real interface, only for a
+deployment an operator intends to be reachable.
 
 ## Configuration
 

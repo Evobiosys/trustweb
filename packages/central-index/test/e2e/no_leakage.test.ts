@@ -21,7 +21,7 @@
 // so it cannot itself trip any of these assertions.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startTestServer, stopTestServer, post, makeFacets, type TestServer, TEST_TIMEOUT_MS, LONG_TEST_TIMEOUT_MS } from './helpers.js';
+import { startTestServer, stopTestServer, post, makeFacets, makeSigner, type TestServer, TEST_TIMEOUT_MS, LONG_TEST_TIMEOUT_MS } from './helpers.js';
 
 const VAULT_TEXT_CANARY = 'the-vault-said-my-safe-word-is-heliotrope-42';
 const AUTHOR_NAME_CANARY = 'Maximilian Ferdinand Habsburg-Canary';
@@ -41,16 +41,20 @@ describe('e2e: a query response never contains raw vault text, an author name, o
     // request fields the server's validatePublishRequest does not name in its shape, i.e.
     // fields nothing should read, store or echo.
     for (let i = 0; i < 6; i++) {
+      const filler = await makeSigner();
       const res = await post(t.baseUrl, '/declarations', {
         facets: makeFacets({ ...facetOverrides, authorCommitment: `filler-author-${i}` }),
         sealedBody: `sealed-opaque-filler-${i}`,
+        holderPubKey: filler.publicKeyB64u,
         soleAuthorAck: true,
       });
       expect(res.status, JSON.stringify(res.json)).toBe(201);
     }
+    const targetSigner = await makeSigner();
     const target = await post(t.baseUrl, '/declarations', {
       facets: makeFacets({ ...facetOverrides, authorCommitment: AUTHOR_COMMITMENT }),
       sealedBody: 'sealed-opaque-target-abc123',
+      holderPubKey: targetSigner.publicKeyB64u,
       soleAuthorAck: true,
       authorName: AUTHOR_NAME_CANARY,
       streetAddress: STREET_ADDRESS_CANARY,
