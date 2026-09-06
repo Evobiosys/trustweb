@@ -1,0 +1,24 @@
+# Podman containerfile (not Docker)
+
+FROM docker.io/library/node:22-alpine
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Copy built package
+COPY dist /app/dist
+COPY public /app/public
+COPY jurisdictions /app/jurisdictions
+COPY package.json /app/package.json
+
+# Change ownership to nodejs user
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+EXPOSE 4187
+
+CMD ["node", "dist/bin.js"]
