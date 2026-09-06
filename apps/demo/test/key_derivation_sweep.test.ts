@@ -148,7 +148,20 @@ describe('no AES-GCM key is derived solely from data that travels in cleartext',
     // own `seal` primitive (its declaration and its `subtle.encrypt` body)
     // that both of them call. Both callers draw randomBytes(12); neither
     // takes a key derived from the wire.
-    expect([...new Set(sites.map((s) => s.split(':')[0]))].sort()).toEqual(['crypto.ts', 'gate.ts', 'relay.ts'])
-    expect(sites).toHaveLength(4)
+    //
+    // central/coarsen.ts's sealBody was added by feat/central-rag and reviewed
+    // against this rule when the two branches were merged (integration
+    // rehearsal, 2026-09-06): it draws its own randomBytes(12) per call, takes
+    // the CryptoKey from its caller, and nothing under src/central/ calls
+    // derivePairKey at all, so no key there can come from the wire. The
+    // deliberate-addition requirement this assertion exists to enforce is met
+    // by this note plus the entry below, which is the whole mechanism.
+    expect([...new Set(sites.map((s) => s.split(':')[0]))].sort()).toEqual([
+      'central/coarsen.ts',
+      'crypto.ts',
+      'gate.ts',
+      'relay.ts',
+    ])
+    expect(sites).toHaveLength(5)
   })
 })
