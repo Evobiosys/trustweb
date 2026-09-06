@@ -259,6 +259,24 @@ export interface QueryEnvelope {
    * ever set by a relaying hop's own one-time local decision.
    */
   relayed?: true
+  /**
+   * "This is very important" (2026-09-06 decision, cooldown.ts). Present and
+   * `true` ONLY when the asker has deliberately marked this specific ask as
+   * an escalation past the receiving device's own repeat-ask cooldown
+   * (cooldown.ts's ASK_COOLDOWN_MS) -- omitted on every ordinary ask, same
+   * `undefined`-means-nothing convention as `relayed` above.
+   *
+   * This is a REQUEST, not a grant: the receiving device decides for itself,
+   * from its OWN local cooldown record, whether this asker has already
+   * spent their one-time escalation for this (asker, template-or-query-text)
+   * pair -- see cooldown.ts's `decideAsk`. Setting this field on a second
+   * ask after the first was already granted changes nothing; the recipient
+   * ignores it and applies its ordinary cooldown decision. This is the
+   * enforcement the feature depends on: an asker's own device cannot make
+   * itself believe it has an escalation left by simply setting this field
+   * again, because the field is not where the "spent" state lives.
+   */
+  escalated?: true
 }
 
 /** Bound for QueryEnvelope.freeText, same reasoning as wire.ts's CHAT_MAX_LEN
@@ -340,7 +358,60 @@ export interface PingEnvelope {
  * never produces these two -- it keeps using the five reasons above,
  * unchanged, exactly as every other demo already does.
  */
-export type LocalOutcome = 'no-match' | 'below-k' | 'declined' | 'blocked' | 'shared' | 'relayed' | 'relay-nothing'
+/**
+ * `'cooldown'`/`'muted'` (2026-09-06, cooldown.ts): two more local-only
+ * "nothing" reasons, added alongside the original four (`no-match`,
+ * `below-k`, `declined`, `blocked`) for the SAME reason `blocked` exists --
+ * a device that has decided, ahead of time and for its own reasons, not to
+ * engage with this particular ask still runs the full gate.ts `decide()`
+ * path and still produces a byte-identical wire "nothing", it just gets to
+ * remember WHY locally. `'cooldown'`: this asker sent the same
+ * (template-or-query-text) too recently and did not have an unspent
+ * escalation to spend (cooldown.ts's `decideAsk`). `'muted'`: this asker is
+ * on this device's mute list (state.ts's `Peer.muted`) -- silenced
+ * entirely, regardless of cooldown state.
+ */
+export type LocalOutcome =
+  | 'no-match'
+  | 'below-k'
+  | 'declined'
+  | 'blocked'
+  | 'cooldown'
+  | 'muted'
+  | 'shared'
+  | 'relayed'
+  | 'relay-nothing'
+
+// ---------------------------------------------------------------------------
+// Repeat-ask cooldown (cooldown.ts) -- local-only, never transmitted
+// ---------------------------------------------------------------------------
+
+/**
+ * One (asker, template-or-query-text) cooldown record, keyed by
+ * cooldown.ts's `cooldownKey()`. Lives in DeviceState.askCooldowns on the
+ * RECEIVING device (the enforcement this feature depends on: the asker's
+ * own device cannot edit this record) and, in a parallel, best-effort,
+ * UI-ONLY copy, in DeviceState.escalationHints on the ASKING device (see
+ * that field's own doc comment for why it can never be authoritative).
+ *
+ * `windowStartAt` anchors the cooldown clock: the timestamp of the ask that
+ * OPENED the current window (the first-ever ask for this key, or the first
+ * one to arrive after a prior window had already elapsed naturally). An
+ * escalated ask that is granted mid-window does NOT move this forward --
+ * see cooldown.ts's `decideAsk` doc comment for why the natural expiry has
+ * to stay anchored to the window's true start, not to whichever ask most
+ * recently got through.
+ *
+ * `escalationUsedInWindow`: true once this asker's one-time "this is very
+ * important" pass has been spent for the CURRENT window. Reset to false
+ * only when the window itself naturally expires and a fresh one opens --
+ * never by anything else, per this feature's spec ("gone until the cooldown
+ * naturally expires").
+ */
+export interface AskCooldownRecord {
+  windowStartAt: number
+  escalationUsedInWindow: boolean
+}
 
 /** What the asking device is allowed to learn. */
 export type VisibleOutcome = 'nothing' | 'shared'

@@ -245,6 +245,27 @@ describe('encodeForQr / decodeFromQr round trip', () => {
     }
   })
 
+  // cooldown.ts, 2026-09-06: QueryEnvelope.escalated, "this is very
+  // important" -- same optional-`true`-only convention as `relayed` above.
+  it('round-trips a QueryEnvelope carrying escalated: true', () => {
+    const escalated: QueryEnvelope = { ...QUERY, escalated: true }
+    expect(decodeFromQr(encodeForQr(escalated))).toEqual(escalated)
+  })
+
+  it('a QueryEnvelope with no escalated field parses with escalated left undefined -- every ordinary ask', () => {
+    const decoded = decodeFromQr(encodeForQr(QUERY))
+    expect(decoded).not.toBeNull()
+    expect((decoded as QueryEnvelope).escalated).toBeUndefined()
+    expect('escalated' in (decoded as QueryEnvelope)).toBe(false)
+  })
+
+  it('rejects a QueryEnvelope whose escalated field is present but not exactly true', () => {
+    for (const bad of [false, 1, 0, 'true', null, {}, []]) {
+      const raw = JSON.stringify({ ...QUERY, escalated: bad })
+      expect(decodeFromQr(raw)).toBeNull()
+    }
+  })
+
   it('round-trips an AnswerEnvelope', () => {
     expect(decodeFromQr(encodeForQr(ANSWER))).toEqual(ANSWER)
   })

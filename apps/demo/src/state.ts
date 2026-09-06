@@ -2,10 +2,11 @@
  * Device state. Lives in IndexedDB, never leaves the device.
  */
 
-import type { ChatThread, Identity, InventoryItem, Profile, QueryLogEntry } from './types'
+import type { AskCooldownRecord, ChatThread, Identity, InventoryItem, Profile, QueryLogEntry } from './types'
 import { kvGet, kvSet, kvClear } from './db'
 import { randomId } from './crypto'
 import type { SerializedIdentityV1 } from './did'
+import { ASK_COOLDOWN_MS, askIdentityKey, cooldownKey, decideAsk, type CooldownDecision, type CooldownPolicy } from './cooldown'
 
 export interface Peer {
   id: string
@@ -54,6 +55,30 @@ export interface Peer {
    * cross the relay.
    */
   pairing?: 'nonce' | 'ecdh'
+  /**
+   * Mute this asker (cooldown.ts, 2026-09-06). Distinct from `blocked`
+   * above: `blocked` is this project's pre-existing, broader "I do not want
+   * this contact reaching me at all" switch; `muted` is the narrower,
+   * repeat-asking-specific one this feature adds -- "their asks stay
+   * silent and log-only," a smaller, more easily reversible step than
+   * blocking outright, offered specifically from the cooldown settings
+   * (screens/profile.ts) so muting someone for nagging never requires the
+   * heavier, pre-existing block action. Both fold into the SAME
+   * indistinguishable-"nothing" wire outcome as everything else in
+   * gate.ts's `decide()`; only the local Protokoll (LocalOutcome) tells
+   * them apart. Absent reads as `false` -- see `isMuted()` below.
+   */
+  muted?: boolean
+  /**
+   * Relay-target posture (relay_posture.ts, 2026-09-06): "do not relay for
+   * this person." Per-peer override of the global `DeviceState.actAsRelay`
+   * default -- see relay_posture.ts's module doc for what "relay" means
+   * here (carrying a THIRD party's sealed traffic, not the demo-21
+   * second-hop question-forward). Absent reads as `false` (this contact is
+   * covered by whatever the global posture says) -- see relay_posture.ts's
+   * `mayRelayFor()`.
+   */
+  doNotRelayFor?: boolean
 }
 
 /**
@@ -269,6 +294,41 @@ export interface DeviceState {
    * existed, same pattern as `inventory`/`profile`/`queryLog` above.
    */
   pendingAcceptRequests?: { did: string; from: Identity }[]
+  /**
+   * Repeat-ask cooldown (cooldown.ts, 2026-09-06). This device's OWN
+   * enforcement records, keyed by `cooldownKey(askerId, templateOrText)` --
+   * see cooldown.ts's module doc for why this is the receiving device's
+   * state and the asker cannot touch it. Absent reads as `{}` -- `withDefaults`
+   * backfills it, same as `queryLog`.
+   */
+  askCooldowns?: Record<string, AskCooldownRecord>
+  /**
+   * "Keep default cooldown" / "no cooldown" (cooldown.ts). Absent reads as
+   * `'default'` (I9) -- see cooldown.ts's `CooldownPolicy`. `withDefaults`
+   * does not need to backfill it: absence already correctly means the
+   * protective default.
+   */
+  cooldownPolicy?: CooldownPolicy
+  /**
+   * Best-effort, UI-ONLY copy of the escalation half of `askCooldowns`, kept
+   * on the ASKING device purely so main.ts's screenAsk can grey out its own
+   * "this is very important" checkbox once it believes it has already spent
+   * it for a given (peer, template-or-query-text) -- keyed the same way,
+   * with the PEER's id standing in for "asker" from this device's own point
+   * of view. NEVER authoritative: the receiving device enforces the real
+   * single-use rule from its OWN `askCooldowns`, independent of anything
+   * here (cooldown.ts's module doc, "the sender cannot bypass by editing
+   * its own state" -- this field is exactly the state a sender COULD edit,
+   * which is why nothing on the receiving side ever reads it). Absent reads
+   * as `{}`, same as `askCooldowns`.
+   */
+  escalationHints?: Record<string, AskCooldownRecord>
+  /**
+   * "Act as relay for others" (relay_posture.ts, 2026-09-06). Absent reads
+   * as `RELAY_POSTURE_DEFAULT_ON` (true) -- see relay_posture.ts's own
+   * module doc for why the default is ON and what "relay" scopes to here.
+   */
+  actAsRelay?: boolean
 }
 
 /** Exported so test/state_defaults.test.ts can write a legacy-shaped record
@@ -377,6 +437,8 @@ function withDefaults(s: DeviceState): DeviceState {
     queryLog: s.queryLog ?? [],
     secondBrainNotes: s.secondBrainNotes ?? (legacy.secondBrainNote ? [legacy.secondBrainNote] : s.secondBrainNotes),
     pendingAcceptRequests: s.pendingAcceptRequests ?? [],
+    askCooldowns: s.askCooldowns ?? {},
+    escalationHints: s.escalationHints ?? {},
   }
 }
 
@@ -545,3 +607,132 @@ export function appendQueryLog(s: DeviceState, entry: Omit<QueryLogEntry, 'id'>)
   if (s.queryLog.length > QUERY_LOG_MAX) s.queryLog.splice(0, s.queryLog.length - QUERY_LOG_MAX)
   return full
 }
+
+// ---------------------------------------------------------------------------
+// Repeat-ask cooldown (cooldown.ts) -- RECEIVING-device enforcement
+// ---------------------------------------------------------------------------
+
+/** Absent reads as `false`. See Peer.muted's own doc comment. */
+export function isMuted(peer: Pick<Peer, 'muted'> | null | undefined): boolean {
+  return peer?.muted ?? false
+}
+
+export interface AskEvaluation {
+  outcome: 'muted' | 'cooldown' | 'ok'
+  escalationGranted: boolean
+}
+
+/**
+ * Memoised by `qid`, NOT persisted (in-memory only, cleared on reload -- a
+ * fresh session re-derives everything it needs from `s.askCooldowns`, which
+ * IS persisted). Exists because a single incoming query is evaluated from
+ * more than one call site over its lifetime: `handleAmbientQuery` decides
+ * whether to surface it at all, and -- for the ambient-surfaced case --
+ * `runConsentCeremony` runs again once a human actually looks
+ * (`screenAnswer`'s `pendingIncomingQuery`/`pendingGeoQueries` drain).
+ * Without this cache, the SAME ask would be evaluated twice: a cooldown
+ * window would shift twice, and, worse, a single-use escalation would be
+ * spent twice for what is, on the wire, one ask. Capped the same way
+ * `queryLog` is (`QUERY_LOG_MAX`), for the same reason: a long-running demo
+ * device must not grow this without bound.
+ */
+const askEvaluationCache = new Map<string, AskEvaluation>()
+const ASK_EVALUATION_CACHE_MAX = 200
+
+/**
+ * The one call every main.ts entry point for an incoming query makes before
+ * running any match/consent logic: `handleAmbientQuery` (the ambient path)
+ * and `runConsentCeremony` (both the ambient-surfaced ceremony AND the
+ * manual QR-scan path, `scanQuery`) all call this with the query's own
+ * `qid`, exactly once in effect (see `askEvaluationCache` above for how a
+ * SECOND call for the same `qid` is made safe rather than double-counted).
+ * Mutates `s.askCooldowns` in place (same style as
+ * `appendQueryLog`/`upsertPeer` above) ONLY when the ask is allowed through
+ * -- a dropped ask leaves the stored window untouched, per cooldown.ts's
+ * `decideAsk` doc comment.
+ *
+ * Muting is checked here, ahead of cooldown, and short-circuits it entirely
+ * (a muted asker's window is never opened or extended by an ask that was
+ * always going to be silenced regardless of timing) -- muting is this
+ * device's own standing decision about the PERSON, cooldown is about the
+ * ASK, and the person-level decision takes priority.
+ */
+export function evaluateIncomingAsk(
+  s: DeviceState,
+  qid: string,
+  askerId: string,
+  templateOrText: string,
+  escalationRequested: boolean,
+  now: number = Date.now(),
+): AskEvaluation {
+  const cached = askEvaluationCache.get(qid)
+  if (cached) return cached
+
+  const result: AskEvaluation = ((): AskEvaluation => {
+    if (s.peers.find((p) => p.id === askerId)?.muted) {
+      return { outcome: 'muted', escalationGranted: false }
+    }
+    const key = cooldownKey(askerId, templateOrText)
+    const decision: CooldownDecision = decideAsk({
+      record: s.askCooldowns?.[key],
+      now,
+      cooldownMs: ASK_COOLDOWN_MS,
+      policy: s.cooldownPolicy ?? 'default',
+      escalationRequested,
+    })
+    if (decision.nextRecord) {
+      s.askCooldowns = s.askCooldowns ?? {}
+      s.askCooldowns[key] = decision.nextRecord
+    }
+    return decision.allow
+      ? { outcome: 'ok', escalationGranted: decision.escalationConsumed }
+      : { outcome: 'cooldown', escalationGranted: false }
+  })()
+
+  askEvaluationCache.set(qid, result)
+  if (askEvaluationCache.size > ASK_EVALUATION_CACHE_MAX) {
+    const oldest = askEvaluationCache.keys().next().value
+    if (oldest !== undefined) askEvaluationCache.delete(oldest)
+  }
+  return result
+}
+
+/** Test-only: clears the qid memoisation above. Production `randomId(12)`
+ *  qids do not collide across real asks, so no production code path ever
+ *  needs this -- it exists purely so test/state_ask_cooldown.test.ts's
+ *  cases can reuse short, readable literal qids ('qid-1', 'qid-2', ...)
+ *  without one test's cached decision leaking into the next. */
+export function __resetAskEvaluationCacheForTests(): void {
+  askEvaluationCache.clear()
+}
+
+/**
+ * ASKING-device UI hint only -- see DeviceState.escalationHints' own doc
+ * comment on why this can never be authoritative. `peerId` here is the
+ * device being asked (from the asker's own point of view), standing in for
+ * `askIdentityKey`'s usual "asker" role in `evaluateIncomingAsk` above.
+ */
+export function escalationHintAvailable(s: DeviceState, peerId: string, templateOrText: string, now: number = Date.now()): boolean {
+  const key = cooldownKey(peerId, templateOrText)
+  const record = s.escalationHints?.[key]
+  if (!record) return true
+  if (now - record.windowStartAt >= ASK_COOLDOWN_MS) return true
+  return !record.escalationUsedInWindow
+}
+
+/** Record, locally and optimistically, that this device just sent an
+ *  escalated ask to `peerId` for `templateOrText` -- see
+ *  `escalationHintAvailable` above. */
+export function recordEscalationHintSent(s: DeviceState, peerId: string, templateOrText: string, now: number = Date.now()): void {
+  const key = cooldownKey(peerId, templateOrText)
+  const existing = s.escalationHints?.[key]
+  const withinWindow = existing !== undefined && now - existing.windowStartAt < ASK_COOLDOWN_MS
+  s.escalationHints = s.escalationHints ?? {}
+  s.escalationHints[key] = withinWindow
+    ? { windowStartAt: existing.windowStartAt, escalationUsedInWindow: true }
+    : { windowStartAt: now, escalationUsedInWindow: true }
+}
+
+/** Re-exported so main.ts does not need a second import line for a single
+ *  function used alongside the ones above. */
+export { askIdentityKey }

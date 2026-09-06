@@ -74,6 +74,12 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   // either: this field only ever means one thing when present at all.
   if ('relayed' in o && o.relayed !== true) return null
   const relayed = o.relayed === true ? (true as const) : undefined
+  // `escalated` (cooldown.ts's "this is very important", types.ts's
+  // QueryEnvelope.escalated doc comment): same strictness convention as
+  // `relayed` immediately above -- absent is fine, present-and-not-`true`
+  // rejects the whole envelope.
+  if ('escalated' in o && o.escalated !== true) return null
+  const escalated = o.escalated === true ? (true as const) : undefined
   return {
     v: WIRE_VERSION,
     t: 'query',
@@ -84,6 +90,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     issuedAt: o.issuedAt,
     ...(freeText ? { freeText } : {}),
     ...(relayed ? { relayed } : {}),
+    ...(escalated ? { escalated } : {}),
   }
 }
 

@@ -16,6 +16,8 @@ import { t } from '../i18n'
 import type { DeviceState } from '../state'
 import { deviceMode, applyModePosture } from '../state'
 import { renderModePicker, modeTitleKey } from './mode_picker'
+import type { CooldownPolicy } from '../cooldown'
+import { RELAY_POSTURE_DEFAULT_ON } from '../relay_posture'
 
 function field(label: string, input: HTMLElement, hint?: string): HTMLElement {
   return el('div', { class: 'field' }, [el('label', {}, [label]), input, hint ? el('small', {}, [hint]) : null])
@@ -88,6 +90,88 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
     }, 'wot-mode-profile'),
   ])
 
+  // Repeat-ask cooldown (cooldown.ts, 2026-09-06): "keep default cooldown" /
+  // "no cooldown" -- a device-wide radio pair, same shape as
+  // renderModePicker's own radios just above, but its own small group since
+  // it is independent of the onboarding mode. Absent `s.cooldownPolicy`
+  // reads as 'default' (I9) -- see cooldown.ts's `CooldownPolicy`.
+  const cooldownRadios = (['default', 'off'] as CooldownPolicy[]).map((policy) => {
+    const id = `wot-cooldown-${policy}`
+    const input = el('input', {
+      type: 'radio',
+      name: 'wot-cooldown-policy',
+      id,
+      ...((s.cooldownPolicy ?? 'default') === policy ? { checked: true } : {}),
+    }) as HTMLInputElement
+    input.addEventListener('change', () => {
+      if (!input.checked) return
+      s.cooldownPolicy = policy
+      onSave()
+    })
+    return el('label', { for: id, style: 'display:flex;align-items:center;gap:8px' }, [
+      input,
+      document.createTextNode(t(policy === 'default' ? 'cooldownPolicyDefault' : 'cooldownPolicyOff')),
+    ])
+  })
+
+  // Per-peer mute (cooldown.ts) and "do not relay for this person"
+  // (relay_posture.ts) -- one row per connected peer. Both are additive,
+  // reversible, narrower actions than the pre-existing `Peer.blocked`
+  // (which this screen does not surface a toggle for at all yet -- out of
+  // this feature's scope), offered here because muting/relay posture are
+  // exactly the settings this feature adds, not a place to also build a
+  // general peer-management screen.
+  const peerRows = s.peers.length
+    ? s.peers.map((p) => {
+        const muteBtn = el('button', {
+          class: 'btn quiet',
+          onclick: () => { p.muted = !p.muted; onSave(); onIdentityChange() },
+        }, [t(p.muted ? 'unmutePeerLabel' : 'mutePeerLabel')])
+        const relayInput = el('input', {
+          type: 'checkbox',
+          id: `wot-norelay-${p.id}`,
+          ...(p.doNotRelayFor ? { checked: true } : {}),
+        }) as HTMLInputElement
+        relayInput.addEventListener('change', () => { p.doNotRelayFor = relayInput.checked; onSave() })
+        return el('div', { class: 'card' }, [
+          el('p', {}, [el('b', {}, [p.displayName])]),
+          el('div', { class: 'btnrow' }, [muteBtn]),
+          p.muted ? el('p', { class: 'note' }, [t('mutePeerHint')]) : null,
+          el('label', { for: `wot-norelay-${p.id}`, style: 'display:flex;align-items:center;gap:8px' }, [
+            relayInput,
+            document.createTextNode(t('doNotRelayForLabel')),
+          ]),
+        ])
+      })
+    : [el('p', { class: 'note' }, [t('noPeersToManage')])]
+
+  const cooldownSection = el('div', {}, [
+    el('h2', {}, [t('cooldownSettingTitle')]),
+    el('p', { class: 'note' }, [t('cooldownSettingLead')]),
+    ...cooldownRadios,
+    ...peerRows,
+  ])
+
+  // "Act as relay for others" (relay_posture.ts, 2026-09-06). Absent
+  // `s.actAsRelay` reads as RELAY_POSTURE_DEFAULT_ON (true) -- see that
+  // constant's own doc comment for why the default is on, restated in the
+  // setting's own lead copy (I7: the setting text carries the reason, not
+  // only the handover doc).
+  const actAsRelayInput = el('input', {
+    type: 'checkbox',
+    id: 'wot-act-as-relay',
+    ...((s.actAsRelay ?? RELAY_POSTURE_DEFAULT_ON) ? { checked: true } : {}),
+  }) as HTMLInputElement
+  actAsRelayInput.addEventListener('change', () => { s.actAsRelay = actAsRelayInput.checked; onSave() })
+  const relaySection = el('div', {}, [
+    el('h2', {}, [t('relayPostureSettingTitle')]),
+    el('p', { class: 'note' }, [t('relayPostureSettingLead')]),
+    el('label', { for: 'wot-act-as-relay', style: 'display:flex;align-items:center;gap:8px' }, [
+      actAsRelayInput,
+      document.createTextNode(t('actAsRelayLabel')),
+    ]),
+  ])
+
   return el('div', {}, [
     el('p', { class: 'lead' }, [t('profileLead')]),
     field(t('profileName'), nameInput),
@@ -95,5 +179,7 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
     field(t('profileGraetzl'), graetzlInput),
     field(t('profileLangs'), langsInput, t('profileLangsHint')),
     modeSection,
+    cooldownSection,
+    relaySection,
   ])
 }

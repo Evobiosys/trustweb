@@ -61,6 +61,21 @@ export interface GateInput {
   consent: boolean
   /** A has blocked this requester. */
   blocked: boolean
+  /**
+   * This requester is muted (cooldown.ts, state.ts's `Peer.muted`).
+   * OPTIONAL, additive, defaults to `false` -- every caller before this
+   * field existed (demo 1/2/3/6/20/21) keeps behaving exactly as before.
+   * Folds into the SAME indistinguishable-"nothing" outcome as `blocked`
+   * below, with its own LocalOutcome label for the local Protokoll only.
+   */
+  muted?: boolean
+  /**
+   * This specific ask violates the receiving device's own repeat-ask
+   * cooldown view (cooldown.ts's `decideAsk`, called by main.ts BEFORE
+   * `decide()` -- see state.ts's `evaluateIncomingAsk`). OPTIONAL,
+   * additive, same reasoning as `muted` above.
+   */
+  cooldownBlocked?: boolean
   key: CryptoKey
   /**
    * The answering device's own identity, for `SharedPayload.from`. OPTIONAL,
@@ -384,18 +399,28 @@ export async function decide(
   ivOverride?: Uint8Array,
 ): Promise<{ outcome: LocalOutcome; envelope: AnswerEnvelope }> {
   const { match, consent, blocked } = input
+  const muted = input.muted ?? false
+  const cooldownBlocked = input.cooldownBlocked ?? false
 
-  const wouldShare = !blocked && match.aboveThreshold && consent
+  const wouldShare = !blocked && !muted && !cooldownBlocked && match.aboveThreshold && consent
 
+  // Six reasons now collapse to `nothing` on the wire (module doc point 2:
+  // buildSharedJsonBytes/maskAnswerPlaintext run unconditionally regardless
+  // of which one fired, so adding these two costs nothing byte- or
+  // timing-wise -- see test/gate_identity.test.ts's cooldown/muted cases).
   const outcome: LocalOutcome = blocked
     ? 'blocked'
-    : match.hits.length === 0
-      ? 'no-match'
-      : !match.aboveThreshold
-        ? 'below-k'
-        : !consent
-          ? 'declined'
-          : 'shared'
+    : muted
+      ? 'muted'
+      : cooldownBlocked
+        ? 'cooldown'
+        : match.hits.length === 0
+          ? 'no-match'
+          : !match.aboveThreshold
+            ? 'below-k'
+            : !consent
+              ? 'declined'
+              : 'shared'
 
   // Always do the full "what would we share" work -- see module doc.
   const jsonBytes = buildSharedJsonBytes(input)

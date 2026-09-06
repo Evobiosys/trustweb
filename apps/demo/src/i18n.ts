@@ -219,6 +219,22 @@ const S: Table = {
   networkAskInFlight: { de: 'Frage an {n} Personen im Netz…', en: 'Asking {n} people in the network…' },
   networkAskedCount:  { de: 'Gefragt: {n} Personen im Netz.', en: 'Asked: {n} people in the network.' },
 
+  // Repeat-ask cooldown, "this is very important" escalation (cooldown.ts,
+  // 2026-09-06)
+  askEscalateLabel: { de: 'Das ist sehr wichtig', en: 'This is very important' },
+  askEscalateHint: {
+    de: 'Umgeht die Wartezeit der anderen Seite, aber nur EIN Mal pro Person und Frage, bis die Wartezeit von selbst abläuft. Danach steht diese Option wieder nicht zur Verfügung.',
+    en: 'Passes through the other side’s cooldown, but only ONCE per person and question, until the cooldown naturally expires. It is unavailable again after that.',
+  },
+  askEscalateUnavailable: {
+    de: 'Für diese Person und Frage bereits einmal genutzt.',
+    en: 'Already used once for this person and question.',
+  },
+  askEscalatedMarker: {
+    de: 'Als sehr wichtig markiert (nur einmal nutzbar)',
+    en: 'Marked as very important (single use)',
+  },
+
   // answer
   answerTitle:    { de: 'Anfrage beantworten', en: 'Answer a request' },
   scanQuery:      { de: 'Frage scannen', en: 'Scan the question' },
@@ -257,6 +273,9 @@ const S: Table = {
   logOutcomeBelowK:   { de: 'Gefunden, zu wenige Stimmen für die Anonymität', en: 'Found, too few voices for anonymity' },
   logOutcomeNoMatch:  { de: 'Nichts gefunden', en: 'Nothing found' },
   logOutcomeBlocked:  { de: 'Blockiert', en: 'Blocked' },
+  // cooldown.ts, 2026-09-06.
+  logOutcomeCooldown: { de: 'Zu bald wiederholt, ignoriert', en: 'Repeated too soon, ignored' },
+  logOutcomeMuted:    { de: 'Stummgeschaltet', en: 'Muted' },
   // Demo 21 (secondHop) only.
   logOutcomeRelayed:      { de: 'Weitergeleitet, beantwortet', en: 'Forwarded, answered' },
   logOutcomeRelayNothing: { de: 'Weitergeleitet, keine Antwort', en: 'Forwarded, no answer' },
@@ -613,6 +632,35 @@ const S: Table = {
     de: 'Du bekommst alles: Fragen in freien Worten, so schnelle Antworten wie möglich, und wenn du eine Frage für jemand anderen weiterreichst, kann man das an der Zeit erkennen. Das ist keine zusätzliche Sicherheit, das ist bewusst gewählte Geschwindigkeit und Offenheit. Du entscheidest selbst, was du teilst und wie du es sagst.',
     en: 'You get everything: questions in someone else’s own free words, answers as fast as possible, and if you pass a question on to someone else, that can be read off the timing. This is not extra protection, it is speed and openness you are choosing deliberately. You decide for yourself what you share and how you say it.',
   },
+
+  // Repeat-ask cooldown settings (cooldown.ts, 2026-09-06, screens/profile.ts)
+  cooldownSettingTitle: { de: 'Wiederholte Anfragen', en: 'Repeated requests' },
+  cooldownSettingLead: {
+    de: 'Wenn dich jemand mit derselben Frage mehrmals hintereinander fragt, kann das unangenehm werden. Standardmäßig ignoriert dieses Gerät eine Wiederholung 24 Stunden lang, still und nur im Protokoll vermerkt.',
+    en: 'Being asked the same question again and again can feel uncomfortable. By default this device ignores a repeat for 24 hours, silently, noted only in the log.',
+  },
+  cooldownPolicyDefault: { de: 'Standard-Wartezeit (24 Std.)', en: 'Default cooldown (24 h)' },
+  cooldownPolicyOff: { de: 'Keine Wartezeit', en: 'No cooldown' },
+  mutePeerLabel: { de: 'Stummschalten', en: 'Mute' },
+  unmutePeerLabel: { de: 'Stummschaltung aufheben', en: 'Unmute' },
+  mutePeerHint: {
+    de: 'Fragen dieser Person bleiben still und werden nur im Protokoll vermerkt, unabhängig von der Wartezeit oben.',
+    en: 'This person’s requests stay silent and are noted only in the log, regardless of the cooldown above.',
+  },
+  noPeersToManage: { de: 'Noch keine Verbindungen.', en: 'No connections yet.' },
+
+  // Relay-target posture (relay_posture.ts, 2026-09-06). See that module's
+  // doc comment for what "relay" scopes to: carrying a THIRD party's sealed
+  // traffic, a role no code in this build yet performs -- I7 (honest
+  // labelling) is why this setting's own copy says so, not only the
+  // handover doc.
+  relayPostureSettingTitle: { de: 'Als Relais für andere', en: 'Act as relay for others' },
+  relayPostureSettingLead: {
+    de: 'Ein anderes Gerät kann irgendwann darum bitten, deines als Zwischenstation für versiegelte Nachrichten zu nutzen, die es selbst nicht öffnen kann -- der Inhalt bleibt für dein Gerät unlesbar, es kostet nur Akku und Datenvolumen. Standardmäßig an, weil dabei nichts von dir preisgegeben wird. Es gibt keine Möglichkeit, das für eine einzelne Nachricht zu entscheiden, weil versiegelte Nachrichten sich nicht einzeln ansehen lassen, bevor du sie weiterleitest. Hinweis: Diese Funktion selbst ist in dieser Version noch nicht gebaut, diese Einstellung legt nur die Haltung fest, sobald sie kommt.',
+    en: 'Another device may eventually ask to use yours as a waypoint for sealed messages it cannot open itself -- the content stays unreadable to your device, it only costs battery and data. On by default, because nothing about you is exposed by carrying it. There is no way to decide this per message, because a sealed message cannot be inspected before you would relay it. Note: this carrying feature itself is not built in this version yet; this setting only fixes the posture for when it is.',
+  },
+  actAsRelayLabel: { de: 'Als Relais für andere zur Verfügung stellen', en: 'Make available as a relay for others' },
+  doNotRelayForLabel: { de: 'Für diese Person nicht weiterleiten', en: 'Do not relay for this person' },
 
   camDenied:      { de: 'Ohne Kamera geht das Scannen nicht. Du kannst den Code auch als Text übertragen.',
                     en: 'Scanning needs the camera. You can also transfer the code as text.' },
