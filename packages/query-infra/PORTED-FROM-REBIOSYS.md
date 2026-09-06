@@ -107,6 +107,11 @@ pnpm --filter @resource-web/query-infra demo:script   # serverless, opens no por
 pnpm --filter @resource-web/query-infra demo          # http://127.0.0.1:4790
 ```
 
+Both this demo server and `packages/network-access`'s own default to port 4790
+and read the same `NETWORK_ACCESS_PORT`, so running the two filters at once
+fails with EADDRINUSE. Set `NETWORK_ACCESS_PORT` on one of them to run them side
+by side. Deduplicating the two servers is on the deferred list above.
+
 The server binds loopback only unless `NETWORK_ACCESS_HOST` is set explicitly.
 Useful overrides: `NETWORK_ACCESS_PORT`, `NETWORK_ACCESS_STATE_DIR` (keeps the
 owner-local JSONL store out of `~/.local/share/rebiosys`),
