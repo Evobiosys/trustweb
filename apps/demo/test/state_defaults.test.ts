@@ -36,5 +36,8 @@ describe('loadState() normalizes a pre-Profile/Inventory record', () => {
     expect(s!.pendingAcceptRequests).toEqual([])
     expect(() => threadsInScope(s!)).not.toThrow()
     expect(threadsInScope(s!)).toEqual([])
+    // k-standardize pass (2026-09-06): "Test mode: single-holder matches
+    // allowed" defaults to false/OFF for a device that never saved it.
+    expect(s!.testModeSingleHolderMatches).toBe(false)
   })
 })

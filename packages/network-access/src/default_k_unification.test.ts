@@ -1,4 +1,6 @@
-// Finding 3 guard (2026-09-06 UH-findings handover, docs/k-parameters.md).
+// Finding 3 guard (2026-09-06 UH-findings handover, docs/k-parameters.md),
+// updated by the 2026-09-06 k-standardize pass ("keep k as is, just
+// standardize them").
 //
 // DEFAULT_K used to disagree across forks: primary-repo shipped 3, the
 // rebiosys fork shipped its own copy at 7, and packages/query-infra held a
@@ -9,30 +11,35 @@
 // (a re-fork, a copy-pasted package, a careless merge) fails this test even
 // if nobody remembers the history above.
 //
-// KNOWN EXCEPTION, found while writing this test (not fixed by it — see
-// docs/k-parameters.md's Finding 3 section for the open ❗): packages/
-// inventory-store/src/query.ts also defines its own `DEFAULT_K = 3`,
-// currently value-equal to this one but NOT imported from it.
-// inventory-store deliberately declares zero dependencies (its own package.json
-// has none; that fact was load-bearing evidence in decision B-22's AGPL/
-// third-party-dependency audit), and network-access is licensed
-// AGPL-3.0-or-later, so wiring inventory-store to import this constant is a
-// dependency/license call for the project owner, not something this test or
-// this handover should decide silently. Until that is resolved,
-// inventory-store's copy is allowlisted below on the condition that its
-// VALUE never drifts from this one -- if it ever does, or if any THIRD file
-// defines DEFAULT_K, this test fails.
+// The k-standardize pass resolved the one remaining ambiguity this test used
+// to carry as a value-pinned allowlist exception: packages/inventory-store/
+// src/query.ts's own zero-dependency floor is no longer named `DEFAULT_K` at
+// all -- it is `INVENTORY_DEFAULT_K`, so it can never again be mistaken for
+// (or accidentally satisfy a grep for) the canonical constant. It also
+// deliberately named the OTHER historical drift value -- the four
+// apps/demo/src/data/templates.ts templates that used to hardcode a literal
+// 7 -- as `HIGH_RISK_TEMPLATE_K`, defined beside DEFAULT_K in anonymity.ts.
+//
+// So this file now checks EXACTLY these named constants and nothing else:
+//   - DEFAULT_K, MIN_K, HIGH_RISK_TEMPLATE_K: defined ONLY in the canonical
+//     anonymity.ts, nowhere else in the workspace.
+//   - INVENTORY_DEFAULT_K: defined ONLY in inventory-store's query.ts,
+//     nowhere else -- and its value must never drift from DEFAULT_K (the
+//     cross-package equality itself is asserted by
+//     apps/demo/test/k_cross_package_sync.test.ts, which can import both
+//     packages; this file cannot, since network-access must not gain a
+//     dependency on inventory-store or vice versa -- see the dependency/
+//     license reasoning in query.ts's own comment, decision B-22).
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_K, MIN_K } from './anonymity.js'
+import { DEFAULT_K, HIGH_RISK_TEMPLATE_K, MIN_K } from './anonymity.js'
 
 // packages/network-access/src -> packages/network-access -> packages -> repo root
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const CANONICAL_FILE = join(ROOT, 'packages', 'network-access', 'src', 'anonymity.ts')
-/** See the KNOWN EXCEPTION note above -- allowlisted only while its value matches DEFAULT_K exactly. */
-const ALLOWLISTED_SECONDARY_FILE = join(ROOT, 'packages', 'inventory-store', 'src', 'query.ts')
+const INVENTORY_FILE = join(ROOT, 'packages', 'inventory-store', 'src', 'query.ts')
 /** This file's own doc comment quotes the pattern it scans for -- exclude it from its own scan. */
 const SELF = fileURLToPath(import.meta.url)
 
@@ -73,13 +80,17 @@ function workspaceSrcDirs(): string[] {
   return dirs
 }
 
-/** Extracts the integer RHS of `export const DEFAULT_K = <n>` in `code`, or undefined if absent. */
-function extractDefaultKValue(code: string): number | undefined {
-  const m = /export\s+const\s+DEFAULT_K\s*=\s*(\d+)/.exec(code)
+/** Extracts the integer RHS of `export const <name> = <n>` in `code`, or undefined if absent. */
+function extractConstValue(code: string, name: string): number | undefined {
+  const m = new RegExp(`export\\s+const\\s+${name}\\s*=\\s*(\\d+)`).exec(code)
   return m ? Number(m[1]) : undefined
 }
 
-describe('DEFAULT_K is defined exactly once (plus one flagged, value-pinned exception) across the workspace (Finding 3)', () => {
+function definesConst(code: string, name: string): boolean {
+  return new RegExp(`export\\s+const\\s+${name}\\b`).test(code)
+}
+
+describe('the workspace k-constants are each defined in exactly one named, expected place (Finding 3)', () => {
   const files = workspaceSrcDirs()
     .flatMap(tsFilesUnder)
     .filter((f) => f !== SELF)
@@ -87,22 +98,30 @@ describe('DEFAULT_K is defined exactly once (plus one flagged, value-pinned exce
   it('finds the workspace it is supposed to be scanning', () => {
     expect(files.length).toBeGreaterThan(20)
     expect(files).toContain(CANONICAL_FILE)
+    expect(files).toContain(INVENTORY_FILE)
   })
 
-  it('has no DEFAULT_K definition outside the canonical file and the one flagged exception', () => {
-    const defRe = /export\s+const\s+DEFAULT_K\b/
-    const definedIn = files.filter((f) => defRe.test(readFileSync(f, 'utf8')))
-    expect(definedIn.sort()).toEqual([ALLOWLISTED_SECONDARY_FILE, CANONICAL_FILE].sort())
+  it('DEFAULT_K, MIN_K and HIGH_RISK_TEMPLATE_K are defined only in the canonical file', () => {
+    for (const name of ['DEFAULT_K', 'MIN_K', 'HIGH_RISK_TEMPLATE_K']) {
+      const definedIn = files.filter((f) => definesConst(readFileSync(f, 'utf8'), name))
+      expect(definedIn, `${name} should be defined in exactly the canonical file`).toEqual([CANONICAL_FILE])
+    }
   })
 
-  it('the allowlisted secondary definition (inventory-store/src/query.ts) has not drifted from the canonical value', () => {
-    const secondaryValue = extractDefaultKValue(readFileSync(ALLOWLISTED_SECONDARY_FILE, 'utf8'))
-    expect(secondaryValue).toBe(DEFAULT_K)
+  it('INVENTORY_DEFAULT_K is defined only in inventory-store, and nowhere is DEFAULT_K itself redeclared under that name', () => {
+    const definedIn = files.filter((f) => definesConst(readFileSync(f, 'utf8'), 'INVENTORY_DEFAULT_K'))
+    expect(definedIn).toEqual([INVENTORY_FILE])
   })
 
-  it('the canonical value is 3, with the floor derived from it (never a second literal)', () => {
+  it('INVENTORY_DEFAULT_K has not drifted from the canonical DEFAULT_K value', () => {
+    const inventoryValue = extractConstValue(readFileSync(INVENTORY_FILE, 'utf8'), 'INVENTORY_DEFAULT_K')
+    expect(inventoryValue).toBe(DEFAULT_K)
+  })
+
+  it('the canonical values are unchanged: DEFAULT_K = 3, MIN_K = 2 (derived), HIGH_RISK_TEMPLATE_K = 7', () => {
     expect(DEFAULT_K).toBe(3)
     expect(MIN_K).toBe(Math.max(2, DEFAULT_K - 1))
     expect(MIN_K).toBe(2)
+    expect(HIGH_RISK_TEMPLATE_K).toBe(7)
   })
 })

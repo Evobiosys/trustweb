@@ -38,6 +38,9 @@ importers:
       '@resource-web/network-access':
         specifier: workspace:*
         version: link:../../packages/network-access
+      '@resource-web/transport':
+        specifier: workspace:*
+        version: link:../../packages/transport
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0
@@ -48,9 +51,9 @@ importers:
         specifier: ^1.5.4
         version: 1.5.4
     devDependencies:
-      '@resource-web/transport':
+      '@resource-web/inventory-store':
         specifier: workspace:*
-        version: link:../../packages/transport
+        version: link:../../packages/inventory-store
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

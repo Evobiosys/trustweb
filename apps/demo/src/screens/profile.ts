@@ -18,6 +18,14 @@ import { deviceMode, applyModePosture } from '../state'
 import { renderModePicker, modeTitleKey } from './mode_picker'
 import type { CooldownPolicy } from '../cooldown'
 import { RELAY_POSTURE_DEFAULT_ON } from '../relay_posture'
+import { DEFAULT_K, HIGH_RISK_TEMPLATE_K } from '@resource-web/network-access/anonymity'
+// Subpath import, not the package's default entry: `@resource-web/transport`'s
+// barrel (index.ts) also re-exports its Matrix/DIDComm transports, which pull
+// in Node-only modules (matrix-bot-sdk, node:module) that Vite cannot bundle
+// for the browser. `./inbound_vouch` only reaches vrc.ts/did_identity.ts,
+// which have no such dependency -- see packages/transport/package.json's
+// `exports` map.
+import { VOUCH_K } from '@resource-web/transport/inbound_vouch'
 
 function field(label: string, input: HTMLElement, hint?: string): HTMLElement {
   return el('div', { class: 'field' }, [el('label', {}, [label]), input, hint ? el('small', {}, [hint]) : null])
@@ -172,6 +180,40 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
     ]),
   ])
 
+  // Anonymity floor (k) settings row (k-standardize pass, 2026-09-06,
+  // docs/k-parameters.md). The three constants are read-only: they are
+  // fixed workspace/product values, not per-device settings (Jakob's
+  // 2026-09-06 ruling: "keep k as is, just standardize them"). Only the
+  // test-mode toggle below is writable.
+  const kRow = (label: string, value: number, hint: string): HTMLElement =>
+    el('div', { class: 'card' }, [
+      el('p', {}, [el('b', {}, [label]), document.createTextNode(': ' + value)]),
+      el('small', {}, [hint]),
+    ])
+
+  const testModeInput = el('input', {
+    type: 'checkbox',
+    id: 'wot-k-test-mode-single-holder',
+    ...(s.testModeSingleHolderMatches ? { checked: true } : {}),
+  }) as HTMLInputElement
+  testModeInput.addEventListener('change', () => {
+    s.testModeSingleHolderMatches = testModeInput.checked
+    onSave()
+  })
+
+  const kSection = el('div', {}, [
+    el('h2', {}, [t('kSettingsTitle')]),
+    el('p', { class: 'note' }, [t('kSettingsLead')]),
+    kRow(t('kDefaultLabel'), DEFAULT_K, t('kDefaultHint')),
+    kRow(t('kHighRiskLabel'), HIGH_RISK_TEMPLATE_K, t('kHighRiskHint')),
+    kRow(t('kVouchLabel'), VOUCH_K, t('kVouchHint')),
+    el('label', { for: 'wot-k-test-mode-single-holder', style: 'display:flex;align-items:center;gap:8px' }, [
+      testModeInput,
+      document.createTextNode(t('kTestModeLabel')),
+    ]),
+    el('small', {}, [t('kTestModeHint')]),
+  ])
+
   return el('div', {}, [
     el('p', { class: 'lead' }, [t('profileLead')]),
     field(t('profileName'), nameInput),
@@ -181,5 +223,6 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
     modeSection,
     cooldownSection,
     relaySection,
+    kSection,
   ])
 }

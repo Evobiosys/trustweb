@@ -329,6 +329,27 @@ export interface DeviceState {
    * module doc for why the default is ON and what "relay" scopes to here.
    */
   actAsRelay?: boolean
+  /**
+   * "Test mode: single-holder matches allowed" (k-standardize pass,
+   * 2026-09-06, docs/k-parameters.md's k1 section). Advanced, OFF by
+   * default. Widens ONLY match/lexical.ts's existing B-08 owner-declared
+   * bypass (thread.source === 'self') -- it must never be read by, or
+   * change the outcome of, the ordinary `distinctAuthors >= kThreshold`
+   * check for chat-derived hits. See matchTemplate()'s own doc comment for
+   * the honestly-stated finding that, with today's data model (an
+   * owner-declared entry's `author` is always `s.me.displayName`, so
+   * `distinctAuthors` is always exactly 1 there already), this toggle
+   * currently changes no gating outcome -- it exists as the named,
+   * explicit override surface match/accommodation.ts's own comment already
+   * asks for, scoped so it can never reach the chat-derived branch.
+   *
+   * Explicit `?? false` in `withDefaults` below despite absence already
+   * reading `false` correctly (same as `secondHopUniformModeDirect`) --
+   * kept explicit anyway because the settings screen reads this field
+   * directly to render its current state, not through a helper that
+   * already knows the default.
+   */
+  testModeSingleHolderMatches?: boolean
 }
 
 /** Exported so test/state_defaults.test.ts can write a legacy-shaped record
@@ -439,6 +460,7 @@ function withDefaults(s: DeviceState): DeviceState {
     pendingAcceptRequests: s.pendingAcceptRequests ?? [],
     askCooldowns: s.askCooldowns ?? {},
     escalationHints: s.escalationHints ?? {},
+    testModeSingleHolderMatches: s.testModeSingleHolderMatches ?? false,
   }
 }
 

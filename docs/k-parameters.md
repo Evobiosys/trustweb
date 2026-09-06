@@ -49,34 +49,82 @@ below drifts.
 | `packages/query-infra`'s vault-specific duplicate | 7 | deleted in the same port |
 | design doc `overnight/05-chat-group-information.md:83` | "integer >= 2, default 7 ... never below 2" | doc not code; still says 7, not updated by this handover -- a product call for the project owner, not this handover's to make |
 
-**❗ Known drift NOT fixed by this handover:** four templates in
-`apps/demo/src/data/templates.ts` (`nachmieter_genossenschaft`,
-`kassenarzt_open`, `handwerker_reliable`, `childcare.place_open`) hardcode
-the literal `kThreshold: 7` rather than importing `DEFAULT_K` (currently 3).
-One of them even carried a comment claiming "per catalogue doc section 1
-(DEFAULT_K)" while citing a file that says 3, not 7 -- itself a small
-instance of the drift this document exists to stop. Each site is now flagged
-in place (`❗ Finding 3` comment) rather than silently changed: reconciling
-these four to `DEFAULT_K` would silently RELAX their anonymity floor from 7
-to 3; raising `DEFAULT_K` itself to 7 is what the design doc implies but
-contradicts F-07's ruling that the floor is not to be tuned before the C-08
-prevalence measurement runs. Left exactly as found; a project-owner decision,
-not an engineering one.
+**Resolved by the k-standardize pass (2026-09-06, Jakob: "keep k as is, just
+standardize them"):** the two drifts below were left open by the original
+UH-findings handover. Neither k VALUE changed; both were given a name.
 
-**❗ Second known drift, also NOT fixed:** `packages/inventory-store/src/
-query.ts` independently defines its own `export const DEFAULT_K = 3` --
-currently value-equal to the canonical one but not imported from it, and
-`inventory-store` is unreferenced by any other package or app in this
-workspace today (checked 2026-09-06). It is allowlisted in
-`default_k_unification.test.ts` on the sole condition that its value never
-diverges from the canonical one. Not merged into a single import because
+Four templates in `apps/demo/src/data/templates.ts`
+(`nachmieter_genossenschaft`, `kassenarzt_open`, `handwerker_reliable`,
+`childcare.place_open`) used to hardcode the literal `kThreshold: 7` rather
+than importing `DEFAULT_K` (3). One of them even carried a comment claiming
+"per catalogue doc section 1 (DEFAULT_K)" while citing a file that says 3,
+not 7 -- itself a small instance of the drift this document exists to stop.
+The literal is now `HIGH_RISK_TEMPLATE_K`, a named constant exported beside
+`DEFAULT_K` in `packages/network-access/src/anonymity.ts`, value still 7:
+reconciling these four to `DEFAULT_K` would have silently RELAXED their
+anonymity floor from 7 to 3; raising `DEFAULT_K` itself to 7 is what the
+design doc implies but contradicts F-07's ruling that the floor is not to be
+tuned before the C-08 prevalence measurement runs. The design doc
+(`overnight/05-chat-group-information.md:83`) still says 7 as its own
+default, unchanged -- that row in the table above stays a ❗ for the project
+owner; naming the code-side constant did not touch it.
+
+`packages/inventory-store/src/query.ts`'s own zero-dependency copy is no
+longer named `DEFAULT_K` at all -- renamed to `INVENTORY_DEFAULT_K`, value
+still 3, with its own doc comment pointing here. It stays a SEPARATE
+definition, not merged into a single import, for the same reason as before:
 `inventory-store` deliberately declares zero dependencies in its own
-`package.json` -- a fact that was load-bearing evidence in decision B-22's
-AGPL/third-party-dependency audit ("packages/inventory-store and
-packages/relay-crypto declare no dependencies at all") -- while
-`network-access` is licensed AGPL-3.0-or-later. Wiring one to import the
-other is a dependency/license call for the project owner, not this
-handover's to make silently.
+`package.json` -- load-bearing evidence in decision B-22's AGPL/third-party-
+dependency audit ("packages/inventory-store and packages/relay-crypto
+declare no dependencies at all") -- while `network-access` is licensed
+AGPL-3.0-or-later. Wiring one to import the other stays a dependency/license
+call for the project owner. What changed is that drift between the two no
+longer goes unnoticed silently: `packages/network-access/src/
+default_k_unification.test.ts` now asserts `INVENTORY_DEFAULT_K` is defined
+in exactly that one file and nowhere named `DEFAULT_K`, and
+`apps/demo/test/k_cross_package_sync.test.ts` -- the one place in this
+workspace that already depends on both packages -- imports both constants
+and fails the moment their VALUES diverge.
+
+**Settings surface (2026-09-06):** the demo's "Mein Profil" screen
+(`apps/demo/src/screens/profile.ts`) now shows a read-only "Anonymity floor
+(k)" section: `DEFAULT_K`, `HIGH_RISK_TEMPLATE_K` (this page's k1) and
+`VOUCH_K` (k2, below), each with a one-line explanation, plus an advanced,
+OFF-by-default toggle, "Test mode: single-holder matches allowed"
+(`DeviceState.testModeSingleHolderMatches`, `withDefaults`-backfilled to
+`false`). It widens ONLY `match/lexical.ts`'s existing B-08 owner-declared
+bypass (`thread.source === 'self'`) and is threaded through as an explicit
+argument to `matchTemplate()`, read nowhere near the
+`distinctAuthors >= template.kThreshold` branch that protects a real chat
+message's third party -- see `apps/demo/test/match_kanon.test.ts`'s
+`testModeSingleHolderMatches` suite for the tests proving that.
+
+Honestly stated finding, not hidden in a code comment alone: because an
+owner-declared hit's `author` is always `s.me.displayName`
+(`state.ts`'s `inventoryThreads()` / `main.ts`'s `secondBrainThread()`),
+`distinctAuthors` is already exactly 1 for every owner-declared band-hit
+set, and the existing bypass already fires unconditionally for it. So this
+toggle currently changes NO gating outcome -- it exists as the named,
+explicit override surface `match/accommodation.ts`'s own comment already
+asks for ("bigger-corpus-or-explicit-override fix"), wired and tested ahead
+of the corpus change that would ever make it non-vacuous.
+
+**❗ Open for the project owner, not decided here:** "single-holder" most
+naturally could also describe a holder's own CHAT message about their own
+thing (e.g. Marlene posting "meine Wohnung wird frei" into a group chat --
+one real author, writing about herself, same as an inventory entry in
+substance) -- a reading `match/accommodation.ts`'s comment gestures at
+("a genuine chat-message match against this template can no longer clear
+the floor... known and accepted"). This toggle deliberately does NOT cover
+that case: `matchTemplate()`'s bypass check is `h.source === 'self'`, which
+is true only for owner-declared corpora (inventory items, second-brain
+notes), never for an ordinary `ChatThread` regardless of who wrote which
+message in it. Extending "single-holder" to also mean "one real author,
+whoever they are, in a chat" would let a single chat message about oneself
+skip the floor -- exactly the shape of the historically dangerous
+`kThreshold: 1` mistake this codebase already had to fix once (see the
+Summary table's closing note below). Left unbuilt and named here rather than
+guessed at.
 
 ## k2 -- vouch-count k for credential presentation
 

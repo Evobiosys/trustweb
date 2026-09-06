@@ -2450,7 +2450,9 @@ async function handleAmbientQuery(q: QueryEnvelope): Promise<void> {
 
   let match: MatchResult = { hits: [], distinctAuthors: 0, aboveThreshold: false }
   if (tpl) {
-    match = isAddressBearingTemplate(tpl) ? matchAccommodation() : prune(matchTemplate(tpl, threadsInScope(s)))
+    match = isAddressBearingTemplate(tpl)
+      ? matchAccommodation()
+      : prune(matchTemplate(tpl, threadsInScope(s), s.testModeSingleHolderMatches))
   }
 
   const { surface } = classifyIncomingQuery(match, blocked, Boolean(tpl), ask.outcome === 'muted', ask.outcome === 'cooldown')
@@ -3190,7 +3192,7 @@ async function runConsentCeremony(q: QueryEnvelope): Promise<void> {
     // one gate.ts's every other caller still uses unmodified.
     match = matchAccommodation()
   } else if (tpl) {
-    match = prune(matchTemplate(tpl, threadsInScope(s)))
+    match = prune(matchTemplate(tpl, threadsInScope(s), s.testModeSingleHolderMatches))
   }
   await settleAt(t0, GATE_BUDGET_MS)
 
@@ -3569,7 +3571,7 @@ async function runSecondHopRelayCeremony(q: QueryEnvelope): Promise<void> {
     return
   }
 
-  const directMatch = prune(matchTemplate(tpl, threadsInScope(s)))
+  const directMatch = prune(matchTemplate(tpl, threadsInScope(s), s.testModeSingleHolderMatches))
   if (directMatch.aboveThreshold) {
     renderSecondHopDirectCard(q, tpl, directMatch, peer, dispatch)
     return
@@ -3603,7 +3605,7 @@ async function runSecondHopRelayCeremony(q: QueryEnvelope): Promise<void> {
     .map((note) => ({ note, ownerPeer: s.peers.find((p) => p.id === note.ownerPeerId && p.did && p.id !== q.from.id) }))
     .filter((x): x is { note: SecondBrainNote; ownerPeer: Peer } => Boolean(x.ownerPeer))
   const noteMatch: MatchResult = eligibleNotes.length
-    ? prune(matchTemplate(tpl, eligibleNotes.map((x) => secondBrainThread(s, x.note))))
+    ? prune(matchTemplate(tpl, eligibleNotes.map((x) => secondBrainThread(s, x.note)), s.testModeSingleHolderMatches))
     : { hits: [], distinctAuthors: 0, aboveThreshold: false }
   const winner = noteMatch.aboveThreshold
     ? eligibleNotes.find((x) => `sb:${x.note.id}` === noteMatch.hits[0]?.threadId)

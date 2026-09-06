@@ -4,7 +4,18 @@
 import { currentView } from "./store.js";
 import type { InventoryRecord } from "./types.js";
 
-export const DEFAULT_K = 3;
+// Named INVENTORY_DEFAULT_K, not DEFAULT_K, so it can never be mistaken for
+// (or grep-collide with) the canonical k-anonymity floor exported by
+// packages/network-access/src/anonymity.ts's DEFAULT_K -- currently
+// value-equal (3) but NOT imported from it: inventory-store deliberately
+// declares zero dependencies in its own package.json (decision B-22's
+// AGPL/third-party-dependency audit relied on that fact), while
+// network-access is licensed AGPL-3.0-or-later. Wiring one to import the
+// other is a dependency/license call for the project owner, not made here.
+// apps/demo/test/k_cross_package_sync.test.ts is the structural guard: it
+// imports both constants and fails the moment they diverge, so drift breaks
+// a test instead of going unnoticed. See docs/k-parameters.md's k1 section.
+export const INVENTORY_DEFAULT_K = 3;
 
 // Byte-identical outward text for suppressed AND zero-match cases, mirroring
 // packages/network-access's anonymity.ts convention: a distinguishable
@@ -142,7 +153,7 @@ export interface RunQueryOptions {
   text: string;
   requester: string;
   gates?: Record<string, unknown>;
-  k?: number; // override the k-anonymity floor (default DEFAULT_K)
+  k?: number; // override the k-anonymity floor (default INVENTORY_DEFAULT_K)
 }
 
 function scoreRecord(qTokens: string[], record: InventoryRecord): Candidate {
@@ -158,7 +169,7 @@ function kDecisionLine(sharingCount: number, total: number, k: number, released:
 }
 
 export async function runQuery(path: string, options: RunQueryOptions): Promise<QueryTrace> {
-  const { text, requester, gates = {}, k = DEFAULT_K } = options;
+  const { text, requester, gates = {}, k = INVENTORY_DEFAULT_K } = options;
   const records = await currentView(path);
   const qTokens = queryTokens(text);
 

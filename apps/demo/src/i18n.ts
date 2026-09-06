@@ -662,6 +662,38 @@ const S: Table = {
   actAsRelayLabel: { de: 'Als Relais für andere zur Verfügung stellen', en: 'Make available as a relay for others' },
   doNotRelayForLabel: { de: 'Für diese Person nicht weiterleiten', en: 'Do not relay for this person' },
 
+  // Anonymity floor (k) settings row (k-standardize pass, 2026-09-06,
+  // docs/k-parameters.md). Read-only display of the three named k-constants
+  // plus the test-mode toggle for the owner-declared bypass.
+  kSettingsTitle: { de: 'Anonymitätsschwelle (k)', en: 'Anonymity floor (k)' },
+  kSettingsLead: {
+    de: 'Diese Werte sind fix und werden hier nur angezeigt, nicht verändert.',
+    en: 'These values are fixed and shown here for reference only, not editable.',
+  },
+  kDefaultLabel: { de: 'Standardschwelle', en: 'Default floor' },
+  kDefaultHint: {
+    de: 'Mindestanzahl verschiedener Personen, bevor eine Übereinstimmung aus dem Chatverlauf gezeigt wird.',
+    en: 'Minimum number of distinct people before a chat-derived match is shown.',
+  },
+  kHighRiskLabel: { de: 'Strengere Schwelle (sensible Vorlagen)', en: 'Stricter floor (high-risk templates)' },
+  kHighRiskHint: {
+    de: 'Gilt für besonders sensible Vorlagen (z.B. Kassenarzt, Nachmieter), die absichtlich eine höhere Schwelle als die Standardschwelle verwenden.',
+    en: 'Applies to a handful of especially sensitive templates (e.g. doctor, successor tenant) that deliberately use a higher floor than the default.',
+  },
+  kVouchLabel: { de: 'Bestätigungsschwelle (Vouch)', en: 'Vouch floor' },
+  kVouchHint: {
+    de: 'Anzahl verschiedener Personen, die jemanden bestätigen müssen, bevor eine anfragende Stelle das als ausreichend ansieht.',
+    en: 'Number of distinct people who must vouch for someone before a relying party treats that as sufficient.',
+  },
+  kTestModeLabel: {
+    de: 'Testmodus: Übereinstimmungen von einer einzelnen Person erlauben',
+    en: 'Test mode: single-holder matches allowed',
+  },
+  kTestModeHint: {
+    de: 'Nur für Tests. Erweitert ausschließlich die bestehende Ausnahme für selbst erklärte Angaben (z.B. eigenes Inventar) -- senkt nie die Schwelle für Treffer aus echten Chatverläufen.',
+    en: 'Test-only. Widens only the existing bypass for owner-declared entries (e.g. your own inventory) -- it never lowers the floor for chat-derived matches.',
+  },
+
   camDenied:      { de: 'Ohne Kamera geht das Scannen nicht. Du kannst den Code auch als Text übertragen.',
                     en: 'Scanning needs the camera. You can also transfer the code as text.' },
   camPaste:       { de: 'Code als Text einfügen', en: 'Paste code as text' },
