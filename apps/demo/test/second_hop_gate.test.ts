@@ -131,7 +131,7 @@ describe('demo 21: A -> B final answer is byte-identical across every "nothing" 
     const hit: MatchHit = {
       threadId: 'sb:note1', threadTitle: 'Eigene Notizen (über andere)', messageIndex: 0,
       message: { ts: new Date().toISOString(), author: 'A', text: 'Der Jakob hat eine Leiter.', system: false },
-      score: 5, terms: ['leiter'],
+      score: 5, terms: ['leiter'], source: 'self',
     }
     const noteMatch: MatchResult = { hits: [hit], distinctAuthors: 1, aboveThreshold: true }
 

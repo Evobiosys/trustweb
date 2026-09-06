@@ -61,7 +61,7 @@ function makeMatch(hitCount: number, aboveThreshold: boolean): MatchResult {
   const hits: MatchHit[] = Array.from({ length: hitCount }, (_, i) => ({
     threadId: `t${i}`, threadTitle: 'Chat', messageIndex: i,
     message: { ts: '2026-08-15T10:00:00.000Z', author: `A${i}`, text: 'Ich hab eine Leiter.', system: false },
-    score: 5, terms: ['leiter'],
+    score: 5, terms: ['leiter'], source: 'seed',
   }))
   return { hits, distinctAuthors: hitCount, aboveThreshold }
 }

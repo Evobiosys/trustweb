@@ -68,12 +68,18 @@ export function freeTextTemplate(text: string): QueryTemplate {
     // ("must not ship"), replaced with the workspace DEFAULT_K (3).
     // state.ts's inventoryThreads() gives every "Was ich habe" entry exactly
     // one author (the device's own owner), so any inventory-only match has
-    // distinctAuthors === 1 by construction -- at DEFAULT_K this makes
-    // sharing an inventory entry impossible, which silently kills the
-    // "Ski in, Ski found" story. Known and accepted: closing C-03 outranks
-    // this demo story. The real fix is inventory entries getting a way to
-    // accumulate distinct authors, or an explicit per-query override -- not
-    // a return to a hardcoded 1 (see README's Privacy Honesty Box, I7).
+    // distinctAuthors === 1 by construction -- at DEFAULT_K this alone would
+    // make sharing an inventory entry impossible, killing the "Ski in, Ski
+    // found" story.
+    //
+    // B-08 (2026-09-06), stale note above superseded: match/lexical.ts's
+    // matchTemplate() now bypasses this floor when every relevance-band hit
+    // is owner-declared (thread.source === 'self'), which an inventory-only
+    // match always is. The floor here still governs a real chat hit -- it
+    // only stops protecting the holder from being asked about their own
+    // single declared item, not a third party's message. Do not read the
+    // "Known and accepted" framing above as still live; the Ski story is
+    // fixed by the bypass, not by this constant.
     kThreshold: DEFAULT_K,
     // Free text is a bigger privacy surface than a curated template's fixed
     // vocabulary -- the asker can type anything, so the UI that shows this

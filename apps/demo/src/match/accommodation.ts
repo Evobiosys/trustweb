@@ -52,12 +52,20 @@ export const ACCOMMODATION_TEMPLATE: QueryTemplate = {
   minScore: 1,
   // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
   // ("must not ship"), replaced with the workspace DEFAULT_K (3). The corpus
-  // here is ONE flat and ONE calendar, so at DEFAULT_K this query can no
-  // longer clear the floor -- known and accepted: closing C-03 outranks this
-  // demo story. Said honestly in the UI (main.ts's geoKHonesty string), not
-  // pretended to be an anonymity floor. Restoring a hit here needs either a
-  // bigger seeded corpus or an explicit, labelled per-query override -- not
-  // a return to a hardcoded 1.
+  // here is ONE flat and ONE calendar, so a genuine chat-message match
+  // against this template can no longer clear the floor -- known and
+  // accepted: closing C-03 outranks that. Said honestly in the UI (main.ts's
+  // geoKHonesty string), not pretended to be an anonymity floor.
+  //
+  // B-08 (2026-09-06): this field is unused by matchAccommodation() below
+  // (which never reads template.kThreshold at all, see its own hardcoded
+  // MatchResult), but IS read whenever this template is passed to
+  // match/lexical.ts's matchTemplate() directly -- e.g. a second-hop
+  // relayer's own second-brain note about the flat (main.ts's
+  // secondBrainThread(), source: 'self'). That path now clears the floor via
+  // lexical.ts's owner-declared bypass; a real chat corpus hit against this
+  // template still needs the bigger-corpus-or-explicit-override fix this
+  // comment used to ask for.
   kThreshold: DEFAULT_K,
   sensitivity: 'high',
   ttlSeconds: 1_209_600, // 14 days
@@ -82,6 +90,7 @@ export function matchAccommodation(): MatchResult {
     },
     score: 1,
     terms: [],
+    source: 'self',
   }
   return { hits: [hit], distinctAuthors: 1, aboveThreshold: true }
 }

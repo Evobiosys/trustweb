@@ -256,6 +256,12 @@ export const TEMPLATES: QueryTemplate[] = [
     // from packages/network-access/src/anonymity.ts. This template can no
     // longer show a hit against a single seeded group chat; that is the
     // accepted cost of closing C-03, not an oversight.
+    //
+    // B-08 (2026-09-06): match/lexical.ts's owner-declared bypass does NOT
+    // help this template -- the corpus it matches against is real seeded
+    // chat messages (thread.source: 'seed'), never an inventory or
+    // second-brain entry, so the ordinary distinct-authors floor still
+    // applies exactly as the paragraph above describes.
     kThreshold: DEFAULT_K,
     sensitivity: 'high',
     ttlSeconds: 1_209_600, // 14 days (ttl_ms 1209600000 in the catalogue doc)

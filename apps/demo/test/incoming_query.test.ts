@@ -19,11 +19,25 @@ const hit = (author: string): MatchHit => ({
   message: { ts: '2026-09-04T10:00:00Z', author, text: 'Ski, kannst du dir ausborgen', system: false },
   score: 1,
   terms: ['ski'],
+  source: 'seed',
 })
 
 const NO_MATCH: MatchResult = { hits: [], distinctAuthors: 0, aboveThreshold: false }
 const BELOW_K: MatchResult = { hits: [hit('marlene0')], distinctAuthors: 1, aboveThreshold: false }
 const ABOVE_K: MatchResult = { hits: [hit('marlene0')], distinctAuthors: 1, aboveThreshold: true }
+
+// B-08 (2026-09-06): a single owner-declared hit that cleared the floor via
+// match/lexical.ts's bypass looks IDENTICAL to any other aboveThreshold:true
+// match from classifyIncomingQuery()'s point of view -- it reads
+// match.aboveThreshold as a black box and has no separate branch for how
+// that became true. Pinning this literally: surfacing does not care why.
+const ownDeclaredHit: MatchHit = {
+  ...hit('marlene0'),
+  threadId: 'inv:1',
+  message: { ts: '2026-09-06T10:00:00Z', author: 'marlene0', text: 'Ich habe ein Motorrad.', system: false },
+  source: 'self',
+}
+const ABOVE_K_VIA_BYPASS: MatchResult = { hits: [ownDeclaredHit], distinctAuthors: 1, aboveThreshold: true }
 
 describe('classifyIncomingQuery', () => {
   it('does not surface, and logs no-match, when nothing matched', () => {
@@ -72,5 +86,10 @@ describe('classifyIncomingQuery', () => {
 
   it('muted/cooldownBlocked default to false, so every pre-existing call site is unaffected', () => {
     expect(classifyIncomingQuery(ABOVE_K, false, true)).toEqual({ surface: true, outcome: null })
+  })
+
+  // B-08 (2026-09-06)
+  it('surfaces exactly as today when aboveThreshold:true came from the owner-declared bypass', () => {
+    expect(classifyIncomingQuery(ABOVE_K_VIA_BYPASS, false, true)).toEqual({ surface: true, outcome: null })
   })
 })

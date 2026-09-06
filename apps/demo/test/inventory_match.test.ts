@@ -103,11 +103,13 @@ describe('inventory entries matched via threadsInScope + matchTemplate', () => {
     expect(result.hits.length).toBeGreaterThan(0)
     expect(result.hits.some((h) => h.threadId.startsWith('inv:'))).toBe(true)
     // C-03 (2026-09-06): T1's demo-only kThreshold of 1 is banned ("must not
-    // ship"); it now carries DEFAULT_K (3). A single-author inventory match
-    // can no longer clear that floor -- the matcher still finds the entry
-    // (above), but this device answers silently instead of surfacing
-    // consent. Accepted cost of closing C-03, not a regression here.
-    expect(result.aboveThreshold).toBe(false)
+    // ship"); it now carries DEFAULT_K (3).
+    // B-08 (2026-09-06), supersedes the "answers silently" note this comment
+    // used to carry: match/lexical.ts's owner-declared bypass now clears the
+    // floor for this match anyway -- every hit here comes from
+    // threadsInScope()'s inventoryThreads() (source: 'self'), so no third
+    // party is in the band. This device surfaces the consent ceremony.
+    expect(result.aboveThreshold).toBe(true)
   })
 
   it('the add-entry placeholder (what someone actually types live) also fires T1', async () => {
@@ -123,10 +125,10 @@ describe('inventory entries matched via threadsInScope + matchTemplate', () => {
     const t1 = TEMPLATES.find((tpl) => tpl.id === 'wot.vienna.housing.flat_pre_listing')!
     const result = matchTemplate(t1, threadsInScope(s))
     expect(result.hits.length).toBeGreaterThan(0)
-    // C-03 (2026-09-06): same accepted change as the seed-entry test above --
-    // T1 now enforces DEFAULT_K (3), which a single-author inventory match
-    // cannot clear.
-    expect(result.aboveThreshold).toBe(false)
+    // C-03 (2026-09-06): T1 enforces DEFAULT_K (3).
+    // B-08 (2026-09-06): same owner-declared bypass as the seed-entry test
+    // above -- this inventory-only match clears it regardless.
+    expect(result.aboveThreshold).toBe(true)
   })
 
   it('one distinct author across a chat message and an inventory entry counts once, not twice', () => {
@@ -168,16 +170,19 @@ describe('"call into the web": a free-text ask against an inventory entry (the o
     // (2026-09-06) freeTextTemplate() carried a demo override of
     // kThreshold: 1, which let a single-author match clear the floor; that
     // override is now banned ("must not ship") and freeTextTemplate() uses
-    // DEFAULT_K (3) like every other template, so this match structurally
-    // cannot clear it. Accepted cost of closing C-03: the "Ski in, Ski
-    // found" story now ends here (no-hit-shown), not at consent.
+    // DEFAULT_K (3) like every other template.
+    //
+    // B-08 (2026-09-06): match/lexical.ts's owner-declared bypass clears the
+    // floor here anyway -- this hit's thread.source is 'self' (it came from
+    // threadsInScope()'s inventoryThreads()), so there is no third party in
+    // the band to protect. The "Ski in, Ski found" story is restored.
     expect(result.distinctAuthors).toBe(1)
-    expect(result.aboveThreshold).toBe(false)
+    expect(result.aboveThreshold).toBe(true)
 
     // The exact decision main.ts's handleAmbientQuery() makes from this
-    // match: below the floor, so this device answers silently instead of
-    // surfacing the consent ceremony.
-    expect(classifyIncomingQuery(result, false, true)).toEqual({ surface: false, outcome: 'below-k' })
+    // match: above the floor via the bypass, so this device surfaces the
+    // consent ceremony.
+    expect(classifyIncomingQuery(result, false, true)).toEqual({ surface: true, outcome: null })
   })
 
   it('a device with no matching inventory or chat content gets a silent no-match, not a surfaced one', async () => {

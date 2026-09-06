@@ -86,6 +86,7 @@ function makeHit(threadId: string, author: string): MatchHit {
     message: { ts: '2026-08-15T10:00:00Z', author, text: 'Wohnung wird bald frei bei uns im Haus.', system: false },
     score: 5,
     terms: ['wohnung'],
+    source: 'seed',
   }
 }
 

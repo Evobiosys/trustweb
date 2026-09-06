@@ -141,6 +141,18 @@ export interface MatchHit {
   score: number
   /** Which match/boost terms fired. For the "what exactly would I share" screen. */
   terms: string[]
+  /**
+   * The source of the thread this hit came from (state.ts's inventoryThreads()
+   * and main.ts's secondBrainThread() both set 'self': the device owner's own
+   * declared entry, never a real contact's chat message). Pushed straight
+   * through from ChatThread.source at the point matchTemplate() builds the
+   * hit (lexical.ts), so a bypass decision there never has to re-derive it.
+   * See lexical.ts:171 area for the one place this field changes behaviour:
+   * a hit set that is entirely 'self' clears the anonymity floor regardless
+   * of distinctAuthors, because an inventory/second-brain entry has no third
+   * party to protect -- the author IS the person about to consent.
+   */
+  source: ChatSource
 }
 
 export interface MatchResult {
@@ -150,7 +162,12 @@ export interface MatchResult {
    * relevance bar. This is the number the anonymity floor is compared against.
    */
   distinctAuthors: number
-  /** True when distinctAuthors >= template.kThreshold. */
+  /**
+   * True when distinctAuthors >= template.kThreshold, OR (B-08, 2026-09-06)
+   * when every relevance-band hit is owner-declared (MatchHit.source ===
+   * 'self') -- see match/lexical.ts's matchTemplate() for the one place this
+   * is computed.
+   */
   aboveThreshold: boolean
 }
 

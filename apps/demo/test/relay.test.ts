@@ -206,6 +206,7 @@ describe('wire-level indistinguishability: what the RELAY sees', () => {
       },
       score: 5,
       terms: ['wohnung'],
+      source: 'seed',
     }
   }
 

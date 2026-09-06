@@ -139,6 +139,7 @@ export function matchTemplate(template: QueryTemplate, threads: ChatThread[]): M
           message,
           score,
           terms: firedTerms,
+          source: thread.source,
         })
       }
     })
@@ -162,11 +163,30 @@ export function matchTemplate(template: QueryTemplate, threads: ChatThread[]): M
   // silently buys down the protection.
   const top = hits.length ? hits[0].score : 0
   const floorBand = top * K_RELEVANCE_BAND
+  const bandHits = hits.filter((h) => h.score >= floorBand)
   const authors = new Set<string>()
-  for (const h of hits) {
-    if (h.score >= floorBand) authors.add(h.message.author.trim().toLowerCase())
-  }
+  for (const h of bandHits) authors.add(h.message.author.trim().toLowerCase())
   const distinctAuthors = authors.size
 
-  return { hits, distinctAuthors, aboveThreshold: distinctAuthors >= template.kThreshold }
+  // B-08 (2026-09-06): owner-declared matches bypass the floor.
+  //
+  // The floor exists to protect a THIRD PARTY whose chat message might
+  // identify them -- see the comment above. An inventory entry or
+  // second-brain note (thread.source === 'self', state.ts's
+  // inventoryThreads()/main.ts's secondBrainThread()) has no third party:
+  // the author IS the device owner, the person about to be asked whether to
+  // share their own single declared item through the ordinary consent
+  // ceremony. Requiring distinctAuthors >= kThreshold before that person is
+  // even allowed to be ASKED conflates "protect someone else's anonymity"
+  // with "protect the holder from being asked" -- two different objects.
+  //
+  // Bypass fires ONLY when every relevance-band hit is owner-declared. A
+  // single chat-authored hit mixed in with owner-declared ones still means a
+  // real third party is in the band, so the ordinary floor applies unchanged
+  // -- this is the one branch below that changes aboveThreshold's semantics;
+  // everything else in this function is untouched.
+  const allOwnerDeclared = bandHits.length > 0 && bandHits.every((h) => h.source === 'self')
+  const aboveThreshold = allOwnerDeclared ? true : distinctAuthors >= template.kThreshold
+
+  return { hits, distinctAuthors, aboveThreshold }
 }

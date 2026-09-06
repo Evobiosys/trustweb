@@ -105,4 +105,48 @@ describe('anonymity floor', () => {
     expect(a.distinctAuthors).toBe(b.distinctAuthors)
     expect(a.aboveThreshold).toBe(b.aboveThreshold)
   })
+
+  // B-08 (2026-09-06): owner-declared matches bypass the floor. See
+  // lexical.ts's matchTemplate() -- the floor protects a third party whose
+  // chat message might identify them; an inventory/second-brain entry
+  // (thread.source === 'self') has no third party, so a single-author match
+  // that is ENTIRELY owner-declared clears aboveThreshold regardless of
+  // distinctAuthors. A single-author REAL CHAT hit still gets suppressed,
+  // proving the floor still protects an actual third party. Mixed hits (one
+  // owner-declared, one chat-authored) keep the ordinary floor too -- a real
+  // third party is in the band, so their protection must not be bypassed.
+  describe('owner-declared bypass (B-08)', () => {
+    it('a single owner-declared hit (source: self) clears kThreshold=3 -- the Motorrad/Ski case', () => {
+      const t: ChatThread = {
+        ...thread([msg('Marlene', 'Ich habe ein Motorrad, das ich verleihen kann: wohnung wird nicht gebraucht.')]),
+        source: 'self',
+      }
+      const r = matchTemplate(template(3), [t])
+      expect(r.distinctAuthors).toBe(1)
+      expect(r.aboveThreshold).toBe(true)
+    })
+
+    it('a single-author REAL CHAT hit (source: seed) still does NOT clear kThreshold=3', () => {
+      const t = thread([msg('Marlene', 'Ich habe ein Motorrad, das ich verleihen kann: wohnung wird nicht gebraucht.')])
+      const r = matchTemplate(template(3), [t])
+      expect(r.distinctAuthors).toBe(1)
+      expect(r.aboveThreshold).toBe(false)
+    })
+
+    it('mixed owner-declared + chat-authored hits stay below the floor -- a real third party is in the band', () => {
+      const ownDeclared: ChatThread = {
+        ...thread([msg('Marlene', 'wohnung wird frei')]),
+        id: 'inv:1',
+        source: 'self',
+      }
+      const chatAuthored: ChatThread = {
+        ...thread([msg('Rosa', 'wohnung wird frei')]),
+        id: 't2',
+        source: 'seed',
+      }
+      const r = matchTemplate(template(3), [ownDeclared, chatAuthored])
+      expect(r.distinctAuthors).toBe(2)
+      expect(r.aboveThreshold).toBe(false)
+    })
+  })
 })

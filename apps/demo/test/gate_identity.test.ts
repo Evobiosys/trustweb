@@ -55,6 +55,7 @@ function makeHit(i: number): MatchHit {
     },
     score: 5,
     terms: ['wohnung'],
+    source: 'seed',
   }
 }
 
