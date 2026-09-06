@@ -14,7 +14,7 @@ import {
   verifyContract,
 } from "./contracts.js";
 import { loadOrCreateSecret } from "./templates.js";
-import { DEFAULT_K } from "@resource-web/network-access";
+import { DEFAULT_K, MIN_K as MIN_K_FROM_NETWORK_ACCESS } from "@resource-web/network-access";
 
 let dir: string;
 let secretPath: string;
@@ -36,6 +36,26 @@ describe("DEFAULT_K", () => {
   // is retuned by the C-08 prevalence run, not here.
   it("is the trunk floor of 3, read from the one exported constant", () => {
     expect(DEFAULT_K).toBe(3);
+  });
+});
+
+describe("MIN_K is tied to DEFAULT_K", () => {
+  // The point of these three cases is the RELATIONSHIP, not the number. When
+  // C-08 retunes DEFAULT_K, a hard-coded 2 would silently widen the gap the
+  // mutual-flag guardrail is supposed to keep narrow; these fail instead.
+  it("is exactly one step below the default, never below 2", () => {
+    expect(MIN_K).toBe(Math.max(2, DEFAULT_K - 1));
+  });
+
+  it("always leaves the default strictly above it, so lowering means something", () => {
+    expect(MIN_K).toBeLessThan(DEFAULT_K);
+    expect(MIN_K).toBeGreaterThanOrEqual(2);
+  });
+
+  it("is the very same constant contracts.ts re-exports, not a second copy", () => {
+    expect(MIN_K).toBe(MIN_K_FROM_NETWORK_ACCESS);
+    // and, at today's DEFAULT_K of 3, still the value the port carried across
+    expect(MIN_K).toBe(2);
   });
 });
 
@@ -73,7 +93,7 @@ describe("createContract", () => {
     ).toThrow(ContractError);
   });
 
-  it("refuses k_floor below MIN_K (2) even with mutual:true — k=1 identifies individuals outright", () => {
+  it("refuses k_floor below MIN_K even with mutual:true — k=1 identifies individuals outright", () => {
     expect(() =>
       createContract(secretPath, storePath, { peer_id: "a@b.org", k_floor: 1, mutual: true }),
     ).toThrow(ContractError);

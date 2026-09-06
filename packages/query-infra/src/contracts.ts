@@ -31,19 +31,26 @@
 // *whatever the default is when it's read* is not honored as a lowering
 // contract, so a later rise in the default can't retroactively turn an
 // old, legally-created contract into an unauthorized downgrade. k can never
-// go below MIN_K (2) regardless of mutual: at k=1 an "N of M" aggregate
+// go below MIN_K regardless of mutual: at k=1 an "N of M" aggregate
 // identifies a single individual outright, which is exactly what
-// k-anonymity exists to prevent.
+// k-anonymity exists to prevent. MIN_K is no longer a literal of this
+// module: it is tied to DEFAULT_K in @resource-web/network-access
+// (Math.max(2, DEFAULT_K - 1)), so retuning the default after the C-08
+// prevalence run moves the hard minimum with it instead of leaving a
+// widening gap. It is re-exported here so existing importers of
+// "./contracts.js" keep working.
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
 import { loadOrCreateSecret } from "./templates.js";
-import { DEFAULT_K } from "@resource-web/network-access";
+import { DEFAULT_K, MIN_K } from "@resource-web/network-access";
 import { peerKey } from "./contact_channels.js";
 
 export class ContractError extends Error {}
 
-export const MIN_K = 2;
+// Re-exported, not redeclared: the single definition lives beside DEFAULT_K
+// in @resource-web/network-access/anonymity.ts so the two cannot drift.
+export { MIN_K };
 
 /** One agreed (owner, peer) k-anonymity override. `sig` covers every other
  * field below via canonical JSON + HMAC-SHA256. */

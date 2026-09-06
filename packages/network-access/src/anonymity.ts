@@ -25,8 +25,22 @@ import type { OutwardResponse } from "./types.js";
 //
 // Per-peer overrides live in packages/query-infra/src/contracts.ts
 // (effectiveK / effectiveKFor): they may raise the floor freely, and lower it
-// only with mutual:true and never below that module's MIN_K.
+// only with mutual:true and never below MIN_K, declared just below.
 export const DEFAULT_K = 3;
+
+// The hard minimum any per-peer contract may lower the floor to, however
+// mutual the agreement. Derived from DEFAULT_K rather than written as a
+// literal, so the two move together when the C-08 prevalence run retunes the
+// default: exactly one step of slack below it, and never below 2, because at
+// k = 1 an "N of M" aggregate identifies a single individual outright, which
+// is the thing k-anonymity exists to prevent.
+//
+// At DEFAULT_K = 3 this is 2, the value the rebiosys port carried in
+// query-infra's contracts.ts. Under the fork's floor of 7 the same literal 2
+// left a five-step gap, which changed what the mutual-flag guardrail meant;
+// tying the two keeps that gap at one step whatever the default becomes.
+// contracts.ts re-exports this so its existing import path still resolves.
+export const MIN_K = Math.max(2, DEFAULT_K - 1);
 
 export const NOTHING_SHAREABLE_TEXT = "No shareable result for this request.";
 
