@@ -1,4 +1,5 @@
 import './app.css'
+import { DEFAULT_K } from '@resource-web/network-access/anonymity'
 import { initI18n, t, getLang, toggleLang } from './i18n'
 import { el, clear, coarseWhen } from './ui/dom'
 import { renderQr, keepAwake } from './ui/qr'
@@ -2355,7 +2356,7 @@ const UNRESOLVED_TEMPLATE: QueryTemplate = {
   boostTerms: [],
   excludeTerms: [],
   minScore: 1,
-  kThreshold: 1,
+  kThreshold: DEFAULT_K,
   sensitivity: 'low',
   ttlSeconds: 0,
 }

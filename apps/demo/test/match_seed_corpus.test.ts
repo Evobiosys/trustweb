@@ -124,11 +124,15 @@ describe('match_seed_corpus (acceptance)', () => {
     // Seeker-side language must not create a hit on this OFFER template.
     expect(hitTexts.some((t) => t.includes('cousine sucht grad genau sowas'))).toBe(false)
 
-    // High-sensitivity category: the demo-only kThreshold override (1) is
-    // what makes aboveThreshold true here; production's kThreshold=7 would
-    // read `false` on a single seeded group.
-    expect(t1.kThreshold).toBe(1)
-    expect(result.aboveThreshold).toBe(true)
+    // C-03 (2026-09-06): the demo-only kThreshold override of 1 is banned
+    // ("must not ship") and T1 now carries the workspace DEFAULT_K (3) like
+    // every other production template. A single seeded group can no longer
+    // clear that floor, so aboveThreshold correctly reads false here -- this
+    // is the accepted cost of closing C-03, not a regression. The matcher
+    // still finds and ranks the buried message correctly, above; only the
+    // consent-worthy reveal is gated differently now.
+    expect(t1.kThreshold).toBe(3)
+    expect(result.aboveThreshold).toBe(false)
   })
 
   it('T2 (Nachmieter/Genossenschaft) finds zero hits: this corpus never mentions co-op/municipal succession', async () => {

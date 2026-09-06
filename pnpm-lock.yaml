@@ -35,6 +35,9 @@ importers:
       '@noble/hashes':
         specifier: 2.2.0
         version: 2.2.0
+      '@resource-web/network-access':
+        specifier: workspace:*
+        version: link:../../packages/network-access
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0

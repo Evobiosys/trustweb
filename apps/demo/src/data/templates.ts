@@ -1,4 +1,5 @@
 import type { QueryTemplate } from '../types'
+import { DEFAULT_K } from '@resource-web/network-access/anonymity'
 
 /**
  * The five demo query templates.
@@ -250,12 +251,12 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T1_HOUSING_PRE_LISTING_BOOST_TERMS,
     excludeTerms: T1_HOUSING_PRE_LISTING_EXCLUDE_TERMS,
     minScore: 1,
-    // DEMO OVERRIDE: production default is 7 (see
-    // overnight/05-chat-group-information.md section 1, "DEFAULT_K = 7" /
-    // packages/network-access/src/anonymity.ts). Set to 1 here ONLY so the
-    // demo can show a hit against a single seeded group chat; do not ship
-    // this value.
-    kThreshold: 1,
+    // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
+    // ("must not ship"), replaced with the workspace DEFAULT_K, imported
+    // from packages/network-access/src/anonymity.ts. This template can no
+    // longer show a hit against a single seeded group chat; that is the
+    // accepted cost of closing C-03, not an oversight.
+    kThreshold: DEFAULT_K,
     sensitivity: 'high',
     ttlSeconds: 1_209_600, // 14 days (ttl_ms 1209600000 in the catalogue doc)
   },

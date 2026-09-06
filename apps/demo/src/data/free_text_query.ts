@@ -16,6 +16,7 @@
  */
 
 import type { QueryTemplate } from '../types'
+import { DEFAULT_K } from '@resource-web/network-access/anonymity'
 import { tokenize } from '../match/normalize'
 
 /** Sentinel templateId a free-text QueryEnvelope always carries on the wire
@@ -63,17 +64,17 @@ export function freeTextTemplate(text: string): QueryTemplate {
     boostTerms: [],
     excludeTerms: [],
     minScore: 1,
-    // DEMO OVERRIDE, same reasoning as data/templates.ts's T1: production
-    // default is 7 (DEFAULT_K). Kept at 1 here for a STRUCTURAL reason, not
-    // just convenience -- state.ts's inventoryThreads() gives every "Was ich
-    // habe" entry exactly one author (the device's own owner), so any
-    // inventory-only match has distinctAuthors === 1 by construction. A
-    // floor above 1 would make sharing an inventory entry impossible,
-    // ever, which would silently kill the one story this feature exists to
-    // tell ("Ski" in, "Ski" found). Do not raise this without also giving
-    // inventory entries a way to accumulate distinct authors. Do not ship
-    // this value as-is (see README's Privacy Honesty Box, I7).
-    kThreshold: 1,
+    // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
+    // ("must not ship"), replaced with the workspace DEFAULT_K (3).
+    // state.ts's inventoryThreads() gives every "Was ich habe" entry exactly
+    // one author (the device's own owner), so any inventory-only match has
+    // distinctAuthors === 1 by construction -- at DEFAULT_K this makes
+    // sharing an inventory entry impossible, which silently kills the
+    // "Ski in, Ski found" story. Known and accepted: closing C-03 outranks
+    // this demo story. The real fix is inventory entries getting a way to
+    // accumulate distinct authors, or an explicit per-query override -- not
+    // a return to a hardcoded 1 (see README's Privacy Honesty Box, I7).
+    kThreshold: DEFAULT_K,
     // Free text is a bigger privacy surface than a curated template's fixed
     // vocabulary -- the asker can type anything, so the UI that shows this
     // question to A must say so plainly (see i18n.ts's askFreeTextPrivacy).

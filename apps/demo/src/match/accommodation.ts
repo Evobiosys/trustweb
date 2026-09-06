@@ -25,6 +25,7 @@
  * "Zeigen, was geteilt würde" reveal entirely for this one template id.
  */
 import type { MatchHit, MatchResult, QueryTemplate } from '../types'
+import { DEFAULT_K } from '@resource-web/network-access/anonymity'
 import { ADDRESS, FREE_WINDOW_DE } from '../data/geologengasse'
 
 export const ACCOMMODATION_TEMPLATE_ID = 'wot.vienna.geologengasse.accommodation'
@@ -49,12 +50,15 @@ export const ACCOMMODATION_TEMPLATE: QueryTemplate = {
   boostTerms: [],
   excludeTerms: [],
   minScore: 1,
-  // The k-threshold demo-crutch, same as T1_HOUSING's own comment: production
-  // default is 7 (see data/templates.ts). Here the corpus is ONE flat and
-  // ONE calendar, so k=1 is not optional -- with k>1 nothing could ever
-  // match. Said honestly in the UI (main.ts's geoKHonesty string), not
-  // pretended to be an anonymity floor.
-  kThreshold: 1,
+  // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
+  // ("must not ship"), replaced with the workspace DEFAULT_K (3). The corpus
+  // here is ONE flat and ONE calendar, so at DEFAULT_K this query can no
+  // longer clear the floor -- known and accepted: closing C-03 outranks this
+  // demo story. Said honestly in the UI (main.ts's geoKHonesty string), not
+  // pretended to be an anonymity floor. Restoring a hit here needs either a
+  // bigger seeded corpus or an explicit, labelled per-query override -- not
+  // a return to a hardcoded 1.
+  kThreshold: DEFAULT_K,
   sensitivity: 'high',
   ttlSeconds: 1_209_600, // 14 days
 }
