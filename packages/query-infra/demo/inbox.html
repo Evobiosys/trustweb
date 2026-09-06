@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Query inbox — network access</title>
+<style>
+  :root { --ground:#F2F3EC; --panel:#FAFAF6; --ink:#232A20; --muted:#5C6455; --line:#D6DACA; --accent:#3F7A54; --amber:#9A6B22; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground:#151A14; --panel:#1C231B; --ink:#E4E7DA; --muted:#9AA391; --line:#323B2F; --accent:#86B894; --amber:#D2A857; }
+  }
+  body { background:var(--ground); color:var(--ink); font-family:Seravek,"Avenir Next",system-ui,sans-serif; margin:0; padding:2rem 1rem; }
+  main { max-width:680px; margin:0 auto; }
+  h1 { font-family:Palatino,Georgia,serif; font-size:1.5rem; }
+  .meta { color:var(--muted); font-size:.85rem; }
+  .q { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:1rem; margin:.8rem 0; }
+  .state { display:inline-block; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; padding:.1rem .5rem; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .state.awaiting_gate0, .state.awaiting_run, .state.awaiting_reveal { color:var(--amber); border-color:var(--amber); }
+  .who { font-weight:600; }
+  button { margin:.5rem .4rem 0 0; padding:.4rem .8rem; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  ul.matches { margin:.4rem 0; padding-left:1.2rem; font-size:.88rem; }
+  .kd { font-size:.82rem; color:var(--muted); }
+  select { font:inherit; background:var(--ground); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:.15rem; }
+  .pol { font-size:.78rem; color:var(--muted); margin-top:.6rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Query inbox</h1>
+  <div class="meta" id="meta"></div>
+  <div id="list"></div>
+</main>
+<script>
+  let data = { queries: [], k: 3 };
+  async function post(url, body) {
+    await fetch(url, { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body) });
+    await refresh();
+  }
+  window.ev = (id, event) => post("/api/queries/" + id + "/event", { event });
+  window.revealIdentified = (id) => {
+    const boxes = [...document.querySelectorAll('input[data-q="' + id + '"]:checked')];
+    if (!boxes.length) { alert("pick at least one contact"); return; }
+    post("/api/queries/" + id + "/event", { event: { type:"reveal_identified", contactIds: boxes.map((b) => b.value) } });
+  };
+  window.setPol = (requester) => {
+    const g = (n) => document.querySelector('select[data-r="' + requester + '"][data-g="' + n + '"]').value;
+    post("/api/policies", { requester, policy: { gate0: g(0), gate1: g(1), gate2: g(2) } });
+  };
+  function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+  function controls(q) {
+    if (q.state === "awaiting_gate0") return '<button class="primary" onclick=\'ev("' + q.id + '",{type:"gate0_allow"})\'>Allow this query</button><button onclick=\'ev("' + q.id + '",{type:"gate0_block"})\'>Decline</button>';
+    if (q.state === "awaiting_run") return '<button class="primary" onclick=\'ev("' + q.id + '",{type:"run",model:"small"})\'>Run — small model</button><button onclick=\'ev("' + q.id + '",{type:"run",model:"large"})\'>Run — large model</button>';
+    if (q.state === "running") return '<span class="kd">matcher running…</span>';
+    if (q.state === "awaiting_reveal") {
+      const kd = q.kDecision || { kind: "none" };
+      const kdText = kd.kind === "anonymized"
+        ? "shareable aggregate: " + kd.matchCount + " of " + kd.totalCount
+        : kd.kind === "suppressed"
+          ? "below k=" + data.k + " — anonymized share would send the no-result text"
+          : "no matches — anonymized share sends the no-result text";
+      const list = (q.matches || []).map((m) => '<li><label><input type="checkbox" data-q="' + q.id + '" value="' + esc(m.contact_id) + '"> ' + esc(m.name) + ' <span class="kd">' + esc(m.reason) + "</span></label></li>").join("");
+      // Anonymized aggregate lives behind a toggle: folded when the owner
+      // walked the gates by hand (they already saw everything), unfolded when
+      // the query auto-ran under a standing policy.
+      const autoRan = q.policy && q.policy.gate0 === "standing_allow" && q.policy.gate1 === "auto_small";
+      return '<ul class="matches">' + list + "</ul>" + trace(q)
+        + '<button class="primary" onclick=\'ev("' + q.id + '",{type:"reveal_identity",profileId:"general"})\'>Tell them it&#39;s my identity</button>'
+        + '<button onclick=\'revealIdentified("' + q.id + '")\'>Share selected, identified</button>'
+        + '<button onclick=\'ev("' + q.id + '",{type:"decline_reveal"})\'>Decline</button>'
+        + '<details class="kd" data-persist="anon:' + q.id + '"' + (autoRan ? " open" : "") + '><summary>anonymized aggregate option</summary>'
+        + '<div class="kd">' + kdText + "</div>"
+        + '<button onclick=\'ev("' + q.id + '",{type:"reveal_anonymized"})\'>Share anonymized</button></details>';
+    }
+    if (q.response) return '<div class="kd">answered (' + esc(q.response.kind) + "): " + esc(q.response.text) + "</div>" + trace(q);
+    return "";
+  }
+  function trace(q) {
+    const t = q.trace;
+    if (!t) return "";
+    const ev = (t.matchEvidence || []).map((m) => esc(m.id) + " (" + Number(m.score).toFixed(2) + "): " + esc(m.reason)).join("<br>");
+    return '<details class="kd" data-persist="trace:' + q.id + '"><summary>algorithm trace</summary>'
+      + "<div>scanned " + t.scanned + " entries (" + t.corpusSplit.contacts + " contacts + " + t.corpusSplit.inventory + " inventory)</div>"
+      + (ev ? "<div>" + ev + "</div>" : "<div>no candidates matched</div>")
+      + "<div>k-decision: " + esc(JSON.stringify(t.kDecision)) + "</div>"
+      + (t.outwardIfAnonymized ? "<div>anonymized would send: “" + esc(t.outwardIfAnonymized) + "”</div>" : "")
+      + (t.outwardSent ? "<div>sent: “" + esc(t.outwardSent) + "”</div>" : "")
+      + "</details>";
+  }
+  function policyRow(q) {
+    const p = q.policy;
+    const sel = (g, opts, cur) => '<select data-r="' + esc(q.requester) + '" data-g="' + g + '">' + opts.map((o) => '<option' + (o === cur ? " selected" : "") + ">" + o + "</option>").join("") + "</select>";
+    return '<div class="pol">standing policy for ' + esc(q.requester) + ": may-query "
+      + sel(0, ["ask_each_time", "standing_allow", "blocked"], p.gate0) + " · run "
+      + sel(1, ["manual", "auto_small"], p.gate1) + " · share "
+      + sel(2, ["manual", "auto_anonymized"], p.gate2)
+      + ' <button onclick=\'setPol("' + esc(q.requester) + '")\'>save</button></div>';
+  }
+  let lastPayload = "";
+  async function refresh() {
+    const payload = await (await fetch("/api/inbox")).text();
+    // Re-render ONLY when data changed — otherwise open toggles (algorithm
+    // trace, aggregate option) and half-edited selects get wiped every poll.
+    if (payload === lastPayload) return;
+    lastPayload = payload;
+    data = JSON.parse(payload);
+    const open = new Set([...document.querySelectorAll("details[data-persist][open]")].map((d) => d.dataset.persist));
+    document.getElementById("meta").textContent = data.contacts + " contacts in the inventory · k = " + data.k + " · identified sharing is never automatic";
+    document.getElementById("list").innerHTML = data.queries.map((q) => {
+      const badge = q.viaRelay ? (q.emailVerified ? ' <span class="kd">✓ verified inbox</span>' : ' <span class="kd">✉ unverified</span>') : "";
+      return '<div class="q"><span class="state ' + q.state + '">' + q.state.replaceAll("_", " ") + '</span> <span class="who">' + esc(q.requester) + "</span>" + badge + "<div>" + esc(q.text) + "</div>" + controls(q) + policyRow(q) + "</div>";
+    }).join("") || '<p class="meta">No queries yet. Send one from the ask page.</p>';
+    for (const d of document.querySelectorAll("details[data-persist]")) {
+      if (open.has(d.dataset.persist)) d.open = true;
+    }
+  }
+  refresh();
+  setInterval(refresh, 2500);
+</script>
+</body>
+</html>

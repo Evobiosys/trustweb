@@ -12,6 +12,20 @@
 // this package is mounted into the daemon wire protocol.
 import type { OutwardResponse } from "./types.js";
 
+// The single k-anonymity floor for the whole workspace. Every other module
+// reads this constant; nothing declares a second one. The rebiosys fork
+// raised its own copy to 7 (Jakob, 2026-08-25 owner decision, DECISIONS.md
+// D24, rebiosys commit 0613fb1: "set the default floor to 7, and let people
+// adjust that in contracts with each other"), and packages/query-infra held a
+// vault-specific duplicate of 7 as well. Both duplicates were deleted when
+// query-infra was ported into this trunk (decision B-03, option A); the value
+// kept is the trunk's 3, because the prevalence measurement (C-08) has not
+// run yet and F-07 rules that the floor is not to be tuned before it does.
+// Raising this to 7 is a one-line change here once C-08 reports.
+//
+// Per-peer overrides live in packages/query-infra/src/contracts.ts
+// (effectiveK / effectiveKFor): they may raise the floor freely, and lower it
+// only with mutual:true and never below that module's MIN_K.
 export const DEFAULT_K = 3;
 
 export const NOTHING_SHAREABLE_TEXT = "No shareable result for this request.";

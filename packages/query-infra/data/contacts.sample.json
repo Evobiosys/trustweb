@@ -1,0 +1,14 @@
+[
+  { "id": "c-ana", "name": "Ana Gruber", "tags": ["permaculture", "vienna", "gardening"], "notes": "runs a community garden collective in Vienna", "networks": ["transcripts"] },
+  { "id": "c-ben", "name": "Ben Okafor", "tags": ["crypto", "celo", "refi"], "notes": "regenerative finance, knows the Celo ecosystem well", "networks": ["linkedin"] },
+  { "id": "c-cyn", "name": "Cynthia Park", "tags": ["housing", "sf", "co-living"], "notes": "steward in an SF co-living community", "networks": ["facebook"] },
+  { "id": "c-dee", "name": "Dee Muster", "tags": ["permaculture", "alm", "forestry"], "notes": "forestry and alpine permaculture, helped on the Alm", "networks": ["transcripts"] },
+  { "id": "c-eli", "name": "Elias Steiner", "tags": ["permaculture", "vienna", "seeds"], "notes": "seed-saving network organizer in Vienna", "networks": ["instagram"] },
+  { "id": "c-fio", "name": "Fiona Bauer", "tags": ["law", "gdpr", "vienna"], "notes": "lawyer, data protection and association law", "networks": ["linkedin"] },
+  { "id": "c-gus", "name": "Gustav Lindner", "tags": ["tools", "repair", "vienna"], "notes": "runs a repair café, lends tools", "networks": ["transcripts"] },
+  { "id": "c-hana", "name": "Hana Vlk", "tags": ["facilitation", "we-space", "retreats"], "notes": "facilitates group processes and retreats", "networks": ["facebook"] },
+  { "id": "c-ivo", "name": "Ivo Petrov", "tags": ["matrix", "self-hosting", "federation"], "notes": "runs federated infrastructure, Matrix homeservers", "networks": ["transcripts"] },
+  { "id": "c-jul", "name": "Julia Mair", "tags": ["funding", "grants", "eu"], "notes": "EU grant writing for commons projects", "networks": ["linkedin"] },
+  { "id": "c-kim", "name": "Kim Aydin", "tags": ["permaculture", "danube", "water"], "notes": "water retention landscapes along the Danube", "networks": ["instagram"] },
+  { "id": "c-lea", "name": "Lea Novak", "tags": ["journalism", "commons", "vienna"], "notes": "writes about commons and mutual aid", "networks": ["transcripts"] }
+]

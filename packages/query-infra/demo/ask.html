@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask into Jakob's network</title>
+<style>
+  :root { --ground:#F2F3EC; --panel:#FAFAF6; --ink:#232A20; --muted:#5C6455; --line:#D6DACA; --accent:#3F7A54; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground:#151A14; --panel:#1C231B; --ink:#E4E7DA; --muted:#9AA391; --line:#323B2F; --accent:#86B894; }
+  }
+  body { background:var(--ground); color:var(--ink); font-family:Seravek,"Avenir Next",system-ui,sans-serif; margin:0; padding:2rem 1rem; }
+  main { max-width:560px; margin:0 auto; }
+  h1 { font-family:Palatino,Georgia,serif; font-size:1.5rem; }
+  p.small { color:var(--muted); font-size:.85rem; }
+  form, .q { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:1rem; margin:.8rem 0; }
+  label { display:block; font-size:.8rem; color:var(--muted); margin:.5rem 0 .15rem; }
+  input, textarea { width:100%; box-sizing:border-box; padding:.5rem; border:1px solid var(--line); border-radius:6px; background:var(--ground); color:var(--ink); font:inherit; }
+  button { margin-top:.8rem; padding:.5rem 1rem; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  .state { font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .answer { margin-top:.4rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ask into Jakob's network</h1>
+  <p class="small">Your request is stored until Jakob's device is on. His algorithm only runs — and any result is only shared — with his consent. Small result sets are never disclosed.</p>
+  <form id="f">
+    <label for="requester">Your name</label>
+    <input id="requester" required>
+    <label for="email">Your email (required — how the answer reaches you)</label>
+    <input id="email" type="email" required>
+    <label for="text">Who are you looking for?</label>
+    <textarea id="text" rows="3" required placeholder="e.g. someone who knows permaculture in Vienna"></textarea>
+    <button>Send query</button>
+  </form>
+  <div id="list"></div>
+</main>
+<script>
+  const ids = JSON.parse(localStorage.getItem("na_asks") || "[]");
+  document.getElementById("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("requester").value.trim();
+    const email = document.getElementById("email").value.trim();
+    if (!email) return;
+    const requester = name + " <" + email + ">";
+    const text = document.getElementById("text").value.trim();
+    const res = await fetch("/api/ask", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ requester, text }) });
+    const data = await res.json();
+    ids.unshift({ id: data.id, text });
+    localStorage.setItem("na_asks", JSON.stringify(ids));
+    document.getElementById("text").value = "";
+    render();
+  });
+  async function render() {
+    const list = document.getElementById("list");
+    const parts = [];
+    for (const entry of ids) {
+      const view = await (await fetch("/api/ask/" + entry.id)).json();
+      let body = '<span class="state">pending — waiting for the owner’s device</span>';
+      if (view.state === "answered") {
+        body = '<div class="answer">' + escapeHtml(view.text || "") + "</div>";
+        if (view.contacts) {
+          body += "<ul>" + view.contacts.map((c) => "<li>" + escapeHtml(c.name) + " — " + escapeHtml(c.reason) + "</li>").join("") + "</ul>";
+        }
+      }
+      parts.push('<div class="q"><div>' + escapeHtml(entry.text) + "</div>" + body + "</div>");
+    }
+    list.innerHTML = parts.join("");
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+  render();
+  setInterval(render, 2500);
+</script>
+</body>
+</html>

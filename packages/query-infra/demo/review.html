@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner review — network access</title>
+<style>
+  :root {
+    --ground:#F2F3EC; --panel:#FAFAF6; --ink:#232A20; --muted:#5C6455; --line:#D6DACA;
+    --accent:#3F7A54; --amber:#9A6B22; --danger:#A6402F; --danger-bg:#F7E8E4; --info:#3D6C8A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#151A14; --panel:#1C231B; --ink:#E4E7DA; --muted:#9AA391; --line:#323B2F;
+      --accent:#86B894; --amber:#D2A857; --danger:#E08A78; --danger-bg:#2E1D1A; --info:#8FC2DE;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { background:var(--ground); color:var(--ink); font-family:Seravek,"Avenir Next",system-ui,sans-serif; margin:0; padding:1.5rem 1rem 4rem; }
+  main { max-width:760px; margin:0 auto; }
+  h1 { font-family:Palatino,Georgia,serif; font-size:1.4rem; margin:0 0 .2rem; }
+  h2 { font-family:Palatino,Georgia,serif; font-size:1.05rem; margin:1.6rem 0 .5rem; }
+  .meta { color:var(--muted); font-size:.83rem; }
+  a { color: var(--accent); }
+
+  header.top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.6rem; border-bottom:1px solid var(--line); padding-bottom:.8rem; margin-bottom:.4rem; }
+  .pause-bar { display:flex; align-items:center; gap:.6rem; }
+  .pause-btn { padding:.5rem 1rem; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font:inherit; font-weight:600; cursor:pointer; }
+  .pause-btn.paused { background:var(--amber); border-color:var(--amber); color:#1a1300; }
+  .queue-len { font-size:.78rem; color:var(--muted); }
+
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:1rem 1.1rem; margin:.7rem 0; }
+  .card.red-flag { background:var(--danger-bg); border-color:var(--danger); }
+  .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:.6rem; flex-wrap:wrap; }
+  .who { font-weight:700; font-size:1.02rem; }
+  .badge { display:inline-block; font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; padding:.15rem .5rem; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .badge.deviant { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .badge.template { border-color:var(--accent); color:var(--accent); }
+  .badge.legacy { border-color:var(--muted); }
+  .dates { font-size:.76rem; color:var(--muted); margin:.15rem 0 .5rem; }
+  .stale { color:var(--info); cursor:help; }
+  .text { margin:.35rem 0; }
+  .scan-line { font-size:.82rem; color:var(--muted); }
+  .gates { display:flex; gap:.4rem; flex-wrap:wrap; margin:.5rem 0; }
+  .gate-pill { font-size:.72rem; padding:.15rem .5rem; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .gate-pill.downgraded { border-color:var(--amber); color:var(--amber); }
+
+  .actions { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.7rem; align-items:center; }
+  button { font:inherit; border-radius:8px; cursor:pointer; }
+  .approve { padding:.55rem 1.1rem; border:0; background:var(--accent); color:#fff; font-weight:700; font-size:.95rem; }
+  .decline { padding:.55rem 1.1rem; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-weight:600; }
+  .decline-note { font-size:.72rem; color:var(--muted); flex-basis:100%; }
+  .restore { padding:.5rem .9rem; border:1px solid var(--danger); background:transparent; color:var(--danger); font-weight:700; }
+  .restore[disabled] { opacity:.55; cursor:default; }
+  .countdown { font-size:.78rem; color:var(--danger); }
+
+  .reach-out { position:relative; display:inline-flex; align-items:center; gap:.3rem; }
+  .reach-primary { padding:.5rem .9rem; border:1px solid var(--accent); background:transparent; color:var(--accent); font-weight:600; }
+  details.fallbacks { display:inline-block; }
+  details.fallbacks summary { list-style:none; padding:.5rem .6rem; border:1px solid var(--line); border-radius:8px; color:var(--muted); font-size:.85rem; cursor:pointer; }
+  details.fallbacks summary::-webkit-details-marker { display:none; }
+  .fallback-menu { position:absolute; top:100%; right:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:.35rem; margin-top:.25rem; z-index:5; min-width:11rem; }
+  .fallback-menu a { display:block; padding:.4rem .5rem; border-radius:6px; text-decoration:none; color:var(--ink); font-size:.85rem; }
+  .fallback-menu a:hover { background:var(--ground); }
+  .fallback-menu .preferred::after { content:" · preferred"; color:var(--muted); font-size:.72rem; }
+  .fallback-menu .none { padding:.4rem .5rem; color:var(--muted); font-size:.82rem; }
+
+  details.trace { margin-top:.5rem; font-size:.82rem; color:var(--muted); }
+  details.trace summary { cursor:pointer; }
+  .empty { color:var(--muted); font-size:.9rem; padding:.6rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>Owner review</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="pause-bar">
+      <span class="queue-len" id="queueLen"></span>
+      <button class="pause-btn" id="pauseBtn" onclick="togglePause()">…</button>
+    </div>
+  </header>
+
+  <h2>Needs your review</h2>
+  <div id="queue"></div>
+
+  <h2>Recently processed <span class="meta">— trace one tap away</span></h2>
+  <div id="processed"></div>
+</main>
+<script>
+  let data = null;
+
+  function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+
+  async function post(url, body) {
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    await refresh();
+    return res;
+  }
+
+  window.togglePause = () => post("/api/pause", { paused: !data.pause.paused });
+
+  window.ev = (id, event) => post("/api/queries/" + id + "/event", { event });
+  function findCard(id) { return (data.review.queue || []).find((c) => c.id === id); }
+  window.approve = (id) => {
+    const card = findCard(id);
+    if (!card) return;
+    if (card.action.approve === "gate0_allow") return ev(id, { type: "gate0_allow" });
+    if (card.action.approve === "run_small") return ev(id, { type: "run", model: "small" });
+    if (card.action.approve === "reveal_anonymized") return ev(id, { type: "reveal_anonymized" });
+  };
+  window.decline = (id) => {
+    const card = findCard(id);
+    if (!card) return;
+    if (card.action.decline === "gate0_block") return ev(id, { type: "gate0_block" });
+    if (card.action.decline === "decline_reveal") return ev(id, { type: "decline_reveal" });
+  };
+
+  window.restorePrompt = (id) => post("/api/red-flags/" + id + "/restore-prompt");
+
+  window.reachOut = (requester) => {
+    const message = prompt("Message to " + requester + " (sent over the Web of Trust):", "Hi — reaching out about your query.");
+    if (message === null || !message.trim()) return;
+    post("/api/reach-out", { requester, message, profileId: "general" });
+  };
+
+  function dateLine(isoOrMs, stalenessInfo) {
+    const d = new Date(typeof isoOrMs === "number" ? isoOrMs : isoOrMs);
+    const abs = d.toLocaleString();
+    const rel = relTime(d.getTime());
+    let out = esc(abs) + " (" + rel + ")";
+    if (stalenessInfo && stalenessInfo.stale) {
+      out += ' <span class="stale" title="' + esc(stalenessInfo.seasonNote) + '">ⓘ stale</span>';
+    }
+    return out;
+  }
+  function relTime(ms) {
+    const diff = Date.now() - ms;
+    const mins = Math.round(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return hours + "h ago";
+    const days = Math.round(hours / 24);
+    if (days < 90) return days + "d ago";
+    const months = Math.round(days / 30);
+    return months + "mo ago";
+  }
+
+  function reachOutHtml(requester) {
+    const opts = (data.review.reachOutByRequester || {})[requester] || { primary: { label: "Contact over Web of Trust" }, fallbacks: [] };
+    const fallbackItems = opts.fallbacks.length
+      ? opts.fallbacks.map((f) => '<a href="' + esc(f.href) + '" target="_blank" rel="noopener" class="' + (f.preferred ? "preferred" : "") + '">' + esc(f.label) + '</a>').join("")
+      : '<div class="none">no Matrix/Signal on file for this requester yet</div>';
+    return '<span class="reach-out">'
+      + '<button class="reach-primary" data-requester="' + esc(requester) + '" onclick="reachOut(this.dataset.requester)">' + esc(opts.primary.label) + '</button>'
+      + '<details class="fallbacks"><summary>fallback ▾</summary><div class="fallback-menu">' + fallbackItems + '</div></details>'
+      + '</span>';
+  }
+
+  function gatePills(policy, effective) {
+    if (!policy) return "";
+    const keys = ["gate0", "gate1", "gate2"];
+    return '<div class="gates">' + keys.map((k) => {
+      const downgraded = effective && effective[k] !== policy[k];
+      const val = effective ? effective[k] : policy[k];
+      return '<span class="gate-pill' + (downgraded ? " downgraded" : "") + '" title="' + k + (downgraded ? " — downgraded from " + esc(policy[k]) + " by an active red-flag trust penalty" : "") + '">' + k + ": " + esc(val) + '</span>';
+    }).join("") + '</div>';
+  }
+
+  function pendingCardHtml(card) {
+    const badge = card.template
+      ? '<span class="badge template">template ' + esc(card.template.id.slice(0, 8)) + ' · ' + esc(card.template.target) + '</span>'
+      : '<span class="badge legacy">no template (legacy ask)</span>';
+    let actions = "";
+    if (card.action.approve === "gate0_allow") {
+      actions = '<button class="approve" onclick="approve(\'' + card.id + '\')">Approve</button>'
+        + '<button class="decline" onclick="decline(\'' + card.id + '\')">Decline</button>'
+        + '<div class="decline-note">Declining sends the exact same bytes as a real no-match — the requester can never tell the two apart.</div>';
+    } else if (card.action.approve === "run_small") {
+      actions = '<button class="approve" onclick="approve(\'' + card.id + '\')">Approve — run matcher (small model)</button>';
+    } else if (card.action.approve === "reveal_anonymized") {
+      actions = '<button class="approve" onclick="approve(\'' + card.id + '\')">Approve — share anonymized</button>'
+        + '<button class="decline" onclick="decline(\'' + card.id + '\')">Decline</button>'
+        + '<div class="decline-note">Declining sends the exact same bytes as a real no-match — the requester can never tell the two apart.</div>';
+    }
+    return '<div class="card">'
+      + '<div class="card-top"><span class="who">' + esc(card.requester) + '</span>' + badge + '</div>'
+      + '<div class="dates">received ' + dateLine(card.receivedAt, card.staleness) + ' · state: ' + esc(card.state.replaceAll("_", " ")) + '</div>'
+      + '<div class="text">' + esc(card.text) + '</div>'
+      + '<div class="scan-line">would scan: network contacts + inventory (' + (data.corpusTotal ?? "?") + ' total)</div>'
+      + gatePills(card.policy, card.effectivePolicy)
+      + '<div class="actions">' + actions + reachOutHtml(card.requester) + '</div>'
+      + '</div>';
+  }
+
+  function redFlagCardHtml(card) {
+    const expires = new Date(card.trustDowngradeExpiresAt);
+    const msLeft = expires.getTime() - Date.now();
+    const hoursLeft = Math.max(0, Math.ceil(msLeft / 3600000));
+    return '<div class="card red-flag">'
+      + '<div class="card-top"><span class="who">' + esc(card.requester) + '</span><span class="badge deviant">DEVIANT — either hacked or malicious</span></div>'
+      + '<div class="dates">flagged ' + dateLine(card.ts, card.staleness) + ' · reason: ' + esc(card.reason.replaceAll("_", " ")) + '</div>'
+      + '<div class="text">received text: “' + esc(card.receivedText) + '”</div>'
+      + '<div class="countdown">trust downgrade active for ' + hoursLeft + 'h more (until ' + esc(expires.toLocaleString()) + ')</div>'
+      + '<div class="actions">'
+      + '<button class="restore" ' + (card.restorePromptSent ? "disabled" : "") + ' onclick=\'restorePrompt("' + card.id + '")\'>'
+      + (card.restorePromptSent ? "Restore-trust prompt sent" : "Send restore-trust prompt")
+      + '</button>'
+      + reachOutHtml(card.requester)
+      + '</div>'
+      + '</div>';
+  }
+
+  function traceHtml(q) {
+    const t = q.trace;
+    if (!t) return "";
+    const ev = (t.matchEvidence || []).map((m) => esc(m.id) + " (" + Number(m.score).toFixed(2) + "): " + esc(m.reason)).join("<br>");
+    return '<details class="trace"><summary>algorithm trace</summary>'
+      + (t.scanned !== undefined ? '<div>scanned ' + t.scanned + ' entries (' + t.corpusSplit.contacts + ' contacts + ' + t.corpusSplit.inventory + ' inventory)</div>' : "")
+      + (ev ? "<div>" + ev + "</div>" : "")
+      + (t.kDecision ? "<div>k-decision: " + esc(JSON.stringify(t.kDecision)) + "</div>" : "")
+      + (t.outwardSent ? "<div>sent: “" + esc(t.outwardSent) + "”</div>" : "")
+      + "</details>";
+  }
+
+  function processedNetworkHtml(q) {
+    return '<div class="card">'
+      + '<div class="card-top"><span class="who">' + esc(q.requester) + '</span><span class="badge">' + esc(q.state.replaceAll("_", " ")) + '</span></div>'
+      + '<div class="dates">received ' + dateLine(q.receivedAt, q.staleness) + '</div>'
+      + '<div class="text">' + esc(q.text) + '</div>'
+      + (q.response ? '<div class="scan-line">answered: ' + esc(q.response.text) + '</div>' : "")
+      + traceHtml(q)
+      + '<div class="actions">' + reachOutHtml(q.requester) + '</div>'
+      + '</div>';
+  }
+
+  function processedVaultHtml(v) {
+    return '<div class="card">'
+      + '<div class="card-top"><span class="who">' + esc(v.requester) + '</span><span class="badge template">vault</span></div>'
+      + '<div class="dates">' + dateLine(v.ts, v.staleness) + '</div>'
+      + '<div class="scan-line">outward: ' + esc(v.outward) + '</div>'
+      + (v.trace ? '<details class="trace"><summary>algorithm trace</summary><div>scanned ' + v.trace.scanned.count + ' notes</div><div>k-decision: ' + esc(v.trace.k_decision.line) + '</div></details>' : "")
+      + '<div class="actions">' + reachOutHtml(v.requester) + '</div>'
+      + '</div>';
+  }
+
+  async function refresh() {
+    data = await (await fetch("/api/inbox")).json();
+
+    document.getElementById("meta").textContent =
+      data.contacts + " contacts + inventory (" + data.corpusTotal + " total) · " + data.vaultNoteCount + " vault notes · k = " + data.k + " · identified sharing is never automatic";
+
+    const pauseBtn = document.getElementById("pauseBtn");
+    pauseBtn.textContent = data.pause.paused ? "⏸ Paused — tap to resume" : "⏵ Running — tap to pause";
+    pauseBtn.className = "pause-btn" + (data.pause.paused ? " paused" : "");
+    document.getElementById("queueLen").textContent = data.pause.queueLength ? data.pause.queueLength + " queued while paused" : "";
+
+    const queue = data.review.queue || [];
+    document.getElementById("queue").innerHTML = queue.length
+      ? queue.map((c) => (c.kind === "red_flag" ? redFlagCardHtml(c) : pendingCardHtml(c))).join("")
+      : '<div class="empty">Nothing needs your review right now.</div>';
+
+    const processed = [...(data.review.processed || []), ...(data.review.vaultProcessed || [])]
+      .sort((a, b) => (b.receivedAt ?? Date.parse(b.ts)) - (a.receivedAt ?? Date.parse(a.ts)));
+    document.getElementById("processed").innerHTML = processed.length
+      ? processed.map((q) => (q.templateId !== undefined || q.outward !== undefined ? processedVaultHtml(q) : processedNetworkHtml(q))).join("")
+      : '<div class="empty">No processed queries yet.</div>';
+  }
+
+  refresh();
+  setInterval(refresh, 2500);
+</script>
+</body>
+</html>
