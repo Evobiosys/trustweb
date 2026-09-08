@@ -1,17 +1,22 @@
-# The three k's
+# The four k's
 
 Findings 2 and 3 of the 2026-09-06 UH-findings handover
 (`DEVLOG/community-wot/wot-findings_of-WebOfTrust_handover.md` in the
-unlocking-housing repo). Three unrelated parameters in this codebase are all
-casually called "k". Conflating them is the trap the handover names directly:
-"the famous `kThreshold: 1` must not ship warning ... is about k-anonymity
-over distinct authors -- NOT about vouch counts." This document is the single
-place that defines all three, so nobody has to reconstruct the distinction
-from scattered comments again.
+unlocking-housing repo) named three unrelated parameters in this codebase
+that are all casually called "k". Conflating them is the trap the handover
+names directly: "the famous `kThreshold: 1` must not ship warning ... is
+about k-anonymity over distinct authors -- NOT about vouch counts." A fourth,
+`CENTRAL_K_FLOOR`, was added to this document by a 2026-09-08 follow-up pass
+on the same k-standardize branch, after the module-map audit found the
+central-index server's own floor constant (`packages/wot-policy`) had been
+left out of the original three-way accounting and its relationship to k1's
+`DEFAULT_K` misdescribed in the central-RAG handover (see k4 below). This
+document is the single place that defines all four, so nobody has to
+reconstruct the distinctions from scattered comments again.
 
 No function in this codebase should take a parameter literally named `k`
 without a doc comment pointing here. Where one still does, treat that as a
-bug, not a style nit -- it is exactly how the three got conflated in the
+bug, not a style nit -- it is exactly how the four got conflated in the
 first place.
 
 ## k1 -- k-anonymity over distinct authors (aggregate display)
@@ -86,10 +91,11 @@ in exactly that one file and nowhere named `DEFAULT_K`, and
 workspace that already depends on both packages -- imports both constants
 and fails the moment their VALUES diverge.
 
-**Settings surface (2026-09-06):** the demo's "Mein Profil" screen
-(`apps/demo/src/screens/profile.ts`) now shows a read-only "Anonymity floor
-(k)" section: `DEFAULT_K`, `HIGH_RISK_TEMPLATE_K` (this page's k1) and
-`VOUCH_K` (k2, below), each with a one-line explanation, plus an advanced,
+**Settings surface (2026-09-06, extended 2026-09-08):** the demo's "Mein
+Profil" screen (`apps/demo/src/screens/profile.ts`) now shows a read-only
+"Anonymity floor (k)" section: `DEFAULT_K`, `HIGH_RISK_TEMPLATE_K` (this
+page's k1), `VOUCH_K` (k2, below) and `CENTRAL_K_FLOOR` (k4, below), each
+with a one-line explanation, plus an advanced,
 OFF-by-default toggle, "Test mode: single-holder matches allowed"
 (`DeviceState.testModeSingleHolderMatches`, `withDefaults`-backfilled to
 `false`). It widens ONLY `match/lexical.ts`'s existing B-08 owner-declared
@@ -177,16 +183,62 @@ UH's own use of "distance" (`TrustClaim.distance`, carried but unused,
 per its proposal §7) is deliberately fixed at 1 by construction (anchor-set
 vouches only), for exactly this reason.
 
+## k4 -- central-index anonymity floor
+
+**Question it answers:** "How many distinct authors must a central-RAG query
+match clear before the central-index server returns hits at all?" -- k1's
+question, asked again at the central (hosted, opt-in) layer instead of the
+device.
+
+**Where:** `packages/wot-policy/src/index.ts` -- `CENTRAL_K_FLOOR`,
+`evaluateFloor()`'s default for `FloorInput.kFloor`. `packages/central-index/
+src/server.ts:273` calls `evaluateFloor({ candidates })` with no `kFloor`
+argument, so `CENTRAL_K_FLOOR` is what actually gates every `POST /query`
+response -- enforced by omission, not by an explicit config read, and wired
+to no config surface today.
+
+**Default:** `CENTRAL_K_FLOOR = 7`. Renamed from `K_FLOOR_DEFAULT` in the
+2026-09-08 k-standardize follow-up pass -- the value did not change, only
+the name, so the constant reads as "the central layer's own floor" rather
+than implying it is THE floor for the whole workspace.
+
+**Not the same constant as k1, and not currently equal to it either:** k1's
+`DEFAULT_K` (`packages/network-access/src/anonymity.ts`) is 3; `CENTRAL_K_FLOOR`
+is 7. The two are independently declared and were already independent
+before this pass -- `packages/wot-policy` deliberately has zero imports from
+`apps/demo` or `packages/network-access` (see that file's own header
+comment), so the central layer is structurally never MORE PERMISSIVE than
+the device (it cannot silently accept a lower floor than whatever the device
+enforces), but it is currently STRICTER, not equal. The central-RAG handover
+(`DEVLOG/wot-central-rag/central-rag_of-web-of-trust_handover.md:135`) said
+"the server cannot be more permissive than the device," which is true as far
+as it goes but reads as implying the two floors match -- they do not, and a
+dated correction was added to that handover rather than rewriting its
+history. `apps/demo/test/k_cross_package_sync.test.ts` now asserts this
+7-vs-3 relationship explicitly so a silent change to either value fails a
+test instead of only a doc going stale.
+
+**Configurable by:** nobody today -- no env var, template, or per-deployment
+override reaches `CENTRAL_K_FLOOR`; changing it means editing the constant.
+
+**❗ Open for the project owner (Jakob), not decided here:** keep
+`CENTRAL_K_FLOOR` at 7 (deliberately stricter than the device's `DEFAULT_K`
+of 3, on the same "not to be tuned before C-08" reasoning F-07 already gave
+for k1's own `HIGH_RISK_TEMPLATE_K` exception), or align it down to 3 to
+match `DEFAULT_K`. Naming the constant in this pass did not answer that
+question, only made the disagreement visible and impossible to silently
+lose again.
+
 ## Summary table
 
-| | k1 | k2 | k3 |
-|---|---|---|---|
-| Counts | distinct AUTHORS in a matched corpus | distinct ANCHOR/issuer VOUCHERS for one subject | weighted, decayed CONTRIBUTORS |
-| Answers | "would this identify one person?" | "is this holder vouched-for enough?" | "how much should this aggregate contribution count?" |
-| Constant | `DEFAULT_K` / `MIN_K` | `VOUCH_K` | `DEFAULT_MIN_CONTRIBUTORS` |
-| Where | `packages/network-access/src/anonymity.ts` | `packages/transport/src/inbound_vouch.ts` | `packages/network-access/src/trust_weighting.ts` (branch `feat/trust-weighting`, unmerged) |
-| Default | 3 (floor 2) | 2 (floor 2) | 3 |
-| Configurable by | the WoT deployment (env / template) | the relying party (e.g. UH) | not yet wired to any config surface |
+| | k1 | k2 | k3 | k4 |
+|---|---|---|---|---|
+| Counts | distinct AUTHORS in a matched corpus | distinct ANCHOR/issuer VOUCHERS for one subject | weighted, decayed CONTRIBUTORS | distinct AUTHORS in a central-index matched corpus |
+| Answers | "would this identify one person?" | "is this holder vouched-for enough?" | "how much should this aggregate contribution count?" | "would this identify one person, at the central layer?" |
+| Constant | `DEFAULT_K` / `MIN_K` | `VOUCH_K` | `DEFAULT_MIN_CONTRIBUTORS` | `CENTRAL_K_FLOOR` |
+| Where | `packages/network-access/src/anonymity.ts` | `packages/transport/src/inbound_vouch.ts` | `packages/network-access/src/trust_weighting.ts` (branch `feat/trust-weighting`, unmerged) | `packages/wot-policy/src/index.ts` |
+| Default | 3 (floor 2) | 2 (floor 2) | 3 | 7, ❗ open (keep 7, or align with `DEFAULT_K`) |
+| Configurable by | the WoT deployment (env / template) | the relying party (e.g. UH) | not yet wired to any config surface | nobody -- not yet wired to any config surface |
 
 **The historically dangerous phrase, disambiguated:** "`kThreshold: 1` must
 not ship" refers to k1 ONLY -- a demo-crutch value in `apps/demo/src/data/

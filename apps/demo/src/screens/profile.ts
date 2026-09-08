@@ -26,6 +26,11 @@ import { DEFAULT_K, HIGH_RISK_TEMPLATE_K } from '@resource-web/network-access/an
 // which have no such dependency -- see packages/transport/package.json's
 // `exports` map.
 import { VOUCH_K } from '@resource-web/transport/inbound_vouch'
+// k4 (docs/k-parameters.md), added by the 2026-09-08 k-standardize
+// follow-up. The central-index layer's own, currently STRICTER floor --
+// see the kCentralHint copy below for the reader-facing version of that
+// difference.
+import { CENTRAL_K_FLOOR } from '@resource-web/wot-policy'
 
 function field(label: string, input: HTMLElement, hint?: string): HTMLElement {
   return el('div', { class: 'field' }, [el('label', {}, [label]), input, hint ? el('small', {}, [hint]) : null])
@@ -181,10 +186,10 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
   ])
 
   // Anonymity floor (k) settings row (k-standardize pass, 2026-09-06,
-  // docs/k-parameters.md). The three constants are read-only: they are
-  // fixed workspace/product values, not per-device settings (Jakob's
-  // 2026-09-06 ruling: "keep k as is, just standardize them"). Only the
-  // test-mode toggle below is writable.
+  // extended 2026-09-08 with k4, docs/k-parameters.md). The four constants
+  // are read-only: they are fixed workspace/product values, not per-device
+  // settings (Jakob's 2026-09-06 ruling: "keep k as is, just standardize
+  // them"). Only the test-mode toggle below is writable.
   const kRow = (label: string, value: number, hint: string): HTMLElement =>
     el('div', { class: 'card' }, [
       el('p', {}, [el('b', {}, [label]), document.createTextNode(': ' + value)]),
@@ -207,6 +212,7 @@ export function renderProfile(s: DeviceState, onSave: () => void, onIdentityChan
     kRow(t('kDefaultLabel'), DEFAULT_K, t('kDefaultHint')),
     kRow(t('kHighRiskLabel'), HIGH_RISK_TEMPLATE_K, t('kHighRiskHint')),
     kRow(t('kVouchLabel'), VOUCH_K, t('kVouchHint')),
+    kRow(t('kCentralLabel'), CENTRAL_K_FLOOR, t('kCentralHint')),
     el('label', { for: 'wot-k-test-mode-single-holder', style: 'display:flex;align-items:center;gap:8px' }, [
       testModeInput,
       document.createTextNode(t('kTestModeLabel')),

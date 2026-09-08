@@ -685,6 +685,11 @@ const S: Table = {
     de: 'Anzahl verschiedener Personen, die jemanden bestätigen müssen, bevor eine anfragende Stelle das als ausreichend ansieht.',
     en: 'Number of distinct people who must vouch for someone before a relying party treats that as sufficient.',
   },
+  kCentralLabel: { de: 'Schwelle beim zentralen Index (optional)', en: 'Central-index floor (opt-in)' },
+  kCentralHint: {
+    de: 'Gilt nur, wenn die optionale zentrale RAG-Anfrage genutzt wird. Bewusst strenger als die Standardschwelle, solange Jakob nicht anders entscheidet.',
+    en: 'Applies only if the opt-in central RAG query is used. Deliberately stricter than the default floor, until Jakob rules otherwise.',
+  },
   kTestModeLabel: {
     de: 'Testmodus: Übereinstimmungen von einer einzelnen Person erlauben',
     en: 'Test mode: single-holder matches allowed',

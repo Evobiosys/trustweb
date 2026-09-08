@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_K } from '@resource-web/network-access/anonymity'
 import { INVENTORY_DEFAULT_K } from '@resource-web/inventory-store'
+import { CENTRAL_K_FLOOR } from '@resource-web/wot-policy'
 
 /**
  * k-standardize pass (2026-09-06), docs/k-parameters.md's k1 section.
@@ -23,5 +24,41 @@ import { INVENTORY_DEFAULT_K } from '@resource-web/inventory-store'
 describe('inventory-store INVENTORY_DEFAULT_K stays in sync with network-access DEFAULT_K', () => {
   it('the two independently-declared k-anonymity floors are equal', () => {
     expect(INVENTORY_DEFAULT_K).toBe(DEFAULT_K)
+  })
+})
+
+/**
+ * k-standardize follow-up (2026-09-08), docs/k-parameters.md's k4 section.
+ *
+ * Unlike INVENTORY_DEFAULT_K above, `@resource-web/wot-policy`'s
+ * `CENTRAL_K_FLOOR` is NOT expected to equal `DEFAULT_K`. It is a separate,
+ * deliberately stricter floor for the central-index (hosted, opt-in) layer
+ * -- packages/wot-policy has zero imports from apps/demo or
+ * packages/network-access by design (see that package's own header
+ * comment), so this gap between 7 and 3 is a real, known, and currently
+ * unresolved product question (❗ for Jakob: keep CENTRAL_K_FLOOR at 7, or
+ * align it down to DEFAULT_K), not drift to be silently reconciled.
+ *
+ * This test does not assert the two are equal -- the opposite: it pins the
+ * CURRENT relationship (7 and 3, unequal) so that if either constant's
+ * value ever changes, this test fails loudly instead of the difference
+ * quietly becoming stale or being "fixed" by someone who does not know it
+ * is deliberate. apps/demo is again the one place able to import both
+ * @resource-web/network-access and @resource-web/wot-policy to check this.
+ */
+describe('wot-policy CENTRAL_K_FLOOR and network-access DEFAULT_K: the current, known, tracked difference', () => {
+  it('CENTRAL_K_FLOOR is 7 and DEFAULT_K is 3 -- the gap is known and tracked, not drift', () => {
+    expect(
+      CENTRAL_K_FLOOR,
+      'CENTRAL_K_FLOOR changed -- docs/k-parameters.md k4 and the ❗ open question for Jakob need updating too, not just this test',
+    ).toBe(7)
+    expect(
+      DEFAULT_K,
+      'DEFAULT_K changed -- docs/k-parameters.md k1 and this file\'s CENTRAL_K_FLOOR-vs-DEFAULT_K gap need re-checking too, not just this test',
+    ).toBe(3)
+    expect(
+      CENTRAL_K_FLOOR,
+      'CENTRAL_K_FLOOR and DEFAULT_K have converged -- docs/k-parameters.md k4 said this was open (❗ for Jakob); if this was an intentional resolution, update the doc and this test together, do not just let it pass silently',
+    ).not.toBe(DEFAULT_K)
   })
 })

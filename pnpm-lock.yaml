@@ -41,6 +41,9 @@ importers:
       '@resource-web/transport':
         specifier: workspace:*
         version: link:../../packages/transport
+      '@resource-web/wot-policy':
+        specifier: workspace:*
+        version: link:../../packages/wot-policy
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0

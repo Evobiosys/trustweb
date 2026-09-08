@@ -67,8 +67,12 @@ this JSON table, and padding a human loading a status page buys no privacy.
 
 `@resource-web/wot-policy` is the one implementation of the anonymity floor and asker
 protection, imported identically by the client and the server, so the server can never be more
-permissive than the device. `evaluateFloor` counts distinct `authorCommitment` values, not
-records, against `K_FLOOR_DEFAULT` (7). `requiresSoleAuthorAck` refuses a publish whose
+permissive than the device -- it cannot silently accept a lower floor than the device would.
+That is not the same as the two floors being equal: the server enforces its own `CENTRAL_K_FLOOR`
+(7), deliberately stricter than the device's own k1 floor, `DEFAULT_K` (3, in
+`packages/network-access/src/anonymity.ts`) -- see `docs/k-parameters.md`'s k4 section for the
+full accounting and the open question of whether that gap stays. `evaluateFloor` counts distinct
+`authorCommitment` values, not records, against `CENTRAL_K_FLOOR` (7). `requiresSoleAuthorAck` refuses a publish whose
 `(category, regionCode)` pair can structurally only ever have one author, unless the holder set
 `soleAuthorAck: true`. All SHIPPED.
 

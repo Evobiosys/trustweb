@@ -6,19 +6,19 @@ client opt-in adapter (`apps/demo/src/central`) both import this package, so
 the server can never be more permissive than the device.
 
 Zero runtime dependencies. Node stdlib and Web Crypto only. Zero imports from
-`apps/demo` — `K_FLOOR_DEFAULT` is this package's own constant and is not
+`apps/demo` — `CENTRAL_K_FLOOR` is this package's own constant and is not
 wired to the demo's `kThreshold` scaffolding.
 
 ## Exports
 
-- `K_FLOOR_DEFAULT` — `7`, this package's own anonymity-floor default.
+- `CENTRAL_K_FLOOR` — `7`, this package's own anonymity-floor default.
 - `DeclarationFacets` — the coarse, holder-approved facets a published
   declaration is indexed under (`category`, `regionCode`, `authorCommitment`,
   `sensitive`).
 - `FloorInput`, `FloorVerdict` — input/output shapes for `evaluateFloor`.
 - `evaluateFloor(input)` — counts **distinct** `authorCommitment` values among
   `input.candidates`, never records, and compares the count against
-  `input.kFloor ?? K_FLOOR_DEFAULT`.
+  `input.kFloor ?? CENTRAL_K_FLOOR`.
 - `requiresSoleAuthorAck(facets, corpus)` — the D27/F-07 single-author rule.
   True when the `(category, regionCode)` facet pair can structurally only
   ever have come from one author (at most one distinct `authorCommitment`

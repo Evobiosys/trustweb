@@ -7,13 +7,22 @@
 // not incidental — this package must remain embeddable in either a browser
 // bundle or a bare `node:http` server).
 //
-// Zero imports from apps/demo. K_FLOOR_DEFAULT below is this package's own
+// Zero imports from apps/demo. CENTRAL_K_FLOOR below is this package's own
 // constant; it must never be wired to apps/demo's `kThreshold` scaffolding
 // (the `kThreshold: 1` sites in the demo are a different unit's contended
 // files, C-03).
 
-/** This package's own anonymity-floor default. Not the demo's kThreshold. */
-export const K_FLOOR_DEFAULT = 7
+/**
+ * The central-index layer's own anonymity floor. Not the demo's kThreshold,
+ * and not `@resource-web/network-access`'s `DEFAULT_K` (3) either -- this is
+ * a separate, deliberately stricter floor for the central (hosted) layer,
+ * renamed from `K_FLOOR_DEFAULT` in the k-standardize pass (2026-09-08) so
+ * the name says whose floor this is instead of implying it is THE floor.
+ * The two constants disagreeing (7 here, 3 in DEFAULT_K) is a real, known
+ * gap, not drift -- see docs/k-parameters.md's k4 section for the ❗ open
+ * question of whether Jakob keeps 7 or aligns this with DEFAULT_K.
+ */
+export const CENTRAL_K_FLOOR = 7
 
 /**
  * Coarse, holder-approved facets a `PublishedDeclaration` is indexed under.
@@ -35,7 +44,7 @@ export interface DeclarationFacets {
 export interface FloorInput {
   /** Records already matching the query facets. */
   candidates: DeclarationFacets[]
-  /** Defaults to K_FLOOR_DEFAULT. */
+  /** Defaults to CENTRAL_K_FLOOR. */
   kFloor?: number
 }
 
@@ -54,7 +63,7 @@ export type FloorVerdict =
  * package's own logic (no import from that file).
  */
 export function evaluateFloor(input: FloorInput): FloorVerdict {
-  const kFloor = input.kFloor ?? K_FLOOR_DEFAULT
+  const kFloor = input.kFloor ?? CENTRAL_K_FLOOR
   const authors = new Set<string>()
   for (const candidate of input.candidates) {
     authors.add(candidate.authorCommitment)
