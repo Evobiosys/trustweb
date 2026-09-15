@@ -198,6 +198,11 @@
             <p><code>GET /declarations?authorCommitment=&lt;your-commitment-hash&gt;</code></p>
             <p>To withdraw all of your publications and clear this instance completely:</p>
             <p><code>POST /clear</code></p>
+            <p>
+              Withdraw and clear are signed by your own device. Only the device that published a
+              declaration can withdraw it, and a clear removes only what that device published.
+              Nobody who merely learns your author commitment can remove anything.
+            </p>
           </div>
         `;
       } catch (err) {

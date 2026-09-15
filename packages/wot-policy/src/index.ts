@@ -151,3 +151,7 @@ export function settleAt(t0: number, budgetMs: number): Promise<void> {
 
 /** Default response budget for every central-index endpoint (handover §4). */
 export const CENTRAL_BUDGET_MS = 900
+
+// Signed withdraw and clear (B-20 option A). Kept in its own module so this
+// index stays readable; re-exported here so both callers keep one import path.
+export * from './signing.js'

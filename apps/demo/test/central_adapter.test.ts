@@ -45,7 +45,8 @@ describe('client adapter -- centralMode off', () => {
   })
 
   it('withdraw() returns disabled without touching the network', async () => {
-    const result = await client.withdraw('decl-1', 'proof')
+    // Second argument is the authorCommitment now, not a caller-built proof.
+    const result = await client.withdraw('decl-1', 'author-commitment-1')
     expect(result).toEqual({ kind: 'disabled' })
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
@@ -57,7 +58,9 @@ describe('client adapter -- centralMode off', () => {
   })
 
   it('clearAll() returns disabled without touching the network', async () => {
-    const result = await client.clearAll('author-commitment-1', 'proof')
+    // One argument since B-20: the signed proof is built inside clearAll from
+    // the device's own key, never handed in by a caller.
+    const result = await client.clearAll('author-commitment-1')
     expect(result).toEqual({ kind: 'disabled' })
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })

@@ -7,7 +7,14 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createCentralServer, type CentralServer } from '../../src/server.js';
+import {
+  CLEAR_ALL_TARGET,
+  canonicalActionMessage,
+  toB64u,
+  type SignedActionPayload,
+  type SignedActionRequest,
+} from '@resource-web/wot-policy';
+import { createCentralServer, type CentralServer, type CentralServerOptions } from '../../src/server.js';
 
 export const TEST_TIMEOUT_MS = 20_000;
 export const LONG_TEST_TIMEOUT_MS = 30_000;
@@ -20,11 +27,69 @@ export interface TestServer {
 
 /** Starts a fresh server on an ephemeral port with a fresh temp data dir. Caller must
  *  await stopTestServer() on it, always, including on a failed setup. */
-export async function startTestServer(jurisdiction?: string): Promise<TestServer> {
+export async function startTestServer(
+  jurisdiction?: string,
+  extra: Partial<CentralServerOptions> = {},
+): Promise<TestServer> {
   const dataDir = mkdtempSync(join(tmpdir(), 'wot-central-index-e2e-'));
-  const server = createCentralServer({ dataDir, jurisdiction });
+  const server = createCentralServer({ dataDir, jurisdiction, ...extra });
   const port = await server.listen(0);
   return { server, dataDir, baseUrl: `http://127.0.0.1:${port}` };
+}
+
+// ---------------------------------------------------------------------------
+// Holder signing keys (B-20 option A)
+// ---------------------------------------------------------------------------
+// Every publish now registers an Ed25519 verification key with the declaration,
+// and every withdraw/clear must be signed by the matching private key. These
+// helpers keep that plumbing out of the assertions: a test that is about the
+// floor should not be about key management.
+
+export interface TestSigner {
+  publicKeyB64u: string;
+  signAction(payload: SignedActionPayload): Promise<SignedActionRequest>;
+}
+
+export async function makeSigner(): Promise<TestSigner> {
+  const pair = (await globalThis.crypto.subtle.generateKey({ name: 'Ed25519' }, false, [
+    'sign',
+    'verify',
+  ])) as CryptoKeyPair;
+  const raw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', pair.publicKey));
+  const publicKeyB64u = toB64u(raw);
+  return {
+    publicKeyB64u,
+    async signAction(payload: SignedActionPayload): Promise<SignedActionRequest> {
+      const message = canonicalActionMessage(payload);
+      const sig = await globalThis.crypto.subtle.sign({ name: 'Ed25519' }, pair.privateKey, message);
+      return { payload, signature: toB64u(new Uint8Array(sig)), publicKey: publicKeyB64u };
+    },
+  };
+}
+
+/** A nonce is only ever accepted once per server, so every call must be unique. */
+export function testNonce(): string {
+  return toB64u(globalThis.crypto.getRandomValues(new Uint8Array(18)));
+}
+
+export function withdrawPayload(id: string, authorCommitment: string): SignedActionPayload {
+  return {
+    action: 'withdraw',
+    target: id,
+    authorCommitment,
+    nonce: testNonce(),
+    expiresAt: Date.now() + 60_000,
+  };
+}
+
+export function clearPayload(authorCommitment: string): SignedActionPayload {
+  return {
+    action: 'clear',
+    target: CLEAR_ALL_TARGET,
+    authorCommitment,
+    nonce: testNonce(),
+    expiresAt: Date.now() + 60_000,
+  };
 }
 
 export async function stopTestServer(t: TestServer | undefined): Promise<void> {
@@ -101,19 +166,29 @@ export function makeFacets(overrides: Partial<{
  *  per-request, not a server-wide lock, so this collapses wall time to ~one budget window
  *  instead of count * budget). Every publish sends soleAuthorAck: true so the first one in
  *  the series (which structurally is the sole author for that facet pair at that instant)
- *  is never refused with 409 regardless of publish ordering under concurrency. */
+ *  is never refused with 409 regardless of publish ordering under concurrency.
+ *
+ *  Each author gets its OWN signing key, mirroring reality (one key per device) and making
+ *  the clear-scope assertions meaningful: a clear signed by author 0's key must not touch
+ *  author 1's records. `signer` overrides that when a test wants one key across several
+ *  publishes, e.g. one holder publishing in two different facet pairs. */
 export async function publishDistinctAuthors(
   baseUrl: string,
   count: number,
   facetOverrides: Partial<{ category: string; regionCode: string; sensitive: boolean }> = {},
   sealedBodyPrefix = 'sealed-opaque',
-): Promise<RawResponse[]> {
-  const requests = Array.from({ length: count }, (_, i) =>
+  signer?: TestSigner,
+): Promise<Array<RawResponse & { signer: TestSigner }>> {
+  const signers = await Promise.all(
+    Array.from({ length: count }, () => (signer ? Promise.resolve(signer) : makeSigner())),
+  );
+  const requests = signers.map((s, i) =>
     post(baseUrl, '/declarations', {
       facets: makeFacets({ ...facetOverrides, authorCommitment: `author-${i}` }),
       sealedBody: `${sealedBodyPrefix}-${i}`,
+      holderPubKey: s.publicKeyB64u,
       soleAuthorAck: true,
-    }),
+    }).then((res) => ({ ...res, signer: s })),
   );
   return Promise.all(requests);
 }

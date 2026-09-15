@@ -20,6 +20,23 @@ export interface PublishedDeclaration {
   facets: DeclarationFacets;
   /** Opaque base64url ciphertext. The server never decodes or reads this. */
   sealedBody: string;
+  /**
+   * The holder's Ed25519 verification key, registered WITH the declaration at
+   * publish time (B-20 option A), base64url over the raw 32 bytes.
+   *
+   * On the declaration rather than in a side registry keyed by
+   * authorCommitment, because that is what makes `POST /clear` scopeable: a
+   * clear removes only the declarations whose registered key matches the one
+   * that signed the request. A commitment-keyed registry could not express
+   * that, and a holder who re-keys (new device, lost phone) would either
+   * silently lose the ability to clear her old records or gain the ability to
+   * clear records she never published.
+   *
+   * It is never returned by /query (see DeclarationHit) and never by the
+   * backtrace listing: a per-holder constant in a hit list would let an asker
+   * cluster hits by author and erode the floor the k-check just enforced.
+   */
+  holderPubKey: string;
   publishedAt: string; // ISO 8601
   instanceId: string;
   residency: 'AT' | 'EU';

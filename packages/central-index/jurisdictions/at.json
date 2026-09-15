@@ -4,5 +4,6 @@
   "operatorContact": "connect@japossert.com",
   "lawfulBasis": "GDPR Art. 6(1)(a) consent",
   "retentionDays": 90,
-  "displayName": "Austria (AT) instance"
+  "displayName": "Austria (AT) instance",
+  "allowPublicBind": false
 }
