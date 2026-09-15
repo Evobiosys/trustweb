@@ -114,6 +114,11 @@ The rule behind that choice, so it does not have to be re-decided each time:
 - A project he does not lead defaults to **AMPL 1.0** instead. That text is kept at
   [`LICENSE-AMPL-1.0`](LICENSE-AMPL-1.0) and no longer governs this repository.
 
+This repository is licensed under **AGPL-3.0-or-later**. An AMPL 1.0 license for this code is
+available on request from Jakob directly, at **connect@japossert.com**; it is not granted
+automatically. That reach-out is meant to happen in a web of trust manner, through direct
+contact, so he knows who is asking and why before terms outside AGPL copyleft are agreed.
+
 Need terms outside AGPL copyleft? Write to **connect@japossert.com**. That route is deliberate: the
 point is to know who is building on this outside a copyleft or commons frame, and to have that
 conversation directly. See [`NOTICE`](NOTICE).
