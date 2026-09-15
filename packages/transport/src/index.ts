@@ -68,3 +68,16 @@ export {
   type VrcCredentialSubject,
   type VrcVerifyResult,
 } from "./vrc.js";
+// Inbound-vouch route (Finding 1, UH-findings handover 2026-09-06): the
+// direction trustExport() above does NOT provide — "who vouched for me".
+export {
+  issueInboundVouch,
+  buildVouchPresentation,
+  verifyInboundVouches,
+  VOUCH_RELATIONSHIP,
+  VOUCH_K,
+  type VouchPresentation,
+  type VouchRejection,
+  type VouchVerificationResult,
+  type VerifyInboundVouchesOptions,
+} from "./inbound_vouch.js";

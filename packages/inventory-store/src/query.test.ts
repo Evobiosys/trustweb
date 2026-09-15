@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
-import { runQuery, DEFAULT_K, NOTHING_SHAREABLE_TEXT } from "./query.js";
+import { runQuery, INVENTORY_DEFAULT_K, NOTHING_SHAREABLE_TEXT } from "./query.js";
 
 let dir: string;
 let path: string;
@@ -87,7 +87,7 @@ describe("runQuery — acceptance test", () => {
     // 4. k_decision
     expect(trace.k_decision.total).toBe(4);
     expect(trace.k_decision.sharing_count).toBe(trace.candidates.length);
-    expect(trace.k_decision.k).toBe(DEFAULT_K);
+    expect(trace.k_decision.k).toBe(INVENTORY_DEFAULT_K);
     expect(trace.k_decision.line).toMatch(/^\d+ of \d+ sharing → .* → (released|suppressed)$/);
 
     // 5. outward

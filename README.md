@@ -87,11 +87,20 @@ approves — becomes its own node connected to them.
 > `private` listing is never sent; `close` reaches only `close` edges; the guest `?public=1` view
 > strips `where_gated` server-side). **Loans** and **DMs** are connected-only; a loan's "not yet" note
 > stays local. **Second-brain relays** ping the noted person only at first relay, consent every hop,
-> and reveal no more than a direct request (I8). The alpha REST API has **no authentication** — LAN
-> exposure is a deliberate closed-room opt-in ([ALPHA.md](ALPHA.md)).
+> and reveal no more than a direct request (I8). The alpha REST API has **no authentication by
+> default** — LAN exposure is a deliberate closed-room opt-in ([ALPHA.md](ALPHA.md)); an operator who
+> needs one can opt in to a bearer token and a CORS origin allowlist (`AGENT_DAEMON_AUTH_TOKEN` /
+> `AGENT_DAEMON_CORS_ALLOWED_ORIGINS`, `packages/agent-daemon/src/api/server.ts`) without changing
+> anything for a deployment that leaves them unset.
 >
 > **v1 commitment:** actual zero-knowledge properties (asker learns only the aggregate, provably;
 > non-matching peers learn nothing). See [PRIVACY.md](PRIVACY.md).
+>
+> **Which "k"?** This codebase has three unrelated parameters casually called k — k-anonymity over
+> distinct authors (`kThreshold`/`DEFAULT_K`, "`kThreshold: 1` must not ship" refers to THIS one and
+> only this one), vouch-count k for credential presentation (`VOUCH_K`), and trust-distance weighting
+> (`DEFAULT_MIN_CONTRIBUTORS`, unmerged `feat/trust-weighting`). See [docs/k-parameters.md](docs/k-parameters.md)
+> before reusing any of them, or before repeating the warning without saying which k it means.
 
 ## Licence
 

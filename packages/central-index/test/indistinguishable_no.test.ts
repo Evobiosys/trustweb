@@ -60,7 +60,7 @@ describe('I3 indistinguishable no', () => {
   it(
     'a below-floor query (few candidates, one author) returns byte-identical bytes to the no-match case',
     async () => {
-      // Publish fewer than K_FLOOR_DEFAULT (7) declarations, all from one author, so
+      // Publish fewer than CENTRAL_K_FLOOR (7) declarations, all from one author, so
       // evaluateFloor reports 'below' rather than 'above'.
       for (let i = 0; i < 3; i++) {
         await fetch(`${baseUrl}/declarations`, {

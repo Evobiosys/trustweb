@@ -95,7 +95,20 @@ const BOOST_TERM_WEIGHT = 2
  * into ["ferien", ...] under a broader dictionary), so the veto has to see
  * exactly what the scorer sees, not a narrower view of the message.
  */
-export function matchTemplate(template: QueryTemplate, threads: ChatThread[]): MatchResult {
+export function matchTemplate(
+  template: QueryTemplate,
+  threads: ChatThread[],
+  /**
+   * "Test mode: single-holder matches allowed" (state.ts's
+   * `DeviceState.testModeSingleHolderMatches`, OFF by default). Read ONLY
+   * inside the owner-declared branch below -- never by the
+   * `distinctAuthors >= template.kThreshold` branch that protects a real
+   * third party's chat message. See this function's own bypass comment
+   * below for the honestly-stated finding that this currently changes no
+   * outcome under today's data model.
+   */
+  testModeSingleHolderMatches = false,
+): MatchResult {
   const matchTerms = template.matchTerms.map(prepareTerm)
   const boostTerms = template.boostTerms.map(prepareTerm)
   const excludeTerms = template.excludeTerms.map(prepareTerm)
@@ -186,7 +199,29 @@ export function matchTemplate(template: QueryTemplate, threads: ChatThread[]): M
   // -- this is the one branch below that changes aboveThreshold's semantics;
   // everything else in this function is untouched.
   const allOwnerDeclared = bandHits.length > 0 && bandHits.every((h) => h.source === 'self')
-  const aboveThreshold = allOwnerDeclared ? true : distinctAuthors >= template.kThreshold
+
+  // `testModeSingleHolderMatches` (state.ts, k-standardize pass 2026-09-06)
+  // is scoped to widen ONLY this owner-declared branch, never the
+  // `distinctAuthors >= template.kThreshold` branch below that protects a
+  // real third party's chat message. Honestly stated finding: since an
+  // owner-declared hit's author is always `s.me.displayName` (state.ts's
+  // inventoryThreads()/main.ts's secondBrainThread()), `allOwnerDeclared`
+  // above already bypasses unconditionally whenever this flag's own
+  // condition (bandHits.length > 0 && all self-sourced) would also hold --
+  // so `singleHolderTestModeBypass` is provably identical to
+  // `allOwnerDeclared` under today's data model and toggling the flag
+  // changes no gating outcome yet. It exists as the named, explicit
+  // override surface match/accommodation.ts's own comment already asks for
+  // ("bigger-corpus-or-explicit-override fix"), for a future corpus where
+  // an owner-declared entry's hits could plausibly attribute to more than
+  // one author. See docs/k-parameters.md's k1 section for the open ❗ on
+  // whether "single-holder" should also ever cover a holder's own CHAT
+  // message (author === s.me.displayName in a real thread) -- this flag
+  // deliberately does NOT do that; a chat-authored hit is excluded by the
+  // `every((h) => h.source === 'self')` check regardless of the flag.
+  const singleHolderTestModeBypass =
+    testModeSingleHolderMatches && bandHits.length > 0 && bandHits.every((h) => h.source === 'self')
+  const aboveThreshold = allOwnerDeclared || singleHolderTestModeBypass ? true : distinctAuthors >= template.kThreshold
 
   return { hits, distinctAuthors, aboveThreshold }
 }

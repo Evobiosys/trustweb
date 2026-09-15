@@ -33,7 +33,7 @@ describe('e2e: below-k, declined and no-match all settle within one budget windo
 
   beforeAll(async () => {
     t = await startTestServer('at');
-    // 2 distinct authors: below K_FLOOR_DEFAULT (7), so a matching query is the below-k case.
+    // 2 distinct authors: below CENTRAL_K_FLOOR (7), so a matching query is the below-k case.
     const publishes = await publishDistinctAuthors(t.baseUrl, 2, facetOverrides);
     for (const p of publishes) {
       expect(p.status, JSON.stringify(p.json)).toBe(201);

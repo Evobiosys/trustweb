@@ -56,7 +56,7 @@ describe('e2e: publish then query, above and below the floor', () => {
       'same length and bytes as an unrelated no-match query, both 200',
     async () => {
       const facetOverrides = { category: 'accommodation.sublet-e2e-below', regionCode: 'AT-3' };
-      // 3 distinct authors: below K_FLOOR_DEFAULT (7).
+      // 3 distinct authors: below CENTRAL_K_FLOOR (7).
       const publishes = await publishDistinctAuthors(t.baseUrl, 3, facetOverrides);
       for (const p of publishes) {
         expect(p.status, JSON.stringify(p.json)).toBe(201);

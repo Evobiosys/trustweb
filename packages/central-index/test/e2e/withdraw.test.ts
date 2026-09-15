@@ -1,7 +1,7 @@
 // U5 end-to-end assertion 4: withdraw removes the record; a later query for it returns the
 // byte-identical no.
 //
-// Publishes exactly K_FLOOR_DEFAULT (7) distinct authors on one facet pair so the pair starts
+// Publishes exactly CENTRAL_K_FLOOR (7) distinct authors on one facet pair so the pair starts
 // above the floor and a query returns hits including every published id. Withdrawing one of
 // those declarations drops the pair to 6 distinct authors, below the floor, so the very next
 // query for the same facets must now return indistinguishableNo() rather than a smaller hit

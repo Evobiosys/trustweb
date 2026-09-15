@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CENTRAL_BUDGET_MS,
-  K_FLOOR_DEFAULT,
+  CENTRAL_K_FLOOR,
   type DeclarationFacets,
   evaluateFloor,
   indistinguishableNo,
@@ -20,9 +20,9 @@ function facets(overrides: Partial<DeclarationFacets> = {}): DeclarationFacets {
   }
 }
 
-describe('K_FLOOR_DEFAULT', () => {
+describe('CENTRAL_K_FLOOR', () => {
   it('is 7, this package\'s own constant', () => {
-    expect(K_FLOOR_DEFAULT).toBe(7)
+    expect(CENTRAL_K_FLOOR).toBe(7)
   })
 })
 
@@ -33,20 +33,20 @@ describe('evaluateFloor', () => {
     expect(verdict).toEqual({ kind: 'below', distinctAuthors: 1 })
   })
 
-  it('is above floor once distinct authors reach K_FLOOR_DEFAULT', () => {
-    const candidates = Array.from({ length: K_FLOOR_DEFAULT }, (_, i) =>
+  it('is above floor once distinct authors reach CENTRAL_K_FLOOR', () => {
+    const candidates = Array.from({ length: CENTRAL_K_FLOOR }, (_, i) =>
       facets({ authorCommitment: `author-${i}` }),
     )
     const verdict = evaluateFloor({ candidates })
-    expect(verdict).toEqual({ kind: 'above', distinctAuthors: K_FLOOR_DEFAULT })
+    expect(verdict).toEqual({ kind: 'above', distinctAuthors: CENTRAL_K_FLOOR })
   })
 
-  it('is below floor at K_FLOOR_DEFAULT - 1 distinct authors', () => {
-    const candidates = Array.from({ length: K_FLOOR_DEFAULT - 1 }, (_, i) =>
+  it('is below floor at CENTRAL_K_FLOOR - 1 distinct authors', () => {
+    const candidates = Array.from({ length: CENTRAL_K_FLOOR - 1 }, (_, i) =>
       facets({ authorCommitment: `author-${i}` }),
     )
     const verdict = evaluateFloor({ candidates })
-    expect(verdict).toEqual({ kind: 'below', distinctAuthors: K_FLOOR_DEFAULT - 1 })
+    expect(verdict).toEqual({ kind: 'below', distinctAuthors: CENTRAL_K_FLOOR - 1 })
   })
 
   it('respects a supplied kFloor override', () => {

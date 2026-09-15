@@ -65,7 +65,11 @@ export function freeTextTemplate(text: string): QueryTemplate {
     excludeTerms: [],
     minScore: 1,
     // C-03 (2026-09-06): the hardcoded kThreshold: 1 demo-crutch is banned
-    // ("must not ship"), replaced with the workspace DEFAULT_K (3).
+    // ("must not ship"), replaced with the workspace DEFAULT_K (3). This
+    // `kThreshold` is k-ANONYMITY over distinct AUTHORS in an aggregate
+    // match (docs/k-parameters.md's "k1") -- distinct from vouch-count k
+    // (VOUCH_K, "k2") and trust-distance weighting (DEFAULT_MIN_CONTRIBUTORS,
+    // "k3"); see docs/k-parameters.md before reusing this constant elsewhere.
     // state.ts's inventoryThreads() gives every "Was ich habe" entry exactly
     // one author (the device's own owner), so any inventory-only match has
     // distinctAuthors === 1 by construction -- at DEFAULT_K this alone would

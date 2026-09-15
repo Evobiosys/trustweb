@@ -16,8 +16,10 @@
  * that package may not be built yet when this unit builds (handover, unit
  * U4 note) -- U1 (policy core) and U4 (this adapter) are developed in
  * parallel against the same fixed shape. If `DeclarationFacets` ever changes
- * shape in `packages/wot-policy/src`, this copy MUST change with it; there
- * is no type-level link enforcing that, only this comment.
+ * shape in `packages/wot-policy/src`, this copy MUST change with it --
+ * `apps/demo/test/central_facets_sync.test.ts` (k-standardize follow-up,
+ * 2026-09-08) is the structural guard against that drift going unnoticed:
+ * it fails the moment the two field lists diverge.
  */
 export interface DeclarationFacets {
   /** Template category, e.g. 'accommodation.sublet'. */

@@ -1,5 +1,5 @@
 import type { QueryTemplate } from '../types'
-import { DEFAULT_K } from '@resource-web/network-access/anonymity'
+import { DEFAULT_K, HIGH_RISK_TEMPLATE_K } from '@resource-web/network-access/anonymity'
 
 /**
  * The five demo query templates.
@@ -257,6 +257,15 @@ export const TEMPLATES: QueryTemplate[] = [
     // longer show a hit against a single seeded group chat; that is the
     // accepted cost of closing C-03, not an oversight.
     //
+    // Finding 2 (2026-09-06 UH-findings handover): this `kThreshold` is
+    // k-ANONYMITY over distinct AUTHORS in an aggregate match
+    // (docs/k-parameters.md's "k1") -- distinct from vouch-count k for
+    // credential presentation (VOUCH_K, "k2") and trust-distance weighting
+    // (DEFAULT_MIN_CONTRIBUTORS, "k3"). Below, four other templates in this
+    // file deliberately use the stricter HIGH_RISK_TEMPLATE_K (7) instead of
+    // DEFAULT_K (3) -- a named, resolved exception (2026-09-06 k-standardize
+    // pass), not drift; see docs/k-parameters.md's k1 section.
+    //
     // B-08 (2026-09-06): match/lexical.ts's owner-declared bypass does NOT
     // help this template -- the corpus it matches against is real seeded
     // chat messages (thread.source: 'seed'), never an inventory or
@@ -286,7 +295,11 @@ export const TEMPLATES: QueryTemplate[] = [
     // (childcare waiting lists in this very corpus). Require boosted or
     // multi-term confirmation.
     minScore: 2,
-    kThreshold: 7, // production default, per catalogue doc section 1 (DEFAULT_K)
+    // HIGH_RISK_TEMPLATE_K (2026-08-25 owner decision, DECISIONS.md D24):
+    // this template deliberately keeps the stricter floor rather than
+    // DEFAULT_K -- see anonymity.ts's own comment and docs/k-parameters.md's
+    // k1 section for the full history.
+    kThreshold: HIGH_RISK_TEMPLATE_K,
     sensitivity: 'high',
     ttlSeconds: 2_592_000, // 30 days
   },
@@ -306,7 +319,9 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T3_KASSENARZT_OPEN_BOOST_TERMS,
     excludeTerms: T3_KASSENARZT_OPEN_EXCLUDE_TERMS,
     minScore: 1,
-    kThreshold: 7,
+    // HIGH_RISK_TEMPLATE_K -- same deliberate exception, see the
+    // nachmieter_genossenschaft template above and docs/k-parameters.md.
+    kThreshold: HIGH_RISK_TEMPLATE_K,
     sensitivity: 'medium',
     ttlSeconds: 1_209_600, // 14 days
   },
@@ -326,7 +341,9 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T4_HANDWERKER_RELIABLE_BOOST_TERMS,
     excludeTerms: T4_HANDWERKER_RELIABLE_EXCLUDE_TERMS,
     minScore: 1,
-    kThreshold: 7,
+    // HIGH_RISK_TEMPLATE_K -- same deliberate exception, see the
+    // nachmieter_genossenschaft template above and docs/k-parameters.md.
+    kThreshold: HIGH_RISK_TEMPLATE_K,
     sensitivity: 'low',
     ttlSeconds: 604_800, // 7 days
   },
@@ -346,7 +363,9 @@ export const TEMPLATES: QueryTemplate[] = [
     boostTerms: T5_CHILDCARE_PLACE_OPEN_BOOST_TERMS,
     excludeTerms: T5_CHILDCARE_PLACE_OPEN_EXCLUDE_TERMS,
     minScore: 1,
-    kThreshold: 7,
+    // HIGH_RISK_TEMPLATE_K -- same deliberate exception, see the
+    // nachmieter_genossenschaft template above and docs/k-parameters.md.
+    kThreshold: HIGH_RISK_TEMPLATE_K,
     sensitivity: 'medium',
     ttlSeconds: 2_592_000, // 30 days
   },

@@ -149,4 +149,54 @@ describe('anonymity floor', () => {
       expect(r.aboveThreshold).toBe(false)
     })
   })
+
+  // testModeSingleHolderMatches (k-standardize pass, 2026-09-06,
+  // docs/k-parameters.md's k1 section, state.ts's DeviceState field). OFF by
+  // default. Scoped to widen ONLY the owner-declared bypass above -- these
+  // tests are the guard that it can never lower the floor for a real
+  // chat-derived hit, whatever its state.
+  describe('testModeSingleHolderMatches (settings toggle)', () => {
+    it('defaults to false when omitted -- matchTemplate() behaves exactly like calling it with no third argument', () => {
+      const t = thread([msg('Marlene', 'wohnung wird frei')])
+      const withoutArg = matchTemplate(template(3), [t])
+      const withExplicitFalse = matchTemplate(template(3), [t], false)
+      expect(withoutArg).toEqual(withExplicitFalse)
+      expect(withoutArg.aboveThreshold).toBe(false)
+    })
+
+    it('does NOT affect chat-derived gating: ON, a single-author real chat hit still stays below kThreshold=3', () => {
+      const t = thread([msg('Marlene', 'Ich habe ein Motorrad, das ich verleihen kann: wohnung wird nicht gebraucht.')])
+      const off = matchTemplate(template(3), [t], false)
+      const on = matchTemplate(template(3), [t], true)
+      expect(off.aboveThreshold).toBe(false)
+      expect(on.aboveThreshold).toBe(false)
+      expect(on).toEqual(off)
+    })
+
+    it('does NOT affect chat-derived gating: ON, mixed owner-declared + chat-authored hits still stay below the floor', () => {
+      const ownDeclared: ChatThread = {
+        ...thread([msg('Marlene', 'wohnung wird frei')]),
+        id: 'inv:1',
+        source: 'self',
+      }
+      const chatAuthored: ChatThread = {
+        ...thread([msg('Rosa', 'wohnung wird frei')]),
+        id: 't2',
+        source: 'seed',
+      }
+      const on = matchTemplate(template(3), [ownDeclared, chatAuthored], true)
+      expect(on.aboveThreshold).toBe(false)
+    })
+
+    it('ON, an owner-declared-only hit still clears the floor (same outcome as the bypass alone, per the honest no-op finding in lexical.ts)', () => {
+      const t: ChatThread = {
+        ...thread([msg('Marlene', 'Ich habe ein Motorrad, das ich verleihen kann: wohnung wird nicht gebraucht.')]),
+        source: 'self',
+      }
+      const off = matchTemplate(template(3), [t], false)
+      const on = matchTemplate(template(3), [t], true)
+      expect(off.aboveThreshold).toBe(true)
+      expect(on.aboveThreshold).toBe(true)
+    })
+  })
 })

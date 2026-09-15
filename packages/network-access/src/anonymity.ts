@@ -42,6 +42,20 @@ export const DEFAULT_K = 3;
 // contracts.ts re-exports this so its existing import path still resolves.
 export const MIN_K = Math.max(2, DEFAULT_K - 1);
 
+// The stricter floor four apps/demo/src/data/templates.ts templates
+// (nachmieter_genossenschaft, kassenarzt_open, handwerker_reliable,
+// childcare.place_open) deliberately keep instead of DEFAULT_K -- Jakob's
+// 2026-08-25 owner decision (DECISIONS.md D24, rebiosys commit 0613fb1: "set
+// the default floor to 7, and let people adjust that in contracts with each
+// other"), also reflected in design doc overnight/05-chat-group-information.md:83
+// ("integer >= 2, default 7 ... never below 2"). DEFAULT_K itself stays 3
+// (F-07: not to be tuned before the C-08 prevalence measurement runs); these
+// four templates are a separate, named, deliberate exception, not drift --
+// see docs/k-parameters.md's k1 section for the full history. A named
+// constant, not a bare literal 7, so a future grep for "7" or for
+// DEFAULT_K's usages finds this instead of four unexplained copies.
+export const HIGH_RISK_TEMPLATE_K = 7;
+
 export const NOTHING_SHAREABLE_TEXT = "No shareable result for this request.";
 
 export type RevealDecision =
