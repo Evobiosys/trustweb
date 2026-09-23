@@ -1,15 +1,14 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#12161b">
 <meta name="color-scheme" content="dark light">
-<!-- Not linked from the homepage and not for indexing: these are demos with
-     known gaps (no authentication, a demo k-threshold of 1, v0 is not
-     zero-knowledge). The homepage links only what holds up. -->
+<!-- Not for indexing: these are demos with known gaps (no authentication,
+     a demo k-threshold of 1, v0 is not zero-knowledge). -->
 <meta name="robots" content="noindex, nofollow">
-<title>Vertrauensnetz, Demos</title>
+<title>TrustWeb, Demos</title>
 <style>
 :root{
   --bg:#0f1317;--card:#171d24;--card2:#1c232b;--line:#28323d;--ink:#e9eef4;--dim:#9fb0c0;
@@ -59,112 +58,111 @@ footer a{color:var(--faint)}
 </head>
 <body><div class="wrap">
 
-<h1>Vertrauensnetz, alle Demos</h1>
-<p class="lede-top">Frag die Leute, die du kennst, ohne ihnen zu zeigen, was du suchst,
-und ohne dass sie zeigen müssen, was sie haben.</p>
-<p class="intro">Vieles, was man wirklich braucht, steht nirgends im Netz. Es steht in einer
-Chatgruppe, in der jemand sitzt, den du kennst. Das Vertrauensnetz macht genau diese Frage
-stellbar, ohne dass jemand seine Nachrichten hergeben muss.</p>
+<h1>TrustWeb, all demos</h1>
+<p class="lede-top">Ask the people you know, without showing them what you're looking for,
+and without them having to show what they have.</p>
+<p class="intro">A lot of what you really need isn't anywhere online. It's sitting in a chat
+group, with someone in it you know. TrustWeb makes exactly that question askable,
+without anyone having to hand over their messages.</p>
 
 <div class="note">
-<p><b>Diese Seite ist bewusst nicht von der Startseite verlinkt.</b> Was hier steht, sind
-Prototypen zum Vorführen, nicht abgesicherte Software. Konkret: keine Anmeldung und keine
-Zugriffskontrolle vor den Schnittstellen, in Demo 1 und 2 eine Anonymitätsschwelle von 1
-statt 7, damit die Vorführung überhaupt etwas findet, und v0 ist ausdrücklich
-<b>nicht</b> zero-knowledge. Die Startseite verlinkt nur, was das aushält.</p>
-<p>Details dazu, was geprüft ist und was offen bleibt, stehen im Nachweis weiter unten.</p>
+<p>What's here are prototypes for demonstrating, not hardened software. Concretely: no
+login and no access control in front of the interfaces, an anonymity threshold of 1
+instead of 7 in demo 1 and 2 so the demo actually finds something, and v0 is explicitly
+<b>not</b> zero-knowledge.</p>
+<p>Details on what's verified and what's still open are in the evidence section further down.</p>
 </div>
 
-<h2>Was willst du zeigen?</h2>
-<p class="lede">Jede Kachel sagt, was sie wirklich kann.</p>
+<h2>What do you want to show?</h2>
+<p class="lede">Every tile says what it can actually do.</p>
 
-<p class="lede">Der Kern: Nora fragt, Marlenes Gerät antwortet, und man kann der Antwort nicht ansehen,
-ob nichts da war oder ob nichts geteilt wurde.</p>
+<p class="lede">The core: Nora asks, Marlene's device answers, and you can't tell from the
+answer whether nothing was there or nothing was shared.</p>
 
 <a class="card hero" href="/wot/demo1/">
-  <div class="hd"><span class="nm">Demo 1 · Auge in Auge</span><span class="tag t-live">live</span></div>
-  <p class="ds">Frage und Antwort reisen ausschließlich als QR-Code. Kein Konto, keine Installation,
-  <b>kein Netzweg</b>. Zwei Handys, oder Laptop zeigt den Code und das Handy scannt.</p>
+  <div class="hd"><span class="nm">Demo 1 · Eye to eye</span><span class="tag t-live">live</span></div>
+  <p class="ds">Question and answer travel only as a QR code. No account, no install,
+  <b>no network path</b>. Two phones, or a laptop shows the code and the phone scans it.</p>
   <p class="url">app.idea2.site/wot/demo1/</p>
 </a>
 
 <a class="card hero" href="/wot/demo2/">
-  <div class="hd"><span class="nm">Demo 2 · Über das Netz</span><span class="tag t-live">live</span></div>
-  <p class="ds">Erst koppeln wie bei Demo 1, danach reisen Frage und Antwort über einen
-  Server. <b>Kein Scannen mehr:</b> Nora fragt, und die Antwort erscheint von selbst auf
-  ihrem Handy. Der Server trägt nur Chiffrat, denn der Schlüssel entsteht beim
-  QR-Austausch im Raum, den er nie gesehen hat. Was er sehr wohl sieht: wer wann mit wem
-  spricht.</p>
-  <p class="url">app.idea2.site/wot/demo2/ · Umlauf gemessen 90 bis 120 ms</p>
+  <div class="hd"><span class="nm">Demo 2 · Over the network</span><span class="tag t-live">live</span></div>
+  <p class="ds">Pair first like in demo 1, then question and answer travel over a
+  server. <b>No more scanning:</b> Nora asks, and the answer appears by itself on
+  her phone. The server carries only ciphertext, because the key is created during
+  the QR exchange in the room, which it never saw. What it does very much see: who
+  talks to whom, and when.</p>
+  <p class="url">app.idea2.site/wot/demo2/ · round trip measured at 90 to 120 ms</p>
 </a>
 
 <a class="card" href="/wot/demo3/">
-  <div class="hd"><span class="nm">Demo 3 · Direkt von Gerät zu Gerät</span><span class="tag t-work">ungeprüft am Gerät</span></div>
-  <p class="ds">Wie Demo 2, aber <b>ganz ohne Server</b>: die beiden Geräte handeln über zwei
-  QR-Codes eine direkte Verbindung aus und reden danach unmittelbar miteinander. Gedacht fürs
-  gemeinsame WLAN.</p>
-  <p class="url">⚠️ Die Zeremonie und die Code-Größen sind geprüft, das tatsächliche Zustandekommen
-  der Verbindung zwischen zwei echten Geräten noch nicht. Vor dem Vorführen einmal selbst testen.</p>
+  <div class="hd"><span class="nm">Demo 3 · Direct, device to device</span><span class="tag t-work">unverified on-device</span></div>
+  <p class="ds">Like demo 2, but <b>with no server at all</b>: the two devices negotiate a
+  direct connection over two QR codes and then talk straight to each other. Built for
+  a shared Wi-Fi network.</p>
+  <p class="url">⚠️ The ceremony and the code sizes are verified; the actual connection
+  succeeding between two real devices is not yet. Test it yourself once before demoing.</p>
 </a>
 
 <a class="card" href="/wot/demo6/">
-  <div class="hd"><span class="nm">Demo 6 · Die Leiter, sichtbar</span><span class="tag t-work">ungeprüft am Gerät</span></div>
-  <p class="ds">Dieselbe Abfrage, aber die App zeigt mit, auf welcher Stufe sie gerade steht, und
-  steigt erst dann eine Stufe hinauf, wenn die darunter nicht geht: erst direkt von Gerät zu Gerät,
-  und wenn das Netz das nicht zulässt, sichtbar über den Server aus Demo 2.</p>
-  <p class="url">Die drei Stufen: nur QR, dann direkt, dann über einen Server.</p>
+  <div class="hd"><span class="nm">Demo 6 · The ladder, made visible</span><span class="tag t-work">unverified on-device</span></div>
+  <p class="ds">The same query, but the app shows which rung it's currently on, and
+  only climbs a rung when the one below doesn't work: first direct device to device,
+  and if the network doesn't allow that, visibly over the server from demo 2.</p>
+  <p class="url">The three rungs: QR only, then direct, then over a server.</p>
 </a>
 
-<h2>Der Nachweis</h2>
+<h2>The evidence</h2>
 <a class="card" href="/wot/demo1/nachweis/">
-  <div class="hd"><span class="nm">Was wirklich ausgeführt wurde</span><span class="tag t-live">live</span></div>
-  <p class="ds">22 von 22 Prüfungen gegen die echte Adresse, plus die Bildschirme. Zeigt auch,
-  was ehrlich noch offen ist.</p>
+  <div class="hd"><span class="nm">What actually ran</span><span class="tag t-live">live</span></div>
+  <p class="ds">22 out of 22 checks against the real address, plus the screens. Also
+  shows what's honestly still open.</p>
   <p class="url">app.idea2.site/wot/demo1/nachweis/</p>
 </a>
 
-<h2>Frühere Entwürfe</h2>
-<p class="lede">Gebaut, erreichbar, aber älter als die Demo oben.</p>
+<h2>Earlier drafts</h2>
+<p class="lede">Built, reachable, but older than the demo above.</p>
 
 <a class="card" href="/wot/demo4/">
-  <div class="hd"><span class="nm">App-Mockup, ganze Oberfläche</span><span class="tag t-live">live</span></div>
-  <p class="ds">Die vollständige App als Klick-Mockup: Kreise, Angebote, Ausleihen, Chats.</p>
+  <div class="hd"><span class="nm">App mockup, full interface</span><span class="tag t-live">live</span></div>
+  <p class="ds">The complete app as a clickable mockup: circles, offers, borrowing, chats.</p>
   <p class="url">app.idea2.site/wot/demo4/</p>
 </a>
 
 <a class="card" href="/wot/demo5/">
-  <div class="hd"><span class="nm">Gating-Prototyp</span><span class="tag t-live">live</span></div>
-  <p class="ds">Wer darf was sehen: der Rechte-Aufbau als eigener Prototyp.</p>
+  <div class="hd"><span class="nm">Gating prototype</span><span class="tag t-live">live</span></div>
+  <p class="ds">Who's allowed to see what: the access-rights model as its own prototype.</p>
   <p class="url">app.idea2.site/wot/demo5/</p>
 </a>
 
 <a class="card" href="https://evobiosys.org/rebiosys/">
-  <div class="hd"><span class="nm">Rebiosys</span><span class="tag t-live">live</span></div>
-  <p class="ds">Die Ressourcen-Teilen-Seite, mit echtem Relay und Einwilligungsleiter dahinter.</p>
+  <div class="hd"><span class="nm">Rebiosys · an earlier use case</span><span class="tag t-live">live</span></div>
+  <p class="ds">The resource-sharing site, with a real relay and consent ladder behind it.</p>
   <p class="url">evobiosys.org/rebiosys/</p>
 </a>
 
 <a class="card" href="/wot/app/">
-  <div class="hd"><span class="nm">Mobile-UI, LAN-Alpha</span><span class="tag t-old">ohne Agenten</span></div>
-  <p class="ds">Der Client der Sechs-Personen-Alpha, frisch aus dem aktuellen Quellstand gebaut.
-  Er braucht eigentlich laufende Agenten im selben Netz, ohne die bleibt er eine Oberfläche
-  zum Durchklicken. Hier in der neutralen Wohnen-Variante.</p>
+  <div class="hd"><span class="nm">Mobile UI, LAN alpha</span><span class="tag t-old">no agents</span></div>
+  <p class="ds">The client from the six-person alpha, freshly built from the current source.
+  It really needs agents running on the same network; without them it stays a
+  click-through interface. Shown here in the neutral housing variant.</p>
   <p class="url">app.idea2.site/wot/app/</p>
 </a>
 
-<h2>Bevor du losgehst</h2>
+<h2>Before you go</h2>
 <div class="note good">
-<p><b>Beide Handys auf mobile Daten, nicht WLAN.</b> Am 1. September um 01:02 lieferte der
-Heimrouter für <i>idea2.site</i> SERVFAIL, während jede andere Domain auflöste. Mobile Daten
-gehen daran vorbei.</p>
-<p><b>Helligkeit auf Maximum, Automatik aus.</b> Die ganze Demo ist eine Kamera, die einen
-Bildschirm liest. Das ist der häufigste Grund, warum es scheitert.</p>
-<p><b>Es geht auch ohne Kamera.</b> Jeder Code-Bildschirm hat „Code kopieren“, jeder
-Scan-Bildschirm ein Einfügefeld. Weniger magisch, funktioniert immer.</p>
+<p><b>Put both phones on mobile data, not Wi-Fi.</b> On September 1st at 01:02, the
+home router for <i>idea2.site</i> returned SERVFAIL while every other domain resolved.
+Mobile data goes around that.</p>
+<p><b>Brightness to maximum, auto off.</b> The whole demo is a camera reading a
+screen. That's the most common reason it fails.</p>
+<p><b>It also works without a camera.</b> Every code screen has "Copy code," every
+scan screen a paste field. Less magical, always works.</p>
 </div>
 
 <footer>
-Aufgebaut auf dem Vertrauensnetz-Prototyp. Der Ablauf zum Vorführen steht in
+Built on the TrustWeb prototype. The runbook for demoing is in
 <code>overnight/DEMO-RUNBOOK.md</code>.
 </footer>
 
