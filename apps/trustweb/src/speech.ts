@@ -40,6 +40,12 @@ function ctor(): RecognitionCtor | null {
 
 export const VOICE_LANG = 'en-US'
 
+/** Cheap presence check with no call into the speech service. */
+export function voiceApiPresent(): boolean {
+  const C = ctor()
+  return Boolean(C && typeof C.available === 'function')
+}
+
 export async function voiceSupport(): Promise<VoiceSupport> {
   const C = ctor()
   if (!C || typeof C.available !== 'function') return VoiceSupport.Unavailable

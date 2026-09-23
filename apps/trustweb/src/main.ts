@@ -24,7 +24,7 @@ import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
 import { Persona, seedState } from './seed'
-import { VoiceSupport, installVoice, startDictation, voiceSupport } from './speech'
+import { VoiceSupport, installVoice, startDictation, voiceApiPresent, voiceSupport } from './speech'
 
 enum Screen {
   Start = 'start',
@@ -353,7 +353,7 @@ function screenStart(): Node[] {
 // ---------------------------------------------------------------------------
 
 const NS = 'http://www.w3.org/2000/svg'
-const RADIUS: Record<Ring, number> = { [Ring.Close]: 58, [Ring.Friend]: 104, [Ring.Acquaintance]: 150 }
+const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152 }
 const GRADS = [
   'linear-gradient(135deg,#FF715B,#9A37F0)', 'linear-gradient(135deg,#4FD7A0,#12A8E3)',
   'linear-gradient(135deg,#12A8E3,#9A37F0)', 'linear-gradient(135deg,#F2B544,#FF715B)',
@@ -390,7 +390,7 @@ function ringsView(s: AppState): HTMLElement {
   for (const ring of RINGS) {
     const inRing = s.people.filter((p) => p.ring === ring)
     inRing.forEach((p, i) => {
-      const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 20 : ring === Ring.Friend ? 65 : 0)
+      const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : 30)
       const a = ((deg - 90) * Math.PI) / 180
       const x = C + RADIUS[ring] * Math.cos(a)
       const y = C + RADIUS[ring] * Math.sin(a)
@@ -534,17 +534,23 @@ function screenMeet(): Node[] {
   const micStatus = el('p', { class: 'mic-status' })
   const mic = el('button', { class: 'mic', 'aria-label': S.meetMic, disabled: true })
   mic.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'
-  void voiceSupport().then((v) => {
-    if (v === VoiceSupport.Unavailable) {
-      micStatus.textContent = S.meetMicUnavailable
-      return
-    }
+  // Probed only on a tap, never on render: SpeechRecognition.available()
+  // crashed the renderer outright in headless Chromium 153 during testing, and
+  // a note screen must never be able to take the whole app down with it.
+  if (!voiceApiPresent()) {
+    micStatus.textContent = S.meetMicUnavailable
+  } else {
     mic.removeAttribute('disabled')
-    if (v === VoiceSupport.NeedsDownload) micStatus.textContent = S.meetMicDownload
+    micStatus.textContent = S.meetMicTap
     mic.onclick = async () => {
       if (stopDictation) { stopDictation(); return }
       if (!draft.consent) { micStatus.textContent = S.meetMicNeedsConsent; return }
-      if (v === VoiceSupport.NeedsDownload && !(await installVoice())) { micStatus.textContent = S.meetMicUnavailable; return }
+      const v = await voiceSupport()
+      if (v === VoiceSupport.Unavailable || (v === VoiceSupport.NeedsDownload && !(await installVoice()))) {
+        mic.setAttribute('disabled', '')
+        micStatus.textContent = S.meetMicUnavailable
+        return
+      }
       mic.classList.add('live')
       micStatus.textContent = S.meetMicListening
       stopDictation = startDictation((phrase) => {
@@ -556,7 +562,7 @@ function screenMeet(): Node[] {
         micStatus.textContent = ''
       })
     }
-  })
+  }
 
   const make = (): void => {
     stopDictation?.()

@@ -82,7 +82,7 @@ export const S = {
   meetMic: 'Speak',
   meetMicStop: 'Stop',
   meetMicListening: 'Listening, on this phone only',
-  meetMicDownload: 'Get on-device voice (one download)',
+  meetMicTap: 'Tap the mic to dictate. Only works where this browser can recognise speech on the phone itself.',
   meetMicUnavailable: 'Voice notes need speech recognition that runs on this phone. This browser only offers it through a server, so the mic is off here. Typing works everywhere.',
   meetMicNeedsConsent: 'Tick the consent line first.',
   meetOrType: 'Or type',
