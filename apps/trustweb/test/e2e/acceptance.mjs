@@ -14,6 +14,8 @@
  * Live: TW_URL=https://app.idea2.site/trustweb/ runs the same steps against
  * the deployed app and its production relay.
  *
+ * TW_BROWSER=webkit|chromium (default chromium) picks the engine.
+ *
  * Run from apps/demo/ (it has tsx and the toolchain):
  *   PLAYWRIGHT_PACKAGE=<path to playwright-core> npx tsx ../trustweb/test/e2e/acceptance.mjs
  */
@@ -59,11 +61,12 @@ async function main() {
     base = `http://127.0.0.1:${PORT}/`
     await waitForServer(base)
   }
-  console.log('trustweb acceptance against ' + base)
+  console.log('trustweb acceptance against ' + base + ' in ' + (process.env.TW_BROWSER || 'chromium'))
 
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
-  const chromium = pw.chromium ?? pw.default?.chromium
-  const browser = await chromium.launch({ headless: true })
+  // TW_BROWSER=webkit runs the same steps in WebKit (Safari's engine).
+  const engine = (pw.chromium ? pw : pw.default)[process.env.TW_BROWSER || 'chromium']
+  const browser = await engine.launch({ headless: true })
   try {
     const ctx = await browser.newContext({ viewport: { width: 1000, height: 1000 } })
     const page = await ctx.newPage()

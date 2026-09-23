@@ -196,3 +196,26 @@ Regression sweep: 200 or the expected redirect for:
 10. **The idea2 front door still describes Rebiosys as "The resource-sharing layer Web of Trust queries run against"**, while the hub now calls it "an earlier use case". I left it untouched because it is outside this handover.
 
 Handback: "trustweb-app done. Result at DEVLOG/result-report-trustweb-app.md. Resume: verify URLs live and report open items."
+
+## Addendum, second pass (after advisor review), paused for low battery
+
+Done and deployed live (ONLY_TRUSTWEB=1, "all good"):
+- A second tap on Meet on the Review/Place screens now shows the QR and no longer wipes the note.
+- Shared notes now travel in the URL fragment (`#n=`), which the browser never sends to the server, so they stay out of Caddy logs. Anyone who photographs the code still sees them.
+- The QR is wider.
+- The countdown updates only its text node, so typing no longer loses focus.
+- The regex lookbehind was removed (it is a parse error on iOS Safari before 16.4).
+- The mic: `available()` returns "downloadable" in full Chromium 153 and Chrome 149, with no crash. The crash happens only in the headless shell, so the mic stays, probed only on tap.
+- Live acceptance: 9 of 9 in Chromium AND in WebKit (Safari's engine; playwright-core 1.62.1 from ideal-consumption, with webkit-2336).
+
+Not done:
+- pair.mjs was not re-run after the fragment change. The two-phone notes hand-off over `#n=` is unverified.
+- No phone-width screenshot of solo.html (the iframes stack on phones).
+
+Not verified, open:
+- A plain full `deploy_wot.sh` run (with the new if/else) has only been syntax-checked (`bash -n`).
+- An ask that was queued while the holder was offline still raises a consent prompt after the asker has timed out.
+
+Server state: nothing mid-edit. The Caddyfile, the three front-door pages and the hub are all in their final, verified state, with backups next to each (paths above).
+
+Resume: re-run the scratchpad `pair.mjs` equivalent (two browser contexts: A shows the QR, B opens it and connects; check B receives A's notes), then take a solo.html screenshot at 390px.

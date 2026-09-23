@@ -22,7 +22,9 @@ export function guessTag(line: string): Tag {
  */
 export function splitNote(text: string): string[] {
   const out: string[] = []
-  for (const sentence of text.split(/\n+|(?<=[.!?])\s+/)) {
+  // No regex lookbehind: it is a parse error on iOS Safari before 16.4 and
+  // would blank the whole bundle there.
+  for (const sentence of text.replace(/([.!?])\s+/g, '$1\n').split(/\n+/)) {
     const parts = sentence.split(/[,;]\s+/).map((p) => p.trim()).filter(Boolean)
     let acc = ''
     for (const p of parts) {

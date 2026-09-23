@@ -14,7 +14,7 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { renderQr } from '../../demo/src/ui/qr'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
-import { Net } from './net'
+import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import {
   AUDIENCES, Audience, LineStatus, RINGS, Ring, TAGS, Tag, ageLabel, coarseWhen,
@@ -71,7 +71,9 @@ const personaParam = params.get('persona')
 const persona: string = personaParam === Persona.Holder || personaParam === Persona.Seeker ? personaParam : 'me'
 const solo = params.get('solo') === '1' && persona !== 'me'
 let pendingConnect = parseConnectLinkParams(location.search)
-const sharedNotes = (params.get('n') ?? '').slice(0, 600)
+// Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
+// browser never sends to the server, so they stay out of access logs.
+const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1` : ''))
 
@@ -197,7 +199,8 @@ tabs.append(
 )
 
 function onMeetTap(): void {
-  if (screen === Screen.Meet) { void showQrSheet(); return }
+  // Second tap anywhere in the notes flow shows the code; it must never wipe the note.
+  if (screen === Screen.Meet || screen === Screen.Review || screen === Screen.Place) { void showQrSheet(); return }
   draft = freshDraft()
   go(Screen.Meet)
 }
@@ -592,7 +595,7 @@ async function showQrSheet(): Promise<void> {
   await net.start()
   let url = net.connectLink(APP_URL)
   const notes = draft.text.trim()
-  if (notes) url += '&n=' + encodeURIComponent(notes.slice(0, 300))
+  if (notes) url += '#n=' + encodeURIComponent(notes.slice(0, 300))
   const qr = el('div', { class: 'qrwrap', 'data-payload': url })
   openSheet([
     el('h3', {}, [S.qrTitle]),
@@ -868,13 +871,20 @@ const SUGGESTIONS = [
 
 let countdownTimer: ReturnType<typeof setInterval> | undefined
 
+function secondsLeft(startedAt: number): number {
+  return Math.max(0, Math.ceil((startedAt + ANSWER_WINDOW_MS - Date.now()) / 1000))
+}
+
 async function runAsk(text: string): Promise<void> {
   const t = text.trim()
   if (!t) return
   const peers = st().peers.length
   askRun = { text: t, asked: peers, startedAt: Date.now(), results: null }
   clearInterval(countdownTimer)
-  countdownTimer = setInterval(() => { if (screen === Screen.Query && askRun && !askRun.results) render() }, 1000)
+  countdownTimer = setInterval(() => {
+    const w = document.getElementById('tw-wait')
+    if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt))
+  }, 1000)
   render()
   const results = await net.ask(t)
   clearInterval(countdownTimer)
@@ -909,7 +919,7 @@ function screenQuery(): Node[] {
         el('p', { class: 'hint' }, [S.queryWindow]),
         run.results
           ? el('div', {}, resultsView(run.results))
-          : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), ' ' + S.queryWaiting(Math.max(0, Math.ceil((run.startedAt + 30_000 - Date.now()) / 1000)))]),
+          : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt))])]),
       ])
     : null
   return [
