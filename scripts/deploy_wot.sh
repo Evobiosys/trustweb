@@ -27,6 +27,11 @@
 #   app.idea2.site/wot/demo4/  full app mockup               (demos/app-mockup.html)
 #   app.idea2.site/wot/demo5/  gating prototype              (demos/gating-prototype.html)
 #   app.idea2.site/wot/app/    mobile-UI LAN alpha client    (apps/mobile-ui)
+#   app.idea2.site/trustweb/   TrustWeb, the one merged demo (apps/trustweb; built with
+#                              apps/demo's toolchain). idea2.site/trustweb, /tw,
+#                              /trust-web redirect here (Caddy). Deploy it ALONE with
+#                              ONLY_TRUSTWEB=1 ./scripts/deploy_wot.sh -- leaves every
+#                              /wot/* demo untouched.
 #
 # questhub.eco stays under the hood: it hosts the relay process and nothing
 # user-facing. app.idea2.site proxies /relay/* to it so the demo pages talk to
@@ -48,6 +53,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_APP=/srv/questhub-static/app-idea2-wot
+REMOTE_TRUSTWEB=/srv/questhub-static/app-idea2-trustweb
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
 
@@ -89,6 +95,29 @@ push_page() {
   echo "  pushed  $(basename "$src") -> $dest/index.html"
 }
 
+# TrustWeb (apps/trustweb) has no node_modules of its own: it imports apps/demo's
+# relay, gate and matcher modules directly and is built with apps/demo's tsc/vite.
+deploy_trustweb() {
+  echo "typechecking, building and pushing trustweb (base /trustweb/)"
+  ( cd "$REPO/apps/trustweb" \
+    && "$REPO/apps/demo/node_modules/.bin/tsc" --noEmit -p tsconfig.json \
+    && TW_BASE=/trustweb/ "$REPO/apps/demo/node_modules/.bin/vite" build >/dev/null )
+  push_dir  "$REPO/apps/trustweb/dist"           "$REMOTE_TRUSTWEB"
+}
+
+TRUSTWEB_URLS=(
+  "https://app.idea2.site/trustweb/"
+  "https://app.idea2.site/trustweb"
+  "https://app.idea2.site/trustweb/solo.html"
+  "https://idea2.site/trustweb"
+  "https://idea2.site/TrustWeb/"
+  "https://idea2.site/tw"
+  "https://idea2.site/trust-web/"
+)
+
+if [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
+  deploy_trustweb
+else
 echo "building and pushing demo1 (base /wot/demo1/, QR only)"
 ( cd "$REPO/apps/demo" && WOT_BASE=/wot/demo1/ npx vite build >/dev/null )
 push_dir  "$REPO/apps/demo/dist"               "$REMOTE_APP/demo1"
@@ -167,6 +196,9 @@ push_dir  "$REPO/apps/hub"                     "$REMOTE_APP/demo"
 push_page "$REPO/demos/app-mockup.html"        "$REMOTE_APP/demo4"
 push_page "$REPO/demos/gating-prototype.html"  "$REMOTE_APP/demo5"
 
+deploy_trustweb
+fi
+
 echo "--------"
 echo "verifying (a 200 for each, with AND without the trailing slash)"
 fail=0
@@ -188,6 +220,11 @@ verify_urls=(
   "https://app.idea2.site/wot/app"
   "https://evobiosys.org/rebiosys/"
 )
+if [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
+  verify_urls=("${TRUSTWEB_URLS[@]}")
+else
+  verify_urls+=("${TRUSTWEB_URLS[@]}")
+fi
 # Only checked when demo20 was actually built and pushed this run -- a plain
 # run never pushed it, so checking for it unconditionally would report a
 # false failure every single time.
