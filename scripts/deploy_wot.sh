@@ -28,10 +28,16 @@
 #   app.idea2.site/wot/demo5/  gating prototype              (demos/gating-prototype.html)
 #   app.idea2.site/wot/app/    mobile-UI LAN alpha client    (apps/mobile-ui)
 #   app.idea2.site/trustweb/   TrustWeb, the one merged demo (apps/trustweb; built with
-#                              apps/demo's toolchain). idea2.site/trustweb, /tw,
+#                              apps/demo's toolchain). idea2.site/trustweb and
 #                              /trust-web redirect here (Caddy). Deploy it ALONE with
 #                              ONLY_TRUSTWEB=1 ./scripts/deploy_wot.sh -- leaves every
 #                              /wot/* demo untouched.
+#   idea2.site/tw/             NOT an alias of the app (moved out 2026-09-24, owner
+#                              decision): a TrustWeb-branded copy of the
+#                              idea2.site/web-of-trust/ front door, its own directory
+#                              (/srv/questhub-static/idea2-tw), rebuilt by
+#                              scripts/build_tw_front_door.sh -- this script never
+#                              touches it.
 #
 # questhub.eco stays under the hood: it hosts the relay process and nothing
 # user-facing. app.idea2.site proxies /relay/* to it so the demo pages talk to
@@ -111,9 +117,11 @@ TRUSTWEB_URLS=(
   "https://app.idea2.site/trustweb/solo.html"
   "https://idea2.site/trustweb"
   "https://idea2.site/TrustWeb/"
-  "https://idea2.site/tw"
   "https://idea2.site/trust-web/"
 )
+# idea2.site/tw deliberately NOT in this list: since 2026-09-24 it serves a
+# TrustWeb-branded copy of the front door (scripts/build_tw_front_door.sh),
+# not the app, so a 200 there says nothing about this deploy.
 
 if [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
   deploy_trustweb
