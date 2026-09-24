@@ -30,6 +30,7 @@ export const S = {
   statusDisconnected: 'Offline, retrying',
 
   webTitle: 'Your Web',
+  webAddPerson: 'Note someone new',
   webCount: (people: number, connected: number) => `${people} people · ${connected} on TrustWeb`,
   segRings: 'Rings',
   segPeople: 'People',
@@ -126,7 +127,7 @@ export const S = {
   stillUpdate: 'Update notes',
   stillToast: 'Notes updated.',
 
-  invTitle: 'What I have',
+  invTitle: 'My inventory',
   invLead: 'Things you would lend, give or share. Each line says who can ask about it.',
   invAddPh: 'e.g. Motorbike, can lend it for a weekend',
   invAdd: 'Add',

@@ -219,7 +219,7 @@ function header(title: string, opts: { back?: () => void; right?: Node | null } 
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
     ]),
-    opts.right ?? statusPill,
+    opts.right ? el('div', { class: 'hdr-right' }, [opts.right, statusPill]) : statusPill,
   ])
 }
 
@@ -461,7 +461,9 @@ function screenWeb(): Node[] {
     el('button', { class: webSeg === 'people' ? 'on' : '', onclick: () => { webSeg = 'people'; render() } }, [S.segPeople]),
   ])
   return [
-    header(S.webTitle),
+    header(S.webTitle, {
+      right: el('button', { class: 'add-person', 'aria-label': S.webAddPerson, onclick: onMeetTap }, ['+']),
+    }),
     el('div', { class: 'scroll' }, [
       el('p', { class: 'sub' }, [S.webCount(s.people.length, connected)]),
       seg,

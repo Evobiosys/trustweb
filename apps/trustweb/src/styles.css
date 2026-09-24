@@ -40,6 +40,9 @@ body:has(.phone.embedded){padding:0}
 
 .hdr{padding:40px 20px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px}
 .hdr-left{display:flex; align-items:center; gap:6px; min-width:0}
+.hdr-right{display:flex; align-items:center; gap:10px; flex-shrink:0}
+.add-person{width:30px; height:30px; border-radius:50%; border:0; cursor:pointer; flex-shrink:0;
+  background:var(--teal); color:#fff; font-size:19px; line-height:1; display:flex; align-items:center; justify-content:center}
 .hdr h2{font-size:24px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .back{border:0; background:none; font-size:30px; line-height:1; color:var(--teal); cursor:pointer; padding:0 6px 4px 0}
 .status-pill{font-size:11px; font-weight:600; border-radius:999px; padding:3px 9px; background:var(--mist); color:var(--ink-soft); flex-shrink:0}
