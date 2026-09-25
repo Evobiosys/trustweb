@@ -121,6 +121,25 @@ if h1_old not in html:
 else:
     html = html.replace(h1_old, h1_new)
 
+# ---- 2a2. code icon, top-right of the hero (owner: move the visible Code
+#           section into an icon, top-right and in the footer). Inserted
+#           right after <header class="hero">, before .knot-field, so it
+#           sits above it in DOM order too, not just via z-index.
+header_hero_old = '<header class="hero">\n  <div class="knot-field" aria-hidden="true">'
+code_icon = (
+    '<a class="hero-code-icon" href="https://github.com/evobiosys/web-of-trust" '
+    'aria-label="View the code on GitHub" title="View the code on GitHub">\n'
+    '  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<polyline points="16 18 22 12 16 6"></polyline>'
+    '<polyline points="8 6 2 12 8 18"></polyline></svg>\n'
+    '</a>\n'
+)
+if header_hero_old not in html:
+    missing.append(header_hero_old)
+else:
+    html = html.replace(header_hero_old, '<header class="hero">\n' + code_icon + '  <div class="knot-field" aria-hidden="true">')
+
 # ---- 2b. drop the subline + herochips from the hero (owner: remove them) --
 subline_old = (
     '  <p class="subline">Permission-gated information sharing among organizations and'
@@ -253,9 +272,50 @@ else:
         '    <a href="mailto:hello@evobiosys.org">Contact ↗</a>\n'
         '    <a href="https://evobiosys.org/systems/web-of-trust/">Deep dive: systems/web-of-trust ↗</a>\n'
         '    <a href="https://app.idea2.site/wot/demo/">See an overview of all live demos ↗</a>\n'
+        '    <a href="https://github.com/evobiosys/web-of-trust">Code on GitHub ↗</a>\n'
         '  </div>\n'
     )
     html = html.replace(flinks_old, flinks_new)
+
+# ---- 2g. ecosystem cards: SenseMeet and TalkWeave get real links now that
+#          both have a live page (sensemeet.org already existed; TalkWeave's
+#          landing page already existed too, at evobiosys.org/talkweave/,
+#          the more current of its two duplicate deployments -- see the
+#          result report for the staleness finding on the idea2.site copy).
+ecocard_old = (
+    '    <div class="ecocard">\n'
+    '      <h3>SenseMeet</h3>\n'
+    "      <p>Meeting capture and QR share, so a room's decisions travel with the same consent-gated flow.</p>\n"
+    '    </div>\n'
+    '    <div class="ecocard">\n'
+    '      <h3>TalkWeave</h3>\n'
+    '      <p>Live conversation transcripts, local-first, feeding the same profile and resource graph.</p>\n'
+    '    </div>\n'
+)
+if ecocard_old not in html:
+    missing.append(ecocard_old)
+else:
+    ecocard_new = (
+        '    <div class="ecocard">\n'
+        '      <h3><a href="https://sensemeet.org">SenseMeet ↗</a></h3>\n'
+        "      <p>Meeting capture and QR share, so a room's decisions travel with the same consent-gated flow.</p>\n"
+        '    </div>\n'
+        '    <div class="ecocard">\n'
+        '      <h3><a href="https://evobiosys.org/talkweave/">TalkWeave ↗</a></h3>\n'
+        '      <p>Live conversation transcripts, local-first, feeding the same profile and resource graph.</p>\n'
+        '    </div>\n'
+    )
+    html = html.replace(ecocard_old, ecocard_new)
+
+# ---- 2h. About Us heading (owner: "before my name write Main Builder: Jakob")
+main_builder_old = '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Jakob Possert-Bienzle</h3>'
+if main_builder_old not in html:
+    missing.append(main_builder_old)
+else:
+    html = html.replace(
+        main_builder_old,
+        '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Main Builder: Jakob Possert-Bienzle</h3>',
+    )
 
 # ---- 3. CSS: append the new component styles before the source's </style>
 style_marker = "</style>\n</head>"
@@ -270,6 +330,11 @@ sections = [
     # section, its own <hr> included, so header.hero flows straight into the
     # <hr> before the Code section without a doubled-up empty divider.
     (r'<hr class="rule">\n\n<!-- ================= LIVE DEMOS ================= -->\n<section class="block" id="demos">.*?</section>\n\n',
+     ''),
+    # Owner: move the Code section into an icon (top-right + footer) instead
+    # of a full visible section. Its own <hr> included, same reasoning as
+    # the Live Demos removal above -- no doubled-up empty divider left behind.
+    (r'<hr class="rule">\n\n<!-- ================= CODE ================= -->\n<section class="block" id="code">.*?</section>\n\n',
      ''),
     (r'<!-- ================= HOW IT WORKS ================= -->\n<section class="block" id="how">.*?</section>',
      '<!-- ================= HOW IT WORKS ================= -->\n<section class="block" id="how">\n'
