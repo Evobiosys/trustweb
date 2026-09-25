@@ -44,7 +44,7 @@
      later-DOM-order win, but a tall popup here (e.g. "more scalable") was
      verified live to render UNDER .tagline anyway at 1280px, so this stays
      unambiguously higher rather than relying on tie-break order. */
-  .heroex{position:relative; z-index:2; max-width:52ch; margin:6px auto 0; color:var(--ink-soft);
+  .heroex{position:relative; z-index:2; max-width:52ch; margin:6px auto 20px; color:var(--ink-soft);
     font-size:1.02rem; line-height:1.6}
   .heroex-row{margin:0 0 10px}
   .heroex-row:last-child{margin-bottom:0}
