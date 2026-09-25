@@ -14,7 +14,14 @@
 #   - hero-explainer.html: inserted right under the h1. The "targeted /
 #     discreet / scalable" sentence, as focusable-span terms that reveal
 #     their reasoning and an example on hover, tap, or keyboard focus, each
-#     with a "Learn more" link into why.html.
+#     with a "Learn more" link into why.html. The source's own subline and
+#     herochips get dropped outright (owner: remove them).
+#   - hero-cta.html: replaces the join form in the hero with a plain "Open
+#     the live demo" button (owner: that's what belongs at the top; the
+#     join form moves to a new section just above the footer, alongside a
+#     newsletter entry -- both added by this script, not a fragment file,
+#     since the join form is EXTRACTED from the source rather than written
+#     fresh, and the newsletter script tag is one line).
 #   - live-demos.html: replaces the demos section outright. Exactly ONE
 #     live-demo card (TrustWeb); the gating prototype gets a plain text
 #     link instead of a card, per the owner's "only one live demo" call.
@@ -109,6 +116,75 @@ if h1_old not in html:
     missing.append(h1_old)
 else:
     html = html.replace(h1_old, h1_new)
+
+# ---- 2b. drop the subline + herochips from the hero (owner: remove them) --
+subline_old = (
+    '  <p class="subline">Permission-gated information sharing among organizations and'
+    ' in-person-verified communities.</p>\n'
+    '  <div class="herochips">\n'
+    '    <span class="chip strong">Connecting</span>\n'
+    '    <span class="chip strong">Resource sharing through querying</span>\n'
+    '  </div>\n'
+)
+if subline_old not in html:
+    missing.append(subline_old)
+else:
+    html = html.replace(subline_old, '')
+
+# ---- 2c. the join form moves to the very bottom of the page; the hero gets
+#          a plain "Open the live demo" button in its place (owner: "the
+#          button below should show open the live demo instead of join the
+#          web, which should only be at the very bottom, in addition to a
+#          newsletter entry"). Extracted AFTER replacement #1 has already
+#          renamed its button text, so the literal below must match the
+#          renamed text, not the source's original.
+joinpanel_old = (
+    '  <div class="joinpanel">\n'
+    '    <form id="join-form" novalidate>\n'
+    '      <div class="joinrow">\n'
+    '        <label for="j-email" class="skip">Email</label>\n'
+    '        <input type="email" id="j-email" name="email" placeholder="you@example.org" required autocomplete="email">\n'
+    '        <button type="submit" class="joinbtn" id="j-submit">Join TrustWeb</button>\n'
+    '      </div>\n'
+    '      <p class="join-err" id="j-err">Please enter a valid email.</p>\n'
+    '      <p class="joinnote">Puts you on the waitlist. No accounts, no tracking, one note when the web widens.</p>\n'
+    '      <p class="join-msg" role="status" id="j-msg"></p>\n'
+    '    </form>\n'
+    '  </div>\n'
+)
+if joinpanel_old not in html:
+    missing.append(joinpanel_old)
+else:
+    html = html.replace(joinpanel_old, read("hero-cta.html"))
+    footer_marker = '<footer>'
+    if footer_marker not in html:
+        missing.append(footer_marker)
+    else:
+        bottom_join = (
+            '<hr class="rule">\n\n'
+            '<!-- ================= JOIN, AT THE BOTTOM ================= -->\n'
+            '<section class="block joinbottom" id="join">\n'
+            '  <div class="sechead">\n'
+            '    <p class="chnum">Stay close</p>\n'
+            '    <h2>Join TrustWeb</h2>\n'
+            '    <p class="dek">Same waitlist as the button up top used to be -- moved down here so the\n'
+            '    top of the page leads with the demo instead.</p>\n'
+            '  </div>\n' + joinpanel_old + '</section>\n\n'
+        )
+        html = html.replace(footer_marker, bottom_join + footer_marker, 1)
+
+# ---- 2d. a newsletter entry, in addition to the join form above (owner's
+#          own words) -- reuse the SAME QuestHub widget other idea2.site
+#          pages already embed (world-lore/index.html etc.), not a new one.
+#          It self-mounts into the page's own <footer>, right before </footer>,
+#          because that's what /assets/newsletter-widget.js's own doc comment
+#          says it does when no #newsletter-slot exists on the page.
+body_close = '</body>'
+newsletter_tag = '<script src="/assets/newsletter-widget.js" defer data-project="questhub" data-source="trustweb"></script>\n'
+if body_close not in html:
+    missing.append(body_close)
+else:
+    html = html.replace(body_close, newsletter_tag + body_close, 1)
 
 # ---- 3. CSS: append the new component styles before the source's </style>
 style_marker = "</style>\n</head>"

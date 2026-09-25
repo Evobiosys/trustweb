@@ -20,19 +20,40 @@
   .term{position:relative; display:inline; outline:none}
   .term .trigger{cursor:pointer; color:var(--indigo);
     border-bottom:1px dashed var(--indigo); font-weight:600}
-  .term .pop{display:none; position:absolute; left:0; top:1.7em; z-index:5;
+  .term .pop{display:none; position:absolute; left:50%; transform:translateX(-50%); top:1.7em; z-index:20;
     width:min(320px, calc(100vw - 40px)); text-align:left;
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
     box-shadow:var(--shadow); padding:14px 16px; font-size:.86rem; line-height:1.5; color:var(--ink-soft)}
   .term:hover .pop, .term:focus .pop, .term:focus-within .pop{display:block}
+  /* Narrow viewports: anchoring to the term itself risked pushing the popup
+     past the right edge (verified live -- a term near the edge clipped its
+     own pop). Pin it to the viewport as a bottom sheet instead: it can never
+     overflow horizontally no matter which term triggered it. */
+  @media(max-width:480px){
+    .term .pop{position:fixed; left:12px; right:12px; bottom:12px; top:auto;
+      width:auto; transform:none; max-height:70vh; overflow-y:auto; z-index:50}
+  }
   .term .pop b{color:var(--ink)}
-  .term .pop .ex{margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line)}
+  .term .pop .ex{display:block; margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line)}
   .term .pop .ex b{color:var(--ink-soft); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em}
   .term .pop a{display:inline-block; margin-top:8px; font:600 .8rem var(--mono); color:var(--indigo); text-decoration:none}
   .term .pop a:hover{text-decoration:underline}
 
-  .heroex{position:relative; z-index:1; max-width:52ch; margin:6px auto 0; color:var(--ink-soft);
+  /* z-index:2, not 1: the source's own p.tagline right above this in the DOM
+     is also position:relative;z-index:1 -- tied z-index would normally let
+     later-DOM-order win, but a tall popup here (e.g. "more scalable") was
+     verified live to render UNDER .tagline anyway at 1280px, so this stays
+     unambiguously higher rather than relying on tie-break order. */
+  .heroex{position:relative; z-index:2; max-width:52ch; margin:6px auto 0; color:var(--ink-soft);
     font-size:1.02rem; line-height:1.6}
+  /* The source's header.hero{overflow:hidden} clipped every hero popup (it
+     also hid the overflow from a naive scrollWidth check, since the clip
+     happens inside the header, not at the document root). Moving the crop
+     onto .knot-field, which already covers the exact same box (inset:0),
+     keeps the decorative SVGs cropped exactly as before while letting the
+     popups actually render outside the header's own box. */
+  header.hero{overflow:visible}
+  .knot-field{overflow:hidden}
 
   /* game-phases */
   .phases{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
@@ -58,3 +79,11 @@
   /* "specifically useful" list, same term/pop pattern as above */
   .usefullist{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px 14px; list-style:none; margin:0; padding:0}
   .usefullist li{font-size:.95rem}
+
+  /* hero CTA (replaces the join form there; the form itself moves to the
+     very bottom of the page, see build_tw_front_door.sh) and the bottom
+     join section it moved into */
+  .herocta{position:relative; z-index:1; margin:22px 0 0}
+  .herocta a.joinbtn{display:inline-block; text-decoration:none}
+  .joinbottom{margin:44px 0 0}
+  .joinbottom .sechead{margin-bottom:14px}
