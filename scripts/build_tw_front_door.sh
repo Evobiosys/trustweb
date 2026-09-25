@@ -20,8 +20,15 @@
 #     kind of infrastructure is actually the right tool, same hover pattern.
 #   - why.html: a second page, pushed alongside index.html, with the fuller
 #     reasoning behind every "Learn more" link above.
-#   - style-additions.css: the CSS all of the above needs (the .term hover
-#     component, the phase cards, the two-sides-of-a-coin layout).
+#   - style-additions.css: the CSS all of the above needs. The .term hover
+#     component is a plain focusable <span> (tabindex="0"), not <details>: a
+#     closed <details> suppresses its own non-summary content at the layout
+#     level internally, so no CSS on a descendant (not display:block, not a
+#     JS-toggled class) can make it actually render without the real [open]
+#     attribute -- tried first, dropped after verifying live that computed
+#     style said display:block while the real box was 0x0. A plain span has
+#     none of that, so :hover/:focus-within alone reveal it correctly, no
+#     script needed at all.
 #
 # This is a deliberate hand-kept duplicate, not a template render: idea2.site
 # already keeps three near-identical copies of the plain front door (see

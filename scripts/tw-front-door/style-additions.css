@@ -1,18 +1,30 @@
 
   /* ---------------- TrustWeb front-door additions, 2026-09-25 ----------------
-     Injected by build_tw_front_door.sh, after the source's own </style>
-     content. Hoverable terms use <details>/<summary> (not JS): reveals on
-     tap and Enter/Space natively, on hover and keyboard focus via the CSS
-     below. */
-  .term{position:relative; display:inline}
-  .term > summary{display:inline; cursor:pointer; color:var(--indigo);
-    border-bottom:1px dashed var(--indigo); list-style:none; font-weight:600}
-  .term > summary::-webkit-details-marker, .term > summary::marker{display:none}
+     Injected by build_tw_front_door.sh, right before the source's closing
+     style tag (never write that closing tag's own text inside this comment:
+     HTML's raw-text parsing for <style> looks for it literally, ignoring
+     CSS comment syntax, and closes the element early -- broke every rule
+     below this comment the first time, silently, with zero parse error).
+
+     Hoverable terms are a plain focusable <span>, not <details>/<summary>.
+     <details> was tried first and dropped: a closed <details> suppresses ALL
+     of its non-summary content at the layout level internally, not merely
+     via display:none, so nothing an author's CSS does to a descendant (not
+     display:block, not a JS-toggled class) makes it actually render without
+     setting the real [open] attribute -- verified live, computed style said
+     display:block while the actual box was 0x0. A plain <span> has none of
+     that special-cased suppression, so :hover/:focus-within alone reveal it
+     correctly, tap and keyboard included (tapping/tabbing onto a
+     tabindex="0" span focuses it, and :focus-within covers tabbing on into
+     its own "Learn more" link too), with no script needed at all. */
+  .term{position:relative; display:inline; outline:none}
+  .term .trigger{cursor:pointer; color:var(--indigo);
+    border-bottom:1px dashed var(--indigo); font-weight:600}
   .term .pop{display:none; position:absolute; left:0; top:1.7em; z-index:5;
     width:min(320px, calc(100vw - 40px)); text-align:left;
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
     box-shadow:var(--shadow); padding:14px 16px; font-size:.86rem; line-height:1.5; color:var(--ink-soft)}
-  .term[open] .pop, .term:hover .pop, .term:focus-within .pop{display:block}
+  .term:hover .pop, .term:focus .pop, .term:focus-within .pop{display:block}
   .term .pop b{color:var(--ink)}
   .term .pop .ex{margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line)}
   .term .pop .ex b{color:var(--ink-soft); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em}
