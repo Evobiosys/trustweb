@@ -32,6 +32,13 @@
 #   - game-phases.html: a new section, early / mid / late game.
 #   - specifically-useful.html: a new section, the 8 criteria for when this
 #     kind of infrastructure is actually the right tool, same hover pattern.
+#   - lineage.html: a new section, adapted from japossert.com's "Spine"
+#     illustration -- EvoBioSys at the root (plain, no bloom treatment),
+#     QuestHub as the point where the spreading toward other communities
+#     happens, TrustWeb grounded at the bottom linking back to this same
+#     page. Inserted right before the source's own pre-existing Ecosystem
+#     (sibling tools) section. Plain SVG <a> anchors, not an HTML overlay --
+#     avoids the div-in-p nesting trap already hit once on this page.
 #   - about-us.html: a new section, the team and advisors, from the Manifund
 #     application's own "Who is on your team?" answer, inserted just before
 #     the join-at-the-bottom section this script also builds.
@@ -316,6 +323,23 @@ else:
         main_builder_old,
         '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Main Builder: Jakob Possert-Bienzle</h3>',
     )
+
+# ---- 2i. lineage diagram (owner: adapt the japossert.com "Spine" graphic --
+#          EvoBioSys at the root without the bloom treatment, QuestHub as the
+#          point where the spreading happens, TrustWeb grounded at the
+#          bottom linking to this same page). Inserted right before the
+#          source's own pre-existing "Ecosystem" (sibling tools) section, so
+#          the page reads lineage (parent -> this page) then ecosystem
+#          (siblings) then team.
+ecosystem_marker = '<hr class="rule">\n\n<!-- ================= ECOSYSTEM ================= -->'
+if ecosystem_marker not in html:
+    missing.append(ecosystem_marker)
+else:
+    # lineage.html supplies its own leading <hr> (divider before Lineage);
+    # the marker's own leading <hr> becomes the divider between Lineage and
+    # the native Ecosystem section right after it -- exactly one <hr>
+    # between every pair of sections, same convention as every other frag.
+    html = html.replace(ecosystem_marker, read("lineage.html") + '\n' + ecosystem_marker, 1)
 
 # ---- 3. CSS: append the new component styles before the source's </style>
 style_marker = "</style>\n</head>"

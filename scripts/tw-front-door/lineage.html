@@ -1,0 +1,71 @@
+<hr class="rule">
+
+<!-- ================= LINEAGE ================= -->
+<section class="block" id="lineage">
+  <div class="sechead">
+    <p class="chnum">Where this grows from</p>
+    <h2>Lineage</h2>
+  </div>
+  <p class="dek">EvoBioSys roots the work. QuestHub is where it fans out toward other
+  communities. TrustWeb grows from that same soil - the page you're on right now.</p>
+
+  <div class="lineage-wrap">
+    <svg viewBox="0 0 400 460" class="lineage-svg" role="img" aria-labelledby="lineage-title">
+      <title id="lineage-title">Diagram: EvoBioSys at the root, QuestHub as the point where
+      the spreading toward other communities happens, and TrustWeb growing from that same
+      soil as the page you are currently on.</title>
+
+      <defs>
+        <linearGradient id="lineage-stem" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="var(--gold)" />
+          <stop offset="100%" stop-color="var(--indigo)" />
+        </linearGradient>
+      </defs>
+
+      <!-- ---- spreading cone, fanning out from QuestHub ---- -->
+      <path d="M 200 232 L 42 98 Q 200 50 358 98 Z" fill="var(--indigo)" opacity="0.05" />
+      <path d="M 200 232 L 42 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="3 5" opacity="0.35" fill="none" />
+      <path d="M 200 232 L 358 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="3 5" opacity="0.35" fill="none" />
+      <path d="M 42 98 Q 200 50 358 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="2 6" opacity="0.22" fill="none" />
+
+      <!-- other communities, dim shapes at the cone's edge -->
+      <g opacity="0.55">
+        <ellipse cx="48" cy="94" rx="22" ry="8" fill="var(--indigo)" opacity="0.35" />
+        <ellipse cx="352" cy="94" rx="24" ry="9" fill="var(--indigo)" opacity="0.35" />
+      </g>
+      <text x="358" y="118" text-anchor="end" class="lineage-caption">other communities</text>
+
+      <!-- ---- EvoBioSys: the root, quiet, no bloom ---- -->
+      <circle cx="200" cy="58" r="4" fill="var(--ink-soft)" />
+      <a href="https://evobiosys.org" target="_blank" rel="noopener noreferrer">
+        <text x="200" y="40" text-anchor="middle" class="lineage-node">EvoBioSys</text>
+      </a>
+
+      <!-- stem: EvoBioSys down to QuestHub -->
+      <path d="M 200 63 L 200 224" stroke="url(#lineage-stem)" stroke-width="2.5" fill="none" />
+
+      <!-- ---- QuestHub: where the spreading happens ---- -->
+      <circle cx="200" cy="232" r="9" fill="var(--paper)" stroke="var(--indigo)" stroke-width="2" />
+      <circle cx="200" cy="232" r="3.5" fill="var(--indigo)" />
+      <a href="https://questhub.eco" target="_blank" rel="noopener noreferrer">
+        <text x="200" y="258" text-anchor="middle" class="lineage-node lineage-node-lg">QuestHub</text>
+      </a>
+      <text x="200" y="276" text-anchor="middle" class="lineage-caption">where the spreading happens</text>
+
+      <!-- stem: QuestHub down to TrustWeb -->
+      <path d="M 200 240 C 197 300 203 348 200 386" stroke="url(#lineage-stem)" stroke-width="3" fill="none" />
+
+      <!-- ---- TrustWeb: grounded, this page ---- -->
+      <ellipse cx="200" cy="410" rx="140" ry="34" fill="var(--gold)" opacity="0.10" />
+      <path d="M 68 420 Q 200 364 332 420" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="1.5" opacity="0.55" />
+      <g stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.55">
+        <path d="M 150 401 q -4 -12 -12 -16" />
+        <path d="M 250 400 q 4 -11 12 -14" />
+      </g>
+      <a href="https://idea2.site/trustweb/" class="lineage-here-link">
+        <text x="200" y="440" text-anchor="middle" class="lineage-node lineage-node-lg lineage-node-here">TrustWeb</text>
+      </a>
+      <text x="200" y="456" text-anchor="middle" class="lineage-caption">you are here</text>
+    </svg>
+  </div>
+</section>
