@@ -1,0 +1,48 @@
+
+  /* ---------------- TrustWeb front-door additions, 2026-09-25 ----------------
+     Injected by build_tw_front_door.sh, after the source's own </style>
+     content. Hoverable terms use <details>/<summary> (not JS): reveals on
+     tap and Enter/Space natively, on hover and keyboard focus via the CSS
+     below. */
+  .term{position:relative; display:inline}
+  .term > summary{display:inline; cursor:pointer; color:var(--indigo);
+    border-bottom:1px dashed var(--indigo); list-style:none; font-weight:600}
+  .term > summary::-webkit-details-marker, .term > summary::marker{display:none}
+  .term .pop{display:none; position:absolute; left:0; top:1.7em; z-index:5;
+    width:min(320px, calc(100vw - 40px)); text-align:left;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
+    box-shadow:var(--shadow); padding:14px 16px; font-size:.86rem; line-height:1.5; color:var(--ink-soft)}
+  .term[open] .pop, .term:hover .pop, .term:focus-within .pop{display:block}
+  .term .pop b{color:var(--ink)}
+  .term .pop .ex{margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line)}
+  .term .pop .ex b{color:var(--ink-soft); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em}
+  .term .pop a{display:inline-block; margin-top:8px; font:600 .8rem var(--mono); color:var(--indigo); text-decoration:none}
+  .term .pop a:hover{text-decoration:underline}
+
+  .heroex{position:relative; z-index:1; max-width:52ch; margin:6px auto 0; color:var(--ink-soft);
+    font-size:1.02rem; line-height:1.6}
+
+  /* game-phases */
+  .phases{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media(max-width:700px){.phases{grid-template-columns:1fr}}
+  .phase{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm); padding:16px 17px}
+  .phase .stage{font:600 .7rem/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--indigo)}
+  .phase h3{margin:.3em 0 .3em; font:600 1.05rem var(--sans); color:var(--ink)}
+  .phase p{margin:0; font-size:.88rem; color:var(--ink-soft)}
+
+  /* how it works: two sides of the coin */
+  .coin{display:grid; grid-template-columns:1fr auto 1fr; gap:20px; align-items:stretch}
+  @media(max-width:700px){.coin{grid-template-columns:1fr}}
+  .coin .side{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow)}
+  .coin .side .stepnum{font-family:var(--serif); font-style:italic; font-size:1.3rem; color:var(--indigo); display:block; margin-bottom:6px}
+  .coin .side h3{margin:0 0 8px; font:600 1.1rem var(--sans); color:var(--ink)}
+  .coin .side p{margin:0 0 8px; font-size:.92rem; color:var(--ink-soft)}
+  .coin .side p:last-child{margin-bottom:0}
+  .coin .join{align-self:center; display:flex; align-items:center; justify-content:center; color:var(--indigo);
+    font-family:var(--serif); font-style:italic; font-size:1.3rem}
+  @media(max-width:700px){.coin .join{transform:rotate(90deg); padding:4px 0}}
+  .coin .necessity{margin:14px 0 0; font-size:.84rem; color:var(--ink-soft); text-align:center}
+
+  /* "specifically useful" list, same term/pop pattern as above */
+  .usefullist{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px 14px; list-style:none; margin:0; padding:0}
+  .usefullist li{font-size:.95rem}
