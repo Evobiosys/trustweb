@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 #
-# Rebuilds idea2.site/tw: a copy of idea2.site/web-of-trust/'s front door,
-# retitled TrustWeb, with several sections replaced outright (not just
-# display text -- see scripts/tw-front-door/*.html, each a committed,
-# reviewable fragment, not a hand edit):
+# Rebuilds idea2.site/trustweb: a copy of idea2.site/web-of-trust/'s front
+# door, retitled TrustWeb, with several sections replaced outright (not
+# just display text -- see scripts/tw-front-door/*.html, each a committed,
+# reviewable fragment, not a hand edit). Was idea2.site/tw until 2026-09-25;
+# /trustweb used to redirect to the app instead (owner reversed it: "/tw
+# should redirect to /trustweb and /trustweb should show what /tw shows,
+# instead of directing to the app"). /tw, /trust-web and their case
+# spellings now all redirect to this canonical /trustweb/ (Caddy, not this
+# script); the app is still one click away via this page's own "Live demo"
+# card, which points at app.idea2.site/trustweb/, a separate site block.
 #
 #   - hero-explainer.html: inserted right under the h1. The "targeted /
-#     discreet / scalable" sentence, as <details> terms that reveal their
-#     reasoning and an example on hover, tap, or keyboard focus, each with
-#     a "Learn more" link into why.html.
+#     discreet / scalable" sentence, as focusable-span terms that reveal
+#     their reasoning and an example on hover, tap, or keyboard focus, each
+#     with a "Learn more" link into why.html.
 #   - live-demos.html: replaces the demos section outright. Exactly ONE
 #     live-demo card (TrustWeb); the gating prototype gets a plain text
 #     link instead of a card, per the owner's "only one live demo" call.
@@ -147,11 +153,18 @@ echo "--------"
 echo "remaining 'Web of Trust' text in the copy (expected: the repo name, real URLs, and the commented-out cards -- review this list, don't just check it's non-empty):"
 rsh "grep -noiE 'web[- ]of[- ]trust' $DEST_DIR/index.html" || true
 echo "--------"
-code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 https://idea2.site/tw/)
-why_code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 https://idea2.site/tw/why.html)
-echo "  https://idea2.site/tw/           $code"
-echo "  https://idea2.site/tw/why.html   $why_code"
-if [ "$code" = "200" ] && [ "$why_code" = "200" ]; then
+code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 https://idea2.site/trustweb/)
+why_code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 https://idea2.site/trustweb/why.html)
+# The @trustweb_alias block (/tw, /trust-web, case spellings) redirects with
+# Caddy's `redir ... temporary`, which is a 302 -- matching this Caddyfile's
+# established convention for every other cross-path alias in it. Only the
+# bare-path-to-trailing-slash canonicalization (/trustweb -> /trustweb/) is
+# a 308.
+tw_alias_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://idea2.site/tw)
+echo "  https://idea2.site/trustweb/           $code"
+echo "  https://idea2.site/trustweb/why.html   $why_code"
+echo "  https://idea2.site/tw (alias, expect 302) $tw_alias_code"
+if [ "$code" = "200" ] && [ "$why_code" = "200" ] && [ "$tw_alias_code" = "302" ]; then
   echo "all good"
 else
   echo "NOT 200 -- check the Caddy route" >&2
