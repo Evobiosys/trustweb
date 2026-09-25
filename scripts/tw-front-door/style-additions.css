@@ -46,6 +46,8 @@
      unambiguously higher rather than relying on tie-break order. */
   .heroex{position:relative; z-index:2; max-width:52ch; margin:6px auto 0; color:var(--ink-soft);
     font-size:1.02rem; line-height:1.6}
+  .heroex-row{margin:0 0 10px}
+  .heroex-row:last-child{margin-bottom:0}
   /* The source's header.hero{overflow:hidden} clipped every hero popup (it
      also hid the overflow from a naive scrollWidth check, since the clip
      happens inside the header, not at the document root). Moving the crop
@@ -87,3 +89,8 @@
   .herocta a.joinbtn{display:inline-block; text-decoration:none}
   .joinbottom{margin:44px 0 0}
   .joinbottom .sechead{margin-bottom:14px}
+  /* the newsletter checkbox, on the SAME form as the join button -- one
+     email box, not two (owner reverted the separate widget box) */
+  .nlcheck{display:flex; align-items:center; gap:7px; margin:9px 0 0;
+    font-size:.85rem; color:var(--ink-soft); cursor:pointer}
+  .nlcheck input{margin:0; accent-color:var(--indigo)}

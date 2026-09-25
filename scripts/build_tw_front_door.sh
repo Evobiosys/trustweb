@@ -17,20 +17,24 @@
 #     with a "Learn more" link into why.html. The source's own subline and
 #     herochips get dropped outright (owner: remove them).
 #   - hero-cta.html: replaces the join form in the hero with a plain "Open
-#     the live demo" button (owner: that's what belongs at the top; the
-#     join form moves to a new section just above the footer, alongside a
-#     newsletter entry -- both added by this script, not a fragment file,
-#     since the join form is EXTRACTED from the source rather than written
-#     fresh, and the newsletter script tag is one line).
-#   - live-demos.html: replaces the demos section outright. Exactly ONE
-#     live-demo card (TrustWeb); the gating prototype gets a plain text
-#     link instead of a card, per the owner's "only one live demo" call.
+#     the live demo" button. The join form itself is EXTRACTED from the
+#     source (not written fresh) and reinserted just above the footer, with
+#     a newsletter checkbox spliced in by this script (not a fragment file,
+#     since it's inserted into text extracted at build time) -- one email
+#     box, not a second separate widget box (owner reverted that).
+#   - The Live Demos section is REMOVED outright, not replaced (owner:
+#     "take out this section completely"). The footer gets one more link
+#     instead, to the existing overview of all live demos
+#     (app.idea2.site/wot/demo/), added by this script.
 #   - how-it-works.html: replaces the old 4-step ceremony description with
 #     "two sides of one coin": taking notes, then querying -- notes have to
 #     exist first.
 #   - game-phases.html: a new section, early / mid / late game.
 #   - specifically-useful.html: a new section, the 8 criteria for when this
 #     kind of infrastructure is actually the right tool, same hover pattern.
+#   - about-us.html: a new section, the team and advisors, from the Manifund
+#     application's own "Who is on your team?" answer, inserted just before
+#     the join-at-the-bottom section this script also builds.
 #   - why.html: a second page, pushed alongside index.html, with the fuller
 #     reasoning behind every "Learn more" link above.
 #   - style-additions.css: the CSS all of the above needs. The .term hover
@@ -156,6 +160,27 @@ if joinpanel_old not in html:
     missing.append(joinpanel_old)
 else:
     html = html.replace(joinpanel_old, read("hero-cta.html"))
+    # ---- 2d. one email box, not two (owner: reverted the separate
+    #          newsletter-widget box). A single checkbox on the SAME form,
+    #          unchecked by default, and a second, independent submit
+    #          listener that -- only when it's checked -- fires a background
+    #          subscribe call to the same QuestHub endpoint the widget used
+    #          (subscriber.questhub.eco/subscribe, same payload shape), so
+    #          checking it is still functionally wired, not just decorative.
+    #          Coexists fine with the source's own #join-form submit
+    #          listener already in the page (two listeners on one event).
+    joinpanel_with_checkbox = joinpanel_old.replace(
+        '      </div>\n'
+        '      <p class="join-err" id="j-err">Please enter a valid email.</p>\n',
+        '      </div>\n'
+        '      <label class="nlcheck">'
+        '<input type="checkbox" id="j-newsletter" name="newsletter"> '
+        'Also put me on the newsletter</label>\n'
+        '      <p class="join-msg" role="status" id="j-nl-status"></p>\n'
+        '      <p class="join-err" id="j-err">Please enter a valid email.</p>\n',
+    )
+    if joinpanel_with_checkbox == joinpanel_old:
+        missing.append("joinpanel checkbox insertion point")
     footer_marker = '<footer>'
     if footer_marker not in html:
         missing.append(footer_marker)
@@ -167,24 +192,70 @@ else:
             '  <div class="sechead">\n'
             '    <p class="chnum">Stay close</p>\n'
             '    <h2>Join TrustWeb</h2>\n'
-            '    <p class="dek">Same waitlist as the button up top used to be -- moved down here so the\n'
-            '    top of the page leads with the demo instead.</p>\n'
-            '  </div>\n' + joinpanel_old + '</section>\n\n'
+            '  </div>\n' + joinpanel_with_checkbox + '</section>\n\n'
         )
-        html = html.replace(footer_marker, bottom_join + footer_marker, 1)
+        html = html.replace(footer_marker, read("about-us.html") + '\n' + bottom_join + footer_marker, 1)
 
-# ---- 2d. a newsletter entry, in addition to the join form above (owner's
-#          own words) -- reuse the SAME QuestHub widget other idea2.site
-#          pages already embed (world-lore/index.html etc.), not a new one.
-#          It self-mounts into the page's own <footer>, right before </footer>,
-#          because that's what /assets/newsletter-widget.js's own doc comment
-#          says it does when no #newsletter-slot exists on the page.
+# ---- 2e. the newsletter checkbox's own submit listener, right before </body>
 body_close = '</body>'
-newsletter_tag = '<script src="/assets/newsletter-widget.js" defer data-project="questhub" data-source="trustweb"></script>\n'
+newsletter_script = (
+    '<script>\n'
+    '(function () {\n'
+    '  var form = document.getElementById("join-form");\n'
+    '  var nl = document.getElementById("j-newsletter");\n'
+    '  var status = document.getElementById("j-nl-status");\n'
+    '  if (!form || !nl || !status) return;\n'
+    '  function validEmail(v) { return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v); }\n'
+    '  form.addEventListener("submit", function () {\n'
+    '    if (!nl.checked) return;\n'
+    '    status.className = "join-msg";\n'
+    '    status.textContent = "";\n'
+    '    var emailEl = document.getElementById("j-email");\n'
+    '    var email = emailEl && emailEl.value.trim();\n'
+    '    if (!email || !validEmail(email)) return; // the form\'s own required-field/pattern error already covers this\n'
+    '    fetch("https://subscriber.questhub.eco/subscribe", {\n'
+    '      method: "POST",\n'
+    '      headers: { "Content-Type": "application/json" },\n'
+    '      body: JSON.stringify({ email: email, project: "questhub", source: "trustweb", gdpr: true })\n'
+    '    }).then(function (r) {\n'
+    '      if (!r.ok) throw new Error("http_" + r.status);\n'
+    '      status.className = "join-msg ok";\n'
+    '      status.textContent = "Check your inbox to confirm the newsletter.";\n'
+    '    }).catch(function () {\n'
+    '      status.className = "join-msg err";\n'
+    '      status.textContent = "Newsletter signup failed, please try again.";\n'
+    '    });\n'
+    '  });\n'
+    '})();\n'
+    '</script>\n'
+)
 if body_close not in html:
     missing.append(body_close)
 else:
-    html = html.replace(body_close, newsletter_tag + body_close, 1)
+    html = html.replace(body_close, newsletter_script + body_close, 1)
+
+# ---- 2f. footer: one more link, to the existing overview of ALL live demos
+#          (app.idea2.site/wot/demo/ -- built and TrustWeb-branded earlier
+#          this project), since the on-page demos section is now gone
+#          outright (owner: "take out this section completely... only at
+#          the end make a link to see an overview of all live demos").
+flinks_old = (
+    '  <div class="flinks">\n'
+    '    <a href="mailto:hello@evobiosys.org">Contact ↗</a>\n'
+    '    <a href="https://evobiosys.org/systems/web-of-trust/">Deep dive: systems/web-of-trust ↗</a>\n'
+    '  </div>\n'
+)
+if flinks_old not in html:
+    missing.append(flinks_old)
+else:
+    flinks_new = (
+        '  <div class="flinks">\n'
+        '    <a href="mailto:hello@evobiosys.org">Contact ↗</a>\n'
+        '    <a href="https://evobiosys.org/systems/web-of-trust/">Deep dive: systems/web-of-trust ↗</a>\n'
+        '    <a href="https://app.idea2.site/wot/demo/">See an overview of all live demos ↗</a>\n'
+        '  </div>\n'
+    )
+    html = html.replace(flinks_old, flinks_new)
 
 # ---- 3. CSS: append the new component styles before the source's </style>
 style_marker = "</style>\n</head>"
@@ -195,9 +266,11 @@ else:
 
 # ---- 4. whole-section replacements, by regex (robust to reformatting) --
 sections = [
-    (r'<!-- ================= LIVE DEMOS ================= -->\n<section class="block" id="demos">.*?</section>',
-     '<!-- ================= LIVE DEMOS ================= -->\n<section class="block" id="demos">\n'
-     + read("live-demos.html") + '\n</section>'),
+    # Owner: "take out this section completely" -- the whole Live Demos
+    # section, its own <hr> included, so header.hero flows straight into the
+    # <hr> before the Code section without a doubled-up empty divider.
+    (r'<hr class="rule">\n\n<!-- ================= LIVE DEMOS ================= -->\n<section class="block" id="demos">.*?</section>\n\n',
+     ''),
     (r'<!-- ================= HOW IT WORKS ================= -->\n<section class="block" id="how">.*?</section>',
      '<!-- ================= HOW IT WORKS ================= -->\n<section class="block" id="how">\n'
      + read("how-it-works.html") + '\n</section>\n'
