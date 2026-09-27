@@ -116,3 +116,13 @@
   .lineage-svg a:hover .lineage-node,
   .lineage-svg a:focus-visible .lineage-node{text-decoration:underline}
   .lineage-caption{font:600 9px var(--mono); letter-spacing:.06em; text-transform:uppercase; fill:var(--ink-soft)}
+
+  /* Ecosystem section only (#ecosystem scoping keeps the Advisors section's
+     own .ecorow, 5 cards, on its original grid): SovSwitch and SoTranscribe
+     added as a second row, below ReBioSys/SenseMeet/TalkWeave. Per the
+     standing grid-overflow rule, an incomplete row centers rather than
+     left-aligning -- flex-wrap+justify-content:center instead of grid, with
+     each card given the same width a 3-column grid track would give it. */
+  #ecosystem .ecorow{display:flex; flex-wrap:wrap; justify-content:center}
+  #ecosystem .ecocard{flex:0 0 calc((100% - 28px)/3)}
+  @media(max-width:700px){#ecosystem .ecocard{flex-basis:100%}}

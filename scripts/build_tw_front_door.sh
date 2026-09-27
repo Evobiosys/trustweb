@@ -314,6 +314,51 @@ else:
     )
     html = html.replace(ecocard_old, ecocard_new)
 
+# ---- 2g2. ecosystem cards, second row: SovSwitch and SoTranscribe, both
+#          live (sovswitch.com, sotranscribe.com, curl-verified 200). Placed
+#          directly after the existing three cards, inside the same
+#          .ecorow -- style-additions.css scopes #ecosystem .ecorow to
+#          flex-wrap+justify-content:center, so this pair wraps to a
+#          centered second row rather than left-aligning (standing
+#          grid-overflow rule). Descriptions from each site's own live
+#          <title>/meta description, not invented.
+ecorow_close = (
+    '    <div class="ecocard">\n'
+    '      <h3><a href="https://evobiosys.org/talkweave/">TalkWeave ↗</a></h3>\n'
+    '      <p>Live conversation transcripts, local-first, feeding the same profile and resource graph.</p>\n'
+    '    </div>\n'
+    '  </div>\n'
+    '</section>\n'
+    '\n'
+    '<hr class="rule">\n'
+    '\n'
+    '<!-- ================= ABOUT US ================= -->'
+)
+if ecorow_close not in html:
+    missing.append(ecorow_close)
+else:
+    ecorow_close_new = (
+        '    <div class="ecocard">\n'
+        '      <h3><a href="https://evobiosys.org/talkweave/">TalkWeave ↗</a></h3>\n'
+        '      <p>Live conversation transcripts, local-first, feeding the same profile and resource graph.</p>\n'
+        '    </div>\n'
+        '    <div class="ecocard">\n'
+        '      <h3><a href="https://sovswitch.com">SovSwitch ↗</a></h3>\n'
+        "      <p>Sovereign Switch: the pragmatic path off Big Tech, privacy without giving up your devices.</p>\n"
+        '    </div>\n'
+        '    <div class="ecocard">\n'
+        '      <h3><a href="https://sotranscribe.com">SoTranscribe ↗</a></h3>\n'
+        '      <p>Sovereign transcription: self-host on your own GPU, or use the hosted tier colocated in Austria.</p>\n'
+        '    </div>\n'
+        '  </div>\n'
+        '</section>\n'
+        '\n'
+        '<hr class="rule">\n'
+        '\n'
+        '<!-- ================= ABOUT US ================= -->'
+    )
+    html = html.replace(ecorow_close, ecorow_close_new, 1)
+
 # ---- 2h. About Us heading (owner: "before my name write Main Builder: Jakob")
 main_builder_old = '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Jakob Possert-Bienzle</h3>'
 if main_builder_old not in html:
