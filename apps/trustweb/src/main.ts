@@ -356,7 +356,7 @@ function screenStart(): Node[] {
 // ---------------------------------------------------------------------------
 
 const NS = 'http://www.w3.org/2000/svg'
-const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152 }
+const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168 }
 const GRADS = [
   'linear-gradient(135deg,#FF715B,#9A37F0)', 'linear-gradient(135deg,#4FD7A0,#12A8E3)',
   'linear-gradient(135deg,#12A8E3,#9A37F0)', 'linear-gradient(135deg,#F2B544,#FF715B)',
@@ -385,15 +385,15 @@ function ringsView(s: AppState): HTMLElement {
     const c = document.createElementNS(NS, 'circle')
     c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(RADIUS[r]))
     c.setAttribute('fill', 'none'); c.setAttribute('stroke', 'rgba(154,55,240,.22)')
-    c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : '1.4')
-    c.setAttribute('stroke-dasharray', r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
+    c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
+    c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
     svg.appendChild(c)
   }
   wrap.appendChild(svg)
   for (const ring of RINGS) {
     const inRing = s.people.filter((p) => p.ring === ring)
     inRing.forEach((p, i) => {
-      const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : 30)
+      const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10)
       const a = ((deg - 90) * Math.PI) / 180
       const x = C + RADIUS[ring] * Math.cos(a)
       const y = C + RADIUS[ring] * Math.sin(a)
@@ -402,7 +402,7 @@ function ringsView(s: AppState): HTMLElement {
       const my = (C + y) / 2 + (C - x) * 0.12
       path.setAttribute('d', `M${C} ${C} Q${mx} ${my} ${x} ${y}`)
       path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'url(#th)')
-      path.setAttribute('stroke-width', ring === Ring.Close ? '2.6' : ring === Ring.Friend ? '1.8' : '1.2')
+      path.setAttribute('stroke-width', ring === Ring.Close ? '2.6' : ring === Ring.Friend ? '1.8' : ring === Ring.Acquaintance ? '1.2' : '0.8')
       path.setAttribute('opacity', p.peerId ? '0.85' : '0.35')
       if (!p.peerId) path.setAttribute('stroke-dasharray', '3 4')
       svg.appendChild(path)
@@ -484,9 +484,10 @@ function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   const current = p.lines.filter((l) => l.status === LineStatus.Current)
+  const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
   openSheet([
     el('h3', {}, [p.name]),
-    el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + S.sheetMet(p.context, coarseWhen(p.metAt))]),
+    el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected : S.sheetNotesOnly]),
     current.length
       ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline' }, [

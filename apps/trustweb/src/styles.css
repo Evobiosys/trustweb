@@ -111,6 +111,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-close{background:#F3E8FD; color:var(--violet-deep)}
 .ring-friend{background:#E8F4FB; color:var(--electric-deep)}
 .ring-acquaintance{background:#EFEDE8; color:var(--ink-soft)}
+.ring-intending{background:#FBF1DD; color:#8A6A2F; border:1px dashed #D8B978}
 .verse{background:#fff; border-radius:16px; padding:16px; margin:18px 16px 0; box-shadow:0 2px 12px rgba(36,27,46,.06)}
 .verse h3{font-size:15px; margin-bottom:6px}
 .verse p{font-size:12.5px; color:var(--ink-soft); line-height:1.55}

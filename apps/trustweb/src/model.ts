@@ -16,9 +16,11 @@ export enum Ring {
   Close = 'close',
   Friend = 'friend',
   Acquaintance = 'acquaintance',
+  /** A tier below acquaintance: someone you plan to meet, not yet in your web. */
+  Intending = 'intending',
 }
 
-export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance]
+export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
 /** Who may ask about one line. */
 export enum Audience {
@@ -122,6 +124,9 @@ export interface AppState {
 
 /** Does `audience` admit someone I hold in `ring`? */
 export function audienceAdmits(audience: Audience, ring: Ring): boolean {
+  // Someone I only intend to connect with is not yet in my web: they admit
+  // nothing, the same as OnlyMe, regardless of what the line's audience says.
+  if (ring === Ring.Intending) return false
   switch (audience) {
     case Audience.OnlyMe:
       return false

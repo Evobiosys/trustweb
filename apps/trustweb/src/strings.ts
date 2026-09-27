@@ -34,7 +34,7 @@ export const S = {
   webCount: (people: number, connected: number) => `${people} people · ${connected} on TrustWeb`,
   segRings: 'Rings',
   segPeople: 'People',
-  webCap: 'The three rings: close friends, friends, acquaintances. Tap anyone for your notes about them.',
+  webCap: 'The rings: close friends, friends, acquaintances, and people you intend to connect with. Tap anyone for your notes about them.',
   webEmpty: 'Nobody here yet. Tap Meet after a conversation to note who you met.',
   notifTitle: 'Notifications are off',
   notifOnTitle: 'Notifications are on',
@@ -43,11 +43,17 @@ export const S = {
   notifTurnOff: 'Turn off notifications',
   notifBlocked: 'This browser refused notifications.',
 
-  ringLabel: { [Ring.Close]: 'Close friend', [Ring.Friend]: 'Friend', [Ring.Acquaintance]: 'Acquaintance' } as Record<Ring, string>,
+  ringLabel: {
+    [Ring.Close]: 'Close friend',
+    [Ring.Friend]: 'Friend',
+    [Ring.Acquaintance]: 'Acquaintance',
+    [Ring.Intending]: 'Intending to connect',
+  } as Record<Ring, string>,
   ringHint: {
     [Ring.Close]: 'the few you would call at 3 am',
     [Ring.Friend]: 'you know each other well',
     [Ring.Acquaintance]: 'met in person, still getting to know',
+    [Ring.Intending]: 'someone you plan to meet, not yet in your web',
   } as Record<Ring, string>,
   audienceLabel: {
     [Audience.FriendsOfFriends]: 'Friends of friends',
@@ -68,6 +74,7 @@ export const S = {
   sheetConnected: 'Connected on TrustWeb',
   sheetNotesOnly: 'Notes only, not connected on TrustWeb yet',
   sheetMet: (context: string, when: string) => (context ? `Met ${when} · ${context}` : `Met ${when}`),
+  sheetPlanned: (context: string) => (context || 'Not yet met, nothing noted or shared'),
   sheetNoNotes: 'No notes yet.',
   sheetStillTrue: 'Still true?',
   sheetAddNote: 'Add a note',
