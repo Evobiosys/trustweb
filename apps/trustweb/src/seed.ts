@@ -42,9 +42,13 @@
  * all, so nothing about him is ever queryable. His `context` is a public
  * role description only (no invented private information), and the person
  * sheet shows that role instead of a fabricated "Met ..." line (see main.ts
- * personSheet). The other real public figure this seed used to carry, at
- * the same Ring.Intending tier, has been removed from every context and
- * every tier -- do not reintroduce a second real person here.
+ * personSheet).
+ *
+ * William MacAskill was removed from every context in demo-edit-2, then
+ * reintroduced ea-demo-ONLY in demo-edit-3 (2026-09-27, owner request),
+ * same Ring.Intending / no-lines / public-role-only pattern as Tyler Cowen
+ * above -- see eaPeople() below. Do not add him to generic or emergent, and
+ * do not add a third real person anywhere without the owner asking for it.
  */
 import { randomId } from '../../demo/src/crypto'
 import { Audience, LineStatus, Ring, Tag } from './model'
@@ -146,6 +150,10 @@ function eaPeople(now: number): Person[] {
     person('Felix Novak', 'grantmaker, occasional coffee chats', Ring.Acquaintance, now - 200 * DAY, [
       line('Knows a strong candidate for a comms role', Tag.Talent, Audience.FriendsOfFriends, now - 5 * DAY),
     ]),
+    // Real public figure, ea-demo ONLY (see module doc above). Same pattern
+    // as Tyler Cowen in emergentPeople(): Ring.Intending, no lines, public
+    // role only, nothing about him is ever queryable.
+    person('William MacAskill', 'Philosopher, effective altruism', Ring.Intending, now, []),
   ]
 }
 

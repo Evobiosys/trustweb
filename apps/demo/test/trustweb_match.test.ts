@@ -139,10 +139,17 @@ describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
     }
   })
 
-  it('never seeds William MacAskill, in any context or field', () => {
+  it('seeds William MacAskill only in the Ea context, at Ring.Intending, with no lines', () => {
     for (const ctx of DEMO_CONTEXTS) {
       const state = seedState(Persona.Holder, T1, ctx)
-      expect(JSON.stringify(state)).not.toMatch(/MacAskill/i)
+      const will = state.people.find((p) => p.name === 'William MacAskill')
+      if (ctx === DemoContext.Ea) {
+        expect(will).toBeDefined()
+        expect(will?.ring).toBe(Ring.Intending)
+        expect(will?.lines).toEqual([])
+      } else {
+        expect(will).toBeUndefined()
+      }
     }
   })
 

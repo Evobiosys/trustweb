@@ -35,7 +35,9 @@
 #   .../trustweb/demo/           generic seeded demo, no real people (2026-09-27).
 #   .../trustweb/emergent-demo/  Emergent Ventures grantee personas, plus Tyler Cowen
 #                                at "Intending to connect" -- no other real person.
-#   .../trustweb/ea-demo/        effective-giving/EA conference personas, all fictional.
+#   .../trustweb/ea-demo/        effective-giving/EA conference personas, plus William
+#                                MacAskill at "Intending to connect" (ea-demo ONLY,
+#                                2026-09-27 demo-edit-3) -- no other real person.
 #                              One build (apps/trustweb/vite.config.mjs has all three
 #                              as extra rollupOptions.input entries alongside index.html
 #                              and solo.html), context chosen by path at runtime

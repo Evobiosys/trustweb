@@ -32,7 +32,13 @@ export function storageKey(persona: string, context?: string): string {
   const p = PERSONA_RE.test(persona) ? persona : 'me'
   if (context === undefined) return PREFIX + p
   const c = CONTEXT_RE.test(context) ? context : 'generic'
-  return PREFIX + c + '.' + p
+  // ea-demo's seed changed 2026-09-27 (demo-edit-3: William MacAskill
+  // added). A version segment on that context's key forces a fresh
+  // seedState() reseed for any browser that already saved a pre-edit-3
+  // ea-demo record, instead of silently keeping the old 6-person list.
+  // generic/emergent seeds are unchanged, so their key shape is untouched.
+  const seedSuffix = c === 'ea' ? '-2' : ''
+  return PREFIX + c + seedSuffix + '.' + p
 }
 
 export function isEphemeral(): boolean {
