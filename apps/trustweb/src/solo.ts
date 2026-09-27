@@ -9,7 +9,25 @@
  * then opened on that link, exactly as a phone camera would open a scanned
  * code, so the pairing, the ask and the consent all go over the live relay.
  */
+import { DemoContext } from './seed'
 import { storageKey } from './store'
+
+/**
+ * This one script is shared by four HTML entries (solo.html at the app
+ * root, plus demo/, emergent-demo/ and ea-demo/ -- see vite.config.mjs):
+ * one build, context chosen by path. detectContext() reads this page's own
+ * location.pathname (not BASE, which is the whole app's build-time base and
+ * the same for all four) and forwards it as `ctx` to both phones' iframes,
+ * which load main.ts at the app root; main.ts reads `ctx` back out of its
+ * own URL to pick the matching seed.ts DemoContext and storage record.
+ */
+function detectContext(): DemoContext {
+  const path = location.pathname
+  if (path.includes('/emergent-demo')) return DemoContext.Emergent
+  if (path.includes('/ea-demo')) return DemoContext.Ea
+  return DemoContext.Generic
+}
+const ctx = detectContext()
 
 const BASE = import.meta.env.BASE_URL
 const root = document.getElementById('solo') as HTMLElement
@@ -47,13 +65,13 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 
 const holder = document.createElement('iframe')
 holder.title = "Maya's phone"
-holder.src = `${BASE}?persona=holder&solo=1`
+holder.src = `${BASE}?persona=holder&solo=1&ctx=${ctx}`
 holder.allow = 'microphone'
 
 const seekerSlot = h('div', 'wait', 'Connecting Jonas to Maya over the relay...')
 
 root.append(
-  h('div', 'head', '<h1>TrustWeb, two phones on one screen</h1><p>Both phones run the real app and talk over the live relay. Maya has listed a motorbike; Jonas is connected to her as a friend.</p>'),
+  h('div', 'head', '<h1>TrustWeb, two phones on one screen</h1><p>Both phones run the real app and talk over the live relay. Jonas is connected to Maya as a friend.</p>'),
   h('div', 'steps', [
     '<b>1.</b> On Jonas\'s phone, open <b>Query</b> and ask "Does anyone have a motorbike I could borrow?"',
     '<b>2.</b> Maya\'s phone shows the ask at once, with the line that matched. She chooses: share, or not.',
@@ -62,7 +80,7 @@ root.append(
   ].map((s) => `<div>${s}</div>`).join('')),
   (() => {
     const phones = h('div', 'phones', '')
-    const left = h('div', 'col', '<h2>Maya <span>holds a motorbike</span></h2>')
+    const left = h('div', 'col', '<h2>Maya</h2>')
     left.appendChild(holder)
     const right = h('div', 'col', '<h2>Jonas <span>asks his web</span></h2>')
     right.appendChild(seekerSlot)
@@ -75,7 +93,7 @@ root.append(
     reset.textContent = 'Start the demo over'
     reset.onclick = () => {
       for (const p of ['holder', 'seeker']) {
-        try { localStorage.removeItem(storageKey(p)) } catch { /* nothing stored */ }
+        try { localStorage.removeItem(storageKey(p, ctx)) } catch { /* nothing stored */ }
       }
       location.reload()
     }
@@ -97,6 +115,7 @@ window.addEventListener('message', (e: MessageEvent) => {
   seekerStarted = true
   link.searchParams.set('persona', 'seeker')
   link.searchParams.set('solo', '1')
+  link.searchParams.set('ctx', ctx)
   const seeker = document.createElement('iframe')
   seeker.title = "Jonas's phone"
   seeker.src = link.pathname + link.search

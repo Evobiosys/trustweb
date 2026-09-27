@@ -32,6 +32,15 @@
 #                              "Live demo" card on idea2.site/trustweb/ below. Deploy it
 #                              ALONE with ONLY_TRUSTWEB=1 ./scripts/deploy_wot.sh --
 #                              leaves every /wot/* demo untouched.
+#   .../trustweb/demo/           generic seeded demo, no real people (2026-09-27).
+#   .../trustweb/emergent-demo/  Emergent Ventures grantee personas, plus Tyler Cowen
+#                                at "Intending to connect" -- no other real person.
+#   .../trustweb/ea-demo/        effective-giving/EA conference personas, all fictional.
+#                              One build (apps/trustweb/vite.config.mjs has all three
+#                              as extra rollupOptions.input entries alongside index.html
+#                              and solo.html), context chosen by path at runtime
+#                              (src/solo.ts detectContext()). solo.html itself is
+#                              unchanged and stays the generic demo too.
 #   idea2.site/trustweb/       NOT the app (reversed 2026-09-25, owner: "/tw should
 #                              redirect to /trustweb and /trustweb should show what /tw
 #                              shows, instead of directing to the app"). A TrustWeb-
@@ -117,6 +126,16 @@ TRUSTWEB_URLS=(
   "https://app.idea2.site/trustweb/"
   "https://app.idea2.site/trustweb"
   "https://app.idea2.site/trustweb/solo.html"
+  # Three demo-context entries (2026-09-27, demo-edit-2): one build, one
+  # dist/, context chosen by path (apps/trustweb/src/solo.ts detectContext()
+  # + apps/trustweb/{demo,emergent-demo,ea-demo}/index.html, listed as
+  # separate rollupOptions.input entries in apps/trustweb/vite.config.mjs).
+  # Bare paths 308 to their trailing-slash form (Caddy file_server
+  # canonical_uris, same as /wot/demo1) -- curl -L above follows that
+  # automatically, so checking the bare URL is enough.
+  "https://app.idea2.site/trustweb/demo"
+  "https://app.idea2.site/trustweb/emergent-demo"
+  "https://app.idea2.site/trustweb/ea-demo"
 )
 # idea2.site/trustweb, /tw, /TrustWeb, /trust-web deliberately NOT in this
 # list: since 2026-09-25 idea2.site/trustweb serves a TrustWeb-branded copy

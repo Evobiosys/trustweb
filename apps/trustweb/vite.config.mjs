@@ -25,6 +25,17 @@ export default ({ command }) => ({
       input: {
         main: path.resolve(here, 'index.html'),
         solo: path.resolve(here, 'solo.html'),
+        // Three demo-context entries, one build, context chosen by path
+        // (solo.ts detectContext() reads location.pathname at runtime; all
+        // three load the same compiled src/solo.ts, deduped by Rollup).
+        // Each lives at its own directory so it lands at dist/<name>/index.html
+        // and is reachable at app.idea2.site/trustweb/<name> (Caddy's
+        // file_server canonical_uris 308s the bare path to the trailing
+        // slash and serves that index.html -- see /wot/demo1 for the same
+        // pattern already live).
+        demo: path.resolve(here, 'demo/index.html'),
+        emergentDemo: path.resolve(here, 'emergent-demo/index.html'),
+        eaDemo: path.resolve(here, 'ea-demo/index.html'),
       },
     },
   },

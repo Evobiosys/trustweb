@@ -15,6 +15,7 @@ import {
   Audience, LineStatus, Ring, Tag, audienceAdmits, threadsForRing, ageLabel,
 } from '../../trustweb/src/model'
 import type { AppState } from '../../trustweb/src/model'
+import { DEMO_CONTEXTS, DemoContext, Persona, seedState } from '../../trustweb/src/seed'
 import { matchTemplate } from '../src/match/lexical'
 import { classifyIncomingQuery } from '../src/incoming_query'
 
@@ -115,5 +116,63 @@ describe('trustweb note extraction', () => {
 
   it('falls back to a plain note', () => {
     expect(guessTag('Great laugh')).toBe(Tag.Note)
+  })
+})
+
+// A line each context's seed is expected to make queryable at Ring.Friend,
+// content words chosen to overlap the ask without relying on a synonym
+// group (so a lexicon edit can't silently break this).
+const CONTEXT_QUERYABLE_ASK: Record<DemoContext, string> = {
+  [DemoContext.Generic]: 'Who is hiring?',
+  [DemoContext.Emergent]: 'Does anyone have interpretability research contacts?',
+  [DemoContext.Ea]: 'Does anyone need biosecurity funding?',
+}
+
+describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
+  const T1 = Date.UTC(2026, 8, 27)
+
+  it('every seeded demo context has 5 to 7 people', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      expect(state.people.length).toBeGreaterThanOrEqual(5)
+      expect(state.people.length).toBeLessThanOrEqual(7)
+    }
+  })
+
+  it('never seeds William MacAskill, in any context or field', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      expect(JSON.stringify(state)).not.toMatch(/MacAskill/i)
+    }
+  })
+
+  it('seeds Tyler Cowen only in the Emergent context, at Ring.Intending, with no lines', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      const tyler = state.people.find((p) => p.name === 'Tyler Cowen')
+      if (ctx === DemoContext.Emergent) {
+        expect(tyler).toBeDefined()
+        expect(tyler?.ring).toBe(Ring.Intending)
+        expect(tyler?.lines).toEqual([])
+      } else {
+        expect(tyler).toBeUndefined()
+      }
+    }
+  })
+
+  it('the motorbike ask surfaces and the Vienna / piano asks stay silent, in every context', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      expect(surfaces(state, Ring.Friend, 'Does anyone have a motorbike I could borrow?')).toBe(true)
+      expect(surfaces(state, Ring.Friend, 'Who has a spare room in Vienna?')).toBe(false)
+      expect(surfaces(state, Ring.Friend, 'Does anyone know a good piano teacher?')).toBe(false)
+    }
+  })
+
+  it('each context has at least one queryable People line at Ring.Friend', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      expect(surfaces(state, Ring.Friend, CONTEXT_QUERYABLE_ASK[ctx])).toBe(true)
+    }
   })
 })

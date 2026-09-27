@@ -23,7 +23,7 @@ import type { AppState, NoteLine, Person } from './model'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
-import { Persona, seedState } from './seed'
+import { DemoContext, Persona, isDemoContext, seedState } from './seed'
 import { VoiceSupport, installVoice, startDictation, voiceApiPresent, voiceSupport } from './speech'
 
 enum Screen {
@@ -70,17 +70,25 @@ const params = new URLSearchParams(location.search)
 const personaParam = params.get('persona')
 const persona: string = personaParam === Persona.Holder || personaParam === Persona.Seeker ? personaParam : 'me'
 const solo = params.get('solo') === '1' && persona !== 'me'
+// Which of the three seeded demo networks (seed.ts DemoContext) to show,
+// passed in by solo.ts from its own page path. Only meaningful (and only
+// ever read/written into storage) when solo: a real visitor at the app root
+// (persona 'me') must keep using the original, context-less storage key --
+// see store.ts's own module doc for why.
+const ctxParam = params.get('ctx')
+const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
+const storeCtx = solo ? ctx : undefined
 let pendingConnect = parseConnectLinkParams(location.search)
 // Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
 // browser never sends to the server, so they stay out of access logs.
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
 // Keep only what a reload needs; the connect parameters are consumed once.
-history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1` : ''))
+history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : ''))
 
-let state: AppState | null = loadState(persona)
+let state: AppState | null = loadState(persona, storeCtx)
 if (!state && solo) {
-  state = seedState(persona as Persona, Date.now())
-  saveState(persona, state)
+  state = seedState(persona as Persona, Date.now(), ctx)
+  saveState(persona, state, storeCtx)
 }
 
 function st(): AppState {
@@ -88,7 +96,7 @@ function st(): AppState {
   return state
 }
 function save(): void {
-  if (state) saveState(persona, state)
+  if (state) saveState(persona, state, storeCtx)
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +346,7 @@ function screenStart(): Node[] {
         ])
       : el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
-      ? el('a', { class: 'solo-card', href: APP_URL + 'solo.html' }, [
+      ? el('a', { class: 'solo-card', href: APP_URL + 'demo/' }, [
           el('b', {}, [S.startSolo]),
           el('span', {}, [S.startSoloSub]),
         ])
@@ -855,7 +863,7 @@ function screenInventory(): Node[] {
       el('p', { class: 'foot' }, [S.logFoot]),
       solo ? null : el('button', {
         class: 'btn btn-ghost btn-sm',
-        onclick: () => { if (confirm(S.resetConfirm)) { clearState(persona); location.reload() } },
+        onclick: () => { if (confirm(S.resetConfirm)) { clearState(persona, storeCtx); location.reload() } },
       }, [S.resetPhone]),
     ]),
   ]
