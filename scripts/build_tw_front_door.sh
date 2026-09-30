@@ -417,6 +417,15 @@ for pattern, new in sections:
         continue
     html = re.sub(pattern, lambda _m, new=new: new, html, count=1, flags=re.DOTALL)
 
+# ---- 5. "For EA groups" section, right under the hero (added 2026-09-30).
+#          A top-level <section> between two existing ones, never inside a
+#          <p> or <span> (the div-in-p nesting trap).
+header_close = '</header>\n'
+if header_close not in html:
+    missing.append(header_close)
+else:
+    html = html.replace(header_close, header_close + '\n' + read("for-ea-groups.html").rstrip("\n") + '\n', 1)
+
 open(path, "w", encoding="utf-8").write(html)
 
 if missing:
@@ -425,6 +434,16 @@ if missing:
         print("  " + repr(m), file=sys.stderr)
     sys.exit(1)
 PY
+
+# Build-only mode: TW_BUILD_ONLY=<dir> writes index.html and why.html there
+# and stops before touching the server (the source is still fetched, read-only).
+if [ -n "${TW_BUILD_ONLY:-}" ]; then
+  mkdir -p "$TW_BUILD_ONLY"
+  cp "$TMP_INDEX" "$TW_BUILD_ONLY/index.html"
+  cp "$TMP_WHY" "$TW_BUILD_ONLY/why.html"
+  echo "  build-only: wrote $TW_BUILD_ONLY/index.html and why.html (nothing deployed)"
+  exit 0
+fi
 
 rsh "sudo mkdir -p $DEST_DIR && sudo chown -R almalinux:almalinux $DEST_DIR && rm -rf $DEST_DIR/*"
 "${SSHENV[@]}" scp -q "$TMP_INDEX" "questhub:$DEST_DIR/index.html"
