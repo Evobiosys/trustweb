@@ -75,6 +75,9 @@ async function main() {
     const page = await ctx.newPage()
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
     await page.goto(base + 'solo.html')
+    // The page starts with Maya's device only (2026-10-05); add Jonas's.
+    ok('the side-by-side page starts with one device', await page.locator('iframe').count() === 1)
+    await page.getByRole('button', { name: /Add a device/ }).click()
     const maya = page.frameLocator('iframe[title="Maya\'s phone"]')
     const jonas = page.frameLocator('iframe[title="Jonas\'s phone"]')
 

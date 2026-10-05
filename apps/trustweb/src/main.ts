@@ -33,7 +33,7 @@ import type { AppState, NoteLine, Person } from './model'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
-import { DemoContext, Persona, isDemoContext, seedState } from './seed'
+import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
 import { nfcWriteSupported, writeLinkToTag } from './nfc'
@@ -105,7 +105,7 @@ interface Review {
 const APP_URL = location.origin + import.meta.env.BASE_URL
 const params = new URLSearchParams(location.search)
 const personaParam = params.get('persona')
-const persona: string = personaParam === Persona.Holder || personaParam === Persona.Seeker ? personaParam : 'me'
+const persona: string = isPersona(personaParam) ? personaParam : 'me'
 const solo = params.get('solo') === '1' && persona !== 'me'
 // Which of the three seeded demo networks (seed.ts DemoContext) to show,
 // passed in by solo.ts from its own page path. Only meaningful (and only
@@ -272,22 +272,13 @@ const ICONS: Record<string, string> = {
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
-  // "Call into your web": the app's own drawings of one person calling with
-  // both hands cupped at the mouth, drawn as two open curves (a call, not a
-  // shout: no closed cone, nothing that reads as a megaphone). A ships;
-  // ?qi=b (facing you, forearms raised, hands cupped under the mouth) and
-  // ?qi=c (A with dashed arcs, echoing the Web tab's rings) show the others live.
-  callA: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.8 14.2 11.2 11"/><path d="M10.4 6.6c1.2-1 2.4-1.1 3.2-.5"/><path d="M10.4 9.6c1.2 1 2.4 1.1 3.2.5"/><path d="M16.4 6.4a3 3 0 0 1 0 3.8"/><path d="M19 4.4a6 6 0 0 1 0 7.8"/><path d="M21.5 2.6a9 9 0 0 1 0 11.4"/></svg>',
-  callB: '<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.4"/><path d="M5 22v-1.5a7 7 0 0 1 3-5.7"/><path d="M19 22v-1.5a7 7 0 0 0-3-5.7"/><path d="M7.4 16.8 9.6 12.6M16.6 16.8 14.4 12.6"/><path d="M9.6 12.6q2.4 2.2 4.8 0"/><path d="M17.6 3.2a5 5 0 0 1 1.3 4.6"/><path d="M6.4 3.2a5 5 0 0 0-1.3 4.6"/></svg>',
-  callC: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.8 14.2 11.2 11"/><path d="M10.4 6.6c1.2-1 2.4-1.1 3.2-.5"/><path d="M10.4 9.6c1.2 1 2.4 1.1 3.2.5"/><path d="M16.4 6.4a3 3 0 0 1 0 3.8" stroke-dasharray="1.6 1.6"/><path d="M19 4.4a6 6 0 0 1 0 7.8" stroke-dasharray="1.6 1.6"/><path d="M21.5 2.6a9 9 0 0 1 0 11.4" stroke-dasharray="1.6 1.6"/></svg>',
+  // "Call into your web": only the sound waves (owner 2026-10-05: "simpler and
+  // less confusing"), the call going out and the resonance coming back.
+  call: '<svg viewBox="0 0 24 24"><path d="M5.5 8.5a5 5 0 0 1 0 7"/><path d="M9.5 5.5a9.5 9.5 0 0 1 0 13"/><path d="M13.5 2.8a13.5 13.5 0 0 1 0 18.4"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }
 
 /** Which query button the owner chose in Settings (default: call into your web). */
-const CALL_ICON = ((): string => {
-  const pick = new URLSearchParams(location.search).get('qi')
-  return pick === 'b' ? 'callB' : pick === 'c' ? 'callC' : 'callA'
-})()
 
 function queryStyle(): QueryStyle {
   return state?.queryStyle ?? QueryStyle.Call
@@ -808,7 +799,8 @@ function queryFab(): HTMLElement {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery,
     onclick: () => { queryOpen = true; searchOpen = false; render() },
   })
-  b.innerHTML = icon(call ? CALL_ICON : 'query')
+  b.innerHTML = icon(call ? 'call' : 'query')
+  if (call) b.title = S.callHover
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))
@@ -849,42 +841,75 @@ function personSheet(personId: string): void {
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
-    channelsView(p),
+    channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
   ])
 }
 
+/** Where a set of messenger handles lives: a person's card, or my own contact info. */
+interface ChannelOwner {
+  get(): Partial<Record<Channel, string>>
+  set(ch: Channel, value: string | null): void
+}
+
+function personChannels(p: Person): ChannelOwner {
+  return {
+    get: () => p.channels ?? {},
+    set: (ch, value) => {
+      const next = { ...(p.channels ?? {}) }
+      if (value) next[ch] = value; else delete next[ch]
+      p.channels = next
+      save()
+    },
+  }
+}
+
+function myChannels(): ChannelOwner {
+  return {
+    get: () => st().myChannels ?? {},
+    set: (ch, value) => {
+      const s = st()
+      const next = { ...(s.myChannels ?? {}) }
+      if (value) next[ch] = value; else delete next[ch]
+      s.myChannels = next
+      save()
+    },
+  }
+}
+
 /**
- * How to reach them, in the owner's order: an "Open in ..." link per
- * messenger that opens the app directly, or Add. Stays on this phone.
+ * Contact info, collapsed (owner 2026-10-05): the messengers already known
+ * show as "Open in ..." links; "Add other ways to contact them" expands the
+ * full list, in the owner's order. Kept on this phone.
  */
-function channelsView(p: Person, editing?: Channel): HTMLElement {
+function channelsView(owner: ChannelOwner, labels: { title: string; add: string; hint: string }): HTMLElement {
   const box = el('div', { class: 'channels' })
+  let expanded = false
   const draw = (edit?: Channel): void => {
+    const known = owner.get()
+    const shown = expanded || edit ? CHANNELS : CHANNELS.filter((ch) => known[ch])
     box.replaceChildren(
-      el('h4', { class: 'eyebrow' }, [S.chTitle]),
-      ...CHANNELS.map((ch) => channelRow(p, ch, edit === ch, (next) => draw(next))),
-      el('p', { class: 'meta' }, [S.chHint]),
+      el('h4', { class: 'eyebrow' }, [labels.title]),
+      ...shown.map((ch) => channelRow(owner, ch, edit === ch, (next) => draw(next))),
+      expanded || edit
+        ? el('p', { class: 'meta' }, [labels.hint])
+        : el('button', { class: 'btn btn-ghost btn-sm ch-more', 'aria-expanded': 'false', onclick: () => { expanded = true; draw() } }, ['+ ' + labels.add]),
     )
   }
-  draw(editing)
+  draw()
   return box
 }
 
-function channelRow(p: Person, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
-  const value = p.channels?.[ch]
+function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
+  const value = owner.get()[ch]
   const label = el('span', { class: 'ch-name ch-' + ch }, [S.chLabel[ch]])
   if (edit) {
     const input = el('input', { class: 'field', placeholder: S.chPh[ch], value: value ?? '', 'aria-label': S.chPh[ch], autocomplete: 'off' })
     const msg = el('p', { class: 'meta ch-msg' })
     const saveIt = (): void => {
-      if (!input.value.trim()) {
-        if (p.channels) delete p.channels[ch]
-        save(); redraw(); return
-      }
+      if (!input.value.trim()) { owner.set(ch, null); redraw(); return }
       const v = normalizeHandle(ch, input.value)
       if (!v) { msg.textContent = S.chInvalid[ch]; input.focus(); return }
-      p.channels = { ...(p.channels ?? {}), [ch]: v }
-      save()
+      owner.set(ch, v)
       redraw()
     }
     input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveIt() })
@@ -1348,16 +1373,55 @@ async function makeNotes(): Promise<void> {
 // meet: this phone's code (QR), NFC where the browser can, a link to copy
 // ---------------------------------------------------------------------------
 
+/** The pages of Meet: the TrustWeb code first, then my Signal code, then my Matrix code once set. */
+enum MeetPage {
+  TrustWeb = 'trustweb',
+  Signal = 'signal',
+  Matrix = 'matrix',
+}
+
+let meetPage: MeetPage = MeetPage.TrustWeb
+
+function meetPages(): MeetPage[] {
+  // Tana, 2026-08-24: "on the same page that one shows one's QR code, one should
+  // also show one's Signal code, and once that is ready, one's Matrix code."
+  const mine = st().myChannels ?? {}
+  return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : [])]
+}
+
 function openMeet(from: Screen, notes = ''): void {
   meetFrom = from
   meetNotes = notes
+  meetPage = MeetPage.TrustWeb
   go(Screen.Meet)
 }
 
 function screenMeet(): Node[] {
-  const notes = meetNotes
-  // Named after the person only when Meet comes from that meeting.
   const name = meetFrom === Screen.Meeting ? draft.name.trim() : ''
+  const pages = meetPages()
+  if (!pages.includes(meetPage)) meetPage = MeetPage.TrustWeb
+  const tabs = el('div', { class: 'seg meet-tabs', role: 'tablist', 'aria-label': S.meetPagesLabel }, pages.map((pg) => el('button', {
+    class: meetPage === pg ? 'on' : '', role: 'tab', 'aria-selected': String(meetPage === pg),
+    onclick: () => { meetPage = pg; render() },
+  }, [S.meetPage[pg]])))
+  const body = meetPage === MeetPage.TrustWeb ? meetTrustWebPage() : meetMessengerPage(meetPage === MeetPage.Signal ? Channel.Signal : Channel.Matrix)
+  // Swipe between the pages, like a second page under the QR code.
+  let startX = 0
+  body.addEventListener('pointerdown', (e) => { startX = e.clientX })
+  body.addEventListener('pointerup', (e) => {
+    const dx = e.clientX - startX
+    if (Math.abs(dx) < 60) return
+    const k = pages.indexOf(meetPage) + (dx < 0 ? 1 : -1)
+    if (k >= 0 && k < pages.length) { meetPage = pages[k]; render() }
+  })
+  return [
+    header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom), qr: false }),
+    el('div', { class: 'scroll pad' }, [tabs, body]),
+  ]
+}
+
+function meetTrustWebPage(): HTMLElement {
+  const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
   const nfcStatus = el('p', { class: 'meta' }, [nfcWriteSupported() ? '' : S.meetNfcOff])
   let link = ''
@@ -1383,23 +1447,56 @@ function screenMeet(): Node[] {
     copy.removeAttribute('disabled')
     nfc?.removeAttribute('disabled')
   })()
-  return [
-    header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom), qr: false }),
-    el('div', { class: 'scroll pad' }, [
-      el('p', { class: 'hint' }, [S.meetLead]),
-      qr,
-      el('dl', { class: 'qr-facts' }, [
-        el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
-        el('dt', {}, [S.meetShared]), el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes]),
-      ]),
-      notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
-      copy,
-      el('h4', { class: 'eyebrow' }, [S.meetNfc]),
-      nfc,
-      nfcStatus,
-      el('p', { class: 'meta center' }, [S.meetNoChat]),
+  return el('div', { class: 'meet-page' }, [
+    el('p', { class: 'hint' }, [S.meetLead]),
+    qr,
+    el('dl', { class: 'qr-facts' }, [
+      el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
+      el('dt', {}, [S.meetShared]), el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes]),
     ]),
-  ]
+    notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
+    copy,
+    el('h4', { class: 'eyebrow' }, [S.meetNfc]),
+    nfc,
+    nfcStatus,
+    el('p', { class: 'meta center' }, [S.meetSwipe]),
+  ])
+}
+
+/** My own Signal (or Matrix) code, so they can also reach me there; or a field to add it. */
+function meetMessengerPage(ch: Channel): HTMLElement {
+  const mine = st().myChannels ?? {}
+  const value = mine[ch]
+  if (!value) {
+    return el('div', { class: 'meet-page' }, [
+      el('p', { class: 'hint' }, [S.meetAddMine(S.chLabel[ch])]),
+      singleChannelEditor(ch, () => render()),
+      el('p', { class: 'meta' }, [S.meetMineHint]),
+    ])
+  }
+  const link = channelLink(ch, value)
+  const qr = el('div', { class: 'qrwrap', 'data-payload': link })
+  void renderQr(qr, link)
+  return el('div', { class: 'meet-page' }, [
+    el('p', { class: 'hint' }, [S.meetMineLead(S.chLabel[ch])]),
+    qr,
+    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(S.chLabel[ch])]),
+    el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
+    ch === Channel.Signal && /^\+/.test(value) ? el('p', { class: 'meta' }, [S.meetSignalNumberNote]) : null,
+  ])
+}
+
+/** One of my own channels, straight in edit mode; `done` runs after save or cancel. */
+function singleChannelEditor(ch: Channel, done: () => void): HTMLElement {
+  return channelRow(myChannels(), ch, true, () => done())
+}
+
+function editMineSheet(ch: Channel): void {
+  openSheet([
+    el('h3', {}, [S.meetYour(S.chLabel[ch])]),
+    singleChannelEditor(ch, () => { closeSheet(); render() }),
+    el('p', { class: 'meta' }, [S.meetMineHint]),
+  ])
 }
 
 // ---------------------------------------------------------------------------
@@ -1632,6 +1729,7 @@ function settingsSheet(): void {
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
     el('p', { class: 'meta' }, [S.setTabsHint]),
+    channelsView(myChannels(), { title: S.myTitle, add: S.myAdd, hint: S.myHint }),
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),

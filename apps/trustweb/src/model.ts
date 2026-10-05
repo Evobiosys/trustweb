@@ -150,6 +150,8 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
+  /** My own messenger handles (Meet shows my Signal / Matrix code). This phone only. */
+  myChannels?: Partial<Record<Channel, string>>
 }
 
 /** The Web screen's query button: calling into the web (default) or the magnifier "Query". */

@@ -447,3 +447,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .add-device:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
 /* only where it clears the phone: phone right edge W/2+195, link left edge W-274 */
 @media (max-width:960px){ .add-device{display:none} }
+
+.meet-tabs{margin:4px 0 12px}
+.ch-more{display:block; margin:8px 0 0; padding-left:0; color:var(--electric-deep)}

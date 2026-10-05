@@ -109,6 +109,9 @@ async function main() {
 
     // the person sheet: messenger links in the owner's order, opening the apps
     await page.locator('.node', { hasText: 'Lena' }).click()
+    ok('contact info starts collapsed: no empty rows, one "Add other ways" button',
+      await page.locator('.ch-row').count() === 0 && await page.getByRole('button', { name: /Add other ways to contact them/ }).isVisible())
+    await page.getByRole('button', { name: /Add other ways to contact them/ }).click()
     const chOrder = (await page.locator('.ch-name').allInnerTexts()).map((t) => t.trim())
     ok('messengers in order: Signal, WhatsApp, Matrix, Delta Chat, Telegram, Messenger',
       JSON.stringify(chOrder) === JSON.stringify(['Signal', 'WhatsApp', 'Matrix', 'Delta Chat', 'Telegram', 'Messenger']), JSON.stringify(chOrder))
@@ -132,6 +135,22 @@ async function main() {
     ]), JSON.stringify(hrefs))
     await shot(page, 'person_channels')
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    await page.locator('.node', { hasText: 'Lena' }).click()
+    ok('reopened, only the known messengers show', await page.locator('.ch-row').count() === 4)
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+
+    // Meet shows my Signal code next to the TrustWeb code (Tana 2026-08-24)
+    await page.locator('.hdr .status-pill.qr').click()
+    await page.getByRole('tab', { name: 'Signal' }).click()
+    await page.locator('.meet-page .ch-row.editing input').fill('https://signal.me/#eu/jakobDemo123')
+    await page.locator('.meet-page').getByRole('button', { name: 'Save' }).click()
+    await page.locator('.qrwrap canvas').waitFor({ timeout: 10_000 })
+    ok('Meet shows my Signal code once added', (await page.getAttribute('.qrwrap', 'data-payload')) === 'https://signal.me/#eu/jakobDemo123')
+    await page.getByRole('tab', { name: 'TrustWeb' }).click()
+    await page.locator('.qrwrap canvas').waitFor({ timeout: 10_000 })
+    ok('the TrustWeb code is the first page', /connect=/.test(await page.getAttribute('.qrwrap', 'data-payload') ?? ''))
+    await page.getByRole('button', { name: 'Back' }).click()
+    ok('the call button explains itself on hover', /resonance/.test(await page.getByRole('button', { name: 'Call into your web' }).getAttribute('title') ?? ''))
 
     // Record (solo): Tana voice-memo layout
     await page.locator('nav.tabs .tab-record').click()

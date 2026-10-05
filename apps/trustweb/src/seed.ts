@@ -57,6 +57,23 @@ import type { AppState, NoteLine, Person } from './model'
 export enum Persona {
   Holder = 'holder',
   Seeker = 'seeker',
+  /** Added with "Add a device" on the side-by-side page (2026-10-05). */
+  Third = 'third',
+  Fourth = 'fourth',
+}
+
+export const PERSONAS: readonly Persona[] = [Persona.Holder, Persona.Seeker, Persona.Third, Persona.Fourth]
+
+export function isPersona(v: string | null): v is Persona {
+  return v !== null && (PERSONAS as readonly string[]).includes(v)
+}
+
+/** The display name each demo persona's phone carries. */
+export const PERSONA_NAMES: Record<Persona, string> = {
+  [Persona.Holder]: 'Maya',
+  [Persona.Seeker]: 'Jonas',
+  [Persona.Third]: 'Sam',
+  [Persona.Fourth]: 'Lena',
 }
 
 export enum DemoContext {
@@ -180,9 +197,22 @@ export function seedState(persona: Persona, now: number, context: DemoContext = 
       people: peopleFor(context, now),
     }
   }
+  if (persona === Persona.Third) {
+    return {
+      v: 1,
+      me: { id: 'sam-' + randomId(6), displayName: PERSONA_NAMES[Persona.Third] },
+      peers: [],
+      log: [],
+      notificationsOn: false,
+      inventory: [
+        { id: randomId(8), text: 'Spare desk in a coworking space, Fridays', audience: Audience.FriendsOfFriends, included: true, createdAt: now - 10 * DAY },
+      ],
+      people: [],
+    }
+  }
   return {
     v: 1,
-    me: { id: 'jonas-' + randomId(6), displayName: 'Jonas' },
+    me: { id: (persona === Persona.Fourth ? 'lena-' : 'jonas-') + randomId(6), displayName: PERSONA_NAMES[persona] },
     peers: [],
     log: [],
     notificationsOn: false,
