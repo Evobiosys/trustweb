@@ -168,6 +168,28 @@ export interface AppState {
   demoOffered?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
+  /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
+  hiddenHints?: string[]
+}
+
+/** Things that explain themselves: a tooltip on desktop, a small "i" on a touch phone (owner 2026-10-06). */
+export enum HintId {
+  Meeting = 'meeting',
+  Qr = 'qr',
+  CallWeb = 'call-web',
+  WebTap = 'web-tap',
+  AboutWho = 'about-who',
+  AboutWhat = 'about-what',
+  RecAdvanced = 'rec-advanced',
+}
+export const HINTS: readonly HintId[] = [
+  HintId.Meeting, HintId.Qr, HintId.CallWeb, HintId.WebTap, HintId.AboutWho, HintId.AboutWhat, HintId.RecAdvanced,
+]
+
+/** What a recording is about: a person (notes go to them) or a thing (notes go to the inventory). */
+export enum AboutKind {
+  Who = 'who',
+  What = 'what',
 }
 
 /** The Web screen's query button: calling into the web (default) or the magnifier "Query". */

@@ -194,7 +194,7 @@ async function main() {
     await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
     ok('a solo memo saves to the web', true)
     await page.locator('nav.tabs .tab-record').click()
-    ok('Record starts fresh after saving', (await page.locator('.memo-row b').innerText()).includes('Who was this about?'))
+    ok('Record starts fresh after saving: "Who or what was this about?"', /Who\s*or\s*what\s*was this about\?/.test(await page.locator('.about-row').innerText()))
     await page.locator('.rec-circle').click()
     await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
     await page.waitForTimeout(800)

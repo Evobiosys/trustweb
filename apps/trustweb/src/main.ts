@@ -25,9 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import {
-  AUDIENCES, Audience, CHANNELS, Channel, LineStatus, QueryStyle, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
-} from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, NoteLine, Person } from './model'
 import { extractLines } from './notes'
@@ -90,6 +88,10 @@ interface Draft {
   segments: Segment[]
   lines: DraftLine[]
   ring: Ring
+  /** Who (a person) or what (a thing) the recording is about. */
+  about: AboutKind
+  /** Lines noted by hand under Record > Advanced; merged after the transcript is mined. */
+  extraLines: DraftLine[]
 }
 
 interface Review {
@@ -179,7 +181,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance,
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [],
   }
 }
 
@@ -368,10 +370,16 @@ function startDraftFor(personId?: string): void {
 
 function draftInProgress(): boolean {
   return recorder.live || takes.length > 0
-    || Boolean(draft.name.trim() || draft.text.trim() || draft.segments.length || draft.lines.length)
+    || Boolean(draft.name.trim() || draft.text.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
 function go(s: Screen): void {
+  // Coming to Record from Inventory means "what", from Web "who" (owner
+  // 2026-10-06); only while nothing has been named or recorded yet.
+  if (s === Screen.Record && !draftInProgress() && !draft.name.trim()) {
+    if (screen === Screen.Inventory) draft.about = AboutKind.What
+    else if (screen === Screen.Web) draft.about = AboutKind.Who
+  }
   screen = s
   closeSheet()
   render()
@@ -386,13 +394,14 @@ function header(title: string, opts: { back?: () => void; right?: Node | null; a
   statusPill = el('button', { class: 'status-pill' })
   // Record and Meeting show their own recording state, so the QR stays put there (owner 2026-10-06).
   statusPill.dataset.pill = opts.pill === false ? '0' : '1'
+  const qr = withHint(statusPill, HintId.Qr)
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
     ]),
-    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill, opts.more ? moreButton() : opts.after ?? null]),
+    el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
 }
 
@@ -425,6 +434,48 @@ function relayLabel(): string {
     : relayStatus === 'connecting' ? S.statusConnecting : S.statusDisconnected
 }
 
+// ---------------------------------------------------------------------------
+// hints: on desktop a tooltip, on a touch phone a small "i" at the top right
+// of the thing (owner 2026-10-06). Tapping it explains; unticking "Show this
+// hint again" hides that one; Settings > Tutorial brings all back, Settings >
+// Advanced switches them one by one.
+// ---------------------------------------------------------------------------
+
+const touchUi = (): boolean => window.matchMedia('(hover: none)').matches
+const hintHidden = (id: HintId): boolean => (state?.hiddenHints ?? []).includes(id)
+
+function setHintHidden(id: HintId, hidden: boolean): void {
+  const s = st()
+  const rest = (s.hiddenHints ?? []).filter((h) => h !== id)
+  s.hiddenHints = hidden ? [...rest, id] : rest
+  if (!s.hiddenHints.length) delete s.hiddenHints
+  save()
+}
+
+/** Gives `node` its explanation: a title on desktop, an "i" beside it on touch screens. */
+function withHint(node: HTMLElement, id: HintId): HTMLElement {
+  const text = S.hintText[id]
+  node.title = text
+  if (!touchUi() || hintHidden(id)) return node
+  const i = el('button', {
+    class: 'hint-i', 'aria-label': S.hintOpen(S.hintLabel[id]),
+    onclick: (e: Event) => { e.stopPropagation(); e.preventDefault(); openHint(id) },
+  }, ['i'])
+  return el('span', { class: 'hint-wrap' }, [node, i])
+}
+
+function openHint(id: HintId): void {
+  const again = el('input', { type: 'checkbox', checked: true })
+  const ok = (): void => {
+    hideNotice()
+    if (!(again as HTMLInputElement).checked) { setHintHidden(id, true); render() }
+  }
+  showNotice(S.hintLabel[id], S.hintText[id], [
+    el('label', { class: 'hint-again' }, [again, S.hintAgain]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: ok }, [S.hintOk]),
+  ])
+}
+
 /** The relay state, shown in Settings (moved there from the QR button, owner 2026-10-05). */
 function connectionRow(): HTMLElement {
   return el('div', { class: 'conn-row ' + relayStatus, id: 'conn-row', role: 'status' }, [
@@ -444,7 +495,10 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
   p.dataset.qr = withQr ? '1' : '0'
   p.onclick = null
   p.removeAttribute('title')
+  // The "i" beside the QR explains the code: gone while the pill stands there, or the QR is hidden.
+  const hintOff = (off: boolean): void => { p.parentElement?.classList.toggle('hint-off', off) }
   if (recorder.live && p.dataset.pill !== '0') {
+    hintOff(true)
     const meeting = draft.mode === RecordMode.Meeting
     p.className = 'status-pill rec' + (recorder.paused ? ' paused' : '')
     p.textContent = recorder.paused ? S.statusPaused : meeting ? S.statusRecordingMeeting : S.statusRecording
@@ -454,6 +508,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
     return
   }
   p.hidden = !withQr
+  hintOff(!withQr)
   p.className = 'status-pill qr ' + relayStatus
   p.innerHTML = icon('qr')
   p.setAttribute('aria-label', `${S.qrOpen} (${relayLabel()})`)
@@ -724,8 +779,14 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
 
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
-  const wrap = el('div', { class: 'rings-wrap', title: S.webTapToAdd })
+  const wrap = el('div', { class: 'rings-wrap', title: S.hintText[HintId.WebTap] })
   wrap.addEventListener('click', (e) => onRingsTap(e as MouseEvent, wrap))
+  if (touchUi() && !hintHidden(HintId.WebTap)) {
+    wrap.appendChild(el('button', {
+      class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
+      onclick: (e: Event) => { e.stopPropagation(); openHint(HintId.WebTap) },
+    }, ['i']))
+  }
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('viewBox', '0 0 352 352')
   svg.innerHTML = '<defs><linearGradient id="th" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4FD7A0"/><stop offset="1" stop-color="#12A8E3"/></linearGradient></defs>'
@@ -955,11 +1016,13 @@ function queryFab(): HTMLElement {
     onclick: () => { queryOpen = true; searchOpen = false; render() },
   })
   b.innerHTML = icon(call ? 'call' : 'query')
-  if (call) b.title = S.callHover
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))
-  return b
+  if (!call) return b
+  const wrapped = withHint(b, HintId.CallWeb)
+  if (wrapped !== b) wrapped.classList.add('fab-hint')
+  return wrapped
 }
 
 function screenCurate(): Node[] {
@@ -1220,30 +1283,96 @@ function roundButton(name: string, label: string, onclick: () => void, opts: { d
   return b
 }
 
-/** "Who was this about?": an existing person or a new name. Then `next`. */
-function aboutSheet(next?: () => void): void {
-  const input = el('input', { class: 'field', placeholder: S.recWhoPh, value: draft.name, maxlength: '40', 'aria-label': S.aboutTitle })
+/**
+ * "Who or what was this about?": a person (an existing one or a new name) or
+ * a thing (an inventory item or a new topic). What you type decides it when
+ * it matches a person or an item; otherwise the kind you picked stays. Then `next`.
+ */
+function aboutSheet(next?: () => void, kind: AboutKind = draft.about): void {
+  const who = kind === AboutKind.Who
+  const title = who ? S.aboutTitle : S.aboutWhatTitle
+  const input = el('input', { class: 'field', placeholder: who ? S.recWhoPh : S.aboutWhatPh, value: draft.name, maxlength: '60', 'aria-label': title })
   const done = (): void => {
     const v = input.value.trim()
     if (!v) { input.focus(); return }
-    const match = st().people.find((p) => p.name.toLowerCase() === v.toLowerCase())
-    draft.name = match?.name ?? v
-    draft.personId = match?.id
-    if (match) draft.ring = match.ring
+    const person = st().people.find((p) => p.name.toLowerCase() === v.toLowerCase())
+    const item = st().inventory.find((i) => i.text.toLowerCase() === v.toLowerCase())
+    draft.about = person ? AboutKind.Who : item ? AboutKind.What : kind
+    draft.name = person?.name ?? item?.text ?? v
+    draft.personId = draft.about === AboutKind.Who ? person?.id : undefined
+    if (person) draft.ring = person.ring
     closeSheet()
     if (next) next(); else render()
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') done() })
-  const people = [...st().people].sort((a, b) => b.metAt - a.metAt).slice(0, 6)
+  const picks = who
+    ? [...st().people].sort((a, b) => b.metAt - a.metAt).slice(0, 6).map((p) => p.name)
+    : [...st().inventory].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6).map((i) => i.text)
   openSheet([
-    el('h3', {}, [S.aboutTitle]),
+    el('h3', { class: who ? 'about-who-ink' : 'about-what-ink' }, [title]),
     input,
-    people.length ? el('div', { class: 'chips' }, people.map((p) => el('button', {
-      class: 'chip', onclick: () => { input.value = p.name; done() },
-    }, [p.name]))) : null,
+    picks.length ? el('div', { class: 'chips' }, picks.map((t) => el('button', {
+      class: 'chip', onclick: () => { input.value = t; done() },
+    }, [t]))) : null,
     el('button', { class: 'btn btn-electric', onclick: done }, [S.aboutOk]),
   ])
   setTimeout(() => input.focus(), 320)
+}
+
+/** The About row: "Who or what was this about?", each word pressable in its colour. */
+function aboutRowView(): HTMLElement {
+  const pick = (k: AboutKind): void => { draft.about = k; aboutSheet(undefined, k) }
+  const whoBtn = el('button', {
+    class: 'about-kind who' + (draft.about === AboutKind.Who ? ' on' : ''), 'aria-pressed': String(draft.about === AboutKind.Who),
+    onclick: () => pick(AboutKind.Who),
+  }, [S.aboutWho])
+  const whatBtn = el('button', {
+    class: 'about-kind what' + (draft.about === AboutKind.What ? ' on' : ''), 'aria-pressed': String(draft.about === AboutKind.What),
+    onclick: () => pick(AboutKind.What),
+  }, [S.aboutWhat])
+  const name = draft.name.trim()
+  return el('div', { class: 'memo-row about-row ' + draft.about }, [
+    el('span', { class: 'about-q' }, [withHint(whoBtn, HintId.AboutWho), S.aboutOr, withHint(whatBtn, HintId.AboutWhat), S.aboutTail]),
+    name ? el('button', { class: 'about-value', onclick: () => aboutSheet() }, [name]) : null,
+  ])
+}
+
+/** Record > Advanced: lines to note by hand, by kind; folded away until asked for. */
+const ADVANCED_TAGS: readonly Tag[] = [Tag.Opportunity, Tag.Resource, Tag.Looking, Tag.Offer, Tag.Talent]
+let recAdvancedOpen = false
+
+function recAdvancedView(): HTMLElement {
+  const toggle = el('button', {
+    class: 'adv-toggle', 'aria-expanded': String(recAdvancedOpen),
+    onclick: () => { recAdvancedOpen = !recAdvancedOpen; render() },
+  }, [S.recAdvanced, el('span', { class: 'chev', 'aria-hidden': 'true' }, [recAdvancedOpen ? '▴' : '▾'])])
+  if (!recAdvancedOpen) return el('div', { class: 'adv' }, [withHint(toggle, HintId.RecAdvanced)])
+  const sections = ADVANCED_TAGS.map((tag) => {
+    const input = el('input', { class: 'field', placeholder: S.recAdvancedAdd(S.tagLabel[tag]), maxlength: '160', 'aria-label': S.recAdvancedAdd(S.tagLabel[tag]) })
+    const add = (): void => {
+      const text = input.value.trim()
+      if (!text) return
+      draft.extraLines.push({ id: randomId(8), text, tag, audience: Audience.Friends })
+      render()
+      document.querySelector<HTMLInputElement>(`[data-adv="${tag}"] input`)?.focus()
+    }
+    input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+    const mine = draft.extraLines.filter((l) => l.tag === tag)
+    return el('div', { class: 'adv-sec', 'data-adv': tag }, [
+      el('h4', { class: 'eyebrow' }, [S.tagLabel[tag]]),
+      ...mine.map((l) => el('div', { class: 'adv-line' }, [
+        el('span', {}, [l.text]),
+        el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { draft.extraLines = draft.extraLines.filter((x) => x !== l); render() } }, ['×']),
+      ])),
+      input,
+    ])
+  })
+  return el('div', { class: 'adv open' }, [
+    withHint(toggle, HintId.RecAdvanced),
+    engine !== null && (recorder.live || takes.length > 0) ? el('p', { class: 'tr-engine' }, [engineLabel()]) : null,
+    el('p', { class: 'hint' }, [S.recSoloHint]),
+    ...sections,
+  ])
 }
 
 function discardDraft(): void {
@@ -1262,7 +1391,7 @@ async function startSolo(): Promise<void> {
 
 async function sendSolo(): Promise<void> {
   if (recorder.live) await recorder.stop()
-  if (!takes.length) return
+  if (!takes.length && !draft.extraLines.length) return
   if (!draft.name.trim()) { aboutSheet(() => void makeNotes()); return }
   await makeNotes()
 }
@@ -1271,7 +1400,7 @@ function screenRecord(): Node[] {
   const live = recorder.live
   const paused = recorder.paused
   // Icon only, in the slot ⋮ has on Web, so the QR keeps its exact place (owner 2026-10-06: muscle memory).
-  const meeting = iconButton('meet', S.recMeeting, () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) }, 'meet-btn')
+  const meeting = withHint(iconButton('meet', S.recMeeting, () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) }, 'meet-btn'), HintId.Meeting)
   const has = takes.length > 0
   const circle = el('button', {
     class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
@@ -1288,20 +1417,17 @@ function screenRecord(): Node[] {
       ]),
       el('p', { class: 'rec-status center' }, [status]),
       recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
-      el('button', { class: 'memo-row', onclick: () => aboutSheet() }, [
-        el('span', {}, [S.aboutRow]),
-        el('b', {}, [draft.name.trim() || S.aboutNobody]),
-      ]),
-      engine !== null && (live || has) ? el('p', { class: 'tr-engine center' }, [engineLabel()]) : null,
+      aboutRowView(),
+      recAdvancedView(),
       draft.segments.length || transcriber
         ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' },
             draft.segments.length ? draft.segments.map(transcriptRow) : [el('p', { class: 'tr-empty' }, [S.trEmpty])])
-        : el('p', { class: 'hint center' }, [S.recSoloHint]),
+        : null,
     ]),
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
       roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() }),
-      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has }),
+      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length }),
     ]),
   ]
 }
@@ -1519,6 +1645,7 @@ async function makeNotes(): Promise<void> {
       draft.lines = [{ id: randomId(8), text: S.memoLine(clock(totalMs())), tag: Tag.Note, audience: Audience.OnlyMe }]
     }
   }
+  for (const l of draft.extraLines) if (!draft.lines.some((x) => x.id === l.id)) draft.lines.push({ ...l })
   go(Screen.Review)
 }
 
@@ -1759,6 +1886,41 @@ function audiencePill(current: Audience, onChange: (a: Audience) => void): HTMLE
   }, [S.audienceLabel[current]])
 }
 
+/** "What" notes: no ring to pick, only who can ask about each line. */
+function screenPlaceWhat(): Node[] {
+  return [
+    header(S.placeWhatTitle(draft.name.trim()), { back: () => go(Screen.Review) }),
+    el('div', { class: 'scroll pad' }, [
+      el('h4', { class: 'eyebrow' }, [S.placeWho]),
+      el('div', { class: 'aud-list' }, draft.lines.map((l) => el('div', { class: 'aud-row' }, [
+        el('span', {}, [l.text]),
+        audiencePill(l.audience, (a) => { l.audience = a; render() }),
+      ]))),
+      el('p', { class: 'foot' }, [S.placeFoot]),
+    ]),
+    el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', onclick: saveDraftWhat }, [S.placeWhatSave])]),
+  ]
+}
+
+/** Each line becomes an inventory item, prefixed with what it was about unless it already says so. */
+function saveDraftWhat(): void {
+  const s = st()
+  const now = Date.now()
+  const what = draft.name.trim()
+  const lines = draft.lines.filter((l) => l.text.trim())
+  for (const l of lines) {
+    const text = l.text.trim()
+    s.inventory.push({
+      id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
+      audience: l.audience, included: true, createdAt: now,
+    })
+  }
+  save()
+  toast(S.savedWhatToast(lines.length))
+  newDraft()
+  go(Screen.Inventory)
+}
+
 function saveDraft(): void {
   const s = st()
   const now = Date.now()
@@ -1785,6 +1947,7 @@ function saveDraft(): void {
 }
 
 function screenPlace(): Node[] {
+  if (draft.about === AboutKind.What) return screenPlaceWhat()
   return [
     header(S.placeTitle(draft.name.trim()), { back: () => go(Screen.Review) }),
     el('div', { class: 'scroll pad' }, [
@@ -1929,6 +2092,17 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    ...HINTS.map((id) => el('button', {
+      class: 'radio' + (hintHidden(id) ? '' : ' on'),
+      'aria-pressed': String(!hintHidden(id)),
+      onclick: () => { setHintHidden(id, !hintHidden(id)); render(); settingsSheet() },
+    }, [el('b', {}, [S.setHintsOne(S.hintLabel[id])]), el('small', {}, [S.hintText[id]])])),
+    el('h4', { class: 'eyebrow' }, [S.setTutorial]),
+    el('button', {
+      class: 'btn btn-ghost', disabled: !(s.hiddenHints?.length),
+      onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
+    }, [S.setHintsAll]),
+    el('p', { class: 'meta' }, [S.setHintsAllHint]),
     el('h4', { class: 'eyebrow' }, [S.setTalkWeave]),
     el('button', {
       class: 'radio' + (s.talkWeaveLocal ? ' on' : ''),
