@@ -75,7 +75,12 @@ iframe{width:390px;max-width:calc(100vw - 32px);height:780px;border:0;border-rad
 .dock .see{background:linear-gradient(135deg,#FF715B,#9A37F0);color:#fff;box-shadow:0 8px 24px rgba(154,55,240,.35)}
 .dock .plus{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#FF715B,#9A37F0);color:#fff;font-size:17px;font-weight:400}
 .dock button:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
-@media (max-width:600px){.dock{right:12px;bottom:12px}.dock button{padding:10px 14px;font-size:13.5px}}
+/* phones: the dock sits in the page flow at the bottom, never over a phone */
+@media (max-width:600px){
+  body{padding-bottom:24px}
+  .dock{position:static;align-items:stretch;margin:18px auto 0;max-width:420px}
+  .dock button{justify-content:center;padding:12px 14px;font-size:14px}
+}
 `
 document.head.appendChild(style)
 
@@ -87,14 +92,14 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 }
 
 const phones = h('div', 'phones', '')
-const head = h('div', 'head', '<h1>TrustWeb, side by side</h1><p>Real phones running the real app over the live relay. Start with one; add devices to see a web form.</p>')
+const head = h('div', 'head', '<h1>TrustWeb, side by side</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is Maya\'s phone, running the real app over the live relay. Add Jonas\'s phone next to it, or watch the scripted version with <b>See it in action</b>.</p>')
 
 // "See it in action": the walkthrough and, under it, what to try on the live phones.
 const actionSlot = h('section', 'action-slot', '')
 actionSlot.hidden = true
 const walkSlot = h('div', '', '')
 const liveSteps = h('div', 'live-steps', `<h2>Try it on the live phones below</h2><div class="steps">${[
-  '<b>1.</b> On Jonas\'s phone, tap <b>Call into your web</b> and ask "Does anyone have a motorbike I could borrow?"',
+  '<b>1.</b> First add Jonas\'s device (bottom right). Then on Jonas\'s phone, tap <b>Call into your web</b> and ask "Does anyone have a motorbike I could borrow?"',
   '<b>2.</b> Maya\'s phone shows the ask at once, with the line that matched. She chooses: share, or not.',
   '<b>3.</b> After the 30-second window Jonas sees what she shared, or "No match". A decline looks exactly like no match.',
   '<b>4.</b> Now ask "Who has a spare room in Vienna?" Maya noted one, shared with nobody: her phone stays silent.',
@@ -135,7 +140,8 @@ function addDevice(): void {
     slot.dataset.persona = p
   }
   updateDock()
-  col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  // Not for the first phone: scrolling on load would hide the page title.
+  if (shown > 1) col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
 }
 
 function linkFor(p: Persona, url: string): string {
@@ -171,8 +177,8 @@ function updateDock(): void {
   addBtn.disabled = full
   addBtn.innerHTML = full
     ? `${ORDER.length} devices (the most for now)`
-    : `<span class="plus" aria-hidden="true">+</span>Add a device <small>(${PERSONA_NAMES[ORDER[shown]]}'s)</small>`
-  addBtn.setAttribute('aria-label', full ? `${ORDER.length} devices, the most for now` : `Add a device: ${PERSONA_NAMES[ORDER[shown]]}'s`)
+    : `<span class="plus" aria-hidden="true">+</span>Add a device: ${PERSONA_NAMES[ORDER[shown]]}'s phone`
+  addBtn.setAttribute('aria-label', full ? `${ORDER.length} devices, the most for now` : `Add a device: ${PERSONA_NAMES[ORDER[shown]]}'s phone`)
 }
 
 const foot = (() => {

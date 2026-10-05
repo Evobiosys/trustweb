@@ -23,7 +23,8 @@ enum Tie {
 }
 
 interface Who { id: string; name: string; role: string }
-interface Link { a: string; b: string; tie: Tie }
+/** `since`: the step from which the tie exists; before it, the strip draws "not connected yet". */
+interface Link { a: string; b: string; tie: Tie; since?: number }
 interface Step {
   title: string
   text: string
@@ -53,6 +54,7 @@ const waiting = (s: number): string => `<div class="wt-h">Call into your web</di
 const consent = (who: string, q: string, match: string): string =>
   `<div class="wt-cosmic"><b>${who} asks</b><br>"${q}"<br><small>On this phone, this matches:</small>${card('', match)}<span class="wt-btn">Share these</span><span class="wt-btn ghost">Don't share</span></div>`
 const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb app</b><br>${body}</div>`
+const AISHA_REAL = 'In real life: she just opened an animal welfare fund.'
 
 const MOTORBIKE = 'Motorbike (125cc), can lend it for a weekend'
 const POSITION = 'We have a new position to fill'
@@ -61,14 +63,14 @@ const FUND = 'Aisha just opened an animal welfare fund'
 const MODES: Mode[] = [
   {
     id: '2',
-    label: '2 people',
+    label: '2 people · Ask a friend',
     title: 'Ask a friend',
-    intro: 'Jonas meets Maya, they connect with one scan, and later Jonas asks his web for a motorbike.',
+    intro: 'Your web is the people you have connected with. Jonas meets Maya, they connect with one scan, and later Jonas asks his web for a motorbike.',
     people: [
       { id: 'jonas', name: 'Jonas', role: 'asks his web' },
       { id: 'maya', name: 'Maya', role: 'can lend a motorbike' },
     ],
-    links: [{ a: 'jonas', b: 'maya', tie: Tie.Friend }],
+    links: [{ a: 'jonas', b: 'maya', tie: Tie.Friend, since: 2 }],
     steps: [
       {
         title: 'Two people, two phones', changed: [],
@@ -76,10 +78,10 @@ const MODES: Mode[] = [
         screens: { jonas: web([]), maya: web([]) },
       },
       {
-        title: 'They meet, and Jonas records it', changed: ['jonas'], path: ['jonas', 'maya'],
-        text: 'Both agreed to the recording. It stays on Jonas\'s phone, for his notes afterwards.',
+        title: 'They meet in person', changed: ['jonas'],
+        text: 'They talk over coffee. With Maya\'s yes, Jonas records it for his own notes. Nothing is shared with anyone.',
         screens: {
-          jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Speaker 2</i> I can lend you my motorbike some weekend.')}`,
+          jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Maya:</i> I can lend you my motorbike some weekend.')}`,
           maya: quiet('In a conversation with Jonas.'),
         },
       },
@@ -93,8 +95,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Maya notes what she could lend', changed: ['maya'],
-        text: 'One line in her inventory, and who may ask about it. Nothing is published anywhere.',
-        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${MOTORBIKE}<br><small>Friends of friends · on</small>`)}` },
+        text: 'One line in her inventory (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
+        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${MOTORBIKE}<br><small>Shared with: friends of friends</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
       },
       {
         title: 'Jonas calls into his web', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
@@ -102,8 +104,8 @@ const MODES: Mode[] = [
         screens: { jonas: ask('Does anyone have a motorbike I could borrow?', 1), maya: quiet('The ask arrives and is checked on this phone.') },
       },
       {
-        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'],
-        text: 'Only a person can say yes. Maya sees exactly which line matched before deciding.',
+        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
+        text: 'Only a person can say yes. Maya sees who asks and exactly which line matched. Every answer comes back after a fixed 30-second window, so a fast or slow reply reveals nothing.',
         screens: { jonas: waiting(24), maya: consent('Jonas', 'Does anyone have a motorbike...?', MOTORBIKE) },
       },
       {
@@ -112,29 +114,29 @@ const MODES: Mode[] = [
         screens: { jonas: waiting(9), maya: card('ok', 'Shared. It leaves when the 30-second window closes.') },
       },
       {
-        title: 'Jonas gets his answer', changed: ['jonas'],
+        title: 'Jonas gets his answer', changed: ['jonas'], path: ['maya', 'jonas'],
         text: 'He sees what Maya chose to share, and nothing else from her phone.',
         screens: { jonas: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b><br>${MOTORBIKE}`)}`, maya: web(['Jonas']) },
       },
       {
-        title: 'A "no" looks exactly like no match', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
-        text: 'Jonas asks for a spare room. Maya has one noted but shared with nobody, so her phone stays silent and Jonas sees "No match". He cannot tell "nobody had one" from "somebody chose not to share".',
+        title: 'Not sharing looks the same as having nothing', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
+        text: 'Jonas asks for a spare room. Maya has one noted, shared with nobody, so her phone stays silent and Jonas sees "No match". He cannot tell "nobody had one" from "somebody chose not to share".',
         screens: {
           jonas: `<div class="wt-h">Call into your web</div>${card('q', '"Who has a spare room in Vienna?"')}${card('', '<b>No match</b><br><small>You do not learn why.</small>')}`,
-          maya: quiet('Matched a note shared with nobody. Silent.'),
+          maya: `${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}${quiet('Silent: nothing leaves this phone.')}`,
         },
       },
     ],
   },
   {
     id: '3',
-    label: '3 people',
+    label: '3 people · Job lead',
     title: 'A job lead, months after meeting',
-    intro: 'Manifund Example A: an acquaintance finds an opening through your friend, without you lifting a finger. Here Jonas is "you".',
-    note: 'Two-hop asks are how TrustWeb is designed (Manifund Example A). The live phones on this page answer one hop today.',
+    intro: 'Example A from our funding application (Manifund): an acquaintance finds an opening through a friend, without the person in the middle lifting a finger. Jonas is the friend in the middle.',
+    note: 'Design preview: asks that pass through a second person are how TrustWeb is designed. The live phones on this page do one hop today.',
     people: [
       { id: 'sam', name: 'Sam', role: 'Jonas\'s acquaintance' },
-      { id: 'jonas', name: 'Jonas', role: 'you, not involved in the moment' },
+      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
       { id: 'maya', name: 'Maya', role: 'Jonas\'s friend' },
     ],
     links: [{ a: 'sam', b: 'jonas', tie: Tie.Acquaintance }, { a: 'jonas', b: 'maya', tie: Tie.Friend }],
@@ -147,41 +149,41 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes an opening', changed: ['maya'],
         text: 'She lets friends of friends ask about it. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>Friends of friends · on</small>`)}` },
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>Shared with: friends of friends</small>`)}` },
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
-        text: '"Who is hiring?" It reaches Jonas, and through Jonas, his friends. Jonas is not asked to do anything.',
+        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. Jonas set his phone once to pass questions from people he knows on to his friends: he is not asked each time, and he cannot read the answer.',
         screens: { sam: ask('Who is hiring?', 1), jonas: quiet('Passed on to Jonas\'s friends. Jonas is not involved in the moment.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.') },
       },
       {
-        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'],
-        text: 'Maya sees who asks (a friend of Jonas) and which line matched. Her yes is the only way anything leaves.',
+        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
+        text: 'Maya sees who asks (Sam, an acquaintance of her friend Jonas) and which line matched. She decides whether to answer; her yes is the only way anything leaves.',
         screens: { sam: waiting(24), jonas: web(['Sam', 'Maya']), maya: consent('Sam, through Jonas,', 'Who is hiring?', POSITION) },
       },
       {
         title: 'The answer travels back through Jonas', changed: ['maya', 'jonas'], path: ['maya', 'jonas', 'sam'],
-        text: 'Maya shares. Her answer goes back the way the ask came, sealed, through Jonas\'s phone.',
-        screens: { sam: waiting(9), jonas: quiet('Relays a sealed answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Sam, through Jonas.') },
+        text: 'Maya shares. Her answer goes back the way the ask came, through Jonas\'s phone, end-to-end encrypted: only Maya and Sam can read it.',
+        screens: { sam: waiting(9), jonas: quiet('Passes on an encrypted answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Sam, through Jonas.') },
       },
       {
-        title: 'Sam has a job lead', changed: ['sam'],
-        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything.',
-        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}`)}`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+        title: 'Sam has a job lead', changed: ['sam'], path: ['jonas', 'sam'],
+        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. Next, Sam can ask Jonas for an introduction to Maya.',
+        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
   },
   {
     id: '4',
-    label: '4 people',
-    title: 'A funder two hops away',
-    intro: 'Manifund Example B: your friend finds a fund through your close friend\'s network, someone neither of you knows. Here Jonas is "you".',
-    note: 'Two-hop asks are how TrustWeb is designed (Manifund Example B). The live phones on this page answer one hop today.',
+    label: '4 people · Funder',
+    title: 'A funder you have never met, through two friends',
+    intro: 'Example B from our funding application (Manifund): a friend finds a fund through your close friend\'s network, someone neither of you knows. Jonas is the friend in the middle.',
+    note: 'Design preview: asks that pass through a second person are how TrustWeb is designed. The live phones on this page do one hop today.',
     people: [
       { id: 'lena', name: 'Lena', role: 'Jonas\'s friend, animal welfare project' },
-      { id: 'jonas', name: 'Jonas', role: 'you, not required to approve' },
+      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
       { id: 'maya', name: 'Maya', role: 'Jonas\'s close friend' },
-      { id: 'aisha', name: 'Aisha', role: 'Maya\'s acquaintance' },
+      { id: 'aisha', name: 'Aisha', role: 'Maya\'s acquaintance, no app' },
     ],
     links: [
       { a: 'lena', b: 'jonas', tie: Tie.Friend },
@@ -192,32 +194,32 @@ const MODES: Mode[] = [
       {
         title: 'Four people, three apps', changed: [],
         text: 'Lena works on an animal welfare project. Aisha does not use TrustWeb at all.',
-        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp('Aisha just opened an animal welfare fund.') },
+        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
       {
-        title: 'Maya notes what she heard', changed: ['maya'], path: ['aisha', 'maya'],
+        title: 'Maya notes what she heard', changed: ['maya'],
         text: 'After meeting Aisha, Maya notes it, for people she regards as friends. Aisha\'s phone is not involved.',
-        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: `<div class="wt-h">Notes about Aisha</div>${card('', `${FUND}<br><small>Friends of friends</small>`)}`, aisha: noApp('Aisha just opened an animal welfare fund.') },
+        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: `<div class="wt-h">Notes about Aisha</div>${card('', `${FUND}<br><small>Shared with: friends of friends</small>`)}`, aisha: noApp(AISHA_REAL) },
       },
       {
         title: 'Lena calls into her web', changed: ['lena', 'jonas', 'maya'], path: ['lena', 'jonas', 'maya'],
-        text: '"Any new animal welfare funding?" It reaches Jonas and, through him, his close friend Maya. Jonas does not have to approve.',
-        screens: { lena: ask('Any new animal welfare funding?', 1), jonas: quiet('Passed on. Jonas is not required to approve.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
+        text: '"Any new animal welfare funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and he cannot read the answer.',
+        screens: { lena: ask('Any new animal welfare funding?', 1), jonas: quiet('Passed on. Jonas is not asked each time.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
-        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'],
-        text: 'The match is Maya\'s own note. Aisha is never contacted by anyone\'s phone.',
+        title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
+        text: 'The match is Maya\'s own note. She sees who asks (Lena, a friend of Jonas) and decides. Aisha is never contacted by anyone\'s phone.',
         screens: { lena: waiting(24), jonas: web(['Lena', 'Maya']), maya: consent('Lena, through Jonas,', 'Any new animal welfare funding?', FUND), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
         title: 'The answer travels back through Jonas', changed: ['maya', 'jonas'], path: ['maya', 'jonas', 'lena'],
-        text: 'Maya shares. The answer goes back through Jonas, sealed.',
-        screens: { lena: waiting(9), jonas: quiet('Relays a sealed answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Lena, through Jonas.'), aisha: noApp('Aisha just opened an animal welfare fund.') },
+        text: 'Maya shares only what she herself noted. The answer goes back through Jonas, end-to-end encrypted: only Maya and Lena can read it. Lena learns nothing else about Aisha.',
+        screens: { lena: waiting(9), jonas: quiet('Passes on an encrypted answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Lena, through Jonas.'), aisha: noApp(AISHA_REAL) },
       },
       {
-        title: 'Lena finds a funder two hops away', changed: ['lena'],
-        text: 'Someone neither Lena nor Jonas knows. Next, Lena can ask Jonas to ask Maya for an introduction.',
-        screens: { lena: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${FUND}`)}`, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp('Aisha just opened an animal welfare fund.') },
+        title: 'Lena finds a funder, through Jonas and Maya', changed: ['lena'], path: ['jonas', 'lena'],
+        text: 'Lena has never met Aisha, and neither has Jonas. Lena can now ask Jonas to ask Maya for an introduction.',
+        screens: { lena: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${FUND}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
     ],
   },
@@ -247,24 +249,34 @@ const CSS = `
 .wt-speed select{font:inherit;border-radius:8px;border:1px solid var(--soft);background:var(--card);color:var(--ink);padding:3px 6px}
 .wt-intro{font-size:13.5px;color:var(--soft);margin:0 0 6px;line-height:1.5}
 .wt-intro b{color:var(--ink)}
-.wt-strip{display:block;width:100%;height:64px;margin:2px 0 8px}
+.wt-strip{display:block;width:100%;height:64px;margin:2px 0 0}
+.wt-strip .ln.pending{stroke-dasharray:4 6;opacity:.35}
+.wt-strip-text{display:none;font-size:13px;font-weight:600;margin:4px 0}
+.wt-legend{font-size:11.5px;color:var(--soft);margin:0 0 8px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.wt-legend .lg{display:inline-block;width:22px;height:0;border-top:3px solid var(--soft);margin-right:4px;vertical-align:middle}
+.wt-legend .lg.close{border-top-width:6px}
+.wt-legend .lg.acq{border-top-style:dotted}
+.wt-legend .lg.route{border-top-color:#9A37F0}
+.wt-scripted{font-size:12.5px;font-weight:700;color:var(--ink);background:var(--bg);border-radius:10px;padding:6px 10px;margin:0 0 8px;display:inline-block}
+.wt-hint{font-size:12.5px;color:var(--soft);margin:8px 0 0;text-align:center}
+@media (max-width:600px){.wt-strip{display:none}.wt-strip-text{display:block}}
 .wt-strip text{font:600 12px "Seravek","Avenir Next",system-ui,sans-serif;fill:var(--ink)}
 .wt-strip .ln{stroke:var(--soft);opacity:.6}
 .wt-strip .ln.on{stroke:#9A37F0;opacity:1}
 .wt-strip .nd{fill:var(--bg);stroke:var(--soft);stroke-width:2}
 .wt-strip .nd.on{fill:#9A37F0;stroke:#9A37F0}
-.wt-banner{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;min-height:82px;border-left:4px solid #9A37F0;padding:2px 0 2px 12px}
+.wt-banner{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;min-height:7.5em;border-left:4px solid #9A37F0;padding:2px 0 2px 12px}
 .wt-banner .wt-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9A37F0;font-weight:700}
 .wt-banner h3{font-family:Optima,Candara,"Gill Sans",sans-serif;font-size:20px;font-weight:600;margin:0}
 .wt-banner p{font-size:14px;color:var(--soft);line-height:1.5;margin:0}
-.wt-devices{display:grid;gap:12px}
+.wt-devices{display:grid;gap:18px}
 .wt-dev{display:flex;flex-direction:column;gap:16px;align-items:stretch;min-width:0}
 .wt-dev h4{margin:0;font-size:13.5px;text-align:center}
 .wt-dev h4 small{display:block;color:var(--soft);font-weight:400;font-size:11.5px}
-.wt-screen{position:relative;height:230px;border-radius:22px;background:#F2EBDC;color:#241B2E;padding:16px 12px;overflow:hidden;
+.wt-screen{position:relative;min-height:240px;border-radius:22px;background:#F2EBDC;color:#241B2E;padding:28px 12px 14px;overflow:hidden;
   box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47;font-size:12.5px;line-height:1.45;transition:box-shadow .3s,opacity .3s}
-.wt-screen.changed{box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47,0 0 0 11px rgba(154,55,240,.5)}
-.wt-screen.idle{opacity:.5}
+.wt-screen.changed{box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47,0 0 0 9px rgba(154,55,240,.6)}
+.wt-screen.idle{opacity:.7}
 .wt-tag{position:absolute;right:8px;top:8px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:#9A37F0;color:#fff;border-radius:999px;padding:2px 7px;z-index:2}
 .wt-h{font-family:Optima,Candara,"Gill Sans",sans-serif;font-weight:600;font-size:15px;margin-bottom:8px}
 .wt-rings{display:flex;flex-wrap:wrap;gap:6px}
@@ -274,12 +286,13 @@ const CSS = `
 .wt-card.q{font-weight:600}
 .wt-quiet{height:100%;display:grid;place-items:center;text-align:center;color:#5C4F6B;font-style:italic;padding:0 8px}
 .wt-noapp{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#5C4F6B;border:2px dashed #b9aec4;border-radius:16px;padding:10px}
-.wt-cosmic{position:absolute;inset:0;padding:14px 12px;background:linear-gradient(160deg,#2A0E4E,#3B1163 45%,#0E3A55);color:#EDE6F2}
+/* in the flow (not absolute), so a long prompt grows the screen instead of clipping its buttons */
+.wt-cosmic{margin:-28px -12px -14px;padding:28px 12px 16px;min-height:240px;border-radius:22px;background:linear-gradient(160deg,#2A0E4E,#3B1163 45%,#0E3A55);color:#EDE6F2}
 .wt-cosmic .wt-card{color:#241B2E}
 .wt-btn{display:inline-block;margin:6px 6px 0 0;border-radius:999px;padding:5px 10px;background:#4FD7A0;color:#0d3527;font-weight:700;font-size:11.5px}
 .wt-btn.ghost{background:transparent;color:#BFE6F7;padding-left:0}
 .wt-qr{width:110px;height:110px;margin:6px auto;border-radius:8px;background:repeating-conic-gradient(#241B2E 0 25%,#fff 0 50%) 0 0/22px 22px;box-shadow:inset 0 0 0 8px #fff}
-.wt-note{font-size:12.5px;color:var(--soft);margin:10px 0 0}
+.wt-note{font-size:13px;color:var(--ink);margin:0 0 8px;border-left:3px solid #12A8E3;padding-left:10px}
 .wt-controls{display:flex;align-items:center;gap:10px;margin-top:16px}
 .wt-controls button{border:0;border-radius:999px;cursor:pointer;font:inherit;font-weight:700}
 .wt-play{width:46px;height:46px;background:#9A37F0;color:#fff;font-size:16px;flex-shrink:0}
@@ -298,7 +311,7 @@ const CSS = `
 @media (prefers-reduced-motion: reduce){.wt-screen{transition:none}}
 @media (prefers-color-scheme: dark){
   .wt-screen{background:#1F1729;color:#F4EDF9;box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C}
-  .wt-screen.changed{box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C,0 0 0 11px rgba(190,130,255,.8)}
+  .wt-screen.changed{box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C,0 0 0 9px rgba(190,130,255,.85)}
   .wt-rings span,.wt-card,.wt-cosmic .wt-card{background:#2B2139;color:#F4EDF9}
   .wt-card.ok{background:#173A2C}
   .wt-quiet,.wt-noapp{color:#BBAACD}
@@ -316,7 +329,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''):
 const NS = 'http://www.w3.org/2000/svg'
 
 /** The who-knows-whom strip: people in a row, ties drawn like the Manifund legend. */
-function strip(mode: Mode): { svg: SVGSVGElement; light(path?: string[]): void } {
+function tieWord(t: Tie): string {
+  return t === Tie.Close ? 'close friend' : t
+}
+
+function strip(mode: Mode): { el: HTMLElement; light(step: number, path?: string[]): void } {
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('class', 'wt-strip')
   svg.setAttribute('viewBox', '0 0 1000 64')
@@ -339,9 +356,9 @@ function strip(mode: Mode): { svg: SVGSVGElement; light(path?: string[]): void }
     const t = document.createElementNS(NS, 'text')
     t.setAttribute('x', String(((pos.get(l.a) ?? 0) + (pos.get(l.b) ?? 0)) / 2)); t.setAttribute('y', '12')
     t.setAttribute('text-anchor', 'middle'); t.setAttribute('style', 'font-weight:400;font-size:10.5px;fill:var(--soft)')
-    t.textContent = l.tie === Tie.Close ? 'close friend' : l.tie
+    t.textContent = tieWord(l.tie)
     svg.appendChild(t)
-    return { l, ln }
+    return { l, ln, t }
   })
   const nodes = mode.people.map((p) => {
     const c = document.createElementNS(NS, 'circle')
@@ -353,16 +370,29 @@ function strip(mode: Mode): { svg: SVGSVGElement; light(path?: string[]): void }
     svg.appendChild(t)
     return { id: p.id, c }
   })
+  // Below 600px the SVG text would be a few pixels tall: a wrapping text line instead.
+  const text = el('p', 'wt-strip-text')
+  const legend = el('p', 'wt-legend', '<span class="lg close"></span>close friend <span class="lg friend"></span>friend <span class="lg acq"></span>acquaintance <span class="lg route"></span>this step\'s route')
+  const wrap = el('div', 'wt-strip-wrap')
+  wrap.append(svg, text, legend)
   return {
-    svg,
-    light(path?: string[]): void {
+    el: wrap,
+    light(step: number, path?: string[]): void {
       const on = new Set(path ?? [])
       nodes.forEach(({ id, c }) => c.classList.toggle('on', on.has(id)))
-      lines.forEach(({ l, ln }) => {
+      lines.forEach(({ l, ln, t }) => {
+        const exists = step >= (l.since ?? 0)
         const i = path ? path.indexOf(l.a) : -1
         const j = path ? path.indexOf(l.b) : -1
-        ln.classList.toggle('on', i >= 0 && j >= 0 && Math.abs(i - j) === 1)
+        ln.classList.toggle('on', exists && i >= 0 && j >= 0 && Math.abs(i - j) === 1)
+        ln.classList.toggle('pending', !exists)
+        t.textContent = exists ? tieWord(l.tie) : 'not connected yet'
       })
+      text.textContent = mode.people.map((p, k) => {
+        const l = mode.links.find((x) => x.a === p.id && mode.people[k + 1]?.id === x.b)
+        const tie = l ? (step >= (l.since ?? 0) ? tieWord(l.tie) : 'not connected yet') : ''
+        return p.name + (tie ? ` · ${tie} · ` : '')
+      }).join('')
     },
   }
 }
@@ -395,9 +425,10 @@ export function mountWalkthrough(host: HTMLElement): () => void {
   }
   speedSel.onchange = (): void => { speed = Number(speedSel.value); saveSpeed(speed); schedule() }
   const speedLbl = el('label', 'wt-speed')
-  speedLbl.append('Next step every', speedSel)
+  speedLbl.append('Autoplay:', speedSel, 'per step')
   const top = el('div', 'wt-top')
   top.append(modes, speedLbl)
+  const scripted = el('p', 'wt-scripted', 'Illustration: these phones are scripted, not live. The real phones are further down the page.')
   const intro = el('p', 'wt-intro')
   const stripSlot = el('div')
   const banner = el('div', 'wt-banner')
@@ -414,12 +445,13 @@ export function mountWalkthrough(host: HTMLElement): () => void {
   const count = el('span', 'wt-count')
   const controls = el('div', 'wt-controls')
   controls.append(prev, play, next, track, count)
-  box.append(top, intro, stripSlot, banner, devices, controls, note)
+  const hint = el('p', 'wt-hint', 'Press play, or step through with the arrows.')
+  box.append(top, scripted, intro, note, stripSlot, banner, devices, controls, hint)
   host.replaceChildren(box)
 
   let screens = new Map<string, HTMLElement>()
   let ticks: HTMLButtonElement[] = []
-  let light: (path?: string[]) => void = () => {}
+  let light: (step: number, path?: string[]) => void = () => {}
 
   function buildMode(): void {
     modes.replaceChildren(...MODES.map((m) => {
@@ -433,7 +465,7 @@ export function mountWalkthrough(host: HTMLElement): () => void {
     intro.innerHTML = `<b>${mode.title}.</b> ${mode.intro}`
     const s = strip(mode)
     light = s.light
-    stripSlot.replaceChildren(s.svg)
+    stripSlot.replaceChildren(s.el)
     devices.style.gridTemplateColumns = `repeat(${mode.people.length},minmax(0,1fr))`
     screens = new Map()
     devices.replaceChildren(...mode.people.map((p) => {
@@ -469,7 +501,8 @@ export function mountWalkthrough(host: HTMLElement): () => void {
       scr.classList.toggle('changed', changed)
       scr.classList.toggle('idle', index > 0 && !changed)
     }
-    light(s.path)
+    light(index, s.path)
+    hint.hidden = playing || index > 0
     ticks.forEach((t, k) => { t.classList.toggle('on', k === index); t.classList.toggle('done', k < index) })
     fill.style.width = `${(index / (mode.steps.length - 1)) * 100}%`
     count.textContent = `${index + 1} / ${mode.steps.length}`
@@ -491,6 +524,7 @@ export function mountWalkthrough(host: HTMLElement): () => void {
     playing = on
     play.textContent = on ? '❚❚' : '▶'
     play.setAttribute('aria-label', on ? 'Pause' : 'Play')
+    hint.hidden = on || index > 0
     schedule()
   }
 
