@@ -272,13 +272,23 @@ const ICONS: Record<string, string> = {
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
-  // "Call into your web": the app's own drawing, one person calling with both
-  // hands cupped at the mouth (a call, not a shout; no megaphone), three soft arcs.
-  call: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.6 14 11 10.3"/><path d="M10.2 7.4 13.6 5.8v5.4l-3.4-1.6z"/><path d="M16.2 6.2a3.3 3.3 0 0 1 0 4.6"/><path d="M18.7 4.2a6.3 6.3 0 0 1 0 8.6"/><path d="M21.2 2.4a9.2 9.2 0 0 1 0 12.2"/></svg>',
+  // "Call into your web": the app's own drawings of one person calling with
+  // both hands cupped at the mouth, drawn as two open curves (a call, not a
+  // shout: no closed cone, nothing that reads as a megaphone). A ships;
+  // ?qi=b (facing you, forearms raised, hands cupped under the mouth) and
+  // ?qi=c (A with dashed arcs, echoing the Web tab's rings) show the others live.
+  callA: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.8 14.2 11.2 11"/><path d="M10.4 6.6c1.2-1 2.4-1.1 3.2-.5"/><path d="M10.4 9.6c1.2 1 2.4 1.1 3.2.5"/><path d="M16.4 6.4a3 3 0 0 1 0 3.8"/><path d="M19 4.4a6 6 0 0 1 0 7.8"/><path d="M21.5 2.6a9 9 0 0 1 0 11.4"/></svg>',
+  callB: '<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.4"/><path d="M5 22v-1.5a7 7 0 0 1 3-5.7"/><path d="M19 22v-1.5a7 7 0 0 0-3-5.7"/><path d="M7.4 16.8 9.6 12.6M16.6 16.8 14.4 12.6"/><path d="M9.6 12.6q2.4 2.2 4.8 0"/><path d="M17.6 3.2a5 5 0 0 1 1.3 4.6"/><path d="M6.4 3.2a5 5 0 0 0-1.3 4.6"/></svg>',
+  callC: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.8 14.2 11.2 11"/><path d="M10.4 6.6c1.2-1 2.4-1.1 3.2-.5"/><path d="M10.4 9.6c1.2 1 2.4 1.1 3.2.5"/><path d="M16.4 6.4a3 3 0 0 1 0 3.8" stroke-dasharray="1.6 1.6"/><path d="M19 4.4a6 6 0 0 1 0 7.8" stroke-dasharray="1.6 1.6"/><path d="M21.5 2.6a9 9 0 0 1 0 11.4" stroke-dasharray="1.6 1.6"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }
 
 /** Which query button the owner chose in Settings (default: call into your web). */
+const CALL_ICON = ((): string => {
+  const pick = new URLSearchParams(location.search).get('qi')
+  return pick === 'b' ? 'callB' : pick === 'c' ? 'callC' : 'callA'
+})()
+
 function queryStyle(): QueryStyle {
   return state?.queryStyle ?? QueryStyle.Call
 }
@@ -700,7 +710,13 @@ function screenWeb(): Node[] {
   // style: the magnifier means querying, so the top shows the Curate list.
   const search = queryStyle() === QueryStyle.Call
     ? iconButton(searchOpen ? 'x' : 'search', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
-    : iconButton('list', S.searchCurate, () => go(Screen.Curate))
+    : ((): HTMLElement => {
+        // "the list item like you had with Manage": icon plus label
+        const b = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Curate) })
+        b.innerHTML = icon('list')
+        b.append(S.curateTitle)
+        return b
+      })()
   if (searchOpen) return [header(S.webTitle, { right: search, more: true }), searchPanel(s)]
   return [
     header(S.webTitle, { right: search, more: true }),
@@ -792,7 +808,7 @@ function queryFab(): HTMLElement {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery,
     onclick: () => { queryOpen = true; searchOpen = false; render() },
   })
-  b.innerHTML = icon(call ? 'call' : 'query')
+  b.innerHTML = icon(call ? CALL_ICON : 'query')
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))

@@ -445,4 +445,5 @@ textarea.field{resize:vertical; line-height:1.5}
 .add-device-plus{width:36px; height:36px; border-radius:50%; flex-shrink:0; display:grid; place-items:center; font-size:22px; font-weight:400;
   background:linear-gradient(135deg,var(--coral),var(--violet)); color:#fff}
 .add-device:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
-@media (max-width:820px){ .add-device{display:none} }
+/* only where it clears the phone: phone right edge W/2+195, link left edge W-274 */
+@media (max-width:960px){ .add-device{display:none} }

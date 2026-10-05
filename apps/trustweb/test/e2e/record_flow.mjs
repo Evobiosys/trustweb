@@ -244,7 +244,7 @@ async function main() {
     await page.locator('.radio', { hasText: 'A magnifying glass' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     ok('the Query alternative shows a magnifier "Query" and the Curate list top right',
-      await page.getByRole('button', { name: 'Query', exact: true }).isVisible() && await page.locator('.hdr-right').getByRole('button', { name: 'Curate your web' }).isVisible())
+      await page.getByRole('button', { name: 'Query', exact: true }).isVisible() && await page.locator('.hdr-right').getByRole('button', { name: 'Curate', exact: true }).isVisible())
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
 
     // a populated web: with the query dock open, every person stays above it

@@ -41,6 +41,9 @@ const web = (names: string[]): string =>
 const card = (cls: string, body: string): string => `<div class="wt-card ${cls}">${body}</div>`
 const quiet = (body: string): string => `<div class="wt-quiet">${body}</div>`
 
+// Before they meet, Jonas and Maya are not in each other's web yet.
+const JONAS_BEFORE = web(['Sam'])
+const MAYA_BEFORE = web(['Lena'])
 const JONAS_WEB = web(['Maya', 'Sam'])
 const MAYA_WEB = web(['Jonas', 'Lena'])
 const SAM_WEB = web(['Jonas'])
@@ -50,12 +53,12 @@ const MOTORBIKE = 'Motorbike (125cc), can lend it for a weekend'
 const STEPS: Step[] = [
   {
     title: 'Four people, four phones',
-    text: 'Jonas knows Maya and Sam. Lena knows Maya, but not Jonas. Everything each of them notes stays on their own phone.',
-    screens: { jonas: JONAS_WEB, maya: MAYA_WEB, sam: SAM_WEB, lena: LENA_WEB },
+    text: 'Jonas knows Sam. Maya knows Lena. Jonas and Maya have not met yet. Everything each of them notes stays on their own phone.',
+    screens: { jonas: JONAS_BEFORE, maya: MAYA_BEFORE, sam: SAM_WEB, lena: LENA_WEB },
     changed: [],
   },
   {
-    title: 'Jonas and Maya meet and record it',
+    title: 'Jonas meets Maya and records it',
     text: 'Both agreed to the recording. It stays on Jonas\'s phone; the transcript is made on the phone or later on his computer.',
     screens: {
       jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Speaker 2</i> I can lend you my motorbike some weekend.')}`,
@@ -65,10 +68,10 @@ const STEPS: Step[] = [
   },
   {
     title: 'They connect with one scan',
-    text: 'Jonas shows his code, Maya scans it with her camera. Now each can ask the other, and nobody else sees that they did.',
+    text: 'Jonas shows his code, Maya scans it with her camera. Now they are in each other\'s web, and nobody else sees that they are.',
     screens: {
       jonas: `<div class="wt-h">Meet Maya</div><div class="wt-qr" aria-hidden="true"></div>`,
-      maya: card('ok', 'Connected with Jonas, as a friend.'), sam: SAM_WEB, lena: LENA_WEB,
+      maya: `${card('ok', 'Connected with Jonas, as a friend.')}${MAYA_WEB}`, sam: SAM_WEB, lena: LENA_WEB,
     },
     changed: [Device.Jonas, Device.Maya],
   },
@@ -180,6 +183,14 @@ const CSS = `
 .wt-tick.on::after{content:"";position:absolute;left:5px;top:8px;width:12px;height:12px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 3px var(--card)}
 .wt-count{font-size:12.5px;color:var(--soft);min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion: reduce){.wt-screen{transition:none}}
+@media (prefers-color-scheme: dark){
+  .wt-screen{background:#1F1729;color:#F4EDF9;box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C}
+  .wt-screen.changed{box-shadow:0 0 0 6px #0B0710,0 0 0 7px #3A2D4C,0 0 0 11px rgba(190,130,255,.8)}
+  .wt-rings span,.wt-card,.wt-cosmic .wt-card{background:#2B2139;color:#F4EDF9}
+  .wt-card.ok{background:#173A2C}
+  .wt-quiet{color:#BBAACD}
+  .wt-qr{box-shadow:inset 0 0 0 8px #fff}
+}
 `
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
