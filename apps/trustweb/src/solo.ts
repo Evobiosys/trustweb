@@ -89,7 +89,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 }
 
 const phones = h('div', 'phones', '')
-const head = h('div', 'head', '<h1>TrustWeb, side by side</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.</p>')
+const head = h('div', 'head', '<h1>TrustWeb demo</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.</p>')
 
 // "See it in action": the walkthrough and, under it, what to try on the live phones.
 const actionSlot = h('section', 'action-slot', '')
@@ -172,6 +172,11 @@ seeBtn.textContent = 'See it in action'
 dock.append(addBtn, seeBtn)
 
 function updateDock(): void {
+  // "Side by side" only once there is a second device (owner 2026-10-05).
+  const title = shown > 1 ? 'TrustWeb, side by side' : 'TrustWeb demo'
+  const h1 = head.querySelector('h1')
+  if (h1) h1.textContent = title
+  document.title = title
   const full = shown >= ORDER.length
   addBtn.disabled = full
   addBtn.innerHTML = full

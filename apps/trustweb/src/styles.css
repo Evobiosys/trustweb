@@ -189,6 +189,23 @@ textarea.field{resize:vertical; line-height:1.5}
 .toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
+/* "We have given you some (imaginary ;) friends :)": demo phones, once, under the header */
+.demo-friends{position:absolute; left:16px; right:16px; top:92px; z-index:30; background:var(--card); color:var(--ink); border-radius:16px;
+  padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
+  font-size:13px; line-height:1.45; animation:tw-pop .25s ease-out}
+.demo-friends[hidden]{display:none}
+.demo-friends b{font-size:14.5px; grid-column:1}
+.demo-friends span{color:var(--ink-soft); grid-column:1}
+.demo-friends .btn{grid-column:2; grid-row:1 / span 2; margin:0}
+@keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
+/* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */
+.ripple{position:absolute; z-index:45; width:0; height:0; pointer-events:none}
+.ripple{--ripple:hsl(40,82%,46%)}
+.ripple::before,.ripple::after{content:""; position:absolute; left:0; top:0; width:132px; height:132px; margin:-66px 0 0 -66px; border-radius:50%;
+  border:3px solid var(--ripple); box-shadow:0 0 16px hsla(46,68%,55%,.5); opacity:0; animation:tw-ripple .9s ease-out forwards}
+.ripple::after{animation-name:tw-ripple-2; animation-delay:.16s}
+@keyframes tw-ripple{0%{transform:scale(.06); opacity:1} 45%{opacity:.9} 100%{transform:scale(1); opacity:0; border-width:.8px}}
+@keyframes tw-ripple-2{0%{transform:scale(.06); opacity:.9} 45%{opacity:.75} 100%{transform:scale(.7); opacity:0; border-width:.8px}}
 
 /* tags and audiences */
 .tagpill{display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; border-radius:6px; padding:3px 7px}
@@ -381,7 +398,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .ask-foot{font-size:12.5px; color:#C9AEE8; line-height:1.55; margin-top:10px}
 .ask-done{font-size:22px; color:#fff; margin-top:16px}
 
-@media (prefers-reduced-motion: reduce){ .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
+@media (prefers-reduced-motion: reduce){ .ripple{display:none} .demo-friends{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
 
 /* dark: the pale pills and tints that are not tokens get night versions */
 @media (prefers-color-scheme: dark){
@@ -399,6 +416,7 @@ textarea.field{resize:vertical; line-height:1.5}
   :root:not([data-theme="light"]) .rec-circle{background:radial-gradient(circle at 35% 30%, #B7A6F2, #7E66D6 72%)}
   :root:not([data-theme="light"]) .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #5D5070, #43384F 75%)}
   :root:not([data-theme="light"]) .toast{background:#F4EDF9; color:#1F1729}
+  :root:not([data-theme="light"]) .ripple{--ripple:hsl(46,68%,58%)}
   :root:not([data-theme="light"]) .rings-wrap svg circle{stroke:rgba(201,174,232,.28)}
 }
 

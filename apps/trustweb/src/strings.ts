@@ -10,9 +10,13 @@ export const S = {
   appName: 'TrustWeb',
   tagline: 'Amplifying the power of weak ties',
   startLead: 'Ask the people you have actually met, and the people they trust, without broadcasting to anyone. What you know stays on your phone; a question travels, the data stays.',
-  startSolo: 'Demo: see it side by side',
+  startSolo: 'Try the demo',
   startSoloSub: 'Start with one phone on this laptop, add more, or watch it in action.',
   startOwn: 'Start on this phone',
+  // Shown once on a demo phone, right after its name is typed (owner 2026-10-05).
+  demoFriendsTitle: 'We have given you some (imaginary ;) friends :)',
+  demoFriendsBody: 'They live only on this demo phone. Tap one to see what you noted about them.',
+  demoFriendsOk: 'Got it',
   yourName: 'Your first name',
   startFoot: 'No account. Everything stays on this phone.',
   connectInvite: (name: string) => `${name} wants to connect with you on TrustWeb.`,
@@ -283,6 +287,10 @@ export const S = {
     [QueryStyle.Call]: 'A person calling. Contact search sits top right.',
     [QueryStyle.Search]: 'A magnifying glass. Curate sits top right as a list.',
   } as Record<QueryStyle, string>,
+
+  setTalkWeave: 'Meeting transcription',
+  setTalkWeaveLabel: 'Use TalkWeave on this computer',
+  setTalkWeaveHint: 'Live transcripts from TalkWeave running here. Your browser asks once to let this page reach this computer.',
 
   queryTitle: 'Ask your web',
   queryClose: 'Close',

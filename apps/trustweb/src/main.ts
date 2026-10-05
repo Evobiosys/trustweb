@@ -241,8 +241,9 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
+const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 let statusPill: HTMLElement | null = null
-phone.append(host, tabs, veil, sheet, overlay, toastEl)
+phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
@@ -477,6 +478,39 @@ function toast(msg: string): void {
   toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200)
 }
 
+/**
+ * Demo phones only, once, right after the name is typed: the web they see is
+ * seeded, so say so (owner 2026-10-05). Non-blocking: it sits under the
+ * header, only its own button takes taps, and it goes by itself.
+ */
+let friendsTimer: ReturnType<typeof setTimeout> | undefined
+function showDemoFriends(): void {
+  const hide = (): void => { clearTimeout(friendsTimer); friendsEl.hidden = true }
+  friendsEl.replaceChildren(
+    el('b', {}, [S.demoFriendsTitle]),
+    el('span', {}, [S.demoFriendsBody]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: hide }, [S.demoFriendsOk]),
+  )
+  friendsEl.hidden = false
+  clearTimeout(friendsTimer)
+  friendsTimer = setTimeout(hide, 9000)
+}
+
+/**
+ * A little ripple where the web was pressed, the gold ground ripple of
+ * questhub.eco (owner 2026-10-05). Decorative: no pointer events, hidden
+ * from assistive tech, removed when it has faded.
+ */
+function ripple(e: MouseEvent): void {
+  const box = phone.getBoundingClientRect()
+  const r = el('span', { class: 'ripple', 'aria-hidden': 'true' })
+  r.style.left = `${e.clientX - box.left}px`
+  r.style.top = `${e.clientY - box.top}px`
+  r.addEventListener('animationend', (ev) => { if ((ev as AnimationEvent).animationName === 'tw-ripple-2') r.remove() })
+  phone.appendChild(r)
+  setTimeout(() => r.remove(), 1600)
+}
+
 // ---------------------------------------------------------------------------
 // start
 // ---------------------------------------------------------------------------
@@ -527,6 +561,7 @@ function screenStart(): Node[] {
     createMe(name.value)
     screen = Screen.Web
     render()
+    if (solo) showDemoFriends()
     void net.start().then(announceLink)
     void completePendingConnect()
   }
@@ -734,6 +769,7 @@ function screenWeb(): Node[] {
  * scaled for the query dock, because it measures the rendered box.
  */
 function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
+  ripple(e)
   if ((e.target as HTMLElement).closest('.node')) return
   const box = wrap.getBoundingClientRect()
   const scale = box.width / RINGS_SIZE
@@ -741,8 +777,12 @@ function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
   const dy = (e.clientY - box.top) / scale - RINGS_SIZE / 2
   const dist = Math.hypot(dx, dy)
   const ring = RINGS.reduce((best, r) => (Math.abs(RADIUS[r] - dist) < Math.abs(RADIUS[best] - dist) ? r : best), Ring.Acquaintance)
-  addPersonSheet(ring)
+  // Let the ripple show before the sheet rises over it.
+  setTimeout(() => addPersonSheet(ring), RIPPLE_LEAD_MS)
 }
+
+/** How long the ripple plays on its own before the add-someone sheet opens. */
+const RIPPLE_LEAD_MS = 360
 
 function addPersonSheet(ring: Ring): void {
   let picked = ring
@@ -1182,7 +1222,7 @@ function screenRecord(): Node[] {
 // ---------------------------------------------------------------------------
 
 async function ensureEngine(): Promise<TranscriberEngine> {
-  engine ??= await detectEngine().catch(() => TranscriberEngine.None)
+  engine ??= await detectEngine({ direct: st().talkWeaveLocal === true }).catch(() => TranscriberEngine.None)
   return engine
 }
 
@@ -1744,6 +1784,12 @@ function settingsSheet(): void {
       onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     notificationsCard(s),
+    el('h4', { class: 'eyebrow' }, [S.setTalkWeave]),
+    el('button', {
+      class: 'radio' + (s.talkWeaveLocal ? ' on' : ''),
+      'aria-pressed': String(s.talkWeaveLocal === true),
+      onclick: () => { s.talkWeaveLocal = !s.talkWeaveLocal; engine = null; save(); settingsSheet() },
+    }, [el('b', {}, [S.setTalkWeaveLabel]), el('small', {}, [S.setTalkWeaveHint])]),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
       onclick: () => { if (confirm(S.resetConfirm)) { dropRecording(); clearState(persona, storeCtx); location.reload() } },
