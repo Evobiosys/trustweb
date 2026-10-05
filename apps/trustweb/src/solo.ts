@@ -11,6 +11,7 @@
  */
 import { DemoContext } from './seed'
 import { storageKey } from './store'
+import { mountWalkthrough } from './walkthrough'
 
 /**
  * This one script is shared by four HTML entries (solo.html at the app
@@ -53,6 +54,11 @@ iframe{width:390px;max-width:calc(100vw - 32px);height:780px;border:0;border-rad
 .wait{width:390px;max-width:calc(100vw - 32px);height:780px;border-radius:40px;display:grid;place-items:center;color:var(--soft);background:var(--card);font-size:14px;text-align:center;padding:30px}
 .foot{text-align:center;margin-top:22px;font-size:13px;color:var(--soft)}
 .foot button,.foot a{font:inherit;color:var(--violet);background:none;border:0;cursor:pointer;text-decoration:underline}
+.action{max-width:980px;margin:0 auto 18px;text-align:center}
+.action-toggle{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:999px;padding:12px 22px;cursor:pointer;
+  background:linear-gradient(135deg,#FF715B,#9A37F0);color:#fff;box-shadow:0 8px 24px rgba(154,55,240,.3)}
+.action-toggle:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
+.action-slot{margin-top:16px;text-align:left}
 `
 document.head.appendChild(style)
 
@@ -72,8 +78,29 @@ const seekerSlot = h('div', 'wait', 'Connecting Jonas to Maya over the relay...'
 
 root.append(
   h('div', 'head', '<h1>TrustWeb, two phones on one screen</h1><p>Both phones run the real app and talk over the live relay. Jonas is connected to Maya as a friend.</p>'),
+  (() => {
+    // "See it in action": the scripted four-phone walkthrough, hidden until asked for.
+    const wrap = h('div', 'action', '')
+    const toggle = document.createElement('button')
+    toggle.className = 'action-toggle'
+    toggle.setAttribute('aria-expanded', 'false')
+    toggle.textContent = 'See it in action'
+    const slot = h('div', 'action-slot', '')
+    slot.hidden = true
+    let stop: (() => void) | null = null
+    toggle.onclick = () => {
+      const open = slot.hidden
+      slot.hidden = !open
+      toggle.setAttribute('aria-expanded', String(open))
+      toggle.textContent = open ? 'Hide the walkthrough' : 'See it in action'
+      if (open && !stop) stop = mountWalkthrough(slot)
+      if (!open) stop?.()
+    }
+    wrap.append(toggle, slot)
+    return wrap
+  })(),
   h('div', 'steps', [
-    '<b>1.</b> On Jonas\'s phone, open <b>Query</b> and ask "Does anyone have a motorbike I could borrow?"',
+    '<b>1.</b> On Jonas\'s phone, tap <b>Call into your web</b> and ask "Does anyone have a motorbike I could borrow?"',
     '<b>2.</b> Maya\'s phone shows the ask at once, with the line that matched. She chooses: share, or not.',
     '<b>3.</b> After the 30-second window Jonas sees what she shared, or "No match". A decline looks exactly like no match.',
     '<b>4.</b> Now ask "Who has a spare room in Vienna?" Maya noted one, shared with nobody: her phone stays silent.',
