@@ -8,9 +8,15 @@
  * Nav (owner, 2026-10-05): Web | Record | Inventory, Record raised in the
  * middle. Querying happens ON the Web screen (a Query button bottom right
  * opens a dock under the rings), because you always see your web when you
- * ask it. Web's Manage (top right) lists the connections; Meet (QR, NFC) is
- * reached from there and offered after a shared recording. No chat, no
- * unread badges, notifications off by default.
+ * ask it. Tapping empty space in the web adds someone. Web's Curate (top
+ * right) lists the connections. The QR button in every header opens Meet
+ * (QR, NFC); Meet is also offered when a meeting ends.
+ *
+ * Record is solo by default and laid out like Tana mobile's voice memo
+ * (circle and clock, then discard / pause / send). Its top-right Meeting
+ * button opens the meeting view: who and where, consent, and a Tana-style
+ * speaker transcript fed by TalkWeave (desktop) or on-device speech.
+ * No chat, no unread badges, notifications off by default.
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
@@ -23,31 +29,36 @@ import {
   AUDIENCES, Audience, LineStatus, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
 } from './model'
 import type { AppState, NoteLine, Person } from './model'
-import { extractLines, guessTag } from './notes'
+import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
 import { DemoContext, Persona, isDemoContext, seedState } from './seed'
-import { VoiceSupport, installVoice, startDictation, voiceApiPresent, voiceSupport } from './speech'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
 import { nfcWriteSupported, writeLinkToTag } from './nfc'
+import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine } from './meeting_transcriber'
+import type { MeetingTranscriber, Segment } from './meeting_transcriber'
+import { meetingToNoteText, meetingToText } from './sensemeet'
+import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
+import type { BackupKey } from './backup'
 
 enum Screen {
   Start = 'start',
   Web = 'web',
-  Manage = 'manage',
+  Curate = 'curate',
   Inventory = 'inventory',
   Record = 'record',
+  Meeting = 'meeting',
   Meet = 'meet',
   Review = 'review',
   Place = 'place',
   StillTrue = 'still',
 }
 
-/** Recording by myself is the default; a shared recording needs the other person's yes. */
+/** Recording by myself is the default; a meeting recording needs the other person's yes. */
 enum RecordMode {
   Solo = 'solo',
-  Shared = 'shared',
+  Meeting = 'meeting',
 }
 
 interface Point {
@@ -70,11 +81,12 @@ interface Draft {
   context: string
   text: string
   mode: RecordMode
-  /** Only meaningful for a shared recording: the other person agreed. */
+  /** Only meaningful for a meeting recording: the other person agreed. */
   consent: boolean
+  /** Parked with the old Record fields (2026-10-05); kept so a later view can bring points back. */
   points: Point[]
-  /** Live on-device transcript phrases, if the owner turned that on. */
-  transcript: string[]
+  /** The meeting transcript, one entry per utterance, in order. */
+  segments: Segment[]
   lines: DraftLine[]
   ring: Ring
 }
@@ -140,7 +152,7 @@ const askQueue: IncomingAsk[] = []
 let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
 // Where Meet's back arrow returns to (Manage, Record, or Web).
-let meetFrom: Screen = Screen.Manage
+let meetFrom: Screen = Screen.Web
 // The recording belongs to the current draft; it is dropped with it.
 const recorder = new MeetingRecorder()
 // Every take of the current draft, oldest first: a new take never overwrites one.
@@ -148,7 +160,11 @@ let takes: Recording[] = []
 let recNotice = ''
 let recTicker: ReturnType<typeof setInterval> | undefined
 let wakeLock: WakeLockSentinel | null = null
-let stopDictation: (() => void) | null = null
+// Meeting transcription: the engine is probed once, the transcriber lives per meeting.
+let transcriber: MeetingTranscriber | null = null
+let engine: TranscriberEngine | null = null
+let transcribing = true
+let speaker = 1
 // Meet shares the current draft's notes only when opened from that draft
 // (after a shared recording), never from Manage: notes about one person must
 // not ride into the code shown to the next.
@@ -158,7 +174,7 @@ function freshDraft(personId?: string): Draft {
   const p = personId ? state?.people.find((x) => x.id === personId) : undefined
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
-    mode: RecordMode.Solo, consent: false, points: [], transcript: [], lines: [],
+    mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
     ring: p?.ring ?? Ring.Acquaintance,
   }
 }
@@ -218,35 +234,46 @@ const phone = el('div', { class: 'phone' + (solo ? ' embedded' : '') })
 const host = el('div', { class: 'screen on' })
 const tabs = el('nav', { class: 'tabs', 'aria-label': 'Main' })
 const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
-const sheet = el('div', { class: 'sheet', role: 'dialog' })
+const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl)
 root.replaceChildren(phone)
 
+// Icons: web, inventory and query are this app's own; mic, pause, play, send,
+// x, qr, handshake, settings (a cog, never a sun-like icon: owner 2026-10-05),
+// users and info are Lucide icons (lucide.dev, ISC licence).
 const ICONS: Record<string, string> = {
   web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
   inventory: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
-  mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
-  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
   query: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>',
-  list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
-  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
-  doc: '<svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>',
-  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+  mic: '<svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M6 3l14 9-14 9z"/></svg>',
+  send: '<svg viewBox="0 0 24 24"><path d="M3.7 3.05a.5.5 0 0 0-.68.63l2.84 7.62a2 2 0 0 1 0 1.4l-2.84 7.62a.5.5 0 0 0 .68.63l18-8.5a.5.5 0 0 0 0-.9z"/><path d="M6 12h16"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  qr: '<svg viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>',
+  handshake: '<svg viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>',
+  users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
 }
 
-function tabButton(target: Screen, label: string, icon: string): HTMLElement {
+function icon(name: string): string {
+  return ICONS[name]
+}
+
+function tabButton(target: Screen, label: string, name: string): HTMLElement {
   const b = el('button', { class: 'tab', 'data-go': target, onclick: () => go(target) })
-  b.innerHTML = ICONS[icon]
+  b.innerHTML = icon(name)
   b.append(label)
   return b
 }
 
 function recordButton(): HTMLElement {
   const b = el('button', { class: 'tab-record', 'data-go': Screen.Record, 'aria-label': S.navRecord, onclick: onRecordTap })
-  b.innerHTML = ICONS.mic
+  b.innerHTML = icon('mic')
   b.append(el('span', {}, [S.navRecord]))
   return b
 }
@@ -259,22 +286,27 @@ function renderTabs(): void {
 }
 renderTabs()
 
+/** The screen that belongs to the draft's mode: Record (solo) or Meeting. */
+function recordScreen(): Screen {
+  return draft.mode === RecordMode.Meeting ? Screen.Meeting : Screen.Record
+}
+
 function onRecordTap(): void {
-  // The Record tab never wipes a draft in progress (notes, points, audio);
-  // it only starts fresh when nothing is in flight.
+  // The Record tab never wipes a draft in progress (audio, transcript,
+  // who/where); it only starts fresh when nothing is in flight.
   if (!draftInProgress()) newDraft()
-  go(Screen.Record)
+  go(recordScreen())
 }
 
 /**
  * A new note never silently replaces one in progress (a live recording is one
  * tap away from here via the pill): it returns to that draft instead, where
- * "Start over" is the one deliberate way to drop it.
+ * discarding is the one deliberate way to drop it.
  */
 function startDraftFor(personId?: string): void {
   if (draftInProgress()) {
     toast(S.recBusy)
-    go(Screen.Record)
+    go(recordScreen())
     return
   }
   newDraft(personId)
@@ -282,7 +314,8 @@ function startDraftFor(personId?: string): void {
 }
 
 function draftInProgress(): boolean {
-  return recorder.live || takes.length > 0 || Boolean(draft.name.trim() || draft.text.trim() || draft.points.length || draft.lines.length)
+  return recorder.live || takes.length > 0
+    || Boolean(draft.name.trim() || draft.text.trim() || draft.segments.length || draft.lines.length)
 }
 
 function go(s: Screen): void {
@@ -291,9 +324,14 @@ function go(s: Screen): void {
   render()
 }
 
-function header(title: string, opts: { back?: () => void; right?: Node | null } = {}): HTMLElement {
-  statusPill = el('button', { class: 'status-pill', onclick: () => { if (recorder.live) go(Screen.Record) } })
-  updateStatusPill()
+/**
+ * Every header: title left; right, the screen's own button and then the
+ * QR button that opens Meet (with a tiny relay-status dot on it). While a
+ * take is open the QR gives way to the "Recording" pill, on every screen.
+ */
+function header(title: string, opts: { back?: () => void; right?: Node | null; qr?: boolean } = {}): HTMLElement {
+  statusPill = el('button', { class: 'status-pill' })
+  updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
@@ -303,28 +341,34 @@ function header(title: string, opts: { back?: () => void; right?: Node | null } 
   ])
 }
 
-/**
- * The top-right pill. Idle: a quiet dot that only carries the relay state in
- * its label (no "Online" text, owner 2026-10-05). Recording: "Recording
- * meeting", on every screen, and tapping it returns to the recording.
- */
-function updateStatusPill(): void {
-  if (!statusPill) return
+function relayLabel(): string {
+  return relayStatus === 'connected' ? S.statusConnected
+    : relayStatus === 'connecting' ? S.statusConnecting : S.statusDisconnected
+}
+
+/** Re-applies the pill for the current state; `withQr` false hides the idle QR (Meet, Record). */
+function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): void {
+  const p = statusPill
+  if (!p) return
+  p.dataset.qr = withQr ? '1' : '0'
+  p.onclick = null
+  p.removeAttribute('title')
   if (recorder.live) {
-    statusPill.className = 'status-pill rec'
-    statusPill.textContent = S.statusRecording
-    statusPill.removeAttribute('aria-label')
-    statusPill.removeAttribute('title')
-    statusPill.removeAttribute('tabindex')
+    const meeting = draft.mode === RecordMode.Meeting
+    p.className = 'status-pill rec' + (recorder.paused ? ' paused' : '')
+    p.textContent = recorder.paused ? S.statusPaused : meeting ? S.statusRecordingMeeting : S.statusRecording
+    p.removeAttribute('aria-label')
+    p.hidden = false
+    p.onclick = (): void => go(recordScreen())
     return
   }
-  const label = relayStatus === 'connected' ? S.statusConnected
-    : relayStatus === 'connecting' ? S.statusConnecting : S.statusDisconnected
-  statusPill.className = 'status-pill dot ' + relayStatus
-  statusPill.textContent = ''
-  statusPill.title = label
-  statusPill.setAttribute('aria-label', label)
-  statusPill.setAttribute('tabindex', '-1')
+  p.hidden = !withQr
+  p.className = 'status-pill qr ' + relayStatus
+  p.innerHTML = icon('qr')
+  p.append(el('span', { class: 'relay-dot', 'aria-hidden': 'true' }))
+  p.setAttribute('aria-label', `${S.qrOpen} (${relayLabel()})`)
+  p.title = `${S.qrOpen} · ${relayLabel()}`
+  p.onclick = (): void => openMeet(screen === Screen.Meet ? meetFrom : screen)
 }
 
 function render(): void {
@@ -333,19 +377,20 @@ function render(): void {
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {
     const target = b.getAttribute('data-go')
     const on = target === screen
-      || (target === Screen.Record && (screen === Screen.Review || screen === Screen.Place || screen === Screen.Meet))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Manage))
+      || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Curate))
     b.classList.toggle('on', on)
   })
-  tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live)
+  tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const body = (() => {
     switch (screen) {
       case Screen.Start: return screenStart()
       case Screen.Web: return screenWeb()
-      case Screen.Manage: return screenManage()
+      case Screen.Curate: return screenCurate()
       case Screen.Inventory: return screenInventory()
       case Screen.Record: return screenRecord()
+      case Screen.Meeting: return screenMeeting()
       case Screen.Meet: return screenMeet()
       case Screen.Review: return screenReview()
       case Screen.Place: return screenPlace()
@@ -363,10 +408,14 @@ function render(): void {
 function openSheet(children: (Node | null)[]): void {
   sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
+  sheet.inert = false
   veil.classList.add('on')
 }
 
 function closeSheet(): void {
+  // A closed sheet keeps its last content off-screen; inert takes it out of
+  // the tab order and the accessibility tree.
+  sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
 }
@@ -477,7 +526,8 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
 
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
-  const wrap = el('div', { class: 'rings-wrap' })
+  const wrap = el('div', { class: 'rings-wrap', title: S.webTapToAdd })
+  wrap.addEventListener('click', (e) => onRingsTap(e as MouseEvent, wrap))
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('viewBox', '0 0 352 352')
   svg.innerHTML = '<defs><linearGradient id="th" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4FD7A0"/><stop offset="1" stop-color="#12A8E3"/></linearGradient></defs>'
@@ -569,21 +619,69 @@ function askMarks(): Map<string, 'asked' | 'shared'> {
 
 function screenWeb(): Node[] {
   const s = st()
-  const connected = s.people.filter((p) => p.peerId).length
-  const manage = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Manage) })
-  manage.innerHTML = ICONS.list
-  manage.append(S.webManage)
+  const curate = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Curate) })
+  curate.innerHTML = icon('users')
+  curate.append(S.webCurate)
   return [
-    header(S.webTitle, { right: manage }),
+    header(S.webTitle, { right: curate }),
     el('div', { class: 'scroll' }, [
-      el('p', { class: 'sub' }, [S.webWelcome + ' ' + S.webCount(s.people.length, connected)]),
       s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
       ringsView(s, askMarks()),
-      queryOpen ? null : el('p', { class: 'web-cap' }, [S.webCap]),
       isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
     ]),
     queryOpen ? queryDock(s) : queryFab(),
   ]
+}
+
+/**
+ * Tap on empty space in the web: "Add someone to your web?". The ring is
+ * preselected by how far from you the tap landed. Works while the rings are
+ * scaled for the query dock, because it measures the rendered box.
+ */
+function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
+  if ((e.target as HTMLElement).closest('.node')) return
+  const box = wrap.getBoundingClientRect()
+  const scale = box.width / RINGS_SIZE
+  const dx = (e.clientX - box.left) / scale - RINGS_SIZE / 2
+  const dy = (e.clientY - box.top) / scale - RINGS_SIZE / 2
+  const dist = Math.hypot(dx, dy)
+  const ring = RINGS.reduce((best, r) => (Math.abs(RADIUS[r] - dist) < Math.abs(RADIUS[best] - dist) ? r : best), Ring.Acquaintance)
+  addPersonSheet(ring)
+}
+
+function addPersonSheet(ring: Ring): void {
+  let picked = ring
+  const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
+  const where = el('input', { class: 'field', placeholder: S.recWherePh, maxlength: '80', 'aria-label': S.addWhere })
+  const radios = el('div', { class: 'add-rings' })
+  const drawRadios = (): void => {
+    radios.replaceChildren(...RINGS.map((r) => el('button', {
+      class: 'radio' + (picked === r ? ' on' : ''),
+      onclick: () => { picked = r; drawRadios() },
+    }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
+  }
+  drawRadios()
+  const add = (): void => {
+    const n = name.value.trim()
+    if (!n) { name.focus(); return }
+    const s = st()
+    s.people.push({ id: randomId(8), name: n.slice(0, 40), context: where.value.trim().slice(0, 80), ring: picked, metAt: Date.now(), lines: [] })
+    save()
+    closeSheet()
+    toast(S.savedToast(n, S.ringLabel[picked]))
+    render()
+  }
+  name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  openSheet([
+    el('h3', {}, [S.addTitle]),
+    el('p', { class: 'meta' }, [S.addLead]),
+    name,
+    where,
+    radios,
+    el('button', { class: 'btn btn-electric', onclick: add }, [S.addSave]),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.addCancel]),
+  ])
+  setTimeout(() => name.focus(), 320)
 }
 
 const RINGS_SIZE = 352
@@ -610,21 +708,20 @@ window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() 
 
 function queryFab(): HTMLElement {
   const b = el('button', { class: 'query-fab', onclick: () => { queryOpen = true; render() } })
-  b.innerHTML = ICONS.query
+  b.innerHTML = icon('query')
   b.append(S.webQuery)
   return b
 }
 
-function screenManage(): Node[] {
+function screenCurate(): Node[] {
   const s = st()
-  const connect = el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Manage) }, [S.manageConnect])
-  const add = el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor() }, ['+ ' + S.manageAddPerson])
+  const add = el('button', { class: 'btn btn-ghost', onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+ ' + S.curateAdd])
   return [
-    header(S.manageTitle, { back: () => go(Screen.Web) }),
+    header(S.curateTitle, { back: () => go(Screen.Web) }),
     el('div', { class: 'scroll' }, [
-      el('p', { class: 'sub' }, [S.manageLead + ' ' + S.webCount(s.people.length, s.people.filter((p) => p.peerId).length)]),
-      el('div', { class: 'manage-actions' }, [connect, add]),
-      s.people.length === 0 ? el('p', { class: 'empty' }, [S.manageEmpty]) : peopleView(s),
+      el('p', { class: 'sub' }, [S.curateLead + ' ' + S.webCount(s.people.length, s.people.filter((p) => p.peerId).length)]),
+      el('div', { class: 'manage-actions' }, [add]),
+      s.people.length === 0 ? el('p', { class: 'empty' }, [S.curateEmpty]) : peopleView(s),
     ]),
   ]
 }
@@ -671,29 +768,31 @@ function ringSheet(p: Person): void {
 }
 
 // ---------------------------------------------------------------------------
-// record: the raised middle tab. Mic at the top, then who/where, points to
-// cover and notes, all usable while the recording runs.
+// record: the raised middle tab. Solo by default, laid out like Tana mobile's
+// voice memo: circle and clock, an "About" row where Tana shows Destination,
+// then discard / pause / send. Top right: Meeting.
 // ---------------------------------------------------------------------------
 
 function startTicker(): void {
   clearInterval(recTicker)
   recTicker = setInterval(() => {
     const t = document.getElementById('rec-clock')
-    if (t) t.textContent = clock(recorder.elapsed())
-  }, 500)
+    if (t) t.textContent = clock(totalMs() + recorder.elapsed())
+  }, 250)
 }
 
 function dropRecording(): void {
   recorder.discard()
+  void transcriber?.stop()
+  transcriber = null
   endLiveExtras()
   takes = []
   recNotice = ''
 }
 
-/** Everything that only lives while a take is running. */
+/** Everything that only lives while a take is open. */
 function endLiveExtras(): void {
   clearInterval(recTicker)
-  stopDictation?.()
   void wakeLock?.release().catch(() => {})
   wakeLock = null
 }
@@ -702,48 +801,59 @@ function endLiveExtras(): void {
 function onTake(take: Recording, expected: boolean): void {
   takes.push(take)
   endLiveExtras()
-  if (!expected) recNotice = S.recInterrupted
+  if (!expected) {
+    recNotice = S.recInterrupted
+    transcriber?.pause()
+  }
   updateStatusPill()
-  if (screen === Screen.Record || !expected) render()
+  if (screen === Screen.Record || screen === Screen.Meeting || !expected) render()
 }
 
-async function toggleRecording(): Promise<void> {
-  if (recorder.live) { await stopRecording(); return }
-  if (draft.mode === RecordMode.Shared && !draft.consent) { recNotice = S.recNeedsConsent; render(); return }
+async function keepScreenOn(): Promise<void> {
+  wakeLock = await navigator.wakeLock?.request('screen').catch(() => null) ?? null
+}
+
+// A wake lock is dropped whenever the page is hidden; take it again on return.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && recorder.live && !recorder.paused) void keepScreenOn()
+})
+
+/** Starts a take. Meetings need the other person's yes first. */
+async function startRecording(): Promise<boolean> {
+  if (draft.mode === RecordMode.Meeting && !draft.consent) { recNotice = S.recNeedsConsent; render(); return false }
   const support = recorderSupport()
   if (support !== RecorderSupport.Ready) {
     recNotice = support === RecorderSupport.NeedsSecurePage ? S.recInsecure : S.recUnavailable
     render()
-    return
+    return false
   }
   try {
     await recorder.start(onTake)
   } catch {
     recNotice = S.recDenied
     render()
-    return
+    return false
   }
   recNotice = ''
   startTicker()
-  // Keep the screen on: a phone that locks mid-meeting ends the recording.
-  wakeLock = await navigator.wakeLock?.request('screen').catch(() => null) ?? null
+  void keepScreenOn()
   render()
+  return true
 }
 
-async function stopRecording(): Promise<void> {
-  await recorder.stop()
-  if (draft.mode === RecordMode.Shared && screen === Screen.Record) connectPrompt()
-}
-
-/** After a shared recording: offer the connection, the same Meet flow. */
-function connectPrompt(): void {
-  const name = draft.name.trim() || 'them'
-  openSheet([
-    el('h3', {}, [S.recConnectTitle(name)]),
-    el('p', { class: 'meta' }, [S.recConnectLead]),
-    el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Record, draft.text.trim()) }, [S.recConnectYes]),
-    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recConnectLater]),
-  ])
+function togglePause(): void {
+  if (!recorder.live) return
+  if (recorder.paused) {
+    recorder.resume()
+    transcriber?.resume()
+    void keepScreenOn()
+  } else {
+    recorder.pause()
+    transcriber?.pause()
+    void wakeLock?.release().catch(() => {})
+    wakeLock = null
+  }
+  render()
 }
 
 function totalMs(): number {
@@ -761,143 +871,318 @@ function saveAudio(r: Recording): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
 }
 
-async function toggleLiveTranscript(): Promise<void> {
-  if (stopDictation) { stopDictation(); transcriptSheet(); return }
-  const v = voiceApiPresent() ? await voiceSupport() : VoiceSupport.Unavailable
-  if (v === VoiceSupport.Unavailable || (v === VoiceSupport.NeedsDownload && !(await installVoice()))) {
-    toast(S.trLiveUnavailable)
-    return
-  }
-  stopDictation = startDictation((phrase) => {
-    draft.transcript.push(phrase)
-    const list = document.getElementById('tr-lines')
-    if (list) list.append(el('p', {}, [phrase]))
-  }, () => { stopDictation = null })
-  transcriptSheet()
-}
-
-/** Top right of Record: the local transcript and the audio file for later transcription. */
 function saveButtons(cls: string): HTMLElement[] {
   return takes.map((t, i) => el('button', { class: cls, onclick: () => saveAudio(t) }, [
     takes.length > 1 ? `${S.trSave} ${i + 1} (${clock(t.durationMs)})` : `${S.trSave} (${clock(t.durationMs)})`,
   ]))
 }
 
-function transcriptSheet(): void {
-  openSheet([
-    el('h3', {}, [S.trTitle]),
-    el('p', { class: 'meta' }, [S.trLead]),
-    ...saveButtons('btn btn-electric'),
-    takes.length ? null : el('p', { class: 'meta' }, [recorder.live ? S.recLive : S.trNone]),
-    voiceApiPresent()
-      ? el('button', { class: 'btn btn-ghost', onclick: () => void toggleLiveTranscript() }, [stopDictation ? S.trLiveStop : S.trLive])
-      : el('p', { class: 'meta' }, [S.trLiveUnavailable]),
-    stopDictation ? el('p', { class: 'meta' }, [S.trLiveOn]) : null,
-    el('div', { class: 'tr-lines', id: 'tr-lines' },
-      draft.transcript.length ? draft.transcript.map((t) => el('p', {}, [t])) : [el('p', { class: 'meta' }, [S.trEmpty])]),
-  ])
+function roundButton(name: string, label: string, onclick: () => void, opts: { disabled?: boolean; cls?: string } = {}): HTMLElement {
+  const b = el('button', { class: 'round' + (opts.cls ? ' ' + opts.cls : ''), 'aria-label': label, title: label, disabled: Boolean(opts.disabled), onclick })
+  b.innerHTML = icon(name)
+  return b
 }
 
-function pointsView(): HTMLElement {
-  const add = el('input', { class: 'field', placeholder: S.recPointPh, maxlength: '120', 'aria-label': S.recPointPh })
-  const addPoint = (): void => {
-    const v = add.value.trim()
-    if (!v) { add.focus(); return }
-    draft.points.push({ id: randomId(8), text: v, done: false })
-    render()
-    document.querySelector<HTMLInputElement>('.points .add-row input')?.focus()
+/** "Who was this about?": an existing person or a new name. Then `next`. */
+function aboutSheet(next?: () => void): void {
+  const input = el('input', { class: 'field', placeholder: S.recWhoPh, value: draft.name, maxlength: '40', 'aria-label': S.aboutTitle })
+  const done = (): void => {
+    const v = input.value.trim()
+    if (!v) { input.focus(); return }
+    const match = st().people.find((p) => p.name.toLowerCase() === v.toLowerCase())
+    draft.name = match?.name ?? v
+    draft.personId = match?.id
+    if (match) draft.ring = match.ring
+    closeSheet()
+    if (next) next(); else render()
   }
-  add.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') addPoint() })
-  return el('div', { class: 'points' }, [
-    ...draft.points.map((pt) => {
-      const box = el('input', { type: 'checkbox', 'aria-label': S.recPointDone })
-      box.checked = pt.done
-      const text = el('input', { class: 'point-text', value: pt.text, maxlength: '120', 'aria-label': S.recPoints })
-      // Checking a point off never locks it: it stays editable (owner, 2026-10-05).
-      box.addEventListener('change', () => { pt.done = box.checked; row.classList.toggle('done', pt.done) })
-      text.addEventListener('input', () => { pt.text = text.value })
-      const row = el('label', { class: 'point' + (pt.done ? ' done' : '') }, [box, text])
-      return row
-    }),
-    el('div', { class: 'add-row' }, [add, el('button', { class: 'btn btn-electric btn-sm', onclick: addPoint }, [S.recPointAdd])]),
+  input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') done() })
+  const people = [...st().people].sort((a, b) => b.metAt - a.metAt).slice(0, 6)
+  openSheet([
+    el('h3', {}, [S.aboutTitle]),
+    input,
+    people.length ? el('div', { class: 'chips' }, people.map((p) => el('button', {
+      class: 'chip', onclick: () => { input.value = p.name; done() },
+    }, [p.name]))) : null,
+    el('button', { class: 'btn btn-electric', onclick: done }, [S.aboutOk]),
   ])
+  setTimeout(() => input.focus(), 320)
+}
+
+function discardDraft(): void {
+  if (draftInProgress() && !confirm(S.recDiscardConfirm)) return
+  newDraft()
+  render()
+}
+
+/** Solo is transcription too, like Tana's voice memo: same engine as a meeting, one speaker. */
+async function startSolo(): Promise<void> {
+  if (!(await startRecording())) return
+  speaker = 1
+  await startTranscriber()
+  render()
+}
+
+async function sendSolo(): Promise<void> {
+  if (recorder.live) await recorder.stop()
+  if (!takes.length) return
+  if (!draft.name.trim()) { aboutSheet(() => void makeNotes()); return }
+  await makeNotes()
 }
 
 function screenRecord(): Node[] {
   const live = recorder.live
+  const paused = recorder.paused
+  const meeting = el('button', { class: 'hdr-btn', onclick: () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) } })
+  meeting.innerHTML = icon('handshake')
+  meeting.append(S.recMeeting)
+  const has = takes.length > 0
+  const circle = el('button', {
+    class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
+    'aria-label': live ? (paused ? S.recResume : S.recPause) : S.recStart,
+    onclick: () => { if (live) togglePause(); else void startSolo() },
+  })
+  const status = live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
+  return [
+    header(S.recTitle, { right: meeting, qr: false }),
+    el('div', { class: 'scroll pad memo' }, [
+      el('div', { class: 'memo-hero' }, [
+        circle,
+        el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(totalMs() + recorder.elapsed())]),
+      ]),
+      el('p', { class: 'rec-status center' }, [status]),
+      recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
+      el('button', { class: 'memo-row', onclick: () => aboutSheet() }, [
+        el('span', {}, [S.aboutRow]),
+        el('b', {}, [draft.name.trim() || S.aboutNobody]),
+      ]),
+      engine !== null && (live || has) ? el('p', { class: 'tr-engine center' }, [engineLabel()]) : null,
+      draft.segments.length || transcriber
+        ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' },
+            draft.segments.length ? draft.segments.map(transcriptRow) : [el('p', { class: 'tr-empty' }, [S.trEmpty])])
+        : el('p', { class: 'hint center' }, [S.recSoloHint]),
+    ]),
+    el('div', { class: 'memo-controls' }, [
+      roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() }),
+      roundButton(paused || !live ? 'play' : 'pause', paused || !live ? (live ? S.recResume : S.recStart) : S.recPause,
+        () => { if (live) togglePause(); else void startSolo() }, { cls: 'main' }),
+      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has }),
+    ]),
+  ]
+}
+
+/*
+ * PARKED 2026-10-05 (owner: "comment out what we have right now"): the
+ * earlier Record screen with who/where, points to cover that stay editable
+ * after ticking, and a notes field. Who/where and consent moved to the
+ * Meeting view; points and notes wait here until a view wants them back.
+ *
+ * function pointsView(): HTMLElement {
+ *   const add = el('input', { class: 'field', placeholder: S.recPointPh, maxlength: '120' })
+ *   ... draft.points rows: checkbox (pt.done) + editable text, an "Add" row
+ * }
+ * Record body (old): rec-hero mic, Just me / Shared segment, consent row,
+ *   who, where, pointsView(), notes textarea, "Start over".
+ */
+
+// ---------------------------------------------------------------------------
+// meeting: who and where, consent, the speaker transcript (Tana-style), and
+// an active-transcribing switch. TalkWeave transcribes on a desktop where it
+// runs; on a phone, on-device speech or nothing ("transcribed later").
+// ---------------------------------------------------------------------------
+
+async function ensureEngine(): Promise<TranscriberEngine> {
+  engine ??= await detectEngine().catch(() => TranscriberEngine.None)
+  return engine
+}
+
+function onSegment(seg: Segment): void {
+  const i = draft.segments.findIndex((x) => x.id === seg.id)
+  if (i >= 0) draft.segments[i] = seg; else draft.segments.push(seg)
+  if (screen !== Screen.Meeting && screen !== Screen.Record) return
+  const list = document.getElementById('tr-list')
+  if (!list) return
+  const row = transcriptRow(seg)
+  const old = list.querySelector(`[data-seg="${CSS.escape(seg.id)}"]`)
+  if (old) old.replaceWith(row); else list.append(row)
+  list.querySelector('.tr-empty')?.remove()
+  row.scrollIntoView({ block: 'nearest' })
+}
+
+async function startTranscriber(): Promise<void> {
+  if (!transcribing) return
+  const eng = await ensureEngine()
+  if (eng === TranscriberEngine.None) return
+  const t = createTranscriber(eng)
+  t.onSegment(onSegment)
+  t.onStatus((st) => { if (st === TranscriberStatus.Error || st === TranscriberStatus.Offline) recNotice = S.trOffline })
+  t.setSpeaker(speaker)
+  try {
+    await t.start()
+    transcriber = t
+  } catch {
+    recNotice = S.trOffline
+  }
+}
+
+async function startMeeting(): Promise<void> {
+  if (!(await startRecording())) return
+  await startTranscriber()
+  render()
+}
+
+async function toggleTranscribing(): Promise<void> {
+  transcribing = !transcribing
+  if (!transcribing) { await transcriber?.stop(); transcriber = null }
+  else if (recorder.live) await startTranscriber()
+  render()
+}
+
+function setSpeaker(n: number): void {
+  speaker = n
+  transcriber?.setSpeaker(n)
+  render()
+}
+
+async function endMeeting(): Promise<void> {
+  if (recorder.live) await recorder.stop()
+  await transcriber?.stop()
+  transcriber = null
+  render()
+  endMeetingSheet()
+}
+
+function meetingText(): string {
+  return meetingToText({ who: draft.name.trim(), where: draft.context.trim(), startedAt: takes[0]?.startedAt ?? Date.now() }, draft.segments)
+}
+
+async function sendAsIs(): Promise<void> {
+  const text = meetingText()
+  const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string }) => Promise<void> }
+  if (nav.share) {
+    try { await nav.share({ title: S.meetingShareTitle(draft.name.trim() || 'meeting'), text }); return } catch { /* cancelled: fall through to copy */ }
+  }
+  await navigator.clipboard?.writeText(text).then(() => toast(S.meetingCopied), () => toast(S.meetingCopyFailed))
+}
+
+/** End meeting: send it as it is, or meet the other person (QR with these notes), or make notes. */
+function endMeetingSheet(): void {
+  const name = draft.name.trim() || S.meetingThem
+  const notes = meetingToNoteText(draft.segments) || draft.text.trim()
+  openSheet([
+    el('h3', {}, [S.meetingEnded]),
+    el('p', { class: 'meta' }, [S.meetingEndedLead]),
+    el('button', { class: 'btn btn-electric', onclick: () => void sendAsIs() }, [S.meetingSendAsIs]),
+    el('button', { class: 'btn btn-teal', onclick: () => openMeet(Screen.Meeting, notes) }, [S.meetingMeet(name)]),
+    el('button', { class: 'btn btn-ghost', onclick: () => void makeNotes() }, [S.recMake]),
+    takes.length ? el('div', { class: 'rec-saves' }, saveButtons('btn btn-ghost btn-sm')) : null,
+    el('p', { class: 'meta' }, [S.meetingSendHonest]),
+  ])
+}
+
+function transcriptRow(seg: Segment): HTMLElement {
+  return el('div', { class: 'tr-row' + (seg.final ? '' : ' interim'), 'data-seg': seg.id }, [
+    el('span', { class: 'tr-dot', 'aria-hidden': 'true' }),
+    el('div', { class: 'tr-body' }, [
+      el('p', {}, [seg.text]),
+      el('div', { class: 'tr-meta' }, [el('span', {}, [S.speaker(seg.speaker)]), el('span', {}, [clockLong(seg.atMs)])]),
+    ]),
+  ])
+}
+
+/** "00:00:17", like Tana's transcript. */
+function clockLong(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
+}
+
+function engineLabel(): string {
+  if (!transcribing) return S.trOff
+  switch (engine) {
+    case TranscriberEngine.TalkWeave: return S.trTalkWeave
+    case TranscriberEngine.OnDevice: return S.trOnDevice
+    case TranscriberEngine.None: return S.trLater
+    default: return S.trChecking
+  }
+}
+
+function screenMeeting(): Node[] {
+  // The engine is probed on the Start tap only, never on render: the on-device
+  // check (SpeechRecognition.available) has crashed headless Chromium's
+  // renderer outright, and a screen must never take the app down with it.
+  const live = recorder.live
+  const paused = recorder.paused
+  const name = draft.name.trim()
   const who = el('input', { class: 'field', placeholder: S.recWhoPh, value: draft.name, 'aria-label': S.recWho, maxlength: '40' })
   const where = el('input', { class: 'field', placeholder: S.recWherePh, value: draft.context, 'aria-label': S.recWhere, maxlength: '80' })
-  const notes = el('textarea', { class: 'field note', placeholder: S.recNotesPh, rows: '5', 'aria-label': S.recNotes })
-  notes.value = draft.text
-  const consentText = el('span', {}, [S.recConsent(draft.name.trim() || 'They')])
-  who.addEventListener('input', () => { draft.name = who.value; consentText.textContent = S.recConsent(draft.name.trim() || 'They') })
+  const consentText = el('span', {}, [S.recConsent(name || S.meetingThey)])
+  who.addEventListener('input', () => { draft.name = who.value; consentText.textContent = S.recConsent(draft.name.trim() || S.meetingThey) })
   where.addEventListener('input', () => { draft.context = where.value })
-  notes.addEventListener('input', () => { draft.text = notes.value })
-
-  const mic = el('button', {
-    class: 'rec-mic' + (live ? ' live' : ''),
-    'aria-label': live ? S.recStop : S.recStart,
-    onclick: () => void toggleRecording(),
-  })
-  mic.innerHTML = live ? ICONS.stop : ICONS.mic
-  const status = live ? S.recLive : takes.length ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
-
-  const mode = (m: RecordMode, label: string): HTMLElement => el('button', {
-    class: draft.mode === m ? 'on' : '',
-    disabled: live,
-    onclick: () => { draft.mode = m; recNotice = ''; render() },
-  }, [label])
-
   const consentBox = el('input', { type: 'checkbox', id: 'consent' })
   consentBox.checked = draft.consent
-  consentBox.addEventListener('change', () => { draft.consent = consentBox.checked; if (draft.consent) { recNotice = ''; render() } })
+  consentBox.addEventListener('change', () => { draft.consent = consentBox.checked; if (draft.consent && recNotice === S.recNeedsConsent) { recNotice = ''; render() } })
   const infoHint = el('p', { class: 'info-hint', hidden: true }, [S.recInfoHint])
   const info = el('button', { class: 'info', 'aria-label': S.recInfo, onclick: (e: Event) => { e.preventDefault(); infoHint.hidden = !infoHint.hidden } })
-  info.innerHTML = ICONS.info
+  info.innerHTML = icon('info')
 
-  const transcriptBtn = el('button', { class: 'hdr-btn', onclick: transcriptSheet })
-  transcriptBtn.innerHTML = ICONS.doc
-  transcriptBtn.append(S.recTranscript)
+  const mic = el('button', {
+    class: 'rec-circle small' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
+    'aria-label': live ? (paused ? S.recResume : S.recPause) : S.recStart,
+    onclick: () => { if (live) togglePause(); else void startMeeting() },
+  })
+  mic.innerHTML = icon(live && !paused ? 'pause' : 'mic')
+  const trToggle = el('button', {
+    class: 'tr-toggle' + (transcribing ? ' on' : ''), role: 'switch', 'aria-checked': String(transcribing),
+    onclick: () => void toggleTranscribing(),
+  }, [el('span', { class: 'tr-led', 'aria-hidden': 'true' }), S.trToggle])
+  const speakers = el('div', { class: 'speakers', role: 'group', 'aria-label': S.speakerPick }, [1, 2, 3].map((n) => el('button', {
+    class: 'chip' + (speaker === n ? ' on' : ''), 'aria-pressed': String(speaker === n), onclick: () => setSpeaker(n),
+  }, [S.speaker(n)])))
 
   return [
-    header(S.recTitle, { right: transcriptBtn }),
+    header(S.meetingTitle, {
+      back: () => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; go(Screen.Record) },
+      qr: false,
+    }),
     el('div', { class: 'scroll pad' }, [
-      el('div', { class: 'rec-hero' }, [
-        mic,
-        live || takes.length ? el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(live ? recorder.elapsed() : totalMs())]) : null,
-        el('p', { class: 'rec-status' }, [status]),
-        recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
-      ]),
-      el('div', { class: 'seg rec-mode' }, [mode(RecordMode.Solo, S.recModeSolo), mode(RecordMode.Shared, S.recModeShared)]),
-      draft.mode === RecordMode.Shared
-        ? el('div', {}, [
-            el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
-            infoHint,
-          ])
-        : el('p', { class: 'hint' }, [S.recSoloHint]),
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
-      el('label', { class: 'lbl' }, [S.recPoints]), pointsView(),
-      el('label', { class: 'lbl' }, [S.recNotes]), notes,
-      draftInProgress() && !live
-        ? el('button', {
-            class: 'btn btn-ghost btn-sm start-over',
-            onclick: () => { if (confirm(S.recStartOverConfirm)) { newDraft(); render() } },
-          }, [S.recStartOver])
-        : null,
+      el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
+      infoHint,
+      el('div', { class: 'meeting-bar' }, [
+        mic,
+        el('div', { class: 'meeting-clock' }, [
+          el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(totalMs() + recorder.elapsed())]),
+          el('small', {}, [live ? (paused ? S.recPausedHint : S.recLiveMeeting) : S.recIdleMeeting]),
+        ]),
+        trToggle,
+      ]),
+      el('p', { class: 'tr-engine' }, [engineLabel()]),
+      recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
+      speakers,
+      el('div', { class: 'tr-list', id: 'tr-list', 'aria-live': 'polite' },
+        draft.segments.length ? draft.segments.map(transcriptRow) : [el('p', { class: 'tr-empty' }, [transcribing ? S.trEmpty : S.trOffHint])]),
     ]),
-    el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', onclick: () => void makeNotes() }, [S.recMake])]),
+    el('div', { class: 'cta' }, [el('button', {
+      class: 'btn btn-teal', disabled: !live && !takes.length, onclick: () => void endMeeting(),
+    }, [S.meetingEnd])]),
   ]
 }
 
 async function makeNotes(): Promise<void> {
-  if (!draft.name.trim()) { document.querySelector<HTMLInputElement>(`input[aria-label="${S.recWho}"]`)?.focus(); return }
+  if (!draft.name.trim()) { aboutSheet(() => void makeNotes()); return }
   if (recorder.live) await recorder.stop()
-  stopDictation?.()
+  await transcriber?.stop()
+  transcriber = null
   if (!draft.lines.length) {
-    const fromNotes = extractLines(draft.text)
-    const fromPoints = draft.points.filter((p) => p.text.trim()).map((p) => ({ text: p.text.trim(), tag: guessTag(p.text) }))
-    draft.lines = [...fromPoints, ...fromNotes].map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends }))
+    const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
+    draft.lines = extractLines(prose).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends }))
+    // Nothing transcribed here: keep the memo itself as a line, so saving
+    // never dead-ends; the audio is transcribed later on the computer.
+    if (!draft.lines.length && takes.length) {
+      draft.lines = [{ id: randomId(8), text: S.memoLine(clock(totalMs())), tag: Tag.Note, audience: Audience.OnlyMe }]
+    }
   }
   go(Screen.Review)
 }
@@ -914,7 +1199,8 @@ function openMeet(from: Screen, notes = ''): void {
 
 function screenMeet(): Node[] {
   const notes = meetNotes
-  const name = meetFrom === Screen.Record ? draft.name.trim() : ''
+  // Named after the person only when Meet comes from that meeting.
+  const name = meetFrom === Screen.Meeting ? draft.name.trim() : ''
   const qr = el('div', { class: 'qrwrap' })
   const nfcStatus = el('p', { class: 'meta' }, [nfcWriteSupported() ? '' : S.meetNfcOff])
   let link = ''
@@ -941,7 +1227,7 @@ function screenMeet(): Node[] {
     nfc?.removeAttribute('disabled')
   })()
   return [
-    header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom) }),
+    header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom), qr: false }),
     el('div', { class: 'scroll pad' }, [
       el('p', { class: 'hint' }, [S.meetLead]),
       qr,
@@ -1028,7 +1314,7 @@ function screenReview(): Node[] {
     return row
   })
   return [
-    header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(Screen.Record) } }),
+    header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(recordScreen()) } }),
     el('div', { class: 'scroll pad' }, [
       takes.length ? recordingCard() : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
@@ -1197,6 +1483,153 @@ function settingsSheet(): void {
   ])
 }
 
+// ---------------------------------------------------------------------------
+// backup: the whole phone record, end-to-end encrypted, to a Swiss server
+// (questhub, Infomaniak). The key is made on this phone (or derived from a
+// passphrase the person chooses) and never sent; the server only ever sees
+// ciphertext. backup.ts holds the crypto; this is the UI around it.
+// ---------------------------------------------------------------------------
+
+interface BackupInfo { keyText: string; fromPassphrase: boolean; lastAt: number; lastBytes: number }
+
+function backupStoreKey(): string {
+  return `trustweb.backup.${persona}${storeCtx ? '.' + storeCtx : ''}`
+}
+
+function loadBackupInfo(): BackupInfo | null {
+  try {
+    const raw = localStorage.getItem(backupStoreKey())
+    return raw ? JSON.parse(raw) as BackupInfo : null
+  } catch { return null }
+}
+
+function saveBackupInfo(info: BackupInfo | null): void {
+  try {
+    if (info) localStorage.setItem(backupStoreKey(), JSON.stringify(info))
+    else localStorage.removeItem(backupStoreKey())
+  } catch { /* storage blocked: the backup still works this visit */ }
+}
+
+async function runBackup(key: BackupKey): Promise<void> {
+  try {
+    const r = await backupNow(key, st())
+    saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: r.at, lastBytes: r.bytes })
+    toast(S.bkDone(Math.max(1, Math.round(r.bytes / 1024))))
+  } catch {
+    toast(S.bkFailed)
+  }
+  if (screen === Screen.Inventory) render()
+}
+
+/** Shows a fresh recovery key; the backup only runs after "I saved it". */
+function recoveryKeySheet(key: BackupKey): void {
+  const saved = el('input', { type: 'checkbox', id: 'bk-saved' })
+  const go2 = el('button', { class: 'btn btn-electric', disabled: true, onclick: () => { closeSheet(); void runBackup(key) } }, [S.bkBackUpNow])
+  saved.addEventListener('change', () => { if (saved.checked) go2.removeAttribute('disabled'); else go2.setAttribute('disabled', '') })
+  const download = (): void => {
+    const a = el('a', { href: URL.createObjectURL(new Blob([S.bkKeyFile(key.text)], { type: 'text/plain' })), download: 'trustweb-recovery-key.txt' })
+    document.body.append(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+  }
+  openSheet([
+    el('h3', {}, [S.bkKeyTitle]),
+    el('p', { class: 'meta' }, [key.fromPassphrase ? S.bkKeyLeadPass : S.bkKeyLead]),
+    el('code', { class: 'recovery-key' }, [key.text]),
+    el('div', { class: 'rec-saves' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void navigator.clipboard?.writeText(key.text).then(() => toast(S.bkCopied), () => toast(S.meetingCopyFailed)) } }, [S.bkCopy]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: download }, [S.bkDownload]),
+    ]),
+    el('label', { class: 'consent' }, [saved, el('span', {}, [S.bkSaved])]),
+    go2,
+  ])
+}
+
+function passphraseSheet(): void {
+  const pass = el('input', { class: 'field', type: 'password', placeholder: S.bkPassPh, autocomplete: 'new-password', 'aria-label': S.bkPassPh })
+  const msg = el('p', { class: 'meta' }, [S.bkPassLead])
+  const ok = async (): Promise<void> => {
+    try { recoveryKeySheet(await keyFromPassphrase(pass.value)) } catch { msg.textContent = S.bkPassShort; pass.focus() }
+  }
+  pass.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void ok() })
+  openSheet([el('h3', {}, [S.bkPassTitle]), msg, pass, el('button', { class: 'btn btn-electric', onclick: () => void ok() }, [S.bkPassOk])])
+  setTimeout(() => pass.focus(), 320)
+}
+
+function restoreSheet(): void {
+  const input = el('input', { class: 'field', placeholder: S.bkRestorePh, 'aria-label': S.bkRestorePh, autocomplete: 'off' })
+  const msg = el('p', { class: 'meta' }, [S.bkRestoreLead])
+  const run = async (): Promise<void> => {
+    const text = input.value.trim()
+    if (!text) { input.focus(); return }
+    let key: BackupKey
+    try { key = text.startsWith('TW1') ? parseKeyText(text) : await keyFromPassphrase(text) } catch { msg.textContent = S.bkBadKey; return }
+    try {
+      const data = await restore(key) as Partial<AppState> | null
+      if (!data || data.v !== 1 || !data.me) { msg.textContent = S.bkBadData; return }
+      if (!confirm(S.bkRestoreConfirm)) return
+      state = data as AppState
+      save()
+      saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: Date.now(), lastBytes: 0 })
+      location.reload()
+    } catch (e) {
+      msg.textContent = e instanceof BackupNotFound ? S.bkNotFound : S.bkFailed
+    }
+  }
+  openSheet([el('h3', {}, [S.bkRestoreTitle]), msg, input, el('button', { class: 'btn btn-electric', onclick: () => void run() }, [S.bkRestoreOk])])
+}
+
+// The card only shows where the backup service answers: a static deploy
+// without it must not offer a backup that can only fail.
+let backupAvailable: boolean | null = null
+
+let backupProbe: Promise<void> | null = null
+
+/**
+ * Probed once. When the answer arrives it fills the card's slot in place, never
+ * a full re-render: that would wipe whatever is being typed on the screen.
+ */
+function probeBackup(): Promise<void> {
+  backupProbe ??= (async (): Promise<void> => {
+    try {
+      const r = await fetch('/backup/health', { cache: 'no-store' })
+      backupAvailable = r.ok && (await r.text()).trim() === 'ok'
+    } catch {
+      backupAvailable = false
+    }
+    const slot = document.getElementById('backup-slot')
+    if (slot) slot.replaceChildren(...[backupCardInner()].filter((c): c is HTMLElement => c !== null))
+  })()
+  return backupProbe
+}
+
+function backupCard(): HTMLElement {
+  if (backupAvailable === null) void probeBackup()
+  const inner = backupCardInner()
+  return el('div', { id: 'backup-slot' }, inner ? [inner] : [])
+}
+
+function backupCardInner(): HTMLElement | null {
+  if (!backupAvailable) return null
+  const info = loadBackupInfo()
+  if (!info) {
+    return el('div', { class: 'verse backup' }, [
+      el('h3', {}, [S.bkQuestion]),
+      el('p', {}, [S.bkLead]),
+      el('button', { class: 'btn btn-electric btn-sm', onclick: () => void newRandomKey().then(recoveryKeySheet) }, [S.bkStart]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: passphraseSheet }, [S.bkOwnPass]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: restoreSheet }, [S.bkRestore]),
+    ])
+  }
+  const key = ((): BackupKey | null => { try { return parseKeyText(info.keyText) } catch { return null } })()
+  return el('div', { class: 'verse backup' }, [
+    el('h3', {}, [S.bkOn]),
+    el('p', {}, [S.bkLast(new Date(info.lastAt).toLocaleString())]),
+    key ? el('button', { class: 'btn btn-electric btn-sm', onclick: () => void runBackup(key) }, [S.bkBackUpNow]) : null,
+    key ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => recoveryKeySheet(key) }, [S.bkShowKey]) : null,
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.bkForgetConfirm)) { saveBackupInfo(null); render() } } }, [S.bkForget]),
+  ])
+}
+
 function screenInventory(): Node[] {
   const s = st()
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -1209,7 +1642,7 @@ function screenInventory(): Node[] {
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   const gear = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
-  gear.innerHTML = ICONS.gear
+  gear.innerHTML = icon('settings')
   return [
     header(S.invTitle, { right: gear }),
     el('div', { class: 'scroll pad' }, [
@@ -1231,6 +1664,7 @@ function screenInventory(): Node[] {
         el('em', {}, [S.logOutcome[e.outcome]]),
       ])),
       el('p', { class: 'foot' }, [S.logFoot]),
+      backupCard(),
     ]),
   ]
 }

@@ -7,19 +7,19 @@ const pwm = await import(process.env.PW); const pw = pwm.chromium ? pwm : pwm.de
 const S = process.env.S, B = process.env.TW_URL || 'https://app.idea2.site/trustweb/'
 const browser = await pw.chromium.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
 const errs = []
-const mk = async () => { const c = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['microphone'] }); const p = await c.newPage(); p.on('pageerror', e => errs.push(e.message)); return p }
+const mk = async () => { const c = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['microphone'] }); await c.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition }); const p = await c.newPage(); p.on('pageerror', e => errs.push(e.message)); return p }
 const a = await mk(), b = await mk()
 await a.goto(B); await a.fill('input.field', 'Anna'); await a.click('text=Start on this phone')
-await a.getByRole('button', { name: 'Record' }).click()
-await a.fill('input[aria-label="Who are you meeting?"]', 'Ben')
-await a.fill('textarea.note', 'Looking for a flat in Graz. Can fix bikes')
-// Notes ride along only from a shared recording: Shared, tick, record, stop, Show my code.
-await a.getByRole('button', { name: 'Shared', exact: true }).click(); await a.check('#consent')
+// Notes ride along only from a meeting: Record > Meeting, consent, record, End meeting, Meet Ben.
+// (Transcription off: headless Chromium crashes on the on-device speech probe.)
+await a.locator('nav.tabs .tab-record').click(); await a.getByRole('button', { name: 'Meeting' }).click()
+await a.fill('input[aria-label="Who are you meeting?"]', 'Ben'); await a.check('#consent')
+await a.getByRole('switch', { name: /Transcribing/ }).click()
 await a.getByRole('button', { name: 'Start recording' }).click(); await a.waitForTimeout(1200)
-await a.getByRole('button', { name: 'Stop recording' }).click(); await a.getByRole('button', { name: 'Show my code' }).click()
-await a.waitForSelector('.qrwrap canvas')
+await a.getByRole('button', { name: 'End meeting' }).click()
+await a.getByRole('button', { name: 'Meet Ben' }).click(); await a.waitForSelector('.qrwrap canvas')
 const url = await a.getAttribute('.qrwrap', 'data-payload')
-console.log('qr url has did param:', /connect=did/.test(url), 'len', url.length)
+console.log('qr url has did param:', /connect=did/.test(url), 'len', url.length, 'notes:', /#n=/.test(url))
 await b.goto(url); await b.screenshot({ path: S + '/p1_invite.png' })
 await b.fill('input.field', 'Ben'); await b.getByRole('button', { name: 'Connect', exact: true }).click()
 await a.waitForSelector('.toast.on', { timeout: 20000 }); console.log('A toast:', await a.textContent('.toast'))

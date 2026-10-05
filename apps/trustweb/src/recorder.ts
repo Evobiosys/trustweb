@@ -52,21 +52,51 @@ export function audioExtension(mimeType: string): string {
  * locking the screen), so the caller can say so. Chunks are never dropped
  * on that path.
  */
+interface TakeState {
+  startedAt: number
+  stopping: boolean
+  discarding: boolean
+  /** When the current pause began, 0 while recording. */
+  pausedAt: number
+  pausedTotal: number
+}
+
+function recordedMs(t: TakeState, now: number): number {
+  return now - t.startedAt - t.pausedTotal - (t.pausedAt ? now - t.pausedAt : 0)
+}
+
 export type TakeHandler = (take: Recording, expected: boolean) => void
 
 export class MeetingRecorder {
   private rec: MediaRecorder | null = null
-  private current: { stopping: boolean; discarding: boolean } | null = null
-  private began = 0
+  private current: TakeState | null = null
   private waiter: (() => void) | null = null
 
+  /** Recording or paused: a take is open. */
   get live(): boolean {
     return this.rec !== null && this.rec.state !== 'inactive'
   }
 
-  /** Milliseconds since start, 0 when idle. */
+  get paused(): boolean {
+    return this.rec?.state === 'paused'
+  }
+
+  /** Recorded milliseconds of the open take (paused time excluded), 0 when idle. */
   elapsed(now: number = Date.now()): number {
-    return this.live ? now - this.began : 0
+    return this.live && this.current ? recordedMs(this.current, now) : 0
+  }
+
+  pause(): void {
+    if (this.rec?.state !== 'recording' || !this.current) return
+    this.rec.pause()
+    this.current.pausedAt = Date.now()
+  }
+
+  resume(): void {
+    if (this.rec?.state !== 'paused' || !this.current) return
+    this.rec.resume()
+    this.current.pausedTotal += Date.now() - this.current.pausedAt
+    this.current.pausedAt = 0
   }
 
   /** Asks for the microphone and starts recording. Rejects if the person or the browser refuses. */
@@ -79,14 +109,15 @@ export class MeetingRecorder {
     // the chunks, stream or flags of the take that is running now.
     const chunks: Blob[] = []
     const startedAt = Date.now()
-    const take = { stopping: false, discarding: false }
+    const take: TakeState = { startedAt, stopping: false, discarding: false, pausedAt: 0, pausedTotal: 0 }
     rec.ondataavailable = (e: BlobEvent): void => { if (e.data.size > 0) chunks.push(e.data) }
     rec.onstop = (): void => {
       const type = rec.mimeType || chunks[0]?.type || 'audio/webm'
       const blob = new Blob(chunks, { type })
       stream.getTracks().forEach((t) => t.stop())
       if (this.rec === rec) { this.rec = null; this.current = null }
-      if (!take.discarding && blob.size > 0) onTake({ blob, mimeType: type, startedAt, durationMs: Date.now() - startedAt }, take.stopping)
+      const durationMs = recordedMs(take, Date.now())
+      if (!take.discarding && blob.size > 0) onTake({ blob, mimeType: type, startedAt, durationMs }, take.stopping)
       const w = this.waiter
       this.waiter = null
       w?.()
@@ -98,7 +129,6 @@ export class MeetingRecorder {
     }
     this.rec = rec
     this.current = take
-    this.began = startedAt
     // A timeslice keeps memory in small chunks instead of one growing buffer.
     rec.start(1000)
   }

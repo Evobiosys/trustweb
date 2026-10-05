@@ -43,9 +43,29 @@ export default ({ command }) => ({
     host: '127.0.0.1',
     port: Number(process.env.TW_PORT ?? 5190),
     fs: { allow: [repo] },
-    // Test-only: point /relay at a local RelayServer (see test/e2e/acceptance.mjs).
-    proxy: process.env.TW_RELAY_PROXY
-      ? { '/relay': { target: process.env.TW_RELAY_PROXY, ws: true, changeOrigin: true } }
-      : undefined,
+    // Dev/test proxies, all same-origin so no CORS and no Origin exception:
+    //   /relay     -> a RelayServer (TW_RELAY_PROXY; see test/e2e/acceptance.mjs)
+    //   /backup    -> services/trustweb-backup (TW_BACKUP_PROXY, e.g. http://127.0.0.1:8960)
+    //   /talkweave -> a local TalkWeave (TW_TALKWEAVE_PROXY, e.g. http://127.0.0.1:8990),
+    //                 prefix stripped and Origin dropped, so TalkWeave's own
+    //                 "reject any Origin" rule for local services stays intact.
+    proxy: {
+      ...(process.env.TW_RELAY_PROXY
+        ? { '/relay': { target: process.env.TW_RELAY_PROXY, ws: true, changeOrigin: true } }
+        : {}),
+      ...(process.env.TW_BACKUP_PROXY
+        ? { '/backup': { target: process.env.TW_BACKUP_PROXY, changeOrigin: true } }
+        : {}),
+      // Only the mic routes and the availability probe: TalkWeave's other
+      // routes (sessions, ask) have no auth and must not be reachable here.
+      ...(process.env.TW_TALKWEAVE_PROXY
+        ? Object.fromEntries(['/talkweave/api/mic/', '/talkweave/api/whisper/available'].map((prefix) => [prefix, {
+            target: process.env.TW_TALKWEAVE_PROXY,
+            changeOrigin: true,
+            rewrite: (p) => p.replace(/^\/talkweave/, ''),
+            configure: (proxy) => { proxy.on('proxyReq', (req) => req.removeHeader('origin')) },
+          }]))
+        : {}),
+    },
   },
 })

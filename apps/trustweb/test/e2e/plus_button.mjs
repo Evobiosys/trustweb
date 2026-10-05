@@ -1,8 +1,8 @@
 /**
- * Web -> Manage -> "Note someone new" must open the exact same Record flow as
- * the raised Record tab -- not a forked one -- and finishing Place -> "Save to
- * my web" must return to Web with the new person visible. Also pins the
- * 2026-10-05 nav: exactly Web | Record | Inventory, Query on the Web screen.
+ * Web -> Curate -> "Add someone" and a tap on empty space in the web open the
+ * same "Add someone to your web?" sheet, and saving puts the person on the
+ * rings. Also pins the 2026-10-05 nav: exactly Web | Record | Inventory, Query
+ * on the Web screen, a QR button in the header instead of "Online".
  *
  * Local only (spins up a real RelayServer + Vite dev server), single phone.
  *
@@ -65,27 +65,17 @@ async function main() {
     ok('Query sits on the Web screen', await page.getByRole('button', { name: 'Query' }).isVisible())
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 
-    await page.getByRole('button', { name: 'Manage' }).click()
-    await page.getByRole('heading', { name: 'Connections' }).waitFor({ timeout: 10_000 })
-    ok('Manage lists the connections', true)
-    await page.getByRole('button', { name: /Note someone new/ }).click()
-    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
-    ok('Note someone new opens the Record flow (not a fork)', true)
-
-    await page.getByLabel('Who are you meeting?').fill('Plus Person')
-    await page.locator('textarea.note').fill('Looking for a co-founder')
-    await page.getByRole('button', { name: 'Make notes' }).click()
-    await page.getByRole('heading', { name: /Notes about Plus Person/ }).waitFor({ timeout: 10_000 })
-    ok('proceeds to Review with the typed note', true)
-
-    await page.getByRole('button', { name: 'Looks right' }).click()
-    await page.getByRole('heading', { name: /Plus Person is my/ }).waitFor({ timeout: 10_000 })
-    await page.getByText('Acquaintance', { exact: false }).first().click()
-    await page.getByRole('button', { name: 'Save to my web' }).click()
-
+    await page.getByRole('button', { name: 'Curate' }).click()
+    await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 10_000 })
+    ok('Curate lists the connections', true)
+    await page.getByRole('button', { name: /Add someone/ }).click()
+    await page.getByRole('heading', { name: 'Add someone to your web?' }).waitFor({ timeout: 10_000 })
+    ok('Curate > Add someone opens the add sheet', true)
+    await page.getByPlaceholder('Name').first().fill('Plus Person')
+    await page.getByRole('button', { name: 'Add to my web' }).click()
+    await page.getByRole('button', { name: 'Back' }).click()
     await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
-    const bodyText = await page.locator('.scroll').first().innerText()
-    ok('back on Web with the new person visible', bodyText.includes('Plus Person'), bodyText.slice(0, 200))
+    ok('back on Web with the new person on the rings', await page.locator('.node', { hasText: 'Plus Person' }).count() === 1)
     ok('Record is still the raised middle tab', await page.locator('nav.tabs .tab-record').isVisible())
   } finally {
     await browser.close()

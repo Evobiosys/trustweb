@@ -1,14 +1,20 @@
 /**
- * The Record tab (owner's voice memo, 2026-10-05): mic centred at the top,
- * recording by myself by default, points to cover that can be ticked off
- * and still edited while recording, "Recording meeting" in the top-right pill
- * on every screen, a Transcript button top right with the audio file, a
- * shared recording that needs the other person's yes and then offers the
- * Meet code, and the Inventory settings that swap the outer tabs.
+ * Record and Meeting (owner's voice memos and follow-ups, 2026-10-05):
+ * - Record is solo by default and laid out like Tana mobile's voice memo:
+ *   circle + clock, an About row, then discard / pause / send.
+ * - Pause stops the clock; the pill says "Recording" and follows you around.
+ * - Top-right Meeting opens the meeting view: who/where, "<name> agreed to
+ *   recording the meeting." with an info hint, an active-transcribing switch,
+ *   manual speaker chips, a Tana-style transcript, and End meeting, which
+ *   offers Send as is / Meet <name> / Make notes.
+ * - Every header carries a QR button (Meet) instead of the "Online" dot; Meet
+ *   from there shares no notes, Meet after a meeting is named after them.
+ * - Tapping empty space in the web adds someone; Curate lists connections;
+ *   the Inventory settings sit behind a cog; the backup card asks about the
+ *   Swiss server; a take the phone ends is kept; dark mode is a real palette.
  *
- * Chromium's fake microphone stands in for a real one, so MediaRecorder
- * really records. Local only: a real RelayServer + Vite dev server.
- * TW_SHOTS=<dir> also saves a screenshot per step.
+ * Chromium's fake microphone stands in for a real one. Local only: a real
+ * RelayServer + Vite dev server. TW_SHOTS=<dir> saves a screenshot per step.
  *
  * Run from apps/demo/ (it has tsx and the toolchain):
  *   PLAYWRIGHT_PACKAGE=<path to playwright-core> npx tsx ../trustweb/test/e2e/record_flow.mjs
@@ -38,6 +44,8 @@ async function waitForServer(url, ms = 30_000) {
   throw new Error('server did not come up: ' + url)
 }
 
+const clockSecs = (t) => t.trim().split(':').map(Number).reduce((a, b) => a * 60 + b, 0)
+
 async function main() {
   const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
@@ -54,151 +62,151 @@ async function main() {
 
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   const engine = (pw.chromium ? pw : pw.default).chromium
-  const browser = await engine.launch({
-    headless: true,
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
-  })
+  let browser = null
   let n = 0
   const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_${name}.png`) }) }
   try {
-    const ctx = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    browser = await engine.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
+    const ctx = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] })
+    // No on-device speech in this run: headless Chromium crashes on the
+    // SpeechRecognition.available() probe, so the browser behaves like one
+    // without it (the TalkWeave path has its own live test).
+    const noSpeech = () => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition }
+    await ctx.addInitScript(noSpeech)
     const page = await ctx.newPage()
     const errors = []
     page.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
+    page.on('dialog', (d) => void d.accept())
     await page.goto(base)
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
     await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-    await shot(page, 'web')
 
-    // Record tab: mic first, solo by default, no consent needed
+    // Web: no welcome line, no ring caption; QR in the header; Curate; tap to add
+    const webText = await page.locator('.screen').innerText()
+    ok('Web has no welcome/count line and no ring caption', !/Welcome to your TrustWeb/.test(webText) && !/The rings: close friends/.test(webText))
+    ok('the header shows a QR button, not an "Online" dot', await page.locator('.hdr .status-pill.qr svg').count() === 1 && !/Online/.test(await page.locator('.hdr').innerText()))
+    await page.locator('.rings-wrap').click({ position: { x: 176 + 114, y: 176 } })
+    await page.getByRole('heading', { name: 'Add someone to your web?' }).waitFor({ timeout: 5_000 })
+    ok('tapping empty space in the web offers to add someone', true)
+    ok('the ring is preselected by where you tapped', (await page.locator('.add-rings .radio.on').innerText()).startsWith('Friend'))
+    await page.getByPlaceholder('Name').first().fill('Lena')
+    await page.getByRole('button', { name: 'Add to my web' }).click()
+    await page.locator('.node', { hasText: 'Lena' }).waitFor({ timeout: 5_000 })
+    ok('the new person appears on the rings', true)
+    await shot(page, 'web')
+    await page.getByRole('button', { name: 'Curate' }).click()
+    await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 5_000 })
+    ok('Curate lists the connections', /Lena/.test(await page.locator('.ppl').innerText()))
+    await page.getByRole('button', { name: 'Back' }).click()
+
+    // Record (solo): Tana voice-memo layout
     await page.locator('nav.tabs .tab-record').click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
-    const heroFirst = await page.evaluate(() => {
-      const scroll = document.querySelector('.screen .scroll')
-      return scroll?.firstElementChild?.classList.contains('rec-hero') ?? false
-    })
-    ok('the mic sits at the top of Record, above the fields', heroFirst)
-    ok('"Just me" is the default mode', (await page.locator('.rec-mode button.on').innerText()).trim() === 'Just me')
-    ok('no transcript-consent wording on Record', !/agreed to a transcript/.test(await page.locator('.screen').innerText()))
+    ok('Record has the Tana-style circle, clock and three round buttons',
+      await page.locator('.rec-circle').count() === 1 && await page.locator('.memo-controls .round').count() === 3)
+    ok('Record carries the handshake Meeting button top right', await page.getByRole('button', { name: 'Meeting' }).isVisible())
+    ok('no consent wording on solo Record', !/agreed to/.test(await page.locator('.screen').innerText()))
     await shot(page, 'record_idle')
-
-    await page.getByRole('button', { name: 'Start recording' }).click()
+    await page.locator('.rec-circle').click()
     await page.locator('.status-pill.rec').waitFor({ timeout: 10_000 })
-    ok('top-right pill says "Recording meeting" while recording', (await page.locator('.status-pill.rec').innerText()).trim() === 'Recording meeting')
+    ok('solo pill says "Recording"', (await page.locator('.status-pill.rec').innerText()).trim() === 'Recording')
+    await page.waitForTimeout(2200)
+    await page.locator('.memo-controls .round.main').click()
+    const atPause = clockSecs(await page.locator('#rec-clock').innerText())
+    await page.waitForTimeout(1600)
+    const later = clockSecs(await page.locator('#rec-clock').innerText())
+    ok('pause stops the clock', atPause >= 2 && later === atPause, `${atPause} -> ${later}`)
+    ok('the pill says "Paused"', (await page.locator('.status-pill.rec').innerText()).trim() === 'Paused')
+    await shot(page, 'record_paused')
+    await page.locator('.memo-controls .round.main').click()
+    await page.waitForTimeout(1200)
+    await page.getByRole('button', { name: 'Web' }).click()
+    ok('the pill follows you to Web', await page.locator('.status-pill.rec').isVisible())
+    await page.locator('.status-pill.rec').click()
+    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
+    await page.getByRole('button', { name: 'Send' }).click()
+    await page.getByRole('heading', { name: 'Who was this about?' }).waitFor({ timeout: 5_000 })
+    ok('send asks who it was about', true)
+    await page.locator('.sheet .chip', { hasText: 'Lena' }).click()
+    await page.getByRole('heading', { name: /Notes about Lena/ }).waitFor({ timeout: 10_000 })
+    ok('then goes to Review with the recording card', await page.locator('.rec-card').isVisible())
+    const memoLines = await page.locator('.line-text').evaluateAll((els) => els.map((e) => e.value))
+    ok('with no transcriber the memo itself is a line (never a dead end)', memoLines.some((l) => /Voice memo, 0:0\d, to transcribe later/.test(l)), JSON.stringify(memoLines))
+    await shot(page, 'review_solo')
+    await page.getByRole('button', { name: 'Looks right' }).click()
+    await page.getByRole('button', { name: 'Save to my web' }).click()
+    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+    ok('a solo memo saves to the web', true)
+    await page.locator('nav.tabs .tab-record').click()
+    ok('Record starts fresh after saving', (await page.locator('.memo-row b').innerText()).includes('Who was this about?'))
+    await page.locator('.rec-circle').click()
+    await page.locator('.status-pill.rec').waitFor({ timeout: 10_000 })
+    await page.waitForTimeout(800)
+    await page.getByRole('button', { name: 'Discard' }).click()
+    ok('discard drops a take in progress', await page.locator('.status-pill.rec').count() === 0 && /0:00/.test(await page.locator('#rec-clock').innerText()))
 
+    // Meeting view
+    await page.getByRole('button', { name: 'Meeting' }).click()
+    await page.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
     await page.getByLabel('Who are you meeting?').fill('Maya')
     await page.getByLabel('Where are you meeting?').fill('coffee at the Hub')
-    const addPoint = async (t) => {
-      await page.getByPlaceholder('Add a point, e.g. ask about the flat').fill(t)
-      await page.getByRole('button', { name: 'Add', exact: true }).click()
-    }
-    await addPoint('Ask about the flat in Graz')
-    await addPoint('Mention the motorbike')
-    await page.locator('.point').first().locator('input[type=checkbox]').check()
-    ok('a ticked point is marked addressed', await page.locator('.point.done').count() === 1)
-    await page.locator('.point').first().locator('.point-text').fill('Ask about the flat in Graz (she has one from March)')
-    ok('a ticked point stays editable while recording',
-      (await page.locator('.point').first().locator('.point-text').inputValue()).includes('from March'))
-    await page.locator('textarea.note').fill('She can lend a cargo bike. Looking for a co-founder.')
-    await page.waitForTimeout(1500)
-    await shot(page, 'record_live')
-
-    // the pill follows you to other screens and brings you back
-    await page.getByRole('button', { name: 'Web' }).click()
-    ok('"Recording meeting" shows on the Web screen too', await page.locator('.status-pill.rec').isVisible())
-    await page.locator('.status-pill.rec').click()
-    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
-    ok('tapping the pill returns to the recording, draft intact', (await page.getByLabel('Who are you meeting?').inputValue()) === 'Maya')
-
-    // a new note never silently drops the live recording
-    await page.getByRole('button', { name: 'Web' }).click()
-    await page.getByRole('button', { name: 'Manage' }).click()
-    await page.getByRole('button', { name: /Note someone new/ }).click()
-    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
-    ok('"Note someone new" during a recording returns to it instead of dropping it',
-      (await page.getByLabel('Who are you meeting?').inputValue()) === 'Maya' && await page.locator('.status-pill.rec').isVisible())
-
-    // Manage > Connect shares no notes from the draft in progress
-    await page.getByRole('button', { name: 'Web' }).click()
-    await page.getByRole('button', { name: 'Manage' }).click()
-    await page.getByRole('button', { name: 'Connect with someone' }).click()
-    await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-    const manageLink = await page.getAttribute('.qrwrap', 'data-payload')
-    ok('a code shown from Manage carries no notes', !/#n=/.test(manageLink ?? '#n='), manageLink ?? '')
-    ok('Meet from Manage is not titled after the draft', await page.getByRole('heading', { name: 'Meet', exact: true }).isVisible())
-    await page.locator('.status-pill.rec').click()
-    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
-
-    await page.getByRole('button', { name: 'Stop recording' }).click()
-    // The clock shows while live too, so wait for the mic to flip back instead.
-    await page.getByRole('button', { name: 'Start recording' }).waitFor({ timeout: 5_000 })
-    ok('the pill drops "Recording meeting" once stopped', await page.locator('.status-pill.rec').count() === 0)
-
-    // transcript sheet: audio file for later transcription on a computer
-    await page.getByRole('button', { name: 'Transcript' }).click()
-    const saveBtn = page.getByRole('button', { name: /Save audio file/ })
-    ok('Transcript offers the recorded audio file', await saveBtn.isVisible())
-    const [download] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), saveBtn.click()])
-    ok('the audio file downloads with a sensible name', /^trustweb-Maya-.*\.(webm|m4a|ogg)$/.test(download.suggestedFilename()), download.suggestedFilename())
-    await shot(page, 'transcript_sheet')
-    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
-
-    // shared recording: needs the yes, info hint, then offers Meet
-    await page.getByRole('button', { name: 'Shared', exact: true }).click()
-    ok('shared mode shows "<name> agreed to the recording."', await page.getByText('Maya agreed to the recording.').isVisible())
+    ok('meeting shows "Maya agreed to recording the meeting."', await page.getByText('Maya agreed to recording the meeting.').isVisible())
     await page.getByRole('button', { name: 'How to start' }).click()
     ok('the info button shows how to start', await page.getByText('Okay, we\'re recording now.', { exact: false }).isVisible())
+    ok('an active-transcribing switch is there', await page.getByRole('switch', { name: /Transcribing/ }).isVisible())
+    // Headless Chromium crashes on the on-device speech probe, so this run
+    // records audio only; the TalkWeave path has its own live probe test.
+    await page.getByRole('switch', { name: /Transcribing/ }).click()
+    ok('switching transcription off says so', await page.getByText('Transcription off. Only the audio is recorded.').isVisible())
+    ok('manual speaker chips are there', await page.locator('.speakers .chip').count() === 3)
     await page.getByRole('button', { name: 'Start recording' }).click()
-    ok('a shared recording waits for the tick', await page.getByText('For a shared recording, tick the line above first.').isVisible())
+    ok('a meeting waits for the consent tick', await page.getByText('Tick the line above once they agreed.').isVisible())
     await page.locator('#consent').check()
-    await shot(page, 'record_shared')
     await page.getByRole('button', { name: 'Start recording' }).click()
     await page.locator('.status-pill.rec').waitFor({ timeout: 10_000 })
-    await page.waitForTimeout(1200)
-    await page.getByRole('button', { name: 'Stop recording' }).click()
-    await page.getByRole('heading', { name: 'Connect with Maya?' }).waitFor({ timeout: 5_000 })
-    ok('after a shared recording it offers to connect', true)
-    await shot(page, 'connect_prompt')
-    await page.getByRole('button', { name: 'Show my code' }).click()
+    ok('meeting pill says "Recording meeting"', (await page.locator('.status-pill.rec').innerText()).trim() === 'Recording meeting')
+    await page.waitForTimeout(1500)
+    await shot(page, 'meeting_live')
+    await page.getByRole('button', { name: 'End meeting' }).click()
+    await page.getByRole('heading', { name: 'Meeting ended' }).waitFor({ timeout: 10_000 })
+    ok('End meeting offers Send as is and Meet Maya',
+      await page.getByRole('button', { name: 'Send as is' }).isVisible() && await page.getByRole('button', { name: 'Meet Maya' }).isVisible())
+    await shot(page, 'meeting_ended')
+    await page.getByRole('button', { name: 'Send as is' }).click()
+    await page.waitForTimeout(400)
+    const shared = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '')
+    ok('Send as is copies the meeting text (no share sheet headless)', /Maya/.test(shared), shared.slice(0, 120))
+    await page.getByRole('button', { name: 'Meet Maya' }).click()
     await page.getByRole('heading', { name: 'Meet Maya' }).waitFor({ timeout: 5_000 })
     await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-    const payload = await page.getAttribute('.qrwrap', 'data-payload')
-    ok('Meet shows the QR with the notes in the fragment', /#n=/.test(payload ?? ''), payload ?? '')
-    ok('Meet shows exactly which notes are shared', /cargo bike/.test(await page.locator('.shared-notes').innerText()))
+    ok('Meet after a meeting is named after the person', true)
     ok('Meet explains NFC honestly where it is unavailable', await page.getByText(/Tap-to-connect needs Chrome on Android/).isVisible())
-    await shot(page, 'meet')
-
-    // back to Record, make notes: points and notes both arrive in Review, with the audio card
+    await shot(page, 'meet_after_meeting')
     await page.getByRole('button', { name: 'Back' }).click()
-    await page.getByRole('button', { name: 'Make notes' }).click()
-    await page.getByRole('heading', { name: /Notes about Maya/ }).waitFor({ timeout: 10_000 })
-    const lines = await page.locator('.line-text').evaluateAll((els) => els.map((e) => e.value))
-    ok('Review holds the points and the notes', lines.some((l) => /flat in Graz/.test(l)) && lines.some((l) => /cargo bike/.test(l)), JSON.stringify(lines))
-    ok('Review offers the audio before it is dropped', await page.locator('.rec-card').isVisible())
-    ok('a second take is kept, not overwritten', /2 takes/.test(await page.locator('.rec-card').innerText())
-      && await page.locator('.rec-card button').count() === 2)
-    await shot(page, 'review')
 
-    // Inventory settings swap the outer tabs; Record stays in the middle
+    // QR from a header: no notes, generic title
+    await page.getByRole('button', { name: 'Web' }).click()
+    await page.locator('.hdr .status-pill.qr').click()
+    await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
+    const qrLink = await page.getAttribute('.qrwrap', 'data-payload')
+    ok('the header QR opens Meet with no notes', !/#n=/.test(qrLink ?? '#n=') && await page.getByRole('heading', { name: 'Meet', exact: true }).isVisible(), qrLink ?? '')
+    await page.getByRole('button', { name: 'Back' }).click()
+
+    // Inventory: cog settings, backup question
     await page.getByRole('button', { name: 'Inventory' }).click()
+    ok('Inventory settings sit behind a cog (Lucide settings path)', await page.locator('.hdr-btn.icon-only svg path[d^="M12.22 2h"]').count() === 1)
+    await page.waitForTimeout(500)
+    ok('without a backup service the backup card stays hidden (backup_flow covers it live)', await page.getByText('Do you want to back it up on a Swiss server?').count() === 0)
+    await shot(page, 'inventory')
     await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByRole('button', { name: 'Inventory on the left, Web on the right' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
     ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabs))
-    await page.reload()
-    const tabsAfter = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
-    ok('the tab order survives a reload', JSON.stringify(tabsAfter) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabsAfter))
-
-    // the Web screen's query dock keeps the rings in view
-    await page.getByRole('button', { name: 'Web' }).click()
-    await page.getByRole('button', { name: 'Query' }).click()
-    ok('Query opens a dock under the rings', await page.locator('.query-dock').isVisible() && await page.locator('.rings-wrap').isVisible())
-    await shot(page, 'web_query')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
 
-    // a populated web: with the dock open, every person stays above it
+    // a populated web: with the query dock open, every person stays above it
     const demo = await ctx.newPage()
     await demo.goto(base + 'ea-demo/')
     const maya = demo.frameLocator('iframe[title="Maya\'s phone"]')
@@ -208,15 +216,30 @@ async function main() {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
       const doc = f?.contentDocument
       const dock = doc?.querySelector('.query-dock')?.getBoundingClientRect()
-      const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((n) => n.getBoundingClientRect().bottom)
+      const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((x) => x.getBoundingClientRect().bottom)
       return { dockTop: dock?.top ?? 0, lowest: Math.max(...nodes), count: nodes.length }
     })
     ok(`all ${fit.count} people stay above the query dock`, fit.count > 3 && fit.lowest <= fit.dockTop, JSON.stringify(fit))
-    if (SHOTS) await demo.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_ea_demo_query.png`) })
     await demo.close()
+
+    // dark mode is a real palette, not a darkened beige
+    const dark = await browser.newContext({ viewport: { width: 1000, height: 1000 }, colorScheme: 'dark' })
+    const dp = await dark.newPage()
+    await dp.goto(base + 'ea-demo/')
+    const dm = dp.frameLocator('iframe[title="Maya\'s phone"]')
+    await dm.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
+    const bg = await dp.evaluate(() => {
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
+      const s = f?.contentDocument?.querySelector('.screen')
+      return s ? getComputedStyle(s).backgroundColor : ''
+    })
+    ok('dark mode uses the plum night surface', bg === 'rgb(31, 23, 41)', bg)
+    if (SHOTS) await dp.locator('iframe[title="Maya\'s phone"]').screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_dark_web.png`) })
+    await dark.close()
 
     // the phone ending a take (call, lock, mic taken) keeps what was recorded
     const ctx2 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    await ctx2.addInitScript(noSpeech)
     await ctx2.addInitScript(() => {
       const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
       navigator.mediaDevices.getUserMedia = async (c) => { const st = await orig(c); window.__streams = [...(window.__streams || []), st]; return st }
@@ -226,18 +249,16 @@ async function main() {
     await p2.getByLabel('Your first name').fill('Jakob')
     await p2.getByRole('button', { name: 'Start on this phone' }).click()
     await p2.locator('nav.tabs .tab-record').click()
-    await p2.getByRole('button', { name: 'Start recording' }).click()
+    await p2.locator('.rec-circle').click()
     await p2.locator('.status-pill.rec').waitFor({ timeout: 10_000 })
     await p2.waitForTimeout(1500)
     await p2.evaluate(() => { for (const st of window.__streams) for (const t of st.getTracks()) { t.stop(); t.dispatchEvent(new Event('ended')) } })
     await p2.getByText('The recording was stopped by the phone', { exact: false }).waitFor({ timeout: 5_000 })
-    ok('a take ended by the phone says so', true)
-    await p2.getByRole('button', { name: 'Transcript' }).click()
-    ok('and its audio is kept', await p2.getByRole('button', { name: /Save audio file/ }).isVisible())
-    ok('the pill drops "Recording meeting" after the phone ends it', await p2.locator('.status-pill.rec').count() === 0)
+    ok('a take ended by the phone says so and is kept', /Recorded/.test(await p2.locator('.rec-status').innerText()))
+    ok('the pill gives way to the QR again', await p2.locator('.status-pill.rec').count() === 0)
     await ctx2.close()
   } finally {
-    await browser.close()
+    await browser?.close()
     viteProc.kill()
     await relay.close?.()
   }

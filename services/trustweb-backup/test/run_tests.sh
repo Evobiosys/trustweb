@@ -1,0 +1,27 @@
+#!/bin/sh
+# Typecheck backup.ts, compile it to a temp dir (ESM), then run the node:test suites.
+# No installs: uses the tsc already present in apps/demo/node_modules.
+set -eu
+echo "trustweb-backup tests running ..."
+HERE="$(cd "$(dirname "$0")" && pwd)"
+R="$(cd "$HERE/../../.." && pwd)"
+TSC="$R/apps/demo/node_modules/.bin/tsc"
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
+cat > "$OUT/tsconfig.json" <<JSON
+{
+  "compilerOptions": {
+    "target": "ES2020", "lib": ["ES2020", "DOM", "DOM.Iterable"], "module": "ESNext",
+    "moduleResolution": "bundler", "strict": true, "noUnusedLocals": true, "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true, "skipLibCheck": true, "isolatedModules": true, "types": [],
+    "outDir": "$OUT/js"
+  },
+  "files": ["$R/apps/trustweb/src/backup.ts"]
+}
+JSON
+echo "--------"
+"$TSC" -p "$OUT/tsconfig.json"
+echo "typecheck + compile: ok"
+echo '{"type":"module"}' > "$OUT/js/package.json"
+echo "--------"
+BACKUP_JS="$OUT/js/backup.js" node --test "$HERE/backup.test.mjs" "$HERE/server.test.mjs"
