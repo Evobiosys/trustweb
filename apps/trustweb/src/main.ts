@@ -123,10 +123,11 @@ const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '')
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : ''))
 
 let state: AppState | null = loadState(persona, storeCtx)
-if (!state && solo) {
-  state = seedState(persona as Persona, Date.now(), ctx)
-  saveState(persona, state, storeCtx)
-}
+// Side-by-side demo phones start like a real phone, with "Your first name"
+// (owner 2026-10-05); the name field is prefilled from ?device_name= and the
+// demo content (web, inventory) is seeded under the name typed in createMe().
+// Not ?name=: a connect link already carries the inviter's name there.
+const defaultName = solo ? (params.get('device_name') ?? '').slice(0, 40) : ''
 
 function st(): AppState {
   if (!state) throw new Error('no state yet')
@@ -481,11 +482,18 @@ function toast(msg: string): void {
 // ---------------------------------------------------------------------------
 
 function createMe(name: string): void {
-  state = {
-    v: 1, me: { id: randomId(12), displayName: name.trim().slice(0, 40) },
-    peers: [], people: [], inventory: [], log: [], notificationsOn: false,
-  }
+  const displayName = name.trim().slice(0, 40)
+  state = solo
+    ? { ...seedState(persona as Persona, Date.now(), ctx), me: { id: randomId(12), displayName } }
+    : { v: 1, me: { id: randomId(12), displayName }, peers: [], people: [], inventory: [], log: [], notificationsOn: false }
   save()
+}
+
+/** In the side-by-side demo, the first phone hands its connect link to the page for the others. */
+function announceLink(): void {
+  if (solo && persona === Persona.Holder && window.parent !== window) {
+    window.parent.postMessage({ type: 'trustweb-connect-link', url: net.connectLink(APP_URL) }, location.origin)
+  }
 }
 
 async function completePendingConnect(): Promise<void> {
@@ -513,13 +521,13 @@ async function completePendingConnect(): Promise<void> {
 }
 
 function screenStart(): Node[] {
-  const name = el('input', { class: 'field', placeholder: S.yourName, autocomplete: 'given-name', maxlength: '40', 'aria-label': S.yourName })
+  const name = el('input', { class: 'field', placeholder: S.yourName, autocomplete: 'given-name', maxlength: '40', 'aria-label': S.yourName, value: defaultName })
   const submit = (): void => {
     if (!name.value.trim()) { name.focus(); return }
     createMe(name.value)
     screen = Screen.Web
     render()
-    void net.start()
+    void net.start().then(announceLink)
     void completePendingConnect()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
@@ -2067,10 +2075,6 @@ function decide(share: boolean): void {
 
 render()
 if (state) {
-  void net.start().then(() => {
-    if (solo && persona === Persona.Holder && window.parent !== window) {
-      window.parent.postMessage({ type: 'trustweb-connect-link', url: net.connectLink(APP_URL) }, location.origin)
-    }
-  })
+  void net.start().then(announceLink)
   void completePendingConnect()
 }

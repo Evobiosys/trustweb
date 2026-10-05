@@ -27,6 +27,10 @@ async function main() {
     await page.goto(BASE + 'demo/')
     const toggle = page.getByRole('button', { name: 'See it in action' })
     ok('one device by default', await page.locator('iframe').count() === 1)
+    ok('no names above the phones, no "own phone" link', await page.locator('.phones .col h2').count() === 0 && await page.getByText('Use TrustWeb on your own phone').count() === 0)
+    const restart = page.getByRole('button', { name: 'Start the demo over' })
+    const rb = await restart.boundingBox()
+    ok('"Start over" sits bottom left with a restart symbol', rb !== null && rb.x < 100 && rb.y > 800 && await restart.locator('svg').count() === 1)
     ok('the walkthrough and the live-phone steps are hidden behind "See it in action"',
       await toggle.isVisible() && await page.locator('.wt').count() === 0 && !(await page.getByText('Try it on the live phones below').isVisible()))
     await toggle.click()

@@ -75,20 +75,24 @@ async function main() {
     const page = await ctx.newPage()
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
     await page.goto(base + 'solo.html')
-    // The page starts with Maya's device only (2026-10-05); add Jonas's.
+    // The page starts with one unnamed device at "Your first name" (2026-10-05).
     ok('the side-by-side page starts with one device', await page.locator('iframe').count() === 1)
-    await page.getByRole('button', { name: /Add a device/ }).click()
-    const maya = page.frameLocator('iframe[title="Maya\'s phone"]')
-    const jonas = page.frameLocator('iframe[title="Jonas\'s phone"]')
-
+    const maya = page.frameLocator('iframe[title="Device 1"]')
+    const jonas = page.frameLocator('iframe[title="Device 2"]')
+    await maya.getByLabel('Your first name').fill('Maya')
+    await maya.getByRole('button', { name: 'Start on this phone' }).click()
     await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
-    ok('Maya\'s phone boots on the Web screen', true)
+    ok('the first device starts like a real phone, then shows the seeded web', true)
+    await page.getByRole('button', { name: /Add a device/ }).click()
+    await jonas.getByRole('button', { name: 'Connect', exact: true }).waitFor({ timeout: 30_000 })
+    ok('an added device is called Jonas by default', (await jonas.getByLabel('Your first name').inputValue()) === 'Jonas')
+    await jonas.getByRole('button', { name: 'Connect', exact: true }).click()
     // Query lives on the Web screen (bottom right) and opens a dock under the rings.
     await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
     ok('Jonas\'s rings stay visible while querying', await jonas.locator('.rings-wrap').isVisible())
     const askBtn = jonas.getByRole('button', { name: 'Ask my web' })
     await page.waitForFunction(() => {
-      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Jonas's phone")
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 2")
       const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Ask my web')
       return b && !b.disabled
     }, null, { timeout: 30_000 })
@@ -111,7 +115,8 @@ async function main() {
     await waitResult()
     const shared = await jonas.locator('.card.asked').innerText()
     ok('Jonas receives what Maya shared', /Maya chose to share/.test(shared) && /Motorbike/.test(shared), shared)
-    ok('Maya glows on Jonas\'s rings as the one who shared', await jonas.locator('.node.shared', { hasText: 'Maya' }).count() === 1)
+    const glow = await jonas.locator('.node.shared').allInnerTexts()
+    ok('Maya glows on Jonas\'s rings as the one who shared', glow.length === 1 && /Maya/.test(glow[0]), JSON.stringify({ glow, nodes: await jonas.locator('.node').allInnerTexts() }))
     await maya.getByRole('button', { name: 'Back to the app' }).click()
 
     // 2. unrelated ask: silence

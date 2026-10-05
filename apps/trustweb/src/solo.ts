@@ -36,12 +36,6 @@ const BASE = import.meta.env.BASE_URL
 const root = document.getElementById('solo') as HTMLElement
 /** Maya first; each "Add a device" opens the next one, up to four phones (roadmap: five). */
 const ORDER: readonly Persona[] = [Persona.Holder, Persona.Seeker, Persona.Third, Persona.Fourth]
-const ROLE: Record<Persona, string> = {
-  [Persona.Holder]: 'has a seeded web and inventory',
-  [Persona.Seeker]: 'asks his web',
-  [Persona.Third]: 'joins Maya\'s web',
-  [Persona.Fourth]: 'joins Maya\'s web',
-}
 
 const style = document.createElement('style')
 style.textContent = `
@@ -66,8 +60,11 @@ body{background:var(--bg);color:var(--ink);font-family:"Seravek","Avenir Next","
 iframe{width:390px;max-width:calc(100vw - 32px);height:780px;border:0;border-radius:40px;background:#F2EBDC;
   box-shadow:0 24px 80px rgba(36,27,46,.35),0 0 0 10px #17111e,0 0 0 12px #3a2f47}
 .wait{width:390px;max-width:calc(100vw - 32px);height:780px;border-radius:40px;display:grid;place-items:center;color:var(--soft);background:var(--card);font-size:14px;text-align:center;padding:30px}
-.foot{text-align:center;margin-top:22px;font-size:13px;color:var(--soft)}
-.foot button,.foot a{font:inherit;color:var(--violet);background:none;border:0;cursor:pointer;text-decoration:underline}
+.restart{position:fixed;left:20px;bottom:20px;z-index:10;display:flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:10px 16px 10px 12px;
+  font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;background:var(--card);color:var(--ink);box-shadow:0 8px 24px rgba(36,27,46,.25)}
+.restart svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.restart:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
+@media (max-width:600px){.restart{position:static;margin:14px auto 0}}
 .dock{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;align-items:flex-end;gap:10px;z-index:10}
 .dock button{font:inherit;font-weight:700;font-size:14.5px;border:0;border-radius:999px;padding:12px 20px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .dock .add{background:var(--card);color:var(--ink);box-shadow:0 8px 24px rgba(36,27,46,.25)}
@@ -92,14 +89,14 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 }
 
 const phones = h('div', 'phones', '')
-const head = h('div', 'head', '<h1>TrustWeb, side by side</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is Maya\'s phone, running the real app over the live relay. Add Jonas\'s phone next to it, or watch the scripted version with <b>See it in action</b>.</p>')
+const head = h('div', 'head', '<h1>TrustWeb, side by side</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.</p>')
 
 // "See it in action": the walkthrough and, under it, what to try on the live phones.
 const actionSlot = h('section', 'action-slot', '')
 actionSlot.hidden = true
 const walkSlot = h('div', '', '')
 const liveSteps = h('div', 'live-steps', `<h2>Try it on the live phones below</h2><div class="steps">${[
-  '<b>1.</b> First add Jonas\'s device (bottom right). Then on Jonas\'s phone, tap <b>Call into your web</b> and ask "Does anyone have a motorbike I could borrow?"',
+  '<b>1.</b> Start the first phone as Maya, then add a device (bottom right; it is called Jonas unless you rename it). On Jonas\'s phone, tap <b>Call into your web</b> and ask "Does anyone have a motorbike I could borrow?"',
   '<b>2.</b> Maya\'s phone shows the ask at once, with the line that matched. She chooses: share, or not.',
   '<b>3.</b> After the 30-second window Jonas sees what she shared, or "No match". A decline looks exactly like no match.',
   '<b>4.</b> Now ask "Who has a spare room in Vienna?" Maya noted one, shared with nobody: her phone stays silent.',
@@ -111,15 +108,16 @@ let shown = 0
 const pending: HTMLElement[] = []
 
 function phoneColumn(p: Persona): { col: HTMLElement; slot: HTMLElement } {
-  const col = h('div', 'col', `<h2>${PERSONA_NAMES[p]}'s device <span>${ROLE[p]}</span></h2>`)
-  const slot = h('div', 'wait', `Connecting ${PERSONA_NAMES[p]} to Maya over the relay...`)
+  // No name above a phone: each person names their own phone on its start screen.
+  const col = h('div', 'col', '')
+  const slot = h('div', 'wait', p === Persona.Holder ? '' : 'Start the first phone with a name; this one then connects to it over the relay...')
   col.appendChild(slot)
   return { col, slot }
 }
 
 function frame(p: Persona, src: string): HTMLIFrameElement {
   const f = document.createElement('iframe')
-  f.title = `${PERSONA_NAMES[p]}'s phone`
+  f.title = `Device ${ORDER.indexOf(p) + 1}`
   f.src = src
   f.allow = 'microphone'
   return f
@@ -149,7 +147,8 @@ function linkFor(p: Persona, url: string): string {
   link.searchParams.set('persona', p)
   link.searchParams.set('solo', '1')
   link.searchParams.set('ctx', ctx)
-  return link.pathname + link.search
+  link.searchParams.set('device_name', PERSONA_NAMES[p])
+  return link.pathname + link.search + link.hash
 }
 
 const dock = h('div', 'dock', '')
@@ -177,32 +176,31 @@ function updateDock(): void {
   addBtn.disabled = full
   addBtn.innerHTML = full
     ? `${ORDER.length} devices (the most for now)`
-    : `<span class="plus" aria-hidden="true">+</span>Add a device: ${PERSONA_NAMES[ORDER[shown]]}'s phone`
-  addBtn.setAttribute('aria-label', full ? `${ORDER.length} devices, the most for now` : `Add a device: ${PERSONA_NAMES[ORDER[shown]]}'s phone`)
+    : '<span class="plus" aria-hidden="true">+</span>Add a device'
+  addBtn.setAttribute('aria-label', full ? `${ORDER.length} devices, the most for now` : 'Add a device')
 }
 
+// "Start the demo over", bottom left, as a restart symbol (owner 2026-10-05).
 const foot = (() => {
-  const f = h('p', 'foot', '')
   const reset = document.createElement('button')
-  reset.textContent = 'Start the demo over'
+  reset.className = 'restart'
+  reset.title = 'Start the demo over'
+  reset.setAttribute('aria-label', 'Start the demo over')
+  reset.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span>Start over</span>'
   reset.onclick = () => {
     for (const p of ORDER) {
       try { localStorage.removeItem(storageKey(p, ctx)) } catch { /* nothing stored */ }
     }
     location.reload()
   }
-  const own = document.createElement('a')
-  own.href = BASE
-  own.textContent = 'Use TrustWeb on your own phone'
-  f.append(reset, document.createTextNode(' · '), own)
-  return f
+  return reset
 })()
 
 root.append(head, actionSlot, phones, foot, dock)
 addDevice()
 
 window.addEventListener('message', (e: MessageEvent) => {
-  const holder = phones.querySelector<HTMLIFrameElement>('iframe[title="Maya\'s phone"]')
+  const holder = phones.querySelector<HTMLIFrameElement>('iframe[title="Device 1"]')
   if (e.origin !== location.origin || !holder || e.source !== holder.contentWindow) return
   const data = e.data as { type?: unknown; url?: unknown }
   if (data?.type !== 'trustweb-connect-link' || typeof data.url !== 'string' || connectLink) return

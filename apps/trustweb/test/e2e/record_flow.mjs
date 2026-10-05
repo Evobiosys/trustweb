@@ -269,11 +269,13 @@ async function main() {
     // a populated web: with the query dock open, every person stays above it
     const demo = await ctx.newPage()
     await demo.goto(base + 'ea-demo/')
-    const maya = demo.frameLocator('iframe[title="Maya\'s phone"]')
+    const maya = demo.frameLocator('iframe[title="Device 1"]')
+    await maya.getByLabel('Your first name').fill('Maya')
+    await maya.getByRole('button', { name: 'Start on this phone' }).click()
     await maya.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
     await demo.waitForTimeout(400)
     const fit = await demo.evaluate(() => {
-      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 1")
       const doc = f?.contentDocument
       const dock = doc?.querySelector('.query-dock')?.getBoundingClientRect()
       const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((x) => x.getBoundingClientRect().bottom)
@@ -286,15 +288,17 @@ async function main() {
     const dark = await browser.newContext({ viewport: { width: 1000, height: 1000 }, colorScheme: 'dark' })
     const dp = await dark.newPage()
     await dp.goto(base + 'ea-demo/')
-    const dm = dp.frameLocator('iframe[title="Maya\'s phone"]')
+    const dm = dp.frameLocator('iframe[title="Device 1"]')
+    await dm.getByLabel('Your first name').fill('Maya')
+    await dm.getByRole('button', { name: 'Start on this phone' }).click()
     await dm.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
     const bg = await dp.evaluate(() => {
-      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 1")
       const s = f?.contentDocument?.querySelector('.screen')
       return s ? getComputedStyle(s).backgroundColor : ''
     })
     ok('dark mode uses the plum night surface', bg === 'rgb(31, 23, 41)', bg)
-    if (SHOTS) await dp.locator('iframe[title="Maya\'s phone"]').screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_dark_web.png`) })
+    if (SHOTS) await dp.locator('iframe[title="Device 1"]').screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_dark_web.png`) })
     await dark.close()
 
     // wide screen: a "+" outside the phone opens the side-by-side demo
