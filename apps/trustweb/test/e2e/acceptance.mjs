@@ -66,8 +66,11 @@ async function main() {
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   // TW_BROWSER=webkit runs the same steps in WebKit (Safari's engine).
   const engine = (pw.chromium ? pw : pw.default)[process.env.TW_BROWSER || 'chromium']
-  const browser = await engine.launch({ headless: true })
+  // A launch failure (e.g. a missing browser build) must still stop the dev
+  // server and relay below, or the orphaned Vite process keeps this run alive.
+  let browser = null
   try {
+    browser = await engine.launch({ headless: true })
     const ctx = await browser.newContext({ viewport: { width: 1000, height: 1000 } })
     const page = await ctx.newPage()
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
@@ -134,7 +137,7 @@ async function main() {
     ok('a decline shows Jonas the same "No match"', /No match/.test(declined) && !/chose to share/.test(declined), declined)
     if (process.env.TW_SHOT) await page.screenshot({ path: process.env.TW_SHOT })
   } finally {
-    await browser.close().catch(() => {})
+    await browser?.close().catch(() => {})
     if (viteProc) {
       viteProc.kill('SIGTERM')
       await new Promise((r) => { viteProc.once('exit', r); setTimeout(r, 3000) })

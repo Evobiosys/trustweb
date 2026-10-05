@@ -46,11 +46,19 @@ export function audioExtension(mimeType: string): string {
   return 'webm'
 }
 
+/**
+ * Called once per take, however it ended: `expected` is false when the
+ * browser or the system ended it (incoming call, microphone revoked, iOS
+ * locking the screen), so the caller can say so. Chunks are never dropped
+ * on that path.
+ */
+export type TakeHandler = (take: Recording, expected: boolean) => void
+
 export class MeetingRecorder {
   private rec: MediaRecorder | null = null
-  private stream: MediaStream | null = null
-  private chunks: Blob[] = []
+  private current: { stopping: boolean; discarding: boolean } | null = null
   private began = 0
+  private waiter: (() => void) | null = null
 
   get live(): boolean {
     return this.rec !== null && this.rec.state !== 'inactive'
@@ -62,51 +70,56 @@ export class MeetingRecorder {
   }
 
   /** Asks for the microphone and starts recording. Rejects if the person or the browser refuses. */
-  async start(): Promise<void> {
+  async start(onTake: TakeHandler): Promise<void> {
     if (this.live) return
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     const mimeType = pickMimeType()
     const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-    this.chunks = []
-    rec.ondataavailable = (e: BlobEvent): void => { if (e.data.size > 0) this.chunks.push(e.data) }
-    this.stream = stream
+    // Per-take locals: a late stop event from an earlier take must never touch
+    // the chunks, stream or flags of the take that is running now.
+    const chunks: Blob[] = []
+    const startedAt = Date.now()
+    const take = { stopping: false, discarding: false }
+    rec.ondataavailable = (e: BlobEvent): void => { if (e.data.size > 0) chunks.push(e.data) }
+    rec.onstop = (): void => {
+      const type = rec.mimeType || chunks[0]?.type || 'audio/webm'
+      const blob = new Blob(chunks, { type })
+      stream.getTracks().forEach((t) => t.stop())
+      if (this.rec === rec) { this.rec = null; this.current = null }
+      if (!take.discarding && blob.size > 0) onTake({ blob, mimeType: type, startedAt, durationMs: Date.now() - startedAt }, take.stopping)
+      const w = this.waiter
+      this.waiter = null
+      w?.()
+    }
+    // A track can end without stop(): the OS takes the mic, the person
+    // revokes it, the phone locks. Close the take so its audio is kept.
+    for (const t of stream.getAudioTracks()) {
+      t.addEventListener('ended', () => { if (rec.state !== 'inactive') rec.stop() })
+    }
     this.rec = rec
-    this.began = Date.now()
-    // A timeslice keeps memory in small chunks and leaves something usable if
-    // the tab is closed abruptly in a later version that persists them.
+    this.current = take
+    this.began = startedAt
+    // A timeslice keeps memory in small chunks instead of one growing buffer.
     rec.start(1000)
   }
 
-  /** Stops and returns the finished recording; null if nothing was recording. */
-  stop(): Promise<Recording | null> {
+  /** Stops on purpose; resolves after the take has been handed to the TakeHandler. */
+  stop(): Promise<void> {
     const rec = this.rec
-    if (!rec || rec.state === 'inactive') return Promise.resolve(null)
-    const startedAt = this.began
+    if (!rec || rec.state === 'inactive' || !this.current) return Promise.resolve()
+    this.current.stopping = true
     return new Promise((resolve) => {
-      rec.onstop = (): void => {
-        const mimeType = rec.mimeType || this.chunks[0]?.type || 'audio/webm'
-        const blob = new Blob(this.chunks, { type: mimeType })
-        this.release()
-        resolve({ blob, mimeType, startedAt, durationMs: Date.now() - startedAt })
-      }
+      this.waiter = resolve
       rec.stop()
     })
   }
 
   /** Stops without keeping anything. */
   discard(): void {
-    if (this.rec && this.rec.state !== 'inactive') {
-      this.rec.onstop = null
+    if (this.rec && this.rec.state !== 'inactive' && this.current) {
+      this.current.discarding = true
       this.rec.stop()
     }
-    this.release()
-  }
-
-  private release(): void {
-    this.stream?.getTracks().forEach((t) => t.stop())
-    this.stream = null
-    this.rec = null
-    this.chunks = []
   }
 }
 

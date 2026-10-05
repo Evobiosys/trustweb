@@ -147,7 +147,12 @@ const recorder = new MeetingRecorder()
 let takes: Recording[] = []
 let recNotice = ''
 let recTicker: ReturnType<typeof setInterval> | undefined
+let wakeLock: WakeLockSentinel | null = null
 let stopDictation: (() => void) | null = null
+// Meet shares the current draft's notes only when opened from that draft
+// (after a shared recording), never from Manage: notes about one person must
+// not ride into the code shown to the next.
+let meetNotes = ''
 
 function freshDraft(personId?: string): Draft {
   const p = personId ? state?.people.find((x) => x.id === personId) : undefined
@@ -261,6 +266,21 @@ function onRecordTap(): void {
   go(Screen.Record)
 }
 
+/**
+ * A new note never silently replaces one in progress (a live recording is one
+ * tap away from here via the pill): it returns to that draft instead, where
+ * "Start over" is the one deliberate way to drop it.
+ */
+function startDraftFor(personId?: string): void {
+  if (draftInProgress()) {
+    toast(S.recBusy)
+    go(Screen.Record)
+    return
+  }
+  newDraft(personId)
+  go(Screen.Record)
+}
+
 function draftInProgress(): boolean {
   return recorder.live || takes.length > 0 || Boolean(draft.name.trim() || draft.text.trim() || draft.points.length || draft.lines.length)
 }
@@ -333,6 +353,7 @@ function render(): void {
     }
   })()
   host.replaceChildren(...body)
+  if (screen === Screen.Web) requestAnimationFrame(fitRings)
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +586,28 @@ function screenWeb(): Node[] {
   ]
 }
 
+const RINGS_SIZE = 352
+
+/**
+ * While the query dock is open, shrink the rings to the space left above it,
+ * so every person, and above all the ones who answer, stays in view: you
+ * always see your web while you ask it. Runs after layout, on every Web
+ * render and on resize.
+ */
+function fitRings(): void {
+  const wrap = host.querySelector<HTMLElement>('.rings-wrap')
+  const scroll = host.querySelector<HTMLElement>('.scroll')
+  if (!wrap || !scroll) return
+  if (!queryOpen) { wrap.style.transform = ''; wrap.style.marginBottom = ''; return }
+  const top = wrap.offsetTop - scroll.offsetTop
+  const room = scroll.clientHeight - top - 8
+  const scale = Math.max(0.4, Math.min(1, room / RINGS_SIZE))
+  wrap.style.transform = `scale(${scale})`
+  wrap.style.marginBottom = `${-(1 - scale) * RINGS_SIZE}px`
+  scroll.scrollTop = 0
+}
+window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
+
 function queryFab(): HTMLElement {
   const b = el('button', { class: 'query-fab', onclick: () => { queryOpen = true; render() } })
   b.innerHTML = ICONS.query
@@ -575,7 +618,7 @@ function queryFab(): HTMLElement {
 function screenManage(): Node[] {
   const s = st()
   const connect = el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Manage) }, [S.manageConnect])
-  const add = el('button', { class: 'btn btn-ghost', onclick: () => { newDraft(); go(Screen.Record) } }, ['+ ' + S.manageAddPerson])
+  const add = el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor() }, ['+ ' + S.manageAddPerson])
   return [
     header(S.manageTitle, { back: () => go(Screen.Web) }),
     el('div', { class: 'scroll' }, [
@@ -605,7 +648,7 @@ function personSheet(personId: string): void {
         ])))
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
-    el('button', { class: 'btn btn-ghost', onclick: () => { newDraft(p.id); go(Screen.Record) } }, [S.sheetAddNote]),
+    el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
   ])
 }
@@ -641,11 +684,27 @@ function startTicker(): void {
 }
 
 function dropRecording(): void {
-  if (recorder.live) recorder.discard()
-  clearInterval(recTicker)
-  stopDictation?.()
+  recorder.discard()
+  endLiveExtras()
   takes = []
   recNotice = ''
+}
+
+/** Everything that only lives while a take is running. */
+function endLiveExtras(): void {
+  clearInterval(recTicker)
+  stopDictation?.()
+  void wakeLock?.release().catch(() => {})
+  wakeLock = null
+}
+
+/** Every take lands here, whether the owner stopped it or the system did. */
+function onTake(take: Recording, expected: boolean): void {
+  takes.push(take)
+  endLiveExtras()
+  if (!expected) recNotice = S.recInterrupted
+  updateStatusPill()
+  if (screen === Screen.Record || !expected) render()
 }
 
 async function toggleRecording(): Promise<void> {
@@ -658,7 +717,7 @@ async function toggleRecording(): Promise<void> {
     return
   }
   try {
-    await recorder.start()
+    await recorder.start(onTake)
   } catch {
     recNotice = S.recDenied
     render()
@@ -666,15 +725,13 @@ async function toggleRecording(): Promise<void> {
   }
   recNotice = ''
   startTicker()
+  // Keep the screen on: a phone that locks mid-meeting ends the recording.
+  wakeLock = await navigator.wakeLock?.request('screen').catch(() => null) ?? null
   render()
 }
 
 async function stopRecording(): Promise<void> {
-  const r = await recorder.stop()
-  clearInterval(recTicker)
-  stopDictation?.()
-  if (r) takes.push(r)
-  render()
+  await recorder.stop()
   if (draft.mode === RecordMode.Shared && screen === Screen.Record) connectPrompt()
 }
 
@@ -684,7 +741,7 @@ function connectPrompt(): void {
   openSheet([
     el('h3', {}, [S.recConnectTitle(name)]),
     el('p', { class: 'meta' }, [S.recConnectLead]),
-    el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Record) }, [S.recConnectYes]),
+    el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Record, draft.text.trim()) }, [S.recConnectYes]),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recConnectLater]),
   ])
 }
@@ -822,6 +879,12 @@ function screenRecord(): Node[] {
       el('label', { class: 'lbl' }, [S.recWhere]), where,
       el('label', { class: 'lbl' }, [S.recPoints]), pointsView(),
       el('label', { class: 'lbl' }, [S.recNotes]), notes,
+      draftInProgress() && !live
+        ? el('button', {
+            class: 'btn btn-ghost btn-sm start-over',
+            onclick: () => { if (confirm(S.recStartOverConfirm)) { newDraft(); render() } },
+          }, [S.recStartOver])
+        : null,
     ]),
     el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', onclick: () => void makeNotes() }, [S.recMake])]),
   ]
@@ -829,11 +892,7 @@ function screenRecord(): Node[] {
 
 async function makeNotes(): Promise<void> {
   if (!draft.name.trim()) { document.querySelector<HTMLInputElement>(`input[aria-label="${S.recWho}"]`)?.focus(); return }
-  if (recorder.live) {
-    const r = await recorder.stop()
-    clearInterval(recTicker)
-    if (r) takes.push(r)
-  }
+  if (recorder.live) await recorder.stop()
   stopDictation?.()
   if (!draft.lines.length) {
     const fromNotes = extractLines(draft.text)
@@ -847,14 +906,15 @@ async function makeNotes(): Promise<void> {
 // meet: this phone's code (QR), NFC where the browser can, a link to copy
 // ---------------------------------------------------------------------------
 
-function openMeet(from: Screen): void {
+function openMeet(from: Screen, notes = ''): void {
   meetFrom = from
+  meetNotes = notes
   go(Screen.Meet)
 }
 
 function screenMeet(): Node[] {
-  const notes = draft.text.trim()
-  const name = draft.name.trim()
+  const notes = meetNotes
+  const name = meetFrom === Screen.Record ? draft.name.trim() : ''
   const qr = el('div', { class: 'qrwrap' })
   const nfcStatus = el('p', { class: 'meta' }, [nfcWriteSupported() ? '' : S.meetNfcOff])
   let link = ''
@@ -889,6 +949,7 @@ function screenMeet(): Node[] {
         el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
         el('dt', {}, [S.meetShared]), el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes]),
       ]),
+      notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
       copy,
       el('h4', { class: 'eyebrow' }, [S.meetNfc]),
       nfc,

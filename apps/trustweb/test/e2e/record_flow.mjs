@@ -111,6 +111,25 @@ async function main() {
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
     ok('tapping the pill returns to the recording, draft intact', (await page.getByLabel('Who are you meeting?').inputValue()) === 'Maya')
 
+    // a new note never silently drops the live recording
+    await page.getByRole('button', { name: 'Web' }).click()
+    await page.getByRole('button', { name: 'Manage' }).click()
+    await page.getByRole('button', { name: /Note someone new/ }).click()
+    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
+    ok('"Note someone new" during a recording returns to it instead of dropping it',
+      (await page.getByLabel('Who are you meeting?').inputValue()) === 'Maya' && await page.locator('.status-pill.rec').isVisible())
+
+    // Manage > Connect shares no notes from the draft in progress
+    await page.getByRole('button', { name: 'Web' }).click()
+    await page.getByRole('button', { name: 'Manage' }).click()
+    await page.getByRole('button', { name: 'Connect with someone' }).click()
+    await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
+    const manageLink = await page.getAttribute('.qrwrap', 'data-payload')
+    ok('a code shown from Manage carries no notes', !/#n=/.test(manageLink ?? '#n='), manageLink ?? '')
+    ok('Meet from Manage is not titled after the draft', await page.getByRole('heading', { name: 'Meet', exact: true }).isVisible())
+    await page.locator('.status-pill.rec').click()
+    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
+
     await page.getByRole('button', { name: 'Stop recording' }).click()
     // The clock shows while live too, so wait for the mic to flip back instead.
     await page.getByRole('button', { name: 'Start recording' }).waitFor({ timeout: 5_000 })
@@ -146,6 +165,7 @@ async function main() {
     await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     const payload = await page.getAttribute('.qrwrap', 'data-payload')
     ok('Meet shows the QR with the notes in the fragment', /#n=/.test(payload ?? ''), payload ?? '')
+    ok('Meet shows exactly which notes are shared', /cargo bike/.test(await page.locator('.shared-notes').innerText()))
     ok('Meet explains NFC honestly where it is unavailable', await page.getByText(/Tap-to-connect needs Chrome on Android/).isVisible())
     await shot(page, 'meet')
 
@@ -177,6 +197,45 @@ async function main() {
     ok('Query opens a dock under the rings', await page.locator('.query-dock').isVisible() && await page.locator('.rings-wrap').isVisible())
     await shot(page, 'web_query')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
+
+    // a populated web: with the dock open, every person stays above it
+    const demo = await ctx.newPage()
+    await demo.goto(base + 'ea-demo/')
+    const maya = demo.frameLocator('iframe[title="Maya\'s phone"]')
+    await maya.getByRole('button', { name: 'Query' }).click({ timeout: 30_000 })
+    await demo.waitForTimeout(400)
+    const fit = await demo.evaluate(() => {
+      const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
+      const doc = f?.contentDocument
+      const dock = doc?.querySelector('.query-dock')?.getBoundingClientRect()
+      const nodes = [...(doc?.querySelectorAll('.rings-wrap .node') ?? [])].map((n) => n.getBoundingClientRect().bottom)
+      return { dockTop: dock?.top ?? 0, lowest: Math.max(...nodes), count: nodes.length }
+    })
+    ok(`all ${fit.count} people stay above the query dock`, fit.count > 3 && fit.lowest <= fit.dockTop, JSON.stringify(fit))
+    if (SHOTS) await demo.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_ea_demo_query.png`) })
+    await demo.close()
+
+    // the phone ending a take (call, lock, mic taken) keeps what was recorded
+    const ctx2 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    await ctx2.addInitScript(() => {
+      const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+      navigator.mediaDevices.getUserMedia = async (c) => { const st = await orig(c); window.__streams = [...(window.__streams || []), st]; return st }
+    })
+    const p2 = await ctx2.newPage()
+    await p2.goto(base)
+    await p2.getByLabel('Your first name').fill('Jakob')
+    await p2.getByRole('button', { name: 'Start on this phone' }).click()
+    await p2.locator('nav.tabs .tab-record').click()
+    await p2.getByRole('button', { name: 'Start recording' }).click()
+    await p2.locator('.status-pill.rec').waitFor({ timeout: 10_000 })
+    await p2.waitForTimeout(1500)
+    await p2.evaluate(() => { for (const st of window.__streams) for (const t of st.getTracks()) { t.stop(); t.dispatchEvent(new Event('ended')) } })
+    await p2.getByText('The recording was stopped by the phone', { exact: false }).waitFor({ timeout: 5_000 })
+    ok('a take ended by the phone says so', true)
+    await p2.getByRole('button', { name: 'Transcript' }).click()
+    ok('and its audio is kept', await p2.getByRole('button', { name: /Save audio file/ }).isVisible())
+    ok('the pill drops "Recording meeting" after the phone ends it', await p2.locator('.status-pill.rec').count() === 0)
+    await ctx2.close()
   } finally {
     await browser.close()
     viteProc.kill()
