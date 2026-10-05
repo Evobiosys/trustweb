@@ -406,3 +406,29 @@ textarea.field{resize:vertical; line-height:1.5}
 .memo-tr{margin-top:14px; max-height:240px; overflow-y:auto}
 .memo-tr .tr-meta{justify-content:flex-end}
 .memo-tr .tr-meta span:first-child{display:none}
+
+/* header: search, QR, more (owner 2026-10-05: ⋮ top right, QR left of it, search left of that) */
+.hdr-right{gap:8px}
+.hdr-btn.icon-only{width:34px; height:34px; padding:0; display:grid; place-items:center; color:var(--ink)}
+.hdr-btn.on{background:var(--teal); color:#fff}
+.menu-item{display:flex; align-items:center; gap:14px; width:100%; border:0; background:var(--card); color:var(--ink); cursor:pointer;
+  border-radius:14px; padding:14px 16px; margin-top:8px; font:inherit; font-size:15.5px; text-align:left}
+.menu-item svg{width:22px; height:22px; stroke:var(--teal); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0}
+.menu-item span{display:flex; flex-direction:column; gap:2px}
+.menu-item small{font-size:12px; color:var(--ink-soft)}
+.menu-item:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.search{padding-top:4px}
+.search-field{margin-top:4px}
+.curate-row{margin:10px 0 14px}
+.search .ppl{padding:0}
+
+/* person sheet: reach them on */
+.channels{margin-top:16px}
+.ch-row{display:flex; align-items:center; gap:10px; background:var(--card); border-radius:12px; padding:10px 12px; margin-top:6px; flex-wrap:wrap}
+.ch-row.editing{flex-direction:column; align-items:stretch}
+.ch-row.editing .field{margin:0}
+.ch-name{flex:1; font-weight:700; font-size:14px; color:var(--ink)}
+.ch-open{color:var(--electric-deep); font-weight:700; font-size:13.5px; text-decoration:none; padding:4px 0}
+.ch-open:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+.ch-msg{color:var(--warn-ink)}
+.ch-msg:empty{display:none}

@@ -74,7 +74,27 @@ export interface Person {
   lines: NoteLine[]
   /** Set once this person is also connected on TrustWeb (a paired peer). */
   peerId?: string
+  /**
+   * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
+   * this phone only: never matched, relayed or put into a shared code.
+   * Absent in records saved before it existed.
+   */
+  channels?: Partial<Record<Channel, string>>
 }
+
+/** Messengers a contact can be opened in, in the owner's order (2026-10-05). */
+export enum Channel {
+  Signal = 'signal',
+  WhatsApp = 'whatsapp',
+  Matrix = 'matrix',
+  Delta = 'delta',
+  Telegram = 'telegram',
+  Messenger = 'messenger',
+}
+
+export const CHANNELS: readonly Channel[] = [
+  Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Delta, Channel.Telegram, Channel.Messenger,
+]
 
 export interface Peer {
   id: string

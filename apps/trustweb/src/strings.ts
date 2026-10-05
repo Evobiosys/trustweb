@@ -4,7 +4,7 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, LogOutcome, Ring, Tag } from './model'
+import { Audience, Channel, LogOutcome, Ring, Tag } from './model'
 
 export const S = {
   appName: 'TrustWeb',
@@ -32,13 +32,20 @@ export const S = {
   statusRecording: 'Recording',
   statusRecordingMeeting: 'Recording meeting',
   statusPaused: 'Paused',
-  qrOpen: 'Show my code',
+  qrOpen: 'Show my code (QR or NFC)',
 
   webTitle: 'Your TrustWeb',
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
   webEmpty: 'Nobody here yet. Tap anywhere in the web to add someone.',
   webQuery: 'Query',
-  webCurate: 'Curate',
+  searchOpen: 'Search contacts',
+  searchClose: 'Close search',
+  searchPh: 'Search your contacts',
+  searchNone: 'Nobody by that name yet.',
+  searchCurate: 'Curate your web',
+  searchCurateSub: 'Rings, notes and connections',
+  moreOpen: 'More',
+  moreSettings: 'Settings',
   webTapToAdd: 'Tap empty space to add someone',
   addTitle: 'Add someone to your web?',
   addLead: 'Their name, and how close you are. You can add notes later.',
@@ -292,6 +299,38 @@ export const S = {
 
   peerConnectedToast: (name: string, ring: string) => `Connected with ${name}, as ${ring === 'Acquaintance' ? 'an' : 'a'} ${ring.toLowerCase()}.`,
   notesReceivedContext: (name: string) => `Shared by ${name} when you met`,
+  chTitle: 'Reach them on',
+  chLabel: {
+    [Channel.Signal]: 'Signal',
+    [Channel.WhatsApp]: 'WhatsApp',
+    [Channel.Matrix]: 'Matrix',
+    [Channel.Delta]: 'Delta Chat',
+    [Channel.Telegram]: 'Telegram',
+    [Channel.Messenger]: 'Messenger',
+  } as Record<Channel, string>,
+  chPh: {
+    [Channel.Signal]: 'Phone number (+43...) or signal.me link',
+    [Channel.WhatsApp]: 'Phone number (+43...)',
+    [Channel.Matrix]: '@name:server.org',
+    [Channel.Delta]: 'Delta Chat invite link or email address',
+    [Channel.Telegram]: 'Username or phone number',
+    [Channel.Messenger]: 'Username (m.me/...)',
+  } as Record<Channel, string>,
+  chInvalid: {
+    [Channel.Signal]: 'Use an international number like +43 660 1234567, or paste their signal.me link.',
+    [Channel.WhatsApp]: 'Use an international number like +43 660 1234567.',
+    [Channel.Matrix]: 'A Matrix address looks like @name:server.org.',
+    [Channel.Delta]: 'Paste their i.delta.chat invite link, or an email address.',
+    [Channel.Telegram]: 'A Telegram username has 5 to 32 letters, digits or _, or use +43... .',
+    [Channel.Messenger]: 'Use their Messenger username (the part after m.me/).',
+  } as Record<Channel, string>,
+  chOpen: (app: string) => `Open in ${app}`,
+  chAdd: 'Add',
+  chEditShort: 'Edit',
+  chEdit: (app: string) => `Edit ${app}`,
+  chSave: 'Save',
+  chCancel: 'Cancel',
+  chHint: 'Kept on this phone only: never shared, never matched. Opens the app if it is installed. Delta Chat opens directly from an invite link; an email address opens your mail app.',
   back: 'Back',
   close: 'Close',
 } as const

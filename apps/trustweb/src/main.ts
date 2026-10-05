@@ -26,8 +26,9 @@ import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import {
-  AUDIENCES, Audience, LineStatus, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
+  AUDIENCES, Audience, CHANNELS, Channel, LineStatus, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
 } from './model'
+import { channelLink, normalizeHandle } from './channel'
 import type { AppState, NoteLine, Person } from './model'
 import { extractLines } from './notes'
 import { S } from './strings'
@@ -144,6 +145,8 @@ let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
 let queryOpen = false
+let searchOpen = false
+let searchText = ''
 let queryText = ''
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
@@ -258,7 +261,19 @@ const ICONS: Record<string, string> = {
   users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
+  // "Calling into the web": three own drawings, all with both hands cupped
+  // at the mouth (a call, not a shout; no megaphone). ?qi=a|b|c picks one live.
+  queryA: '<svg viewBox="0 0 24 24"><circle cx="7" cy="7.5" r="3.2"/><path d="M2.5 21v-2.5A4.5 4.5 0 0 1 7 14h1.5"/><path d="M10 6.2c1.3-.6 2.3-.6 3 0M10 8.8c1.3.6 2.3.6 3 0"/><path d="M13 6.2v2.6"/><path d="M16 5a5 5 0 0 1 0 5"/><path d="M18.8 3a8.5 8.5 0 0 1 0 9"/><circle cx="21.5" cy="17" r=".9"/><circle cx="17.5" cy="20" r=".9"/></svg>',
+  queryB: '<svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3.2"/><path d="M3 22v-1.5A6 6 0 0 1 9 14.5a6 6 0 0 1 6 6V22"/><path d="M5.5 15.5 7.3 10M12.5 15.5 10.7 10"/><path d="M16 5.5a4 4 0 0 1 0 5"/><path d="M18.5 3.5a7 7 0 0 1 0 9"/><circle cx="21.5" cy="4" r="1"/><circle cx="22" cy="12" r="1"/></svg>',
+  queryC: '<svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M9.5 13.2c.8 1.6 4.2 1.6 5 0"/><path d="M5 22c0-3.6 3.1-6 7-6s7 2.4 7 6"/><path d="M7.5 6a6.5 6.5 0 0 1 9 0"/><path d="M5 3.3a10 10 0 0 1 14 0"/></svg>',
 }
+
+const QUERY_ICON = ((): string => {
+  const pick = new URLSearchParams(location.search).get('qi')
+  return pick === 'b' ? 'queryB' : pick === 'c' ? 'queryC' : 'queryA'
+})()
 
 function icon(name: string): string {
   return ICONS[name]
@@ -329,7 +344,7 @@ function go(s: Screen): void {
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
  * take is open the QR gives way to the "Recording" pill, on every screen.
  */
-function header(title: string, opts: { back?: () => void; right?: Node | null; qr?: boolean } = {}): HTMLElement {
+function header(title: string, opts: { back?: () => void; right?: Node | null; qr?: boolean; more?: boolean } = {}): HTMLElement {
   statusPill = el('button', { class: 'status-pill' })
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
@@ -337,7 +352,31 @@ function header(title: string, opts: { back?: () => void; right?: Node | null; q
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
     ]),
-    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill]),
+    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill, opts.more ? moreButton() : null]),
+  ])
+}
+
+function iconButton(name: string, label: string, onclick: () => void, extra = ''): HTMLElement {
+  const b = el('button', { class: 'hdr-btn icon-only' + (extra ? ' ' + extra : ''), 'aria-label': label, title: label, onclick })
+  b.innerHTML = icon(name)
+  return b
+}
+
+function moreButton(): HTMLElement {
+  return iconButton('more', S.moreOpen, moreMenu, 'more')
+}
+
+/** The ⋮ menu (top right): settings, and curating the web. */
+function moreMenu(): void {
+  const item = (name: string, label: string, onclick: () => void): HTMLElement => {
+    const b = el('button', { class: 'menu-item', onclick })
+    b.innerHTML = icon(name)
+    b.append(el('span', {}, [label]))
+    return b
+  }
+  openSheet([
+    item('settings', S.moreSettings, settingsSheet),
+    item('users', S.searchCurate, () => go(Screen.Curate)),
   ])
 }
 
@@ -574,9 +613,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   return wrap
 }
 
-function peopleView(s: AppState): HTMLElement {
+function peopleView(s: AppState, only?: Person[]): HTMLElement {
   const order = (r: Ring): number => RINGS.indexOf(r)
-  const list = [...s.people].sort((a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name))
+  const list = [...(only ?? s.people)].sort((a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name))
   return el('div', { class: 'ppl' }, list.map((p) => el('button', { class: 'prow', onclick: () => personSheet(p.id) }, [
     avatar(p.name, p.id),
     el('div', { class: 'who' }, [
@@ -617,13 +656,42 @@ function askMarks(): Map<string, 'asked' | 'shared'> {
   return marks
 }
 
+function toggleSearch(): void {
+  searchOpen = !searchOpen
+  if (searchOpen) queryOpen = false
+  else searchText = ''
+  render()
+  if (searchOpen) document.querySelector<HTMLInputElement>('.search-field')?.focus()
+}
+
+function matchesSearch(p: Person, q: string): boolean {
+  const needle = q.trim().toLowerCase()
+  return !needle || p.name.toLowerCase().includes(needle) || p.context.toLowerCase().includes(needle)
+}
+
+/** Search: contacts only, filtered live in place (a re-render would wipe the typing). */
+function searchPanel(s: AppState): HTMLElement {
+  const input = el('input', { class: 'field search-field', type: 'search', placeholder: S.searchPh, 'aria-label': S.searchPh, value: searchText, autocomplete: 'off' })
+  const results = el('div', { id: 'search-results', 'aria-live': 'polite' })
+  const fill = (): void => {
+    const hits = s.people.filter((p) => matchesSearch(p, searchText))
+    results.replaceChildren(hits.length ? peopleView(s, hits) : el('p', { class: 'empty' }, [S.searchNone]))
+  }
+  input.addEventListener('input', () => { searchText = input.value; fill() })
+  input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Escape') toggleSearch() })
+  fill()
+  const curate = el('button', { class: 'menu-item curate-row', onclick: () => go(Screen.Curate) })
+  curate.innerHTML = icon('users')
+  curate.append(el('span', {}, [el('b', {}, [S.searchCurate]), el('small', {}, [S.searchCurateSub])]))
+  return el('div', { class: 'scroll pad search' }, [input, curate, results])
+}
+
 function screenWeb(): Node[] {
   const s = st()
-  const curate = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Curate) })
-  curate.innerHTML = icon('users')
-  curate.append(S.webCurate)
+  const search = iconButton(searchOpen ? 'x' : 'search', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
+  if (searchOpen) return [header(S.webTitle, { right: search, more: true }), searchPanel(s)]
   return [
-    header(S.webTitle, { right: curate }),
+    header(S.webTitle, { right: search, more: true }),
     el('div', { class: 'scroll' }, [
       s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
       ringsView(s, askMarks()),
@@ -708,7 +776,7 @@ window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() 
 
 function queryFab(): HTMLElement {
   const b = el('button', { class: 'query-fab', onclick: () => { queryOpen = true; render() } })
-  b.innerHTML = icon('query')
+  b.innerHTML = icon(QUERY_ICON)
   b.append(S.webQuery)
   return b
 }
@@ -747,6 +815,61 @@ function personSheet(personId: string): void {
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
+    channelsView(p),
+  ])
+}
+
+/**
+ * How to reach them, in the owner's order: an "Open in ..." link per
+ * messenger that opens the app directly, or Add. Stays on this phone.
+ */
+function channelsView(p: Person, editing?: Channel): HTMLElement {
+  const box = el('div', { class: 'channels' })
+  const draw = (edit?: Channel): void => {
+    box.replaceChildren(
+      el('h4', { class: 'eyebrow' }, [S.chTitle]),
+      ...CHANNELS.map((ch) => channelRow(p, ch, edit === ch, (next) => draw(next))),
+      el('p', { class: 'meta' }, [S.chHint]),
+    )
+  }
+  draw(editing)
+  return box
+}
+
+function channelRow(p: Person, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
+  const value = p.channels?.[ch]
+  const label = el('span', { class: 'ch-name ch-' + ch }, [S.chLabel[ch]])
+  if (edit) {
+    const input = el('input', { class: 'field', placeholder: S.chPh[ch], value: value ?? '', 'aria-label': S.chPh[ch], autocomplete: 'off' })
+    const msg = el('p', { class: 'meta ch-msg' })
+    const saveIt = (): void => {
+      if (!input.value.trim()) {
+        if (p.channels) delete p.channels[ch]
+        save(); redraw(); return
+      }
+      const v = normalizeHandle(ch, input.value)
+      if (!v) { msg.textContent = S.chInvalid[ch]; input.focus(); return }
+      p.channels = { ...(p.channels ?? {}), [ch]: v }
+      save()
+      redraw()
+    }
+    input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveIt() })
+    setTimeout(() => input.focus(), 0)
+    return el('div', { class: 'ch-row editing' }, [
+      label, input, msg,
+      el('div', { class: 'rec-saves' }, [
+        el('button', { class: 'btn btn-electric btn-sm', onclick: saveIt }, [S.chSave]),
+        el('button', { class: 'btn btn-ghost btn-sm', onclick: () => redraw() }, [S.chCancel]),
+      ]),
+    ])
+  }
+  if (!value) {
+    return el('div', { class: 'ch-row' }, [label, el('button', { class: 'mini', onclick: () => redraw(ch) }, ['+ ' + S.chAdd])])
+  }
+  return el('div', { class: 'ch-row' }, [
+    label,
+    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(S.chLabel[ch])]),
+    el('button', { class: 'mini', 'aria-label': S.chEdit(S.chLabel[ch]), onclick: () => redraw(ch) }, [S.chEditShort]),
   ])
 }
 
