@@ -81,7 +81,7 @@ async function main() {
     await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
     ok('Maya\'s phone boots on the Web screen', true)
     // Query lives on the Web screen (bottom right) and opens a dock under the rings.
-    await jonas.getByRole('button', { name: 'Query' }).click({ timeout: 30_000 })
+    await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
     ok('Jonas\'s rings stay visible while querying', await jonas.locator('.rings-wrap').isVisible())
     const askBtn = jonas.getByRole('button', { name: 'Ask my web' })
     await page.waitForFunction(() => {

@@ -95,10 +95,43 @@ async function main() {
     await page.locator('.node', { hasText: 'Lena' }).waitFor({ timeout: 5_000 })
     ok('the new person appears on the rings', true)
     await shot(page, 'web')
-    await page.getByRole('button', { name: 'Curate' }).click()
+    // search: contacts only, with "Curate your web" as the first option
+    await page.getByRole('button', { name: 'Search contacts' }).click()
+    await page.getByPlaceholder('Search your contacts').fill('len')
+    ok('search finds Lena', /Lena/.test(await page.locator('#search-results').innerText()))
+    await page.getByPlaceholder('Search your contacts').fill('zzz')
+    ok('search says when nobody matches', /Nobody by that name yet/.test(await page.locator('#search-results').innerText()))
+    await page.getByRole('button', { name: /Curate your web/ }).click()
     await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 5_000 })
-    ok('Curate lists the connections', /Lena/.test(await page.locator('.ppl').innerText()))
+    ok('Curate is reached from search and lists the connections', /Lena/.test(await page.locator('.ppl').innerText()))
     await page.getByRole('button', { name: 'Back' }).click()
+    await page.getByRole('button', { name: 'Close search' }).click()
+
+    // the person sheet: messenger links in the owner's order, opening the apps
+    await page.locator('.node', { hasText: 'Lena' }).click()
+    const chOrder = (await page.locator('.ch-name').allInnerTexts()).map((t) => t.trim())
+    ok('messengers in order: Signal, WhatsApp, Matrix, Delta Chat, Telegram, Messenger',
+      JSON.stringify(chOrder) === JSON.stringify(['Signal', 'WhatsApp', 'Matrix', 'Delta Chat', 'Telegram', 'Messenger']), JSON.stringify(chOrder))
+    const addCh = async (i, value) => {
+      await page.locator('.ch-row').nth(i).getByRole('button', { name: /Add/ }).click()
+      await page.locator('.ch-row.editing input').fill(value)
+      await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
+    }
+    await addCh(0, '+43 660 123 4567')
+    await addCh(1, '0043 660 123 4567')
+    await page.locator('.ch-row').nth(2).getByRole('button', { name: /Add/ }).click()
+    await page.locator('.ch-row.editing input').fill('lena-without-server')
+    await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
+    ok('a malformed Matrix address is refused', /A Matrix address looks like/.test(await page.locator('.ch-row.editing').innerText()))
+    await page.locator('.ch-row.editing input').fill('@lena:matrix.example.org')
+    await page.locator('.ch-row.editing').getByRole('button', { name: 'Save' }).click()
+    await addCh(4, '@lena_tw')
+    const hrefs = await page.locator('.ch-open').evaluateAll((els) => els.map((e) => e.getAttribute('href')))
+    ok('links open the apps directly', JSON.stringify(hrefs) === JSON.stringify([
+      'https://signal.me/#p/+436601234567', 'https://wa.me/436601234567', 'https://matrix.to/#/@lena:matrix.example.org', 'https://t.me/lena_tw',
+    ]), JSON.stringify(hrefs))
+    await shot(page, 'person_channels')
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // Record (solo): Tana voice-memo layout
     await page.locator('nav.tabs .tab-record').click()
@@ -204,13 +237,21 @@ async function main() {
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
     ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabs))
+    // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
+    await page.getByRole('button', { name: 'Web', exact: true }).click()
+    await page.getByRole('button', { name: 'More' }).click()
+    await page.locator('.menu-item', { hasText: 'Settings' }).click()
+    await page.locator('.radio', { hasText: 'A magnifying glass' }).click()
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    ok('the Query alternative shows a magnifier "Query" and the Curate list top right',
+      await page.getByRole('button', { name: 'Query', exact: true }).isVisible() && await page.locator('.hdr-right').getByRole('button', { name: 'Curate your web' }).isVisible())
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
 
     // a populated web: with the query dock open, every person stays above it
     const demo = await ctx.newPage()
     await demo.goto(base + 'ea-demo/')
     const maya = demo.frameLocator('iframe[title="Maya\'s phone"]')
-    await maya.getByRole('button', { name: 'Query' }).click({ timeout: 30_000 })
+    await maya.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
     await demo.waitForTimeout(400)
     const fit = await demo.evaluate(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Maya's phone")
@@ -236,6 +277,14 @@ async function main() {
     ok('dark mode uses the plum night surface', bg === 'rgb(31, 23, 41)', bg)
     if (SHOTS) await dp.locator('iframe[title="Maya\'s phone"]').screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_dark_web.png`) })
     await dark.close()
+
+    // wide screen: a "+" outside the phone opens the side-by-side demo
+    const wide = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    const wp = await wide.newPage()
+    await wp.goto(base)
+    const addLink = wp.getByRole('link', { name: /Add another device to see how it works side by side/ })
+    ok('the "+ add another device" link sits outside the phone on a wide screen', await addLink.isVisible() && /\/demo\/$/.test(await addLink.getAttribute('href') ?? ''))
+    await wide.close()
 
     // the phone ending a take (call, lock, mic taken) keeps what was recorded
     const ctx2 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })

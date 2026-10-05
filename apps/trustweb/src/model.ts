@@ -148,6 +148,14 @@ export interface AppState {
   notificationsOn: boolean
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
+  /** Absent: QueryStyle.Call. */
+  queryStyle?: QueryStyle
+}
+
+/** The Web screen's query button: calling into the web (default) or the magnifier "Query". */
+export enum QueryStyle {
+  Call = 'call',
+  Search = 'search',
 }
 
 /** Does `audience` admit someone I hold in `ring`? */

@@ -1,5 +1,5 @@
 /**
- * Web -> Curate -> "Add someone" and a tap on empty space in the web open the
+ * Web -> search -> Curate your web -> "Add someone" and a tap on empty space in the web open the
  * same "Add someone to your web?" sheet, and saving puts the person on the
  * rings. Also pins the 2026-10-05 nav: exactly Web | Record | Inventory, Query
  * on the Web screen, a QR button in the header instead of "Online".
@@ -62,10 +62,13 @@ async function main() {
     ok('boots on Web screen', true)
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
     ok('nav is exactly Web | Record | Inventory', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Inventory']), JSON.stringify(tabs))
-    ok('Query sits on the Web screen', await page.getByRole('button', { name: 'Query' }).isVisible())
+    ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
+    const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
+    ok('header right reads search, QR, more', hdr.length === 3 && /Search/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 
-    await page.getByRole('button', { name: 'Curate' }).click()
+    await page.getByRole('button', { name: 'Search contacts' }).click()
+    await page.getByRole('button', { name: /Curate your web/ }).click()
     await page.getByRole('heading', { name: 'Curate' }).waitFor({ timeout: 10_000 })
     ok('Curate lists the connections', true)
     await page.getByRole('button', { name: /Add someone/ }).click()
@@ -75,6 +78,8 @@ async function main() {
     await page.getByRole('button', { name: 'Add to my web' }).click()
     await page.getByRole('button', { name: 'Back' }).click()
     await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+    ok('back from Curate returns to the open search, with the new person found', /Plus Person/.test(await page.locator('#search-results').innerText()))
+    await page.getByRole('button', { name: 'Close search' }).click()
     ok('back on Web with the new person on the rings', await page.locator('.node', { hasText: 'Plus Person' }).count() === 1)
     ok('Record is still the raised middle tab', await page.locator('nav.tabs .tab-record').isVisible())
   } finally {

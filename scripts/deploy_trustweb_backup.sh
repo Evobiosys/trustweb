@@ -56,7 +56,7 @@ MemoryMax=256M
 [Install]
 WantedBy=multi-user.target
 UNIT
-rsh 'sudo systemctl daemon-reload && sudo systemctl enable --now trustweb-backup && sudo systemctl restart trustweb-backup && sleep 1 && curl -fsS http://127.0.0.1:8960/health'
+rsh 'sudo systemctl daemon-reload && sudo systemctl enable --now trustweb-backup && sudo systemctl restart trustweb-backup && sleep 1 && curl -fsS -H "Host: app.idea2.site" http://127.0.0.1:8960/health'
 echo
 
 echo "3/4 Caddy: handle /backup/* inside app.idea2.site, before the relay block"

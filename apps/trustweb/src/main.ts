@@ -26,7 +26,7 @@ import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import {
-  AUDIENCES, Audience, CHANNELS, Channel, LineStatus, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
+  AUDIENCES, Audience, CHANNELS, Channel, LineStatus, QueryStyle, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
 } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, NoteLine, Person } from './model'
@@ -243,6 +243,15 @@ const toastEl = el('div', { class: 'toast', role: 'status' })
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl)
 root.replaceChildren(phone)
+// On a wide screen, outside the phone: open the side-by-side demo (not inside
+// the demo's own iframes, and not on a real phone, where the app is full screen).
+if (!solo && window.top === window) {
+  const add = el('a', { class: 'add-device', href: APP_URL + 'demo/', title: S.addDevice }, [
+    el('span', { class: 'add-device-plus', 'aria-hidden': 'true' }, ['+']),
+    el('span', {}, [S.addDevice]),
+  ])
+  root.append(add)
+}
 
 // Icons: web, inventory and query are this app's own; mic, pause, play, send,
 // x, qr, handshake, settings (a cog, never a sun-like icon: owner 2026-10-05),
@@ -263,17 +272,16 @@ const ICONS: Record<string, string> = {
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
-  // "Calling into the web": three own drawings, all with both hands cupped
-  // at the mouth (a call, not a shout; no megaphone). ?qi=a|b|c picks one live.
-  queryA: '<svg viewBox="0 0 24 24"><circle cx="7" cy="7.5" r="3.2"/><path d="M2.5 21v-2.5A4.5 4.5 0 0 1 7 14h1.5"/><path d="M10 6.2c1.3-.6 2.3-.6 3 0M10 8.8c1.3.6 2.3.6 3 0"/><path d="M13 6.2v2.6"/><path d="M16 5a5 5 0 0 1 0 5"/><path d="M18.8 3a8.5 8.5 0 0 1 0 9"/><circle cx="21.5" cy="17" r=".9"/><circle cx="17.5" cy="20" r=".9"/></svg>',
-  queryB: '<svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3.2"/><path d="M3 22v-1.5A6 6 0 0 1 9 14.5a6 6 0 0 1 6 6V22"/><path d="M5.5 15.5 7.3 10M12.5 15.5 10.7 10"/><path d="M16 5.5a4 4 0 0 1 0 5"/><path d="M18.5 3.5a7 7 0 0 1 0 9"/><circle cx="21.5" cy="4" r="1"/><circle cx="22" cy="12" r="1"/></svg>',
-  queryC: '<svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M9.5 13.2c.8 1.6 4.2 1.6 5 0"/><path d="M5 22c0-3.6 3.1-6 7-6s7 2.4 7 6"/><path d="M7.5 6a6.5 6.5 0 0 1 9 0"/><path d="M5 3.3a10 10 0 0 1 14 0"/></svg>',
+  // "Call into your web": the app's own drawing, one person calling with both
+  // hands cupped at the mouth (a call, not a shout; no megaphone), three soft arcs.
+  call: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3.3"/><path d="M2 21v-2a5 5 0 0 1 5-5h1.5"/><path d="M8.6 14 11 10.3"/><path d="M10.2 7.4 13.6 5.8v5.4l-3.4-1.6z"/><path d="M16.2 6.2a3.3 3.3 0 0 1 0 4.6"/><path d="M18.7 4.2a6.3 6.3 0 0 1 0 8.6"/><path d="M21.2 2.4a9.2 9.2 0 0 1 0 12.2"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }
 
-const QUERY_ICON = ((): string => {
-  const pick = new URLSearchParams(location.search).get('qi')
-  return pick === 'b' ? 'queryB' : pick === 'c' ? 'queryC' : 'queryA'
-})()
+/** Which query button the owner chose in Settings (default: call into your web). */
+function queryStyle(): QueryStyle {
+  return state?.queryStyle ?? QueryStyle.Call
+}
 
 function icon(name: string): string {
   return ICONS[name]
@@ -688,7 +696,11 @@ function searchPanel(s: AppState): HTMLElement {
 
 function screenWeb(): Node[] {
   const s = st()
-  const search = iconButton(searchOpen ? 'x' : 'search', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
+  // Call style: a contact search top right (the magnifier is free). Query
+  // style: the magnifier means querying, so the top shows the Curate list.
+  const search = queryStyle() === QueryStyle.Call
+    ? iconButton(searchOpen ? 'x' : 'search', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
+    : iconButton('list', S.searchCurate, () => go(Screen.Curate))
   if (searchOpen) return [header(S.webTitle, { right: search, more: true }), searchPanel(s)]
   return [
     header(S.webTitle, { right: search, more: true }),
@@ -775,9 +787,15 @@ function fitRings(): void {
 window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
 
 function queryFab(): HTMLElement {
-  const b = el('button', { class: 'query-fab', onclick: () => { queryOpen = true; render() } })
-  b.innerHTML = icon(QUERY_ICON)
-  b.append(S.webQuery)
+  const call = queryStyle() === QueryStyle.Call
+  const b = el('button', {
+    class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery,
+    onclick: () => { queryOpen = true; searchOpen = false; render() },
+  })
+  b.innerHTML = icon(call ? 'call' : 'query')
+  b.append(call
+    ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
+    : el('span', {}, [S.webQuery]))
   return b
 }
 
@@ -1598,6 +1616,11 @@ function settingsSheet(): void {
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
     el('p', { class: 'meta' }, [S.setTabsHint]),
+    el('h4', { class: 'eyebrow' }, [S.setQuery]),
+    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
+      class: 'radio' + (queryStyle() === q ? ' on' : ''),
+      onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     notificationsCard(s),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
@@ -1857,7 +1880,7 @@ function queryDock(s: AppState): HTMLElement {
     : null
   return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
-      el('h3', {}, [S.queryTitle]),
+      el('h3', {}, [queryStyle() === QueryStyle.Call ? S.webCall : S.queryTitle]),
       el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [

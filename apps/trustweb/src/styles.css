@@ -432,3 +432,17 @@ textarea.field{resize:vertical; line-height:1.5}
 .ch-open:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
 .ch-msg{color:var(--warn-ink)}
 .ch-msg:empty{display:none}
+
+/* query button, call style: two short lines next to the calling person */
+.query-fab.call{padding:10px 18px 10px 14px; gap:9px}
+.query-fab.call svg{width:24px; height:24px}
+.fab-two{display:flex; flex-direction:column; line-height:1.1; text-align:left; font-size:13.5px}
+
+/* page-level, outside the phone: open the side-by-side demo */
+.add-device{position:fixed; right:24px; bottom:24px; display:flex; align-items:center; gap:10px; max-width:250px;
+  background:var(--card); color:var(--ink); text-decoration:none; border-radius:18px; padding:12px 16px 12px 12px;
+  font-size:13.5px; line-height:1.35; font-weight:600; box-shadow:0 10px 30px rgba(36,27,46,.25)}
+.add-device-plus{width:36px; height:36px; border-radius:50%; flex-shrink:0; display:grid; place-items:center; font-size:22px; font-weight:400;
+  background:linear-gradient(135deg,var(--coral),var(--violet)); color:#fff}
+.add-device:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
+@media (max-width:820px){ .add-device{display:none} }

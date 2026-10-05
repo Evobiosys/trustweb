@@ -4,7 +4,7 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, LogOutcome, Ring, Tag } from './model'
+import { Audience, Channel, LogOutcome, QueryStyle, Ring, Tag } from './model'
 
 export const S = {
   appName: 'TrustWeb',
@@ -38,6 +38,10 @@ export const S = {
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
   webEmpty: 'Nobody here yet. Tap anywhere in the web to add someone.',
   webQuery: 'Query',
+  webCall: 'Call into your web',
+  addDevice: 'Add another device to see how it works side by side',
+  webCallTop: 'Call into',
+  webCallBottom: 'your web',
   searchOpen: 'Search contacts',
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
@@ -269,6 +273,15 @@ export const S = {
   setTabsWebLeft: 'Web on the left, Inventory on the right',
   setTabsInvLeft: 'Inventory on the left, Web on the right',
   setTabsHint: 'Record always stays in the middle.',
+  setQuery: 'Asking your web',
+  setQueryLabel: {
+    [QueryStyle.Call]: 'Call into your web',
+    [QueryStyle.Search]: 'Query',
+  } as Record<QueryStyle, string>,
+  setQueryHint: {
+    [QueryStyle.Call]: 'A person calling. Contact search sits top right.',
+    [QueryStyle.Search]: 'A magnifying glass. Curate sits top right as a list.',
+  } as Record<QueryStyle, string>,
 
   queryTitle: 'Ask your web',
   queryClose: 'Close',
