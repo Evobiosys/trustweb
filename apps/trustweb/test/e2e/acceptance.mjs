@@ -75,9 +75,11 @@ async function main() {
     const maya = page.frameLocator('iframe[title="Maya\'s phone"]')
     const jonas = page.frameLocator('iframe[title="Jonas\'s phone"]')
 
-    await maya.getByRole('heading', { name: 'Your Web' }).waitFor({ timeout: 20_000 })
+    await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
     ok('Maya\'s phone boots on the Web screen', true)
+    // Query lives on the Web screen (bottom right) and opens a dock under the rings.
     await jonas.getByRole('button', { name: 'Query' }).click({ timeout: 30_000 })
+    ok('Jonas\'s rings stay visible while querying', await jonas.locator('.rings-wrap').isVisible())
     const askBtn = jonas.getByRole('button', { name: 'Ask my web' })
     await page.waitForFunction(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Jonas's phone")
@@ -103,6 +105,7 @@ async function main() {
     await waitResult()
     const shared = await jonas.locator('.card.asked').innerText()
     ok('Jonas receives what Maya shared', /Maya chose to share/.test(shared) && /Motorbike/.test(shared), shared)
+    ok('Maya glows on Jonas\'s rings as the one who shared', await jonas.locator('.node.shared', { hasText: 'Maya' }).count() === 1)
     await maya.getByRole('button', { name: 'Back to the app' }).click()
 
     // 2. unrelated ask: silence

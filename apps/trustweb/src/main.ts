@@ -2,11 +2,14 @@
  * TrustWeb: the one merged demo app (app.idea2.site/trustweb/).
  *
  * Substance from apps/demo (relay-mode consent flow, via net.ts); look and
- * nav chrome from apps/mobile-ui (the rings, Rings/People toggle, bottom bar
- * with a raised Meet button); a new notes flow in place of the Meet ceremony.
+ * nav chrome from apps/mobile-ui (the rings, bottom bar with a raised
+ * button); the notes flow from the owner's note-taking mockup.
  *
- * Nav: Web | Inventory | Meet | Query. Meet: first tap opens a blank note,
- * a second tap on the note screen shows this phone's code (QR). No chat, no
+ * Nav (owner, 2026-10-05): Web | Record | Inventory, Record raised in the
+ * middle. Querying happens ON the Web screen (a Query button bottom right
+ * opens a dock under the rings), because you always see your web when you
+ * ask it. Web's Manage (top right) lists the connections; Meet (QR, NFC) is
+ * reached from there and offered after a shared recording. No chat, no
  * unread badges, notifications off by default.
  */
 import './styles.css'
@@ -17,24 +20,40 @@ import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import {
-  AUDIENCES, Audience, LineStatus, RINGS, Ring, TAGS, Tag, ageLabel, coarseWhen,
+  AUDIENCES, Audience, LineStatus, RINGS, Ring, TAGS, TabOrder, Tag, ageLabel, coarseWhen,
 } from './model'
 import type { AppState, NoteLine, Person } from './model'
-import { extractLines } from './notes'
+import { extractLines, guessTag } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
 import { DemoContext, Persona, isDemoContext, seedState } from './seed'
 import { VoiceSupport, installVoice, startDictation, voiceApiPresent, voiceSupport } from './speech'
+import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
+import type { Recording } from './recorder'
+import { nfcWriteSupported, writeLinkToTag } from './nfc'
 
 enum Screen {
   Start = 'start',
   Web = 'web',
+  Manage = 'manage',
   Inventory = 'inventory',
+  Record = 'record',
   Meet = 'meet',
   Review = 'review',
   Place = 'place',
   StillTrue = 'still',
-  Query = 'query',
+}
+
+/** Recording by myself is the default; a shared recording needs the other person's yes. */
+enum RecordMode {
+  Solo = 'solo',
+  Shared = 'shared',
+}
+
+interface Point {
+  id: string
+  text: string
+  done: boolean
 }
 
 interface DraftLine {
@@ -50,7 +69,12 @@ interface Draft {
   name: string
   context: string
   text: string
+  mode: RecordMode
+  /** Only meaningful for a shared recording: the other person agreed. */
   consent: boolean
+  points: Point[]
+  /** Live on-device transcript phrases, if the owner turned that on. */
+  transcript: string[]
   lines: DraftLine[]
   ring: Ring
 }
@@ -104,22 +128,40 @@ function save(): void {
 // ---------------------------------------------------------------------------
 
 let screen: Screen = state ? Screen.Web : Screen.Start
-let webSeg: 'rings' | 'people' = 'rings'
 let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
+let queryOpen = false
 let queryText = ''
-let askRun: { text: string; asked: number; startedAt: number; results: AskResult[] | null } | null = null
+let askRun: {
+  text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
+} | null = null
 const askQueue: IncomingAsk[] = []
 let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
+// Where Meet's back arrow returns to (Manage, Record, or Web).
+let meetFrom: Screen = Screen.Manage
+// The recording belongs to the current draft; it is dropped with it.
+const recorder = new MeetingRecorder()
+// Every take of the current draft, oldest first: a new take never overwrites one.
+let takes: Recording[] = []
+let recNotice = ''
+let recTicker: ReturnType<typeof setInterval> | undefined
+let stopDictation: (() => void) | null = null
 
 function freshDraft(personId?: string): Draft {
   const p = personId ? state?.people.find((x) => x.id === personId) : undefined
   return {
-    personId, name: p?.name ?? '', context: p?.context ?? '', text: '', consent: false, lines: [],
+    personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
+    mode: RecordMode.Solo, consent: false, points: [], transcript: [], lines: [],
     ring: p?.ring ?? Ring.Acquaintance,
   }
+}
+
+/** Starts a new draft, dropping any recording that belonged to the old one. */
+function newDraft(personId?: string): void {
+  dropRecording()
+  draft = freshDraft(personId)
 }
 
 // ---------------------------------------------------------------------------
@@ -181,8 +223,13 @@ root.replaceChildren(phone)
 const ICONS: Record<string, string> = {
   web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
   inventory: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
-  meet: '<svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>',
+  mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
   query: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+  doc: '<svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
 }
 
 function tabButton(target: Screen, label: string, icon: string): HTMLElement {
@@ -192,25 +239,30 @@ function tabButton(target: Screen, label: string, icon: string): HTMLElement {
   return b
 }
 
-function meetButton(): HTMLElement {
-  const b = el('button', { class: 'tab-meet', 'data-go': Screen.Meet, 'aria-label': S.navMeet, onclick: onMeetTap })
-  b.innerHTML = ICONS.meet
-  b.append(el('span', {}, [S.navMeet]))
+function recordButton(): HTMLElement {
+  const b = el('button', { class: 'tab-record', 'data-go': Screen.Record, 'aria-label': S.navRecord, onclick: onRecordTap })
+  b.innerHTML = ICONS.mic
+  b.append(el('span', {}, [S.navRecord]))
   return b
 }
 
-tabs.append(
-  tabButton(Screen.Web, S.navWeb, 'web'),
-  tabButton(Screen.Inventory, S.navInventory, 'inventory'),
-  meetButton(),
-  tabButton(Screen.Query, S.navQuery, 'query'),
-)
+function renderTabs(): void {
+  const web = tabButton(Screen.Web, S.navWeb, 'web')
+  const inv = tabButton(Screen.Inventory, S.navInventory, 'inventory')
+  const invLeft = state?.tabOrder === TabOrder.InventoryLeft
+  tabs.replaceChildren(invLeft ? inv : web, recordButton(), invLeft ? web : inv)
+}
+renderTabs()
 
-function onMeetTap(): void {
-  // Second tap anywhere in the notes flow shows the code; it must never wipe the note.
-  if (screen === Screen.Meet || screen === Screen.Review || screen === Screen.Place) { void showQrSheet(); return }
-  draft = freshDraft()
-  go(Screen.Meet)
+function onRecordTap(): void {
+  // The Record tab never wipes a draft in progress (notes, points, audio);
+  // it only starts fresh when nothing is in flight.
+  if (!draftInProgress()) newDraft()
+  go(Screen.Record)
+}
+
+function draftInProgress(): boolean {
+  return recorder.live || takes.length > 0 || Boolean(draft.name.trim() || draft.text.trim() || draft.points.length || draft.lines.length)
 }
 
 function go(s: Screen): void {
@@ -220,22 +272,39 @@ function go(s: Screen): void {
 }
 
 function header(title: string, opts: { back?: () => void; right?: Node | null } = {}): HTMLElement {
-  statusPill = el('span', { class: 'status-pill' })
+  statusPill = el('button', { class: 'status-pill', onclick: () => { if (recorder.live) go(Screen.Record) } })
   updateStatusPill()
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
     ]),
-    opts.right ? el('div', { class: 'hdr-right' }, [opts.right, statusPill]) : statusPill,
+    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill]),
   ])
 }
 
+/**
+ * The top-right pill. Idle: a quiet dot that only carries the relay state in
+ * its label (no "Online" text, owner 2026-10-05). Recording: "Recording
+ * meeting", on every screen, and tapping it returns to the recording.
+ */
 function updateStatusPill(): void {
   if (!statusPill) return
-  statusPill.className = 'status-pill ' + relayStatus
-  statusPill.textContent = relayStatus === 'connected' ? S.statusConnected
+  if (recorder.live) {
+    statusPill.className = 'status-pill rec'
+    statusPill.textContent = S.statusRecording
+    statusPill.removeAttribute('aria-label')
+    statusPill.removeAttribute('title')
+    statusPill.removeAttribute('tabindex')
+    return
+  }
+  const label = relayStatus === 'connected' ? S.statusConnected
     : relayStatus === 'connecting' ? S.statusConnecting : S.statusDisconnected
+  statusPill.className = 'status-pill dot ' + relayStatus
+  statusPill.textContent = ''
+  statusPill.title = label
+  statusPill.setAttribute('aria-label', label)
+  statusPill.setAttribute('tabindex', '-1')
 }
 
 function render(): void {
@@ -244,21 +313,23 @@ function render(): void {
   tabs.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => {
     const target = b.getAttribute('data-go')
     const on = target === screen
-      || (target === Screen.Meet && (screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && screen === Screen.StillTrue)
+      || (target === Screen.Record && (screen === Screen.Review || screen === Screen.Place || screen === Screen.Meet))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Manage))
     b.classList.toggle('on', on)
   })
-  host.className = 'screen on ' + screen
+  tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live)
+  host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const body = (() => {
     switch (screen) {
       case Screen.Start: return screenStart()
       case Screen.Web: return screenWeb()
+      case Screen.Manage: return screenManage()
       case Screen.Inventory: return screenInventory()
+      case Screen.Record: return screenRecord()
       case Screen.Meet: return screenMeet()
       case Screen.Review: return screenReview()
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
-      case Screen.Query: return screenQuery()
     }
   })()
   host.replaceChildren(...body)
@@ -383,7 +454,7 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
-function ringsView(s: AppState): HTMLElement {
+function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
   const wrap = el('div', { class: 'rings-wrap' })
   const svg = document.createElementNS(NS, 'svg')
@@ -414,7 +485,8 @@ function ringsView(s: AppState): HTMLElement {
       path.setAttribute('opacity', p.peerId ? '0.85' : '0.35')
       if (!p.peerId) path.setAttribute('stroke-dasharray', '3 4')
       svg.appendChild(path)
-      const b = el('button', { class: 'node', onclick: () => personSheet(p.id) }, [
+      const mark = p.peerId ? marks.get(p.peerId) : undefined
+      const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
         el('span', {}, [p.name]),
         el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]),
@@ -452,7 +524,7 @@ function notificationsCard(s: AppState): HTMLElement {
     }
     s.notificationsOn = !s.notificationsOn
     save()
-    render()
+    settingsSheet()
   }
   return el('div', { class: 'verse notif' }, [
     el('h3', {}, [s.notificationsOn ? S.notifOnTitle : S.notifTitle]),
@@ -461,25 +533,55 @@ function notificationsCard(s: AppState): HTMLElement {
   ])
 }
 
+/** How each connected person shows on the rings while an ask is out or answered. */
+function askMarks(): Map<string, 'asked' | 'shared'> {
+  const marks = new Map<string, 'asked' | 'shared'>()
+  const run = askRun
+  if (!run) return marks
+  if (!run.results) {
+    for (const id of run.askedPeerIds) marks.set(id, 'asked')
+    return marks
+  }
+  for (const r of run.results) if (r.decoded?.outcome === 'shared' && r.decoded.shared) marks.set(r.peerId, 'shared')
+  return marks
+}
+
 function screenWeb(): Node[] {
   const s = st()
   const connected = s.people.filter((p) => p.peerId).length
-  const seg = el('div', { class: 'seg' }, [
-    el('button', { class: webSeg === 'rings' ? 'on' : '', onclick: () => { webSeg = 'rings'; render() } }, [S.segRings]),
-    el('button', { class: webSeg === 'people' ? 'on' : '', onclick: () => { webSeg = 'people'; render() } }, [S.segPeople]),
-  ])
+  const manage = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Manage) })
+  manage.innerHTML = ICONS.list
+  manage.append(S.webManage)
   return [
-    header(S.webTitle, {
-      right: el('button', { class: 'add-person', 'aria-label': S.webAddPerson, onclick: onMeetTap }, ['+']),
-    }),
+    header(S.webTitle, { right: manage }),
     el('div', { class: 'scroll' }, [
-      el('p', { class: 'sub' }, [S.webCount(s.people.length, connected)]),
-      seg,
+      el('p', { class: 'sub' }, [S.webWelcome + ' ' + S.webCount(s.people.length, connected)]),
       s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-      webSeg === 'rings' ? ringsView(s) : peopleView(s),
-      webSeg === 'rings' ? el('p', { class: 'web-cap' }, [S.webCap]) : null,
+      ringsView(s, askMarks()),
+      queryOpen ? null : el('p', { class: 'web-cap' }, [S.webCap]),
       isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
-      notificationsCard(s),
+    ]),
+    queryOpen ? queryDock(s) : queryFab(),
+  ]
+}
+
+function queryFab(): HTMLElement {
+  const b = el('button', { class: 'query-fab', onclick: () => { queryOpen = true; render() } })
+  b.innerHTML = ICONS.query
+  b.append(S.webQuery)
+  return b
+}
+
+function screenManage(): Node[] {
+  const s = st()
+  const connect = el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Manage) }, [S.manageConnect])
+  const add = el('button', { class: 'btn btn-ghost', onclick: () => { newDraft(); go(Screen.Record) } }, ['+ ' + S.manageAddPerson])
+  return [
+    header(S.manageTitle, { back: () => go(Screen.Web) }),
+    el('div', { class: 'scroll' }, [
+      el('p', { class: 'sub' }, [S.manageLead + ' ' + S.webCount(s.people.length, s.people.filter((p) => p.peerId).length)]),
+      el('div', { class: 'manage-actions' }, [connect, add]),
+      s.people.length === 0 ? el('p', { class: 'empty' }, [S.manageEmpty]) : peopleView(s),
     ]),
   ]
 }
@@ -503,7 +605,7 @@ function personSheet(personId: string): void {
         ])))
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
-    el('button', { class: 'btn btn-ghost', onclick: () => { draft = freshDraft(p.id); go(Screen.Meet) } }, [S.sheetAddNote]),
+    el('button', { class: 'btn btn-ghost', onclick: () => { newDraft(p.id); go(Screen.Record) } }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
   ])
 }
@@ -526,100 +628,274 @@ function ringSheet(p: Person): void {
 }
 
 // ---------------------------------------------------------------------------
-// meet: step 1, the note
+// record: the raised middle tab. Mic at the top, then who/where, points to
+// cover and notes, all usable while the recording runs.
 // ---------------------------------------------------------------------------
 
-let stopDictation: (() => void) | null = null
+function startTicker(): void {
+  clearInterval(recTicker)
+  recTicker = setInterval(() => {
+    const t = document.getElementById('rec-clock')
+    if (t) t.textContent = clock(recorder.elapsed())
+  }, 500)
+}
 
-function screenMeet(): Node[] {
-  const who = el('input', { class: 'field', placeholder: S.meetWhoPh, value: draft.name, 'aria-label': S.meetWho, maxlength: '40' })
-  const where = el('input', { class: 'field', placeholder: S.meetWherePh, value: draft.context, 'aria-label': S.meetWhere, maxlength: '80' })
-  const text = el('textarea', { class: 'field note', placeholder: S.meetTypePh, rows: '6', 'aria-label': S.meetOrType })
-  text.value = draft.text
-  who.addEventListener('input', () => { draft.name = who.value; consentText.textContent = S.meetConsent(draft.name.trim() || 'They') })
+function dropRecording(): void {
+  if (recorder.live) recorder.discard()
+  clearInterval(recTicker)
+  stopDictation?.()
+  takes = []
+  recNotice = ''
+}
+
+async function toggleRecording(): Promise<void> {
+  if (recorder.live) { await stopRecording(); return }
+  if (draft.mode === RecordMode.Shared && !draft.consent) { recNotice = S.recNeedsConsent; render(); return }
+  const support = recorderSupport()
+  if (support !== RecorderSupport.Ready) {
+    recNotice = support === RecorderSupport.NeedsSecurePage ? S.recInsecure : S.recUnavailable
+    render()
+    return
+  }
+  try {
+    await recorder.start()
+  } catch {
+    recNotice = S.recDenied
+    render()
+    return
+  }
+  recNotice = ''
+  startTicker()
+  render()
+}
+
+async function stopRecording(): Promise<void> {
+  const r = await recorder.stop()
+  clearInterval(recTicker)
+  stopDictation?.()
+  if (r) takes.push(r)
+  render()
+  if (draft.mode === RecordMode.Shared && screen === Screen.Record) connectPrompt()
+}
+
+/** After a shared recording: offer the connection, the same Meet flow. */
+function connectPrompt(): void {
+  const name = draft.name.trim() || 'them'
+  openSheet([
+    el('h3', {}, [S.recConnectTitle(name)]),
+    el('p', { class: 'meta' }, [S.recConnectLead]),
+    el('button', { class: 'btn btn-electric', onclick: () => openMeet(Screen.Record) }, [S.recConnectYes]),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recConnectLater]),
+  ])
+}
+
+function totalMs(): number {
+  return takes.reduce((sum, t) => sum + t.durationMs, 0)
+}
+
+function saveAudio(r: Recording): void {
+  const a = el('a', {
+    href: URL.createObjectURL(r.blob),
+    download: `trustweb-${(draft.name.trim() || 'meeting').replace(/[^\w-]+/g, '_')}-${new Date(r.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${audioExtension(r.mimeType)}`,
+  })
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+}
+
+async function toggleLiveTranscript(): Promise<void> {
+  if (stopDictation) { stopDictation(); transcriptSheet(); return }
+  const v = voiceApiPresent() ? await voiceSupport() : VoiceSupport.Unavailable
+  if (v === VoiceSupport.Unavailable || (v === VoiceSupport.NeedsDownload && !(await installVoice()))) {
+    toast(S.trLiveUnavailable)
+    return
+  }
+  stopDictation = startDictation((phrase) => {
+    draft.transcript.push(phrase)
+    const list = document.getElementById('tr-lines')
+    if (list) list.append(el('p', {}, [phrase]))
+  }, () => { stopDictation = null })
+  transcriptSheet()
+}
+
+/** Top right of Record: the local transcript and the audio file for later transcription. */
+function saveButtons(cls: string): HTMLElement[] {
+  return takes.map((t, i) => el('button', { class: cls, onclick: () => saveAudio(t) }, [
+    takes.length > 1 ? `${S.trSave} ${i + 1} (${clock(t.durationMs)})` : `${S.trSave} (${clock(t.durationMs)})`,
+  ]))
+}
+
+function transcriptSheet(): void {
+  openSheet([
+    el('h3', {}, [S.trTitle]),
+    el('p', { class: 'meta' }, [S.trLead]),
+    ...saveButtons('btn btn-electric'),
+    takes.length ? null : el('p', { class: 'meta' }, [recorder.live ? S.recLive : S.trNone]),
+    voiceApiPresent()
+      ? el('button', { class: 'btn btn-ghost', onclick: () => void toggleLiveTranscript() }, [stopDictation ? S.trLiveStop : S.trLive])
+      : el('p', { class: 'meta' }, [S.trLiveUnavailable]),
+    stopDictation ? el('p', { class: 'meta' }, [S.trLiveOn]) : null,
+    el('div', { class: 'tr-lines', id: 'tr-lines' },
+      draft.transcript.length ? draft.transcript.map((t) => el('p', {}, [t])) : [el('p', { class: 'meta' }, [S.trEmpty])]),
+  ])
+}
+
+function pointsView(): HTMLElement {
+  const add = el('input', { class: 'field', placeholder: S.recPointPh, maxlength: '120', 'aria-label': S.recPointPh })
+  const addPoint = (): void => {
+    const v = add.value.trim()
+    if (!v) { add.focus(); return }
+    draft.points.push({ id: randomId(8), text: v, done: false })
+    render()
+    document.querySelector<HTMLInputElement>('.points .add-row input')?.focus()
+  }
+  add.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') addPoint() })
+  return el('div', { class: 'points' }, [
+    ...draft.points.map((pt) => {
+      const box = el('input', { type: 'checkbox', 'aria-label': S.recPointDone })
+      box.checked = pt.done
+      const text = el('input', { class: 'point-text', value: pt.text, maxlength: '120', 'aria-label': S.recPoints })
+      // Checking a point off never locks it: it stays editable (owner, 2026-10-05).
+      box.addEventListener('change', () => { pt.done = box.checked; row.classList.toggle('done', pt.done) })
+      text.addEventListener('input', () => { pt.text = text.value })
+      const row = el('label', { class: 'point' + (pt.done ? ' done' : '') }, [box, text])
+      return row
+    }),
+    el('div', { class: 'add-row' }, [add, el('button', { class: 'btn btn-electric btn-sm', onclick: addPoint }, [S.recPointAdd])]),
+  ])
+}
+
+function screenRecord(): Node[] {
+  const live = recorder.live
+  const who = el('input', { class: 'field', placeholder: S.recWhoPh, value: draft.name, 'aria-label': S.recWho, maxlength: '40' })
+  const where = el('input', { class: 'field', placeholder: S.recWherePh, value: draft.context, 'aria-label': S.recWhere, maxlength: '80' })
+  const notes = el('textarea', { class: 'field note', placeholder: S.recNotesPh, rows: '5', 'aria-label': S.recNotes })
+  notes.value = draft.text
+  const consentText = el('span', {}, [S.recConsent(draft.name.trim() || 'They')])
+  who.addEventListener('input', () => { draft.name = who.value; consentText.textContent = S.recConsent(draft.name.trim() || 'They') })
   where.addEventListener('input', () => { draft.context = where.value })
-  text.addEventListener('input', () => { draft.text = text.value })
+  notes.addEventListener('input', () => { draft.text = notes.value })
+
+  const mic = el('button', {
+    class: 'rec-mic' + (live ? ' live' : ''),
+    'aria-label': live ? S.recStop : S.recStart,
+    onclick: () => void toggleRecording(),
+  })
+  mic.innerHTML = live ? ICONS.stop : ICONS.mic
+  const status = live ? S.recLive : takes.length ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
+
+  const mode = (m: RecordMode, label: string): HTMLElement => el('button', {
+    class: draft.mode === m ? 'on' : '',
+    disabled: live,
+    onclick: () => { draft.mode = m; recNotice = ''; render() },
+  }, [label])
 
   const consentBox = el('input', { type: 'checkbox', id: 'consent' })
   consentBox.checked = draft.consent
-  consentBox.addEventListener('change', () => { draft.consent = consentBox.checked })
-  const consentText = el('span', {}, [S.meetConsent(draft.name.trim() || 'They')])
+  consentBox.addEventListener('change', () => { draft.consent = consentBox.checked; if (draft.consent) { recNotice = ''; render() } })
+  const infoHint = el('p', { class: 'info-hint', hidden: true }, [S.recInfoHint])
+  const info = el('button', { class: 'info', 'aria-label': S.recInfo, onclick: (e: Event) => { e.preventDefault(); infoHint.hidden = !infoHint.hidden } })
+  info.innerHTML = ICONS.info
 
-  const micStatus = el('p', { class: 'mic-status' })
-  const mic = el('button', { class: 'mic', 'aria-label': S.meetMic, disabled: true })
-  mic.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'
-  // Probed only on a tap, never on render: SpeechRecognition.available()
-  // crashed the renderer outright in headless Chromium 153 during testing, and
-  // a note screen must never be able to take the whole app down with it.
-  if (!voiceApiPresent()) {
-    micStatus.textContent = S.meetMicUnavailable
-  } else {
-    mic.removeAttribute('disabled')
-    micStatus.textContent = S.meetMicTap
-    mic.onclick = async () => {
-      if (stopDictation) { stopDictation(); return }
-      if (!draft.consent) { micStatus.textContent = S.meetMicNeedsConsent; return }
-      const v = await voiceSupport()
-      if (v === VoiceSupport.Unavailable || (v === VoiceSupport.NeedsDownload && !(await installVoice()))) {
-        mic.setAttribute('disabled', '')
-        micStatus.textContent = S.meetMicUnavailable
-        return
-      }
-      mic.classList.add('live')
-      micStatus.textContent = S.meetMicListening
-      stopDictation = startDictation((phrase) => {
-        draft.text = (draft.text ? draft.text.trimEnd() + '. ' : '') + phrase
-        text.value = draft.text
-      }, () => {
-        stopDictation = null
-        mic.classList.remove('live')
-        micStatus.textContent = ''
-      })
-    }
-  }
-
-  const make = (): void => {
-    stopDictation?.()
-    if (!draft.name.trim()) { who.focus(); return }
-    const existing = draft.lines.length ? draft.lines : []
-    draft.lines = existing.length ? existing : extractLines(draft.text).map((l) => ({
-      id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends,
-    }))
-    go(Screen.Review)
-  }
+  const transcriptBtn = el('button', { class: 'hdr-btn', onclick: transcriptSheet })
+  transcriptBtn.innerHTML = ICONS.doc
+  transcriptBtn.append(S.recTranscript)
 
   return [
-    header(S.meetTitle, { back: () => go(Screen.Web) }),
+    header(S.recTitle, { right: transcriptBtn }),
     el('div', { class: 'scroll pad' }, [
-      el('label', { class: 'lbl' }, [S.meetWho]), who,
-      el('label', { class: 'lbl' }, [S.meetWhere]), where,
-      el('div', { class: 'mic-row' }, [mic, micStatus]),
-      el('label', { class: 'consent' }, [consentBox, consentText]),
-      el('label', { class: 'lbl' }, [S.meetOrType]), text,
-      el('p', { class: 'hint' }, [S.meetQrHint]),
+      el('div', { class: 'rec-hero' }, [
+        mic,
+        live || takes.length ? el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(live ? recorder.elapsed() : totalMs())]) : null,
+        el('p', { class: 'rec-status' }, [status]),
+        recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
+      ]),
+      el('div', { class: 'seg rec-mode' }, [mode(RecordMode.Solo, S.recModeSolo), mode(RecordMode.Shared, S.recModeShared)]),
+      draft.mode === RecordMode.Shared
+        ? el('div', {}, [
+            el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
+            infoHint,
+          ])
+        : el('p', { class: 'hint' }, [S.recSoloHint]),
+      el('label', { class: 'lbl' }, [S.recWho]), who,
+      el('label', { class: 'lbl' }, [S.recWhere]), where,
+      el('label', { class: 'lbl' }, [S.recPoints]), pointsView(),
+      el('label', { class: 'lbl' }, [S.recNotes]), notes,
     ]),
-    el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', onclick: make }, [S.meetMake])]),
+    el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', onclick: () => void makeNotes() }, [S.recMake])]),
   ]
 }
 
-async function showQrSheet(): Promise<void> {
-  await net.start()
-  let url = net.connectLink(APP_URL)
+async function makeNotes(): Promise<void> {
+  if (!draft.name.trim()) { document.querySelector<HTMLInputElement>(`input[aria-label="${S.recWho}"]`)?.focus(); return }
+  if (recorder.live) {
+    const r = await recorder.stop()
+    clearInterval(recTicker)
+    if (r) takes.push(r)
+  }
+  stopDictation?.()
+  if (!draft.lines.length) {
+    const fromNotes = extractLines(draft.text)
+    const fromPoints = draft.points.filter((p) => p.text.trim()).map((p) => ({ text: p.text.trim(), tag: guessTag(p.text) }))
+    draft.lines = [...fromPoints, ...fromNotes].map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends }))
+  }
+  go(Screen.Review)
+}
+
+// ---------------------------------------------------------------------------
+// meet: this phone's code (QR), NFC where the browser can, a link to copy
+// ---------------------------------------------------------------------------
+
+function openMeet(from: Screen): void {
+  meetFrom = from
+  go(Screen.Meet)
+}
+
+function screenMeet(): Node[] {
   const notes = draft.text.trim()
-  if (notes) url += '#n=' + encodeURIComponent(notes.slice(0, 300))
-  const qr = el('div', { class: 'qrwrap', 'data-payload': url })
-  openSheet([
-    el('h3', {}, [S.qrTitle]),
-    el('p', { class: 'meta' }, [S.qrLead]),
-    qr,
-    el('dl', { class: 'qr-facts' }, [
-      el('dt', {}, [S.qrRing]), el('dd', {}, [S.qrRingValue]),
-      el('dt', {}, [S.qrShared]), el('dd', {}, [notes ? S.qrSharedValue : S.qrSharedNoNotes]),
+  const name = draft.name.trim()
+  const qr = el('div', { class: 'qrwrap' })
+  const nfcStatus = el('p', { class: 'meta' }, [nfcWriteSupported() ? '' : S.meetNfcOff])
+  let link = ''
+  const copy = el('button', {
+    class: 'btn btn-ghost', disabled: true,
+    onclick: () => { void navigator.clipboard?.writeText(link).then(() => toast(S.meetCopied), () => toast(link)) },
+  }, [S.meetCopy])
+  const nfc = nfcWriteSupported()
+    ? el('button', {
+        class: 'btn btn-ghost', disabled: true,
+        onclick: () => {
+          nfcStatus.textContent = S.meetNfcWaiting
+          writeLinkToTag(link).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
+        },
+      }, [S.meetNfcWrite])
+    : null
+  void (async () => {
+    await net.start()
+    link = net.connectLink(APP_URL)
+    if (notes) link += '#n=' + encodeURIComponent(notes.slice(0, 300))
+    qr.setAttribute('data-payload', link)
+    await renderQr(qr, link)
+    copy.removeAttribute('disabled')
+    nfc?.removeAttribute('disabled')
+  })()
+  return [
+    header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom) }),
+    el('div', { class: 'scroll pad' }, [
+      el('p', { class: 'hint' }, [S.meetLead]),
+      qr,
+      el('dl', { class: 'qr-facts' }, [
+        el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
+        el('dt', {}, [S.meetShared]), el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes]),
+      ]),
+      copy,
+      el('h4', { class: 'eyebrow' }, [S.meetNfc]),
+      nfc,
+      nfcStatus,
+      el('p', { class: 'meta center' }, [S.meetNoChat]),
     ]),
-    el('button', { class: 'btn btn-ghost', disabled: true }, [`${S.qrAdvanced} · ${S.qrSoon}`]),
-    el('p', { class: 'meta center' }, [S.qrNoChat]),
-  ])
-  await renderQr(qr, url)
+  ]
 }
 
 // ---------------------------------------------------------------------------
@@ -666,6 +942,15 @@ function longPress(target: HTMLElement, onLong: () => void): void {
   target.addEventListener('contextmenu', (e) => { e.preventDefault(); onLong() })
 }
 
+/** The audio for the debrief: save it before the notes are saved, which drops TrustWeb's copy. */
+function recordingCard(): HTMLElement {
+  return el('div', { class: 'rec-card' }, [
+    el('b', {}, [S.reviewRecording(clock(totalMs()), takes.length)]),
+    el('p', {}, [S.reviewRecordingSub]),
+    el('div', { class: 'rec-saves' }, saveButtons('btn btn-electric btn-sm')),
+  ])
+}
+
 function screenReview(): Node[] {
   const rows = draft.lines.map((line) => {
     const input = el('textarea', { class: 'line-text', rows: '2', 'aria-label': S.tagLabel[line.tag] })
@@ -682,8 +967,9 @@ function screenReview(): Node[] {
     return row
   })
   return [
-    header(S.reviewTitle(draft.name.trim()), { back: () => go(Screen.Meet) }),
+    header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(Screen.Record) } }),
     el('div', { class: 'scroll pad' }, [
+      takes.length ? recordingCard() : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
       rows.length ? el('div', { class: 'lines' }, rows) : el('p', { class: 'empty' }, [S.reviewEmpty]),
       el('button', {
@@ -740,7 +1026,7 @@ function saveDraft(): void {
   }
   save()
   toast(S.savedToast(p.name, S.ringLabel[p.ring]))
-  draft = freshDraft()
+  newDraft()
   go(Screen.Web)
 }
 
@@ -829,6 +1115,27 @@ function screenStillTrue(): Node[] {
 // inventory (+ the local log)
 // ---------------------------------------------------------------------------
 
+function settingsSheet(): void {
+  const s = st()
+  const order = s.tabOrder ?? TabOrder.WebLeft
+  const pick = (o: TabOrder, label: string): HTMLElement => el('button', {
+    class: 'radio' + (order === o ? ' on' : ''),
+    onclick: () => { s.tabOrder = o; save(); renderTabs(); render(); settingsSheet() },
+  }, [el('b', {}, [label])])
+  openSheet([
+    el('h3', {}, [S.setTitle]),
+    el('h4', { class: 'eyebrow' }, [S.setTabs]),
+    pick(TabOrder.WebLeft, S.setTabsWebLeft),
+    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
+    el('p', { class: 'meta' }, [S.setTabsHint]),
+    notificationsCard(s),
+    solo ? null : el('button', {
+      class: 'btn btn-ghost',
+      onclick: () => { if (confirm(S.resetConfirm)) { dropRecording(); clearState(persona, storeCtx); location.reload() } },
+    }, [S.resetPhone]),
+  ])
+}
+
 function screenInventory(): Node[] {
   const s = st()
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -840,8 +1147,10 @@ function screenInventory(): Node[] {
     render()
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  const gear = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
+  gear.innerHTML = ICONS.gear
   return [
-    header(S.invTitle),
+    header(S.invTitle, { right: gear }),
     el('div', { class: 'scroll pad' }, [
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -861,16 +1170,12 @@ function screenInventory(): Node[] {
         el('em', {}, [S.logOutcome[e.outcome]]),
       ])),
       el('p', { class: 'foot' }, [S.logFoot]),
-      solo ? null : el('button', {
-        class: 'btn btn-ghost btn-sm',
-        onclick: () => { if (confirm(S.resetConfirm)) { clearState(persona, storeCtx); location.reload() } },
-      }, [S.resetPhone]),
     ]),
   ]
 }
 
 // ---------------------------------------------------------------------------
-// query
+// query: a dock on the Web screen, under the rings, so the web stays in view
 // ---------------------------------------------------------------------------
 
 const SUGGESTIONS = [
@@ -889,8 +1194,8 @@ function secondsLeft(startedAt: number): number {
 async function runAsk(text: string): Promise<void> {
   const t = text.trim()
   if (!t) return
-  const peers = st().peers.length
-  askRun = { text: t, asked: peers, startedAt: Date.now(), results: null }
+  const peers = st().peers
+  askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
     const w = document.getElementById('tw-wait')
@@ -900,7 +1205,7 @@ async function runAsk(text: string): Promise<void> {
   const results = await net.ask(t)
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
-  if (screen === Screen.Query) render()
+  if (screen === Screen.Web) render()
 }
 
 function resultsView(results: AskResult[]): HTMLElement[] {
@@ -916,9 +1221,8 @@ function resultsView(results: AskResult[]): HTMLElement[] {
   ]))
 }
 
-function screenQuery(): Node[] {
-  const s = st()
-  const box = el('textarea', { class: 'field', rows: '3', placeholder: S.queryPh, maxlength: '200', 'aria-label': S.queryTitle })
+function queryDock(s: AppState): HTMLElement {
+  const box = el('textarea', { class: 'field', rows: '2', placeholder: S.queryPh, maxlength: '200', 'aria-label': S.queryTitle })
   box.value = queryText
   box.addEventListener('input', () => { queryText = box.value })
   const busy = Boolean(askRun && !askRun.results)
@@ -933,13 +1237,16 @@ function screenQuery(): Node[] {
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt))])]),
       ])
     : null
-  return [
-    header(S.queryTitle),
-    el('div', { class: 'scroll pad' }, [
-      el('p', { class: 'hint' }, [S.queryLead]),
+  return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
+    el('div', { class: 'dock-head' }, [
+      el('h3', {}, [S.queryTitle]),
+      el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
+    ]),
+    el('div', { class: 'dock-body' }, [
+      run ? null : el('p', { class: 'hint' }, [S.queryLead]),
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       box,
-      el('div', { class: 'chips' }, [
+      run ? null : el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.queryTry]),
         ...SUGGESTIONS.map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
       ]),
@@ -949,7 +1256,7 @@ function screenQuery(): Node[] {
       }, [S.querySend]),
       inFlight,
     ]),
-  ]
+  ])
 }
 
 // ---------------------------------------------------------------------------

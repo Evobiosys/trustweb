@@ -111,6 +111,12 @@ export interface Me {
   displayName: string
 }
 
+/** Which side of the raised Record button each outer tab sits on (Inventory settings). */
+export enum TabOrder {
+  WebLeft = 'web-left',
+  InventoryLeft = 'inventory-left',
+}
+
 export interface AppState {
   v: 1
   me: Me
@@ -120,6 +126,8 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
+  tabOrder?: TabOrder
 }
 
 /** Does `audience` admit someone I hold in `ring`? */

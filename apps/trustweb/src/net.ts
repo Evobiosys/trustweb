@@ -53,6 +53,7 @@ export interface IncomingAsk {
 }
 
 export interface AskResult {
+  peerId: string
   peerName: string
   decoded: DecodedAnswer | null
 }
@@ -280,7 +281,7 @@ export class Net {
         this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
       }
       const env = await answered
-      return { peerName: peer.displayName, decoded: env ? await interpret(env, key) : null }
+      return { peerId: peer.id, peerName: peer.displayName, decoded: env ? await interpret(env, key) : null }
     }))
   }
 }
