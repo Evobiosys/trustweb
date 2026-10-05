@@ -116,6 +116,12 @@ async function main() {
     await page.locator('.radio', { hasText: 'Remove demo content' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     ok('"Remove demo content" takes exactly them away again', await page.locator('.node:not(.you)').count() === before)
+    ok('ring names (close friend, friend, ...) are hidden on the web by default', await page.locator('.node .lvl').count() === 0)
+    await page.getByRole('button', { name: 'More' }).click()
+    await page.locator('.menu-item', { hasText: 'Settings' }).click()
+    await page.locator('.radio', { hasText: 'Show ring names on the web' }).click()
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    ok('Settings > Advanced shows them again', await page.locator('.node .lvl').count() > 0)
 
     // desktop: outside the phone, "Add a device" and "See it in action" (an overlay)
     const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } })

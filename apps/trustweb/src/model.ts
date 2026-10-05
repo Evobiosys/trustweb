@@ -166,6 +166,8 @@ export interface AppState {
   demo?: { people: string[]; inventory: string[] }
   /** The phone offered demo content once (popup); absent: not yet. */
   demoOffered?: boolean
+  /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
+  showRingNames?: boolean
 }
 
 /** The Web screen's query button: calling into the web (default) or the magnifier "Query". */

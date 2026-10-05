@@ -294,6 +294,7 @@ const ICONS: Record<string, string> = {
   send: '<svg viewBox="0 0 24 24"><path d="M3.7 3.05a.5.5 0 0 0-.68.63l2.84 7.62a2 2 0 0 1 0 1.4l-2.84 7.62a.5.5 0 0 0 .68.63l18-8.5a.5.5 0 0 0 0-.9z"/><path d="M6 12h16"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   qr: '<svg viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>',
+  meet: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="5" r="2.4"/><circle cx="18.5" cy="5" r="2.4"/><path d="M2 21v-6.5A3.5 3.5 0 0 1 5.5 11a3.5 3.5 0 0 1 2.6 1.2l2.4 2.6"/><path d="M22 21v-6.5a3.5 3.5 0 0 0-3.5-3.5 3.5 3.5 0 0 0-2.6 1.2l-2.4 2.6"/><path d="M9 21v-3.5M15 21v-3.5"/><circle cx="12" cy="15.4" r="1.9" fill="currentColor"/></svg>',
   handshake: '<svg viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>',
   users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -381,15 +382,17 @@ function go(s: Screen): void {
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
  * take is open the QR gives way to the "Recording" pill, on every screen.
  */
-function header(title: string, opts: { back?: () => void; right?: Node | null; qr?: boolean; more?: boolean } = {}): HTMLElement {
+function header(title: string, opts: { back?: () => void; right?: Node | null; after?: Node | null; qr?: boolean; pill?: boolean; more?: boolean } = {}): HTMLElement {
   statusPill = el('button', { class: 'status-pill' })
+  // Record and Meeting show their own recording state, so the QR stays put there (owner 2026-10-06).
+  statusPill.dataset.pill = opts.pill === false ? '0' : '1'
   updateStatusPill(opts.qr !== false)
   return el('div', { class: 'hdr' }, [
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
     ]),
-    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill, opts.more ? moreButton() : null]),
+    el('div', { class: 'hdr-right' }, [opts.right ?? null, statusPill, opts.more ? moreButton() : opts.after ?? null]),
   ])
 }
 
@@ -441,7 +444,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
   p.dataset.qr = withQr ? '1' : '0'
   p.onclick = null
   p.removeAttribute('title')
-  if (recorder.live) {
+  if (recorder.live && p.dataset.pill !== '0') {
     const meeting = draft.mode === RecordMode.Meeting
     p.className = 'status-pill rec' + (recorder.paused ? ' paused' : '')
     p.textContent = recorder.paused ? S.statusPaused : meeting ? S.statusRecordingMeeting : S.statusRecording
@@ -755,7 +758,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
         el('span', {}, [p.name]),
-        el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]),
+        st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
       b.style.left = x + 'px'
       b.style.top = y + 'px'
@@ -1267,9 +1270,8 @@ async function sendSolo(): Promise<void> {
 function screenRecord(): Node[] {
   const live = recorder.live
   const paused = recorder.paused
-  const meeting = el('button', { class: 'hdr-btn', onclick: () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) } })
-  meeting.innerHTML = icon('handshake')
-  meeting.append(S.recMeeting)
+  // Icon only, in the slot ⋮ has on Web, so the QR keeps its exact place (owner 2026-10-06: muscle memory).
+  const meeting = iconButton('meet', S.recMeeting, () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) }, 'meet-btn')
   const has = takes.length > 0
   const circle = el('button', {
     class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
@@ -1278,7 +1280,7 @@ function screenRecord(): Node[] {
   })
   const status = live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
   return [
-    header(S.recTitle, { right: meeting, qr: false }),
+    header(S.recTitle, { after: meeting, pill: false }),
     el('div', { class: 'scroll pad memo' }, [
       el('div', { class: 'memo-hero' }, [
         circle,
@@ -1297,9 +1299,8 @@ function screenRecord(): Node[] {
         : el('p', { class: 'hint center' }, [S.recSoloHint]),
     ]),
     el('div', { class: 'memo-controls' }, [
+      // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
       roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() }),
-      roundButton(paused || !live ? 'play' : 'pause', paused || !live ? (live ? S.recResume : S.recStart) : S.recPause,
-        () => { if (live) togglePause(); else void startSolo() }, { cls: 'main' }),
       roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has }),
     ]),
   ]
@@ -1477,7 +1478,7 @@ function screenMeeting(): Node[] {
   return [
     header(S.meetingTitle, {
       back: () => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; go(Screen.Record) },
-      qr: false,
+      pill: false,
     }),
     el('div', { class: 'scroll pad' }, [
       el('label', { class: 'lbl' }, [S.recWho]), who,
@@ -1922,6 +1923,12 @@ function settingsSheet(): void {
       'aria-pressed': String(Boolean(s.demo)),
       onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
     }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]),
+    el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
+    el('button', {
+      class: 'radio' + (s.showRingNames ? ' on' : ''),
+      'aria-pressed': String(s.showRingNames === true),
+      onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
     el('h4', { class: 'eyebrow' }, [S.setTalkWeave]),
     el('button', {
       class: 'radio' + (s.talkWeaveLocal ? ' on' : ''),

@@ -28,6 +28,9 @@ export const S = {
   setDemo: 'Demo content',
   setDemoHint: 'Imaginary friends and things, on this phone only.',
   setConnection: 'Connection',
+  setAdvanced: 'Advanced',
+  setRingNames: 'Show ring names on the web',
+  setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
   addDeviceShort: 'Add a device',
   // Your own name, editable any time: tap yourself in the web, or Settings (owner 2026-10-05).
   meNameTitle: 'Your name',
