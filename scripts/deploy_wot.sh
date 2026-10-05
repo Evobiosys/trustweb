@@ -194,7 +194,14 @@ push_dir  "$REPO/apps/demo/dist"               "$REMOTE_APP/demo21"
 # necessarily contain the address in cleartext once VITE_WOT_ADDRESS is
 # supplied (a fully client-side app has no other way to answer with it
 # locally).
+# RETIRED 2026-10-05 (owner: "this should be deleted"): demo20 exposed a real
+# street address; app.idea2.site/wot/demo20/ is now a redirect to /trustweb/.
+# The opt-in build below is refused so no run can ever republish it.
 if [ "${DEPLOY_DEMO20:-}" = "1" ]; then
+  echo "demo20 is retired (2026-10-05) and must not be republished; its URL redirects to /trustweb/." >&2
+  exit 1
+fi
+if false; then
   if [ -z "$DEMO20_ADDRESS" ]; then
     echo "DEPLOY_DEMO20=1 but VITE_WOT_ADDRESS is not set -- refusing to build a demo whose whole point is answering with a real address it does not have. See this block's own comment." >&2
     exit 1
@@ -223,8 +230,8 @@ push_dir  "$REPO/apps/mobile-ui/dist"          "$REMOTE_APP/app"
 
 echo "pushing the static pages"
 push_dir  "$REPO/apps/hub"                     "$REMOTE_APP/demo"
-push_page "$REPO/demos/app-mockup.html"        "$REMOTE_APP/demo4"
-push_page "$REPO/demos/gating-prototype.html"  "$REMOTE_APP/demo5"
+# demo4 (app mockup) and demo5 (gating prototype) retired 2026-10-05: their
+# URLs are redirect pages to /trustweb/, so they are no longer pushed here.
 
 deploy_trustweb
 fi
@@ -244,8 +251,6 @@ verify_urls=(
   "https://app.idea2.site/wot/demo3/"
   "https://app.idea2.site/wot/demo6/"
   "https://app.idea2.site/wot/demo21/"
-  "https://app.idea2.site/wot/demo4/"
-  "https://app.idea2.site/wot/demo5/"
   "https://app.idea2.site/wot/app/"
   "https://app.idea2.site/wot/app"
   "https://evobiosys.org/rebiosys/"
