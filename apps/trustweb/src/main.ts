@@ -196,7 +196,7 @@ function newDraft(personId?: string): void {
 const net = new Net({
   state: st,
   save,
-  onStatus: (s) => { relayStatus = s; updateStatusPill() },
+  onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow() },
   onAsk: (ask) => {
     askQueue.push(ask)
     notify(S.notifBodyAsk(ask.fromName))
@@ -242,18 +242,20 @@ const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
+/** Desktop, bottom left, outside the phone: add or remove the demo content. */
+const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
 if (!solo && window.top === window) {
-  const add = el('a', { class: 'add-device', href: APP_URL + 'demo/', title: S.addDevice }, [
+  const add = el('a', { class: 'add-device', href: APP_URL + 'demo/', title: S.addDevice, 'aria-label': S.addDevice }, [
     el('span', { class: 'add-device-plus', 'aria-hidden': 'true' }, ['+']),
-    el('span', {}, [S.addDevice]),
+    el('span', {}, [S.addDeviceShort]),
   ])
   const see = el('button', { class: 'see-action', onclick: () => void openWalkthrough() }, [S.seeInAction])
-  root.append(el('div', { class: 'page-dock' }, [add, see]))
+  root.append(el('div', { class: 'page-dock' }, [add, see]), demoToggle)
 }
 
 /**
@@ -420,6 +422,18 @@ function relayLabel(): string {
     : relayStatus === 'connecting' ? S.statusConnecting : S.statusDisconnected
 }
 
+/** The relay state, shown in Settings (moved there from the QR button, owner 2026-10-05). */
+function connectionRow(): HTMLElement {
+  return el('div', { class: 'conn-row ' + relayStatus, id: 'conn-row', role: 'status' }, [
+    el('span', { class: 'relay-dot', 'aria-hidden': 'true' }),
+    el('b', {}, [S.setConnection]),
+    el('span', {}, [relayLabel()]),
+  ])
+}
+function updateConnectionRow(): void {
+  document.getElementById('conn-row')?.replaceWith(connectionRow())
+}
+
 /** Re-applies the pill for the current state; `withQr` false hides the idle QR (Meet, Record). */
 function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): void {
   const p = statusPill
@@ -439,7 +453,6 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
   p.hidden = !withQr
   p.className = 'status-pill qr ' + relayStatus
   p.innerHTML = icon('qr')
-  p.append(el('span', { class: 'relay-dot', 'aria-hidden': 'true' }))
   p.setAttribute('aria-label', `${S.qrOpen} (${relayLabel()})`)
   p.title = `${S.qrOpen} · ${relayLabel()}`
   p.onclick = (): void => openMeet(screen === Screen.Meet ? meetFrom : screen)
@@ -473,6 +486,7 @@ function render(): void {
   })()
   host.replaceChildren(...body)
   if (screen === Screen.Web) requestAnimationFrame(fitRings)
+  updateDemoToggle()
 }
 
 // ---------------------------------------------------------------------------
@@ -508,16 +522,81 @@ function toast(msg: string): void {
  * header, only its own button takes taps, and it goes by itself.
  */
 let friendsTimer: ReturnType<typeof setTimeout> | undefined
-function showDemoFriends(): void {
-  const hide = (): void => { clearTimeout(friendsTimer); friendsEl.hidden = true }
+function hideNotice(): void { clearTimeout(friendsTimer); friendsEl.hidden = true }
+/** A small card under the header: non-blocking, only its own buttons take taps. */
+function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
   friendsEl.replaceChildren(
-    el('b', {}, [S.demoFriendsTitle]),
-    el('span', {}, [S.demoFriendsBody]),
-    el('button', { class: 'btn btn-ghost btn-sm', onclick: hide }, [S.demoFriendsOk]),
+    el('b', {}, [title]),
+    el('span', {}, [body]),
+    el('div', { class: 'notice-actions' }, actions),
   )
   friendsEl.hidden = false
   clearTimeout(friendsTimer)
-  friendsTimer = setTimeout(hide, 9000)
+  if (autoHideMs) friendsTimer = setTimeout(hideNotice, autoHideMs)
+}
+function showDemoFriends(): void {
+  showNotice(S.demoFriendsTitle, solo ? S.demoFriendsBody : S.demoFriendsBodyOwn, [el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.demoFriendsOk])], 9000)
+}
+
+// ---------------------------------------------------------------------------
+// demo content on your own phone (owner 2026-10-05): desktop has a button
+// bottom left, a phone is asked once in a popup; Settings can add or remove
+// it any time. Only what was added is removed again (ids kept in state.demo).
+// ---------------------------------------------------------------------------
+
+function addDemoContent(): void {
+  const s = st()
+  if (s.demo) return
+  const seed = seedState(Persona.Holder, Date.now(), ctx)
+  s.people.push(...seed.people)
+  s.inventory.push(...seed.inventory)
+  s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }
+  s.demoOffered = true
+  save()
+  render()
+  showDemoFriends()
+}
+
+function removeDemoContent(): void {
+  const s = st()
+  const demo = s.demo
+  if (!demo) return
+  s.people = s.people.filter((p) => !demo.people.includes(p.id))
+  s.inventory = s.inventory.filter((i) => !demo.inventory.includes(i.id))
+  delete s.demo
+  save()
+  render()
+  toast(S.demoRemoved)
+}
+
+const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matches
+
+/**
+ * Phones only, once: offer the demo content in the notice card. Tapping
+ * anywhere else counts as "no thanks", so the card never sits over what the
+ * person went on to do (Settings can still add it).
+ */
+function offerDemoContent(): void {
+  const s = state
+  if (!s || solo || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth()) return
+  const answer = (yes: boolean): void => {
+    document.removeEventListener('pointerdown', onElsewhere, true)
+    st().demoOffered = true
+    save()
+    hideNotice()
+    if (yes) addDemoContent()
+  }
+  const onElsewhere = (e: PointerEvent): void => { if (!friendsEl.contains(e.target as Node)) answer(false) }
+  showNotice(S.demoOfferTitle, S.demoOfferBody, [
+    el('button', { class: 'btn btn-electric btn-sm', onclick: () => answer(true) }, [S.demoOfferYes]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => answer(false) }, [S.demoOfferNo]),
+  ])
+  document.addEventListener('pointerdown', onElsewhere, true)
+}
+
+function updateDemoToggle(): void {
+  demoToggle.hidden = !state || solo || window.top !== window
+  if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
 }
 
 /**
@@ -586,6 +665,7 @@ function screenStart(): Node[] {
     screen = Screen.Web
     render()
     if (solo) showDemoFriends()
+    else offerDemoContent()
     void net.start().then(announceLink)
     void completePendingConnect()
   }
@@ -1821,7 +1901,10 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
-    el('button', { class: 'radio', onclick: () => editNameSheet() }, [el('b', {}, [S.setYourName(s.me.displayName)])]),
+    el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+      el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+    ]),
+    connectionRow(),
     el('h4', { class: 'eyebrow' }, [S.setTabs]),
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
@@ -1833,6 +1916,12 @@ function settingsSheet(): void {
       onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     notificationsCard(s),
+    solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
+    solo ? null : el('button', {
+      class: 'radio' + (s.demo ? ' on' : ''),
+      'aria-pressed': String(Boolean(s.demo)),
+      onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
+    }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]),
     el('h4', { class: 'eyebrow' }, [S.setTalkWeave]),
     el('button', {
       class: 'radio' + (s.talkWeaveLocal ? ' on' : ''),
@@ -2172,4 +2261,5 @@ render()
 if (state) {
   void net.start().then(announceLink)
   void completePendingConnect()
+  offerDemoContent()
 }

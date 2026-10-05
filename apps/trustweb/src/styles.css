@@ -196,7 +196,23 @@ textarea.field{resize:vertical; line-height:1.5}
 .demo-friends[hidden]{display:none}
 .demo-friends b{font-size:14.5px; grid-column:1}
 .demo-friends span{color:var(--ink-soft); grid-column:1}
-.demo-friends .btn{grid-column:2; grid-row:1 / span 2; margin:0}
+.demo-friends .notice-actions{grid-column:2; grid-row:1 / span 2; display:flex; flex-direction:column; gap:6px; align-items:stretch}
+.demo-friends .notice-actions .btn{margin:0; white-space:nowrap}
+/* Settings: the relay state (moved here from the QR button) */
+.conn-row{display:flex; align-items:center; gap:10px; background:var(--card); border-radius:12px; padding:10px 12px; margin-top:8px; font-size:13.5px}
+.conn-row .relay-dot{position:static; box-shadow:none}
+.conn-row b{flex:1}
+.name-row{width:100%; border:0; font:inherit; color:var(--ink); cursor:pointer; text-align:left}
+.name-row em{font-style:normal; font-weight:700; color:var(--electric-deep)}
+.name-row:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.conn-row.connected .relay-dot{background:var(--mint)}
+.conn-row.disconnected .relay-dot{background:var(--coral)}
+/* desktop, bottom left: add / remove the demo content */
+.demo-toggle{position:fixed; left:24px; bottom:24px; font:inherit; font-weight:700; font-size:14px; border:0; border-radius:999px; padding:12px 20px;
+  cursor:pointer; background:var(--card); color:var(--ink); box-shadow:0 8px 24px rgba(36,27,46,.25)}
+.demo-toggle[hidden]{display:none}
+.demo-toggle:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
+@media (max-width:960px){ .demo-toggle{display:none} }
 @keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
 /* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */
 .ripple{position:absolute; z-index:45; width:0; height:0; pointer-events:none}
@@ -458,13 +474,12 @@ textarea.field{resize:vertical; line-height:1.5}
 
 /* page-level, outside the phone: open the side-by-side demo */
 .page-dock{position:fixed; right:24px; bottom:24px; display:flex; flex-direction:column; align-items:flex-end; gap:10px}
-.add-device{display:flex; align-items:center; gap:10px; max-width:250px;
-  background:var(--card); color:var(--ink); text-decoration:none; border-radius:18px; padding:12px 16px 12px 12px;
-  font-size:13.5px; line-height:1.35; font-weight:600; box-shadow:0 10px 30px rgba(36,27,46,.25)}
-.add-device-plus{width:36px; height:36px; border-radius:50%; flex-shrink:0; display:grid; place-items:center; font-size:22px; font-weight:400;
+.add-device{display:flex; align-items:center; gap:10px; background:var(--card); color:var(--ink); text-decoration:none;
+  border-radius:999px; padding:9px 20px 9px 9px; font-size:14.5px; line-height:1.2; font-weight:700; box-shadow:0 8px 24px rgba(36,27,46,.25)}
+.add-device-plus{width:30px; height:30px; border-radius:50%; flex-shrink:0; display:grid; place-items:center; font-size:22px; font-weight:400;
   background:linear-gradient(135deg,var(--coral),var(--violet)); color:#fff}
 .add-device:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
-/* only where it clears the phone: phone right edge W/2+195, link left edge W-274 */
+/* only where the docks (about 200 px wide, both sides) clear the 390 px phone */
 .see-action{font:inherit; font-weight:700; font-size:14px; border:0; border-radius:999px; padding:12px 20px; cursor:pointer; color:#fff;
   background:linear-gradient(135deg,var(--coral),var(--violet)); box-shadow:0 8px 24px rgba(154,55,240,.35)}
 .see-action:focus-visible{outline:3px solid var(--electric); outline-offset:3px}

@@ -158,6 +158,14 @@ export interface AppState {
    * visitor gets the browser's local-network prompt unasked (2026-10-05).
    */
   talkWeaveLocal?: boolean
+  /**
+   * Demo content added on request (imaginary friends and things, 2026-10-05):
+   * the ids it added, so "Remove demo content" takes exactly those away again.
+   * Absent: none added.
+   */
+  demo?: { people: string[]; inventory: string[] }
+  /** The phone offered demo content once (popup); absent: not yet. */
+  demoOffered?: boolean
 }
 
 /** The Web screen's query button: calling into the web (default) or the magnifier "Query". */
