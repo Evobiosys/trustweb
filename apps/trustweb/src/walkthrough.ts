@@ -398,7 +398,7 @@ function strip(mode: Mode): { el: HTMLElement; light(step: number, path?: string
 }
 
 /** Builds the player into `host`. Returns a function that pauses playback. */
-export function mountWalkthrough(host: HTMLElement): () => void {
+export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } = {}): () => void {
   if (!document.getElementById('wt-style')) {
     const style = document.createElement('style')
     style.id = 'wt-style'
@@ -428,7 +428,7 @@ export function mountWalkthrough(host: HTMLElement): () => void {
   speedLbl.append('Autoplay:', speedSel, 'per step')
   const top = el('div', 'wt-top')
   top.append(modes, speedLbl)
-  const scripted = el('p', 'wt-scripted', 'Illustration: these phones are scripted, not live. The real phones are further down the page.')
+  const scripted = el('p', 'wt-scripted', opts.liveHint ?? 'Illustration: these phones are scripted, not live. The real phones are further down the page.')
   const intro = el('p', 'wt-intro')
   const stripSlot = el('div')
   const banner = el('div', 'wt-banner')

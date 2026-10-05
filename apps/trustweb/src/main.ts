@@ -252,7 +252,31 @@ if (!solo && window.top === window) {
     el('span', { class: 'add-device-plus', 'aria-hidden': 'true' }, ['+']),
     el('span', {}, [S.addDevice]),
   ])
-  root.append(add)
+  const see = el('button', { class: 'see-action', onclick: () => void openWalkthrough() }, [S.seeInAction])
+  root.append(el('div', { class: 'page-dock' }, [add, see]))
+}
+
+/**
+ * Desktop, outside the phone: the scripted walkthrough of the demo page as an
+ * overlay over this page (owner 2026-10-05: may be dropped if it does not look
+ * good). Loaded on demand; Escape or Close ends it and pauses playback.
+ */
+async function openWalkthrough(): Promise<void> {
+  const { mountWalkthrough } = await import('./walkthrough')
+  const panel = el('div', { class: 'wt-panel' })
+  const layer = el('div', { class: 'wt-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': S.seeInAction })
+  const close = (): void => { stop(); layer.remove(); document.removeEventListener('keydown', onKey) }
+  const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') close() }
+  const closeBtn = el('button', { class: 'btn btn-ghost btn-sm wt-close', onclick: close }, [S.seeInActionClose])
+  layer.addEventListener('click', (e) => { if (e.target === layer) close() })
+  layer.append(panel)
+  panel.append(closeBtn)
+  const slot = el('div', {})
+  panel.append(slot)
+  const stop = mountWalkthrough(slot, { liveHint: S.seeInActionHint })
+  document.addEventListener('keydown', onKey)
+  document.body.append(layer)
+  closeBtn.focus()
 }
 
 // Icons: web, inventory and query are this app's own; mic, pause, play, send,
@@ -658,7 +682,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('div', { class: 'node you' }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
@@ -1764,6 +1788,30 @@ function screenStillTrue(): Node[] {
 // inventory (+ the local log)
 // ---------------------------------------------------------------------------
 
+/** Change your own name (tap yourself in the web, or Settings). */
+function editNameSheet(): void {
+  const s = st()
+  const name = el('input', { class: 'field', maxlength: '40', autocomplete: 'given-name', 'aria-label': S.meNameTitle, value: s.me.displayName })
+  const saveName = (): void => {
+    const n = name.value.trim().slice(0, 40)
+    if (!n) { name.focus(); return }
+    s.me.displayName = n
+    save()
+    closeSheet()
+    render()
+    toast(S.meNameSaved)
+  }
+  name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveName() })
+  openSheet([
+    el('h3', {}, [S.meNameTitle]),
+    name,
+    el('p', { class: 'meta' }, [S.meNameHint]),
+    el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
+  ])
+  name.focus()
+  name.select()
+}
+
 function settingsSheet(): void {
   const s = st()
   const order = s.tabOrder ?? TabOrder.WebLeft
@@ -1773,6 +1821,7 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
+    el('button', { class: 'radio', onclick: () => editNameSheet() }, [el('b', {}, [S.setYourName(s.me.displayName)])]),
     el('h4', { class: 'eyebrow' }, [S.setTabs]),
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
