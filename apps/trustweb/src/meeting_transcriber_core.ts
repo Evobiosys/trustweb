@@ -289,6 +289,22 @@ export async function probeTalkWeave(base: string, fetchFn: FetchLike, timeoutMs
   }
 }
 
+export interface TalkWeaveCandidate { base: string; timeoutMs: number }
+
+/**
+ * Walks the candidate bases in order and returns the first whose probe
+ * succeeds, or null. Candidates are tried one after another, never in
+ * parallel: the same-origin proxy must win over a direct connection, and a
+ * direct connection to the loopback address is only attempted when the first
+ * answers nothing usable.
+ */
+export async function discoverTalkWeave(candidates: readonly TalkWeaveCandidate[], fetchFn: FetchLike): Promise<string | null> {
+  for (const c of candidates) {
+    if (await probeTalkWeave(c.base, fetchFn, c.timeoutMs)) return c.base
+  }
+  return null
+}
+
 export function createTalkWeaveCore(deps: TalkWeaveDeps): MeetingTranscriberCore {
   const staleAfterMs = deps.staleAfterMs ?? 90_000
   const flushTimeoutMs = deps.flushTimeoutMs ?? 10_000

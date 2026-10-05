@@ -152,6 +152,12 @@ export interface AppState {
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). This phone only. */
   myChannels?: Partial<Record<Channel, string>>
+  /**
+   * Opt-in: the live site may reach TalkWeave on this computer
+   * (http://127.0.0.1:8990) for meeting transcription. Absent: off, so no
+   * visitor gets the browser's local-network prompt unasked (2026-10-05).
+   */
+  talkWeaveLocal?: boolean
 }
 
 /** The Web screen's query button: calling into the web (default) or the magnifier "Query". */

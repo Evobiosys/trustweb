@@ -8,7 +8,7 @@
 import {
   ActiveClock, SegmentBook, TurnTracker, TranscriberEngine, TranscriberStatus,
   createNoneCore, createOnDeviceCore, createTalkWeaveCore, downsampleTo16k, floatToPcm16Bytes,
-  parseSseBlock, probeTalkWeave,
+  discoverTalkWeave, parseSseBlock, probeTalkWeave,
 } from '../../src/meeting_transcriber_core.ts'
 import { formatClock, layerComments, meetingToNoteText, meetingToText, settledSegments } from '../../src/sensemeet.ts'
 import { extractLines } from '../../src/notes.ts'
@@ -395,6 +395,65 @@ describe('TalkWeave adapter', () => {
     expect(await probeTalkWeave('/talkweave', res(true, 'text/html', {}), 100)).toBe(false) // SPA fallback
     expect(await probeTalkWeave('/talkweave', res(false, 'application/json', {}), 100)).toBe(false)
     expect(await probeTalkWeave('/talkweave', async () => { throw new Error('down') }, 100)).toBe(false)
+  })
+
+  describe('discoverTalkWeave (same-origin proxy first, then the loopback address)', () => {
+    const OK = { ok: true, available: true, modelPresent: true }
+    const reply = (status, type, body) => ({ ok: status < 300, status, headers: { get: () => type }, json: async () => body, body: null })
+    const SAME = { base: '/talkweave', timeoutMs: 50 }
+    const DIRECT = { base: 'http://127.0.0.1:8990', timeoutMs: 50 }
+    /** A fetch that records the order of probes; `answers` maps a base to a reply, a throw, or 'hang'. */
+    function probeFetch(answers) {
+      const seen = []
+      const fetchFn = (url, init = {}) => {
+        const base = url.replace('/api/whisper/available', '')
+        seen.push(base)
+        const a = answers[base]
+        if (a === 'hang') {
+          return new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))))
+        }
+        if (a === 'throw') return Promise.reject(new TypeError('Failed to fetch'))
+        return Promise.resolve(a ?? reply(404, 'text/html', null))
+      }
+      return { fetchFn, seen }
+    }
+
+    it('takes the same-origin proxy when it answers and never touches the loopback address', async () => {
+      const { fetchFn, seen } = probeFetch({ '/talkweave': reply(200, 'application/json', OK), 'http://127.0.0.1:8990': reply(200, 'application/json', OK) })
+      expect(await discoverTalkWeave([SAME, DIRECT], fetchFn)).toBe('/talkweave')
+      expect(seen).toEqual(['/talkweave'])
+    })
+
+    it('falls through to the loopback address when the same-origin path is an SPA fallback or 404', async () => {
+      const { fetchFn, seen } = probeFetch({ '/talkweave': reply(200, 'text/html', null), 'http://127.0.0.1:8990': reply(200, 'application/json', OK) })
+      expect(await discoverTalkWeave([SAME, DIRECT], fetchFn)).toBe('http://127.0.0.1:8990')
+      expect(seen).toEqual(['/talkweave', 'http://127.0.0.1:8990'])
+    })
+
+    it('falls through when the same-origin probe hangs, after its own timeout', async () => {
+      const { fetchFn } = probeFetch({ '/talkweave': 'hang', 'http://127.0.0.1:8990': reply(200, 'application/json', OK) })
+      const t0 = Date.now()
+      expect(await discoverTalkWeave([SAME, DIRECT], fetchFn)).toBe('http://127.0.0.1:8990')
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(45)
+    })
+
+    it('gives up on a hanging loopback address within its short timeout and reports none', async () => {
+      const { fetchFn, seen } = probeFetch({ '/talkweave': 'throw', 'http://127.0.0.1:8990': 'hang' })
+      const t0 = Date.now()
+      expect(await discoverTalkWeave([SAME, DIRECT], fetchFn)).toBeNull()
+      expect(Date.now() - t0).toBeLessThan(1000)
+      expect(seen).toEqual(['/talkweave', 'http://127.0.0.1:8990'])
+    })
+
+    it('reports none when the loopback address is refused or has no ASR engine', async () => {
+      expect(await discoverTalkWeave([SAME, DIRECT], probeFetch({ '/talkweave': 'throw', 'http://127.0.0.1:8990': 'throw' }).fetchFn)).toBeNull()
+      expect(await discoverTalkWeave([SAME, DIRECT], probeFetch({ 'http://127.0.0.1:8990': reply(200, 'application/json', { ok: true, available: false, modelPresent: false }) }).fetchFn)).toBeNull()
+      expect(await discoverTalkWeave([SAME, DIRECT], probeFetch({ 'http://127.0.0.1:8990': reply(403, 'application/json', { ok: false }) }).fetchFn)).toBeNull()
+    })
+
+    it('an empty candidate list finds nothing', async () => {
+      expect(await discoverTalkWeave([], probeFetch({}).fetchFn)).toBeNull()
+    })
   })
 })
 

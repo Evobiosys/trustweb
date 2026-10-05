@@ -2,9 +2,11 @@
  * Meeting transcription for TrustWeb's Meeting view (SenseMeet capture step).
  *
  * Three engines behind one interface:
- *   TalkWeave  desktop only: the TalkWeave server on the same computer
- *              (reached through the same-origin prefix `/talkweave/`),
+ *   TalkWeave  desktop only: the TalkWeave server on the same computer,
  *              which transcribes on this machine through the local ASR proxy.
+ *              Reached through the same-origin prefix `/talkweave/` when the
+ *              dev server proxies it, else directly at http://127.0.0.1:8990
+ *              (TalkWeave allows this site's origin on the mic routes only).
  *   OnDevice   phones and any browser that can recognise speech locally:
  *              Web Speech with processLocally, exactly like speech.ts. Audio
  *              never leaves the phone; a browser that cannot do it locally
@@ -26,8 +28,8 @@ import {
   createNoneCore,
   createOnDeviceCore,
   createTalkWeaveCore,
+  discoverTalkWeave,
   encodeChunk,
-  probeTalkWeave,
 } from './meeting_transcriber_core'
 import { startDictation, voiceSupport, VoiceSupport } from './speech'
 
@@ -50,15 +52,40 @@ export interface MeetingTranscriber {
 
 /** Same-origin prefix the dev server proxies to TalkWeave (127.0.0.1:8990). */
 export const TALKWEAVE_BASE = '/talkweave'
+/** TalkWeave on this computer, reached cross-origin (CORS) from the live site. */
+export const TALKWEAVE_DIRECT_BASE = 'http://127.0.0.1:8990'
 
 const PROBE_TIMEOUT_MS = 2500
+/**
+ * A refused loopback connection fails at once, so this ceiling is only ever
+ * waited out when the browser is holding the request behind its "local
+ * network access" permission prompt (Chromium asks the first time a public
+ * https page reaches 127.0.0.1). Long enough to answer that prompt, short
+ * enough that ignoring it still ends in the on-device fallback.
+ */
+const DIRECT_PROBE_TIMEOUT_MS = 8000
+/** Probe order: same-origin proxy first, then the loopback address directly. */
+const TALKWEAVE_CANDIDATES = [
+  { base: TALKWEAVE_BASE, timeoutMs: PROBE_TIMEOUT_MS },
+  { base: TALKWEAVE_DIRECT_BASE, timeoutMs: DIRECT_PROBE_TIMEOUT_MS },
+] as const
+/** The base detectEngine found; createTranscriber(TalkWeave) talks to it. */
+let talkWeaveBase: string = TALKWEAVE_BASE
 const SCRIPT_PROCESSOR_BUFFER = 4096
 
 const browserFetch: FetchLike = (url, init) => fetch(url, init as RequestInit) as unknown as ReturnType<FetchLike>
 
-/** TalkWeave if it is up and has an ASR engine, else on-device, else nothing. */
-export async function detectEngine(): Promise<TranscriberEngine> {
-  if (typeof fetch === 'function' && await probeTalkWeave(TALKWEAVE_BASE, browserFetch, PROBE_TIMEOUT_MS)) {
+/**
+ * TalkWeave (same-origin, else direct) if up with an ASR engine, else
+ * on-device, else nothing. The direct loopback probe only runs when the
+ * person opted in (Settings), because it makes Chromium ask for local
+ * network access.
+ */
+export async function detectEngine(opts: { direct: boolean }): Promise<TranscriberEngine> {
+  const candidates = opts.direct ? TALKWEAVE_CANDIDATES : TALKWEAVE_CANDIDATES.slice(0, 1)
+  const found = typeof fetch === 'function' ? await discoverTalkWeave(candidates, browserFetch) : null
+  if (found !== null) {
+    talkWeaveBase = found
     return TranscriberEngine.TalkWeave
   }
   // NeedsDownload counts as unavailable here: installing the on-device model
@@ -124,7 +151,7 @@ export function createTranscriber(engine: TranscriberEngine): MeetingTranscriber
   let core: MeetingTranscriberCore
   switch (engine) {
     case TranscriberEngine.TalkWeave:
-      core = createTalkWeaveCore({ base: TALKWEAVE_BASE, fetchFn: browserFetch, audio: micAudioSource(), now: Date.now })
+      core = createTalkWeaveCore({ base: talkWeaveBase, fetchFn: browserFetch, audio: micAudioSource(), now: Date.now })
       break
     case TranscriberEngine.OnDevice:
       core = createOnDeviceCore({
