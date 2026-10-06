@@ -147,6 +147,7 @@ async function main() {
         await sheet.getByRole('button', { name: `Allow ${name}` }).waitFor({ timeout: 20_000 })
         ok('the request also shows under Inventory > Review / requests', new RegExp(`${name}.*asks to connect`).test(await text(sheet)))
         await sheet.getByRole('button', { name: `Allow ${name}` }).click()
+        await page.locator('.toast.on', { hasText: 'Allowed' }).waitFor({ timeout: 20_000 })
         await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
       }
       await page.locator('.toast.on').waitFor({ timeout: 10_000 })
@@ -370,6 +371,10 @@ async function main() {
     ok('the peer logged the outcome, never the ask', peerLog.some((l) => /ask shared/.test(l)) && !peerLog.some((l) => /motorbike/i.test(l)))
     await shot(b2, '17-carl-answer-from-peer')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
+  } catch (e) {
+    // An exception must count: the finally below exits the process before main().catch could.
+    failures++
+    console.log('  FAIL  exception  ->  ' + (e instanceof Error ? e.stack ?? e.message : String(e)))
   } finally {
     await peer?.stop()
     await browser?.close()

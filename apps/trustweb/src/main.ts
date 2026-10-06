@@ -2022,8 +2022,9 @@ function demoAccountRow(acct: DemoAccount, after: () => void): HTMLElement {
       el('span', {}, [demoStatus(acct) + ' · ' + S.demoAcctLeft(leftLabel(expiresAt))]),
     ]),
     el('div', { class: 'test-actions' }, [
-      acct.pending ? el('button', { class: 'btn btn-electric btn-sm', 'aria-label': `${S.demoAcctAllow} ${acct.name}`, onclick: () => { void allowDemoAccount(acct.id, true).then(after) } }, [S.demoAcctAllow]) : null,
-      acct.pending ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void allowDemoAccount(acct.id, false).then(after) } }, [S.demoAcctDeny]) : null,
+      // The yes travels over the relay first; the sheet refreshes only if it is still open by then.
+      acct.pending ? el('button', { class: 'btn btn-electric btn-sm', 'aria-label': `${S.demoAcctAllow} ${acct.name}`, onclick: () => { void allowDemoAccount(acct.id, true).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctAllow]) : null,
+      acct.pending ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void allowDemoAccount(acct.id, false).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctDeny]) : null,
       el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctExtend} ${acct.name}`, onclick: () => { extendDemoAccount(acct.id); after() } }, [S.demoAcctExtend]),
       el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: () => { removeDemoAccount(acct.id); after() } }, [S.demoAcctRemove]),
     ]),
