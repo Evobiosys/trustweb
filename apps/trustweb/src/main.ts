@@ -27,7 +27,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, NoteLine, Person, TestAccount } from './model'
+import type { AppState, DemoAccount, Found, NoteLine, Person } from './model'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
@@ -40,8 +40,8 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
 import type { BackupKey } from './backup'
-import { demoFragment, isDemoPeerRef, parseDemoFragment, testAccountName } from './demo_account'
-import type { DemoPeerRef } from './demo_account'
+import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
+import type { DemoPeerRef, HandoverLink } from './demo_account'
 
 enum Screen {
   Start = 'start',
@@ -109,8 +109,10 @@ interface Review {
 const APP_URL = location.origin + import.meta.env.BASE_URL
 const params = new URLSearchParams(location.search)
 const personaParam = params.get('persona')
-const persona: string = isPersona(personaParam) ? personaParam : 'me'
-const solo = params.get('solo') === '1' && persona !== 'me'
+// A demo account opened on the owner's own phone runs under its own persona
+// (demo-<account id>): its own storage record and relay identity, next to his.
+const persona: string = isPersona(personaParam) || isDemoPersona(personaParam) ? personaParam : 'me'
+const solo = params.get('solo') === '1' && isPersona(persona)
 // Which of the three seeded demo networks (seed.ts DemoContext) to show,
 // passed in by solo.ts from its own page path. Only meaningful (and only
 // ever read/written into storage) when solo: a real visitor at the app root
@@ -126,8 +128,10 @@ const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '')
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
+// A hand-over link (?handover=1#k=...): a demo account moves to this phone.
+const handover: HandoverLink | null = params.get('handover') === '1' ? parseHandoverFragment(location.hash) : null
 // Keep only what a reload needs; the connect parameters are consumed once.
-history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : ''))
+history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
 let state: AppState | null = loadState(persona, storeCtx)
 // Side-by-side demo phones start like a real phone, with "Your first name"
@@ -211,21 +215,39 @@ const net = new Net({
   },
   onPeerConnected: (peer) => {
     const s = st()
-    // A demo account this phone made, opened on their phone: pin it to its entry.
-    const test = (s.testAccounts ?? []).find((t) => !t.peerId && t.name === peer.displayName)
-    const byName = test ? '' : draft.name.trim()
+    const byName = draft.name.trim()
     let person = s.people.find((p) => p.peerId === peer.id)
       ?? (byName ? s.people.find((p) => p.name.toLowerCase() === byName.toLowerCase()) : undefined)
     if (!person) {
-      if (screen === Screen.Meet && !byName && !test) draft.name = peer.displayName
-      person = { id: randomId(8), name: peer.displayName, context: test ? S.testAccountContext : draft.context, ring: peer.ring, metAt: Date.now(), lines: [] }
+      if (screen === Screen.Meet && !byName) draft.name = peer.displayName
+      person = { id: randomId(8), name: peer.displayName, context: draft.context, ring: peer.ring, metAt: Date.now(), lines: [] }
       s.people.push(person)
     }
     person.peerId = peer.id
-    if (test) test.peerId = peer.id
     save()
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
+    render()
+  },
+  // A phone opened one of this phone's demo-account codes: hold it until the
+  // owner allows it in his own view (owner 2026-10-06). Matched by the name
+  // the code carried; a second phone on the same code replaces the first.
+  holdPeer: (peer) => {
+    const acct = demoAccounts().find((t) => t.name === peer.displayName)
+    if (!acct) return false
+    acct.pending = peer
+    save()
+    notify(S.demoAcctAllowTitle(acct.name))
+    showAllowCard(acct)
+    return true
+  },
+  // The owner's phone allowed this demo account (its ack came back).
+  onPeerConfirmed: (peer) => {
+    const s = st()
+    if (!s.testOf || s.testOf.approvedAt || s.testOf.name !== peer.displayName) return
+    s.testOf.approvedAt = Date.now()
+    save()
+    toast(S.demoApprovedToast(peer.displayName))
     render()
   },
   ringForNewPeer: () => (solo ? Ring.Friend : Ring.Acquaintance),
@@ -259,7 +281,7 @@ phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
-if (!solo && window.top === window) {
+if (!solo && !isDemoPersona(persona) && window.top === window) {
   const add = el('a', { class: 'add-device', href: APP_URL + 'demo/', title: S.addDevice, 'aria-label': S.addDevice }, [
     el('span', { class: 'add-device-plus', 'aria-hidden': 'true' }, ['+']),
     el('span', {}, [S.addDeviceShort]),
@@ -537,6 +559,7 @@ function render(): void {
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const body = (() => {
+    if (state?.testOf?.handedOverAt) return screenHandedOver()
     switch (screen) {
       case Screen.Start: return screenStart()
       case Screen.Web: return screenWeb()
@@ -644,7 +667,7 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  */
 function offerDemoContent(): void {
   const s = state
-  if (!s || solo || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth()) return
+  if (!s || solo || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth()) return
   const answer = (yes: boolean): void => {
     document.removeEventListener('pointerdown', onElsewhere, true)
     st().demoOffered = true
@@ -661,7 +684,7 @@ function offerDemoContent(): void {
 }
 
 function updateDemoToggle(): void {
-  demoToggle.hidden = !state || solo || window.top !== window
+  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window
   if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
 }
 
@@ -724,7 +747,7 @@ async function completePendingConnect(): Promise<void> {
   if (demoLink) {
     if (demoLink.peer) await connectDemoPeer(demoLink.peer)
     queryOpen = true
-    toast(S.testConnectedToast(peer.displayName))
+    toast(S.demoWaitingToast(peer.displayName))
   } else {
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
@@ -737,24 +760,25 @@ async function connectDemoPeer(ref: DemoPeerRef): Promise<void> {
   if (s.peers.some((p) => p.did === ref.did)) return
   const peer = await net.completeConnect({ did: ref.did, from: { id: ref.id, displayName: ref.name } }, Ring.Acquaintance)
   if (!s.people.some((p) => p.peerId === peer.id)) {
-    s.people.push({ id: randomId(8), name: peer.displayName, context: S.testPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
+    s.people.push({ id: randomId(8), name: peer.displayName, context: S.demoPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
   }
   save()
 }
 
 function screenStart(): Node[] {
+  if (handover) return takeOverScreen(handover)
   const invite = pendingConnect
   const inviter = invite?.from.displayName || 'Someone'
-  // A demo-account link: the name is set by the inviter ("<first name>-test"), nothing to type.
-  const test = invite && demoLink ? demoLink : null
+  // A demo-account link: the name is set by the owner ("<name>-demo"), nothing to type.
+  const demo = invite && demoLink ? demoLink : null
   const name = el('input', { class: 'field', placeholder: S.yourName, autocomplete: 'given-name', maxlength: '40', 'aria-label': S.yourName, value: defaultName })
   const submit = (): void => {
-    const typed = test ? test.account : name.value
+    const typed = demo ? demo.account : name.value
     if (!typed.trim()) { name.focus(); return }
     createMe(typed)
-    if (test) {
+    if (demo) {
       const s = st()
-      s.testOf = { name: inviter, createdAt: Date.now() }
+      s.testOf = { name: inviter, createdAt: Date.now(), accountId: demo.accountId, expiresAt: demo.expiresAt, own: demo.own }
       // Their first minute is for asking, not for a demo-content card.
       s.demoOffered = true
       save()
@@ -771,10 +795,10 @@ function screenStart(): Node[] {
     el('div', { class: 'logo' }, ['◎']),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
-    test
+    demo
       ? el('div', { class: 'invite test-invite' }, [
-          el('b', {}, [S.testInvite(inviter)]),
-          el('p', {}, [S.testInviteSub(test.account)]),
+          el('b', {}, [demo.own ? S.demoInviteOwn(demo.account) : S.demoInvite(inviter)]),
+          el('p', {}, [demo.own ? S.demoInviteOwnSub : S.demoInviteSub(demo.account)]),
         ])
       : invite
         ? el('div', { class: 'invite' }, [
@@ -789,9 +813,52 @@ function screenStart(): Node[] {
         ])
       : null,
     el('div', { class: 'start-form' }, [
-      test ? el('div', { class: 'field test-name', 'aria-label': S.yourName }, [test.account]) : name,
-      el('button', { class: 'btn btn-electric', onclick: submit }, [test ? S.testStart(test.account) : invite ? S.connectJoin : S.startOwn]),
+      demo ? el('div', { class: 'field test-name', 'aria-label': S.yourName }, [demo.account]) : name,
+      el('button', { class: 'btn btn-electric', onclick: submit }, [demo ? S.demoStart(demo.account) : invite ? S.connectJoin : S.startOwn]),
     ]),
+    el('p', { class: 'foot' }, [S.startFoot]),
+  ])]
+}
+
+/**
+ * A hand-over link opened here: unpack the demo account from the backup server
+ * with the key in the fragment and make it this phone's account (or, where
+ * this phone already has its own TrustWeb, a second persona next to it).
+ */
+function takeOverScreen(h: HandoverLink): Node[] {
+  const msg = el('p', { class: 'meta' })
+  const take = async (): Promise<void> => {
+    btn.setAttribute('disabled', '')
+    msg.textContent = S.takeWorking
+    try {
+      const data = await restore(parseKeyText(h.keyText)) as Partial<AppState> | null
+      if (!data || data.v !== 1 || !data.me || !data.testOf) throw new Error('not a demo account')
+      const taken = { ...data, testOf: { ...data.testOf, own: undefined, handedOverAt: undefined } } as AppState
+      const own = loadState('me')
+      if (own && persona === 'me') {
+        const p = demoPersona(h.accountId)
+        saveState(p, taken)
+        location.replace(location.pathname + '?persona=' + p)
+      } else {
+        state = taken
+        save()
+        location.replace(location.pathname + (persona === 'me' ? '' : '?persona=' + persona))
+      }
+    } catch {
+      msg.textContent = S.takeFailed
+      btn.removeAttribute('disabled')
+    }
+  }
+  const btn = el('button', { class: 'btn btn-electric', onclick: () => void take() }, [S.takeButton(h.account)])
+  return [el('div', { class: 'start' }, [
+    el('div', { class: 'logo' }, ['◎']),
+    el('h1', {}, [S.appName]),
+    el('p', { class: 'tagline' }, [S.tagline]),
+    el('div', { class: 'invite test-invite' }, [
+      el('b', {}, [S.takeTitle(h.account)]),
+      el('p', {}, [S.takeLead(h.account)]),
+    ]),
+    el('div', { class: 'start-form' }, [btn, msg]),
     el('p', { class: 'foot' }, [S.startFoot]),
   ])]
 }
@@ -1711,7 +1778,7 @@ function meetPages(): MeetPage[] {
   // Tana, 2026-08-24: "on the same page that one shows one's QR code, one should
   // also show one's Signal code, and once that is ready, one's Matrix code."
   const mine = st().myChannels ?? {}
-  // Demo phones (solo) and test accounts do not hand out test accounts of their own.
+  // Demo phones (solo) and demo accounts do not hand out demo accounts of their own.
   const demo = solo || st().testOf ? [] : [MeetPage.Demo]
   return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : []), ...demo]
 }
@@ -1817,11 +1884,13 @@ function meetMessengerPage(ch: Channel): HTMLElement {
 }
 
 // ---------------------------------------------------------------------------
-// meet: demo (test) accounts, owner 2026-10-06. "<their first name>-test" is a
-// real connection to this web (acquaintance ring, consent per ask as always),
-// listed here and in Settings, removable any time. The link may also name the
-// demo inventory on the Swiss server (demo-peer.json next to the app, only
-// present once that service is deployed), so the account can ask it too.
+// meet: demo accounts, owner 2026-10-06 (09:29 spec). "<name>-demo" is a real
+// connection to this web (acquaintance ring, consent per ask as always) that
+// the owner ALLOWS in his own view before it is active, that ends after a
+// week unless ended earlier or extended, listed here and in Settings. It can
+// run on their phone (scan) or on this phone (a second tab, own persona) and
+// be handed over from there. The link may also name the demo inventory on
+// the Swiss server (demo-peer.json next to the app, only once deployed).
 // ---------------------------------------------------------------------------
 
 /** The account whose code is on screen right now (this Meet visit only). */
@@ -1844,24 +1913,38 @@ function probeDemoPeer(): Promise<DemoPeerRef | null> {
   return demoPeerProbe
 }
 
-function testAccounts(): TestAccount[] {
-  return st().testAccounts ?? []
+function demoAccounts(): DemoAccount[] {
+  return state?.testAccounts ?? []
 }
 
-function createTestAccount(firstName: string): TestAccount | null {
-  const name = testAccountName(firstName)
+/** Accounts made before expiry existed read as a week after creation. */
+function demoExpiresAt(acct: DemoAccount): number {
+  return acct.expiresAt ?? acct.createdAt + DEMO_LIFETIME_MS
+}
+
+function leftLabel(expiresAt: number): string {
+  const t = timeLeft(expiresAt, Date.now())
+  if (t.ended) return S.demoAcctEnded
+  if (t.days >= 1) return S.demoAcctDays(t.days)
+  if (t.hours >= 1) return S.demoAcctHours(t.hours)
+  return S.demoAcctMinutes(t.minutes)
+}
+
+function createDemoAccount(raw: string): DemoAccount | null {
+  const name = demoAccountName(raw)
   if (!name) return null
   const s = st()
   const existing = (s.testAccounts ?? []).find((t) => t.name === name)
   if (existing) return existing
-  const acct: TestAccount = { id: randomId(8), name, createdAt: Date.now() }
+  const now = Date.now()
+  const acct: DemoAccount = { id: randomId(8), name, createdAt: now, expiresAt: now + DEMO_LIFETIME_MS }
   s.testAccounts = [...(s.testAccounts ?? []), acct]
   save()
   return acct
 }
 
-/** Forgets the account, its peer and its person: that phone can no longer ask this web. */
-function removeTestAccount(id: string): void {
+/** Ends the account: forgets its peer and its person, so that phone can no longer ask this web. */
+function removeDemoAccount(id: string, why: 'ended' | 'expired' = 'ended'): void {
   const s = st()
   const acct = (s.testAccounts ?? []).find((t) => t.id === id)
   if (!acct) return
@@ -1873,30 +1956,96 @@ function removeTestAccount(id: string): void {
   if (!s.testAccounts.length) delete s.testAccounts
   if (demoShowing === id) demoShowing = null
   save()
-  toast(S.demoAcctRemoved(acct.name))
+  toast(why === 'expired' ? S.demoAcctExpired(acct.name) : S.demoAcctRemoved(acct.name))
   render()
 }
 
-function testAccountRow(acct: TestAccount, onRemove: () => void): HTMLElement {
-  return el('div', { class: 'conn-row test-row' }, [
-    el('b', {}, [acct.name]),
-    el('span', {}, [acct.peerId ? S.demoAcctConnected : S.demoAcctWaiting]),
-    el('button', { class: 'mini', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: onRemove }, [S.demoAcctRemove]),
+function extendDemoAccount(id: string): void {
+  const acct = demoAccounts().find((t) => t.id === id)
+  if (!acct) return
+  acct.expiresAt = Math.max(demoExpiresAt(acct), Date.now()) + DEMO_LIFETIME_MS
+  save()
+  toast(S.demoAcctExtended(acct.name, leftLabel(acct.expiresAt)))
+  render()
+}
+
+/** Taken down after its week (owner 2026-10-06), checked at boot and once a minute. */
+function sweepDemoAccounts(): void {
+  const now = Date.now()
+  for (const acct of demoAccounts().filter((t) => demoExpiresAt(t) <= now)) removeDemoAccount(acct.id, 'expired')
+}
+
+/** The owner allows (or not) a phone that opened one of his demo accounts. */
+async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
+  const s = st()
+  const acct = (s.testAccounts ?? []).find((t) => t.id === id)
+  const held = acct?.pending
+  if (!acct || !held) return
+  delete acct.pending
+  if (!yes) { save(); hideNotice(); toast(S.demoAcctDenied(acct.name)); render(); return }
+  // A second phone on the same code replaces the first.
+  if (acct.peerId && acct.peerId !== held.id) {
+    s.peers = s.peers.filter((p) => p.id !== acct.peerId)
+    s.people = s.people.filter((p) => p.peerId !== acct.peerId)
+  }
+  const peer = await net.admitPeer(held)
+  acct.peerId = peer.id
+  let person = s.people.find((p) => p.peerId === peer.id)
+  if (!person) {
+    person = { id: randomId(8), name: peer.displayName, context: S.demoAccountContext, ring: peer.ring, metAt: Date.now(), lines: [], peerId: peer.id }
+    s.people.push(person)
+  }
+  save()
+  hideNotice()
+  toast(S.demoAcctAllowed(acct.name))
+  render()
+}
+
+/** The approve step, in the owner's own view: a card under the header, wherever he is. */
+function showAllowCard(acct: DemoAccount): void {
+  showNotice(S.demoAcctAllowTitle(acct.name), S.demoAcctAllowBody, [
+    el('button', { class: 'btn btn-electric btn-sm', onclick: () => void allowDemoAccount(acct.id, true) }, [S.demoAcctAllow]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => void allowDemoAccount(acct.id, false) }, [S.demoAcctDeny]),
+  ])
+}
+
+function demoStatus(acct: DemoAccount): string {
+  return acct.pending ? S.demoAcctPending : acct.peerId ? S.demoAcctConnected : S.demoAcctWaiting
+}
+
+/** One account: name, state, the countdown, End now, Extend (and Allow / Not now while a phone waits). */
+function demoAccountRow(acct: DemoAccount, after: () => void): HTMLElement {
+  const expiresAt = demoExpiresAt(acct)
+  return el('div', { class: 'test-card' }, [
+    el('div', { class: 'conn-row test-row' }, [
+      el('b', {}, [acct.name]),
+      el('span', {}, [demoStatus(acct) + ' · ' + S.demoAcctLeft(leftLabel(expiresAt))]),
+    ]),
+    el('div', { class: 'test-actions' }, [
+      acct.pending ? el('button', { class: 'btn btn-electric btn-sm', 'aria-label': `${S.demoAcctAllow} ${acct.name}`, onclick: () => { void allowDemoAccount(acct.id, true).then(after) } }, [S.demoAcctAllow]) : null,
+      acct.pending ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void allowDemoAccount(acct.id, false).then(after) } }, [S.demoAcctDeny]) : null,
+      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctExtend} ${acct.name}`, onclick: () => { extendDemoAccount(acct.id); after() } }, [S.demoAcctExtend]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: () => { removeDemoAccount(acct.id); after() } }, [S.demoAcctRemove]),
+    ]),
   ])
 }
 
 function meetDemoPage(): HTMLElement {
-  const shown = demoShowing ? testAccounts().find((t) => t.id === demoShowing) : undefined
+  const shown = demoShowing ? demoAccounts().find((t) => t.id === demoShowing) : undefined
   if (shown) return demoCodePage(shown)
-  const name = el('input', { class: 'field', placeholder: S.demoAcctNamePh, maxlength: '30', autocomplete: 'off', 'aria-label': S.demoAcctNamePh })
+  // Prefilled "-demo", caret in front of it: typing gives "<name>-demo"; the suffix can be erased (owner 2026-10-06).
+  const name = el('input', { class: 'field', placeholder: S.demoAcctNamePh, maxlength: '40', autocomplete: 'off', 'aria-label': S.demoAcctNameAria, value: DEMO_SUFFIX })
+  const caretFirst = (): void => { name.setSelectionRange(0, 0) }
+  name.addEventListener('focus', () => setTimeout(caretFirst, 0), { once: true })
   const make = (): void => {
-    const acct = createTestAccount(name.value)
+    const acct = createDemoAccount(name.value)
     if (!acct) { name.focus(); return }
     demoShowing = acct.id
     render()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') make() })
-  const list = testAccounts()
+  setTimeout(() => { name.focus(); caretFirst() }, 320)
+  const list = demoAccounts()
   return el('div', { class: 'meet-page demo-acct' }, [
     el('h3', {}, [S.demoAcctTitle]),
     el('p', { class: 'hint' }, [S.demoAcctLead]),
@@ -1905,14 +2054,14 @@ function meetDemoPage(): HTMLElement {
     el('h4', { class: 'eyebrow' }, [S.demoAcctList]),
     list.length ? el('div', { class: 'test-list' }, list.map((t) => el('button', {
       class: 'conn-row name-row test-row', onclick: () => { demoShowing = t.id; render() },
-    }, [el('b', {}, [t.name]), el('span', {}, [t.peerId ? S.demoAcctConnected : S.demoAcctWaiting]), el('em', {}, [S.demoAcctShow])])))
+    }, [el('b', {}, [t.name]), el('span', {}, [demoStatus(t) + ' · ' + S.demoAcctLeft(leftLabel(demoExpiresAt(t)))]), el('em', {}, [S.demoAcctShow])])))
       : el('p', { class: 'meta' }, [S.demoAcctNone]),
     el('p', { class: 'meta' }, [S.demoAcctHint]),
   ])
 }
 
-/** The account's code: the connect link plus the account name (and the demo inventory peer) in the fragment. */
-function demoCodePage(acct: TestAccount): HTMLElement {
+/** The account's code: the connect link plus the account, its id, its end (and the demo inventory peer) in the fragment. */
+function demoCodePage(acct: DemoAccount): HTMLElement {
   const qr = el('div', { class: 'qrwrap' })
   let link = ''
   const copy = el('button', {
@@ -1923,10 +2072,19 @@ function demoCodePage(acct: TestAccount): HTMLElement {
   const send = nav.share
     ? el('button', { class: 'btn btn-ghost', disabled: true, onclick: () => { void nav.share?.({ title: S.demoAcctShareTitle(acct.name), url: link }).catch(() => {}) } }, [S.demoAcctSend])
     : null
+  // On this phone: a second tab under the account's own persona, opened on the same code.
+  const here = el('a', { class: 'btn btn-ghost open-here', href: '#', target: '_blank', rel: 'noopener', 'aria-disabled': 'true' }, [S.demoAcctOpenHere])
   const asks = el('dd', {}, [S.demoAcctAsksYou])
+  const expiresAt = demoExpiresAt(acct)
   void (async () => {
     const [peer] = await Promise.all([probeDemoPeer(), net.start()])
-    link = net.connectLink(APP_URL) + '#' + demoFragment({ account: acct.name, peer: peer ?? undefined })
+    const base = net.connectLink(APP_URL)
+    const frag = { account: acct.name, accountId: acct.id, expiresAt, peer: peer ?? undefined }
+    link = base + '#' + demoFragment(frag)
+    const ownUrl = new URL(base)
+    ownUrl.searchParams.set('persona', demoPersona(acct.id))
+    here.href = ownUrl.toString() + '#' + demoFragment({ ...frag, own: true })
+    here.removeAttribute('aria-disabled')
     if (peer) asks.textContent = S.demoAcctAsksPeer(peer.name)
     qr.setAttribute('data-payload', link)
     await renderQr(qr, link)
@@ -1940,13 +2098,111 @@ function demoCodePage(acct: TestAccount): HTMLElement {
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.demoAcctAccount]), el('dd', {}, [acct.name]),
       el('dt', {}, [S.demoAcctAsks]), asks,
-      el('dt', {}, [S.demoAcctKeep]), el('dd', {}, [S.demoAcctKeepValue]),
+      el('dt', {}, [S.demoAcctEnds]), el('dd', {}, [S.demoAcctEndsIn(leftLabel(expiresAt))]),
     ]),
     copy,
     send,
-    testAccountRow(acct, () => removeTestAccount(acct.id)),
+    here,
+    el('p', { class: 'meta' }, [S.demoAcctOpenHereHint]),
+    demoAccountRow(acct, () => {}),
     el('button', { class: 'btn btn-ghost', onclick: () => { demoShowing = null; render() } }, [S.demoAcctAnother]),
   ])
+}
+
+// ---------------------------------------------------------------------------
+// a demo account's own phone: what it found, and handing it over (owner
+// 2026-10-06: "hand over this demo account directly with what we have found
+// and access permissions I have set"). The pack is this phone's whole record
+// (identity, connection, finds, the owner's ring and audiences as they apply),
+// encrypted on the backup server with a key made here; the key travels only
+// in the hand-over link's fragment. Afterwards this phone forgets the account
+// (one relay identity, one phone).
+// ---------------------------------------------------------------------------
+
+const FOUND_MAX = 20
+
+function recordFound(text: string, results: AskResult[]): void {
+  const s = state
+  if (!s?.testOf) return
+  const shared = results
+    .filter((r) => r.decoded?.outcome === 'shared' && r.decoded.shared)
+    .map((r) => ({ from: r.decoded?.shared?.from || r.peerName, items: (r.decoded?.shared?.items ?? []).map((it) => ({ text: it.text, context: it.context, when: it.when })) }))
+  if (!shared.length) return
+  const entry: Found = { id: randomId(8), at: Date.now(), text, shared }
+  s.found = [entry, ...(s.found ?? [])].slice(0, FOUND_MAX)
+  save()
+}
+
+function foundView(s: AppState): HTMLElement {
+  const found = s.found ?? []
+  return el('div', { class: 'found' }, [
+    el('h4', { class: 'eyebrow' }, [S.foundTitle]),
+    found.length === 0 ? el('p', { class: 'meta' }, [S.foundNone]) : null,
+    ...found.map((f) => el('div', { class: 'card found-card' }, [
+      el('p', { class: 'q' }, ['"' + f.text + '"']),
+      ...f.shared.map((sh) => el('div', { class: 'outcome shared' }, [
+        el('b', {}, [S.resultShared(sh.from)]),
+        ...sh.items.map((it) => el('div', { class: 'shared-item' }, [el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when])])),
+      ])),
+    ])),
+  ])
+}
+
+/** "Ends in 6 days" / "has ended", from what the link carried; the owner's phone is the authority. */
+function demoOfLine(s: AppState): string | null {
+  const t = s.testOf
+  if (!t?.expiresAt) return null
+  const left = timeLeft(t.expiresAt, Date.now())
+  return left.ended ? S.demoEndedLine : S.demoEndsLine('in ' + leftLabel(t.expiresAt))
+}
+
+function handoverSheet(): void {
+  const s = st()
+  const t = s.testOf
+  if (!t) return
+  const qr = el('div', { class: 'qrwrap', hidden: true })
+  const msg = el('p', { class: 'meta' }, [S.handLead])
+  let link = ''
+  const copy = el('button', { class: 'btn btn-ghost', hidden: true, onclick: () => { void navigator.clipboard?.writeText(link).then(() => toast(S.meetCopied), () => toast(link)) } }, [S.handCopy])
+  const nav = navigator as Navigator & { share?: (d: { title?: string; url?: string }) => Promise<void> }
+  const send = nav.share ? el('button', { class: 'btn btn-ghost', hidden: true, onclick: () => { void nav.share?.({ title: S.handShareTitle(s.me.displayName), url: link }).catch(() => {}) } }, [S.handSend]) : null
+  const make = el('button', { class: 'btn btn-electric', onclick: () => void run() }, [S.handMake])
+  const run = async (): Promise<void> => {
+    make.setAttribute('disabled', '')
+    msg.textContent = S.handWorking
+    if (backupAvailable === null) await probeBackup()
+    if (!backupAvailable) { msg.textContent = S.handNoServer; make.removeAttribute('disabled'); return }
+    try {
+      const key = await newRandomKey()
+      const pack: AppState = { ...s, testOf: { ...t, own: undefined } }
+      await backupNow(key, pack)
+      link = APP_URL + '?handover=1#' + handoverFragment({ keyText: key.text, accountId: t.accountId ?? 'x0000', account: s.me.displayName })
+      t.handedOverAt = Date.now()
+      save()
+      qr.hidden = false
+      qr.setAttribute('data-payload', link)
+      await renderQr(qr, link)
+      copy.hidden = false
+      if (send) send.hidden = false
+      make.hidden = true
+      msg.textContent = S.handReady
+      // One relay identity, one phone: this tab leaves the relay for good.
+      net.stop()
+      render()
+    } catch {
+      msg.textContent = S.handFailed
+      make.removeAttribute('disabled')
+    }
+  }
+  openSheet([el('h3', {}, [S.handTitle]), msg, qr, make, copy, send])
+}
+
+/** After a hand-over this persona only shows that it is gone (the other phone has the identity now). */
+function screenHandedOver(): Node[] {
+  return [
+    header(S.handTitle, { qr: false }),
+    el('div', { class: 'scroll pad' }, [el('p', { class: 'hint' }, [S.handDone])]),
+  ]
 }
 
 /** One of my own channels, straight in edit mode; `done` runs after save or cancel. */
@@ -2248,7 +2504,9 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
-    s.testOf ? el('p', { class: 'meta' }, [S.setTestOf(s.testOf.name)]) : null,
+    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : S.setDemoOf(s.testOf.name)]) : null,
+    s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
+    s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
       el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
     ]),
@@ -2256,7 +2514,7 @@ function settingsSheet(): void {
     ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
       ...(s.testAccounts?.length
-        ? s.testAccounts.map((t) => testAccountRow(t, () => { removeTestAccount(t.id); settingsSheet() }))
+        ? s.testAccounts.map((t) => demoAccountRow(t, settingsSheet))
         : [el('p', { class: 'meta' }, [S.demoAcctNone])]),
     ]),
     el('h4', { class: 'eyebrow' }, [S.setTabs]),
@@ -2473,6 +2731,7 @@ function screenInventory(): Node[] {
   return [
     header(S.invTitle, { after: gear }),
     el('div', { class: 'scroll pad' }, [
+      s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
@@ -2494,16 +2753,22 @@ function screenInventory(): Node[] {
 function requestsSheet(): void {
   const s = st()
   const waiting = askQueue.length
+  const demoPeerIds = new Set(demoAccounts().map((t) => t.peerId).filter((id): id is string => Boolean(id)))
+  const pendingDemo = demoAccounts().filter((t) => t.pending)
   openSheet([
     el('h3', {}, [S.reqTitle]),
     waiting ? el('div', { class: 'conn-row' }, [
       el('b', {}, [S.reqWaiting(waiting)]),
       el('button', { class: 'btn btn-electric btn-sm', onclick: () => { closeSheet(); if (!askShowing) showNextAsk() } }, [S.reqOpen]),
     ]) : null,
+    // Demo accounts waiting for the owner's yes (owner 2026-10-06: their asks and requests live here too).
+    ...pendingDemo.map((t) => demoAccountRow(t, requestsSheet)),
     el('h4', { class: 'eyebrow' }, [S.logTitle]),
     s.log.length === 0 ? el('p', { class: 'empty' }, [S.logEmpty]) : null,
     ...s.log.slice(0, 50).map((e) => el('div', { class: 'log' }, [
-      el('b', {}, [e.from + ': ']), el('span', {}, ['"' + e.text + '"']),
+      el('b', {}, [e.from + ': ']),
+      e.peerId && demoPeerIds.has(e.peerId) ? el('span', { class: 'tagpill demo-chip' }, [S.demoAcctChip]) : null,
+      el('span', {}, ['"' + e.text + '"']),
       el('em', {}, [S.logOutcome[e.outcome]]),
     ])),
     el('p', { class: 'foot' }, [S.logFoot]),
@@ -2541,6 +2806,7 @@ async function runAsk(text: string): Promise<void> {
   const results = await net.ask(t)
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
+  recordFound(t, results)
   if (screen === Screen.Web) render()
 }
 
@@ -2562,6 +2828,9 @@ function queryDock(s: AppState): HTMLElement {
   box.value = queryText
   box.addEventListener('input', () => { queryText = box.value })
   const busy = Boolean(askRun && !askRun.results)
+  // A demo account asks only once its owner allowed it, and not after its end.
+  const demoEnded = Boolean(s.testOf?.expiresAt && timeLeft(s.testOf.expiresAt, Date.now()).ended)
+  const demoWaiting = Boolean(s.testOf && !s.testOf.approvedAt)
   const run = askRun
   const inFlight = run
     ? el('div', { class: 'card asked' }, [
@@ -2581,13 +2850,14 @@ function queryDock(s: AppState): HTMLElement {
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
+      demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
       run ? null : el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.queryTry]),
         ...SUGGESTIONS.map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
       ]),
       el('button', {
-        class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0,
+        class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
         onclick: () => void runAsk(queryText),
       }, [S.querySend]),
       inFlight,
@@ -2647,8 +2917,13 @@ function decide(share: boolean): void {
 // ---------------------------------------------------------------------------
 
 render()
-if (state) {
+if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
   offerDemoContent()
+  sweepDemoAccounts()
+  setInterval(sweepDemoAccounts, 60_000)
+  // Resume the approve step after a reload while a phone still waits.
+  const pending = demoAccounts().find((t) => t.pending)
+  if (pending) showAllowCard(pending)
 }

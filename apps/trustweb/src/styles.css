@@ -535,3 +535,12 @@ textarea.field{resize:vertical; line-height:1.5}
 .test-row .mini{margin-left:4px}
 .test-name{display:flex; align-items:center; min-height:46px; font-weight:600; color:var(--ink-soft); background:var(--mist)}
 .test-invite b{color:var(--violet-deep)}
+.test-card{background:var(--card); border-radius:14px; padding:4px 10px 8px; margin-top:8px}
+.test-card .conn-row{background:transparent; padding:6px 2px; margin:0}
+.test-actions{display:flex; flex-wrap:wrap; gap:4px}
+.test-actions .btn{margin:0; padding:6px 10px; font-size:12.5px}
+.open-here{display:block; text-align:center; text-decoration:none}
+.open-here[aria-disabled="true"]{opacity:.45; pointer-events:none}
+.demo-chip{background:var(--tint-teal); color:var(--teal); font-size:10.5px; margin-right:4px}
+.found-card{margin:6px 0 10px}
+.found-card .q{font-weight:700; margin-bottom:6px}

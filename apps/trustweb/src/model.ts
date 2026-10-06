@@ -124,6 +124,8 @@ export interface LogEntry {
   from: string
   text: string
   outcome: LogOutcome
+  /** The asking peer, so Review / requests can mark asks from a demo account. Absent in older entries. */
+  peerId?: string
 }
 
 export interface Me {
@@ -132,21 +134,44 @@ export interface Me {
 }
 
 /**
- * A demo (test) account this phone made from the QR button (owner 2026-10-06):
- * "<their first name>-test". `peerId` is set once that phone connected; until
- * then the account is "waiting". Removing it forgets the peer and the person.
+ * A demo account this phone made from the QR button (owner 2026-10-06):
+ * "<name>-demo" (older ones: "-test"). Its connection goes through three
+ * states: waiting (nobody opened it), pending (a phone opened it and asks to
+ * connect: `pending` holds that phone until the owner allows it in his own
+ * view), connected (`peerId` set). Taken down at `expiresAt` (absent on
+ * accounts made before expiry existed: read as a week after creation).
+ * Removing it forgets the peer and the person.
  */
-export interface TestAccount {
+export interface DemoAccount {
   id: string
   name: string
   createdAt: number
+  expiresAt?: number
   peerId?: string
+  pending?: Peer
 }
 
-/** Set on a phone that started from a demo-account link: whose test account it is. */
-export interface TestOf {
+/** Set on a phone that started from a demo-account link: whose demo account it is. */
+export interface DemoOf {
   name: string
   createdAt: number
+  /** The account's id on the owner's phone; absent on links made before it existed. */
+  accountId?: string
+  expiresAt?: number
+  /** The owner allowed the connection (his phone's ack arrived). Absent: waiting. */
+  approvedAt?: number
+  /** Runs on the owner's own phone (a second tab), not on somebody else's. */
+  own?: boolean
+  /** Handed over to another phone: this record is finished, the relay identity moved. */
+  handedOverAt?: number
+}
+
+/** What a demo account found: one entry per ask that got a share, kept so a hand-over carries it. */
+export interface Found {
+  id: string
+  at: number
+  text: string
+  shared: { from: string; items: { text: string; context: string; when: string }[] }[]
 }
 
 /** Which side of the raised Record button each outer tab sits on (Inventory settings). */
@@ -188,10 +213,12 @@ export interface AppState {
   showRingNames?: boolean
   /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
   hiddenHints?: string[]
-  /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. */
-  testAccounts?: TestAccount[]
-  /** This phone is somebody's demo account. Absent: an ordinary phone (today's behaviour). */
-  testOf?: TestOf
+  /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. (Stored key kept from v1.) */
+  testAccounts?: DemoAccount[]
+  /** This phone is somebody's demo account. Absent: an ordinary phone (today's behaviour). (Stored key kept from v1.) */
+  testOf?: DemoOf
+  /** A demo account's finds, newest first, capped. Absent: none. */
+  found?: Found[]
 }
 
 /** Things that explain themselves: a tooltip on desktop, a small "i" on a touch phone (owner 2026-10-06). */

@@ -66,6 +66,15 @@ export interface NetHooks {
   onAsk(ask: IncomingAsk): void
   /** A person scanned this device's code: they are now a connected peer. */
   onPeerConnected(peer: Peer): void
+  /**
+   * A phone that opened a demo-account code asks to connect (owner 2026-10-06:
+   * "I need to authorize in my view the connection"). Return true to HOLD it:
+   * nothing is stored here, the app keeps the would-be peer until the owner
+   * allows it (admitPeer) or drops it. False: the ordinary one-scan flow.
+   */
+  holdPeer(peer: Peer): boolean
+  /** The other side of the hold: a peer we already hold sent its ack again, i.e. the owner allowed us. */
+  onPeerConfirmed(peer: Peer): void
   /** Ring for a peer who just scanned this device's code. */
   ringForNewPeer(): Ring
   onLogChanged(): void
@@ -147,6 +156,13 @@ export class Net {
     return this.starting
   }
 
+  /** Closes the relay drain for good: after a hand-over the identity lives on another phone. */
+  stop(): void {
+    this.channel?.close()
+    this.channel = null
+    this.starting = null
+  }
+
   /** The URL a phone camera opens to connect to this device (one scan). */
   connectLink(appUrl: string): string {
     return buildConnectLinkUrl(appUrl, this.ensureIdentity().did, this.hooks.state().me)
@@ -179,16 +195,37 @@ export class Net {
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
     const s = this.hooks.state()
     const known = this.peerByDid(env.did)
-    const peer = upsertPeer(s, {
+    const incoming: Peer = {
       id: env.from.id,
       displayName: env.from.displayName || 'Someone',
       did: env.did,
       ring: known?.ring ?? this.hooks.ringForNewPeer(),
       connectedAt: Date.now(),
-    })
+    }
+    if (known) {
+      this.hooks.onPeerConfirmed(upsertPeer(s, incoming))
+      this.hooks.save()
+      return true
+    }
+    if (this.hooks.holdPeer(incoming)) return true
+    const peer = upsertPeer(s, incoming)
     this.hooks.save()
-    if (!known) this.hooks.onPeerConnected(peer)
+    this.hooks.onPeerConnected(peer)
     return true
+  }
+
+  /** The owner allowed a held peer: store it and tell that phone (the same bootstrap wire, carrying no secret). */
+  async admitPeer(held: Peer): Promise<Peer> {
+    const s = this.hooks.state()
+    const peer = upsertPeer(s, { ...held, connectedAt: Date.now() })
+    this.hooks.save()
+    await this.start()
+    try {
+      await this.channel?.sendRaw(peer.did, encodeForQr(buildConnectAck(s.me, this.ensureIdentity())))
+    } catch {
+      /* the peer is saved either way; that phone just does not learn of the yes until its next ask is answered */
+    }
+    return peer
   }
 
   private async handleEnvelope(env: Envelope, fromDid: string): Promise<void> {
@@ -200,9 +237,9 @@ export class Net {
     // chat and ping are deliberately ignored: no chat in this build.
   }
 
-  private log(from: string, text: string, outcome: LogOutcome): void {
+  private log(peer: Peer, text: string, outcome: LogOutcome): void {
     const s = this.hooks.state()
-    s.log.unshift({ id: randomId(8), at: Date.now(), from, text, outcome })
+    s.log.unshift({ id: randomId(8), at: Date.now(), from: peer.displayName, text, outcome, peerId: peer.id })
     s.log = s.log.slice(0, 50)
     this.hooks.save()
     this.hooks.onLogChanged()
@@ -228,7 +265,7 @@ export class Net {
     }
 
     if (!surface) {
-      this.log(peer.displayName, text, LogOutcome.NoMatch)
+      this.log(peer, text, LogOutcome.NoMatch)
       await answer(null)
       return
     }
@@ -246,7 +283,7 @@ export class Net {
       decide: async (share: boolean) => {
         if (decided) return
         decided = true
-        this.log(peer.displayName, text, share ? LogOutcome.Shared : LogOutcome.Declined)
+        this.log(peer, text, share ? LogOutcome.Shared : LogOutcome.Declined)
         const payload: SharedPayload | null = share
           ? {
               from: this.hooks.state().me.displayName,
