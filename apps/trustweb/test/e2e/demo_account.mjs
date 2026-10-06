@@ -333,7 +333,8 @@ async function main() {
     ok('"Open it on this phone" opens the code under its own persona', /[?&]persona=demo-[a-z0-9_-]{8}/.test(hereHref) && /connect=did%3Apeer/.test(hereHref) && /&own=1/.test(hereHref), hereHref)
     const [c] = await Promise.all([a.context().waitForEvent('page'), here.click()])
     c.on('pageerror', (e) => errors.push(e.message))
-    await c.locator('.test-invite').waitFor({ timeout: 10_000 })
+    // A fresh tab loads the live page over the network: give it the same time as a first visit.
+    await c.locator('.test-invite').waitFor({ timeout: 25_000 })
     ok('the second tab says "Your demo account Ben-demo."', /Your demo account Ben-demo\./.test(await c.locator('.test-invite').innerText()))
     await c.getByRole('button', { name: 'Start as Ben-demo' }).click()
     await c.locator('.query-dock').waitFor({ timeout: 20_000 })
