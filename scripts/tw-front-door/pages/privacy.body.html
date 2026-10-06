@@ -29,21 +29,36 @@
     The one exception is the very first connection step between two phones, sent before they share a
     key: that message is not encrypted.</li>
     <li><b>Encrypted backup.</b> A backup is encrypted on your phone before it is uploaded. The
-    server keeps ciphertext it cannot read.</li>
+    server keeps ciphertext it cannot read, with its size and when it was last written.</li>
     <li><b>Sending a meeting.</b> The notes and transcript are encrypted with a fresh key and
     stored on the same server. The key is only in the link you send, and that link reaches the other
     person as an encrypted message, so the server never holds the key.</li>
+    <li><b>The demo inventory.</b> A demo account can be connected to "Demo inventory", a small
+    always-on TrustWeb contact that runs on this server and holds made-up lines. An ask sent to it is
+    opened there and matched against those lines. It is also passed on, with the name you use in the
+    demo, to the phone of the person who runs it (named in the <a href="imprint.html">imprint</a>), who
+    can answer it live or not at all. Its log keeps counts and outcomes, never the text of an ask or a name.</li>
     <!--IF:soon--><li><b>Hosted recordings (starting soon, experimental).</b> When this is switched on,
-    your recordings will be stored on the server as ciphertext it cannot read. A recording that
+    your recordings will be stored on the server as ciphertext it cannot read, with each one's size,
+    length and when it was last written or opened, counted against your allowance. A recording that
     is neither written nor opened for 90 days may be removed.</li>
-    <li><b>Server transcription (starting soon, experimental).</b> If you choose it, the audio
-    goes through our server to Infomaniak AI Tools in Switzerland and comes back as text. The
-    audio and the text are not stored on the server.</li><!--/IF-->
+    <li><b>Server transcription (starting soon, experimental).</b> If you choose it, the audio of a
+    recording leaves your phone: it goes through our server to Infomaniak AI Tools in Switzerland,
+    which turns it into text, and the text comes back to your phone. Unlike everything above, this
+    audio is not encrypted for the server: our server and Infomaniak handle it as audio. Our server
+    keeps neither the audio nor the text (the audio sits in a temporary file only while it is being
+    transcribed); it counts the minutes used.</li><!--/IF-->
     <!--IF:live--><li><b>Hosted recordings.</b> Your recordings are stored on the server as ciphertext it
-    cannot read. A recording that is neither written nor opened for 90 days may be removed.</li>
-    <li><b>Server transcription.</b> If you choose it, the audio goes through our server to
-    Infomaniak AI Tools in Switzerland and comes back as text. The audio and the text are not
-    stored on the server.</li><!--/IF-->
+    cannot read, with each one's size, length and when it was last written or opened, counted against
+    your allowance. A recording that is neither written nor opened for 90 days may be removed.</li>
+    <li><b>Server transcription.</b> If you choose it, the audio of a recording leaves your phone: it
+    goes through our server to Infomaniak AI Tools in Switzerland, which turns it into text, and the
+    text comes back to your phone. Unlike everything above, this audio is not encrypted for the
+    server: our server and Infomaniak handle it as audio. Our server keeps neither the audio nor the
+    text (the audio sits in a temporary file only while it is being transcribed); it counts the
+    minutes used.</li><!--/IF-->
+    <li><b>Network addresses</b> reach the server with every request. It uses them in memory to limit
+    abuse (how many requests from one address) and does not write them to disk.</li>
   </ul>
 </section>
 
@@ -58,8 +73,8 @@
     <li><b>The waitlist form</b> sends your email address to our server, only when you press the button. The
     optional newsletter box sends it to our newsletter service.</li>
     <li><b>The feedback form</b> sends what you type, your optional contact, the kind of message and
-    the page you wrote from to our server. We do not store your network address or browser
-    details. We read the messages by hand.</li>
+    the page you wrote from to our server, which stores them with the time to the minute. We do not
+    store your network address or browser details. We read the messages by hand.</li>
   </ul>
 </section>
 

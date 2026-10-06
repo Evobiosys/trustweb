@@ -158,7 +158,8 @@ async function linkAudit(browser) {
     for (const h of found) hrefs.set(h, name)
     for (const h of found.filter((x) => x.includes('#') && !/^https?:/.test(x))) {
       const [file, id] = h.split('#')
-      const target = file === '' || file === './' ? 'index.html' : file
+      // "#x" points into the page it is on; "./#x" into the front page
+      const target = file === '' ? name : file === './' ? 'index.html' : file
       if (!id) continue
       await page.goto(BASE + (target === 'index.html' ? '' : target))
       const exists = await page.evaluate((i) => !!document.getElementById(i), id)

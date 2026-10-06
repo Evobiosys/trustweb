@@ -13,7 +13,11 @@
     <summary>Who sees what I write?</summary>
     <p>Your notes, transcripts and recordings stay on your phone. Nothing leaves it unless you
     choose to share it, for example by sending a meeting to a person you are connected with, or
-    by making a backup. Both are encrypted on your phone first.</p>
+    by making a backup. Both are encrypted on your phone first.<!--IF:soon--> Two optional
+    services are starting soon: hosting your recordings (encrypted the same way) and transcription
+    on the server, where the audio itself goes to the server to be turned into text.<!--/IF--><!--IF:live-->
+    Hosting your recordings is encrypted the same way. Server transcription, if you choose it, is
+    the exception: the audio itself goes to the server to be turned into text.<!--/IF--></p>
   </details>
   <details class="q" id="q-asks">
     <summary>Who sees my ask, and can people say no?</summary>
@@ -22,14 +26,17 @@
   </details>
   <details class="q" id="q-data">
     <summary>Where does my data live?</summary>
-    <p>On your phone first. If you make a backup, or send a meeting, an encrypted copy is kept on
-    a server in Switzerland. The messages between phones pass through a relay on the same server, encrypted so the relay cannot read them.</p>
+    <p>On your phone first. If you make a backup, or send a meeting<!--IF:live-->, or have your
+    recordings hosted<!--/IF-->, an encrypted copy is kept on a server in Switzerland. The messages
+    between phones pass through a relay on the same server, encrypted so the relay cannot read them.</p>
   </details>
   <details class="q" id="q-server">
     <summary>What does the server know?</summary>
-    <p>It stores ciphertext it cannot read. The relay can see routing details, such as which
+    <p>It stores ciphertext it cannot read, with sizes and dates. The relay can see routing details, such as which
     address a message is for and when it arrived, but not what it says. (The very first connection
-    step between two phones, sent before they share a key, is the one message that is not encrypted.) Details are on the
+    step between two phones, sent before they share a key, is the one message that is not encrypted.)
+    Two exceptions read content: the demo inventory (see <a href="#q-demo-account">demo accounts</a>)
+    and, if you choose it, server transcription, which handles your audio. Details are on the
     <a href="privacy.html">privacy page</a>.</p>
   </details>
   <details class="q" id="q-cost">
@@ -47,9 +54,10 @@
   <details class="q" id="q-demo-account">
     <summary>What is a demo account?</summary>
     <p>A pretend identity for trying TrustWeb: imaginary friends, each labelled "dummy", so you
-    can ask, answer and see consent without involving real people. By default, a demo account only
-    ever sees demo content, never someone's real notes. When you move to the live app, you can
-    clear the demo contacts first.</p>
+    can ask, answer and see consent. By default, a demo account only ever sees demo content, never
+    someone's real notes. One demo contact, "Demo inventory", is a small service on our server with
+    made-up lines; an ask to it is also shown, with your demo name, to the person who runs it, who can
+    answer it live. When you move to the live app, you can clear the demo contacts first.</p>
   </details>
   <details class="q" id="q-leave">
     <summary>Can I leave and take my data?</summary>
