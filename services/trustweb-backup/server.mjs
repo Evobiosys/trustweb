@@ -51,7 +51,7 @@ import { loadConfig } from './config.mjs'
 import { createFeedback } from './feedback.mjs'
 import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
-import { etagMatches, jsonError, sha256Hex } from './http_util.mjs'
+import { etagMatches, jsonError, sendJson, sha256Hex } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
@@ -317,6 +317,11 @@ export async function startServer(options = {}) {
     }
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
+    if (pathname === '/hosted/status' && hosted === null && req.method === 'GET') {
+      // Hosting off: the app still gets a clean answer and hides its hosting card.
+      sendJson(res, 200, { hosted: false, transcribe: false, feedback: cfg.feedbackConfigured, plan: null })
+      return 200
+    }
     if (pathname.startsWith('/hosted/')) return hosted === null ? jsonError(res, 503, 'not_configured') : hosted.handle(req, res, pathname)
     const m = ROUTE_RE.exec(pathname)
     if (m === null || !ID_RE.test(m[1])) {

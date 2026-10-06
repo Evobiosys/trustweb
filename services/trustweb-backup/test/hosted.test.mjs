@@ -21,11 +21,12 @@ test('status route: hosting on, transcription and feedback off until configured'
   })
 })
 
-test('hosting off (no HOSTED_DIR): every hosted route is 503 not_configured', async () => {
+test('hosting off (no HOSTED_DIR): status says hosted:false, every other hosted route is 503 not_configured', async () => {
   await withServer(P, { hostedDir: '' }, async () => {
     const r = await call(P, { url: '/hosted/status' })
-    assert.equal(r.status, 503)
-    assert.equal(r.json.error, 'not_configured')
+    assert.equal(r.status, 200)
+    assert.deepEqual(r.json, { hosted: false, transcribe: false, feedback: false, plan: null })
+    assert.equal((await usage(P, A)).json.error, 'not_configured')
     assert.equal((await put(P, A, R1, T, 60, cipher('x'))).status, 503)
   })
 })

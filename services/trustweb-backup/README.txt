@@ -1,59 +1,43 @@
-trustweb-backup: encrypted-blob store for TrustWeb ("back it up on a Swiss server?")
+trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
 
-The server stores opaque ciphertext made on the phone (apps/trustweb/src/backup.ts).
-It cannot read it. API, status codes and env vars are documented at the top of server.mjs.
+  /backup/*       encrypted-blob store for backups, hand-overs and meeting packs ("back it up on a Swiss server?"). Ciphertext made
+                  on the phone (apps/trustweb/src/backup.ts); the server cannot read it. GET sends ETag/Last-Modified and answers
+                  If-None-Match with 304 (a reader polls a pack that was uploaded "pending" and replaced when the transcript is done).
+  /hosted/*       hosted recordings with a free allowance (the equivalent of 10 recordings of 1 h per person: 36000 s, 200 MB;
+                  one recording 3600 s / 30 MB; 50 slots). Opaque ciphertext, own directory (HOSTED_DIR), account token to read
+                  or a per-recording read capability. 90 days untouched = removable by the sweeper (sweep_hosted.mjs).
+  POST /transcribe  audio in, {text, segments} out; forwards to Infomaniak AI Tools Whisper (async batch API, polled), stores nothing.
+                  503 not_configured until the key is placed (scripts/trustweb_transcribe_switch_on.sh).
+  POST /feedback  website feedback from https://idea2.site / https://app.idea2.site only (the one CORS route), one JSON line
+                  per entry in a 0600 file (read with scripts/trustweb_feedback_read.sh).
+
+API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
+Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
+Modules: server.mjs (guard, routing, /backup), http_util.mjs, limits.mjs, quota.mjs (the allowance as pure arithmetic),
+hosted_store.mjs + hosted.mjs, transcribe.mjs, feedback.mjs, config.mjs, sweep_hosted.mjs.
 
 RUN (local)
-  BACKUP_DIR=/tmp/twbackup PORT=8960 node server.mjs
+  BACKUP_DIR=/tmp/twbackup HOSTED_DIR=/tmp/twhosted PORT=8960 node server.mjs
   curl -s http://127.0.0.1:8960/health        # ok
-Requires Node 18+ (no dependencies). Binds 127.0.0.1 only.
+Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 22). No dependencies.
 
 TEST
-  sh services/trustweb-backup/test/run_tests.sh
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test
-(17 tests: crypto unit tests, and the server on an ephemeral port). Nothing is left running.
+  sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over seven files (71 tests: the 17
+original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake provider, feedback
+and CORS, ETag/late packs). Fixed test ports 8971-8975, one per file. Nothing is left running.
 
-PRODUCTION (questhub, installed by the orchestrator)
-  Copy server.mjs to /opt/trustweb-backup/server.mjs, then:
+DEPLOY (questhub)
+  scripts/deploy_trustweb_backup.sh --staging [--keep] [--dry-run]    second unit trustweb-backup-staging on 127.0.0.1:8970, smoke test, then stopped
+  scripts/deploy_trustweb_backup.sh --production [--dry-run]          the real unit + Caddy routes (orchestrator, after review)
+  scripts/deploy_trustweb_backup.sh --print-caddy                      the Caddy snippet
+The unit text lives in the script (unit_text). Notes for the production unit:
+  - StateDirectory=trustweb-backup trustweb-hosted (hosted data and feedback.jsonl live in /var/lib/trustweb-hosted, never in BACKUP_DIR)
+  - EnvironmentFile=-/etc/trustweb-backup.env (0600 root) holds TRANSCRIBE_URL / TRANSCRIBE_KEY; absent = transcription off
+  - SELinux (Enforcing): code dir usr_t, unit written in place with tee, data dirs var_lib_t (checked by the script)
+  - Caddy: handle /hosted/*, /transcribe, /feedback (size limits, 15 min timeouts); keep /hosted/ paths out of access logs.
+Behaviour change for /backup (the only one): the 30 s request deadline is now per request (server.requestTimeout is 15 min
+for the long routes), still 30 s on /backup and /feedback.
 
-  /etc/systemd/system/trustweb-backup.service
-    [Unit]
-    Description=TrustWeb encrypted backup store
-    After=network.target
-
-    [Service]
-    ExecStart=/usr/bin/node /opt/trustweb-backup/server.mjs
-    Environment=HOST=127.0.0.1
-    Environment=PORT=8960
-    Environment=BACKUP_DIR=/var/lib/trustweb-backup
-    Environment=ALLOWED_HOSTS=app.idea2.site
-    DynamicUser=yes
-    StateDirectory=trustweb-backup
-    StateDirectoryMode=0700
-    Restart=on-failure
-    NoNewPrivileges=yes
-    ProtectSystem=strict
-    ProtectHome=yes
-    PrivateTmp=yes
-    PrivateDevices=yes
-    ProtectKernelTunables=yes
-    ProtectControlGroups=yes
-    RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-    MemoryMax=256M
-
-    [Install]
-    WantedBy=multi-user.target
-
-  systemctl daemon-reload && systemctl enable --now trustweb-backup
-  (AlmaLinux: if SELinux blocks the node binary under /opt, label it or run from a path the policy allows.)
-
-  Caddyfile, inside the app.idea2.site site block:
-    handle /backup/* {
-        request_body {
-            max_size 1100KB
-        }
-        reverse_proxy 127.0.0.1:8960
-    }
-  Caddy keeps the original Host header (app.idea2.site) and sets X-Forwarded-For; the server
-  trusts the last X-Forwarded-For entry only when the socket peer is loopback. Do not log
-  request bodies or the /backup/ paths in the Caddy access log (the id is a secret).
+Caddy keeps the original Host header (app.idea2.site) and sets X-Forwarded-For; the server trusts the last X-Forwarded-For
+entry only when the socket peer is loopback. Do not log request bodies or the /backup/ and /hosted/ paths (ids are secrets).
