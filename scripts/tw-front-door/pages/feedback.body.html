@@ -1,0 +1,114 @@
+<a class="back" href="./">&larr; back to TrustWeb</a>
+<h1>Feedback</h1>
+<p class="lede">Tell us what works, what does not, what would be fair to pay, or ask us for the source code. A person reads every message.</p>
+
+<section id="form-card">
+  <form id="fb-form" class="fbform" novalidate>
+    <label for="fb-kind">What kind of message is it?</label>
+    <select id="fb-kind" name="kind">
+      <option value="feedback">Feedback</option>
+      <option value="pricing">Pricing: what would be fair</option>
+      <option value="bug">Bug</option>
+    </select>
+
+    <label for="fb-text">Your message</label>
+    <textarea id="fb-text" name="text" maxlength="4000" required></textarea>
+
+    <label for="fb-contact">How can we reach you? <span class="hint">Optional. Only if you want an answer.</span></label>
+    <input type="text" id="fb-contact" name="contact" maxlength="200" autocomplete="email" inputmode="email">
+
+    <div class="hp" aria-hidden="true">
+      <label for="fb-homepage">Leave this field empty</label>
+      <input type="text" id="fb-homepage" name="homepage" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="btnrow"><button type="submit" class="btn-primary" id="fb-send">Send</button></div>
+    <p class="fbmsg" id="fb-msg" role="status" aria-live="polite"></p>
+  </form>
+  <p style="margin-top:14px;font-size:.86rem">We store what you type here, your optional contact and the kind, and
+  the page you sent it from. No address, no browser details. See the <a href="privacy.html">privacy page</a>.</p>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var ENDPOINT = "https://app.idea2.site/feedback";
+  var TIMEOUT_MS = 15000;
+  var KINDS = ["feedback", "pricing", "bug"];
+  var TEXT = {
+    empty: "Please write a message first.",
+    sending: "Sending...",
+    ok: "Thank you. Your message arrived.",
+    rate: "You have sent several messages in a short time. Please try again in a while. Your text is still here.",
+    fail: "Could not send right now. Your text is still here. Please try again later, or write to connect@evobiosys.org."
+  };
+  var SOURCE_CODE_PREFILL = "I would like to read the current source code of TrustWeb now.";
+
+  var form = document.getElementById("fb-form");
+  var kindEl = document.getElementById("fb-kind");
+  var textEl = document.getElementById("fb-text");
+  var contactEl = document.getElementById("fb-contact");
+  var honeyEl = document.getElementById("fb-homepage");
+  var sendEl = document.getElementById("fb-send");
+  var msgEl = document.getElementById("fb-msg");
+  if (!form || !kindEl || !textEl || !contactEl || !honeyEl || !sendEl || !msgEl) return;
+
+  function setMsg(kind, text) {
+    msgEl.className = "fbmsg " + kind;
+    msgEl.textContent = text;
+  }
+
+  function applyQuery() {
+    var params = new URLSearchParams(location.search);
+    var kind = params.get("kind");
+    if (kind && KINDS.indexOf(kind) !== -1) kindEl.value = kind;
+    if (params.get("topic") === "source-code" && !textEl.value) textEl.value = SOURCE_CODE_PREFILL;
+  }
+
+  function payload() {
+    var body = {
+      text: textEl.value.trim(),
+      kind: kindEl.value,
+      page: location.pathname.slice(0, 200),
+      homepage: honeyEl.value
+    };
+    var contact = contactEl.value.trim();
+    if (contact) body.contact = contact.slice(0, 200);
+    return body;
+  }
+
+  function outcomeFor(status) {
+    if (status === 204) return "ok";
+    if (status === 429) return "rate";
+    return "fail";
+  }
+
+  function send(body) {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, TIMEOUT_MS);
+    return fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctl.signal
+    }).then(function (res) { return outcomeFor(res.status); },
+            function () { return "fail"; })
+      .then(function (outcome) { clearTimeout(timer); return outcome; });
+  }
+
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var body = payload();
+    if (!body.text) { setMsg("err", TEXT.empty); textEl.focus(); return; }
+    sendEl.disabled = true;
+    setMsg("ok", TEXT.sending);
+    send(body).then(function (outcome) {
+      if (outcome === "ok") { textEl.value = ""; setMsg("ok", TEXT.ok); }
+      else setMsg("err", TEXT[outcome]);   // the typed text stays
+      sendEl.disabled = false;
+    });
+  });
+
+  applyQuery();
+})();
+</script>
