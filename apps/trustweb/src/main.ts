@@ -27,7 +27,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare, TranscriptLine } from './model'
+import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { isMeetingPack, parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
@@ -47,17 +47,13 @@ import { aboutGroup } from './about'
 import { installSheetContent, setUpInstall } from './install'
 import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
-import { isoDateLabels, SearchField } from './search'
-import { meetingSearchPanel } from './meeting_search_view'
 import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, typedSource } from './provenance'
-import type { SourceFocus } from './provenance'
 import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
-import type { StoredTake } from './audio_store'
 import { megabytes } from './audio_plan'
-import { mountPlayer } from './audio_player'
-import type { PlayerHandle } from './audio_player'
-import { withDuration } from './webm_duration'
+import { createPastMeetings, whenLabel } from './past_meetings_view'
+import { ICONS } from './icons'
+import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -230,8 +226,6 @@ let meetFrom: Screen = Screen.Web
 const recorder = new MeetingRecorder()
 // Recordings kept on this phone with their meetings (audio_store.ts), per persona like the record.
 const audioStore = new AudioStore(persona, storeCtx)
-// The transcript player of the past meeting on show (audio_player.ts); stopped whenever the sheet changes.
-let activePlayer: PlayerHandle | null = null
 // Every take of the current draft, oldest first: a new take never overwrites one.
 let takes: Recording[] = []
 let recNotice = ''
@@ -377,34 +371,6 @@ async function openWalkthrough(): Promise<void> {
   document.addEventListener('keydown', onKey)
   document.body.append(layer)
   closeBtn.focus()
-}
-
-// Icons: web, inventory, query, meet, solo and call are this app's own; mic, pause, play, send,
-// x, qr, handshake, settings (a cog, never a sun-like icon: owner 2026-10-05),
-// users and info are Lucide icons (lucide.dev, ISC licence).
-const ICONS: Record<string, string> = {
-  web: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="2 3"/></svg>',
-  inventory: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
-  query: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>',
-  mic: '<svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>',
-  pause: '<svg viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>',
-  play: '<svg viewBox="0 0 24 24"><path d="M6 3l14 9-14 9z"/></svg>',
-  send: '<svg viewBox="0 0 24 24"><path d="M3.7 3.05a.5.5 0 0 0-.68.63l2.84 7.62a2 2 0 0 1 0 1.4l-2.84 7.62a.5.5 0 0 0 .68.63l18-8.5a.5.5 0 0 0 0-.9z"/><path d="M6 12h16"/></svg>',
-  x: '<svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
-  qr: '<svg viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>',
-  meet: '<svg viewBox="0 0 24 24"><circle cx="6.2" cy="5.6" r="2.7" fill="currentColor" stroke="none"/><circle cx="17.8" cy="5.6" r="2.7" fill="currentColor" stroke="none"/><rect x="2" y="10" width="7" height="11.5" rx="2.6" fill="currentColor" stroke="none"/><rect x="15" y="10" width="7" height="11.5" rx="2.6" fill="currentColor" stroke="none"/><path d="M7.5 12.2l3.6 2.9" stroke-width="2.6"/><path d="M16.5 12.2l-3.6 2.9" stroke-width="2.6"/></svg>',
-  // "Just me" (owner 2026-10-06): the Meeting icon's person on its own, three small sound arcs at the mouth.
-  solo: '<svg viewBox="0 0 24 24"><circle cx="7.5" cy="5.6" r="2.7" fill="currentColor" stroke="none"/><rect x="3" y="10" width="9" height="11.5" rx="3" fill="currentColor" stroke="none"/><path d="M14.6 7.6a3 3 0 0 1 0 4"/><path d="M17.4 5.6a6 6 0 0 1 0 8"/><path d="M20.2 3.6a9 9 0 0 1 0 12"/></svg>',
-  handshake: '<svg viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>',
-  users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-  settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
-  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
-  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
-  more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
-  // "Call into your web": only the sound waves (owner 2026-10-05: "simpler and
-  // less confusing"), the call going out and the resonance coming back.
-  call: '<svg viewBox="0 0 24 24"><path d="M5.5 8.5a5 5 0 0 1 0 7"/><path d="M9.5 5.5a9.5 9.5 0 0 1 0 13"/><path d="M13.5 2.8a13.5 13.5 0 0 1 0 18.4"/></svg>',
-  list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }
 
 /** Which query button the owner chose in Settings (default: call into your web). */
@@ -675,14 +641,11 @@ function render(): void {
 // sheet, toast
 // ---------------------------------------------------------------------------
 
-function stopPlayer(): void {
-  activePlayer?.stop()
-  activePlayer = null
-}
-
 function openSheet(children: (Node | null)[]): void {
-  stopPlayer()
+  // A past meeting's player stops whenever the sheet changes (past_meetings_view.ts).
+  past.stopPlayer()
   delete sheet.dataset.kind
+  delete sheet.dataset.meeting
   sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
   sheet.inert = false
@@ -692,7 +655,7 @@ function openSheet(children: (Node | null)[]): void {
 function closeSheet(): void {
   // A closed sheet keeps its last content off-screen; inert takes it out of
   // the tab order and the accessibility tree.
-  stopPlayer()
+  past.stopPlayer()
   sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
@@ -1657,35 +1620,13 @@ function recPromptsView(): HTMLElement {
 // notes and transcript, openable again (owner 2026-10-06)
 // ---------------------------------------------------------------------------
 
-const MEETINGS_MAX = 200
-
-function pastMeetingsLink(): HTMLElement {
-  return el('button', { class: 'past-link', onclick: pastMeetingsSheet }, [S.pastLink(pastMeetings(st()).length)])
-}
-
-function whenLabel(at: number): string {
-  return new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
-}
-
-function pastMeta(m: PastMeeting): string {
-  const kind = m.fromName ? S.pastFrom(m.fromName) : m.meeting ? S.pastKindMeeting : m.transcript.length || m.durationMs ? S.pastKindMemo : S.pastKindNotes
-  return [kind, whenLabel(m.startedAt), m.where ? S.pastWhere(m.where) : '', m.durationMs ? clock(m.durationMs) : '', S.pastCounts(m.lines.length, m.transcript.length)]
-    .filter(Boolean).join(' · ')
-}
-
-function pastMeetingsSheet(): void {
-  const s = st()
-  const list = pastMeetings(s)
-  openSheet([
-    el('h3', {}, [S.pastTitle]),
-    list.length === 0 ? el('p', { class: 'meta' }, [S.pastEmpty]) : null,
-    ...list.map((m) => el('button', { class: 'pm-row', onclick: () => pastMeetingSheet(m) }, [
-      el('b', {}, [m.about, m.personId && isDemoPerson(s, m.personId) ? dummyChip() : null]),
-      el('i', {}, [pastMeta(m)]),
-    ])),
-    el('p', { class: 'foot' }, [S.pastFoot]),
-  ])
-}
+/** Past meetings on screen and their kept audio: past_meetings_view.ts, with these hooks. */
+const past = createPastMeetings({
+  state: st, save, sheet, openSheet, toast, audio: audioStore, personSheet, tagChip, dummyChip,
+  transcriptRow, icon, clockLong,
+})
+const pastMeetingsLink = (): HTMLElement => past.link()
+const pastMeetingSheet = (m: PastMeeting, focus?: PastFocus, from?: ItemSource): void => past.open(m, focus, from)
 
 /** Opens on Record and Meeting, in the header slot where Web has its contact search. */
 function pastSearchButton(): HTMLElement {
@@ -1700,121 +1641,7 @@ function togglePastSearch(): void {
 }
 
 function pastSearchView(): HTMLElement {
-  const s = st()
-  return meetingSearchPanel({
-    meetings: () => pastMeetings(s),
-    query: pastSearchText,
-    onQuery: (q) => { pastSearchText = q },
-    onClose: togglePastSearch,
-    onOpen: (m, hit) => pastMeetingSheet(m, hit && (hit.field === SearchField.Note || hit.field === SearchField.Transcript) ? { field: hit.field, index: hit.index } : undefined),
-    dateLabels: (m) => [whenLabel(m.startedAt), ...isoDateLabels(m.startedAt)],
-    meta: pastMeta,
-    dummy: (m) => (m.personId && isDemoPerson(s, m.personId) ? dummyChip() : null),
-    clock: clockLong,
-  })
-}
-
-/** A line to open a past meeting at: a note, or a transcript line (highlighted and scrolled to). */
-interface PastFocus {
-  field: SearchField.Note | SearchField.Transcript
-  index: number
-}
-
-function highlightPastLine(m: PastMeeting, f: PastFocus | SourceFocus): void {
-  const target = f.field === SearchField.Note
-    ? sheet.querySelector<HTMLElement>(`[data-pm-note="${f.index}"]`)
-    : sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${f.index}`)}"]`)
-  if (!target) return
-  target.classList.add('pm-hit')
-  requestAnimationFrame(() => target.scrollIntoView({ block: 'center' }))
-}
-
-function transcriptView(lines: TranscriptLine[], prefix: string): HTMLElement {
-  return el('div', { class: 'tr-list tr-static' }, lines.map((t, i) => transcriptRow({ id: `${prefix}${i}`, speaker: t.speaker, text: t.text, atMs: t.atMs, final: true })))
-}
-
-function pastMeetingSheet(m: PastMeeting, focus?: PastFocus | SourceFocus, from?: ItemSource): void {
-  const s = st()
-  const person = m.personId ? s.people.find((p) => p.id === m.personId) : undefined
-  openSheet([
-    el('button', { class: 'back-link', onclick: pastMeetingsSheet }, ['‹ ' + S.pastTitle]),
-    el('h3', {}, [m.about, person && isDemoPerson(s, person.id) ? dummyChip() : null]),
-    el('p', { class: 'meta' }, [pastMeta(m)]),
-    el('h4', { class: 'eyebrow' }, [S.pastNotes]),
-    m.lines.length
-      ? el('div', { class: 'sheet-lines' }, m.lines.map((l, i) => el('div', { class: 'sline', 'data-pm-note': String(i) }, [tagChip(l.tag), el('span', {}, [l.text])])))
-      : el('p', { class: 'meta' }, [S.pastNoNotes]),
-    el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
-    el('div', { id: 'pm-player-slot' }),
-    m.transcript.length ? transcriptView(m.transcript, m.id + ':') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
-    person ? el('button', { class: 'btn btn-ghost', onclick: () => personSheet(person.id) }, [S.pastOpenPerson(person.name)]) : null,
-    isStoredMeeting(m) ? el('button', { class: 'btn btn-ghost pm-delete', onclick: () => void deletePastMeeting(m) }, [S.pastDelete]) : null,
-  ])
-  sheet.dataset.meeting = m.id
-  if (focus) highlightPastLine(m, focus)
-  void attachPlayer(m, from)
-}
-
-/** Meetings this phone stored (not the entries derived from older notes): they can be deleted, and may have audio. */
-function isStoredMeeting(m: PastMeeting): boolean {
-  return (st().meetings ?? []).some((x) => x.id === m.id)
-}
-
-/**
- * Where the meeting's audio is kept: the player bar above the transcript, tap
- * a line to play from it, and for an item's link "Play from this moment".
- * Without audio (older meetings, on-device speech without a recording,
- * dropped audio) nothing is added: the control is absent, not broken.
- */
-async function attachPlayer(m: PastMeeting, from?: ItemSource): Promise<void> {
-  const audio = isStoredMeeting(m) ? await audioStore.load(m.id) : null
-  const slot = sheet.querySelector<HTMLElement>('#pm-player-slot')
-  if (!audio || !audio.takes.length || !slot || sheet.dataset.meeting !== m.id || !sheet.classList.contains('on')) return
-  stopPlayer()
-  const row = (i: number): HTMLElement | null => sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${i}`)}"]`)
-  const player = mountPlayer(audio, { transcript: m.transcript, row, clock, icons: { play: icon('play'), pause: icon('pause') } })
-  activePlayer = player
-  m.transcript.forEach((t, i) => {
-    const r = row(i)
-    if (!r) return
-    r.classList.add('playable')
-    r.setAttribute('role', 'button')
-    r.tabIndex = 0
-    r.addEventListener('click', () => void player.playFrom(t.atMs))
-    r.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void player.playFrom(t.atMs) })
-  })
-  const moment = from?.atMs
-  const fromMoment = moment === undefined
-    ? null
-    : el('button', { class: 'btn btn-electric btn-sm pm-from', 'data-play-from': String(moment), onclick: () => void player.playFrom(moment) }, [S.playerFromMoment(clock(moment))])
-  slot.replaceChildren(...[player.bar, fromMoment].filter((n): n is HTMLElement => n !== null))
-}
-
-/** Keeps the draft's takes with its stored meeting (Duration written into WebM takes, so they can seek). */
-async function keepAudio(meetingId: string, recorded: readonly Recording[]): Promise<void> {
-  let offset = 0
-  const stored: StoredTake[] = []
-  for (const t of recorded) {
-    stored.push({ blob: await withDuration(t.blob, t.durationMs), mimeType: t.mimeType, offsetMs: offset, durationMs: t.durationMs })
-    offset += t.durationMs
-  }
-  await audioStore.save(meetingId, stored).catch(() => [])
-}
-
-/** Keeps at most MEETINGS_MAX stored meetings; the audio of any that fall off goes with them. */
-function capMeetings(list: PastMeeting[]): PastMeeting[] {
-  for (const gone of list.slice(MEETINGS_MAX)) void audioStore.remove(gone.id)
-  return list.slice(0, MEETINGS_MAX)
-}
-
-async function deletePastMeeting(m: PastMeeting): Promise<void> {
-  if (!confirm(S.pastDeleteConfirm)) return
-  const s = st()
-  s.meetings = (s.meetings ?? []).filter((x) => x.id !== m.id)
-  save()
-  await audioStore.remove(m.id)
-  toast(S.pastDeleted)
-  pastMeetingsSheet()
+  return past.searchView(pastSearchText, (q) => { pastSearchText = q }, togglePastSearch)
 }
 
 /** Is there anything of this draft worth keeping as a past meeting (a take, a transcript, or a meeting at all)? */
@@ -1853,11 +1680,11 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
   if (transcript.length) m.transcript = transcript
   if (opts.personId) m.personId = opts.personId
-  if (!existing) s.meetings = capMeetings([m, ...(s.meetings ?? [])])
+  if (!existing) s.meetings = past.cap([m, ...(s.meetings ?? [])])
   draft.meetingId = m.id
   save()
   // The audio stays on this phone with the meeting (capped, audio_store.ts); never in the record itself.
-  if (takes.length) void keepAudio(m.id, [...takes])
+  if (takes.length) void past.keepAudio(m.id, [...takes])
 }
 
 // ---------------------------------------------------------------------------
@@ -1977,7 +1804,7 @@ function showPack(pack: MeetingPack): void {
       ? el('div', { class: 'sheet-lines' }, pack.notes.map((t) => el('div', { class: 'sline' }, [el('span', {}, [t])])))
       : el('p', { class: 'meta' }, [S.pastNoNotes]),
     el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
-    pack.transcript.length ? transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
+    pack.transcript.length ? past.transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
     el('button', { class: 'btn btn-electric', onclick: () => { keepPack(pack); closeSheet(); toast(S.recvKept); render() } }, [S.recvKeep]),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recvClose]),
   ])
@@ -2000,7 +1827,7 @@ function keepPack(pack: MeetingPack): void {
     endedAt: pack.startedAt + pack.durationMs, durationMs: pack.durationMs, meeting: true,
     lines: pack.notes.map((t) => ({ text: t, tag: Tag.Note })), transcript: pack.transcript, fromName: pack.from,
   }
-  s.meetings = capMeetings([m, ...(s.meetings ?? [])])
+  s.meetings = past.cap([m, ...(s.meetings ?? [])])
   save()
 }
 
