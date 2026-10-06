@@ -1,4 +1,24 @@
-PERSONAL TRUSTWEB INVENTORY: design and what exists (2026-10-06, walk-part2 pass)
+PERSONAL TRUSTWEB INVENTORY: design and what exists (2026-10-06, walk-part2 pass; updated 2026-10-06 18:15, wave 1733)
+
+WHAT IS TRUE NOW (wave 1733, read this first; the sections below keep the design and are marked where it changed)
+  - The exporter exists: scripts/trustweb_inventory_export.ts (logic in inventory_export.ts). Mac only. Dry run by
+    default: writes the full local file, the review file and the phone import file; nothing leaves the Mac.
+    First real dry run 2026-10-06: 45 lines read from Tana (54 nodes, read-only), 0 marked, so 0 would leave.
+  - The personal front door is built and tested (PeerPolicy.Granted, own unit, own state, port 8962, inventory as a
+    root-only systemd credential, no public card) but NOT deployed: the host is Jakob's decision (sebra per this
+    note, or questhub next to the demo instance). Both dry runs pass.
+  - "My personal account connected with the Tana content, without an app": the import file
+    (trustweb-inventory-import.json, every line, "Only me") goes into his OWN phone's inventory once the app can
+    import it (app-B, "Import inventory file"); that needs no server at all. The front door is the second, optional
+    step: it answers granted people from the lines he allowed in advance while his phone is off.
+  - Grants: scripts/trustweb_peer_grant.sh edits grants.json on the host (no hand-edited JSON); --remove revokes at
+    once (SIGHUP reload forgets the person), and one granted name binds one phone.
+  - Review fixes (2026-10-06, adversarial review): a Tana mark is EXACTLY "allowed in advance" or "allowed in
+    advance: <note>" (anything looser, "allowed in advance? ask first", is no mark); the note is shown in the
+    review file and in the --send confirmation exactly as the asker sees it; --send needs a typed "y" (ENTER is
+    no); the Mac folder reads only regular files in the folder (no symlinks); the phone import file replaces a
+    DID, a Tana link or node id and a date-time as a whole token; answers to forwarded asks leave at one fixed
+    moment (section 3 d).
 
 Jakob's rulings (2026-10-06, binding): "not the server answers asks, I do"; "permissions set in advance, and
 nothing personal goes there until you decide"; "the inventory lives in Tana accessible on phone from sebra, so
@@ -20,8 +40,12 @@ queried if I don't have this laptop on".
      - What Jakob typed or recorded in the app; answers through the forward (section 3) with his live tap.
 
 2. WHAT MAY LEAVE EACH PLACE
-   - To sebra (personal front door): ONLY lines Jakob exported with a preset (by, at, note). Nothing else, ever.
-     The exporter refuses a line without a preset. Today: zero lines exported; the file does not exist yet.
+   - To the personal front door (sebra or questhub, his choice): ONLY lines Jakob marked "allowed in advance"
+     (the server file: text, audience fof, preset {by, at = day only, note?}; nothing else). Lines without the mark
+     are not written to the server file at all (so heldLines is 0 there). A marked line that carries a Tana id or
+     link, a DID or a timestamp finer than a day stays on the Mac too, and the review file says why. Today: zero
+     lines marked, nothing sent; the host's inventory file does not exist (it is created empty at first deploy).
+   - To his own phone: the import file, every line, audience "Only me" (no Tana ids, no DIDs).
    - To the Swiss server (demo front door): fictional lines only (demo_inventory.json), presets on the shareable
      ones.
    - To an asker: at most three lines per ask, each either a preset line (marked "Allowed in advance by Jakob
@@ -34,14 +58,20 @@ queried if I don't have this laptop on".
      b. preset lines matched for the asker's ring (acquaintance), same matcher and audience rule as the phone
      c. in parallel: forward to the owner's phone as a 'query' with relayed: true and "<asker>: <text>";
         wait up to forwardWaitMs (120 s; the asker's app waits 180 s)
-     d. answer = owner's shared items first, then preset hits, max three; sealed; sent no earlier than 30 s
-        after arrival. Decline, no match, phone off, timeout: identical bytes.
+     d. answer = owner's shared items first, then preset hits, max three; sealed. Sent at ONE moment fixed at
+        arrival: while the ask is forwarded, at the forward deadline (120 s), unless the owner shared live (then at
+        once, at least 30 s); otherwise 30 s after arrival. Decline, no match, phone off, timeout, over the rate
+        limit: identical bytes AND identical timing (review fix 2026-10-06).
    Owner binding: claim window (TW_PEER_CLAIM=1 or the claim-open file), first phone to open the link within
    10 minutes becomes the owner; DID in state.json (0600), never logged. Self-asks from the owner: preset only.
    Two instances from one bundle: demo (PeerPolicy.Open, Swiss server, fictional presets) and personal
    (PeerPolicy.Granted + grants.json, sebra, exported presets).
 
-4. THE EXPORTER (not written; design)
+4. THE EXPORTER (BUILT 2026-10-06, wave 1733; the design below, as built: marks = the choices file's
+   "Allow in advance", a Tana child that reads exactly "allowed in advance" or "allowed in advance: <note>" under
+   the node, or "+ " in a regular file of the Mac folder; the unmarked default is "not written" for the server
+   file; --send needs --host, a terminal, a review file written by the same run, and a typed "y" (ENTER = no);
+   the "edited since" sync is NOT built)
    A script on the Mac (never on sebra): reads the "Personal TrustWeb Inventory" node, follows "referenced" one
    hop (title + first line of each referenced node), merges the local folder, and writes {items:[{text,
    audience, preset?}]}. A line gets a preset ONLY from an explicit mark Jakob set: a child node "allowed in
@@ -58,7 +88,7 @@ queried if I don't have this laptop on".
    It is a slow queue job (tens of seconds per node), never a live answerer.
 
 6. ACCESS CONTROL (R15)
-   Personal instance: grants.json by demo-account name (edited on the server) today; owner-phone-sent grants over
+   Personal instance: grants.json by display name, edited with scripts/trustweb_peer_grant.sh (2026-10-06); owner-phone-sent grants over
    the encrypted channel need a new control envelope in apps/demo/src/wire.ts (not built; roadmap). Every demo
    account is listed and removable on Jakob's phone (Settings > Demo accounts) and expires after a week by
    default (6644f1e).

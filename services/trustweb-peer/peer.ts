@@ -21,8 +21,11 @@
  * connect-ack (connect_link.ts), the matcher (match/lexical.ts), the
  * surface-or-stay-silent decision (incoming_query.ts) and the sealed
  * fixed-length answer in which "nothing matched", "not shared" and "the
- * owner was unreachable" are the same bytes, sent no earlier than
- * RELAY_DEADLINE_MS after the ask arrived (gate.ts). Reused, not copied.
+ * owner was unreachable" are the same bytes, sent at one moment fixed when
+ * the ask arrived: RELAY_DEADLINE_MS after it (gate.ts), or, while the ask
+ * is forwarded to the owner, the forward deadline, so WHEN an answer comes
+ * says nothing either (only the owner's live share goes early: its content
+ * says so anyway). Reused, not copied.
  *
  * Owner binding (the "claim" ceremony): the owner's phone becomes the owner
  * by scanning this peer's connect link while a claim window is open (a
@@ -36,8 +39,10 @@
  *             (acquaintance ring); fictional lines with presets
  *             (demo_inventory.json); meant for the Swiss server.
  *   personal  PeerPolicy.Granted: a connect-ack is honoured only for a name
- *             the owner granted beforehand (grants.json). Meant for the
- *             German server (sebra). Not deployed; see README.txt.
+ *             the owner granted beforehand (grants.json); its inventory holds
+ *             only lines the owner allowed in advance (inventory_export.ts).
+ *             Host (questhub or sebra) is the owner's decision; not deployed
+ *             yet; see README.txt.
  *
  * Privacy on this host: no ask text is ever logged; the log has counts and
  * outcomes only. The inventory file is read once at start and on SIGHUP.
@@ -231,13 +236,33 @@ export function loadInventory(file: string, now: number): LoadedInventory {
   return out
 }
 
-/** The names a Granted peer honours: { "names": ["anna-demo", ...] }, compared case-insensitively. */
+/**
+ * How a granted name compares: Unicode NFC, trimmed, inner whitespace
+ * collapsed, lower-cased. scripts/trustweb_peer_grant.sh stores names the
+ * same way, so " Ben  Bauer " from a phone matches "Ben Bauer" on the list.
+ */
+export function grantKey(name: string): string {
+  return name.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+/** The names a Granted peer honours: { "names": ["anna-demo", ...] }, compared by grantKey. */
 export function loadGrants(stateDir: string): Set<string> {
   const file = path.join(stateDir, 'grants.json')
   if (!existsSync(file)) return new Set()
   const raw: unknown = JSON.parse(readFileSync(file, 'utf8'))
   const names = (raw as { names?: unknown }).names
-  return new Set(Array.isArray(names) ? names.filter((n): n is string => typeof n === 'string').map((n) => n.toLowerCase()) : [])
+  return new Set(Array.isArray(names) ? names.filter((n): n is string => typeof n === 'string').map(grantKey).filter(Boolean) : [])
+}
+
+/**
+ * A file error for the log WITHOUT its content: JSON.parse quotes the start
+ * of the text it failed on ("Unexpected token 'm', "my therapi"..."), and an
+ * inventory or grants file must never reach the journal that way.
+ */
+export function fileErrorForLog(e: unknown): string {
+  if (e instanceof SyntaxError) return 'not valid JSON'
+  const code = (e as { code?: unknown } | null)?.code
+  return typeof code === 'string' ? code : 'unreadable'
 }
 
 /** Sliding one-hour window per asker; the limit is per connected peer, not global. */
@@ -349,14 +374,32 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   const peerByDid = (did: string): Peer | undefined => state.peers.find((p) => p.did === did)
   const isOwner = (did: string): boolean => state.owner?.did === did
 
+  /** Granted policy: a connected person stays an asker only while the name is still on the grant list. */
+  const stillGranted = (p: Peer): boolean => policy !== PeerPolicy.Granted || grants.has(grantKey(p.displayName))
+  /** Granted policy: forget everyone whose grant was removed (scripts/trustweb_peer_grant.sh --remove + SIGHUP). */
+  const pruneUngranted = (): number => {
+    const before = state.peers.length
+    state.peers = state.peers.filter(stillGranted)
+    const dropped = before - state.peers.length
+    if (dropped) saveState(opts.stateDir, state)
+    return dropped
+  }
+
   const reload = (): void => {
+    let nextInventory: LoadedInventory
+    let nextGrants: Set<string>
     try {
-      inventory = loadInventory(opts.inventoryFile, Date.now())
-      grants = loadGrants(opts.stateDir)
-      log(`reloaded: ${inventory.preset.length} preset lines, ${inventory.held} held, ${grants.size} grants`)
+      nextInventory = loadInventory(opts.inventoryFile, Date.now())
+      nextGrants = loadGrants(opts.stateDir)
     } catch (e) {
-      log('reload failed: ' + (e instanceof Error ? e.message : String(e)))
+      // Both stay as they were; the reason is logged without the file's content.
+      log('reload failed (kept the previous inventory and grants): ' + fileErrorForLog(e))
+      return
     }
+    inventory = nextInventory
+    grants = nextGrants
+    const dropped = pruneUngranted()
+    log(`reloaded: ${inventory.preset.length} preset lines, ${inventory.held} held, ${grants.size} grants${dropped ? `, ${dropped} no longer granted (forgotten)` : ''}`)
   }
   process.on('SIGHUP', reload)
 
@@ -379,9 +422,18 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       log('owner bound; claim window closed')
       return true
     }
-    if (policy === PeerPolicy.Granted && !grants.has(env.from.displayName.toLowerCase())) {
-      log('connect-ack refused (not granted)')
-      return true
+    if (policy === PeerPolicy.Granted) {
+      const key = grantKey(env.from.displayName)
+      if (!grants.has(key)) {
+        log('connect-ack refused (not granted)')
+        return true
+      }
+      // One phone per granted name: a name is not a secret, so a second phone
+      // sending it is refused while the first holds it (--remove frees it).
+      if (state.peers.some((p) => grantKey(p.displayName) === key)) {
+        log('connect-ack refused (name already bound)')
+        return true
+      }
     }
     if (state.peers.length >= maxPeers) state.peers.shift()
     state.peers.push({ id: env.from.id, displayName: env.from.displayName || 'Someone', did: env.did, ring: Ring.Acquaintance, connectedAt: Date.now() })
@@ -391,7 +443,10 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   })
 
   channel.onEnvelope(
-    async (fromDid) => (peerByDid(fromDid) || isOwner(fromDid) ? pairKey(fromDid) : null),
+    async (fromDid) => {
+      const p = peerByDid(fromDid)
+      return isOwner(fromDid) || (p && stillGranted(p)) ? pairKey(fromDid) : null
+    },
     (env, fromDid) => { void handle(env, fromDid) },
   )
 
@@ -404,8 +459,11 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     if (env.t === 'query') await handleQuery(env, fromDid)
   }
 
-  /** Puts the ask in front of the owner, as the ask it is; resolves with what the owner's phone shared. */
-  async function forwardToOwner(askerName: string, text: string, templateId: string): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
+  /** An ask is put in front of the owner when one is bound, forwarding is on, it has text, and it is not his own. */
+  const forwards = (self: boolean, text: string): boolean => forward && Boolean(state.owner) && !self && Boolean(text)
+
+  /** Puts the ask in front of the owner, as the ask it is; resolves with what the owner's phone shared by `deadline`. */
+  async function forwardToOwner(askerName: string, text: string, templateId: string, deadline: number): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
     const owner = state.owner
     if (!forward || !owner || !text) return { outcome: OwnerOutcome.NotAsked, items: [] }
     const key = await pairKey(owner.did)
@@ -414,7 +472,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       qid: randomId(12), issuedAt: Date.now(), freeText: forwardedText(askerName, text), relayed: true,
     }
     const answered = new Promise<AnswerEnvelope | null>((resolve) => {
-      const timer = setTimeout(() => { awaitingOwner.delete(q.qid); resolve(null) }, forwardWaitMs)
+      const timer = setTimeout(() => { awaitingOwner.delete(q.qid); resolve(null) }, Math.max(0, deadline - Date.now()))
       awaitingOwner.set(q.qid, (env) => { clearTimeout(timer); awaitingOwner.delete(q.qid); resolve(env) })
     })
     try {
@@ -439,12 +497,20 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     const peer: Peer | undefined = self
       ? { id: 'owner', displayName: state.owner?.displayName ?? 'Owner', did: fromDid, ring: Ring.Acquaintance, connectedAt: state.owner?.boundAt ?? receivedAt }
       : peerByDid(fromDid)
-    if (!peer) return
+    if (!peer || (!self && !stillGranted(peer))) return
     const key = await pairKey(peer.did)
     const text = q.freeText ?? ''
     const tpl = askTemplate(text)
-    const answer = async (payload: SharedPayload | null): Promise<void> => {
-      await settleAt(receivedAt, answerWindowMs)
+    // ONE answer instant per ask, fixed before anything is decided: while the
+    // ask goes to the owner's phone, every answer the owner did not add to is
+    // sent at the forward deadline, so a decline, no match, the phone off and
+    // the rate limit cannot be told apart by WHEN they arrive (gate.ts I3,
+    // RELAY_DEADLINE_MS). Only the owner's live share goes early: its content
+    // says so anyway.
+    const ownerDeadline = receivedAt + Math.max(answerWindowMs, forwardWaitMs)
+    const settleMs = forwards(self, text) ? Math.max(answerWindowMs, forwardWaitMs) : answerWindowMs
+    const answer = async (payload: SharedPayload | null, early = false): Promise<void> => {
+      await settleAt(receivedAt, early ? answerWindowMs : settleMs)
       const out = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
       try { await channel.send(peer.did, out, key) } catch { /* the asker times out and sees "no match" */ }
     }
@@ -470,7 +536,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       : []
 
     // 1. The owner's live decision, in parallel with the answer window.
-    const owner = self ? { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] } : await forwardToOwner(peer.displayName, text, tpl.id)
+    const owner = self ? { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] } : await forwardToOwner(peer.displayName, text, tpl.id, ownerDeadline)
 
     const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
     // Shape kept stable for apps/trustweb/test/e2e/demo_account.mjs ("ask shared"): outcome first, then the parts.
@@ -479,7 +545,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       await answer(null)
       return
     }
-    await answer({ from: state.me.displayName, templateId: tpl.id, items })
+    await answer({ from: state.me.displayName, templateId: tpl.id, items }, owner.outcome === OwnerOutcome.Shared)
   }
 
   try {
@@ -526,6 +592,16 @@ function envFlag(name: string, fallback: boolean): boolean {
 
 /** CLI entry: every setting from the environment (see the header and README.txt). */
 export async function main(): Promise<void> {
+  try {
+    await run()
+  } catch (e) {
+    // Never the error's message: it can quote a line of the inventory file.
+    console.error('trustweb-peer: could not start: ' + fileErrorForLog(e))
+    process.exit(1)
+  }
+}
+
+async function run(): Promise<void> {
   const policyRaw = process.env.TW_PEER_POLICY ?? PeerPolicy.Open
   const policy = (Object.values(PeerPolicy) as string[]).includes(policyRaw) ? (policyRaw as PeerPolicy) : PeerPolicy.Open
   const peer = await startPeer({
