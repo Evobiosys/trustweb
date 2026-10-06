@@ -148,6 +148,20 @@ async function main() {
     page.once('dialog', (d) => void d.accept())
     await page.getByRole('button', { name: 'Discard' }).click()
 
+    // Inventory: the cog top right (where ⋮ is on Web), "Review requests" where Web has "Call into your web"
+    await page.getByRole('button', { name: 'Web', exact: true }).click()
+    const moreOnWeb = await page.getByRole('button', { name: 'More' }).boundingBox()
+    const callOnWeb = await page.getByRole('button', { name: 'Call into your web' }).boundingBox()
+    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    const cog = await page.locator('.hdr-right .hdr-btn.icon-only').last().boundingBox()
+    ok('Inventory: the cog sits top right, where ⋮ sits on Web', Math.abs(cog.x - moreOnWeb.x) < 1 && Math.abs(cog.y - moreOnWeb.y) < 1, JSON.stringify([moreOnWeb, cog]))
+    const req = page.getByRole('button', { name: 'Review requests' })
+    const rb = await req.boundingBox()
+    ok('Inventory: "Review / requests" (two lines) sits where "Call into your web" sits', Math.abs(rb.x + rb.width - callOnWeb.x - callOnWeb.width) < 2 && Math.abs(rb.y + rb.height - callOnWeb.y - callOnWeb.height) < 2 && /Review\s*\n\s*requests/.test(await req.innerText()))
+    await req.click()
+    ok('it opens the asks people sent you', await page.getByRole('heading', { name: 'Requests to your inventory' }).isVisible())
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+
     // "what": the notes go to the inventory, with who may ask about each line
     await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await page.locator('nav.tabs .tab-record').click()

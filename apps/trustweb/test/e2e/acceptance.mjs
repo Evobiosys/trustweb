@@ -133,7 +133,9 @@ async function main() {
     const nothing = await jonas.locator('.card.asked').innerText()
     ok('Jonas sees "No match"', /No match/.test(nothing), nothing)
     await maya.getByRole('button', { name: 'Inventory' }).click()
+    await maya.getByRole('button', { name: 'Review requests' }).click()
     const log = await maya.locator('.log').first().innerText()
+    await maya.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     ok('Maya\'s log records the silent ask', /piano/.test(log) && /stayed silent/.test(log), log)
 
     // 3. matching ask, declined: indistinguishable from no match

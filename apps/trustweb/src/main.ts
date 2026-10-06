@@ -2274,10 +2274,14 @@ function screenInventory(): Node[] {
     render()
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  // Top right, in the slot ⋮ has on Web, so the QR keeps its place (owner 2026-10-06).
   const gear = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
   gear.innerHTML = icon('settings')
+  const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
+    el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
+  ])
   return [
-    header(S.invTitle, { right: gear }),
+    header(S.invTitle, { after: gear }),
     el('div', { class: 'scroll pad' }, [
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -2290,16 +2294,30 @@ function screenInventory(): Node[] {
           el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() } }, ['×']),
         ]),
       ])),
-      el('h4', { class: 'eyebrow' }, [S.logTitle]),
-      s.log.length === 0 ? el('p', { class: 'empty' }, [S.logEmpty]) : null,
-      ...s.log.slice(0, 12).map((e) => el('div', { class: 'log' }, [
-        el('b', {}, [e.from + ': ']), el('span', {}, ['"' + e.text + '"']),
-        el('em', {}, [S.logOutcome[e.outcome]]),
-      ])),
-      el('p', { class: 'foot' }, [S.logFoot]),
       backupCard(),
     ]),
+    requests,
   ]
+}
+
+/** "Review requests": the asks people sent to this phone, newest first, and any still waiting for an answer. */
+function requestsSheet(): void {
+  const s = st()
+  const waiting = askQueue.length
+  openSheet([
+    el('h3', {}, [S.reqTitle]),
+    waiting ? el('div', { class: 'conn-row' }, [
+      el('b', {}, [S.reqWaiting(waiting)]),
+      el('button', { class: 'btn btn-electric btn-sm', onclick: () => { closeSheet(); if (!askShowing) showNextAsk() } }, [S.reqOpen]),
+    ]) : null,
+    el('h4', { class: 'eyebrow' }, [S.logTitle]),
+    s.log.length === 0 ? el('p', { class: 'empty' }, [S.logEmpty]) : null,
+    ...s.log.slice(0, 50).map((e) => el('div', { class: 'log' }, [
+      el('b', {}, [e.from + ': ']), el('span', {}, ['"' + e.text + '"']),
+      el('em', {}, [S.logOutcome[e.outcome]]),
+    ])),
+    el('p', { class: 'foot' }, [S.logFoot]),
+  ])
 }
 
 // ---------------------------------------------------------------------------

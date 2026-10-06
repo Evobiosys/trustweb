@@ -287,6 +287,13 @@ export const S = {
   invOff: 'paused',
   invOn: 'on',
   logTitle: 'Asks that reached this phone',
+  // Inventory, where Web has "Call into your web": the asks people sent you (owner 2026-10-06; two lines for now).
+  reqTop: 'Review',
+  reqBottom: 'requests',
+  reqAria: 'Review requests',
+  reqTitle: 'Requests to your inventory',
+  reqWaiting: (n: number) => `${n === 1 ? 'One ask is' : `${n} asks are`} waiting for your yes or no.`,
+  reqOpen: 'Answer now',
   logEmpty: 'None yet.',
   logFoot: 'Only this phone keeps this log.',
   bkQuestion: 'Do you want to back it up on a Swiss server?',
