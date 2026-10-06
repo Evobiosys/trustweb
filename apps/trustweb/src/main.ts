@@ -52,6 +52,12 @@ import { meetingSearchPanel } from './meeting_search_view'
 import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, typedSource } from './provenance'
 import type { SourceFocus } from './provenance'
 import { sourceView } from './provenance_view'
+import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
+import type { StoredTake } from './audio_store'
+import { megabytes } from './audio_plan'
+import { mountPlayer } from './audio_player'
+import type { PlayerHandle } from './audio_player'
+import { withDuration } from './webm_duration'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -220,8 +226,12 @@ let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
 // Where Meet's back arrow returns to (Manage, Record, or Web).
 let meetFrom: Screen = Screen.Web
-// The recording belongs to the current draft; it is dropped with it.
+// The recording belongs to the current draft; it is dropped with it, or kept with its stored meeting.
 const recorder = new MeetingRecorder()
+// Recordings kept on this phone with their meetings (audio_store.ts), per persona like the record.
+const audioStore = new AudioStore(persona, storeCtx)
+// The transcript player of the past meeting on show (audio_player.ts); stopped whenever the sheet changes.
+let activePlayer: PlayerHandle | null = null
 // Every take of the current draft, oldest first: a new take never overwrites one.
 let takes: Recording[] = []
 let recNotice = ''
@@ -665,7 +675,13 @@ function render(): void {
 // sheet, toast
 // ---------------------------------------------------------------------------
 
+function stopPlayer(): void {
+  activePlayer?.stop()
+  activePlayer = null
+}
+
 function openSheet(children: (Node | null)[]): void {
+  stopPlayer()
   delete sheet.dataset.kind
   sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
@@ -676,6 +692,7 @@ function openSheet(children: (Node | null)[]): void {
 function closeSheet(): void {
   // A closed sheet keeps its last content off-screen; inert takes it out of
   // the tab order and the accessibility tree.
+  stopPlayer()
   sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
@@ -1717,7 +1734,6 @@ function transcriptView(lines: TranscriptLine[], prefix: string): HTMLElement {
 }
 
 function pastMeetingSheet(m: PastMeeting, focus?: PastFocus | SourceFocus, from?: ItemSource): void {
-  void from
   const s = st()
   const person = m.personId ? s.people.find((p) => p.id === m.personId) : undefined
   openSheet([
@@ -1729,10 +1745,76 @@ function pastMeetingSheet(m: PastMeeting, focus?: PastFocus | SourceFocus, from?
       ? el('div', { class: 'sheet-lines' }, m.lines.map((l, i) => el('div', { class: 'sline', 'data-pm-note': String(i) }, [tagChip(l.tag), el('span', {}, [l.text])])))
       : el('p', { class: 'meta' }, [S.pastNoNotes]),
     el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
+    el('div', { id: 'pm-player-slot' }),
     m.transcript.length ? transcriptView(m.transcript, m.id + ':') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
     person ? el('button', { class: 'btn btn-ghost', onclick: () => personSheet(person.id) }, [S.pastOpenPerson(person.name)]) : null,
+    isStoredMeeting(m) ? el('button', { class: 'btn btn-ghost pm-delete', onclick: () => void deletePastMeeting(m) }, [S.pastDelete]) : null,
   ])
+  sheet.dataset.meeting = m.id
   if (focus) highlightPastLine(m, focus)
+  void attachPlayer(m, from)
+}
+
+/** Meetings this phone stored (not the entries derived from older notes): they can be deleted, and may have audio. */
+function isStoredMeeting(m: PastMeeting): boolean {
+  return (st().meetings ?? []).some((x) => x.id === m.id)
+}
+
+/**
+ * Where the meeting's audio is kept: the player bar above the transcript, tap
+ * a line to play from it, and for an item's link "Play from this moment".
+ * Without audio (older meetings, on-device speech without a recording,
+ * dropped audio) nothing is added: the control is absent, not broken.
+ */
+async function attachPlayer(m: PastMeeting, from?: ItemSource): Promise<void> {
+  const audio = isStoredMeeting(m) ? await audioStore.load(m.id) : null
+  const slot = sheet.querySelector<HTMLElement>('#pm-player-slot')
+  if (!audio || !audio.takes.length || !slot || sheet.dataset.meeting !== m.id || !sheet.classList.contains('on')) return
+  stopPlayer()
+  const row = (i: number): HTMLElement | null => sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${i}`)}"]`)
+  const player = mountPlayer(audio, { transcript: m.transcript, row, clock, icons: { play: icon('play'), pause: icon('pause') } })
+  activePlayer = player
+  m.transcript.forEach((t, i) => {
+    const r = row(i)
+    if (!r) return
+    r.classList.add('playable')
+    r.setAttribute('role', 'button')
+    r.tabIndex = 0
+    r.addEventListener('click', () => void player.playFrom(t.atMs))
+    r.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void player.playFrom(t.atMs) })
+  })
+  const moment = from?.atMs
+  const fromMoment = moment === undefined
+    ? null
+    : el('button', { class: 'btn btn-electric btn-sm pm-from', 'data-play-from': String(moment), onclick: () => void player.playFrom(moment) }, [S.playerFromMoment(clock(moment))])
+  slot.replaceChildren(...[player.bar, fromMoment].filter((n): n is HTMLElement => n !== null))
+}
+
+/** Keeps the draft's takes with its stored meeting (Duration written into WebM takes, so they can seek). */
+async function keepAudio(meetingId: string, recorded: readonly Recording[]): Promise<void> {
+  let offset = 0
+  const stored: StoredTake[] = []
+  for (const t of recorded) {
+    stored.push({ blob: await withDuration(t.blob, t.durationMs), mimeType: t.mimeType, offsetMs: offset, durationMs: t.durationMs })
+    offset += t.durationMs
+  }
+  await audioStore.save(meetingId, stored).catch(() => [])
+}
+
+/** Keeps at most MEETINGS_MAX stored meetings; the audio of any that fall off goes with them. */
+function capMeetings(list: PastMeeting[]): PastMeeting[] {
+  for (const gone of list.slice(MEETINGS_MAX)) void audioStore.remove(gone.id)
+  return list.slice(0, MEETINGS_MAX)
+}
+
+async function deletePastMeeting(m: PastMeeting): Promise<void> {
+  if (!confirm(S.pastDeleteConfirm)) return
+  const s = st()
+  s.meetings = (s.meetings ?? []).filter((x) => x.id !== m.id)
+  save()
+  await audioStore.remove(m.id)
+  toast(S.pastDeleted)
+  pastMeetingsSheet()
 }
 
 /** Is there anything of this draft worth keeping as a past meeting (a take, a transcript, or a meeting at all)? */
@@ -1771,9 +1853,11 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
   if (transcript.length) m.transcript = transcript
   if (opts.personId) m.personId = opts.personId
-  if (!existing) s.meetings = [m, ...(s.meetings ?? [])].slice(0, MEETINGS_MAX)
+  if (!existing) s.meetings = capMeetings([m, ...(s.meetings ?? [])])
   draft.meetingId = m.id
   save()
+  // The audio stays on this phone with the meeting (capped, audio_store.ts); never in the record itself.
+  if (takes.length) void keepAudio(m.id, [...takes])
 }
 
 // ---------------------------------------------------------------------------
@@ -1916,7 +2000,7 @@ function keepPack(pack: MeetingPack): void {
     endedAt: pack.startedAt + pack.durationMs, durationMs: pack.durationMs, meeting: true,
     lines: pack.notes.map((t) => ({ text: t, tag: Tag.Note })), transcript: pack.transcript, fromName: pack.from,
   }
-  s.meetings = [m, ...(s.meetings ?? [])].slice(0, MEETINGS_MAX)
+  s.meetings = capMeetings([m, ...(s.meetings ?? [])])
   save()
 }
 
@@ -3011,7 +3095,17 @@ function recordingSettings(s: AppState): HTMLElement[] {
       class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
       onclick: () => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() },
     }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [S.setTranscriptionHint[c]])])),
+    audioKeptLine(),
   ]
+}
+
+/** Settings > Recording: what audio is kept on this phone, and that it never leaves with a backup or a sent meeting. */
+function audioKeptLine(): HTMLElement {
+  const line = el('p', { class: 'meta set-sub', 'data-audio-kept': '1' }, [S.audioKeptChecking])
+  void audioStore.entries().then((es) => {
+    line.textContent = S.audioKept(es.length, megabytes(es.reduce((n, e) => n + e.bytes, 0)), MAX_RECORDINGS, megabytes(MAX_BYTES))
+  })
+  return line
 }
 
 function settingsSheet(): void {
@@ -3079,7 +3173,11 @@ function settingsSheet(): void {
     ...aboutGroup(),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
-      onclick: () => { if (confirm(S.resetConfirm)) { dropRecording(); clearState(persona, storeCtx); location.reload() } },
+      onclick: () => {
+        if (!confirm(S.resetConfirm)) return
+        dropRecording()
+        void audioStore.clear().finally(() => { clearState(persona, storeCtx); location.reload() })
+      },
     }, [S.resetPhone]),
   ])
 }

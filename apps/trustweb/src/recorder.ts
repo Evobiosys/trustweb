@@ -2,10 +2,10 @@
  * Meeting recording, ON THIS PHONE ONLY.
  *
  * MediaRecorder writes the audio into memory; nothing is uploaded and nothing
- * is transcribed here. The recording exists for the debrief afterwards: the
- * owner saves the audio file and transcribes it later on their own computer
- * (e.g. OmiCompanion). TrustWeb drops its in-memory copy when the notes are
- * saved or the draft is discarded.
+ * is transcribed here. Once the meeting is stored, its takes are kept on this
+ * phone with it (audio_store.ts, capped) so it can be played again from any
+ * transcript line; the owner can also save the audio file and transcribe it
+ * later on their own computer (e.g. OmiCompanion). A discarded draft keeps nothing.
  *
  * getUserMedia needs a secure page: iOS Safari refuses it on plain http://
  * LAN URLs, which is why support is reported separately from "unavailable".
@@ -37,6 +37,22 @@ function pickMimeType(): string {
     if (MediaRecorder.isTypeSupported(m)) return m
   }
   return ''
+}
+
+/**
+ * Speech at 32 kbit/s where the browser takes a bit rate (about 14.4 MB per
+ * hour, what the hosted allowance assumes); a browser that refuses the
+ * option records at its own rate.
+ */
+export const SPEECH_BITS_PER_SECOND = 32_000
+
+function newRecorder(stream: MediaStream, mimeType: string): MediaRecorder {
+  const opts: MediaRecorderOptions = { audioBitsPerSecond: SPEECH_BITS_PER_SECOND, ...(mimeType ? { mimeType } : {}) }
+  try {
+    return new MediaRecorder(stream, opts)
+  } catch {
+    return mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+  }
 }
 
 /** File extension for the saved audio, from the container the browser chose. */
@@ -104,7 +120,7 @@ export class MeetingRecorder {
     if (this.live) return
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     const mimeType = pickMimeType()
-    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    const rec = newRecorder(stream, mimeType)
     // Per-take locals: a late stop event from an earlier take must never touch
     // the chunks, stream or flags of the take that is running now.
     const chunks: Blob[] = []

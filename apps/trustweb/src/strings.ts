@@ -316,7 +316,7 @@ export const S = {
   reviewLead: 'Picked out on this phone with simple keyword rules, no AI. Edit anything; long-press a line (or tap its label) to mark it as an opportunity, talent, resource or your own label.',
   reviewAdd: 'Add a line',
   reviewRecording: (len: string, takes: number) => (takes === 1 ? `Recording, ${len}` : `Recording, ${takes} takes, ${len}`),
-  reviewRecordingSub: 'Save the audio to transcribe it later on your computer. TrustWeb deletes its copy when you save these notes.',
+  reviewRecordingSub: 'Kept on this phone with the meeting, so you can play it again from any line. Save a copy to transcribe it on your computer.',
   memoLine: (len: string) => `Voice memo, ${len}, to transcribe later`,
   reviewEmpty: 'No lines yet. Add what you remember from the conversation.',
   reviewFoot: 'Made on this phone. Nothing is shared until you choose who can ask.',
@@ -662,6 +662,18 @@ export const S = {
   itemSheetLead: 'Who can ask about it, and where it came from. Only you see where it came from; an answer never carries it.',
   itemWho: (audience: string) => `Who can ask: ${audience}`,
   itemPaused: 'Paused: nobody can ask about it right now.',
+
+  // Recordings kept on this phone and the transcript player (wave 1733, item 4b).
+  playerLabel: 'Recording',
+  playerPlay: 'Play',
+  playerPause: 'Pause',
+  playerHint: 'Tap a line to play from there.',
+  playerFromMoment: (at: string) => `Play from this moment (${at})`,
+  audioKeptChecking: 'Recordings kept on this phone: checking...',
+  audioKept: (n: number, size: string, max: number, maxSize: string) => `Recordings kept on this phone: ${n} (${size}), so a meeting can be played again from any line. At most ${max} or ${maxSize}: the oldest audio goes first, its transcript and notes stay. Deleting a meeting deletes its audio. Audio is not part of backups and is not sent with "Send inside TrustWeb".`,
+  pastDelete: 'Delete this meeting',
+  pastDeleteConfirm: 'Delete this meeting, its transcript and its recording from this phone? Notes saved from it stay.',
+  pastDeleted: 'Meeting deleted.',
 
   // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
   d2lButton: 'Install',
