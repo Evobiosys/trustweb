@@ -158,7 +158,7 @@ async function main() {
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
     ok('Record has the Tana-style circle and clock, discard and send (the circle itself records)',
       await page.locator('.rec-circle').count() === 1 && await page.locator('.memo-controls .round').count() === 2)
-    ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting' }).isVisible() && await page.locator('.meet-btn svg circle').count() === 3)
+    ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting' }).isVisible() && await page.locator('.meet-btn svg circle').count() === 2 && await page.locator('.meet-btn svg rect').count() === 2)
     const meetSlot = await page.locator('.meet-btn').boundingBox()
     const qrOnRecord = await page.locator('.status-pill.qr').boundingBox()
     ok('the QR sits exactly where it sits on Web (muscle memory)', qrOnRecord !== null && Math.abs(qrOnRecord.x - qrOnWeb.x) < 1 && Math.abs(qrOnRecord.y - qrOnWeb.y) < 1, JSON.stringify([qrOnWeb, qrOnRecord]))
