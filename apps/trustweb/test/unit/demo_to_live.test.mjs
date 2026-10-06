@@ -131,10 +131,11 @@ describe('mergeCarryOver / freshFromCarry', () => {
 describe('parseCarry', () => {
   it('reads its own record and nothing else', () => {
     const carry = buildCarryOver(demoPhone(), DemoContext.Generic, DemoCleanChoice.StartClean, NOW)
-    expect(parseCarry(JSON.stringify(carry))?.name).toBe('Jakob')
-    expect(parseCarry(null)).toBeNull()
-    expect(parseCarry('{oops')).toBeNull()
-    expect(parseCarry(JSON.stringify({ v: 2, name: 'x' }))).toBeNull()
-    expect(parseCarry(JSON.stringify({ ...carry, people: 'x' }))).toBeNull()
+    expect(parseCarry(JSON.stringify(carry), NOW)?.name).toBe('Jakob')
+    expect(parseCarry(JSON.stringify(carry), NOW)).toEqual(carry)
+    expect(parseCarry(null, NOW)).toBeNull()
+    expect(parseCarry('{oops', NOW)).toBeNull()
+    expect(parseCarry(JSON.stringify({ v: 2, name: 'x' }), NOW)).toBeNull()
+    expect(parseCarry(JSON.stringify({ ...carry, people: 'x' }), NOW)).toBeNull()
   })
 })

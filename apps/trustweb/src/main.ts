@@ -32,7 +32,7 @@ import { isMeetingPack, parseShareFragment, parseShareText, SHARE_PARAM, shareFr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
-import { clearState, isEphemeral, loadState, saveState } from './store'
+import { clearState, isEphemeral, loadState, saveState, wasUnreadable } from './store'
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
@@ -169,22 +169,35 @@ const wantInstall = params.get('install') === '1'
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
 let state: AppState | null = loadState(persona, storeCtx)
+// A record that is there but unreadable was kept aside untouched (store.ts);
+// nothing is merged over it, and the person is told.
+const recordKeptAside = wasUnreadable(persona, storeCtx)
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
-let pendingCarry: CarryOver | null = !solo && persona === 'me' && window.top === window ? readCarry() : null
+let pendingCarry: CarryOver | null = !solo && persona === 'me' && window.top === window && !recordKeptAside ? readCarry() : null
 let carryNotice = ''
 if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
-  const fresh = !state
-  state = state ? mergeCarryOver(state, pendingCarry) : freshFromCarry(pendingCarry, randomId(12))
-  save()
+  try {
+    const fresh = !state
+    const next = state ? mergeCarryOver(state, pendingCarry) : freshFromCarry(pendingCarry, randomId(12))
+    state = next
+    save()
+    carryNotice = fresh ? S.carryWelcome(next.me.displayName) : S.carryMerged
+  } catch {
+    // Never let a carry-over keep the app from starting: the live record stays as it was loaded.
+  }
   dropCarry()
-  carryNotice = fresh ? S.carryWelcome(state.me.displayName) : S.carryMerged
   pendingCarry = null
 }
 // Every item and note gets a source once (provenance.ts): demo content "demo", the rest "typed"
 // or, where a stored meeting holds the same note, "recorded" with that meeting. Idempotent.
-if (state && migrateSources(state)) save()
+// A failure leaves the record exactly as loaded (nothing saved) and the app still starts.
+try {
+  if (state && migrateSources(state)) save()
+} catch {
+  state = loadState(persona, storeCtx)
+}
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -868,6 +881,7 @@ function screenStart(): Node[] {
     el('div', { class: 'logo' }, ['◎']),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
+    recordKeptAside ? el('p', { class: 'warn', 'data-record-kept-aside': '1' }, [S.recordKeptAside]) : null,
     demo
       ? el('div', { class: 'invite test-invite' }, [
           el('b', {}, [demo.own ? S.demoInviteOwn(demo.account) : S.demoInvite(inviter)]),
@@ -1441,6 +1455,8 @@ async function startRecording(): Promise<boolean> {
     render()
     return false
   }
+  // Never the microphone and a past meeting's playback at once.
+  past.stopPlayer()
   try {
     await recorder.start(onTake)
   } catch {

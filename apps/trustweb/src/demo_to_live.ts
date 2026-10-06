@@ -23,13 +23,28 @@
  * The demo page never writes the live record itself (an open live tab would
  * overwrite it on its next save): it leaves a one-shot carry-over record,
  * and the live app applies it at boot, asking first when it already has people.
+ * The record lives in localStorage, so the live app trusts none of it
+ * (parseCarry checks every element, drops stale records, strips relay links,
+ * and lets only carried ids be marked dummy) and never applies it over a live
+ * record it could not read (store.ts wasUnreadable).
  */
-import type { AppState, InventoryItem, PastMeeting, Person } from './model'
-import { isDemoItem, isDemoPerson } from './model'
+import type { AppState, InventoryItem, NoteLine, PastMeeting, Person } from './model'
+import { AboutKind, AUDIENCES, isDemoItem, isDemoPerson, LineStatus, RINGS, TAGS } from './model'
 import { DemoContext, Persona, seedState } from './seed'
 
 /** The one-shot record the demo page leaves for the live app (same origin). */
 export const CARRY_KEY = 'trustweb.carry.v1'
+
+/**
+ * A carry-over older than this is stale and dropped unread: the demo page
+ * opens the live app at once, so a record still lying around a day later was
+ * never meant for this visit (review-app-a, wave 1733).
+ */
+export const CARRY_MAX_AGE_MS = 24 * 60 * 60 * 1000
+/** Clock skew tolerated for a record that says it was made in the future. */
+const CARRY_FUTURE_SKEW_MS = 60 * 60 * 1000
+/** At most this many of each in one carry-over (a demo phone holds a handful). */
+export const CARRY_MAX = { people: 500, inventory: 1000, meetings: 200 } as const
 
 /** What the demo page hands to the live app. */
 export interface CarryOver {
@@ -129,7 +144,8 @@ export function mergeCarryOver(live: AppState, carry: CarryOver): AppState {
   const havePeople = ids(live.people)
   const haveThings = ids(live.inventory)
   const haveMeetings = ids(live.meetings ?? [])
-  const people = carry.people.filter((p) => !havePeople.has(p.id))
+  // Never a relay link: a carried person is a contact here (also where a record was not built by buildCarryOver).
+  const people = carry.people.filter((p) => !havePeople.has(p.id)).map(unlinked)
   const inventory = carry.inventory.filter((i) => !haveThings.has(i.id))
   const meetings = carry.meetings.filter((m) => !haveMeetings.has(m.id))
   const out: AppState = {
@@ -138,8 +154,12 @@ export function mergeCarryOver(live: AppState, carry: CarryOver): AppState {
     inventory: [...live.inventory, ...inventory],
   }
   if (meetings.length || live.meetings) out.meetings = [...(live.meetings ?? []), ...meetings].sort((a, b) => b.startedAt - a.startedAt)
-  if (carry.demo.people.length || carry.demo.inventory.length) {
-    out.demo = { people: union(live.demo?.people, carry.demo.people), inventory: union(live.demo?.inventory, carry.demo.inventory) }
+  // Only what this merge ADDS can be marked dummy: a live person or thing never is, whatever the record lists.
+  const added = { people: new Set(people.map((p) => p.id)), inventory: new Set(inventory.map((i) => i.id)) }
+  const demoPeople = carry.demo.people.filter((id) => added.people.has(id))
+  const demoThings = carry.demo.inventory.filter((id) => added.inventory.has(id))
+  if (demoPeople.length || demoThings.length) {
+    out.demo = { people: union(live.demo?.people, demoPeople), inventory: union(live.demo?.inventory, demoThings) }
   }
   return out
 }
@@ -150,22 +170,94 @@ export function freshFromCarry(carry: CarryOver, newId: string): AppState {
   return mergeCarryOver(base, carry)
 }
 
-/** Reads a carry-over record; anything malformed counts as none. */
-export function parseCarry(raw: string | null): CarryOver | null {
+// ---------------------------------------------------------------------------
+// reading a carry-over: it comes from localStorage, so every element is
+// checked before it can reach the live record (a damaged, stale, replayed or
+// hand-edited record must never break or pollute the person's real data)
+// ---------------------------------------------------------------------------
+
+type Rec = Record<string, unknown>
+const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isStr = (v: unknown): v is string => typeof v === 'string'
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isId = (v: unknown): v is string => isStr(v) && v.length > 0 && v.length <= 64
+const oneOf = <T>(set: readonly T[], v: unknown): v is T => set.includes(v as T)
+
+function isNoteLine(v: unknown): v is NoteLine {
+  return isRec(v) && isId(v.id) && isStr(v.text) && oneOf(TAGS, v.tag) && oneOf(AUDIENCES, v.audience)
+    && oneOf([LineStatus.Current, LineStatus.Gone], v.status) && isNum(v.notedAt) && isNum(v.checkedAt)
+}
+
+/** A carried person with only well-formed notes, never a relay link; null where the person itself is malformed. */
+function cleanPerson(v: unknown): Person | null {
+  if (!isRec(v) || !isId(v.id) || !isStr(v.name) || !isStr(v.context) || !oneOf(RINGS, v.ring) || !isNum(v.metAt) || !Array.isArray(v.lines)) return null
+  return unlinked({ ...(v as unknown as Person), lines: v.lines.filter(isNoteLine) })
+}
+
+function isItem(v: unknown): v is InventoryItem {
+  return isRec(v) && isId(v.id) && isStr(v.text) && oneOf(AUDIENCES, v.audience) && typeof v.included === 'boolean' && isNum(v.createdAt)
+}
+
+function isMeeting(v: unknown): v is PastMeeting {
+  return isRec(v) && isId(v.id) && isStr(v.about) && oneOf([AboutKind.Who, AboutKind.What], v.kind) && isStr(v.where)
+    && (v.personId === undefined || isId(v.personId))
+    && isNum(v.startedAt) && isNum(v.endedAt) && isNum(v.durationMs) && typeof v.meeting === 'boolean'
+    && Array.isArray(v.lines) && v.lines.every((l) => isRec(l) && isStr(l.text) && oneOf(TAGS, l.tag))
+    && Array.isArray(v.transcript) && v.transcript.every((t) => isRec(t) && isNum(t.speaker) && isNum(t.atMs) && isStr(t.text))
+}
+
+/** The first of each id only, at most `max`. */
+function uniqueById<T extends { id: string }>(xs: readonly T[], max: number): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const x of xs) {
+    if (out.length >= max) break
+    if (seen.has(x.id)) continue
+    seen.add(x.id)
+    out.push(x)
+  }
+  return out
+}
+
+/**
+ * Reads a carry-over record. Anything malformed or stale counts as none;
+ * malformed people, notes, things and meetings inside an otherwise good
+ * record are left out; nobody carried is a relay contact; only carried ids
+ * can be marked dummy.
+ */
+export function parseCarry(raw: string | null, now: number = Date.now()): CarryOver | null {
   if (!raw) return null
-  try {
-    const c = JSON.parse(raw) as Partial<CarryOver>
-    const ok = c && c.v === 1 && typeof c.name === 'string' && Array.isArray(c.people) && Array.isArray(c.inventory)
-      && Array.isArray(c.meetings) && c.demo && Array.isArray(c.demo.people) && Array.isArray(c.demo.inventory)
-    return ok ? c as CarryOver : null
-  } catch {
-    return null
+  let c: unknown
+  try { c = JSON.parse(raw) } catch { return null }
+  if (!isRec(c) || c.v !== 1 || !isStr(c.name) || !isNum(c.at)) return null
+  if (now - c.at > CARRY_MAX_AGE_MS || c.at - now > CARRY_FUTURE_SKEW_MS) return null
+  const demo = c.demo
+  if (!Array.isArray(c.people) || !Array.isArray(c.inventory) || !Array.isArray(c.meetings) || !isRec(demo)
+    || !Array.isArray(demo.people) || !Array.isArray(demo.inventory)) return null
+  const people = uniqueById(c.people.map(cleanPerson).filter((p): p is Person => p !== null), CARRY_MAX.people)
+  const inventory = uniqueById(c.inventory.filter(isItem), CARRY_MAX.inventory)
+  const meetings = uniqueById(c.meetings.filter(isMeeting), CARRY_MAX.meetings)
+  const carried = { people: new Set(people.map((p) => p.id)), inventory: new Set(inventory.map((i) => i.id)) }
+  return {
+    v: 1, at: c.at, name: c.name.trim().slice(0, 40), people, inventory, meetings,
+    demo: {
+      people: union(demo.people.filter((id): id is string => isStr(id) && carried.people.has(id))),
+      inventory: union(demo.inventory.filter((id): id is string => isStr(id) && carried.inventory.has(id))),
+    },
   }
 }
 
-/** Storage around the record; a browser that blocks storage simply has none. */
-export function readCarry(): CarryOver | null {
-  try { return parseCarry(localStorage.getItem(CARRY_KEY)) } catch { return null }
+/**
+ * The carry-over waiting for the live app, if any. A record that is unreadable
+ * or stale is dropped on the way (it can never apply); a browser that blocks
+ * storage simply has none.
+ */
+export function readCarry(now: number = Date.now()): CarryOver | null {
+  let raw: string | null
+  try { raw = localStorage.getItem(CARRY_KEY) } catch { return null }
+  const c = parseCarry(raw, now)
+  if (raw && !c) dropCarry()
+  return c
 }
 
 export function writeCarry(c: CarryOver): boolean {

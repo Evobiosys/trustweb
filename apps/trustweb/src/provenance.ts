@@ -16,7 +16,7 @@
  * Pure and DOM-free.
  */
 import type { AppState, InventoryItem, ItemSource, PastMeeting, Person, Tag, TranscriptLine } from './model'
-import { isDemoItem, isDemoPerson, Provenance, PROVENANCES } from './model'
+import { Provenance, PROVENANCES } from './model'
 import type { Segment } from './meeting_transcriber'
 import { extractLines } from './notes'
 import { meetingToNoteText, settledSegments } from './sensemeet'
@@ -90,28 +90,42 @@ function migratedSource(text: string, demo: boolean, meetings: readonly PastMeet
   if (demo) return demoSource()
   const m = meetingWithLine(meetings, text, personId)
   if (!m) return typedSource()
+  // A meeting another phone sent (a kept pack): its notes were shared by that person, not recorded here.
+  if (m.fromName) return { ...sharedSource(m.fromName), meetingId: m.id }
   const l = m.lines.find((x) => x.text === text || `${m.about}: ${x.text}` === text)
   return recordedSource(m.meeting, m.id, { atMs: l?.atMs, line: l?.line })
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
+/** Only what is shaped as this build reads it takes part; anything odd is left exactly as it is. */
+function wellFormedMeetings(s: AppState): PastMeeting[] {
+  return Array.isArray(s.meetings) ? s.meetings.filter((m) => isObject(m) && Array.isArray(m.lines) && m.lines.every(isObject)) : []
 }
 
 /**
  * Gives every item and note without a (valid) source one, once: demo content
  * "demo"; a note or item found among a stored meeting's notes "recorded" with
- * that meeting; everything else "typed". Never touches a source that is
- * there, so running it again changes nothing. Returns whether anything changed.
+ * that meeting (or "shared by" where another phone sent that meeting);
+ * everything else "typed". Never touches a source that is there, so running it
+ * again changes nothing; skips (never repairs or drops) anything not shaped as
+ * expected, so a record from an older or odd build cannot make it throw.
+ * Returns whether anything changed.
  */
 export function migrateSources(s: AppState): boolean {
   let changed = false
-  const meetings = s.meetings ?? []
-  for (const item of s.inventory) {
-    if (isSource(item.source)) continue
-    item.source = migratedSource(item.text, isDemoItem(s, item.id), meetings)
+  const meetings = wellFormedMeetings(s)
+  const demo = (ids: unknown, id: string): boolean => Array.isArray(ids) && ids.includes(id)
+  for (const item of Array.isArray(s.inventory) ? s.inventory : []) {
+    if (!isObject(item) || typeof item.text !== 'string' || isSource(item.source)) continue
+    item.source = migratedSource(item.text, demo(s.demo?.inventory, item.id), meetings)
     changed = true
   }
-  for (const p of s.people) {
+  for (const p of Array.isArray(s.people) ? s.people : []) {
+    if (!isObject(p) || !Array.isArray(p.lines)) continue
     for (const l of p.lines) {
-      if (isSource(l.source)) continue
-      l.source = migratedSource(l.text, isDemoPerson(s, p.id), meetings, p.id)
+      if (!isObject(l) || typeof l.text !== 'string' || isSource(l.source)) continue
+      l.source = migratedSource(l.text, demo(s.demo?.people, p.id), meetings, p.id)
       changed = true
     }
   }

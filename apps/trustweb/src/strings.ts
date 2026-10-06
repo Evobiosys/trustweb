@@ -53,6 +53,7 @@ export const S = {
   connectInviteNotes: (name: string) => `${name} also shared the notes from your conversation.`,
   connectJoin: 'Connect',
   storageEphemeral: 'This browser blocks storage, so this visit is not saved.',
+  recordKeptAside: 'TrustWeb on this device holds a saved web this version cannot read. It is kept aside, untouched: starting again here does not replace it. Tell us at idea2.site/trustweb/feedback.html and we help you get it back.',
 
   navWeb: 'Web',
   navInventory: 'Inventory',

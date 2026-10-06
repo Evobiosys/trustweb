@@ -36,6 +36,8 @@ export interface StoredAudio {
 }
 
 const STORE = 'audio'
+/** How long "Reset this phone" waits for the audio database to go before resetting anyway. */
+export const CLEAR_TIMEOUT_MS = 3_000
 
 function dbName(persona: string, context?: string): string {
   return `trustweb-audio.${persona}${context ? '.' + context : ''}`
@@ -67,7 +69,13 @@ export class AudioStore {
       if (typeof indexedDB === 'undefined') { reject(new Error('no IndexedDB')); return }
       const r = indexedDB.open(dbName(this.persona, this.context), 1)
       r.onupgradeneeded = (): void => { r.result.createObjectStore(STORE, { keyPath: 'meetingId' }) }
-      r.onsuccess = (): void => resolve(r.result)
+      r.onsuccess = (): void => {
+        const db = r.result
+        // Another tab resetting this phone deletes the database: let go of it at
+        // once, or that delete waits for this tab forever (review-app-a).
+        db.onversionchange = (): void => { db.close(); this.db = null }
+        resolve(db)
+      }
       r.onerror = (): void => reject(r.error)
     })
     this.db.catch(() => { this.db = null })
@@ -141,14 +149,21 @@ export class AudioStore {
     return drop
   }
 
-  /** Reset this phone: every recording of this persona goes. */
-  async clear(): Promise<void> {
-    try {
-      const db = await this.open()
-      db.close()
-    } catch { /* never opened */ }
+  /**
+   * Reset this phone: every recording of this persona goes. Settles within
+   * CLEAR_TIMEOUT_MS whatever IndexedDB does (blocked by a tab of an older
+   * build, refused, never answering), so the reset itself always goes ahead.
+   */
+  async clear(timeoutMs: number = CLEAR_TIMEOUT_MS): Promise<void> {
+    const pending = this.db
     this.db = null
-    if (typeof indexedDB !== 'undefined') await request(indexedDB.deleteDatabase(dbName(this.persona, this.context))).catch(() => undefined)
+    const work = (async (): Promise<void> => {
+      if (pending) (await pending.catch(() => null))?.close()
+      await request(indexedDB.deleteDatabase(dbName(this.persona, this.context)))
+    })().catch(() => undefined)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([work, new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs) })])
+    clearTimeout(timer)
   }
 }
 

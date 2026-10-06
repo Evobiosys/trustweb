@@ -19,6 +19,9 @@ const ID_INFO = 0x1549a966
 const ID_DURATION = 0x4489
 const ID_TIMECODE_SCALE = 0x2ad7b1
 const ID_CLUSTER = 0x1f43b675
+/** SeekHead and Cues hold byte positions inside the Segment: growing Info would make them point wrong. */
+const ID_SEEK_HEAD = 0x114d9b74
+const ID_CUES = 0x1c53bb6b
 
 /** How much of the file head is read to find the Info element. */
 export const HEAD_BYTES = 64 * 1024
@@ -69,6 +72,23 @@ function readUint(b: Uint8Array, pos: number, len: number): number {
   return v
 }
 
+/**
+ * Does a SeekHead or Cues element follow (before the first Cluster, within the
+ * head)? Their byte positions would be off once Info grows, so such a file is
+ * left alone. MediaRecorder's live WebM has neither.
+ */
+function hasPositions(head: Uint8Array, from: number): boolean {
+  for (let pos = from; pos < head.length;) {
+    const id = readId(head, pos)
+    if (!id || id.id === ID_CLUSTER) return false
+    if (id.id === ID_SEEK_HEAD || id.id === ID_CUES) return true
+    const size = readVint(head, pos + id.length)
+    if (!size || size.unknown) return false
+    pos += id.length + size.length + size.value
+  }
+  return false
+}
+
 /** One byte range of the original file and what replaces it. */
 export interface Edit { start: number; end: number; bytes: Uint8Array<ArrayBuffer> }
 
@@ -92,20 +112,24 @@ export function durationEdits(head: Uint8Array, durationMs: number): Edit[] | nu
   while (pos < head.length) {
     const id = readId(head, pos)
     const size = id && readVint(head, pos + id.length)
-    if (!id || !size || size.unknown || id.id === ID_CLUSTER) return null
+    if (!id || !size || size.unknown || id.id === ID_CLUSTER || id.id === ID_SEEK_HEAD || id.id === ID_CUES) return null
     const payload = pos + id.length + size.length
     const end = payload + size.value
     if (id.id !== ID_INFO) { pos = end; continue }
-    if (end > head.length) return null
+    if (end > head.length || hasPositions(head, end)) return null
     let scale = 1_000_000
     for (let p = payload; p < end;) {
       const cid = readId(head, p)
       const csize = cid && readVint(head, p + cid.length)
-      if (!cid || !csize || csize.unknown) return null
+      if (!cid || !csize || csize.unknown || p + cid.length + csize.length + csize.value > end) return null
       if (cid.id === ID_DURATION) return null
-      if (cid.id === ID_TIMECODE_SCALE) scale = readUint(head, p + cid.length + csize.length, csize.value)
+      if (cid.id === ID_TIMECODE_SCALE) {
+        if (csize.value < 1 || csize.value > 6) return null
+        scale = readUint(head, p + cid.length + csize.length, csize.value)
+      }
       p += cid.length + csize.length + csize.value
     }
+    if (!(scale > 0)) return null
     const duration = new Uint8Array(11)
     duration.set([0x44, 0x89, 0x88])
     new DataView(duration.buffer).setFloat64(3, (durationMs * 1_000_000) / scale)

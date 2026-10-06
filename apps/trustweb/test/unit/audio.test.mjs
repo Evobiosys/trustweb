@@ -5,7 +5,7 @@
  * src/webm_duration.ts).
  */
 import { MAX_BYTES, MAX_RECORDINGS, clampAudioPlan, megabytes } from '../../src/audio_plan.ts'
-import { locate } from '../../src/audio_store.ts'
+import { AudioStore, locate } from '../../src/audio_store.ts'
 import { durationEdits, encodeSize, readId, readVint, withDuration } from '../../src/webm_duration.ts'
 
 const MB = 1024 * 1024
@@ -132,5 +132,67 @@ describe('webm duration patch', () => {
     expect(durationOf(new Uint8Array(await out.slice(0, 4096).arrayBuffer()))).toBe(12_345)
     const mp4 = new Blob([new Uint8Array(100)], { type: 'audio/mp4' })
     expect(await withDuration(mp4, 1000)).toBe(mp4)
+  })
+})
+
+describe('webm duration patch never corrupts a file it cannot safely grow (review-app-a)', () => {
+  const ebml = () => elt(0x1a45dfa3, [...elt(0x4286, [1]), ...elt(0x4282, ascii('webm'))])
+  const info = (scale = u(1_000_000, 3)) => elt(0x1549a966, [...elt(0x2ad7b1, scale), ...elt(0x4d80, ascii('Chrome'))], 8)
+  const cluster = [...u(0x1f43b675, 4), 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, ...elt(0xe7, [0])]
+  const seekHead = elt(0x114d9b74, elt(0x4dbb, [...elt(0x53ab, u(0x1549a966, 4)), ...elt(0x53ac, [0])]))
+  const cues = elt(0x1c53bb6b, elt(0xbb, [...elt(0xb3, [0]), ...elt(0xb7, [...elt(0xf7, [1]), ...elt(0xf1, [0x40])])]))
+  const head = (...children) => bytes(ebml(), u(0x18538067, 4), [0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], ...children)
+  it('a SeekHead before Info (its positions would point wrong): unchanged', () => {
+    expect(durationEdits(head(seekHead, info(), cluster), 5000)).toBeNull()
+  })
+  it('Cues after Info, before the first Cluster: unchanged', () => {
+    expect(durationEdits(head(info(), cues, cluster), 5000)).toBeNull()
+  })
+  it('a zero or oversized TimecodeScale: unchanged (no Infinity written)', () => {
+    expect(durationEdits(head(info([0, 0, 0]), cluster), 5000)).toBeNull()
+    expect(durationEdits(head(info(u(1, 8)), cluster), 5000)).toBeNull()
+  })
+  it('a plain MediaRecorder head still gets its Duration', () => {
+    expect(durationEdits(head(info(), cluster), 5000)).toHaveLength(1)
+  })
+  it('a 30 MB take: only the 64 KB head is read, the result is the take plus 11 bytes', async () => {
+    const big = new Blob([head(info(), cluster), new Uint8Array(30 * MB)], { type: 'audio/webm' })
+    let sliced = 0
+    const slice = big.slice.bind(big)
+    big.slice = (...a) => { sliced++; return slice(...a) }
+    const out = await withDuration(big, 1_800_000)
+    expect(out.size - big.size).toBe(11)
+    expect(sliced).toBeLessThanOrEqual(3)
+  })
+  it('garbage typed as WebM comes back as the very same blob', async () => {
+    const junk = new Blob([new Uint8Array(5000).fill(0x42)], { type: 'audio/webm' })
+    expect(await withDuration(junk, 1000)).toBe(junk)
+  })
+})
+
+describe('AudioStore never holds up "Reset this phone" (review-app-a)', () => {
+  it('clear() settles within its timeout even when IndexedDB never answers (another tab blocking the delete)', async () => {
+    const before = globalThis.indexedDB
+    globalThis.indexedDB = {
+      open: () => ({}),
+      deleteDatabase: () => ({}), // never fires success, error or blocked
+    }
+    try {
+      const store = new AudioStore('me')
+      const t0 = Date.now()
+      await store.clear(200)
+      expect(Date.now() - t0).toBeLessThan(1500)
+    } finally {
+      globalThis.indexedDB = before
+    }
+  })
+  it('clear() settles where there is no IndexedDB at all', async () => {
+    const before = globalThis.indexedDB
+    delete globalThis.indexedDB
+    try {
+      await new AudioStore('me').clear(200)
+    } finally {
+      if (before) globalThis.indexedDB = before
+    }
   })
 })
