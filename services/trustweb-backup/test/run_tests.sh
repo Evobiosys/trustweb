@@ -1,11 +1,12 @@
 #!/bin/sh
 # Typecheck backup.ts, compile it to a temp dir (ESM), then run the node:test suites.
-# No installs: uses the tsc already present in apps/demo/node_modules.
+# No installs: uses the tsc already present in apps/demo/node_modules (override with TSC=/path/to/tsc, e.g. from the primary checkout).
+# Test ports 8971-8975 are fixed, one per file (the files run in parallel).
 set -eu
 echo "trustweb-backup tests running ..."
 HERE="$(cd "$(dirname "$0")" && pwd)"
 R="$(cd "$HERE/../../.." && pwd)"
-TSC="$R/apps/demo/node_modules/.bin/tsc"
+TSC="${TSC:-$R/apps/demo/node_modules/.bin/tsc}"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 cat > "$OUT/tsconfig.json" <<JSON
@@ -24,4 +25,4 @@ echo "--------"
 echo "typecheck + compile: ok"
 echo '{"type":"module"}' > "$OUT/js/package.json"
 echo "--------"
-BACKUP_JS="$OUT/js/backup.js" node --test "$HERE/backup.test.mjs" "$HERE/server.test.mjs"
+BACKUP_JS="$OUT/js/backup.js" node --test "$HERE/backup.test.mjs" "$HERE/server.test.mjs" "$HERE/quota.test.mjs" "$HERE/hosted.test.mjs" "$HERE/transcribe.test.mjs" "$HERE/feedback.test.mjs" "$HERE/compat.test.mjs" "$HERE/limits.test.mjs"
