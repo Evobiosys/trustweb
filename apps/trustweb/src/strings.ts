@@ -602,4 +602,31 @@ export const S = {
   aboutBy: 'TrustWeb, by ',
   aboutEvoBioSys: 'EvoBioSys',
   aboutPage: { faq: 'FAQ', feedback: 'Feedback', privacy: 'Privacy', imprint: 'Imprint' } as Record<string, string>,
+
+  // Install on the home screen (wave 1733, contract I3).
+  setInstall: 'Install TrustWeb on this phone',
+  instTitle: 'Install TrustWeb',
+  instLead: 'TrustWeb then opens from your home screen like an app, full screen. It is the same web page: nothing extra is downloaded or sent.',
+  instButton: 'Install',
+  instAccepted: 'Installed. Open TrustWeb from your home screen.',
+  instDismissed: 'Not installed. You can install it later from Settings.',
+  instUnavailable: 'This browser did not offer installing just now. Use its menu: Install app, or Add to Home screen.',
+  instInstalled: 'TrustWeb is installed: you are using it from your home screen.',
+  instIosLead: 'On iPhone and iPad:',
+  instIosSteps: [
+    'Tap the Share button (the square with the arrow pointing up).',
+    'Scroll down and tap "Add to Home Screen".',
+    'Tap "Add". TrustWeb is now on your home screen.',
+  ] as readonly string[],
+  instIosMoveTitle: 'First: your web stays in this browser',
+  instIosMoveBody: 'On iPhone and iPad, an app on the home screen keeps its own storage, separate from this browser. Your people and notes do not move over by themselves. To take them along: back them up here, then choose "Restore from a backup" in the installed app, with the same key.',
+  instIosMoveBackup: 'Back up first',
+  instIosMoveNoServer: 'The backup server cannot be reached from this page right now, so your web cannot be moved yet. You can install anyway and start fresh there, or try again later.',
+  instMenu: 'This browser has not offered a one-tap install. Most browsers can still do it from their menu:',
+  instMenuSteps: [
+    'Chrome or Edge: the menu (three dots), then "Install app" or "Add to Home screen".',
+    'Safari on a Mac: File, then "Add to Dock".',
+    'Firefox: installing web apps is not offered; TrustWeb works right here in the browser.',
+  ] as readonly string[],
+  instMoveToast: 'Back up here first; the installed app then restores it with your key.',
 } as const

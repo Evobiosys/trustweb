@@ -9,12 +9,51 @@
 // ABSOLUTE base, like apps/demo (see its vite.config.ts): a relative base
 // 404s every asset when the page is opened without its trailing slash.
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
 
+// The install files (wave 1733, item 5): the web app manifest and its icons,
+// kept in pwa/ and served at the app's root under fixed names, in dev and in
+// the build alike. Not through publicDir: tests point TW_PUBLIC_DIR elsewhere.
+// Fixed names, not hashed: the live server sends no-cache for everything
+// outside /assets/, so a changed icon is picked up (only /assets/ is immutable).
+// No service worker: the app had stale-cache trouble before, and Chromium's
+// install prompt no longer needs one.
+const PWA_DIR = path.resolve(here, 'pwa')
+const PWA_FILES = {
+  'manifest.json': 'application/manifest+json',
+  'icons/icon-192.png': 'image/png',
+  'icons/icon-512.png': 'image/png',
+  'icons/icon-maskable-512.png': 'image/png',
+  'icons/apple-touch-icon.png': 'image/png',
+}
+
+function pwaFiles() {
+  return {
+    name: 'trustweb-pwa-files',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const file = (req.url ?? '').split('?')[0].replace(/^\//, '')
+        const type = Object.hasOwn(PWA_FILES, file) ? PWA_FILES[file] : null
+        if (!type) { next(); return }
+        res.setHeader('Content-Type', type)
+        res.setHeader('Cache-Control', 'no-cache')
+        res.end(readFileSync(path.join(PWA_DIR, file)))
+      })
+    },
+    generateBundle() {
+      for (const file of Object.keys(PWA_FILES)) {
+        this.emitFile({ type: 'asset', fileName: file, source: readFileSync(path.join(PWA_DIR, file)) })
+      }
+    },
+  }
+}
+
 export default ({ command }) => ({
+  plugins: [pwaFiles()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

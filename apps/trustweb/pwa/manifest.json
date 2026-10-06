@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "TrustWeb",
+  "short_name": "TrustWeb",
+  "description": "Ask the people you have met, and the people they trust. A question travels, the data stays. By EvoBioSys.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#3B1163",
+  "background_color": "#F2EBDC",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

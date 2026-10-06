@@ -44,6 +44,7 @@ import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyTex
 import type { BackupKey } from './backup'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
+import { installSheetContent, setUpInstall } from './install'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -149,6 +150,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 // A meeting sent inside TrustWeb (?share=1#k=...&t=...), or riding in a Meet
 // code after a meeting (#n=...&k=...&t=...): opened once the app is up (share.ts).
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
+// ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
+const wantInstall = params.get('install') === '1'
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
@@ -631,6 +634,7 @@ function render(): void {
 // ---------------------------------------------------------------------------
 
 function openSheet(children: (Node | null)[]): void {
+  delete sheet.dataset.kind
   sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
   sheet.inert = false
@@ -2950,6 +2954,7 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
+    installable ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...aboutGroup(),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
@@ -3315,10 +3320,40 @@ function decide(share: boolean): void {
 }
 
 // ---------------------------------------------------------------------------
+// install on the home screen (install.ts): the real app only, never inside the
+// side-by-side demo's phones or a demo account's second tab
+// ---------------------------------------------------------------------------
+
+const installable = !solo && !isDemoPersona(persona) && window.top === window
+
+function openInstallSheet(): void {
+  const s = state
+  const hasData = Boolean(s && (s.people.length || s.inventory.length || s.meetings?.length))
+  if (hasData && backupAvailable === null) void probeBackup().then(() => { if (sheet.dataset.kind === 'install') openInstallSheet() })
+  openSheet(installSheetContent({
+    hasData,
+    backupAvailable,
+    openBackup: () => {
+      closeSheet()
+      go(Screen.Inventory)
+      toast(S.instMoveToast)
+      document.getElementById('backup-slot')?.scrollIntoView({ block: 'center' })
+    },
+    redraw: () => { if (sheet.dataset.kind === 'install') openInstallSheet() },
+    toast,
+  }))
+  sheet.dataset.kind = 'install'
+}
+
+// ---------------------------------------------------------------------------
 // boot
 // ---------------------------------------------------------------------------
 
 render()
+if (installable) {
+  setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
+  if (wantInstall) openInstallSheet()
+}
 if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
