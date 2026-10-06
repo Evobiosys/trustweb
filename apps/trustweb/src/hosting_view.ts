@@ -91,10 +91,11 @@ export function createHostingView(h: HostingViewHooks): HostingView {
   }
 
   async function hostWaiting(): Promise<void> {
-    if (busy || !isOn() || !hosted()) return
+    const hs = readHosting(h.state())
+    if (busy || !hs?.on || !hosted()) return
     busy = true
     try {
-      const ids = toHost(h.ctx.hosting(), await h.audio.entries(), meetings())
+      const ids = toHost(hs, await h.audio.entries(), meetings())
       if (!ids.length) return
       const r = await hostAll(ids, deps, () => { if (showing()) open() })
       if (r.stoppedBy) note(r.stoppedBy)
@@ -107,7 +108,13 @@ export function createHostingView(h: HostingViewHooks): HostingView {
   }
 
   function setOn(on: boolean): void {
-    h.ctx.hosting().on = on
+    try {
+      h.ctx.hosting().on = on
+    } catch {
+      // A hosting state this build cannot read is left exactly as it is (it may hold the only key to stored recordings).
+      h.toast(S.hostFailed)
+      return
+    }
     h.save()
     if (on) void askPersist()
     redraw()

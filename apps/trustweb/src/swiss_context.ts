@@ -31,11 +31,10 @@ export interface SwissContextHooks {
   enabled: () => boolean
 }
 
-/** A hosting state as read from the record: anything odd reads as absent (never thrown on at boot). */
+/** A hosting state as read from the record: anything odd reads as absent (never thrown on at boot, never repaired). */
 export function readHosting(s: Pick<AppState, 'hosting'>): HostingState | null {
   const h = s.hosting
-  if (!h || typeof h !== 'object' || !isHostedSecret(h.secret)) return null
-  if (!Array.isArray(h.recs)) h.recs = []
+  if (!h || typeof h !== 'object' || !isHostedSecret(h.secret) || !Array.isArray(h.recs)) return null
   return h
 }
 
