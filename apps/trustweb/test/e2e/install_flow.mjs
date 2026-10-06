@@ -58,6 +58,113 @@ async function start(page, base, name) {
   if (await noThanks.isVisible().catch(() => false)) await noThanks.click()
 }
 
+/** All TrustWeb records in this browser, by key. */
+const records = (page) => page.evaluate(() => {
+  const out = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k.startsWith('trustweb.')) out[k] = JSON.parse(localStorage.getItem(k))
+  }
+  return out
+})
+
+/** Opens the demo page, starts its first phone as `name` and adds one person of their own. */
+async function demoWithOwnPerson(page, base, name, own) {
+  await page.goto(base + 'demo/')
+  const phone = page.frameLocator('iframe[title="Device 1"]')
+  await phone.getByLabel('Your first name').fill(name)
+  await phone.getByRole('button', { name: 'Start on this phone' }).click()
+  await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  const gotIt = phone.getByRole('button', { name: 'Got it' })
+  if (await gotIt.isVisible().catch(() => false)) await gotIt.click()
+  await phone.locator('.rings-wrap').click({ position: { x: 176 + 152, y: 176 } })
+  await phone.getByPlaceholder('Name').first().fill(own)
+  await phone.getByRole('button', { name: 'Add to my web' }).click()
+  await phone.locator('.node', { hasText: own }).waitFor({ timeout: 5_000 })
+  // its relay identity exists by now (minted when the phone started)
+  await page.waitForFunction(() => Object.keys(localStorage).some((k) => k.endsWith('.holder') && JSON.parse(localStorage.getItem(k)).identity), null, { timeout: 15_000 })
+}
+
+async function demoToLive(browser, base, shot, errors) {
+  // A. start clean, nothing live yet
+  const a = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const pa = await a.newPage()
+  pa.on('pageerror', (e) => errors.push(e.message))
+  await demoWithOwnPerson(pa, base, 'Jakob', 'Max')
+  const install = pa.locator('[data-demo-install]')
+  ok('the demo page has ONE button top right: Install', await pa.locator('.demo-topbar button').count() === 1 && (await install.innerText()).trim() === 'Install')
+  const box = await install.boundingBox()
+  ok('it sits top right', box.x + box.width > 1280 - 120 && box.y < 80, JSON.stringify(box))
+  await shot(pa, '05_demo_install_button')
+  await pa.setViewportSize({ width: 1280, height: 900 })
+  const demoRec = Object.entries(await records(pa)).find(([k]) => k.endsWith('.holder'))[1]
+  await install.click()
+  await pa.getByRole('dialog', { name: 'Clean out your demo contacts first?' }).waitFor({ timeout: 5_000 })
+  ok('Install asks "Clean out your demo contacts first?" with start clean / keep them', await pa.locator('[data-d2l="clean"]').isVisible() && await pa.locator('[data-d2l="keep"]').isVisible())
+  await shot(pa, '06_demo_clean_question')
+  await pa.setViewportSize({ width: 1280, height: 900 })
+  await pa.locator('[data-d2l="clean"]').click()
+  await pa.waitForURL((u) => u.pathname === '/' , { timeout: 15_000 })
+  await pa.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await pa.locator('.sheet.on [data-install-path]').waitFor({ timeout: 10_000 })
+  ok('then the live app opens with the Install sheet (?install=1)', true)
+  const liveA = (await records(pa))['trustweb.v1.me']
+  ok('"Start clean": the live web has their name and their own person only', liveA?.me.displayName === 'Jakob' && JSON.stringify(liveA.people.map((p) => p.name)) === '["Max"]', JSON.stringify(liveA?.people.map((p) => p.name)))
+  ok('no demo identity, id or peer came along (the live app has its own)', liveA.me.id !== demoRec.me.id && liveA.peers.length === 0
+    && (!liveA.identity || JSON.stringify(liveA.identity) !== JSON.stringify(demoRec.identity)) && liveA.people.every((p) => !p.peerId))
+  ok('the carry-over record is used up', !('trustweb.carry.v1' in await records(pa)))
+  ok('the demo phone itself is untouched', JSON.stringify(Object.entries(await records(pa)).find(([k]) => k.endsWith('.holder'))[1].me) === JSON.stringify(demoRec.me))
+  await shot(pa, '07_live_after_clean')
+  await a.close()
+
+  // B. keep them: the dummy friends come along, still saying dummy
+  const b = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const pb = await b.newPage()
+  pb.on('pageerror', (e) => errors.push(e.message))
+  await demoWithOwnPerson(pb, base, 'Jakob', 'Max')
+  await pb.locator('[data-demo-install]').click()
+  await pb.locator('[data-d2l="keep"]').click()
+  await pb.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  const liveB = (await records(pb))['trustweb.v1.me']
+  ok('"Keep them": the imaginary friends come along with their own person', liveB.people.length === 7 && liveB.people.some((p) => p.name === 'Max'), String(liveB.people.length))
+  await pb.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+  ok('and still say dummy (Max does not)', await pb.locator('.node .dummy-chip').count() === 6 && await pb.locator('.node', { hasText: 'Max' }).locator('.dummy-chip').count() === 0)
+  await shot(pb, '08_live_after_keep')
+  await b.close()
+
+  // C. the live app already has people: merge on a yes, never overwrite; D. cancel adds nothing
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const pc = await c.newPage()
+  pc.on('pageerror', (e) => errors.push(e.message))
+  await start(pc, base, 'Jakob P.')
+  await pc.locator('.rings-wrap').click({ position: { x: 176 + 114, y: 176 } })
+  await pc.getByPlaceholder('Name').first().fill('Ben')
+  await pc.getByRole('button', { name: 'Add to my web' }).click()
+  const before = (await records(pc))['trustweb.v1.me']
+  await demoWithOwnPerson(pc, base, 'Jakob', 'Max')
+  await pc.locator('[data-demo-install]').click()
+  await pc.locator('[data-d2l="clean"]').click()
+  await pc.getByRole('heading', { name: 'Bring your demo along?' }).waitFor({ timeout: 15_000 })
+  ok('live app with people: it says so and asks merge or cancel', /already has 1 person/.test(await pc.locator('.sheet').innerText()) && await pc.locator('[data-carry="merge"]').isVisible() && await pc.locator('[data-carry="cancel"]').isVisible())
+  ok('nothing is written before the answer', JSON.stringify((await records(pc))['trustweb.v1.me']) === JSON.stringify(before))
+  await shot(pc, '09_live_merge_question')
+  await pc.setViewportSize({ width: 390, height: 844 })
+  await pc.locator('[data-carry="merge"]').click()
+  await pc.locator('.sheet.on [data-install-path]').waitFor({ timeout: 10_000 })
+  const merged = (await records(pc))['trustweb.v1.me']
+  ok('merge: Ben stays, Max joins, the live name and identity stay', JSON.stringify(merged.people.map((p) => p.name).sort()) === '["Ben","Max"]' && merged.me.displayName === 'Jakob P.' && merged.me.id === before.me.id && JSON.stringify(merged.identity) === JSON.stringify(before.identity))
+  ok('then the Install sheet', true)
+  // D. once more from the demo, and cancel this time
+  await pc.goto(base + 'demo/')
+  await pc.locator('[data-demo-install]').click()
+  await pc.locator('[data-d2l="keep"]').click()
+  await pc.getByRole('heading', { name: 'Bring your demo along?' }).waitFor({ timeout: 15_000 })
+  await pc.locator('[data-carry="cancel"]').click()
+  const after = (await records(pc))['trustweb.v1.me']
+  ok('cancel: nothing from the demo is added, the record is used up', JSON.stringify(after.people.map((p) => p.name).sort()) === '["Ben","Max"]' && !('trustweb.carry.v1' in await records(pc)))
+  await c.close()
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-install-'))
@@ -65,9 +172,13 @@ async function main() {
     env: { ...process.env, BACKUP_DIR: dir, PORT: String(BACKUP_PORT), HOST: '127.0.0.1', ALLOWED_HOSTS: '127.0.0.1,localhost' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
+  const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
+  const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
+  const { port: relayPort } = await relay.listen(0, '127.0.0.1')
   const viteProc = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
-    env: { ...process.env, TW_PORT: String(PORT), TW_BACKUP_PROXY: `http://127.0.0.1:${BACKUP_PORT}` },
+    env: { ...process.env, TW_PORT: String(PORT), TW_BACKUP_PROXY: `http://127.0.0.1:${BACKUP_PORT}`, TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const base = `http://127.0.0.1:${PORT}/`
@@ -183,11 +294,15 @@ async function main() {
     ok('Settings opens the Install sheet', true)
     await sctx.close()
 
+    // 5. the demo page's ONE [Install] button: demo to live
+    await demoToLive(browser, base, shot, errors)
+
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
   } finally {
     await browser?.close()
     viteProc.kill()
     backupProc.kill()
+    await relay.close?.()
     rmSync(dir, { recursive: true, force: true })
   }
   console.log(failures ? `\n${failures} FAILURE(S)` : '\ninstall-flow: ALL PASS')

@@ -45,6 +45,8 @@ import type { BackupKey } from './backup'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { installSheetContent, setUpInstall } from './install'
+import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
+import type { CarryOver } from './demo_to_live'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -156,6 +158,19 @@ const wantInstall = params.get('install') === '1'
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
 let state: AppState | null = loadState(persona, storeCtx)
+// The demo's carry-over (demo_to_live.ts): the demo page's Install button left
+// the person's own content for the live app. Applied to the live app's own
+// record only; at once where nothing would be overwritten, else after asking.
+let pendingCarry: CarryOver | null = !solo && persona === 'me' && window.top === window ? readCarry() : null
+let carryNotice = ''
+if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
+  const fresh = !state
+  state = state ? mergeCarryOver(state, pendingCarry) : freshFromCarry(pendingCarry, randomId(12))
+  save()
+  dropCarry()
+  carryNotice = fresh ? S.carryWelcome(state.me.displayName) : S.carryMerged
+  pendingCarry = null
+}
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -3345,14 +3360,36 @@ function openInstallSheet(): void {
   sheet.dataset.kind = 'install'
 }
 
+/** The live app already has people: the demo's carry-over is merged only on a yes, never overwriting anything. */
+function carryAskSheet(c: CarryOver, then: () => void): void {
+  const done = (merge: boolean): void => {
+    if (merge && state) { state = mergeCarryOver(state, c); save() }
+    dropCarry()
+    pendingCarry = null
+    closeSheet()
+    render()
+    toast(merge ? S.carryMerged : S.carryCancelled)
+    then()
+  }
+  openSheet([
+    el('h3', {}, [S.carryAskTitle]),
+    el('p', { class: 'meta' }, [S.carryAskBody(c.people.length, c.inventory.length, st().people.length)]),
+    el('button', { class: 'btn btn-electric', 'data-carry': 'merge', onclick: () => done(true) }, [S.carryMerge]),
+    el('button', { class: 'btn btn-ghost', 'data-carry': 'cancel', onclick: () => done(false) }, [S.carryCancel]),
+  ])
+}
+
 // ---------------------------------------------------------------------------
 // boot
 // ---------------------------------------------------------------------------
 
 render()
-if (installable) {
-  setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
-  if (wantInstall) openInstallSheet()
+if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
+const afterCarry = (): void => { if (installable && wantInstall) openInstallSheet() }
+if (pendingCarry) carryAskSheet(pendingCarry, afterCarry)
+else {
+  if (carryNotice) toast(carryNotice)
+  afterCarry()
 }
 if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)

@@ -18,6 +18,7 @@
 import { DemoContext, PERSONA_NAMES, Persona } from './seed'
 import { storageKey } from './store'
 import { mountWalkthrough } from './walkthrough'
+import { demoInstallBar } from './demo_install_button'
 
 /**
  * One script for four HTML entries (solo.html at the app root, plus demo/,
@@ -201,7 +202,8 @@ const foot = (() => {
   return reset
 })()
 
-root.append(head, actionSlot, phones, foot, dock)
+// The one [Install] button, top right (wave 1733, A2): demo to live, then install.
+root.append(demoInstallBar(ctx, BASE), head, actionSlot, phones, foot, dock)
 addDevice()
 
 window.addEventListener('message', (e: MessageEvent) => {

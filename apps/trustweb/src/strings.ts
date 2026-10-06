@@ -629,4 +629,20 @@ export const S = {
     'Firefox: installing web apps is not offered; TrustWeb works right here in the browser.',
   ] as readonly string[],
   instMoveToast: 'Back up here first; the installed app then restores it with your key.',
+
+  // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
+  d2lButton: 'Install',
+  d2lTitle: 'Clean out your demo contacts first?',
+  d2lLead: (name: string) => `Next, the real TrustWeb opens on this device. What you added as ${name} comes along: your name, the people and things you added, your notes and past meetings. The imaginary friends and things can stay (marked dummy) or go.`,
+  d2lClean: 'Start clean',
+  d2lKeep: 'Keep them',
+  d2lCancel: 'Not now',
+  // In the live app, when the demo's carry-over arrives.
+  carryAskTitle: 'Bring your demo along?',
+  carryAskBody: (people: number, things: number, have: number) => `From the demo: ${people === 1 ? '1 person' : `${people} people`} and ${things === 1 ? '1 thing' : `${things} things`}. TrustWeb on this device already has ${have === 1 ? '1 person' : `${have} people`}; nothing of that is replaced.`,
+  carryMerge: 'Merge them in',
+  carryCancel: 'Cancel, keep only what is here',
+  carryMerged: 'Your demo is here. Your own identity on this device stays as it was.',
+  carryCancelled: 'Nothing from the demo was added.',
+  carryWelcome: (name: string) => `Welcome, ${name}. Your demo came along; this device has its own new identity.`,
 } as const
