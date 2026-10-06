@@ -45,6 +45,8 @@ export interface PastMeetingsHooks {
   extra?: (m: PastMeeting) => (Node | null)[]
   /** The meeting was opened (round B: a kept meeting looks for its late transcript). */
   opened?: (m: PastMeeting) => void
+  /** The meeting was deleted on this phone (round B: its hosted copy goes too). */
+  removed?: (m: PastMeeting) => void
 }
 
 export interface PastMeetings {
@@ -136,6 +138,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     s.meetings = (s.meetings ?? []).filter((x) => x.id !== m.id)
     h.save()
     await h.audio.remove(m.id)
+    h.removed?.(m)
     h.toast(S.pastDeleted)
     listSheet()
   }

@@ -625,3 +625,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .tr-static .tr-row.tr-now{background:#15344A}
 }
+
+/* Hosted on the Swiss server (wave 1733 round B, item 4): hours used of the free allowance. */
+.usage{margin:8px 0}
+.usage-bar{height:8px; border-radius:6px; background:var(--tint-blue); overflow:hidden}
+.usage-bar span{display:block; height:100%; background:var(--electric); border-radius:6px}
+.host-row{flex-wrap:wrap; gap:4px 10px}
+.host-row .test-actions{flex-basis:100%}
+.job-state{margin:8px 0}

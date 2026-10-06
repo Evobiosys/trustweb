@@ -55,6 +55,8 @@ import { megabytes } from './audio_plan'
 import { createPastMeetings, whenLabel } from './past_meetings_view'
 import { createSwissContext } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
+import { createHostingView } from './hosting_view'
+import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
@@ -1649,6 +1651,7 @@ const past = createPastMeetings({
   transcriptRow, icon, clockLong,
   extra: (m) => transcription.meetingExtras(m),
   opened: (m) => packs.checkOne(m),
+  removed: (m) => hosting.removed(m.id),
 })
 
 // The Swiss server's newer services (wave 1733 round B): never on a demo phone or a demo account.
@@ -1657,6 +1660,10 @@ const transcription = createTranscriptionView({
   ctx: swiss, state: st, save, audio: audioStore, openSheet, closeSheet, toast, onJobChange, when: whenLabel,
   uploadPack: async (keyText, pack) => { await backupNow(parseKeyText(keyText), pack) },
   fromName: () => st().me.displayName,
+})
+const hosting = createHostingView({
+  ctx: swiss, state: st, save, audio: audioStore, sheet, openSheet, toast, when: whenLabel,
+  redrawSettings: () => { if (sheet.dataset.kind === 'settings' && sheet.classList.contains('on')) settingsSheet() },
 })
 const packs = createPackView({
   state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,
@@ -1753,7 +1760,7 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   draft.meetingId = m.id
   save()
   // The audio stays on this phone with the meeting (capped, audio_store.ts); never in the record itself.
-  if (takes.length) void past.keepAudio(m.id, [...takes])
+  if (takes.length) void past.keepAudio(m.id, [...takes]).then(() => hosting.afterKeep(m.id))
 }
 
 // ---------------------------------------------------------------------------
@@ -2982,8 +2989,12 @@ function recordingSettings(s: AppState): (HTMLElement | null)[] {
 /** Settings > Recording: what audio is kept on this phone, and that it never leaves with a backup or a sent meeting. */
 function audioKeptLine(): HTMLElement {
   const line = el('p', { class: 'meta set-sub', 'data-audio-kept': '1' }, [S.audioKeptChecking])
-  void audioStore.entries().then((es) => {
+  void audioStore.entries().then(async (es) => {
     line.textContent = S.audioKept(es.length, megabytes(es.reduce((n, e) => n + e.bytes, 0)), MAX_RECORDINGS, megabytes(MAX_BYTES))
+    // Honestly whether the browser agreed to keep this site's storage (review P6), once there is something big to keep.
+    const p = es.length ? await persistState() : PersistState.Unsupported
+    if (p !== PersistState.Unsupported) line.append(' ' + (p === PersistState.Granted ? S.persistGranted : S.persistNotGranted))
+    line.dataset.persist = p
   })
   return line
 }
@@ -3027,6 +3038,7 @@ function settingsSheet(): void {
       onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
+    ...hosting.settingsGroup(),
     notificationsCard(s),
     solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
     solo ? null : el('button', {
@@ -3322,6 +3334,7 @@ if (state && !state.testOf?.handedOverAt) {
     transcription.boot()
     // Someone who uses the Swiss server gets its status at once (the past meetings' buttons depend on it).
     if (st().serverTranscriptionConsentAt || st().hosting) void swiss.probe()
+    hosting.boot()
   }
   packs.checkLate()
   // Resume the approve step after a reload while a phone still waits.
