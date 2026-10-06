@@ -47,6 +47,8 @@ import { aboutGroup } from './about'
 import { installSheetContent, setUpInstall } from './install'
 import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
+import { isoDateLabels, SearchField } from './search'
+import { meetingSearchPanel } from './meeting_search_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -196,6 +198,9 @@ let review: Review | null = null
 let queryOpen = false
 let searchOpen = false
 let searchText = ''
+// The magnifier on Record and Meeting: past meetings and memos (search.ts).
+let pastSearchOpen = false
+let pastSearchText = ''
 let queryText = ''
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
@@ -476,6 +481,8 @@ function go(s: Screen): void {
     if (screen === Screen.Inventory) draft.about = AboutKind.What
     else if (screen === Screen.Web) draft.about = AboutKind.Who
   }
+  // The past-meeting search belongs to Record and Meeting; leaving them closes it.
+  if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   screen = s
   closeSheet()
   render()
@@ -1625,11 +1632,53 @@ function pastMeetingsSheet(): void {
   ])
 }
 
+/** Opens on Record and Meeting, in the header slot where Web has its contact search. */
+function pastSearchButton(): HTMLElement {
+  return iconButton(pastSearchOpen ? 'x' : 'search', pastSearchOpen ? S.searchPastClose : S.searchPastOpen, togglePastSearch, 'search-btn past-search-btn' + (pastSearchOpen ? ' on' : ''))
+}
+
+function togglePastSearch(): void {
+  pastSearchOpen = !pastSearchOpen
+  if (!pastSearchOpen) pastSearchText = ''
+  render()
+  if (pastSearchOpen) document.querySelector<HTMLInputElement>('.past-search-field')?.focus()
+}
+
+function pastSearchView(): HTMLElement {
+  const s = st()
+  return meetingSearchPanel({
+    meetings: () => pastMeetings(s),
+    query: pastSearchText,
+    onQuery: (q) => { pastSearchText = q },
+    onClose: togglePastSearch,
+    onOpen: (m, hit) => pastMeetingSheet(m, hit && (hit.field === SearchField.Note || hit.field === SearchField.Transcript) ? { field: hit.field, index: hit.index } : undefined),
+    dateLabels: (m) => [whenLabel(m.startedAt), ...isoDateLabels(m.startedAt)],
+    meta: pastMeta,
+    dummy: (m) => (m.personId && isDemoPerson(s, m.personId) ? dummyChip() : null),
+    clock: clockLong,
+  })
+}
+
+/** A line to open a past meeting at: a note, or a transcript line (highlighted and scrolled to). */
+interface PastFocus {
+  field: SearchField.Note | SearchField.Transcript
+  index: number
+}
+
+function highlightPastLine(m: PastMeeting, f: PastFocus): void {
+  const target = f.field === SearchField.Note
+    ? sheet.querySelector<HTMLElement>(`[data-pm-note="${f.index}"]`)
+    : sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${f.index}`)}"]`)
+  if (!target) return
+  target.classList.add('pm-hit')
+  requestAnimationFrame(() => target.scrollIntoView({ block: 'center' }))
+}
+
 function transcriptView(lines: TranscriptLine[], prefix: string): HTMLElement {
   return el('div', { class: 'tr-list tr-static' }, lines.map((t, i) => transcriptRow({ id: `${prefix}${i}`, speaker: t.speaker, text: t.text, atMs: t.atMs, final: true })))
 }
 
-function pastMeetingSheet(m: PastMeeting): void {
+function pastMeetingSheet(m: PastMeeting, focus?: PastFocus): void {
   const s = st()
   const person = m.personId ? s.people.find((p) => p.id === m.personId) : undefined
   openSheet([
@@ -1638,12 +1687,13 @@ function pastMeetingSheet(m: PastMeeting): void {
     el('p', { class: 'meta' }, [pastMeta(m)]),
     el('h4', { class: 'eyebrow' }, [S.pastNotes]),
     m.lines.length
-      ? el('div', { class: 'sheet-lines' }, m.lines.map((l) => el('div', { class: 'sline' }, [tagChip(l.tag), el('span', {}, [l.text])])))
+      ? el('div', { class: 'sheet-lines' }, m.lines.map((l, i) => el('div', { class: 'sline', 'data-pm-note': String(i) }, [tagChip(l.tag), el('span', {}, [l.text])])))
       : el('p', { class: 'meta' }, [S.pastNoNotes]),
     el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
     m.transcript.length ? transcriptView(m.transcript, m.id + ':') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
     person ? el('button', { class: 'btn btn-ghost', onclick: () => personSheet(person.id) }, [S.pastOpenPerson(person.name)]) : null,
   ])
+  if (focus) highlightPastLine(m, focus)
 }
 
 /** Is there anything of this draft worth keeping as a past meeting (a take, a transcript, or a meeting at all)? */
@@ -1864,8 +1914,9 @@ function screenRecord(): Node[] {
     onclick: () => { if (live) togglePause(); else void startSolo() },
   })
   const status = live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
+  if (pastSearchOpen) return [header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }), pastSearchView()]
   return [
-    header(S.recTitle, { after: meeting, pill: false }),
+    header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
     el('div', { class: 'scroll pad memo' }, [
       el('div', { class: 'memo-hero' }, [
         circle,
@@ -2089,8 +2140,9 @@ function screenMeeting(): Node[] {
   const toSolo = (): void => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; recNotice = ''; go(Screen.Record) }
   // Icon only, in the slot where Record shows the Meeting button (owner 2026-10-06); the QR stays put.
   const justMe = iconButton('solo', S.recJustMe, toSolo, 'solo-btn')
+  if (pastSearchOpen) return [header(S.meetingTitle, { right: pastSearchButton(), after: justMe, pill: false }), pastSearchView()]
   return [
-    header(S.meetingTitle, { after: justMe, pill: false }),
+    header(S.meetingTitle, { right: pastSearchButton(), after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,

@@ -630,6 +630,21 @@ export const S = {
   ] as readonly string[],
   instMoveToast: 'Back up here first; the installed app then restores it with your key.',
 
+  // Search past meetings and recordings (wave 1733, item 2): the magnifier on Record and Meeting.
+  searchPastOpen: 'Search past meetings',
+  searchPastClose: 'Close search',
+  searchPastPh: 'Search past meetings and memos',
+  searchPastLead: (n: number) => `Search ${n === 1 ? 'your past meeting' : `your ${n} past meetings and memos`}: a person, a place, a date, a note, or words from a transcript.`,
+  searchPastNone: 'No past meetings yet. A meeting you end, and notes you save, can be searched here.',
+  searchPastNothing: (q: string) => `Nothing found for "${q}".`,
+  searchField: {
+    about: 'Who or what',
+    where: 'Place',
+    when: 'Date',
+    note: 'Note',
+    transcript: 'Transcript',
+  } as Record<string, string>,
+
   // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
   d2lButton: 'Install',
   d2lTitle: 'Clean out your demo contacts first?',
