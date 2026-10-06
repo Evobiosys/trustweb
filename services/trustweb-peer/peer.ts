@@ -473,7 +473,8 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     const owner = self ? { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] } : await forwardToOwner(peer.displayName, text, tpl.id)
 
     const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
-    log(`ask preset=${presetItems.length} owner=${owner.outcome}${owner.outcome === OwnerOutcome.Shared ? `(${owner.items.length})` : ''} -> ${items.length ? AskOutcome.Shared : AskOutcome.NoMatch} (${items.length})`)
+    // Shape kept stable for apps/trustweb/test/e2e/demo_account.mjs ("ask shared"): outcome first, then the parts.
+    log(`ask ${items.length ? AskOutcome.Shared : AskOutcome.NoMatch} (${items.length}): preset=${presetItems.length} owner=${owner.outcome}${owner.outcome === OwnerOutcome.Shared ? `(${owner.items.length})` : ''}`)
     if (!items.length) {
       await answer(null)
       return

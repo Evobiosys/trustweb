@@ -235,8 +235,8 @@ describe('the peer against an in-memory relay', () => {
     expect(a1.shared.items[0].context).toBe('Allowed in advance by Jakob (2026-10-06): demo content')
     const a2 = await anna.ask(peer.card.did, 'does anyone have a projector and screen for a talk')
     expect(a2.outcome).toBe('nothing')
-    expect(lines.some((l) => /ask preset=1 owner=not-asked -> shared \(1\)/.test(l))).toBe(true)
-    expect(lines.some((l) => /ask preset=0 owner=not-asked -> no-match \(0\)/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask shared \(1\): preset=1 owner=not-asked/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask no-match \(0\): preset=0 owner=not-asked/.test(l))).toBe(true)
     expect(lines.join('\n')).not.toMatch(/motorbike|projector|Anna/i)
     anna.close()
     await peer.stop()
@@ -294,14 +294,14 @@ describe('the peer against an in-memory relay', () => {
     expect(jakob.asks[0].from.displayName).toBe('Demo inventory')
     expect(a1.outcome).toBe('shared')
     expect(a1.shared.items).toEqual([{ text: 'Projector and screen, Vienna', when: 'early October', context: 'What I have' }])
-    expect(lines.some((l) => /ask preset=0 owner=shared\(1\) -> shared \(1\)/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask shared \(1\): preset=0 owner=shared\(1\)/.test(l))).toBe(true)
 
     // 2. the owner says no (or has nothing): nothing, the same bytes as a no-match
     decision = () => null
     const a2 = await anna.ask(peer.card.did, 'anyone with a projector for a talk, second try')
     expect(jakob.asks).toHaveLength(2)
     expect(a2.outcome).toBe('nothing')
-    expect(lines.some((l) => /owner=nothing -> no-match/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask no-match \(0\): preset=0 owner=nothing/.test(l))).toBe(true)
 
     // 3. a preset line AND the owner's yes: both, owner first, at most three
     decision = () => [{ text: 'A second tent', when: 'early October', context: 'What I have' }]
@@ -317,10 +317,10 @@ describe('the peer against an in-memory relay', () => {
     expect(Date.now() - t0).toBeGreaterThanOrEqual(1500)
     expect(a4.outcome).toBe('shared')
     expect(a4.shared.items.map((i) => i.text)).toEqual(['Camping tent for four'])
-    expect(lines.some((l) => /owner=timeout -> shared \(1\)/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask shared \(1\): preset=1 owner=timeout/.test(l))).toBe(true)
     const a5 = await anna.ask(peer.card.did, 'anyone with a projector, phone off')
     expect(a5.outcome).toBe('nothing')
-    expect(lines.some((l) => /preset=0 owner=timeout -> no-match/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask no-match \(0\): preset=0 owner=timeout/.test(l))).toBe(true)
 
     expect(lines.join('\n')).not.toMatch(/projector|tent|Anna/i)
     anna.close()
@@ -339,7 +339,7 @@ describe('the peer against an in-memory relay', () => {
     const a = await jakob.ask(peer.card.did, 'camping tent for four')
     expect(a.outcome).toBe('shared')
     expect(jakob.asks).toHaveLength(0)
-    expect(lines.some((l) => /ask preset=1 owner=not-asked -> shared \(1\)/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask shared \(1\): preset=1 owner=not-asked/.test(l))).toBe(true)
     jakob.close()
     await peer.stop()
     rmSync(dir, { recursive: true })
