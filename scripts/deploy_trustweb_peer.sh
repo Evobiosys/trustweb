@@ -86,6 +86,9 @@ Environment=TW_PEER_RELAY=https://app.idea2.site
 Environment=TW_PEER_HEALTH_PORT=8961
 Environment="TW_PEER_NAME=Demo inventory"
 Environment=TW_PEER_FORWARD=1
+# Every answer the owner did not add to goes out at the forward deadline (same moment for decline,
+# no match and phone off). 45 s keeps a demo answer close to the 30 s floor while the owner can still tap.
+Environment=TW_PEER_FORWARD_WAIT_MS=45000
 Environment=TW_PEER_POLICY=open
 DynamicUser=yes
 StateDirectory=trustweb-peer
