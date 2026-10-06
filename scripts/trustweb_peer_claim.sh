@@ -1,13 +1,19 @@
 #!/bin/bash
-# Open the claim window of the TrustWeb demo peer on questhub and print the
-# connect link the owner opens on his phone. The first phone that opens it
-# within 10 minutes becomes the owner (asks to the peer are then forwarded to
-# that phone for a live yes/no); later phones are askers.
+# Open the claim window of a TrustWeb front door and print the connect link the
+# owner opens on his phone. The first phone that opens it within 10 minutes
+# becomes the owner (asks to the front door are then forwarded to that phone
+# for a live yes/no); later phones are askers (demo) or need a grant (personal).
 #
-#   ./scripts/trustweb_peer_claim.sh           open the window, print the link
-#   ./scripts/trustweb_peer_claim.sh --close   close the window (restart, no claim file)
-#   ./scripts/trustweb_peer_claim.sh --status  print /status
-#   ./scripts/trustweb_peer_claim.sh --reset   forget the owner (re-claim afterwards)
+#   ./scripts/trustweb_peer_claim.sh [--instance demo|personal] [--host questhub|sebra] [MODE]
+#   MODE: (none) open the window, print the link | --close | --status | --reset (forget the owner)
+#   Defaults: --instance demo --host questhub.
+#
+# WHICH TRUSTWEB OPENS THE LINK DECIDES WHO OWNS THE FRONT DOOR. The link is
+# https://app.idea2.site/trustweb/?connect=... with no ?persona=, so the app
+# opens it in its normal persona ("me", your everyday TrustWeb, stored under
+# trustweb.v1.me) in whatever browser opens it. A demo account only ever runs
+# under ?persona=demo-<id>, which this link never carries. So: open it on YOUR
+# phone, in the browser (or installed app) where your normal TrustWeb lives.
 #
 # How: the peer reads <state>/claim-open ONLY at start, so opening = touch the
 # file + restart the unit. The file is removed again right after the restart:
@@ -20,24 +26,36 @@ echo "--------"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-STATE=/var/lib/trustweb-peer
-HOSTHDR='Host: 127.0.0.1:8961'
-APP_URL=https://app.idea2.site/trustweb/
-CARD_URL=https://app.idea2.site/trustweb/demo-peer.json
-SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
-rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
-ssh-add --apple-load-keychain >/dev/null 2>&1 || true
-status() { rsh "curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/status"; echo; }
+# shellcheck source=scripts/trustweb_peer_lib.sh
+. "$HERE/trustweb_peer_lib.sh"
+
+MODE=open; INST=demo; HOSTNAME_ARG=questhub
+usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--close|--status|--reset]" >&2; exit 2; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instance) [ $# -ge 2 ] || usage; INST="$2"; shift 2 ;;
+    --host) [ $# -ge 2 ] || usage; HOSTNAME_ARG="$2"; shift 2 ;;
+    --status) MODE=status; shift ;;
+    --close) MODE=close; shift ;;
+    --reset) MODE=reset; shift ;;
+    *) usage ;;
+  esac
+done
+tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2; exit 2; }
+tw_peer_host "$HOSTNAME_ARG" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
+tw_peer_ssh_prepare
+echo "front door: $INSTANCE ($UNIT on $RHOST)"
+
 restart_and_wait() {
-  rsh "sudo systemctl restart trustweb-peer;
-       for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/health >/dev/null 2>&1 && break; sleep 1; done"
+  rsh "sudo systemctl restart $UNIT;
+       for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 1; done"
 }
 
-case "${1:-}" in
-  --status) status; exit 0 ;;
-  --close)
-    rsh "sudo rm -f $STATE/claim-open"; restart_and_wait; status; echo "window closed"; exit 0 ;;
-  --reset)
+case "$MODE" in
+  status) tw_peer_status; exit 0 ;;
+  close)
+    rsh "sudo rm -f $STATE/claim-open"; restart_and_wait; tw_peer_status; echo "window closed"; exit 0 ;;
+  reset)
     # Removes the owner block from state.json (0600, root-readable via sudo) and restarts.
     rsh "sudo python3 - <<'PY'
 import json
@@ -46,38 +64,33 @@ s = json.load(open(p)); s.pop('owner', None)
 json.dump(s, open(p, 'w'))
 PY
 sudo rm -f $STATE/claim-open"
-    restart_and_wait; status; echo "owner forgotten"; exit 0 ;;
-  "") ;;
-  *) echo "usage: $0 [--close|--status|--reset]" >&2; exit 2 ;;
+    restart_and_wait; tw_peer_status; echo "owner forgotten"; exit 0 ;;
 esac
 
-CUR="$(status)"
+CUR="$(tw_peer_status)"
 if echo "$CUR" | grep -q '"owner":true'; then
-  echo "an owner is already bound. To claim again: $0 --reset, then $0" >&2
+  echo "an owner is already bound. To claim again: $0 --instance $INSTANCE --host $RHOST --reset, then $0 --instance $INSTANCE --host $RHOST" >&2
   exit 1
 fi
 
-CARD="$(curl -fsS "$CARD_URL")"
-# Build the link first: a failure here must not leave a window open.
-LINK="$(cd "$REPO/apps/demo" && CARD="$CARD" APP_URL="$APP_URL" "$REPO/node_modules/.bin/tsx" -e '
-import { buildConnectLinkUrl } from "./src/connect_link"
-const c = JSON.parse(process.env.CARD!)
-console.log(buildConnectLinkUrl(process.env.APP_URL!, c.did, { id: c.id, displayName: c.name }))
-')"
+# Build the link first (from the card over loopback): a failure here must not leave a window open.
+LINK="$(tw_peer_link "$REPO" "$(tw_peer_card)")"
 echo "opening the claim window"
 rsh "sudo touch $STATE/claim-open"
 restart_and_wait
 rsh "sudo rm -f $STATE/claim-open"
 sleep 1
-OPEN="$(status)"
+OPEN="$(tw_peer_status)"
 echo "$OPEN"
 echo "$OPEN" | grep -q '"claimOpen":true' || { echo "claim window did not open" >&2; exit 1; }
 
 echo "--------"
-echo "Open this link on YOUR phone within 10 minutes (the first phone to open it becomes the owner):"
+echo "Open this link within 10 minutes on YOUR phone, in YOUR NORMAL TrustWeb"
+echo "(the browser or installed app where your own web lives), NOT in a demo account tab."
+echo "The first phone to open it becomes the owner of this front door:"
 echo
 echo "$LINK"
 echo
-echo "Check it worked:   $0 --status      (expect \"owner\":true, \"forward\":true, \"claimOpen\":false)"
-echo "Window closes at the first claim or after 10 minutes; $0 --close closes it now."
+echo "Check it worked:   $0 --instance $INSTANCE --host $RHOST --status   (expect \"owner\":true, \"forward\":true, \"claimOpen\":false)"
+echo "Window closes at the first claim or after 10 minutes; --close closes it now."
 echo "Do not run the app's e2e test while the window is open."

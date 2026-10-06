@@ -1,77 +1,68 @@
 #!/bin/bash
-# Install / update the TrustWeb DEMO front-door peer on questhub (Swiss server)
-# and publish its card next to the app. Idempotent.
+# Install / update a TrustWeb front-door peer (services/trustweb-peer) and, for
+# the demo instance, publish its card next to the app. Idempotent.
 #
-#   ./scripts/deploy_trustweb_peer.sh              full deploy (bundle, unit, restart, card)
-#   ./scripts/deploy_trustweb_peer.sh --card-only  republish only demo-peer.json
-#   ./scripts/deploy_trustweb_peer.sh --off        stop the service and remove the card (rollback)
+#   ./scripts/deploy_trustweb_peer.sh [--instance demo|personal] [--host questhub|sebra] [--dry-run] [MODE]
+#   MODE (one of):
+#     (none)             full deploy: bundle, unit, restart, card (demo) / no card (personal)
+#     --card-only        republish only the instance's public card (demo); personal: nothing to do
+#     --republish-cards  the card of EVERY active trustweb-peer* instance on the host (deploy_wot.sh calls this)
+#     --off              stop and disable the instance (demo: also remove its card); state is kept
+#   Defaults: --instance demo --host questhub (the demo instance runs on questhub only).
+#   --dry-run          prints the plan and the rendered unit, runs READ-ONLY checks on the host, changes nothing.
 #
-# Why --card-only exists: scripts/deploy_wot.sh clears the whole app directory
-# (rm -rf app-idea2-trustweb/*), which also deletes demo-peer.json. Run
-# --card-only after every app deploy, or the app stops offering the demo peer.
+# Why --card-only / --republish-cards exist: scripts/deploy_wot.sh clears the
+# whole app directory (rm -rf app-idea2-trustweb/*), which also deletes the
+# demo card. deploy_wot.sh runs --republish-cards after every app deploy.
 #
-# The service (services/trustweb-peer, README.txt there): fictional demo
-# inventory only, forwarding ON (an ask reaches the owner's phone once an owner
-# has claimed the peer; see scripts/trustweb_peer_claim.sh), policy open.
+# demo:     fictional inventory, forwarding ON, policy open (README.txt).
+# personal: Jakob's own front door. Policy granted (grants.json, see
+#           trustweb_peer_grant.sh), forwarding ON, its inventory starts EMPTY
+#           (zero lines) and only ever holds what scripts/trustweb_inventory_export.ts
+#           --send puts there: the lines Jakob allowed in advance. The inventory is
+#           a root-only file in /etc handed to the service as a systemd credential.
+#           It publishes NO card: its connect link goes only to Jakob (claim) and to
+#           the people he grants, so his front door's DID is not on a public URL.
 # Same SSH recipe and unit hardening as deploy_trustweb_backup.sh.
 set -euo pipefail
 echo "... deploy_trustweb_peer running ..."
 echo "--------"
 
-MODE=full
-case "${1:-}" in
-  "") ;;
-  --card-only) MODE=card ;;
-  --off) MODE=off ;;
-  *) echo "usage: $0 [--card-only|--off]" >&2; exit 2 ;;
-esac
-
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/trustweb_peer_lib.sh
+. "$HERE/trustweb_peer_lib.sh"
 PEER_DIR="$HERE/../services/trustweb-peer"
 CARD_DIR=/srv/questhub-static/app-idea2-trustweb
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good (see deploy_wot.sh)
-STATE=/var/lib/trustweb-peer
-HOSTHDR='Host: 127.0.0.1:8961'
-SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
-rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
-ssh-add --apple-load-keychain >/dev/null 2>&1 || true
+RELAY=https://app.idea2.site
 
-publish_card() {
-  # The unit runs as a DynamicUser: its state dir is root-readable only.
-  rsh "for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/health >/dev/null 2>&1 && break; sleep 1; done;
-       sudo cat $STATE/demo-peer.json | sudo tee $CARD_DIR/demo-peer.json >/dev/null &&
-       sudo chmod a+r $CARD_DIR/demo-peer.json && sudo chcon --reference=$REF $CARD_DIR/demo-peer.json"
-}
-
-if [ "$MODE" = off ]; then
-  echo "rollback: stop the peer, remove the card"
-  rsh "sudo rm -f $CARD_DIR/demo-peer.json; sudo systemctl disable --now trustweb-peer"
-  echo "card gone:  $(curl -s -o /dev/null -w '%{http_code}' https://app.idea2.site/trustweb/demo-peer.json) (expect 404 or the app's fallback page, no JSON)"
-  echo "--------"; echo "peer off"; exit 0
+MODE=full; DRY=0; INST=demo; HOSTNAME_ARG=questhub
+usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--dry-run] [--card-only|--republish-cards|--off]" >&2; exit 2; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --instance) [ $# -ge 2 ] || usage; INST="$2"; shift 2 ;;
+    --host) [ $# -ge 2 ] || usage; HOSTNAME_ARG="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    --card-only) MODE=card; shift ;;
+    --republish-cards) MODE=republish; shift ;;
+    --off) MODE=off; shift ;;
+    *) usage ;;
+  esac
+done
+tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2; exit 2; }
+tw_peer_host "$HOSTNAME_ARG" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
+if [ "$INSTANCE" = demo ] && [ "$RHOST" != questhub ]; then
+  echo "the demo instance runs on questhub only (its card is published from questhub's static tree)" >&2; exit 2
 fi
+tw_peer_ssh_prepare
+say() { if [ "$DRY" = 1 ]; then echo "[dry-run] would: $*"; else echo "$*"; fi; }
 
-if [ "$MODE" = card ]; then
-  echo "republish the card only"
-  publish_card
-else
-  BUNDLE="$PEER_DIR/dist/peer.mjs"
-  INV="$PEER_DIR/demo_inventory.json"
-  [ -f "$BUNDLE" ] || { echo "missing $BUNDLE (run: sh services/trustweb-peer/build.sh)" >&2; exit 1; }
-  [ -f "$INV" ] || { echo "missing $INV" >&2; exit 1; }
-
-  echo "1/5 node on questhub (needs >= 22 for the global WebSocket)"
-  rsh 'node -e "if (parseInt(process.versions.node) < 22 || typeof WebSocket !== \"function\") { console.error(\"node too old\"); process.exit(1) } console.log(process.version)"'
-
-  echo "2/5 peer.mjs + demo_inventory.json -> /opt/trustweb-peer/"
-  "${SSHENV[@]}" scp -q "$BUNDLE" questhub:/tmp/trustweb-peer.mjs
-  "${SSHENV[@]}" scp -q "$INV" questhub:/tmp/trustweb-peer-inventory.json
-  rsh 'sudo install -d -m 0755 /opt/trustweb-peer &&
-       sudo install -m 0644 /tmp/trustweb-peer.mjs /opt/trustweb-peer/peer.mjs &&
-       sudo install -m 0644 /tmp/trustweb-peer-inventory.json /opt/trustweb-peer/demo_inventory.json &&
-       rm -f /tmp/trustweb-peer.mjs /tmp/trustweb-peer-inventory.json && sudo restorecon -R /opt/trustweb-peer'
-
-  echo "3/5 systemd unit"
-  rsh 'sudo tee /etc/systemd/system/trustweb-peer.service >/dev/null' <<'UNIT'
+# ---------------------------------------------------------------- units
+# The demo unit is byte-identical to the one deployed on 2026-10-06.
+render_unit() {
+  local node="$1"
+  if [ "$INSTANCE" = demo ]; then
+    cat <<'UNIT'
 [Unit]
 Description=TrustWeb demo front-door peer (fictional inventory; forwards asks to its owner; see web-of-trust services/trustweb-peer)
 After=network.target
@@ -102,24 +93,182 @@ MemoryMax=256M
 [Install]
 WantedBy=multi-user.target
 UNIT
+    return
+  fi
+  cat <<UNIT
+[Unit]
+Description=TrustWeb personal front door (answers only lines its owner allowed in advance; forwards every ask to his phone; see web-of-trust services/trustweb-peer)
+After=network-online.target
+Wants=network-online.target
 
-  echo "4/5 enable, restart, wait for health"
-  rsh "sudo systemctl daemon-reload && sudo systemctl enable --now trustweb-peer && sudo systemctl restart trustweb-peer &&
-       for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/health >/dev/null 2>&1 && break; sleep 1; done;
-       sleep 3; systemctl is-active trustweb-peer; curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/status"
-  echo
+[Service]
+ExecStart=$node $OPT/peer.mjs
+Environment=TW_PEER_STATE=$STATE
+# The inventory is a root-only file handed over as a credential: %d is \$CREDENTIALS_DIRECTORY.
+LoadCredential=inventory:$INV_PATH
+Environment=TW_PEER_INVENTORY=%d/inventory
+Environment=TW_PEER_RELAY=$RELAY
+Environment=TW_PEER_HEALTH_PORT=$PORT
+Environment="TW_PEER_NAME=$PEER_NAME"
+Environment=TW_PEER_FORWARD=1
+Environment=TW_PEER_POLICY=$POLICY
+DynamicUser=yes
+StateDirectory=${STATE#/var/lib/}
+StateDirectoryMode=0700
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=256M
 
-  echo "5/5 publish the card next to the app"
-  publish_card
+[Install]
+WantedBy=multi-user.target
+UNIT
+}
+
+# ---------------------------------------------------------------- cards
+publish_card() {
+  if [ "$PUBLIC_CARD" != 1 ]; then
+    echo "$INSTANCE: no public card by design (its connect link goes only to its owner and the people granted; trustweb_peer_grant.sh --link)"
+    return 0
+  fi
+  if [ "$DRY" = 1 ]; then
+    say "copy $STATE/demo-peer.json to $CARD_DIR/demo-peer.json (a+r, SELinux context of $REF)"
+    echo "[dry-run] card source today: $(rsh "sudo test -f $STATE/demo-peer.json && echo present || echo missing")"
+    return 0
+  fi
+  # The unit runs as a DynamicUser: its state dir is root-readable only.
+  rsh "for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 1; done;
+       sudo cat $STATE/demo-peer.json | sudo tee $CARD_DIR/demo-peer.json >/dev/null &&
+       sudo chmod a+r $CARD_DIR/demo-peer.json && sudo chcon --reference=$REF $CARD_DIR/demo-peer.json"
+}
+
+republish_cards() {
+  local units u inst n=0
+  units="$(rsh "systemctl list-units --type=service --state=active --no-legend --plain 'trustweb-peer*' | awk '{print \$1}'")"
+  if [ -z "$units" ]; then echo "no active front door on $RHOST: no card to republish"; return 0; fi
+  for u in $units; do
+    inst="$(tw_peer_instance_of_unit "$u")" || continue
+    if ! (tw_peer_instance "$inst") 2>/dev/null; then echo "skipping $u: unknown instance '$inst'"; continue; fi
+    echo "active: $u -> --card-only --instance $inst"
+    local args=(--card-only --instance "$inst" --host "$RHOST")
+    [ "$DRY" = 1 ] && args+=(--dry-run)
+    "$HERE/deploy_trustweb_peer.sh" "${args[@]}" | grep -v -e '^\.\.\. deploy_trustweb_peer running' -e '^--------$' || true
+    n=$((n + 1))
+  done
+  echo "republish: $n instance(s) handled"
+}
+
+# ---------------------------------------------------------------- modes
+if [ "$MODE" = republish ]; then
+  republish_cards
+  echo "--------"; echo "done"; exit 0
 fi
 
-echo "verify through the public origin"
-sleep 1
-CARD="$(curl -fsS https://app.idea2.site/trustweb/demo-peer.json)"
-echo "$CARD"
-echo "$CARD" | python3 -c 'import json,sys; c=json.load(sys.stdin); assert c["did"].startswith("did:peer:") and c["id"] and c["name"]; print("card ok:", c["name"])'
+if [ "$MODE" = off ]; then
+  say "stop and disable $UNIT on $RHOST (state in $STATE is kept: same DID and owner on re-enable)"
+  if [ "$DRY" = 0 ]; then
+    if [ "$PUBLIC_CARD" = 1 ]; then rsh "sudo rm -f $CARD_DIR/demo-peer.json"; fi
+    rsh "sudo systemctl disable --now $UNIT"
+    if [ "$PUBLIC_CARD" = 1 ]; then
+      echo "card gone:  $(curl -s -o /dev/null -w '%{http_code}' https://app.idea2.site/trustweb/demo-peer.json) (expect 404 or the app's fallback page, no JSON)"
+    fi
+  fi
+  echo "--------"; echo "$UNIT off"; exit 0
+fi
+
+if [ "$MODE" = card ]; then
+  echo "republish the card only ($INSTANCE on $RHOST)"
+  publish_card
+  echo "--------"; echo "done"; exit 0
+fi
+
+# full deploy
+BUNDLE="$PEER_DIR/dist/peer.mjs"
+[ -f "$BUNDLE" ] || { echo "missing $BUNDLE (run: sh services/trustweb-peer/build.sh)" >&2; exit 1; }
+if [ "$INSTANCE" = demo ]; then
+  INV="$PEER_DIR/demo_inventory.json"
+  [ -f "$INV" ] || { echo "missing $INV" >&2; exit 1; }
+fi
+
+echo "1/6 preflight on $RHOST (read-only): node >= 22 at a system path, port $PORT, current state"
+NODE="$(rsh 'command -v node')"
+case "$NODE" in
+  /usr/bin/node|/usr/local/bin/node) ;;
+  *) echo "node at '$NODE': the unit needs a system path (ProtectHome hides /root and /home)" >&2; exit 1 ;;
+esac
+rsh 'node -e "if (parseInt(process.versions.node) < 22 || typeof WebSocket !== \"function\") { console.error(\"node too old\"); process.exit(1) } console.log(\"node \" + process.version)"'
+echo "port $PORT: $(rsh "ss -ltnH 'sport = :$PORT' | grep -q . && echo in use || echo free")"
+echo "unit $UNIT: $(rsh "systemctl is-active $UNIT 2>/dev/null || true")"
+if [ "$INSTANCE" = personal ]; then
+  echo "inventory $INV_PATH: $(rsh "sudo test -f $INV_PATH && echo present, kept as it is || echo absent, will be created EMPTY")"
+fi
+if rsh "systemctl is-active --quiet trustweb-peer" 2>/dev/null; then
+  echo "demo front door before: $(rsh "curl -fsS -H 'Host: 127.0.0.1:8961' http://127.0.0.1:8961/status")"
+fi
+if [ "$DRY" = 1 ]; then
+  echo "[dry-run] unit /etc/systemd/system/$UNIT.service would be:"
+  echo "----8<----"; render_unit "$NODE"; echo "----8<----"
+fi
+
+say "2/6 peer.mjs -> $OPT/peer.mjs (0644)$([ "$INSTANCE" = demo ] && echo ', demo_inventory.json -> /opt/trustweb-peer/')"
+if [ "$DRY" = 0 ]; then
+  "${SSHENV[@]}" scp -q "$BUNDLE" "$RHOST:/tmp/$UNIT.mjs"
+  rsh "sudo install -d -m 0755 $OPT && sudo install -m 0644 /tmp/$UNIT.mjs $OPT/peer.mjs && rm -f /tmp/$UNIT.mjs &&
+       if command -v restorecon >/dev/null; then sudo restorecon -R $OPT; fi"
+  if [ "$INSTANCE" = demo ]; then
+    "${SSHENV[@]}" scp -q "$INV" "$RHOST:/tmp/trustweb-peer-inventory.json"
+    rsh 'sudo install -m 0644 /tmp/trustweb-peer-inventory.json /opt/trustweb-peer/demo_inventory.json && rm -f /tmp/trustweb-peer-inventory.json &&
+         sudo restorecon -R /opt/trustweb-peer'
+  fi
+fi
+
+if [ "$INSTANCE" = personal ]; then
+  say "3/6 $INV_PATH: create EMPTY ({\"items\":[]}, root 0600) only if absent; an existing one is never overwritten here"
+  if [ "$DRY" = 0 ]; then
+    rsh "sudo install -d -m 0700 $INV_ETC && if ! sudo test -f $INV_PATH; then sudo install -m 0600 /dev/null $INV_PATH && printf '{\"items\":[]}\\n' | sudo tee $INV_PATH >/dev/null; fi"
+  fi
+else
+  say "3/6 (demo: inventory shipped with the bundle)"
+fi
+
+say "4/6 systemd unit /etc/systemd/system/$UNIT.service"
+if [ "$DRY" = 0 ]; then
+  render_unit "$NODE" | rsh "sudo tee /etc/systemd/system/$UNIT.service >/dev/null"
+fi
+
+say "5/6 enable, restart, wait for health"
+if [ "$DRY" = 0 ]; then
+  rsh "sudo systemctl daemon-reload && sudo systemctl enable --now $UNIT && sudo systemctl restart $UNIT &&
+       for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 1; done;
+       sleep 3; systemctl is-active $UNIT; curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/status"
+  echo
+fi
+
+say "6/6 card"
+publish_card
+
+if [ "$DRY" = 1 ]; then
+  echo "--------"
+  echo "dry run: nothing was changed on $RHOST"
+  exit 0
+fi
+
+if [ "$PUBLIC_CARD" = 1 ]; then
+  echo "verify through the public origin"
+  sleep 1
+  CARD="$(curl -fsS https://app.idea2.site/trustweb/demo-peer.json)"
+  echo "$CARD"
+  echo "$CARD" | python3 -c 'import json,sys; c=json.load(sys.stdin); assert c["did"].startswith("did:peer:") and c["id"] and c["name"]; print("card ok:", c["name"])'
+fi
 echo "status:"
-rsh "curl -fsS -H '$HOSTHDR' http://127.0.0.1:8961/status"
-echo
+tw_peer_status
+echo "journal (last 5 lines; counts and outcomes only):"
+rsh "sudo journalctl -u $UNIT -n 5 --no-pager -o cat"
 echo "--------"
-echo "all good (an owner is NOT bound yet: scripts/trustweb_peer_claim.sh)"
+echo "all good. Owner: scripts/trustweb_peer_claim.sh --instance $INSTANCE --host $RHOST --status"

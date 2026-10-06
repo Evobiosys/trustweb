@@ -1,0 +1,66 @@
+# Sourced by deploy_trustweb_peer.sh, trustweb_peer_claim.sh and
+# trustweb_peer_grant.sh: the one table of front-door instances and hosts, and
+# the SSH recipe (control master + askpass, see ~/.claude/CLAUDE.md).
+#
+#   demo      the demo front door: fictional inventory, policy open, card
+#             published next to the app (app.idea2.site/trustweb/demo-peer.json).
+#             questhub only (the card lives in questhub's static tree).
+#   personal  Jakob's own front door: policy granted (grants.json), inventory
+#             = ONLY the lines he allowed in advance, sent by
+#             scripts/trustweb_inventory_export.ts --send. No public card: its
+#             connect link goes only to Jakob (claim) and to people he grants.
+#             Host: questhub or sebra (his decision; see services/trustweb-peer/README.txt).
+#
+# Paths below must match scripts/trustweb_inventory_export.ts (PERSONAL_*).
+
+# shellcheck disable=SC2034  # the variables are read by the scripts that source this file
+tw_peer_instance() {
+  case "$1" in
+    demo)
+      UNIT=trustweb-peer; PORT=8961; STATE=/var/lib/trustweb-peer; OPT=/opt/trustweb-peer
+      PEER_NAME="Demo inventory"; POLICY=open; PUBLIC_CARD=1; INV_PATH=/opt/trustweb-peer/demo_inventory.json; INV_ETC= ;;
+    personal)
+      UNIT=trustweb-peer-personal; PORT=8962; STATE=/var/lib/trustweb-peer-personal; OPT=/opt/trustweb-peer-personal
+      PEER_NAME="Jakob"; POLICY=granted; PUBLIC_CARD=0; INV_ETC=/etc/trustweb-peer-personal; INV_PATH=/etc/trustweb-peer-personal/inventory.json ;;
+    *) return 1 ;;
+  esac
+  INSTANCE="$1"
+  HOSTHDR="Host: 127.0.0.1:$PORT"
+}
+
+tw_peer_host() {
+  case "$1" in
+    questhub|sebra) RHOST="$1" ;;
+    *) return 1 ;;
+  esac
+}
+
+# The unit name -> instance name (trustweb-peer -> demo, trustweb-peer-personal -> personal).
+tw_peer_instance_of_unit() {
+  local u="${1%.service}"
+  case "$u" in
+    trustweb-peer) echo demo ;;
+    trustweb-peer-*) echo "${u#trustweb-peer-}" ;;
+    *) return 1 ;;
+  esac
+}
+
+SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
+rsh() { "${SSHENV[@]}" ssh "$RHOST" "$@"; }
+tw_peer_ssh_prepare() { ssh-add --apple-load-keychain >/dev/null 2>&1 || true; }
+
+# /status over loopback with the Host header the peer checks.
+tw_peer_status() { rsh "curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/status"; echo; }
+# /card over loopback (the claim and grant links are built from it; nothing public needed).
+tw_peer_card() { rsh "curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/card"; }
+
+# The connect link a phone opens: the app's own buildConnectLinkUrl, fed the card on stdin.
+tw_peer_link() {
+  local repo="$1" card="$2"
+  (cd "$repo/apps/demo" && CARD="$card" APP_URL=https://app.idea2.site/trustweb/ "$repo/node_modules/.bin/tsx" -e '
+import { buildConnectLinkUrl } from "./src/connect_link"
+const c = JSON.parse(process.env.CARD!)
+if (typeof c.did !== "string" || !c.did.startsWith("did:peer:") || !c.id || !c.name) throw new Error("not a front-door card")
+console.log(buildConnectLinkUrl(process.env.APP_URL!, c.did, { id: c.id, displayName: c.name }))
+')
+}

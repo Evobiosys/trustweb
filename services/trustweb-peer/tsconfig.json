@@ -15,5 +15,5 @@
     "types": ["node"],
     "typeRoots": ["../../node_modules/.pnpm/@types+node@22.20.1/node_modules/@types"]
   },
-  "files": ["peer.ts", "env.d.ts"]
+  "files": ["peer.ts", "inventory_export.ts", "../../scripts/trustweb_inventory_export.ts", "env.d.ts"]
 }

@@ -36,8 +36,10 @@
  *             (acquaintance ring); fictional lines with presets
  *             (demo_inventory.json); meant for the Swiss server.
  *   personal  PeerPolicy.Granted: a connect-ack is honoured only for a name
- *             the owner granted beforehand (grants.json). Meant for the
- *             German server (sebra). Not deployed; see README.txt.
+ *             the owner granted beforehand (grants.json); its inventory holds
+ *             only lines the owner allowed in advance (inventory_export.ts).
+ *             Host (questhub or sebra) is the owner's decision; not deployed
+ *             yet; see README.txt.
  *
  * Privacy on this host: no ask text is ever logged; the log has counts and
  * outcomes only. The inventory file is read once at start and on SIGHUP.

@@ -122,13 +122,13 @@ deploy_trustweb() {
     && "$REPO/apps/demo/node_modules/.bin/tsc" --noEmit -p tsconfig.json \
     && TW_BASE=/trustweb/ "$REPO/apps/demo/node_modules/.bin/vite" build >/dev/null )
   push_dir  "$REPO/apps/trustweb/dist"           "$REMOTE_TRUSTWEB"
-  # push_dir clears the directory, which takes the demo front door's card
+  # push_dir clears the directory, which takes the front doors' cards
   # (demo-peer.json, published by scripts/deploy_trustweb_peer.sh) with it.
-  # Put it back whenever the peer service runs on questhub (2026-10-06).
-  if rsh 'systemctl is-active --quiet trustweb-peer' 2>/dev/null; then
-    echo "republishing the demo front door's card (trustweb-peer is active)"
-    "$REPO/scripts/deploy_trustweb_peer.sh" --card-only
-  fi
+  # Put back the card of every ACTIVE trustweb-peer* instance on questhub
+  # (2026-10-06; each runs --card-only --instance <name>; an instance without a
+  # public card, like the personal one, is a no-op; none active = nothing to do).
+  echo "republishing the front doors' cards (every active trustweb-peer* instance)"
+  "$REPO/scripts/deploy_trustweb_peer.sh" --republish-cards
 }
 
 TRUSTWEB_URLS=(
