@@ -205,6 +205,22 @@ install_code() { # $1 = remote code dir
        rm -rf $stage
        sudo chcon -R -t usr_t $dest
        ls -Z $dest | head -n 20"
+  if [ "${TW_TEST_BREAK:-0}" = 1 ]; then
+    echo "TW_TEST_BREAK=1 (test hook): corrupting the installed $dest/server.mjs to exercise the rollback"
+    rsh "echo 'this is not javascript (' | sudo tee -a $dest/server.mjs >/dev/null"
+  fi
+}
+
+# Puts the code and the unit back as they were before this run (the .bak.$TS copies made by install_code / install_unit),
+# restarts, and checks health. $1 = unit name, $2 = suffix, $3 = port.
+rollback() {
+  local unit="$1" s="$2" port="$3" dest="/opt/trustweb-backup$2" file="/etc/systemd/system/$1.service"
+  echo "ROLLBACK: restoring $dest/*.mjs.bak.$TS and $file.bak.$TS" >&2
+  rsh "set -e
+       for b in $dest/*.mjs.bak.$TS; do [ -e \"\$b\" ] && sudo cp -p \"\$b\" \"\${b%.bak.$TS}\"; done || true
+       [ -e $file.bak.$TS ] && sudo cp -p $file.bak.$TS $file || true
+       sudo systemctl daemon-reload && sudo systemctl reset-failed $unit && sudo systemctl restart $unit && sleep 2
+       curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$port/health && echo '  <- health after rollback'" >&2 || echo "ROLLBACK FAILED: restore by hand (see the report recipe)" >&2
 }
 
 install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
@@ -212,11 +228,21 @@ install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
   echo "systemd unit $file (written in place with tee, never mv from /tmp)"
   if [ "$DRY" = 1 ]; then
     echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" | sed 's/^/    /'
+    echo "[dry-run] then: daemon-reload, enable, restart, health check on 127.0.0.1:$3; on failure the code and unit are rolled back from their .bak.$TS copies"
     return
   fi
   rsh "[ -e $file ] && sudo cp -p $file $file.bak.$TS || true"
   unit_text "$2" "$3" "$4" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
-  rsh "sudo systemctl daemon-reload && sudo systemctl enable --now $unit && sudo systemctl restart $unit && sleep 1 && systemctl is-active $unit"
+  rsh "sudo systemctl daemon-reload && sudo systemctl enable $unit && sudo systemctl reset-failed $unit && sudo systemctl restart $unit" || true
+  sleep 2
+  if rsh "curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$3/health" >/dev/null 2>&1; then
+    echo "  health ok on 127.0.0.1:$3"
+  else
+    echo "the unit did not come up healthy" >&2
+    rsh "sudo journalctl -u $unit -n 8 --no-pager | cut -c1-200" >&2 || true
+    rollback "$unit" "$2" "$3"
+    exit 1
+  fi
 }
 
 check_data_labels() { # $1 = suffix
