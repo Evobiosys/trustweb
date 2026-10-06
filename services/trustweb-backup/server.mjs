@@ -93,7 +93,16 @@ export async function startServer(options = {}) {
   await fs.mkdir(blobDir, { recursive: true, mode: 0o700 })
   let blobCount = (await fs.readdir(blobDir)).filter((n) => n.endsWith('.bin')).length
 
-  const store = cfg.hostedDir ? await createHostedStore(cfg) : null
+  // The hosted store must never keep /backup (Jakob's real backups) from starting: if it cannot start, hosting is off.
+  let store = null
+  if (cfg.hostedDir) {
+    try {
+      store = await createHostedStore(cfg)
+      if (store.unreadable() > 0) cfg.log(`hosted store: ${store.unreadable()} unreadable recording json(s) skipped`)
+    } catch {
+      cfg.log('hosted store unavailable: hosting off')
+    }
+  }
   const hosted = store === null ? null : createHosted({ cfg, store, withLock, clientOf })
   const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
   const feedback = createFeedback({ cfg, clientOf, withLock })

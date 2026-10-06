@@ -28,6 +28,23 @@ async function readJson(file) {
   }
 }
 
+/** A recording's json, or null when missing; `undefined` when it exists but does not parse (a crash left it torn). */
+async function readRecJson(file) {
+  let text
+  try {
+    text = await fs.readFile(file, 'utf8')
+  } catch (err) {
+    if (err.code === 'ENOENT') return null
+    throw err
+  }
+  try {
+    const meta = JSON.parse(text)
+    return meta !== null && typeof meta === 'object' && typeof meta.file === 'string' && Number.isFinite(meta.bytes) ? meta : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function ignoreMissing(promise) {
   try {
     await promise
@@ -51,11 +68,20 @@ export async function createHostedStore(cfg) {
   const accountDir = (account) => path.join(accountsDir, account)
   const recsDir = (account) => path.join(accountDir(account), 'recs')
 
+  /** Write, fsync, rename (like /backup's writeAtomic): a power loss leaves the old or the new json, never a torn one. */
   async function writeJsonAtomic(file, value) {
     const tmp = path.join(tmpDir, crypto.randomBytes(12).toString('hex'))
-    await fs.writeFile(tmp, JSON.stringify(value), { mode: 0o600, flag: 'wx' })
+    const handle = await fs.open(tmp, 'wx', 0o600)
+    try {
+      await handle.writeFile(JSON.stringify(value))
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
     await fs.rename(tmp, file)
   }
+
+  let unreadable = 0 // torn recording jsons seen by the last scan (count only; never their names)
 
   async function loadAccount(account) {
     return readJson(path.join(accountDir(account), 'account.json'))
@@ -82,15 +108,16 @@ export async function createHostedStore(cfg) {
     const recs = []
     for (const name of names) {
       if (!name.endsWith('.json')) continue
-      const meta = await readJson(path.join(recsDir(account), name))
-      if (meta !== null) recs.push({ id: name.slice(0, -5), ...meta })
+      const meta = await readRecJson(path.join(recsDir(account), name))
+      if (meta === undefined) unreadable += 1 // skipped: one torn json must not break the account or the server
+      else if (meta !== null) recs.push({ id: name.slice(0, -5), ...meta })
     }
     return recs.sort((a, b) => (a.stored < b.stored ? -1 : a.stored > b.stored ? 1 : 0))
   }
 
   async function getRec(account, id) {
-    const meta = await readJson(path.join(recsDir(account), `${id}.json`))
-    return meta === null ? null : { id, ...meta }
+    const meta = await readRecJson(path.join(recsDir(account), `${id}.json`))
+    return meta === null || meta === undefined ? null : { id, ...meta }
   }
 
   function recFile(account, rec) {
@@ -150,7 +177,9 @@ export async function createHostedStore(cfg) {
         if (err.code === 'ENOENT') continue
         throw err
       }
+      const before = unreadable
       const live = new Set((await listRecs(account)).map((r) => r.file))
+      if (unreadable !== before) continue // a torn json may point at one of these files: delete nothing in this account
       for (const name of names) {
         if (name.endsWith('.json') || live.has(name)) continue
         await ignoreMissing(fs.rm(path.join(recsDir(account), name)))
@@ -162,6 +191,7 @@ export async function createHostedStore(cfg) {
 
   /** Sums every recording (startup, and every 10 minutes so an external sweep is noticed). */
   async function rescan() {
+    unreadable = 0
     let sum = 0
     for (const account of await fs.readdir(accountsDir)) {
       for (const rec of await listRecs(account)) sum += rec.bytes
@@ -211,6 +241,7 @@ export async function createHostedStore(cfg) {
       reservedBytes = Math.max(0, reservedBytes - n)
     },
     totalBytes: () => totalBytes,
+    unreadable: () => unreadable,
     accountsDir,
   }
 }
@@ -247,7 +278,12 @@ export async function sweepHosted(dir, { retentionDays = 90, dryRun = true, now 
         remaining += 1
         continue
       }
-      const meta = await readJson(jsonFile)
+      const meta = await readRecJson(jsonFile)
+      if (meta === undefined) {
+        remaining += 1 // torn json: its file is unknown, so leave the account alone (an operator looks at it)
+        report.unreadable = (report.unreadable ?? 0) + 1
+        continue
+      }
       report.recordings.push({ account, id: name.slice(0, -5), bytes: meta?.bytes ?? 0, idleDays: Math.floor((now - stat.mtimeMs) / 86400000) })
       report.freedBytes += meta?.bytes ?? 0
       if (!dryRun) {

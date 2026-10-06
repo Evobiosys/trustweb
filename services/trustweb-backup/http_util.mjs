@@ -134,8 +134,10 @@ export function streamToFile(req, file, { maxBytes, idleMs = 30000 }) {
       settled = true
       detach()
       req.pause()
+      // Settle only once the file is closed: destroy() during a pending open still creates the file afterwards,
+      // and the caller's rm would run first and leave an empty spool file behind.
+      out.once('close', () => reject(err))
       out.destroy()
-      reject(err)
     }
     const arm = () => {
       clearTimeout(idle)

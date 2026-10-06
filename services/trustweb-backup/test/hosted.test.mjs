@@ -452,8 +452,8 @@ test('review: version files no json points at (a crash between rename and pointe
 })
 
 test('review: a GET that races a replace serves the new version instead of a spurious 404', async () => {
-  // maxConcurrentUploads raised: the slot of the setup PUT is released just after its 204 reaches the client
-  await withServer(P, { maxConcurrentUploads: 20 }, async () => {
+  // default slots: the setup PUT frees its upload slot before its 204 goes out (it used to free it just after)
+  await withServer(P, {}, async () => {
     await put(P, A, R1, T, 60, Buffer.alloc(200000, 1))
     const results = await Promise.all(
       Array.from({ length: 12 }, (_, i) =>
@@ -484,4 +484,43 @@ test('review: the shared limiter and the Origin guard answer the new routes in J
     assert.equal(o.json.error, 'forbidden_origin')
     assert.equal((await call(P, { url: '/backup/health', headers: { Origin: 'https://evil.example.com' } })).text, 'forbidden origin')
   })
+})
+
+test('review: a truncated hosted json (power loss) never takes /backup down at restart, and its ciphertext is not deleted', async () => {
+  const keep = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'twcorrupt-'))
+  const opts = { hostedDir: path.join(keep, 'hosted'), dir: path.join(keep, 'backup') }
+  const PACK = 'f'.repeat(64)
+  try {
+    await withServer(P, opts, async () => {
+      assert.equal((await put(P, A, R1, T, 60, cipher('keep me'))).status, 204)
+      assert.equal((await put(P, A, R2, T, 60, cipher('fine'))).status, 204)
+      assert.equal((await call(P, { method: 'PUT', url: `/backup/${PACK}`, headers: { 'X-Write-Token': T }, body: 'backup bytes' })).status, 204)
+    })
+    const recs = path.join(opts.hostedDir, 'accounts', A, 'recs')
+    await fs.writeFile(path.join(recs, `${R1}.json`), '') // zero-length after a crash
+    const binsBefore = (await fs.readdir(recs)).filter((n) => n.endsWith('.bin')).sort()
+    await withServer(P, opts, async () => {
+      assert.equal((await call(P, { url: '/backup/health' })).text, 'ok')
+      assert.equal((await call(P, { url: `/backup/${PACK}` })).text, 'backup bytes')
+      assert.equal((await getRec(P, A, R2, { 'X-Write-Token': T })).text, 'fine')
+      assert.deepEqual((await fs.readdir(recs)).filter((n) => n.endsWith('.bin')).sort(), binsBefore) // nothing deleted
+    })
+  } finally {
+    await fs.rm(keep, { recursive: true, force: true })
+  }
+})
+
+test('review: if the hosted store cannot start at all, /backup still serves and hosting answers hosted:false', async () => {
+  const keep = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'twbroken-'))
+  try {
+    const notADir = path.join(keep, 'file')
+    await fs.writeFile(notADir, 'x')
+    await withServer(P, { hostedDir: path.join(notADir, 'hosted'), dir: path.join(keep, 'backup') }, async ({ lines }) => {
+      assert.equal((await call(P, { url: '/backup/health' })).text, 'ok')
+      assert.equal((await call(P, { url: '/hosted/status' })).json.hosted, false)
+      assert.ok(lines.includes('hosted store unavailable: hosting off'))
+    })
+  } finally {
+    await fs.rm(keep, { recursive: true, force: true })
+  }
 })

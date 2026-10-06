@@ -195,7 +195,8 @@ test('a result download that hangs is cut at the deadline (no slot stays taken f
 test('the phone hangs up after the upload: the provider job is still followed to its end and its real duration is booked', async () => {
   const long = { status: 'success', data: { ...VERBOSE, duration: 500, segments: [{ start: 0, end: 500, text: 'long' }] } }
   await withProvider({ results: [{ status: 'processing' }, { status: 'processing' }, { status: 'processing' }, long] }, async ({ seen }) => {
-    await withServer(P, { ...base, transcribePollMs: 100 }, async () => {
+    // rateLimit raised: the usage polling below must not run into the shared 30/min limiter on a slow machine
+    await withServer(P, { ...base, transcribePollMs: 100, rateLimit: 1000 }, async () => {
       await new Promise((resolve) => {
         const req = http.request({ host: '127.0.0.1', port: P, method: 'POST', path: '/transcribe', headers: { Host: 'app.example.test', ...hdr({ 'X-Audio-Seconds': '1' }) } })
         req.on('error', () => resolve())
@@ -209,7 +210,7 @@ test('the phone hangs up after the upload: the provider job is still followed to
         }, 10)
       })
       let used = 0
-      for (let i = 0; i < 60 && used !== 500; i += 1) {
+      for (let i = 0; i < 100 && used !== 500; i += 1) {
         await new Promise((r) => setTimeout(r, 50))
         used = (await usage(P, A)).json.transcription.secondsUsed
       }

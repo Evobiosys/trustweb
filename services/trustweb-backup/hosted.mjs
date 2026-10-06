@@ -96,13 +96,13 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
     const release = uploads.tryAcquire(ip)
     if (release === null) return refuse(req, res, 429, 'busy', { retryAfter: 5 }, { 'Retry-After': '5' })
     try {
-      return await withLock(`hosted:${account}`, () => putLocked(req, res, { account, rid, token, seconds, readHash, ip }))
+      return await withLock(`hosted:${account}`, () => putLocked(req, res, { account, rid, token, seconds, readHash, ip, releaseUpload: release }))
     } finally {
       release()
     }
   }
 
-  async function putLocked(req, res, { account, rid, token, seconds, readHash, ip }) {
+  async function putLocked(req, res, { account, rid, token, seconds, readHash, ip, releaseUpload }) {
     const acct = await store.loadAccount(account)
     if (acct !== null && !tokenMatches(acct.token, token)) return refuse(req, res, 403, 'forbidden_token')
     if (acct === null && !creations.fits(ip, 1)) {
@@ -138,6 +138,7 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
         creations.add(ip, 1)
       }
       await store.commitRecording(account, { id: rid, tmpFile: tmp, seconds, bytes: streamed.bytes, etag: streamed.etag, readHash })
+      releaseUpload() // before the 204 goes out: a client that starts its next upload at once must find the slot free
       const after = usageOf([...recs.filter((r) => r.id !== rid), { id: rid, seconds, bytes: streamed.bytes }])
       res.writeHead(204, {
         'Cache-Control': 'no-store',
