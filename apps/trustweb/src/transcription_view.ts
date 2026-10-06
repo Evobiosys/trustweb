@@ -97,13 +97,35 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
 
   function start(m: PastMeeting, given?: readonly JobTake[]): void {
     if (!canStartJob(m)) return
+    const release = holdScreen()
     const job = runServerJob(m, () => takesFor(m, given), { account: h.ctx.account, transcribe, save: h.save, sleep, now: Date.now })
     // runServerJob marked the meeting running before its first await: show it at once.
     h.onJobChange(m)
     void job.then(async (state) => {
+      release()
       h.onJobChange(m)
       if (state === ServerJobState.Done) await flush(m)
     })
+  }
+
+  /**
+   * The answer of a call that is out is lost when the phone locks or the app
+   * closes (and may still be charged), so the screen stays on while one runs,
+   * taken again when the page comes back; the copy asks to keep TrustWeb open.
+   */
+  function holdScreen(): () => void {
+    let lock: WakeLockSentinel | null = null
+    let held = true
+    const take = (): void => { void navigator.wakeLock?.request('screen').then((l) => { if (held) lock = l; else void l.release() }).catch(() => {}) }
+    const onVisible = (): void => { if (document.visibilityState === 'visible' && held) take() }
+    take()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      held = false
+      document.removeEventListener('visibilitychange', onVisible)
+      void lock?.release().catch(() => {})
+      lock = null
+    }
   }
 
   function failureText(code: string | undefined): string {

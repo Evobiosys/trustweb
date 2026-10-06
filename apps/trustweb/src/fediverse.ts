@@ -104,10 +104,15 @@ export function htmlToText(html: string): string {
 
 async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
   let res: Response
+  // A plain controller, not AbortSignal.timeout(): that one is missing on iOS before 16.
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS)
   try {
-    res = await f(url, { headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+    res = await f(url, { headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl.signal })
   } catch {
     return FetchProblem.Unreachable
+  } finally {
+    clearTimeout(timer)
   }
   if (res.status === 429) return FetchProblem.RateLimited
   if (res.status === 404) return FetchProblem.NotFound

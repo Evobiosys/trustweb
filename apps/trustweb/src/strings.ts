@@ -706,7 +706,7 @@ export const S = {
   setServerOff: 'Transcription on the Swiss server is not switched on yet. Until it is, "The Swiss server" transcribes on this device where it can, else later.',
   setServerUnknown: 'The Swiss server did not answer just now.',
   jobStart: 'Transcribe on the Swiss server',
-  jobRunning: 'Transcribing on the Swiss server... This can take a few minutes; you can leave this screen.',
+  jobRunning: 'Transcribing on the Swiss server... This can take a few minutes: keep TrustWeb open until it is done (the screen stays on). You can go to other screens in TrustWeb.',
   jobDone: 'Transcribed on the Swiss server.',
   jobTryAgain: 'Try again',
   jobTryAgainCharged: 'The last try may have been charged already. Send the recording again?',
@@ -721,7 +721,7 @@ export const S = {
   jobNoAudio: 'The recording is no longer kept on this phone, so there is nothing to send.',
   jobFailed: 'The Swiss server could not transcribe it. Nothing was charged: try again.',
   fairPrice: 'Tell us what would be fair',
-  reviewServerPending: 'Transcribing on the Swiss server... The lines from the transcript appear here when it is done; you can also save now.',
+  reviewServerPending: 'Transcribing on the Swiss server... Keep TrustWeb open until it is done. The lines from the transcript appear here; you can also save now.',
 
   // The shared meeting link that fills in later (wave 1733 round B, item 3).
   shareSentPending: (name: string) => `Sent to ${name}. The transcript follows by itself when the Swiss server is done.`,
