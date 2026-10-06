@@ -596,4 +596,10 @@ export const S = {
   chHint: 'Kept on this phone only: never shared, never matched. Opens the app if it is installed. Delta Chat opens directly from an invite link; an email address opens your mail app.',
   back: 'Back',
   close: 'Close',
+
+  // Settings > About (owner 2026-10-06): TrustWeb as part of EvoBioSys, the website's pages.
+  aboutGroup: 'About',
+  aboutBy: 'TrustWeb, by ',
+  aboutEvoBioSys: 'EvoBioSys',
+  aboutPage: { faq: 'FAQ', feedback: 'Feedback', privacy: 'Privacy', imprint: 'Imprint' } as Record<string, string>,
 } as const

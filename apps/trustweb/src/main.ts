@@ -43,6 +43,7 @@ import { meetingToNoteText, meetingToText } from './sensemeet'
 import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
 import type { BackupKey } from './backup'
 import { RecordOrigin, recordModeFor } from './record_origin'
+import { aboutGroup } from './about'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -2949,6 +2950,7 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
+    ...aboutGroup(),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
       onclick: () => { if (confirm(S.resetConfirm)) { dropRecording(); clearState(persona, storeCtx); location.reload() } },

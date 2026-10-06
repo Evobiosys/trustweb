@@ -567,3 +567,11 @@ textarea.field{resize:vertical; line-height:1.5}
 .demo-chip{background:var(--tint-teal); color:var(--teal); font-size:10.5px; margin-right:4px}
 .found-card{margin:6px 0 10px}
 .found-card .q{font-weight:700; margin-bottom:6px}
+
+/* Settings > About (wave 1733): TrustWeb, by EvoBioSys, and the website's pages. */
+.about-by{margin:4px 0 8px}
+.about-org{color:var(--violet); font-weight:700; text-decoration:none}
+.about-org:hover,.about-link:hover{text-decoration:underline}
+.about-links{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px}
+.about-link{display:inline-block; padding:7px 13px; border-radius:999px; background:var(--mist); color:var(--ink); font-size:13px; font-weight:600; text-decoration:none}
+.about-link:focus-visible,.about-org:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
