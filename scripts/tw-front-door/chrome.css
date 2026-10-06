@@ -1,0 +1,66 @@
+
+  /* ---------------- TrustWeb site chrome (header, buttons, footer) ----------------
+     Shared by index.html and every subpage, injected by tw_site.py. Never write
+     the closing style tag's own text in this comment (see style-additions.css). */
+
+  /* The two buttons. Self-contained on purpose: explicit colours, radius and
+     font, no site variables, so the app's demo header can copy this block
+     verbatim and the two Install buttons look the same. */
+  .tw-btn{box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center;
+    height:38px; padding:0 18px; border-radius:999px; border:1.5px solid #33456b;
+    font:600 14px/1 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    text-decoration:none; white-space:nowrap; cursor:pointer;
+    transition:background-color .15s, color .15s, border-color .15s}
+  .tw-btn-demo{background:transparent; color:#33456b}
+  .tw-btn-demo:hover{background:#dde2ec}
+  .tw-btn-install{background:#33456b; color:#f4f6fa}
+  .tw-btn-install:hover{background:#27365a; border-color:#27365a}
+  .tw-btn:focus-visible{outline:2px solid #33456b; outline-offset:3px}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .tw-btn{border-color:#8fa7d8}
+    :root:not([data-theme="light"]) .tw-btn-demo{color:#8fa7d8}
+    :root:not([data-theme="light"]) .tw-btn-demo:hover{background:#2a3450}
+    :root:not([data-theme="light"]) .tw-btn-install{background:#8fa7d8; color:#111726}
+    :root:not([data-theme="light"]) .tw-btn-install:hover{background:#a6b9e3; border-color:#a6b9e3}
+    :root:not([data-theme="light"]) .tw-btn:focus-visible{outline-color:#8fa7d8}
+  }
+
+  /* top bar: brand left, [Demo] [Install] right, where people look for sign in */
+  .sitebar{position:relative; z-index:30; border-bottom:1px solid var(--line); background:var(--paper)}
+  .sitebar-in{padding:10px 28px; display:flex;
+    align-items:center; justify-content:space-between; gap:12px}
+  .sitebar-brand{font:600 1.15rem var(--serif); color:var(--ink); text-decoration:none; letter-spacing:.01em}
+  .sitebar-actions{display:flex; align-items:center; gap:8px; flex:none}
+  .draftstrip{background:var(--gold-soft); color:var(--ink); border-bottom:1px solid var(--line);
+    text-align:center; padding:6px 20px; font:600 .78rem var(--mono); letter-spacing:.04em}
+  @media (max-width:480px){
+    .sitebar-in{padding:8px 16px}
+    .tw-btn{padding:0 13px}
+  }
+
+  /* footer: calm, wide, dark, columns of plain links under small grey headings */
+  .sitefooter{--sf-bg:#1b1e2a; --sf-ink:#e9e3d2; --sf-dim:#9b98a8; --sf-line:#2f3446;
+    margin-top:64px; padding:0; border-top:0; background:var(--sf-bg); color:var(--sf-ink);
+    font-size:.9rem; line-height:1.5}
+  .sitefooter-in{max-width:1100px; margin:0 auto; padding:44px 20px 36px}
+  .sf-cols{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)) minmax(0,1.35fr); gap:32px 28px}
+  .sf-h{margin:0 0 14px; font:600 .72rem/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--sf-dim)}
+  .sf-col ul{list-style:none; margin:0; padding:0}
+  .sf-col li{margin:0 0 9px}
+  .sitefooter a{color:var(--sf-ink); text-decoration:none; border-bottom:1px solid transparent}
+  .sitefooter a:hover, .sitefooter a:focus-visible{border-bottom-color:var(--sf-ink)}
+  .sitefooter a:focus-visible{outline:2px solid var(--sf-ink); outline-offset:3px}
+  .sf-soon{color:var(--sf-dim); font-size:.78rem}
+  .sf-brand{align-self:start}
+  .sf-brandlink{display:inline-block; font:600 1.05rem var(--serif); border-bottom:1px solid var(--sf-dim)}
+  .sf-brand p{margin:10px 0 0; color:var(--sf-dim); font-size:.84rem}
+  .sf-fine{margin:34px 0 0; padding-top:18px; border-top:1px solid var(--sf-line); color:var(--sf-dim); font-size:.8rem}
+  @media (max-width:900px){
+    .sf-cols{grid-template-columns:repeat(2, minmax(0,1fr))}
+    .sf-brand{grid-column:1 / -1}
+  }
+
+  /* "draft, not in force" banner on terms.html */
+  .banner{margin:0 0 22px; padding:14px 18px; border-radius:var(--radius-sm);
+    background:var(--cochineal-soft); border:1px solid var(--cochineal); color:var(--ink)}
+  .banner b{color:var(--cochineal)}
