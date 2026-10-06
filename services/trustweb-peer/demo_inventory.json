@@ -1,12 +1,12 @@
 {
-  "_note": "Fictional demo content for the demo inventory peer on the Swiss server. No real person, no real address. audience: fof = friends of friends (shared with every acquaintance), friends = friends and close friends only (never shared by this peer, every peer is an acquaintance), me = only me (never shared).",
+  "_note": "Fictional demo content for the demo front door on the Swiss server. No real person, no real address. audience: fof = friends of friends (every asker of this peer is an acquaintance), friends = friends and close friends only, me = only me. A line is shared ONLY when it carries a preset (a permission the owner set in advance: by, at, note); the asker sees that mark next to the line. Lines without a preset are held and never shared by this service; the owner's phone decides them live when it is bound.",
   "items": [
-    { "text": "Motorbike (125cc), can lend it for a weekend", "audience": "fof" },
-    { "text": "Spare desk in a coworking space, Fridays", "audience": "fof" },
-    { "text": "Projector and screen for a talk, Vienna", "audience": "fof" },
-    { "text": "Camping tent for four, from June", "audience": "fof" },
+    { "text": "Motorbike (125cc), can lend it for a weekend", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-06", "note": "demo content" } },
+    { "text": "Spare desk in a coworking space, Fridays", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-06", "note": "demo content" } },
+    { "text": "Projector and screen for a talk, Vienna", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-06", "note": "demo content" } },
+    { "text": "Camping tent for four, from June", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-06", "note": "demo content" } },
     { "text": "Introductions to people hiring in climate tech", "audience": "fof" },
-    { "text": "Guest bed for a visiting friend, two nights", "audience": "friends" },
+    { "text": "Guest bed for a visiting friend, two nights", "audience": "friends", "preset": { "by": "Jakob", "at": "2026-10-06", "note": "demo content" } },
     { "text": "Spare room in Vienna, for visiting friends", "audience": "me" }
   ]
 }

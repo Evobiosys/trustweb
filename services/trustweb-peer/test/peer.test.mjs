@@ -1,19 +1,33 @@
 /**
- * trustweb-peer, the parts that need no relay: inventory loading (malformed
- * lines skipped), the grant list, the per-asker rate limit, and a full peer
- * started against an in-memory RelayServer: it comes up, writes its card,
- * and a second instance in the same state dir keeps the same identity.
+ * trustweb-peer tests. The parts that need no relay: inventory loading (a
+ * line without a preset is held, never matchable), the grant list, the
+ * per-asker rate limit. Then the whole peer against an in-memory RelayServer
+ * with two fake phones built from the same apps/demo modules a real phone
+ * uses: the OWNER's phone (claims the peer, receives forwarded asks, decides)
+ * and an ASKER's phone (opens the link, asks, reads the sealed answer).
+ *
+ * The rule under test, the owner's (2026-10-06): "not the server answers
+ * asks, I do". A line goes out only when the owner said yes live (forwarded
+ * ask) or in advance (preset, visibly marked). Nothing else answers.
  *
  * Run from the repo root (tsx and vitest come with the workspace):
  *   apps/demo/node_modules/.bin/vitest run --config services/trustweb-peer/test/vitest.config.mjs --root services/trustweb-peer
  */
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { request } from 'node:http'
-import { AskRateLimit, PeerPolicy, loadGrants, loadInventory, startPeer } from '../peer.ts'
+import { AskRateLimit, PeerPolicy, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
+import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
+import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
+import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
+import { decodeFromQr, encodeForQr } from '../../../apps/demo/src/wire.ts'
+import { buildConnectAck } from '../../../apps/demo/src/connect_link.ts'
+import { interpret } from '../../../apps/demo/src/gate.ts'
+import { sealRelayAnswer } from '../../../apps/demo/src/answer_key.ts'
 
 const HOUR = 3_600_000
+const WINDOW_MS = 150
 
 function tmp() { return mkdtempSync(path.join(tmpdir(), 'twpeer-')) }
 /** fetch() silently drops a Host header, so the local-service checks go through node:http. */
@@ -22,29 +36,114 @@ function statusWith(port, headers) {
     request({ host: '127.0.0.1', port, path: '/health', headers }, (res) => { res.resume(); resolve(res.statusCode) }).on('error', reject).end()
   })
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+async function until(fn, ms = 5000) {
+  const t0 = Date.now()
+  while (!fn()) {
+    if (Date.now() - t0 > ms) throw new Error('timed out waiting')
+    await sleep(25)
+  }
+}
+
+/**
+ * A phone, as far as the wire can tell: identity, relay channel, pair keys.
+ * `decide(ask)` is what the person at it does with an incoming ask; it
+ * returns the SharedPayload items to share, or null for decline / no match.
+ */
+async function phone(relayOrigin, name, decide) {
+  const identity = createIdentity(relayOrigin + '/relay')
+  const me = { id: randomId(12), displayName: name }
+  const channel = createRelayChannel({ relayOrigin })
+  const keys = new Map()
+  const key = (did) => {
+    let k = keys.get(did)
+    if (!k) { k = deriveEcdhPairKey(ecdhSharedSecret(identity, did)); keys.set(did, k) }
+    return k
+  }
+  const awaiting = new Map()
+  const asks = []
+  channel.onRawWire(() => true)
+  channel.onEnvelope(async (fromDid) => key(fromDid), (env, fromDid) => {
+    if (env.t === 'answer') { awaiting.get(env.qid)?.(env); return }
+    if (env.t !== 'query') return
+    asks.push(env)
+    void (async () => {
+      const items = decide ? await decide(env) : null
+      const out = await sealRelayAnswer(env.qid, env.templateId, items ? { from: name, templateId: env.templateId, items } : null, { key: await key(fromDid), blocked: false })
+      await channel.send(fromDid, out, await key(fromDid))
+    })()
+  })
+  await channel.connect(identity)
+  return {
+    did: identity.did,
+    asks,
+    /** The scanning side of the one-scan ceremony: tell the peer who we are. */
+    connectTo: (did) => channel.sendRaw(did, encodeForQr(buildConnectAck(me, identity))),
+    /** Ask one peer; resolves with the decoded answer or null on timeout. */
+    ask: async (did, text, timeoutMs = 4000) => {
+      const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text }
+      const answered = new Promise((resolve) => {
+        const timer = setTimeout(() => { awaiting.delete(q.qid); resolve(null) }, timeoutMs)
+        awaiting.set(q.qid, (env) => { clearTimeout(timer); awaiting.delete(q.qid); resolve(env) })
+      })
+      await channel.send(did, q, await key(did))
+      const env = await answered
+      return env ? interpret(env, await key(did)) : null
+    },
+    close: () => channel.close(),
+  }
+}
 
 describe('loadInventory', () => {
-  it('reads text + audience and skips malformed lines', () => {
+  it('keeps only lines with a well-formed preset; holds the rest; skips malformed lines', () => {
     const dir = tmp()
     const f = path.join(dir, 'inv.json')
     writeFileSync(f, JSON.stringify({ items: [
-      { text: 'Motorbike, can lend', audience: 'fof' },
-      { text: '', audience: 'fof' },
-      { text: 'Secret', audience: 'everyone' },
-      { text: 'Guest bed', audience: 'friends' },
+      { text: 'Motorbike, can lend', audience: 'fof', preset: { by: 'Jakob', at: '2026-10-06', note: 'demo' } },
+      { text: 'Projector', audience: 'fof' },
+      { text: 'Tent', audience: 'fof', preset: { by: '', at: '2026-10-06' } },
+      { text: 'Desk', audience: 'fof', preset: { by: 'Jakob', at: 'yesterday-ish' } },
+      { text: '', audience: 'fof', preset: { by: 'Jakob', at: '2026-10-06' } },
+      { text: 'Secret', audience: 'everyone', preset: { by: 'Jakob', at: '2026-10-06' } },
+      { text: 'Guest bed', audience: 'friends', preset: { by: 'Jakob', at: '2026-10-06T10:00:00Z' } },
       'junk',
     ] }))
-    const items = loadInventory(f, 1000)
-    expect(items.map((i) => i.text)).toEqual(['Motorbike, can lend', 'Guest bed'])
-    expect(items.every((i) => i.included && i.createdAt === 1000 && i.id.length === 8)).toBe(true)
+    const inv = loadInventory(f, 1000)
+    expect(inv.preset.map((l) => l.item.text)).toEqual(['Motorbike, can lend', 'Guest bed'])
+    expect(inv.held).toBe(3)
+    expect(inv.preset.every((l) => l.item.included && l.item.createdAt === 1000 && l.item.id.length === 8)).toBe(true)
+    expect(inv.preset[0].preset).toEqual({ by: 'Jakob', at: '2026-10-06', note: 'demo' })
     rmSync(dir, { recursive: true })
   })
   it('is empty when the file has no items array', () => {
     const dir = tmp()
     const f = path.join(dir, 'inv.json')
     writeFileSync(f, '{"nope":1}')
-    expect(loadInventory(f, 1)).toEqual([])
+    expect(loadInventory(f, 1)).toEqual({ preset: [], held: 0 })
     rmSync(dir, { recursive: true })
+  })
+  it('the shipped demo inventory has presets on its shareable lines and holds the rest', () => {
+    const inv = loadInventory(path.join(import.meta.dirname, '..', 'demo_inventory.json'), 1)
+    expect(inv.preset.length).toBe(5)
+    expect(inv.held).toBe(2)
+    expect(inv.preset.every((l) => l.preset.note === 'demo content')).toBe(true)
+  })
+})
+
+describe('parsePreset / presetContext', () => {
+  it('needs by and a parseable at; bounds the note; renders the visible mark', () => {
+    expect(parsePreset(null)).toBeNull()
+    expect(parsePreset({ by: 'Jakob' })).toBeNull()
+    expect(parsePreset({ by: 'Jakob', at: '2026-10-06', note: 'x'.repeat(200) }).note.length).toBe(120)
+    expect(presetContext({ by: 'Jakob', at: '2026-10-06T09:00:00Z' })).toBe('Allowed in advance by Jakob (2026-10-06)')
+    expect(presetContext({ by: 'Jakob', at: '2026-10-06', note: 'demo content' })).toBe('Allowed in advance by Jakob (2026-10-06): demo content')
+  })
+})
+
+describe('forwardedText', () => {
+  it('names the asker first and stays within the free-text bound', () => {
+    expect(forwardedText('Anna-demo', 'motorbike?')).toBe('Anna-demo: motorbike?')
+    expect(forwardedText('Anna-demo', 'x'.repeat(300)).length).toBe(200)
   })
 })
 
@@ -52,8 +151,8 @@ describe('loadGrants', () => {
   it('is empty without a grants file, lower-cases names otherwise', () => {
     const dir = tmp()
     expect(loadGrants(dir).size).toBe(0)
-    writeFileSync(path.join(dir, 'grants.json'), JSON.stringify({ names: ['Anna-test', 7, 'BEN-test'] }))
-    expect([...loadGrants(dir)]).toEqual(['anna-test', 'ben-test'])
+    writeFileSync(path.join(dir, 'grants.json'), JSON.stringify({ names: ['Anna-demo', 7, 'BEN-demo'] }))
+    expect([...loadGrants(dir)]).toEqual(['anna-demo', 'ben-demo'])
     rmSync(dir, { recursive: true })
   })
 })
@@ -69,17 +168,29 @@ describe('AskRateLimit', () => {
   })
 })
 
-describe('startPeer against an in-memory relay', () => {
-  it('comes up, writes its card, keeps its identity across restarts, serves health on loopback only', async () => {
+describe('the peer against an in-memory relay', () => {
+  let relay, relayOrigin
+  beforeAll(async () => {
     const { RelayServer } = await import('../../../packages/transport/src/relay_server.ts')
     const { InMemoryRelayQueueStore } = await import('../../../packages/transport/src/relay_queue_store.ts')
-    const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
+    relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
     const { port } = await relay.listen(0, '127.0.0.1')
+    relayOrigin = `http://127.0.0.1:${port}`
+  })
+  afterAll(async () => { await relay.close() })
+
+  function inventoryFile(dir, items) {
+    const f = path.join(dir, 'inv.json')
+    writeFileSync(f, JSON.stringify({ items }))
+    return f
+  }
+  const PRESET = { by: 'Jakob', at: '2026-10-06', note: 'demo content' }
+
+  it('comes up, writes its card, keeps its identity across restarts, serves health on loopback only', async () => {
     const dir = tmp()
-    const inv = path.join(dir, 'inv.json')
-    writeFileSync(inv, JSON.stringify({ items: [{ text: 'Motorbike, can lend', audience: 'fof' }] }))
+    const inv = inventoryFile(dir, [{ text: 'Motorbike, can lend', audience: 'fof', preset: PRESET }, { text: 'Projector', audience: 'fof' }])
     const lines = []
-    const opts = { stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin: `http://127.0.0.1:${port}`, name: 'Demo inventory', policy: PeerPolicy.Open, healthPort: 0, log: (l) => lines.push(l) }
+    const opts = { stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, name: 'Demo inventory', policy: PeerPolicy.Open, healthPort: 0, log: (l) => lines.push(l) }
     const p1 = await startPeer({ ...opts, healthPort: 18961 })
     expect(p1.card.did.startsWith('did:peer:2')).toBe(true)
     expect(p1.card.name).toBe('Demo inventory')
@@ -87,19 +198,192 @@ describe('startPeer against an in-memory relay', () => {
     expect(card).toEqual(p1.card)
     expect(await (await fetch('http://127.0.0.1:18961/health')).text()).toBe('ok')
     expect((await fetch('http://127.0.0.1:18961/card')).status).toBe(200)
+    const st = await (await fetch('http://127.0.0.1:18961/status')).json()
+    expect(st).toMatchObject({ peers: 0, owner: false, forward: false, claimOpen: false, presetLines: 1, heldLines: 1 })
     expect(await statusWith(18961, { Host: 'evil.example.com' })).toBe(421)
     expect(await statusWith(18961, { Origin: 'https://evil.example.com' })).toBe(421)
     expect(await statusWith(18961, {})).toBe(200)
-    for (let i = 0; i < 50 && p1.status() !== 'connected'; i++) await new Promise((r) => setTimeout(r, 100))
-    expect(p1.status()).toBe('connected')
+    await until(() => p1.status().relay === 'connected')
     await p1.stop()
     const p2 = await startPeer(opts)
     expect(p2.card.did).toBe(p1.card.did)
     expect(p2.card.id).toBe(p1.card.id)
     await p2.stop()
-    expect(lines.some((l) => /up with 1 items, policy open/.test(l))).toBe(true)
-    expect(lines.join('\n')).not.toMatch(/Motorbike/)
-    await relay.close()
+    expect(lines.some((l) => /up with 1 preset lines \(1 held, never shared\), policy open/.test(l))).toBe(true)
+    expect(lines.join('\n')).not.toMatch(/Motorbike|Projector/)
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('without an owner: shares only preset lines, visibly marked; a held line never goes out', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [
+      { text: 'Motorbike (125cc), can lend it for a weekend', audience: 'fof', preset: PRESET },
+      { text: 'Projector and screen for a talk', audience: 'fof' },
+    ])
+    const lines = []
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS, log: (l) => lines.push(l) })
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const t0 = Date.now()
+    const a1 = await anna.ask(peer.card.did, 'can someone lend me a motorbike for the weekend')
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(WINDOW_MS)
+    expect(a1.outcome).toBe('shared')
+    expect(a1.shared.from).toBe('Demo inventory')
+    expect(a1.shared.items).toHaveLength(1)
+    expect(a1.shared.items[0].text).toBe('Motorbike (125cc), can lend it for a weekend')
+    expect(a1.shared.items[0].context).toBe('Allowed in advance by Jakob (2026-10-06): demo content')
+    const a2 = await anna.ask(peer.card.did, 'does anyone have a projector and screen for a talk')
+    expect(a2.outcome).toBe('nothing')
+    expect(lines.some((l) => /ask preset=1 owner=not-asked -> shared \(1\)/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask preset=0 owner=not-asked -> no-match \(0\)/.test(l))).toBe(true)
+    expect(lines.join('\n')).not.toMatch(/motorbike|projector|Anna/i)
+    anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('claim: the first phone in the window becomes the owner, the window closes, later phones are askers', async () => {
+    const dir = tmp()
+    const stateDir = path.join(dir, 'state')
+    const inv = inventoryFile(dir, [])
+    const lines = []
+    const peer = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, healthPort: 18962, claim: true, answerWindowMs: WINDOW_MS, log: (l) => lines.push(l) })
+    expect(peer.status().claimOpen).toBe(true)
+    const jakob = await phone(relayOrigin, 'Jakob', null)
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    expect(peer.status()).toMatchObject({ owner: true, forward: true, claimOpen: false, peers: 0 })
+    expect(existsSync(path.join(stateDir, 'claim-open'))).toBe(false)
+    const ben = await phone(relayOrigin, 'Ben-demo', null)
+    await ben.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    expect(peer.status().owner).toBe(true)
+    // the owner's DID is in the state file (0600) and nowhere in the log
+    expect(readFileSync(path.join(stateDir, 'state.json'), 'utf8')).toContain(jakob.did)
+    expect(lines.join('\n')).not.toContain(jakob.did)
+    expect(lines.some((l) => /owner bound; claim window closed/.test(l))).toBe(true)
+    await peer.stop()
+    // the claim-open FILE opens the window too, and only while no owner is bound
+    writeFileSync(path.join(stateDir, 'claim-open'), '')
+    const again = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS, log: (l) => lines.push(l) })
+    expect(again.status().owner).toBe(true)
+    expect(again.status().claimOpen).toBe(false)
+    await again.stop()
+    jakob.close(); ben.close()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('with an owner: the ask is forwarded to the owner\'s phone; the owner\'s yes is relayed, a no is nothing, offline is nothing', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Camping tent for four', audience: 'fof', preset: PRESET }])
+    const lines = []
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, answerWindowMs: WINDOW_MS, forwardWaitMs: 1500, log: (l) => lines.push(l) })
+    let decision = (q) => [{ text: 'Projector and screen, Vienna', when: 'early October', context: 'What I have' }]
+    const jakob = await phone(relayOrigin, 'Jakob', (q) => decision(q))
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+
+    // 1. the owner says yes: the asker gets what the OWNER's phone shared, from the peer
+    const a1 = await anna.ask(peer.card.did, 'anyone with a projector for a talk')
+    expect(jakob.asks).toHaveLength(1)
+    expect(jakob.asks[0]).toMatchObject({ t: 'query', relayed: true, freeText: 'Anna-demo: anyone with a projector for a talk' })
+    expect(jakob.asks[0].from.displayName).toBe('Demo inventory')
+    expect(a1.outcome).toBe('shared')
+    expect(a1.shared.items).toEqual([{ text: 'Projector and screen, Vienna', when: 'early October', context: 'What I have' }])
+    expect(lines.some((l) => /ask preset=0 owner=shared\(1\) -> shared \(1\)/.test(l))).toBe(true)
+
+    // 2. the owner says no (or has nothing): nothing, the same bytes as a no-match
+    decision = () => null
+    const a2 = await anna.ask(peer.card.did, 'anyone with a projector for a talk, second try')
+    expect(jakob.asks).toHaveLength(2)
+    expect(a2.outcome).toBe('nothing')
+    expect(lines.some((l) => /owner=nothing -> no-match/.test(l))).toBe(true)
+
+    // 3. a preset line AND the owner's yes: both, owner first, at most three
+    decision = () => [{ text: 'A second tent', when: 'early October', context: 'What I have' }]
+    const a3 = await anna.ask(peer.card.did, 'camping tent for four people')
+    expect(a3.outcome).toBe('shared')
+    expect(a3.shared.items.map((i) => i.text)).toEqual(['A second tent', 'Camping tent for four'])
+    expect(a3.shared.items[1].context).toBe('Allowed in advance by Jakob (2026-10-06): demo content')
+
+    // 4. the owner's phone is off: after forwardWaitMs the asker gets the preset hits only
+    jakob.close()
+    const t0 = Date.now()
+    const a4 = await anna.ask(peer.card.did, 'camping tent for four people again')
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1500)
+    expect(a4.outcome).toBe('shared')
+    expect(a4.shared.items.map((i) => i.text)).toEqual(['Camping tent for four'])
+    expect(lines.some((l) => /owner=timeout -> shared \(1\)/.test(l))).toBe(true)
+    const a5 = await anna.ask(peer.card.did, 'anyone with a projector, phone off')
+    expect(a5.outcome).toBe('nothing')
+    expect(lines.some((l) => /preset=0 owner=timeout -> no-match/.test(l))).toBe(true)
+
+    expect(lines.join('\n')).not.toMatch(/projector|tent|Anna/i)
+    anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 40_000)
+
+  it('the owner asking his own front door gets preset lines only and is never forwarded to himself', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Camping tent for four', audience: 'fof', preset: PRESET }])
+    const lines = []
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, answerWindowMs: WINDOW_MS, forwardWaitMs: 500, log: (l) => lines.push(l) })
+    const jakob = await phone(relayOrigin, 'Jakob', () => { throw new Error('must not be asked') })
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    const a = await jakob.ask(peer.card.did, 'camping tent for four')
+    expect(a.outcome).toBe('shared')
+    expect(jakob.asks).toHaveLength(0)
+    expect(lines.some((l) => /ask preset=1 owner=not-asked -> shared \(1\)/.test(l))).toBe(true)
+    jakob.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('forward off: a bound owner is left alone, preset lines still answer', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Camping tent for four', audience: 'fof', preset: PRESET }])
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, forward: false, answerWindowMs: WINDOW_MS })
+    const jakob = await phone(relayOrigin, 'Jakob', () => { throw new Error('must not be asked') })
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    expect(peer.status().forward).toBe(false)
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const a = await anna.ask(peer.card.did, 'camping tent for four')
+    expect(a.outcome).toBe('shared')
+    expect(jakob.asks).toHaveLength(0)
+    jakob.close(); anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('granted policy: only a granted name connects; the claim still binds the owner first', async () => {
+    const dir = tmp()
+    const stateDir = path.join(dir, 'state')
+    const inv = inventoryFile(dir, [])
+    const lines = []
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(path.join(stateDir, 'grants.json'), JSON.stringify({ names: ['anna-demo'] }))
+    const peer = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, healthPort: 0, policy: PeerPolicy.Granted, claim: true, answerWindowMs: WINDOW_MS, log: (l) => lines.push(l) })
+    const jakob = await phone(relayOrigin, 'Jakob', null)
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    const ben = await phone(relayOrigin, 'Ben-demo', null)
+    await ben.connectTo(peer.card.did)
+    await until(() => lines.some((l) => /refused \(not granted\)/.test(l)))
+    expect(peer.peerCount()).toBe(0)
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    jakob.close(); ben.close(); anna.close()
+    await peer.stop()
     rmSync(dir, { recursive: true })
   }, 30_000)
 })

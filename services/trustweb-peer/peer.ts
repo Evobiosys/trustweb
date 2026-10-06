@@ -1,35 +1,46 @@
 /**
- * trustweb-peer: an always-on TrustWeb peer that holds an inventory and answers
- * asks over the existing relay with the existing gate (owner, Omi walk
- * 2026-10-06: "people should be able to query my inventory", "the demo content
- * should be on the Swiss server, a personal one on the German server").
+ * trustweb-peer: an always-on TrustWeb front door that NEVER decides an
+ * answer by itself (owner, 2026-10-06 10:00: "not the server answers asks, I
+ * do"). A server only carries out what its owner decided:
  *
- * It is a phone without a person at it. Everything on the wire is what a
- * phone sends: the did:peer:2 identity (apps/demo/src/did.ts), the relay drain
- * (relay.ts), the one-scan connect-ack (connect_link.ts), the matcher
- * (match/lexical.ts), the surface-or-stay-silent decision (incoming_query.ts)
- * and the sealed fixed-length answer in which "nothing matched" and "not
- * shared" are the same bytes, sent no earlier than RELAY_DEADLINE_MS after
- * the ask arrived (gate.ts). Reused, not copied.
+ *   1. his live yes/no per ask: the peer FORWARDS the ask to the owner's
+ *      phone (a 'query' envelope with relayed: true, the wire that already
+ *      exists) and relays back what the owner's phone shared, or nothing;
+ *   2. a permission he set in advance: a line in the inventory file that
+ *      carries a `preset` block ({ by, at, note? }) may be shared without a
+ *      live tap, and every such shared line is VISIBLY MARKED as allowed in
+ *      advance (SharedItem.context). A line without a preset is never
+ *      shared by this service, whatever its audience says.
  *
- * What differs from a phone: nobody taps "Share". A line is shared when its
- * audience admits the asker's ring (model.ts audienceAdmits), the same rule a
- * phone applies BEFORE it asks its owner; here that rule is the whole
- * decision. So the content behind a peer must be content its owner has
- * already decided to share with everyone it connects with. Two instances:
+ * So the app's sentence "only a person can say yes" stays true for this
+ * peer: the person said yes live (1) or in advance and visibly (2). Nothing
+ * else answers. The owner's phone off = (1) yields nothing, honestly.
  *
- *   demo      PeerPolicy.Open: anyone who opens its connect link is a peer
- *             (acquaintance ring); fictional inventory only (demo_inventory.json);
- *             meant for the Swiss server next to the app (app.idea2.site).
+ * Everything on the wire is what a phone sends: the did:peer:2 identity
+ * (apps/demo/src/did.ts), the relay drain (relay.ts), the one-scan
+ * connect-ack (connect_link.ts), the matcher (match/lexical.ts), the
+ * surface-or-stay-silent decision (incoming_query.ts) and the sealed
+ * fixed-length answer in which "nothing matched", "not shared" and "the
+ * owner was unreachable" are the same bytes, sent no earlier than
+ * RELAY_DEADLINE_MS after the ask arrived (gate.ts). Reused, not copied.
+ *
+ * Owner binding (the "claim" ceremony): the owner's phone becomes the owner
+ * by scanning this peer's connect link while a claim window is open (a
+ * file `claim-open` in the state dir, or TW_PEER_CLAIM=1 at start; the
+ * window closes after claimWindowMs or at the first bind, whichever comes
+ * first). After that, every other connect-ack is an asker. The owner's DID
+ * is kept in state.json (0600), never logged.
+ *
+ * Two instances, same code:
+ *   demo      PeerPolicy.Open: anyone who opens its connect link is an asker
+ *             (acquaintance ring); fictional lines with presets
+ *             (demo_inventory.json); meant for the Swiss server.
  *   personal  PeerPolicy.Granted: a connect-ack is honoured only for a name
- *             the owner granted beforehand (grants.json, written by the owner's
- *             tooling; the owner's phone does not yet send grants over the
- *             wire). Meant for the German server (sebra). NOT deployed by this
- *             pass: see the design note in the result report.
+ *             the owner granted beforehand (grants.json). Meant for the
+ *             German server (sebra). Not deployed; see README.txt.
  *
- * Privacy on this host: no ask text is ever logged (asks come from real people);
- * the log has counts and outcomes only. The inventory file is read once at
- * start and on SIGHUP.
+ * Privacy on this host: no ask text is ever logged; the log has counts and
+ * outcomes only. The inventory file is read once at start and on SIGHUP.
  *
  * Run (from the repo root; tsx comes with the workspace):
  *   TW_PEER_STATE=/tmp/twpeer TW_PEER_INVENTORY=services/trustweb-peer/demo_inventory.json \
@@ -37,7 +48,7 @@
  * It writes <state>/demo-peer.json, the card a TrustWeb app reads to put this
  * peer into a demo-account link (apps/trustweb/src/demo_account.ts).
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import path from 'node:path'
@@ -48,20 +59,32 @@ import type { RelayChannel, RelayStatus } from '../../apps/demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../apps/demo/src/crypto'
 import { decodeFromQr } from '../../apps/demo/src/wire'
 import type { Envelope } from '../../apps/demo/src/wire'
-import { RELAY_DEADLINE_MS, settleAt } from '../../apps/demo/src/gate'
+import { RELAY_DEADLINE_MS, interpret, settleAt } from '../../apps/demo/src/gate'
 import { sealRelayAnswer } from '../../apps/demo/src/answer_key'
 import { classifyIncomingQuery } from '../../apps/demo/src/incoming_query'
 import { matchTemplate } from '../../apps/demo/src/match/lexical'
-import type { MatchResult, QueryEnvelope, SharedPayload } from '../../apps/demo/src/types'
+import { FREE_TEXT_MAX_LEN } from '../../apps/demo/src/types'
+import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayload } from '../../apps/demo/src/types'
 import { askTemplate } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen, threadsForRing } from '../../apps/trustweb/src/model'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
 
 export enum PeerPolicy {
-  /** Anyone who opens the connect link becomes a peer (the demo inventory). */
+  /** Anyone who opens the connect link becomes an asker (the demo inventory). */
   Open = 'open',
-  /** Only names granted beforehand (grants.json) become peers (the personal inventory). */
+  /** Only names granted beforehand (grants.json) become askers (the personal inventory). */
   Granted = 'granted',
+}
+
+/** What the owner's phone did with a forwarded ask. */
+export enum OwnerOutcome {
+  /** No owner is bound, or forwarding is off: nothing was asked of anyone. */
+  NotAsked = 'not-asked',
+  Shared = 'shared',
+  /** A decline, a no-match on the phone, or an undecodable answer: the same bytes to the asker. */
+  Nothing = 'nothing',
+  /** The owner's phone did not answer within forwardWaitMs (off, or still deciding). */
+  Timeout = 'timeout',
 }
 
 export enum AskOutcome {
@@ -70,10 +93,29 @@ export enum AskOutcome {
   RateLimited = 'rate-limited',
 }
 
+/** A permission the owner set in advance for one line; `at` is an ISO date. */
+export interface PresetPermission {
+  by: string
+  at: string
+  note?: string
+}
+
+export interface PresetLine {
+  item: InventoryItem
+  preset: PresetPermission
+}
+
+export interface LoadedInventory {
+  /** Lines the owner allowed in advance: the only lines this peer may share without a live tap. */
+  preset: PresetLine[]
+  /** Well-formed lines WITHOUT a preset: held, counted, never shared. */
+  held: number
+}
+
 export interface PeerOptions {
-  /** Where identity.json, peers.json and demo-peer.json live. */
+  /** Where state.json, demo-peer.json, grants.json and claim-open live. */
   stateDir: string
-  /** The inventory file: { "items": [{ "text", "audience" }] }. */
+  /** The inventory file: { "items": [{ "text", "audience", "preset"?: { "by", "at", "note"? } }] }. */
   inventoryFile: string
   /** The relay's origin (the app's origin in production: https://app.idea2.site). */
   relayOrigin: string
@@ -83,6 +125,15 @@ export interface PeerOptions {
   healthPort?: number
   maxPeers?: number
   asksPerHour?: number
+  /** Forward asks to the bound owner's phone (default true). */
+  forward?: boolean
+  /** How long to wait for the owner's phone before answering the asker with the preset hits only. */
+  forwardWaitMs?: number
+  /** Opens a claim window now (same as the claim-open file). */
+  claim?: boolean
+  claimWindowMs?: number
+  /** The minimum time between an ask's arrival and its answer; tests only, production keeps RELAY_DEADLINE_MS. */
+  answerWindowMs?: number
   log?: (line: string) => void
 }
 
@@ -93,23 +144,44 @@ export interface PeerCard {
   name: string
 }
 
+export interface PeerStatus {
+  relay: RelayStatus
+  peers: number
+  owner: boolean
+  forward: boolean
+  claimOpen: boolean
+  presetLines: number
+  heldLines: number
+}
+
 export interface RunningPeer {
   card: PeerCard
-  status(): RelayStatus
+  status(): PeerStatus
   peerCount(): number
   stop(): Promise<void>
+}
+
+interface Owner {
+  did: string
+  displayName: string
+  boundAt: number
 }
 
 interface PeerState {
   me: { id: string; displayName: string }
   identity: ReturnType<typeof serializeIdentity>
   peers: Peer[]
+  owner?: Owner
 }
 
 const DEFAULT_NAME = 'Demo inventory'
 const DEFAULT_MAX_PEERS = 500
 const DEFAULT_ASKS_PER_HOUR = 30
+const DEFAULT_FORWARD_WAIT_MS = 120_000
+const DEFAULT_CLAIM_WINDOW_MS = 10 * 60_000
 const HOUR_MS = 3_600_000
+const PRESET_NOTE_MAX_LEN = 120
+const CLAIM_FILE = 'claim-open'
 /** apps/demo's prune(): keep the relevance band, at most three lines (net.ts). */
 const RELEVANCE_BAND = 0.5
 const MAX_SHARED = 3
@@ -124,21 +196,42 @@ function isAudience(v: unknown): v is Audience {
   return typeof v === 'string' && (AUDIENCES as readonly string[]).includes(v)
 }
 
-/** Reads the inventory file; a malformed line is skipped, never guessed at. */
-export function loadInventory(file: string, now: number): InventoryItem[] {
+/** A preset is accepted only when it names who allowed it and a parseable date; a malformed preset = no preset. */
+export function parsePreset(v: unknown): PresetPermission | null {
+  if (typeof v !== 'object' || v === null) return null
+  const o = v as Record<string, unknown>
+  if (typeof o.by !== 'string' || !o.by.trim()) return null
+  if (typeof o.at !== 'string' || Number.isNaN(Date.parse(o.at))) return null
+  const note = typeof o.note === 'string' && o.note.trim() ? o.note.trim().slice(0, PRESET_NOTE_MAX_LEN) : undefined
+  return { by: o.by.trim(), at: o.at, ...(note ? { note } : {}) }
+}
+
+/** What the asker sees next to a line allowed in advance: who, when, and the owner's note if any. */
+export function presetContext(p: PresetPermission): string {
+  const day = p.at.slice(0, 10)
+  return `Allowed in advance by ${p.by} (${day})` + (p.note ? `: ${p.note}` : '')
+}
+
+/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset is held. */
+export function loadInventory(file: string, now: number): LoadedInventory {
   const raw: unknown = JSON.parse(readFileSync(file, 'utf8'))
   const items = (raw as { items?: unknown }).items
-  if (!Array.isArray(items)) return []
-  const out: InventoryItem[] = []
+  if (!Array.isArray(items)) return { preset: [], held: 0 }
+  const out: LoadedInventory = { preset: [], held: 0 }
   for (const it of items) {
     const o = it as Record<string, unknown>
     if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
-    out.push({ id: randomId(8), text: o.text.trim().slice(0, 160), audience: o.audience, included: true, createdAt: now })
+    const preset = parsePreset(o.preset)
+    if (!preset) { out.held++; continue }
+    out.preset.push({
+      item: { id: randomId(8), text: o.text.trim().slice(0, 160), audience: o.audience, included: true, createdAt: now },
+      preset,
+    })
   }
   return out
 }
 
-/** The names a Granted peer honours: { "names": ["anna-test", ...] }, compared case-insensitively. */
+/** The names a Granted peer honours: { "names": ["anna-demo", ...] }, compared case-insensitively. */
 export function loadGrants(stateDir: string): Set<string> {
   const file = path.join(stateDir, 'grants.json')
   if (!existsSync(file)) return new Set()
@@ -160,6 +253,11 @@ export class AskRateLimit {
   }
 }
 
+/** The text the owner's phone shows for a forwarded ask: who asks, then what; bounded like any free text. */
+export function forwardedText(askerName: string, text: string): string {
+  return `${askerName}: ${text}`.slice(0, FREE_TEXT_MAX_LEN)
+}
+
 function loadState(stateDir: string, relayOrigin: string, name: string): PeerState {
   const file = path.join(stateDir, 'state.json')
   if (existsSync(file)) {
@@ -178,7 +276,7 @@ function saveState(stateDir: string, s: PeerState): void {
 }
 
 /** Loopback only; the Host header must be loopback too and no Origin is accepted (local-service rule). */
-function healthServer(port: number, card: PeerCard, status: () => RelayStatus, peers: () => number): Promise<Server> {
+function healthServer(port: number, card: PeerCard, status: () => PeerStatus): Promise<Server> {
   const srv = createServer((req, res) => {
     const host = (req.headers.host ?? '').replace(/:\d+$/, '')
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(host) || req.headers.origin !== undefined) {
@@ -189,7 +287,7 @@ function healthServer(port: number, card: PeerCard, status: () => RelayStatus, p
     if (req.url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }).end('ok'); return }
     if (req.url === '/card') { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(card)); return }
     if (req.url === '/status') {
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ relay: status(), peers: peers() }))
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(status()))
       return
     }
     res.writeHead(404).end()
@@ -201,6 +299,9 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   const name = opts.name ?? DEFAULT_NAME
   const policy = opts.policy ?? PeerPolicy.Open
   const maxPeers = opts.maxPeers ?? DEFAULT_MAX_PEERS
+  const forward = opts.forward ?? true
+  const forwardWaitMs = opts.forwardWaitMs ?? DEFAULT_FORWARD_WAIT_MS
+  const answerWindowMs = opts.answerWindowMs ?? RELAY_DEADLINE_MS
   const log = opts.log ?? ((line: string): void => { console.log(new Date().toISOString() + ' ' + line) })
   mkdirSync(opts.stateDir, { recursive: true, mode: 0o700 })
   const state = loadState(opts.stateDir, opts.relayOrigin, name)
@@ -210,15 +311,31 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   const limiter = new AskRateLimit(opts.asksPerHour ?? DEFAULT_ASKS_PER_HOUR)
   const keys = new Map<string, Promise<CryptoKey>>()
   const seenQids = new Set<string>()
+  /** Forwarded asks waiting for the owner's phone, by the forwarded qid. */
+  const awaitingOwner = new Map<string, (env: AnswerEnvelope) => void>()
   let relayStatus: RelayStatus = 'connecting'
+
+  const claimFile = path.join(opts.stateDir, CLAIM_FILE)
+  let claimUntil = 0
+  if (!state.owner && (opts.claim || existsSync(claimFile))) {
+    claimUntil = Date.now() + (opts.claimWindowMs ?? DEFAULT_CLAIM_WINDOW_MS)
+    log('claim window open: the first phone to open the connect link becomes the owner')
+  }
+  const claimOpen = (): boolean => !state.owner && Date.now() < claimUntil
+  const closeClaim = (): void => {
+    claimUntil = 0
+    if (existsSync(claimFile)) unlinkSync(claimFile)
+  }
 
   const card: PeerCard = { did: identity.did, id: state.me.id, name }
   writeFileSync(path.join(opts.stateDir, 'demo-peer.json'), JSON.stringify(card) + '\n')
   saveState(opts.stateDir, state)
 
-  /** What the matcher sees: this peer's inventory, nobody's notes. */
+  const presetById = (): Map<string, PresetPermission> => new Map(inventory.preset.map((l) => [l.item.id, l.preset]))
+
+  /** What the matcher sees: this peer's preset lines only, nobody's notes, nothing held. */
   const asAppState = (): AppState => ({
-    v: 1, me: state.me, peers: state.peers, people: [], inventory, log: [], notificationsOn: false,
+    v: 1, me: state.me, peers: state.peers, people: [], inventory: inventory.preset.map((l) => l.item), log: [], notificationsOn: false,
   })
 
   const pairKey = (did: string): Promise<CryptoKey> => {
@@ -230,12 +347,13 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     return k
   }
   const peerByDid = (did: string): Peer | undefined => state.peers.find((p) => p.did === did)
+  const isOwner = (did: string): boolean => state.owner?.did === did
 
   const reload = (): void => {
     try {
       inventory = loadInventory(opts.inventoryFile, Date.now())
       grants = loadGrants(opts.stateDir)
-      log(`reloaded: ${inventory.length} items, ${grants.size} grants`)
+      log(`reloaded: ${inventory.preset.length} preset lines, ${inventory.held} held, ${grants.size} grants`)
     } catch (e) {
       log('reload failed: ' + (e instanceof Error ? e.message : String(e)))
     }
@@ -245,31 +363,70 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   const channel: RelayChannel = createRelayChannel({ relayOrigin: opts.relayOrigin })
   channel.onStatus((s) => { relayStatus = s; log('relay ' + s) })
 
-  // The one cleartext wire: "someone opened my link". Open policy: welcome;
-  // Granted policy: only a name on the grant list. An unknown DID that is
-  // not welcome is left un-acked and forgotten.
+  // The one cleartext wire: "someone opened my link". While a claim window is
+  // open the first unknown phone becomes the owner. Otherwise: Open policy
+  // welcomes an asker; Granted policy only a name on the grant list. An
+  // unknown DID that is not welcome is left un-acked and forgotten.
   channel.onRawWire((fromDid, payload) => {
     const env = decodeFromQr(payload)
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
-    const known = peerByDid(env.did)
-    if (!known) {
-      if (policy === PeerPolicy.Granted && !grants.has(env.from.displayName.toLowerCase())) {
-        log('connect-ack refused (not granted)')
-        return true
-      }
-      if (state.peers.length >= maxPeers) state.peers.shift()
-      state.peers.push({ id: env.from.id, displayName: env.from.displayName || 'Someone', did: env.did, ring: Ring.Acquaintance, connectedAt: Date.now() })
+    if (isOwner(env.did)) return true
+    if (peerByDid(env.did)) return true
+    if (claimOpen()) {
+      state.owner = { did: env.did, displayName: env.from.displayName || 'Owner', boundAt: Date.now() }
+      closeClaim()
       saveState(opts.stateDir, state)
-      log(`peer connected (${state.peers.length} now)`)
+      log('owner bound; claim window closed')
+      return true
     }
+    if (policy === PeerPolicy.Granted && !grants.has(env.from.displayName.toLowerCase())) {
+      log('connect-ack refused (not granted)')
+      return true
+    }
+    if (state.peers.length >= maxPeers) state.peers.shift()
+    state.peers.push({ id: env.from.id, displayName: env.from.displayName || 'Someone', did: env.did, ring: Ring.Acquaintance, connectedAt: Date.now() })
+    saveState(opts.stateDir, state)
+    log(`peer connected (${state.peers.length} now)`)
     return true
   })
 
-  channel.onEnvelope(async (fromDid) => (peerByDid(fromDid) ? pairKey(fromDid) : null), (env, fromDid) => { void handle(env, fromDid) })
+  channel.onEnvelope(
+    async (fromDid) => (peerByDid(fromDid) || isOwner(fromDid) ? pairKey(fromDid) : null),
+    (env, fromDid) => { void handle(env, fromDid) },
+  )
 
   async function handle(env: Envelope, fromDid: string): Promise<void> {
-    if (env.t !== 'query') return
-    await handleQuery(env, fromDid)
+    if (env.t === 'answer') {
+      // Only the owner's phone answers this peer, and only to a forwarded ask.
+      if (isOwner(fromDid)) awaitingOwner.get(env.qid)?.(env)
+      return
+    }
+    if (env.t === 'query') await handleQuery(env, fromDid)
+  }
+
+  /** Puts the ask in front of the owner, as the ask it is; resolves with what the owner's phone shared. */
+  async function forwardToOwner(askerName: string, text: string, templateId: string): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
+    const owner = state.owner
+    if (!forward || !owner || !text) return { outcome: OwnerOutcome.NotAsked, items: [] }
+    const key = await pairKey(owner.did)
+    const q: QueryEnvelope = {
+      v: 1, t: 'query', from: state.me, templateId, templateVersion: 1,
+      qid: randomId(12), issuedAt: Date.now(), freeText: forwardedText(askerName, text), relayed: true,
+    }
+    const answered = new Promise<AnswerEnvelope | null>((resolve) => {
+      const timer = setTimeout(() => { awaitingOwner.delete(q.qid); resolve(null) }, forwardWaitMs)
+      awaitingOwner.set(q.qid, (env) => { clearTimeout(timer); awaitingOwner.delete(q.qid); resolve(env) })
+    })
+    try {
+      await channel.send(owner.did, q, key)
+    } catch {
+      awaitingOwner.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
+    }
+    const env = await answered
+    if (!env) return { outcome: OwnerOutcome.Timeout, items: [] }
+    const decoded = await interpret(env, key)
+    if (decoded.outcome !== 'shared' || !decoded.shared) return { outcome: OwnerOutcome.Nothing, items: [] }
+    return { outcome: OwnerOutcome.Shared, items: decoded.shared.items }
   }
 
   async function handleQuery(q: QueryEnvelope, fromDid: string): Promise<void> {
@@ -277,13 +434,17 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     seenQids.add(q.qid)
     if (seenQids.size > 5000) seenQids.clear()
     const receivedAt = Date.now()
-    const peer = peerByDid(fromDid)
+    // The owner asking his own front door is a self-test: preset lines only, never forwarded back to him.
+    const self = isOwner(fromDid)
+    const peer: Peer | undefined = self
+      ? { id: 'owner', displayName: state.owner?.displayName ?? 'Owner', did: fromDid, ring: Ring.Acquaintance, connectedAt: state.owner?.boundAt ?? receivedAt }
+      : peerByDid(fromDid)
     if (!peer) return
     const key = await pairKey(peer.did)
     const text = q.freeText ?? ''
     const tpl = askTemplate(text)
     const answer = async (payload: SharedPayload | null): Promise<void> => {
-      await settleAt(receivedAt, RELAY_DEADLINE_MS)
+      await settleAt(receivedAt, answerWindowMs)
       const out = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
       try { await channel.send(peer.did, out, key) } catch { /* the asker times out and sees "no match" */ }
     }
@@ -292,21 +453,32 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       await answer(null)
       return
     }
+
+    // 2. Lines the owner allowed in advance, visibly marked as such.
     const { threads, refs } = threadsForRing(asAppState(), peer.ring)
     const match = text ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
-    if (!surface) {
-      log('ask ' + AskOutcome.NoMatch)
+    const presets = presetById()
+    const presetItems: SharedItem[] = surface
+      ? match.hits
+          .map((h) => refs.get(h.threadId))
+          .filter((r): r is LineRef => Boolean(r))
+          .map((r) => {
+            const p = presets.get(r.threadId.replace(/^inv:/, ''))
+            return { text: r.text, when: coarseWhen(r.at), context: p ? presetContext(p) : r.context }
+          })
+      : []
+
+    // 1. The owner's live decision, in parallel with the answer window.
+    const owner = self ? { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] } : await forwardToOwner(peer.displayName, text, tpl.id)
+
+    const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
+    log(`ask preset=${presetItems.length} owner=${owner.outcome}${owner.outcome === OwnerOutcome.Shared ? `(${owner.items.length})` : ''} -> ${items.length ? AskOutcome.Shared : AskOutcome.NoMatch} (${items.length})`)
+    if (!items.length) {
       await answer(null)
       return
     }
-    const matches = match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
-    log(`ask ${AskOutcome.Shared} (${matches.length})`)
-    await answer({
-      from: state.me.displayName,
-      templateId: tpl.id,
-      items: matches.map((m) => ({ text: m.text, when: coarseWhen(m.at), context: m.context })),
-    })
+    await answer({ from: state.me.displayName, templateId: tpl.id, items })
   }
 
   try {
@@ -314,15 +486,25 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   } catch {
     /* relay.ts keeps reconnecting on its own */
   }
-  const health = opts.healthPort ? await healthServer(opts.healthPort, card, () => relayStatus, () => state.peers.length) : null
-  log(`${name}: up with ${inventory.length} items, policy ${policy}, ${state.peers.length} peers`)
+  const status = (): PeerStatus => ({
+    relay: relayStatus,
+    peers: state.peers.length,
+    owner: Boolean(state.owner),
+    forward: forward && Boolean(state.owner),
+    claimOpen: claimOpen(),
+    presetLines: inventory.preset.length,
+    heldLines: inventory.held,
+  })
+  const health = opts.healthPort ? await healthServer(opts.healthPort, card, status) : null
+  log(`${name}: up with ${inventory.preset.length} preset lines (${inventory.held} held, never shared), policy ${policy}, ${state.peers.length} peers, owner ${state.owner ? 'bound' : 'not bound'}, forward ${forward ? 'on' : 'off'}`)
 
   return {
     card,
-    status: () => relayStatus,
+    status,
     peerCount: () => state.peers.length,
     stop: async () => {
       process.off('SIGHUP', reload)
+      for (const resolve of awaitingOwner.values()) resolve({ v: 1, t: 'answer', qid: '', body: '' })
       channel.close()
       if (health) await new Promise<void>((resolve) => health.close(() => resolve()))
     },
@@ -335,7 +517,13 @@ function env(name: string, fallback?: string): string {
   return v
 }
 
-/** CLI entry: every setting from the environment (see the header). */
+function envFlag(name: string, fallback: boolean): boolean {
+  const v = process.env[name]
+  if (v === undefined) return fallback
+  return v === '1' || v.toLowerCase() === 'true'
+}
+
+/** CLI entry: every setting from the environment (see the header and README.txt). */
 export async function main(): Promise<void> {
   const policyRaw = process.env.TW_PEER_POLICY ?? PeerPolicy.Open
   const policy = (Object.values(PeerPolicy) as string[]).includes(policyRaw) ? (policyRaw as PeerPolicy) : PeerPolicy.Open
@@ -347,6 +535,10 @@ export async function main(): Promise<void> {
     policy,
     healthPort: Number(process.env.TW_PEER_HEALTH_PORT ?? 0),
     asksPerHour: process.env.TW_PEER_ASKS_PER_HOUR ? Number(process.env.TW_PEER_ASKS_PER_HOUR) : undefined,
+    forward: envFlag('TW_PEER_FORWARD', true),
+    forwardWaitMs: process.env.TW_PEER_FORWARD_WAIT_MS ? Number(process.env.TW_PEER_FORWARD_WAIT_MS) : undefined,
+    claim: envFlag('TW_PEER_CLAIM', false),
+    claimWindowMs: process.env.TW_PEER_CLAIM_MINUTES ? Number(process.env.TW_PEER_CLAIM_MINUTES) * 60_000 : undefined,
   })
   const bye = (): void => { void peer.stop().then(() => process.exit(0)) }
   process.on('SIGINT', bye)

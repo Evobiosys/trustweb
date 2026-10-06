@@ -1,0 +1,73 @@
+PERSONAL TRUSTWEB INVENTORY: design and what exists (2026-10-06, walk-part2 pass)
+
+Jakob's rulings (2026-10-06, binding): "not the server answers asks, I do"; "permissions set in advance, and
+nothing personal goes there until you decide"; "the inventory lives in Tana accessible on phone from sebra, so
+it is accessible, and private stuff on this PC and/or on the phone"; "there might be some things that can't be
+queried if I don't have this laptop on".
+
+1. SOURCES (three, honest about reach)
+   Tana (source of truth for the index)
+     - Library > "Personal TrustWeb Inventory" (node qAo6KedrMFrC, created 2026-10-06): references only, no
+       copies; children "inbox" (new things land here) and "referenced" (resources / tools / choices / offers /
+       projects, 43 references today). Jakob curates; agents add to inbox only.
+     - Reachable from the phone through sebra: the Tana desktop app runs on sebra (port 8262 on loopback, seen
+       2026-10-06) with the local Tana MCP; the phone talks to sebra, sebra reads Tana. Read-only from sebra
+       (standing rule since 2026-05-17: no Tana writes from sebra).
+   The Mac (private material, Obsidian-style local folder, R18)
+     - A folder of .md lines next to the Tana export, same {items:[...]} shape, same exporter. Reachable only
+       while the laptop is on; the peer says "nothing" for those while it is off (same bytes as no match).
+   The phone (the TrustWeb app's own inventory and notes)
+     - What Jakob typed or recorded in the app; answers through the forward (section 3) with his live tap.
+
+2. WHAT MAY LEAVE EACH PLACE
+   - To sebra (personal front door): ONLY lines Jakob exported with a preset (by, at, note). Nothing else, ever.
+     The exporter refuses a line without a preset. Today: zero lines exported; the file does not exist yet.
+   - To the Swiss server (demo front door): fictional lines only (demo_inventory.json), presets on the shareable
+     ones.
+   - To an asker: at most three lines per ask, each either a preset line (marked "Allowed in advance by Jakob
+     (date)") or a line Jakob's phone shared live. Never a Tana node id, never a DID, never a timestamp finer
+     than "early/mid/late <month>".
+
+3. THE FRONT DOOR (services/trustweb-peer, built, tested, not deployed)
+   Ask arrives (asker = a demo account or a granted name) ->
+     a. per-asker rate limit (30/h) -> over: nothing after the window
+     b. preset lines matched for the asker's ring (acquaintance), same matcher and audience rule as the phone
+     c. in parallel: forward to the owner's phone as a 'query' with relayed: true and "<asker>: <text>";
+        wait up to forwardWaitMs (120 s; the asker's app waits 180 s)
+     d. answer = owner's shared items first, then preset hits, max three; sealed; sent no earlier than 30 s
+        after arrival. Decline, no match, phone off, timeout: identical bytes.
+   Owner binding: claim window (TW_PEER_CLAIM=1 or the claim-open file), first phone to open the link within
+   10 minutes becomes the owner; DID in state.json (0600), never logged. Self-asks from the owner: preset only.
+   Two instances from one bundle: demo (PeerPolicy.Open, Swiss server, fictional presets) and personal
+   (PeerPolicy.Granted + grants.json, sebra, exported presets).
+
+4. THE EXPORTER (not written; design)
+   A script on the Mac (never on sebra): reads the "Personal TrustWeb Inventory" node, follows "referenced" one
+   hop (title + first line of each referenced node), merges the local folder, and writes {items:[{text,
+   audience, preset?}]}. A line gets a preset ONLY from an explicit mark Jakob set: a child node "allowed in
+   advance: <note>" under the referenced node, or a line in the local folder with a leading "+ ". Lines without
+   the mark are written WITHOUT a preset (held: counted, never shared) or not written at all (safer default for
+   sebra: not written). Then scp to sebra, SIGHUP the peer. "Edited since" sync (R16): the exporter keeps the
+   last run's epoch; a Tana search childOf the inventory node with edited.since picks up changes; the peer only
+   ever reads the file. Real-time updates: later.
+
+5. THE LOCAL-MODEL REVIEW (R20, trial run 2026-10-06; see the result report for numbers)
+   sebra's Ollama (loopback, 16k context, one model loaded, keep-alive 10 min) now holds qwen2.5:3b, qwen3:4b
+   and qwen2.5:1.5b (pulled this pass, 1.4 GB loaded). A small model reads a node export and proposes
+   {keep, category, line, why}; proposals go to a review file for Jakob, never into Tana or the peer file.
+   It is a slow queue job (tens of seconds per node), never a live answerer.
+
+6. ACCESS CONTROL (R15)
+   Personal instance: grants.json by demo-account name (edited on the server) today; owner-phone-sent grants over
+   the encrypted channel need a new control envelope in apps/demo/src/wire.ts (not built; roadmap). Every demo
+   account is listed and removable on Jakob's phone (Settings > Demo accounts) and expires after a week by
+   default (6644f1e).
+
+7. WHAT IS UNREACHABLE WHEN
+   Laptop off: the local folder; Tana still reachable via sebra's Tana app (if running). Phone off: everything
+   that needs a live tap; preset lines on the front door still answer. sebra off: the front door; the phone still
+   answers direct asks. The app's copy should say "nothing found" in all these cases, as it does.
+
+8. OPEN (defaults in the result report)
+   Which referenced nodes get a preset first; the preset mark syntax in Tana; whether the demo front door forwards
+   to Jakob's phone at all (default: yes while bound); the exporter's cadence.
