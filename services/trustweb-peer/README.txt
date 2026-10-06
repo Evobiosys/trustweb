@@ -33,7 +33,11 @@ WHAT THE OWNER'S PHONE SEES
 A forwarded ask arrives as "<peer name> asks: <asker name>: <text>" (fromName is the peer, the asker's chosen
 name leads the text; the app shows relayed asks like any ask today). The phone matches its OWN inventory for the
 peer's ring, prompts the owner, and answers the peer; the peer relays the shared items to the asker (owner items
-first, then preset hits, at most three). Decline, no match, phone off: the same bytes to the asker.
+first, then preset hits, at most three). Decline, no match, phone off, over the rate limit: the same bytes to the
+asker AND the same moment (review fix 2026-10-06): while an ask is forwarded, every answer the owner did not add to
+is sent at the forward deadline (forwardWaitMs, 120 s, from the ask's arrival); only the owner's live share goes
+early, because its content says so anyway. Without forwarding (no owner, forward off, a self-ask) the 30 s window
+holds. Before this fix a decline arrived at the owner's tap and phone off at 120 s, so WHEN told them apart.
 
 STATUS 2026-10-06: DEPLOYED on questhub (Swiss server) as trustweb-peer.service, demo instance, fictional inventory
 only, forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
@@ -87,6 +91,8 @@ DEPLOYMENT (done 2026-10-06; demo instance, Swiss server = questhub, Infomaniak 
      reopen the window), checks /status claimOpen:true, and prints the connect link (built with the app's own
      buildConnectLinkUrl from the published card) for Jakob's phone. Window: 10 minutes or the first claim.
      --status, --close (restart without the file), --reset (forget the owner) are in the same script.
+     Opening, --close and --reset need --instance and a typed confirmation of the instance's name (or
+     --confirm <instance>); deploy_trustweb_peer.sh needs the same for a full deploy and --off (review 2026-10-06).
      Never run the app's e2e test while a window is open: its test phone would become the owner.
   4. The card: /var/lib/trustweb-peer/demo-peer.json (root-readable only, DynamicUser) is copied to
      /srv/questhub-static/app-idea2-trustweb/demo-peer.json, chmod a+r and chcon --reference=wot-app.
@@ -99,7 +105,7 @@ DEPLOYMENT (done 2026-10-06; demo instance, Swiss server = questhub, Infomaniak 
      server-to-server there is no CORS. The relay sees one more DID, nothing else.
   Health (on questhub): curl -s -H "Host: 127.0.0.1:8961" http://127.0.0.1:8961/status
   Journal: sudo journalctl -u trustweb-peer -n 50 --no-pager (counts and outcomes only).
-  Rollback: scripts/deploy_trustweb_peer.sh --off  (= systemctl disable --now trustweb-peer; rm the card file).
+  Rollback: scripts/deploy_trustweb_peer.sh --instance demo --off  (= systemctl disable --now trustweb-peer; rm the card file).
   State survives a stop: re-enabling keeps the same DID. Forget everything: sudo rm -rf /var/lib/trustweb-peer.
 
 PERSONAL INSTANCE (2026-10-06, wave 1733): BUILT, TESTED, NOT DEPLOYED (host = Jakob's decision)
@@ -116,8 +122,11 @@ PERSONAL INSTANCE (2026-10-06, wave 1733): BUILT, TESTED, NOT DEPLOYED (host = J
     scripts/trustweb_peer_grant.sh --instance personal --host ... --add <name> | --remove <name> | --list | --link
     node_modules/.bin/tsx scripts/trustweb_inventory_export.ts [--choices kimi-ticked.json] [--mac-folder dir]
         dry run by default (nothing leaves the Mac); --send --host ... after reading the review file
-  Grants are display names (case-insensitive); a name is not a secret, so the connect link is the other half:
-  hand it only to the people granted. --remove stops new connections, it does not drop a connected person.
+  Grants are display names (NFC, trimmed, whitespace collapsed, case-insensitive: grantKey in peer.ts, the same
+  in the grant script); a name is not a secret, so the connect link is the other half: hand it only to the people
+  granted. Since the review (2026-10-06): one granted name binds ONE phone (a second phone sending it is refused
+  while the first holds it), and --remove takes effect at the SIGHUP reload: the person is forgotten and their
+  asks get no answer. A grant list that cannot be read stops the grant script (it never rewrites the list).
   Dry runs 2026-10-06 against both hosts (read-only): node v22.23.1 (questhub) / v22.23.3 (sebra) at
   /usr/bin/node, port 8962 free, unit absent, inventory absent; the demo unit renders byte-identical to the live one.
 

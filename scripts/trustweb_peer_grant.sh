@@ -14,9 +14,11 @@
 # What a grant is TODAY: the display name the other person's TrustWeb sends
 # when it opens the connect link (compared case-insensitively). A name is not
 # a secret, so the connect link is the second half of the lock: hand it only to
-# the people you grant. A connected person stays connected after --remove
-# (removing stops NEW connections); owner-sent grants over the encrypted
-# channel are on the roadmap (they need a new control envelope in the app).
+# the people you grant. --remove takes effect at once:
+# the SIGHUP reload forgets a connected person whose name is no longer on the
+# list, and one granted name binds ONE phone (a second phone sending the same
+# name is refused while the first holds it). Owner-sent grants over the
+# encrypted channel are on the roadmap (a new control envelope in the app).
 set -euo pipefail
 echo "... trustweb_peer_grant running ..."
 echo "--------"
@@ -50,7 +52,9 @@ echo "front door: $INSTANCE ($UNIT on $RHOST)"
 rsh "systemctl cat $UNIT >/dev/null 2>&1" || { echo "$UNIT is not deployed on $RHOST (scripts/deploy_trustweb_peer.sh --instance $INSTANCE --host $RHOST)" >&2; exit 1; }
 
 # grants.json -> names, one per line; edits are done in node on this Mac (no python or jq needed on the host).
-current() { rsh "sudo cat $STATE/grants.json 2>/dev/null || true"; }
+# An ABSENT file is an empty list; any other failure to read it stops the script (set -e on the assignment
+# below), so a dropped connection can never turn "--add Ben" into a list holding only Ben.
+current() { rsh "if sudo test -e $STATE/grants.json; then sudo cat $STATE/grants.json; else echo '{\"names\":[]}'; fi"; }
 edit_names() {
   CURRENT="$1" ACTION="$ACTION" NAME="$NAME" node -e '
 const raw = process.env.CURRENT.trim()
@@ -59,22 +63,25 @@ if (raw) {
   const o = JSON.parse(raw)
   names = Array.isArray(o.names) ? o.names.filter((n) => typeof n === "string") : []
 }
-const name = process.env.NAME.trim().replace(/\s+/g, " ")
+// the same comparison key as services/trustweb-peer/peer.ts grantKey(): NFC, trimmed, whitespace collapsed, lower-cased
+const key = (n) => n.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase()
+const name = process.env.NAME.normalize("NFC").trim().replace(/\s+/g, " ")
 if (process.env.ACTION !== "list") {
   if (!name || name.length > 40 || /[\u0000-\u001f\u007f]/.test(name)) { console.error("a name is 1 to 40 printable characters"); process.exit(2) }
 }
-const lower = name.toLowerCase()
-const has = names.some((n) => n.toLowerCase() === lower)
+const lower = key(name)
+const has = names.some((n) => key(n) === lower)
 if (process.env.ACTION === "add" && !has) names.push(name)
-if (process.env.ACTION === "remove") names = names.filter((n) => n.toLowerCase() !== lower)
+if (process.env.ACTION === "remove") names = names.filter((n) => key(n) !== lower)
 if (process.env.ACTION === "remove" && !has) console.error("not on the list: " + name)
 process.stdout.write(JSON.stringify({ names }) + "\n")
 '
 }
 
+CUR="$(current)"
 case "$ACTION" in
   list)
-    edit_names "$(current)" | node -e 'const o = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(o.names.length ? o.names.map((n) => "  " + n).join("\n") : "  (nobody granted yet)")'
+    edit_names "$CUR" | node -e 'const o = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(o.names.length ? o.names.map((n) => "  " + n).join("\n") : "  (nobody granted yet)")'
     exit 0 ;;
   link)
     echo "Hand this link ONLY to a person you granted; they open it in their TrustWeb under the granted name:"
@@ -83,7 +90,7 @@ case "$ACTION" in
     exit 0 ;;
 esac
 
-NEXT="$(edit_names "$(current)")"
+NEXT="$(edit_names "$CUR")"
 echo "$NEXT" | rsh "set -e; umask 077; t=\$(mktemp); cat > \"\$t\"; sudo install -m 0600 \"\$t\" $STATE/grants.json; rm -f \"\$t\";
   sudo chown --reference=$STATE/. $STATE/grants.json; sudo systemctl kill -s HUP $UNIT"
 echo "granted now:"

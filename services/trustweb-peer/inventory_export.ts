@@ -23,13 +23,15 @@
  *   (d) import file       every line, for Jakob's OWN phone ("Only me")
  */
 import { createHash } from 'node:crypto'
+import { presetContext } from './peer'
 
 /** The peer reads at most this many characters of a line (peer.ts loadInventory). */
 export const LINE_MAX = 160
 const NOTE_MAX = 120
 const GROUP_NAME_RE = /^[a-z][a-z ]{0,30}$/
 const KNOWN_GROUPS = new Set(['resources', 'tools', 'choices', 'offers', 'projects'])
-const MARK_RE = /^allowed in advance\b\s*:?\s*(.*)$/i
+/** Exactly "allowed in advance", or "allowed in advance: <note>". Nothing looser: "allowed in advance? ask first" is no mark. */
+const MARK_RE = /^allowed in advance(?:\s*:\s*(.*))?$/i
 const PLUS_RE = /^\+\s+(.+)$/
 const BULLET_RE = /^(?:[-*]\s+)?(.+)$/
 export const IMPORT_FORMAT = 'trustweb-inventory-import'
@@ -152,29 +154,39 @@ export function lineKey(text: string): string {
   return createHash('sha256').update(normalise(text)).digest('hex').slice(0, 16)
 }
 
+/**
+ * Identifiers and fine timestamps, each matched as the WHOLE token, so the
+ * same patterns both detect (identifyingReason) and replace (scrubText):
+ * a DID with its body, a Tana link or node reference with its id, a
+ * date-time in ISO or the Austrian/German form (6.10.2026 14:30), an epoch.
+ */
 const IDENTIFIER_PATTERNS: readonly RegExp[] = [
-  /\bdid:[a-z0-9]+:/i,
-  /\btana:[A-Za-z0-9_-]+/i,
-  /nodeid=/i,
-  /node-id/i,
-  /app\.tana\.inc/i,
-  /\[\[[^\]]*\^[A-Za-z0-9_-]+\]\]/,
-  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/,
-  /\b\d{10,13}\b/,
+  /\bdid:[a-z0-9]+:[^\s"'<>)\]]*/gi,
+  /\bhttps?:\/\/[^\s"'<>]*tana\.inc[^\s"'<>]*/gi,
+  /\bapp\.tana\.inc[^\s"'<>]*/gi,
+  /\btana:[A-Za-z0-9_-]+/gi,
+  /\bnode-?id\s*[=:]\s*[A-Za-z0-9_-]*/gi,
+  /\[\[[^\]]*\^[A-Za-z0-9_-]+\]\]/g,
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/g,
+  /\b\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4},?\s+(?:um\s+)?\d{1,2}[:.]\d{2}\b/gi,
+  /\b\d{10,13}\b/g,
 ]
 
 /** Why a text may not leave this Mac, or null when it is clean. */
 export function identifyingReason(text: string, knownIds: ReadonlySet<string>): string | null {
   for (const id of knownIds) if (id && text.includes(id)) return 'it contains a Tana node id'
-  for (const re of IDENTIFIER_PATTERNS) if (re.test(text)) return 'it contains an identifier or a timestamp finer than a day'
+  for (const re of IDENTIFIER_PATTERNS) {
+    re.lastIndex = 0
+    if (re.test(text)) return 'it contains an identifier or a timestamp finer than a day'
+  }
   return null
 }
 
-/** For the phone import file: identifiers replaced, the rest of the line kept. */
+/** For the phone import file: every identifier replaced as a whole token, the rest of the line kept. */
 export function scrubText(text: string, knownIds: ReadonlySet<string>): string {
   let out = text
   for (const id of knownIds) if (id) out = out.split(id).join('[link]')
-  for (const re of IDENTIFIER_PATTERNS) out = out.replace(new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'), '[link]')
+  for (const re of IDENTIFIER_PATTERNS) out = out.replace(re, '[link]')
   return out
 }
 
@@ -197,7 +209,7 @@ export function lineFrom(title: string, firstLine?: string): string {
 export function parseTanaMark(childName: string): Mark | null {
   const m = MARK_RE.exec(cleanText(childName))
   if (!m) return null
-  const note = m[1].trim().slice(0, NOTE_MAX)
+  const note = (m[1] ?? '').trim().slice(0, NOTE_MAX)
   return { kind: MarkKind.TanaChild, ...(note ? { note } : {}) }
 }
 
@@ -353,6 +365,11 @@ export async function readTanaInventory(call: TanaCall, rootId: string): Promise
 // merge, decide, render
 // ---------------------------------------------------------------------------
 
+/** Exactly what an asker would see as the line's context (the peer's own presetContext): the review and the send confirmation print this. */
+export function wireContext(by: string, day: string, note?: string): string {
+  return presetContext({ by, at: day, ...(note ? { note } : {}) })
+}
+
 const MARK_WHY: Record<MarkKind, string> = {
   [MarkKind.KimiChoice]: 'you ticked "Allow in advance" on the review page',
   [MarkKind.TanaChild]: 'a Tana child "allowed in advance" under it',
@@ -404,9 +421,11 @@ export function assertServerFileSafe(file: ServerFile, lines: readonly ExportLin
   for (const id of knownIds) if (id && raw.includes(id)) throw new Error('server file contains a Tana node id')
   if (/did:[a-z0-9]+:/i.test(raw)) throw new Error('server file contains a DID')
   for (const it of file.items) {
+    if (Object.keys(it).sort().join(',') !== 'audience,preset,text' || it.audience !== 'fof') throw new Error('server file holds an item with unexpected fields')
     if (!leaving.has(it.text)) throw new Error('server file holds a line that is not marked')
     if (!it.preset || !/^\d{4}-\d{2}-\d{2}$/.test(it.preset.at)) throw new Error('server file holds a line without a day-only preset')
-    if (identifyingReason(it.text, knownIds) || (it.preset.note && identifyingReason(it.preset.note, knownIds))) throw new Error('server file holds an identifying line')
+    if (Object.keys(it.preset).some((k) => k !== 'by' && k !== 'at' && k !== 'note')) throw new Error('server file holds a preset with unexpected fields')
+    for (const t of [it.text, it.preset.by, it.preset.note ?? '']) if (identifyingReason(t, knownIds)) throw new Error('server file holds an identifying line')
   }
   const keys = Object.keys(file).sort().join(',')
   if (keys !== 'items') throw new Error('server file has unexpected fields: ' + keys)
@@ -469,6 +488,9 @@ export function fullFile(lines: readonly ExportLine[], opts: Pick<ExportOptions,
 
 export interface ReviewContext {
   runId: string
+  /** Who and which day the presets name (the asker sees both). */
+  by: string
+  today: string
   generatedAt: string
   mode: 'dry run' | 'send'
   destination: string
@@ -481,6 +503,8 @@ export function renderReview(lines: readonly ExportLine[], ctx: ReviewContext): 
   const leaving = lines.filter((l) => l.verdict === Verdict.Leaves)
   const staying = lines.filter((l) => l.verdict !== Verdict.Leaves)
   const row = (sign: string, l: ExportLine): string => `  ${sign} ${l.text}\n      why: ${l.reason}; from: ${l.sources.join(', ')} (${l.category})`
+  // A leaving line shows exactly what the asker would see, the note included.
+  const leaveRow = (l: ExportLine): string => `${row('+', l)}\n      the asker sees: "${l.text}" marked "${wireContext(ctx.by, ctx.today.slice(0, 10), l.mark?.note)}"`
   return [
     'PERSONAL TRUSTWEB INVENTORY: EXPORT REVIEW',
     `run ${ctx.runId}, ${ctx.mode}, generated ${ctx.generatedAt}`,
@@ -490,7 +514,7 @@ export function renderReview(lines: readonly ExportLine[], ctx: ReviewContext): 
     '',
     `WOULD LEAVE THIS MAC: ${leaving.length} line(s), to ${ctx.destination}.`,
     'An asker you granted sees each one marked "Allowed in advance by <you> (<day>)". Nothing else goes there.',
-    ...(leaving.length ? leaving.map((l) => row('+', l)) : ['  (none: nothing would leave this Mac)']),
+    ...(leaving.length ? leaving.map(leaveRow) : ['  (none: nothing would leave this Mac)']),
     '',
     `STAYS ON THIS MAC (and goes into the import file for your own phone, "Only me"): ${staying.length} line(s).`,
     ...(staying.length ? staying.map((l) => row('-', l)) : ['  (none)']),
@@ -498,8 +522,9 @@ export function renderReview(lines: readonly ExportLine[], ctx: ReviewContext): 
     'Files written by this run:',
     ...ctx.files.map((f) => '  ' + f),
     '',
-    'To allow a line in advance: tick "Allow in advance" on the review page, or add a child "allowed in advance" under',
-    'the node in Tana, or start the line with "+ " in your Mac folder. Then run the dry run again and read this file.',
+    'To allow a line in advance: tick "Allow in advance" on the review page, or add a child that reads exactly',
+    '"allowed in advance" (or "allowed in advance: <note>"; the note is shown to the asker) under the node in Tana,',
+    'or start the line with "+ " in a .txt file of your Mac folder. Then run the dry run again and read this file.',
     '',
   ].join('\n')
 }

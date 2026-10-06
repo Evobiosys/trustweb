@@ -107,6 +107,19 @@ describe('trustweb_peer_grant.sh', () => {
     rmSync(h.root, { recursive: true })
   }, 60_000)
 
+  it('a grant list that cannot be read stops the script: it is never replaced by a list of one', async () => {
+    const h = fakeHost()
+    writeFileSync(path.join(h.root, 'unit-present'), '')
+    const file = path.join(h.root, 'state', 'grants.json')
+    writeFileSync(file, JSON.stringify({ names: ['Anna', 'Ben'] }))
+    chmodSync(file, 0o000)   // the fake sudo runs as this user: cat fails, as a dropped connection or a sudo error would
+    const r = await run('trustweb_peer_grant.sh', ['--instance', 'personal', '--host', 'sebra', '--add', 'Cleo'], h.env)
+    chmodSync(file, 0o600)
+    expect(r.code).not.toBe(0)
+    expect(JSON.parse(readFileSync(file, 'utf8')).names).toEqual(['Anna', 'Ben'])
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+
   it('refuses the demo instance (open, no grant list) and an instance that is not deployed', async () => {
     const h = fakeHost()
     const demo = await run('trustweb_peer_grant.sh', ['--instance', 'demo', '--host', 'questhub', '--list'], h.env)
@@ -123,8 +136,9 @@ describe('trustweb_peer_grant.sh', () => {
 describe('trustweb_peer_claim.sh --instance personal', () => {
   it('opens a window, closes the claim file again, and tells him to use his NORMAL TrustWeb', async () => {
     const h = fakeHost()
-    const r = await run('trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'sebra'], h.env)
+    const r = await run('trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'sebra', '--confirm', 'personal'], h.env)
     expect(r.code).toBe(0)
+    expect(r.stdout).toContain('THIS ACTS ON: the personal front door (trustweb-peer-personal on sebra)')
     expect(r.stdout).toContain('front door: personal (trustweb-peer-personal on sebra)')
     expect(r.stdout).toContain('"claimOpen":true')
     expect(r.stdout).toContain('in YOUR NORMAL TrustWeb')
@@ -138,10 +152,65 @@ describe('trustweb_peer_claim.sh --instance personal', () => {
   it('refuses while an owner is bound and names the reset command for that instance and host', async () => {
     const h = fakeHost()
     writeFileSync(path.join(h.root, 'owner'), '')
-    const r = await run('trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'questhub'], h.env)
+    const r = await run('trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'questhub', '--confirm', 'personal'], h.env)
     expect(r.code).toBe(1)
     expect(r.stderr).toContain('--instance personal --host questhub --reset')
     expect(existsSync(path.join(h.root, 'state', 'claim-open'))).toBe(false)
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+})
+
+describe('a change names its front door and is confirmed before any host is touched', () => {
+  it('claim (open, --reset, --close) and deploy (full, --off) refuse without --instance, without confirmation, or with a mismatched --confirm', async () => {
+    const h = fakeHost()
+    for (const [script, args, code, msg] of [
+      ['trustweb_peer_claim.sh', [], 2, /no default for changes/],
+      ['trustweb_peer_claim.sh', ['--reset'], 2, /no default for changes/],
+      ['trustweb_peer_claim.sh', ['--close'], 2, /no default for changes/],
+      ['trustweb_peer_claim.sh', ['--instance', 'demo', '--reset'], 2, /pass --confirm demo/],
+      ['trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'sebra', '--confirm', 'demo'], 2, /--confirm demo does not match --instance personal/],
+      ['trustweb_peer_claim.sh', ['--instance', 'demo', '--host', 'sebra', '--status'], 2, /questhub only/],
+      ['deploy_trustweb_peer.sh', ['--off'], 2, /no default for changes/],
+      ['deploy_trustweb_peer.sh', [], 2, /no default for changes/],
+      ['deploy_trustweb_peer.sh', ['--instance', 'personal', '--host', 'sebra', '--off'], 2, /pass --confirm personal/],
+      ['deploy_trustweb_peer.sh', ['--instance', 'demo', '--off', '--confirm', 'personal'], 2, /does not match --instance demo/],
+    ]) {
+      const r = await run(script, args, h.env)
+      expect(r.code, `${script} ${args.join(' ')}`).toBe(code)
+      expect(r.stderr, `${script} ${args.join(' ')}`).toMatch(msg)
+    }
+    expect(existsSync(path.join(h.root, 'ssh.log'))).toBe(false)
+    rmSync(h.root, { recursive: true })
+  }, 120_000)
+
+  it('--status needs no confirmation (read-only)', async () => {
+    const h = fakeHost()
+    const r = await run('trustweb_peer_claim.sh', ['--instance', 'personal', '--host', 'sebra', '--status'], h.env)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toContain('"claimOpen":false')
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+})
+
+describe('the personal inventory on the host: created EMPTY, never overwritten by a deploy', () => {
+  function initOnFakeHost(h) {
+    // the very command deploy_trustweb_peer.sh step 3/6 runs, from the shared lib, through the fake ssh
+    return new Promise((resolve) => {
+      execFile('bash', ['-c', `. "${path.join(REPO, 'scripts/trustweb_peer_lib.sh')}" && tw_peer_instance personal && RHOST=sebra && rsh "$(tw_peer_inventory_init_cmd)"`],
+        { env: h.env }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }))
+    })
+  }
+  it('absent: becomes {"items":[]} with mode 0600 in a 0700 folder; present: byte-identical afterwards', async () => {
+    const h = fakeHost()
+    const inv = path.join(h.root, 'etc', 'inventory.json')
+    expect((await initOnFakeHost(h)).code).toBe(0)
+    expect(readFileSync(inv, 'utf8')).toBe('{"items":[]}\n')
+    expect((statSync(inv).mode & 0o777).toString(8)).toBe('600')
+    expect((statSync(path.join(h.root, 'etc')).mode & 0o777).toString(8)).toBe('700')
+    const sent = JSON.stringify({ items: [{ text: 'Spare desk', audience: 'fof', preset: { by: 'Jakob', at: '2026-10-06' } }] }) + '\n'
+    writeFileSync(inv, sent)
+    expect((await initOnFakeHost(h)).code).toBe(0)
+    expect(readFileSync(inv, 'utf8')).toBe(sent)
     rmSync(h.root, { recursive: true })
   }, 60_000)
 })

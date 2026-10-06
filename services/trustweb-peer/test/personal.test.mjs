@@ -221,4 +221,141 @@ describe('the personal front door, without an app, end to end on this Mac', () =
       rmSync(dir, { recursive: true })
     }
   }, 60_000)
+
+  /** A Granted peer on a fresh state dir; Jakob claims it with a phone that declines everything. */
+  async function grantedPeer(names, extra = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'twpersonal-'))
+    const stateDir = path.join(dir, 'state')
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 })
+    const writeGrants = (n) => writeFileSync(path.join(stateDir, 'grants.json'), JSON.stringify({ names: n }))
+    writeGrants(names)
+    const inv = path.join(dir, 'inventory.json')
+    writeFileSync(inv, JSON.stringify(exportFixture()))
+    const lines = []
+    const peer = await startPeer({
+      stateDir, inventoryFile: inv, relayOrigin, name: 'Jakob', policy: PeerPolicy.Granted, healthPort: 0,
+      claim: true, forwardWaitMs: FORWARD_WAIT_MS, answerWindowMs: WINDOW_MS, log: (l) => lines.push(l), ...extra,
+    })
+    const jakob = await phone(relayOrigin, 'Jakob', () => null)
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    return { dir, stateDir, inv, peer, jakob, lines, writeGrants, cleanup: async () => { await peer.stop(); rmSync(dir, { recursive: true }) } }
+  }
+  /** Time from sending an ask to its answer arriving. */
+  async function timedAsk(p, did, text) {
+    const t0 = Date.now()
+    const a = await p.ask(did, text, FORWARD_WAIT_MS * 3)
+    return { a, ms: Date.now() - t0 }
+  }
+
+  it('timing: decline, no match, over the rate limit and phone off all answer at the same instant (the forward deadline)', async () => {
+    const g = await grantedPeer(['Anna', 'Ben'], { asksPerHour: 2 })
+    try {
+      const anna = await phone(relayOrigin, 'Anna', null)
+      await anna.connectTo(g.peer.card.did)
+      await until(() => g.peer.peerCount() === 1)
+      // owner online: he declines at once / nothing matches / over the limit (never forwarded)
+      const decline = await timedAsk(anna, g.peer.card.did, 'guest bed for a visiting friend two nights')
+      const nomatch = await timedAsk(anna, g.peer.card.did, 'helicopter rides over the alps')
+      const limited = await timedAsk(anna, g.peer.card.did, 'helicopter rides over the alps again')
+      expect(g.jakob.asks).toHaveLength(2)
+      // a preset line that answers while the owner declines the live part
+      const ben = await phone(relayOrigin, 'Ben', null)
+      await ben.connectTo(g.peer.card.did)
+      await until(() => g.peer.peerCount() === 2)
+      const preset = await timedAsk(ben, g.peer.card.did, 'is there a spare desk in a coworking space on fridays')
+      expect(preset.a.decoded.outcome).toBe('shared')
+      // owner off
+      g.jakob.close()
+      const off = await timedAsk(ben, g.peer.card.did, 'helicopter rides over the alps')
+      const all = [decline, nomatch, limited, preset, off]
+      for (const x of [decline, nomatch, limited, off]) expect(x.a.decoded.outcome).toBe('nothing')
+      const times = all.map((x) => x.ms)
+      expect(Math.min(...times)).toBeGreaterThanOrEqual(FORWARD_WAIT_MS)
+      expect(Math.max(...times) - Math.min(...times)).toBeLessThan(400)
+      anna.close(); ben.close()
+    } finally {
+      await g.cleanup()
+    }
+  }, 60_000)
+
+  it('the owner live-sharing answers at once (the content already says so); a self-ask is never forwarded and answers at the window', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'twpersonal-'))
+    const stateDir = path.join(dir, 'state')
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 })
+    writeFileSync(path.join(stateDir, 'grants.json'), JSON.stringify({ names: ['Anna'] }))
+    const inv = path.join(dir, 'inventory.json')
+    writeFileSync(inv, JSON.stringify({ items: [] }))
+    const peer = await startPeer({
+      stateDir, inventoryFile: inv, relayOrigin, name: 'Jakob', policy: PeerPolicy.Granted, healthPort: 0,
+      claim: true, forwardWaitMs: FORWARD_WAIT_MS, answerWindowMs: WINDOW_MS, log: () => {},
+    })
+    try {
+      const jakob = await phone(relayOrigin, 'Jakob', () => [{ text: 'I can lend you my drill', when: 'this week' }])
+      await jakob.connectTo(peer.card.did)
+      await until(() => peer.status().owner)
+      const anna = await phone(relayOrigin, 'Anna', null)
+      await anna.connectTo(peer.card.did)
+      await until(() => peer.peerCount() === 1)
+      const shared = await timedAsk(anna, peer.card.did, 'does anyone have a drill')
+      expect(shared.a.decoded.outcome).toBe('shared')
+      expect(shared.ms).toBeLessThan(FORWARD_WAIT_MS)
+      const self = await timedAsk(jakob, peer.card.did, 'does anyone have a drill')
+      expect(self.a.decoded.outcome).toBe('nothing')
+      expect(self.ms).toBeLessThan(FORWARD_WAIT_MS)
+      expect(jakob.asks).toHaveLength(1)
+      anna.close(); jakob.close()
+    } finally {
+      await peer.stop()
+      rmSync(dir, { recursive: true })
+    }
+  }, 60_000)
+
+  it('grants: --remove revokes a connected person at the next reload; a granted name binds one phone; names normalise like the grant script', async () => {
+    const g = await grantedPeer(['Anna', 'Ben  Bauer'])
+    try {
+      const anna = await phone(relayOrigin, 'Anna', null)
+      await anna.connectTo(g.peer.card.did)
+      await until(() => g.peer.peerCount() === 1)
+      // a second phone sending the same granted name is refused while Anna's phone holds it
+      const impostor = await phone(relayOrigin, 'anna', null)
+      await impostor.connectTo(g.peer.card.did)
+      await until(() => g.lines.some((l) => /refused \(name already bound\)/.test(l)))
+      expect(g.peer.peerCount()).toBe(1)
+      expect(await impostor.ask(g.peer.card.did, 'spare desk on fridays', 1500)).toBeNull()
+      // whitespace and Unicode normalisation: "Ben Bauer" (script form) matches "ben  bauer"
+      const ben = await phone(relayOrigin, ' ben  bauer ', null)
+      await ben.connectTo(g.peer.card.did)
+      await until(() => g.peer.peerCount() === 2)
+      // Jakob removes Anna: after the reload she gets no answer at all and is forgotten
+      g.writeGrants(['Ben Bauer'])
+      process.emit('SIGHUP')
+      await until(() => g.peer.peerCount() === 1)
+      expect(await anna.ask(g.peer.card.did, 'is there a spare desk in a coworking space on fridays', 1500)).toBeNull()
+      const b = await ben.ask(g.peer.card.did, 'is there a spare desk in a coworking space on fridays', FORWARD_WAIT_MS * 3)
+      expect(b.decoded.outcome).toBe('shared')
+      expect(g.lines.join('\n')).not.toMatch(/anna|ben|bauer/i)
+      anna.close(); impostor.close(); ben.close()
+    } finally {
+      await g.cleanup()
+    }
+  }, 60_000)
+
+  it('a malformed inventory or grants file never puts its content into the log', async () => {
+    const g = await grantedPeer(['Anna'])
+    try {
+      writeFileSync(g.inv, 'my therapist Dr Secret, phone 0664')
+      process.emit('SIGHUP')
+      await until(() => g.lines.some((l) => /reload failed/.test(l)))
+      writeFileSync(g.inv, JSON.stringify(exportFixture()))
+      g.writeGrants(['Anna'])
+      writeFileSync(path.join(g.stateDir, 'grants.json'), 'Anna Secretname, Ben')
+      process.emit('SIGHUP')
+      await until(() => g.lines.filter((l) => /reload failed/.test(l)).length === 2)
+      expect(g.lines.join('\n')).not.toMatch(/therapist|Secret|Anna|0664/)
+      expect(g.peer.status().presetLines).toBe(3)
+    } finally {
+      await g.cleanup()
+    }
+  }, 60_000)
 })

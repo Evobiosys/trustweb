@@ -4,7 +4,7 @@
  * checked property-style over random inventories. Plus a CLI smoke test of the
  * dry run against a fake tana_mcp.sh.
  */
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, chmodSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, chmodSync, mkdirSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -13,7 +13,8 @@ import {
   fullFile, identifyingReason, importFile, lineFrom, parseChoices, parseFolderLine, parseTanaMark, readTanaInventory, renderReview,
   scrubText, serverFile,
 } from '../inventory_export.ts'
-import { reviewIsFresh, parseArgs, tanaViaScript } from '../../../scripts/trustweb_inventory_export.ts'
+import { reviewIsFresh, parseArgs, tanaViaScript, isExplicitYes, send, readFolder } from '../../../scripts/trustweb_inventory_export.ts'
+import { presetContext } from '../peer.ts'
 
 const OPTS = { today: '2026-10-06', by: 'Jakob', knownIds: new Set() }
 const REPO = path.resolve(import.meta.dirname, '..', '..', '..')
@@ -83,7 +84,21 @@ describe('text hygiene', () => {
     expect(identifyingReason('met 2026-10-06T10:15', new Set())).toMatch(/timestamp/)
     expect(identifyingReason('epoch 1791234567890', new Set())).toMatch(/timestamp/)
     expect(identifyingReason('Guest bed from 2026-10-06, two nights', new Set())).toBeNull()
-    expect(scrubText('see ABCdef123456 and did:peer:2.x', ids)).toBe('see [link] and [link]2.x')
+    // the Vienna way of writing a date-time
+    expect(identifyingReason('met Anna 6.10.2026 14:30 at the Hub', new Set())).toMatch(/timestamp/)
+    expect(identifyingReason('met Anna 6. 10. 26, um 9.30', new Set())).toMatch(/timestamp/)
+    expect(identifyingReason('sale 6.10.2026', new Set())).toBeNull()
+  })
+  it('scrubText replaces each identifier as a WHOLE token (nothing of a DID, link or node id survives)', () => {
+    const ids = new Set(['ABCdef123456'])
+    expect(scrubText('see ABCdef123456 and did:peer:2.Ez6LSabc.Vz6Mkdef here', ids)).toBe('see [link] and [link] here')
+    expect(scrubText('open https://app.tana.inc/?nodeid=QQQQwwww1234 now', new Set())).toBe('open [link] now')
+    expect(scrubText('ref nodeid=QQQQwwww1234, ok', new Set())).toBe('ref [link], ok')
+    expect(scrubText('[[Anna^QQQQwwww1234]] and tana:QQQQwwww1234', new Set())).toBe('[link] and [link]')
+    expect(scrubText('call 2026-10-06T10:15:30Z or 6.10.2026 14:30 or 1791234567890', new Set())).toBe('call [link] or [link] or [link]')
+    for (const t of ['did:peer:2.Ez6LSabc', 'https://app.tana.inc/?nodeid=QQQQwwww1234', 'nodeid=QQQQwwww1234']) {
+      expect(scrubText(t, new Set())).not.toMatch(/Ez6|QQQQ/)
+    }
   })
 })
 
@@ -91,8 +106,14 @@ describe('marks', () => {
   it('Tana child "allowed in advance[: note]", any case; anything else is no mark', () => {
     expect(parseTanaMark('allowed in advance')).toEqual({ kind: MarkKind.TanaChild })
     expect(parseTanaMark('Allowed in advance: for neighbours')).toEqual({ kind: MarkKind.TanaChild, note: 'for neighbours' })
-    expect(parseTanaMark('ALLOWED IN ADVANCE  for friends')).toEqual({ kind: MarkKind.TanaChild, note: 'for friends' })
-    expect(parseTanaMark('not allowed in advance')).toBeNull()
+    expect(parseTanaMark('ALLOWED IN ADVANCE')).toEqual({ kind: MarkKind.TanaChild })
+    expect(parseTanaMark('Allowed in advance :  for friends ')).toEqual({ kind: MarkKind.TanaChild, note: 'for friends' })
+    expect(parseTanaMark('allowed in advance: <span data-inlineref-node="XyZ123abcDEF">Anna</span>')).toEqual({ kind: MarkKind.TanaChild, note: 'Anna' })
+    // only the exact grammar marks: anything looser is a thought, not a permission
+    for (const near of ['ALLOWED IN ADVANCE  for friends', 'allowed in advance? ask first', 'allowed in advance (not yet)',
+      'allowed in advance - no', 'allowed in advance for nobody', '"allowed in advance"', '> allowed in advance', 'not allowed in advance']) {
+      expect(parseTanaMark(near), near).toBeNull()
+    }
     expect(parseTanaMark('allowed in advanced')).toBeNull()
     expect(parseTanaMark('allowed')).toBeNull()
     expect(parseTanaMark('allowed in advance: ' + 'n'.repeat(300)).note.length).toBe(120)
@@ -196,6 +217,9 @@ describe('buildExport and the four outputs', () => {
     expect(() => assertServerFileSafe({ ...s, owner: 'did:peer:2.x' }, lines, opts.knownIds)).toThrow(/DID/)
     expect(() => assertServerFileSafe({ ...s, at: 1 }, lines, opts.knownIds)).toThrow(/unexpected fields/)
     expect(() => assertServerFileSafe({ items: [{ ...s.items[0], text: 'x ITOOL0000001' }] }, lines, opts.knownIds)).toThrow(/Tana node id/)
+    expect(() => assertServerFileSafe({ items: [{ ...s.items[0], tanaNodeIds: [] }] }, lines, opts.knownIds)).toThrow(/unexpected fields/)
+    expect(() => assertServerFileSafe({ items: [{ ...s.items[0], preset: { ...s.items[0].preset, source: 'x' } }] }, lines, opts.knownIds)).toThrow(/unexpected fields/)
+    expect(() => assertServerFileSafe({ items: [{ ...s.items[0], preset: { ...s.items[0].preset, note: 'met 2026-10-06T10:00' } }] }, lines, opts.knownIds)).toThrow(/identifying/)
   })
 
   it('import file for his own phone: every line, "Only me", no ids, stable keys', async () => {
@@ -220,12 +244,57 @@ describe('buildExport and the four outputs', () => {
     expect(full.items).toHaveLength(lines.length)
     expect(full.tanaNodesRead).toEqual(readIds)
     expect(full.items.filter((i) => i.preset).length).toBe(3)
-    const review = renderReview(lines, { runId: 'abc123', generatedAt: 'now', mode: 'dry run', destination: 'nowhere', inputs: ['x'], files: ['f'] })
+    const review = renderReview(lines, { runId: 'abc123', by: 'Jakob', today: '2026-10-06', generatedAt: 'now', mode: 'dry run', destination: 'nowhere', inputs: ['x'], files: ['f'] })
     expect(review).toContain('run abc123, dry run')
     expect(review).toContain('WOULD LEAVE THIS MAC: 3 line(s)')
     expect(review).toContain('STAYS ON THIS MAC')
     expect(review).toMatch(/\+ Projector for a talk, Vienna\n {6}why: a Tana child "allowed in advance" under it/)
     expect(review).toMatch(/- my private diary\n {6}why: not marked/)
+    // the note leaves the Mac too, so the review shows it exactly as the asker will see it
+    expect(review).toContain('the asker sees: "JARVIS: voice assistant for the desk" marked "Allowed in advance by Jakob (2026-10-06): for people I met"')
+    expect(presetContext({ by: 'Jakob', at: '2026-10-06', note: 'for people I met' })).toBe('Allowed in advance by Jakob (2026-10-06): for people I met')
+  })
+
+  it('send: shows every line with its wire context, sends only after a typed y (ENTER and n send nothing), pipes exactly the server file', async () => {
+    const { lines, opts } = await exported()
+    const s = serverFile(lines, opts)
+    expect(['', ' ', '\n', 'n', 'no', 'yy', 'ja'].map(isExplicitYes)).toEqual([false, false, false, false, false, false, false])
+    expect(['y', 'Y', ' yes '].map(isExplicitYes)).toEqual([true, true, true])
+    for (const answer of ['', 'n']) {
+      const printed = []
+      const calls = []
+      const sent = await send('sebra', s, { ask: async () => answer, ssh: async (...a) => { calls.push(a); return '' }, print: (l) => printed.push(l) })
+      expect(sent).toBe(false)
+      expect(calls).toHaveLength(0)
+      expect(printed.join('\n')).toContain('marked "Allowed in advance by Jakob (2026-10-06): for people I met"')
+    }
+    const calls = []
+    const sent = await send('sebra', s, {
+      ask: async () => 'y',
+      ssh: async (host, cmd, stdin) => { calls.push({ host, cmd, stdin }); return /\/status/.test(cmd) && !stdin ? JSON.stringify({ presetLines: s.items.length }) : '' },
+      print: () => {},
+    })
+    expect(sent).toBe(true)
+    expect(calls.every((c) => c.host === 'sebra')).toBe(true)
+    expect(calls.filter((c) => c.stdin).map((c) => c.stdin)).toEqual([JSON.stringify(s) + '\n'])
+  })
+})
+
+describe('the Mac folder', () => {
+  it('reads only regular files in the folder itself: a symlink to a file elsewhere is skipped and named', () => {
+    const dir = tmp()
+    const folder = path.join(dir, 'folder')
+    mkdirSync(folder)
+    writeFileSync(path.join(dir, 'elsewhere.txt'), '+ secret from outside the folder\n')
+    writeFileSync(path.join(folder, 'mine.txt'), '+ Spare desk, Fridays\n')
+    symlinkSync(path.join(dir, 'elsewhere.txt'), path.join(folder, 'link.txt'))
+    mkdirSync(path.join(folder, 'sub.md'))
+    const warned = []
+    const c = readFolder(folder, (m) => warned.push(m))
+    expect(c.map((x) => x.text)).toEqual(['Spare desk, Fridays'])
+    expect(warned.join('\n')).toMatch(/skipped link\.txt/)
+    expect(warned.join('\n')).toMatch(/skipped sub\.md/)
+    rmSync(dir, { recursive: true })
   })
 })
 
@@ -274,6 +343,87 @@ describe('property: nothing unmarked leaves this Mac', () => {
       // nothing marked and clean is lost either
       expect(s.items.length).toBe(lines.filter((l) => l.mark && !identifyingReason(l.text, new Set([...ids, ...l.tanaNodeIds]))).length)
       expect(importFile(lines, opts).items).toHaveLength(lines.length)
+    }
+  })
+})
+
+describe('property, end to end through the real readers (Tana tree, choices file, Mac folder)', () => {
+  function rng(seed) {
+    return () => {
+      seed |= 0; seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+  const WORDS = ['bike', 'tent', 'desk', 'Vienna', 'intro', 'projector', 'garden', 'room', 'farm', 'kettle', 'ladder', 'sauna']
+  // children that look like a mark but are not one (the generator records them as NOT marking)
+  const NEAR = ['allowed in advance? ask first', 'allowed in advance (not yet)', 'not allowed in advance', 'allowed in advanced',
+    'Allowed in advance for nobody', '"allowed in advance"', 'allowed in advance - no', 'note: allowed in advance']
+  const REAL = ['allowed in advance', 'Allowed in advance', 'ALLOWED IN ADVANCE: for neighbours', 'allowed in advance:   ok']
+
+  it('over 300 random inventories, the server file holds exactly the lines the GENERATOR marked (and nothing identifying)', async () => {
+    const r = rng(20261006)
+    const pick = (a) => a[Math.floor(r() * a.length)]
+    const words = (n) => Array.from({ length: n }, () => pick(WORDS)).join(' ')
+    for (let run = 0; run < 300; run++) {
+      let seq = 0
+      const id = () => 'P' + String(run).padStart(4, '0') + String(seq++).padStart(7, '0')
+      const tree = {}
+      const intended = new Set() // normalised texts the generator meant to allow
+      const all = new Set()
+      const root = id(), refd = id(), inbox = id()
+      tree[root] = [{ id: refd, name: 'referenced' }, { id: inbox, name: 'inbox' }]
+      tree[refd] = []
+      tree[inbox] = []
+      const n = 1 + Math.floor(r() * 10)
+      for (let i = 0; i < n; i++) {
+        const itemId = id()
+        const title = words(1 + Math.floor(r() * 3)) + ' ' + i + 'x' + run // unique titles: no cross-merge by accident
+        const kids = []
+        const marked = r() < 0.35
+        if (r() < 0.5) kids.push({ id: id(), name: words(2) })              // first line
+        if (r() < 0.4) kids.push({ id: id(), name: pick(NEAR) })            // a near miss never marks
+        if (marked) kids.push({ id: id(), name: pick(REAL) })
+        // a grandchild mark never marks the item
+        if (r() < 0.3) { const g = id(); kids.push({ id: g, name: 'details' }); tree[g] = [{ id: id(), name: 'allowed in advance' }] }
+        tree[itemId] = kids
+        ;(r() < 0.5 ? tree[refd] : tree[inbox]).push({ id: itemId, name: title })
+      }
+      const { call } = fakeTana(tree, 1 + Math.floor(r() * 4))
+      const tana = await readTanaInventory(call, root)
+      for (const c of tana.candidates) all.add(c.text.toLowerCase())
+      // which Tana lines the generator meant: those whose node got a REAL mark child
+      for (const c of tana.candidates) if ((tree[c.tanaNodeId] ?? []).some((k) => REAL.includes(k.name))) intended.add(c.text.toLowerCase())
+      // choices rows: only toTana === true && allowInAdvance === true is meant
+      const rows = Array.from({ length: Math.floor(r() * 5) }, (_, k) => {
+        const toTana = pick([true, false, 'true', 1, undefined])
+        const allow = pick([true, false, 'true', 1, undefined])
+        return { candidate: 'c', line: 'kimi ' + words(2) + ' ' + k + 'k' + run, toTana, allowInAdvance: allow }
+      })
+      for (const row of rows) {
+        if (row.toTana === true) all.add(row.line.toLowerCase())
+        if (row.toTana === true && row.allowInAdvance === true) intended.add(row.line.toLowerCase())
+      }
+      // folder lines: only "+ " is meant
+      const folder = Array.from({ length: Math.floor(r() * 5) }, (_, k) => {
+        const lead = pick(['+ ', '- ', '* ', '', '+', '# ', '++ '])
+        return { raw: lead + 'mac ' + words(2) + ' ' + k + 'm' + run, lead }
+      })
+      const folderCands = folder.map((f) => parseFolderLine(f.raw, 'f.txt')).filter(Boolean)
+      // only "+ " (plus, then a space) marks; "+x" and "++ x" do not
+      for (const f of folder) if (f.lead === '+ ') intended.add(f.raw.slice(2).trim().toLowerCase())
+      const candidates = [...tana.candidates, ...parseChoices({ items: rows }), ...folderCands]
+      const knownIds = tana.seenIds
+      const opts = { ...OPTS, knownIds }
+      const lines = buildExport(candidates, opts)
+      const s = serverFile(lines, opts)
+      const left = s.items.map((i) => i.text.toLowerCase())
+      for (const t of left) expect(intended.has(t), `unintended line left: ${t}`).toBe(true)
+      for (const t of intended) expect(left.includes(t), `intended line missing: ${t}`).toBe(true)
+      const raw = JSON.stringify(s)
+      for (const x of knownIds) expect(raw).not.toContain(x)
+      expect(assertServerFileSafe(s, lines, knownIds)).toBe(s.items.length)
     }
   })
 })

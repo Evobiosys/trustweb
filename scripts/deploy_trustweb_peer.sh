@@ -8,7 +8,9 @@
 #     --card-only        republish only the instance's public card (demo); personal: nothing to do
 #     --republish-cards  the card of EVERY active trustweb-peer* instance on the host (deploy_wot.sh calls this)
 #     --off              stop and disable the instance (demo: also remove its card); state is kept
-#   Defaults: --instance demo --host questhub (the demo instance runs on questhub only).
+#   Defaults (read-only modes only: --dry-run, --card-only, --republish-cards): --instance demo --host questhub
+#   (the demo instance runs on questhub only). A full deploy and --off CHANGE a front door: they need
+#   --instance, print which front door they act on and ask you to type its name (or pass --confirm <instance>).
 #   --instance personal REQUIRES --host (where it runs is Jakob's decision, never a default).
 #   --dry-run          prints the plan and the rendered unit, runs READ-ONLY checks on the host, changes nothing.
 #
@@ -37,11 +39,12 @@ CARD_DIR=/srv/questhub-static/app-idea2-trustweb
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good (see deploy_wot.sh)
 RELAY=https://app.idea2.site
 
-MODE=full; DRY=0; INST=demo; HOSTNAME_ARG=""
-usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--dry-run] [--card-only|--republish-cards|--off]" >&2; exit 2; }
+MODE=full; DRY=0; INST=demo; INST_GIVEN=""; HOSTNAME_ARG=""; CONFIRM=""
+usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--dry-run] [--confirm <instance>] [--card-only|--republish-cards|--off]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --instance) [ $# -ge 2 ] || usage; INST="$2"; shift 2 ;;
+    --instance) [ $# -ge 2 ] || usage; INST="$2"; INST_GIVEN="$2"; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || usage; CONFIRM="$2"; shift 2 ;;
     --host) [ $# -ge 2 ] || usage; HOSTNAME_ARG="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --card-only) MODE=card; shift ;;
@@ -55,6 +58,12 @@ tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2
 tw_peer_host "${HOSTNAME_ARG:-questhub}" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
 if [ "$INSTANCE" = demo ] && [ "$RHOST" != questhub ]; then
   echo "the demo instance runs on questhub only (its card is published from questhub's static tree)" >&2; exit 2
+fi
+# A change to a front door: named explicitly and confirmed before anything on the host is touched.
+if [ "$DRY" = 0 ] && { [ "$MODE" = full ] || [ "$MODE" = off ]; }; then
+  tw_peer_require_instance "$INST_GIVEN"
+  if [ "$MODE" = off ]; then tw_peer_confirm_instance "$CONFIRM" "stop and disable it"
+  else tw_peer_confirm_instance "$CONFIRM" "install or update it and restart it"; fi
 fi
 tw_peer_ssh_prepare
 say() { if [ "$DRY" = 1 ]; then echo "[dry-run] would: $*"; else echo "$*"; fi; }
@@ -163,7 +172,7 @@ republish_cards() {
     # Capture first, filter after: a failed card publish must fail this run (deploy_wot.sh relies on it).
     if ! out="$("$HERE/deploy_trustweb_peer.sh" "${args[@]}" 2>&1)"; then
       printf '%s\n' "$out" >&2
-      echo "card republish FAILED for $u ($inst)" >&2
+      echo "card republish FAILED for $u ($inst). The app itself is deployed; once the cause is fixed, rerun: $HERE/deploy_trustweb_peer.sh --republish-cards" >&2
       return 1
     fi
     printf '%s\n' "$out" | grep -v -e '^\.\.\. deploy_trustweb_peer running' -e '^--------$' || true
@@ -211,8 +220,14 @@ case "$NODE" in
   *) echo "node at '$NODE': the unit needs a system path (ProtectHome hides /root and /home)" >&2; exit 1 ;;
 esac
 rsh 'node -e "if (parseInt(process.versions.node) < 22 || typeof WebSocket !== \"function\") { console.error(\"node too old\"); process.exit(1) } console.log(\"node \" + process.version)"'
-echo "port $PORT: $(rsh "ss -ltnH 'sport = :$PORT' | grep -q . && echo in use || echo free")"
-echo "unit $UNIT: $(rsh "systemctl is-active $UNIT 2>/dev/null || true")"
+PORT_STATE="$(rsh "ss -ltnH 'sport = :$PORT' | grep -q . && echo in use || echo free")"
+UNIT_STATE="$(rsh "systemctl is-active $UNIT 2>/dev/null || true")"
+echo "port $PORT: $PORT_STATE"
+echo "unit $UNIT: $UNIT_STATE"
+# The port in use by anything but this very unit = another service: never start over it.
+if [ "$PORT_STATE" = "in use" ] && [ "$UNIT_STATE" != active ]; then
+  echo "port $PORT is taken by another service on $RHOST and $UNIT is not running: stopping here, nothing was changed" >&2; exit 1
+fi
 if [ "$INSTANCE" = personal ]; then
   echo "inventory $INV_PATH: $(rsh "sudo test -f $INV_PATH && echo present, kept as it is || echo absent, will be created EMPTY")"
 fi
@@ -239,7 +254,7 @@ fi
 if [ "$INSTANCE" = personal ]; then
   say "3/6 $INV_PATH: create EMPTY ({\"items\":[]}, root 0600) only if absent; an existing one is never overwritten here"
   if [ "$DRY" = 0 ]; then
-    rsh "sudo install -d -m 0700 $INV_ETC && if ! sudo test -f $INV_PATH; then sudo install -m 0600 /dev/null $INV_PATH && printf '{\"items\":[]}\\n' | sudo tee $INV_PATH >/dev/null; fi"
+    rsh "$(tw_peer_inventory_init_cmd)"
   fi
 else
   say "3/6 (demo: inventory shipped with the bundle)"

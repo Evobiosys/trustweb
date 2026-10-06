@@ -24,16 +24,16 @@
  *          --tana-root <id> --no-tana --by <name> --send --host questhub|sebra
  */
 import { execFile, spawn } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { randomBytes } from 'node:crypto'
 import {
-  TanaReadTool, Verdict, assertServerFileSafe, buildExport, fullFile, importFile, parseChoices, parseFolderLine,
-  readTanaInventory, renderReview, serverFile,
+  TanaReadTool, assertServerFileSafe, buildExport, fullFile, importFile, parseChoices, parseFolderLine,
+  readTanaInventory, renderReview, serverFile, wireContext,
 } from '../services/trustweb-peer/inventory_export'
-import type { Candidate, ExportLine, ServerFile, TanaCall } from '../services/trustweb-peer/inventory_export'
+import type { Candidate, ServerFile, TanaCall } from '../services/trustweb-peer/inventory_export'
 
 const INVENTORY_ROOT = 'qAo6KedrMFrC'
 const TANA_SCRIPT = process.env.TW_TANA_MCP ?? path.join(homedir(), '.claude/scripts/tana_mcp.sh')
@@ -110,9 +110,16 @@ export function tanaViaScript(script: string): TanaCall {
   })
 }
 
-function readFolder(dir: string): Candidate[] {
+/**
+ * The Mac folder's lines. Only REGULAR files that sit in the folder itself
+ * count: a symlink (to a file anywhere else on the Mac), a subfolder or a
+ * device is skipped and named, so no "+ " line can come from outside it.
+ */
+export function readFolder(dir: string, warn: (msg: string) => void = (m) => console.log(m)): Candidate[] {
   const out: Candidate[] = []
   for (const f of readdirSync(dir).filter((n) => /\.(txt|md)$/i.test(n)).sort()) {
+    const st = lstatSync(path.join(dir, f))
+    if (!st.isFile()) { warn(`skipped ${f}: not a regular file in the folder (a symlink or folder is never read)`); continue }
     for (const raw of readFileSync(path.join(dir, f), 'utf8').split(/\r?\n/)) {
       const c = parseFolderLine(raw, f)
       if (c) out.push(c)
@@ -153,32 +160,55 @@ function ssh(host: Host, command: string, stdin?: string): Promise<string> {
   })
 }
 
-async function confirm(question: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-  const answer = (await rl.question(question)).trim().toLowerCase()
-  rl.close()
-  return answer === '' || answer === 'y' || answer === 'yes'
+/**
+ * The one action that sends personal data needs a typed "y" (or "yes").
+ * ENTER alone is NO here, unlike the usual "ENTER or y or n": a newline typed
+ * ahead during the Tana read, or pasted with the command, would otherwise
+ * answer the question before it was read.
+ */
+export function isExplicitYes(answer: string): boolean {
+  const a = answer.trim().toLowerCase()
+  return a === 'y' || a === 'yes'
 }
 
-async function send(host: Host, file: ServerFile, lines: readonly ExportLine[]): Promise<void> {
-  const leaving = lines.filter((l) => l.verdict === Verdict.Leaves)
-  console.log('--------')
-  console.log(`These ${leaving.length} line(s) would go to your personal front door on ${host}:`)
-  for (const l of leaving) console.log('  + ' + l.text)
-  if (!(await confirm(`Send them now? ENTER or y or n: `))) { console.log('not sent'); return }
-  await ssh(host, `systemctl cat ${PERSONAL_UNIT} >/dev/null 2>&1 || { echo "the personal front door is not deployed on this host" >&2; exit 3; }`)
-  await ssh(
+async function ask(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const answer = await rl.question(question)
+  rl.close()
+  return answer
+}
+
+/** What send() needs from the outside world; injected so the tests drive it without a terminal or a host. */
+export interface SendDeps {
+  ask: (question: string) => Promise<string>
+  ssh: (host: Host, command: string, stdin?: string) => Promise<string>
+  print: (line: string) => void
+}
+
+const REAL_DEPS: SendDeps = { ask, ssh, print: (l) => console.log(l) }
+
+/** Shows exactly what goes over the wire (text and the context the asker sees), asks, then replaces the front door's inventory. Returns whether it sent. */
+export async function send(host: Host, file: ServerFile, deps: SendDeps = REAL_DEPS): Promise<boolean> {
+  const { print } = deps
+  print('--------')
+  print(`These ${file.items.length} line(s) would go to your personal front door on ${host}, each exactly as an asker would see it:`)
+  for (const it of file.items) print(`  + "${it.text}"  marked "${wireContext(it.preset.by, it.preset.at, it.preset.note)}"`)
+  if (!isExplicitYes(await deps.ask('Send them now? Type y to send; n or ENTER sends nothing: '))) { print('not sent'); return false }
+  const remote = deps.ssh
+  await remote(host, `systemctl cat ${PERSONAL_UNIT} >/dev/null 2>&1 || { echo "the personal front door is not deployed on this host" >&2; exit 3; }`)
+  await remote(
     host,
     `set -e; umask 077; t=$(mktemp); cat > "$t"; sudo install -D -m 0600 -o root -g root "$t" ${PERSONAL_INVENTORY}; rm -f "$t"; ` +
       `sudo systemctl restart ${PERSONAL_UNIT}; ` +
       `for i in $(seq 1 15); do curl -fsS -H 'Host: 127.0.0.1:${PERSONAL_HEALTH_PORT}' http://127.0.0.1:${PERSONAL_HEALTH_PORT}/health >/dev/null 2>&1 && break; sleep 1; done`,
     JSON.stringify(file) + '\n',
   )
-  const status = await ssh(host, `curl -fsS -H 'Host: 127.0.0.1:${PERSONAL_HEALTH_PORT}' http://127.0.0.1:${PERSONAL_HEALTH_PORT}/status`)
-  console.log('front door status: ' + status.trim())
+  const status = await remote(host, `curl -fsS -H 'Host: 127.0.0.1:${PERSONAL_HEALTH_PORT}' http://127.0.0.1:${PERSONAL_HEALTH_PORT}/status`)
+  print('front door status: ' + status.trim())
   const preset = (JSON.parse(status) as { presetLines?: unknown }).presetLines
   if (preset !== file.items.length) throw new Error(`the front door reports ${String(preset)} preset lines, expected ${file.items.length}`)
-  console.log(`sent: ${file.items.length} line(s)`)
+  print(`sent: ${file.items.length} line(s)`)
+  return true
 }
 
 export async function main(argv: readonly string[]): Promise<void> {
@@ -229,6 +259,8 @@ export async function main(argv: readonly string[]): Promise<void> {
   writePrivate(importPath, JSON.stringify(importFile(lines, opts), null, 2) + '\n')
   writePrivate(reviewPath, renderReview(lines, {
     runId,
+    by: args.by,
+    today,
     generatedAt: new Date().toString(),
     mode: args.send ? 'send' : 'dry run',
     destination: args.host ? `the personal front door on ${args.host}` : 'the personal front door (only with --send; this run sends nothing)',
@@ -250,7 +282,7 @@ export async function main(argv: readonly string[]): Promise<void> {
   if (!process.stdin.isTTY) throw new Error('refused: --send needs a terminal (you confirm the lines yourself)')
   if (!reviewIsFresh(reviewPath, runId, startedAt)) throw new Error('refused: the review file was not regenerated by this run')
   writePrivate(serverPath, JSON.stringify(server, null, 2) + '\n')
-  await send(args.host as Host, server, lines)
+  await send(args.host as Host, server)
 }
 
 if (/trustweb_inventory_export\.(ts|mjs|js)$/.test(process.argv[1] ?? '')) {

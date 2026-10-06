@@ -11,7 +11,14 @@ WHAT IS TRUE NOW (wave 1733, read this first; the sections below keep the design
     (trustweb-inventory-import.json, every line, "Only me") goes into his OWN phone's inventory once the app can
     import it (app-B, "Import inventory file"); that needs no server at all. The front door is the second, optional
     step: it answers granted people from the lines he allowed in advance while his phone is off.
-  - Grants: scripts/trustweb_peer_grant.sh edits grants.json on the host (no hand-edited JSON).
+  - Grants: scripts/trustweb_peer_grant.sh edits grants.json on the host (no hand-edited JSON); --remove revokes at
+    once (SIGHUP reload forgets the person), and one granted name binds one phone.
+  - Review fixes (2026-10-06, adversarial review): a Tana mark is EXACTLY "allowed in advance" or "allowed in
+    advance: <note>" (anything looser, "allowed in advance? ask first", is no mark); the note is shown in the
+    review file and in the --send confirmation exactly as the asker sees it; --send needs a typed "y" (ENTER is
+    no); the Mac folder reads only regular files in the folder (no symlinks); the phone import file replaces a
+    DID, a Tana link or node id and a date-time as a whole token; answers to forwarded asks leave at one fixed
+    moment (section 3 d).
 
 Jakob's rulings (2026-10-06, binding): "not the server answers asks, I do"; "permissions set in advance, and
 nothing personal goes there until you decide"; "the inventory lives in Tana accessible on phone from sebra, so
@@ -51,17 +58,20 @@ queried if I don't have this laptop on".
      b. preset lines matched for the asker's ring (acquaintance), same matcher and audience rule as the phone
      c. in parallel: forward to the owner's phone as a 'query' with relayed: true and "<asker>: <text>";
         wait up to forwardWaitMs (120 s; the asker's app waits 180 s)
-     d. answer = owner's shared items first, then preset hits, max three; sealed; sent no earlier than 30 s
-        after arrival. Decline, no match, phone off, timeout: identical bytes.
+     d. answer = owner's shared items first, then preset hits, max three; sealed. Sent at ONE moment fixed at
+        arrival: while the ask is forwarded, at the forward deadline (120 s), unless the owner shared live (then at
+        once, at least 30 s); otherwise 30 s after arrival. Decline, no match, phone off, timeout, over the rate
+        limit: identical bytes AND identical timing (review fix 2026-10-06).
    Owner binding: claim window (TW_PEER_CLAIM=1 or the claim-open file), first phone to open the link within
    10 minutes becomes the owner; DID in state.json (0600), never logged. Self-asks from the owner: preset only.
    Two instances from one bundle: demo (PeerPolicy.Open, Swiss server, fictional presets) and personal
    (PeerPolicy.Granted + grants.json, sebra, exported presets).
 
 4. THE EXPORTER (BUILT 2026-10-06, wave 1733; the design below, as built: marks = the choices file's
-   "Allow in advance", a Tana child "allowed in advance[: note]" under the node, or "+ " in the Mac folder; the
-   unmarked default is "not written" for the server file; --send needs --host, a terminal, a review file written
-   by the same run, and his "y"; the "edited since" sync is NOT built)
+   "Allow in advance", a Tana child that reads exactly "allowed in advance" or "allowed in advance: <note>" under
+   the node, or "+ " in a regular file of the Mac folder; the unmarked default is "not written" for the server
+   file; --send needs --host, a terminal, a review file written by the same run, and a typed "y" (ENTER = no);
+   the "edited since" sync is NOT built)
    A script on the Mac (never on sebra): reads the "Personal TrustWeb Inventory" node, follows "referenced" one
    hop (title + first line of each referenced node), merges the local folder, and writes {items:[{text,
    audience, preset?}]}. A line gets a preset ONLY from an explicit mark Jakob set: a child node "allowed in

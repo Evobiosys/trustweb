@@ -4,9 +4,12 @@
 # becomes the owner (asks to the front door are then forwarded to that phone
 # for a live yes/no); later phones are askers (demo) or need a grant (personal).
 #
-#   ./scripts/trustweb_peer_claim.sh [--instance demo|personal] [--host questhub|sebra] [MODE]
+#   ./scripts/trustweb_peer_claim.sh --instance demo|personal [--host questhub|sebra] [--confirm <instance>] [MODE]
 #   MODE: (none) open the window, print the link | --close | --status | --reset (forget the owner)
-#   Defaults: --instance demo --host questhub. --instance personal REQUIRES --host.
+#   Opening, --close and --reset CHANGE a front door: they need --instance, print which front door they act
+#   on and ask you to type its name (or pass --confirm <instance>), so a demo window is never opened, or a
+#   demo owner forgotten, when the personal one was meant (and vice versa).
+#   Defaults: --status alone means --instance demo; --host questhub. --instance personal REQUIRES --host.
 #
 # WHICH TRUSTWEB OPENS THE LINK DECIDES WHO OWNS THE FRONT DOOR. The link is
 # https://app.idea2.site/trustweb/?connect=... with no ?persona=, so the app
@@ -29,11 +32,12 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=scripts/trustweb_peer_lib.sh
 . "$HERE/trustweb_peer_lib.sh"
 
-MODE=open; INST=demo; HOSTNAME_ARG=""
-usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--close|--status|--reset]" >&2; exit 2; }
+MODE=open; INST=demo; INST_GIVEN=""; HOSTNAME_ARG=""; CONFIRM=""
+usage() { echo "usage: $0 --instance demo|personal [--host questhub|sebra] [--confirm <instance>] [--close|--status|--reset]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --instance) [ $# -ge 2 ] || usage; INST="$2"; shift 2 ;;
+    --instance) [ $# -ge 2 ] || usage; INST="$2"; INST_GIVEN="$2"; shift 2 ;;
+    --confirm) [ $# -ge 2 ] || usage; CONFIRM="$2"; shift 2 ;;
     --host) [ $# -ge 2 ] || usage; HOSTNAME_ARG="$2"; shift 2 ;;
     --status) MODE=status; shift ;;
     --close) MODE=close; shift ;;
@@ -44,8 +48,16 @@ done
 tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2; exit 2; }
 tw_peer_require_host "$HOSTNAME_ARG"
 tw_peer_host "${HOSTNAME_ARG:-questhub}" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
-tw_peer_ssh_prepare
+if [ "$INSTANCE" = demo ] && [ "$RHOST" != questhub ]; then
+  echo "the demo instance runs on questhub only" >&2; exit 2
+fi
 echo "front door: $INSTANCE ($UNIT on $RHOST)"
+case "$MODE" in
+  open)  tw_peer_require_instance "$INST_GIVEN"; tw_peer_confirm_instance "$CONFIRM" "open a 10-minute claim window (the first phone to open the link becomes its owner)" ;;
+  close) tw_peer_require_instance "$INST_GIVEN"; tw_peer_confirm_instance "$CONFIRM" "close the claim window now" ;;
+  reset) tw_peer_require_instance "$INST_GIVEN"; tw_peer_confirm_instance "$CONFIRM" "FORGET its owner (asks are no longer forwarded to any phone until a new claim)" ;;
+esac
+tw_peer_ssh_prepare
 
 restart_and_wait() {
   rsh "sudo systemctl restart $UNIT;

@@ -43,6 +43,41 @@ tw_peer_require_host() {
   fi
 }
 
+# A mode that changes a front door names its instance on the command line: no default. $1 = the --instance value given ('' = none).
+tw_peer_require_instance() {
+  if [ -z "$1" ]; then
+    echo "this changes a front door: name it with --instance demo or --instance personal (there is no default for changes)" >&2
+    exit 2
+  fi
+}
+
+# Prints which front door a change acts on and has it confirmed BEFORE anything on the host changes:
+# the instance's name typed on the terminal, or --confirm <instance> (non-interactive; must match).
+# $1 = the --confirm value ('' = ask), $2 = what is about to happen.
+tw_peer_confirm_instance() {
+  local given="$1" what="$2" answer=""
+  echo "THIS ACTS ON: the $INSTANCE front door ($UNIT on $RHOST): $what"
+  if [ -n "$given" ]; then
+    if [ "$given" != "$INSTANCE" ]; then
+      echo "--confirm $given does not match --instance $INSTANCE: nothing done" >&2; exit 2
+    fi
+    return 0
+  fi
+  if [ ! -t 0 ]; then
+    echo "no terminal to confirm on: pass --confirm $INSTANCE to say you mean the $INSTANCE front door" >&2; exit 2
+  fi
+  read -r -p "Type $INSTANCE to continue (anything else stops): " answer
+  if [ "$answer" != "$INSTANCE" ]; then
+    echo "not confirmed: nothing done" >&2; exit 1
+  fi
+}
+
+# The remote command that creates the personal inventory EMPTY ({"items":[]}, root 0600, in a 0700 folder)
+# ONLY when it is absent. An existing file is never touched: only the exporter's --send replaces it.
+tw_peer_inventory_init_cmd() {
+  printf '%s' "sudo install -d -m 0700 $INV_ETC && if ! sudo test -f $INV_PATH; then sudo install -m 0600 /dev/null $INV_PATH && printf '{\"items\":[]}\\n' | sudo tee $INV_PATH >/dev/null; fi"
+}
+
 # The unit name -> instance name (trustweb-peer -> demo, trustweb-peer-personal -> personal).
 tw_peer_instance_of_unit() {
   local u="${1%.service}"
