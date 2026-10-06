@@ -1,9 +1,10 @@
 // Headless check of a built TrustWeb site (real Chromium, desktop 1280 and phone 390).
 //
 //   PLAYWRIGHT_PACKAGE=/Users/personal/Documents/SingularStructure/code/other/signal-orbit/node_modules/playwright-core/index.js \
-//   node scripts/tw-front-door/verify_site.mjs <built-dir> <screens-dir> <draft|prod>
+//   node scripts/tw-front-door/verify_site.mjs <built-dir> <screens-dir> <draft|prod> [<live-base-url>]
 //
-// It serves <built-dir> itself on 127.0.0.1:8981 (loopback only, closed at the end),
+// With a live base URL (e.g. https://idea2.site/trustweb/draft/) the same checks run against the
+// deployed pages (<built-dir> then only supplies the page list). Otherwise it serves <built-dir> itself on 127.0.0.1:8981 (loopback only, closed at the end),
 // so no server is left behind. Structure is checked by DOM queries, never with a
 // Python HTML parser (see build_tw_front_door.sh). Exit code 1 if any check fails.
 import http from 'node:http'
@@ -11,14 +12,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
-const [dir, shots, mode] = process.argv.slice(2)
+const [dir, shots, mode, liveBase] = process.argv.slice(2)
 if (!dir || !shots || !['draft', 'prod'].includes(mode)) {
   console.error('usage: verify_site.mjs <built-dir> <screens-dir> <draft|prod>')
   process.exit(2)
 }
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_PACKAGE)
 const PORT = 8981
-const BASE = `http://127.0.0.1:${PORT}/`
+const BASE = liveBase ?? `http://127.0.0.1:${PORT}/`
 const WIDTHS = [1280, 390]
 const results = []
 const check = (name, ok, detail = '') => {
@@ -143,7 +144,7 @@ async function checkPage(browser, name, width) {
   }
   check(`${tag}: zero console errors`, errors.length === 0, errors.join(' | ').slice(0, 200))
   fs.mkdirSync(shots, { recursive: true })
-  await page.screenshot({ path: path.join(shots, `${mode}_${name.replace('.html', '')}_${width}.png`), fullPage: true })
+  await page.screenshot({ path: path.join(shots, `${liveBase ? 'live-' : ''}${mode}_${name.replace('.html', '')}_${width}.png`), fullPage: true })
   await ctx.close()
 }
 
@@ -269,7 +270,7 @@ async function contentChecks(browser) {
   await ctx.close()
 }
 
-const server = await serve()
+const server = liveBase ? null : await serve()
 const browser = await chromium.launch({ headless: true })
 try {
   for (const name of pageNames) for (const w of WIDTHS) await checkPage(browser, name, w)
@@ -278,7 +279,7 @@ try {
   await linkAudit(browser)
 } finally {
   await browser.close()
-  await new Promise((resolve) => server.close(resolve))
+  if (server) await new Promise((resolve) => server.close(resolve))
 }
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)

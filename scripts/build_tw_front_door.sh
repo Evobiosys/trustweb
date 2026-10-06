@@ -82,20 +82,10 @@ echo "--------"
 
 rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
 
-# python3 has its own network allow rule on this Mac; curl may be blocked by LuLu.
+# node has its own network allow rule on this Mac (python3 and curl are blocked by LuLu);
+# redirects are not followed, so a 302 reads as 302.
 http_code() {
-  python3 -I -c '
-import sys, urllib.request, urllib.error
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a, **k):
-        return None
-try:
-    print(urllib.request.build_opener(NoRedirect).open(sys.argv[1], timeout=20).status)
-except urllib.error.HTTPError as e:
-    print(e.code)
-except Exception:
-    print("ERR")
-' "$1"
+  node -e 'fetch(process.argv[1], { redirect: "manual", signal: AbortSignal.timeout(20000) }).then((r) => console.log(r.status), () => console.log("ERR"))' "$1"
 }
 
 echo "fetching $SRC"
