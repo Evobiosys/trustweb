@@ -5,11 +5,11 @@
 # (0600, owned by the service) and sends the peer SIGHUP (it reloads grants
 # without a restart, so an open claim window and pending asks survive).
 #
-#   ./scripts/trustweb_peer_grant.sh --instance personal [--host questhub|sebra] --list
-#   ./scripts/trustweb_peer_grant.sh --instance personal [--host ...] --add "Anna"
-#   ./scripts/trustweb_peer_grant.sh --instance personal [--host ...] --remove "Anna"
-#   ./scripts/trustweb_peer_grant.sh --instance personal [--host ...] --link     the connect link to hand to a granted person
-#   Default host: sebra (the architecture note's home for the personal front door); pass --host questhub if it runs there.
+#   ./scripts/trustweb_peer_grant.sh --instance personal --host questhub|sebra --list
+#   ./scripts/trustweb_peer_grant.sh --instance personal --host ... --add "Anna"
+#   ./scripts/trustweb_peer_grant.sh --instance personal --host ... --remove "Anna"
+#   ./scripts/trustweb_peer_grant.sh --instance personal --host ... --link     the connect link to hand to a granted person
+#   --host is required for the personal instance: the host where you deployed it (your decision, never a default).
 #
 # What a grant is TODAY: the display name the other person's TrustWeb sends
 # when it opens the connect link (compared case-insensitively). A name is not
@@ -26,8 +26,8 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=scripts/trustweb_peer_lib.sh
 . "$HERE/trustweb_peer_lib.sh"
 
-INST=; HOSTNAME_ARG=sebra; ACTION=; NAME=
-usage() { echo "usage: $0 --instance personal [--host questhub|sebra] --list | --add <name> | --remove <name> | --link" >&2; exit 2; }
+INST=; HOSTNAME_ARG=; ACTION=; NAME=
+usage() { echo "usage: $0 --instance personal --host questhub|sebra --list | --add <name> | --remove <name> | --link" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --instance) [ $# -ge 2 ] || usage; INST="$2"; shift 2 ;;
@@ -40,7 +40,8 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$INST" ] && [ -n "$ACTION" ] || usage
 tw_peer_instance "$INST" || { echo "unknown instance: $INST" >&2; exit 2; }
-tw_peer_host "$HOSTNAME_ARG" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
+if [ "$POLICY" = granted ]; then tw_peer_require_host "$HOSTNAME_ARG"; fi
+tw_peer_host "${HOSTNAME_ARG:-questhub}" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
 if [ "$POLICY" != granted ]; then
   echo "the $INSTANCE front door is open to anyone with its link: it has no grant list" >&2; exit 2
 fi

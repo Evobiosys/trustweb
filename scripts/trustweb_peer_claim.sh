@@ -6,7 +6,7 @@
 #
 #   ./scripts/trustweb_peer_claim.sh [--instance demo|personal] [--host questhub|sebra] [MODE]
 #   MODE: (none) open the window, print the link | --close | --status | --reset (forget the owner)
-#   Defaults: --instance demo --host questhub.
+#   Defaults: --instance demo --host questhub. --instance personal REQUIRES --host.
 #
 # WHICH TRUSTWEB OPENS THE LINK DECIDES WHO OWNS THE FRONT DOOR. The link is
 # https://app.idea2.site/trustweb/?connect=... with no ?persona=, so the app
@@ -29,7 +29,7 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=scripts/trustweb_peer_lib.sh
 . "$HERE/trustweb_peer_lib.sh"
 
-MODE=open; INST=demo; HOSTNAME_ARG=questhub
+MODE=open; INST=demo; HOSTNAME_ARG=""
 usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--close|--status|--reset]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -42,7 +42,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2; exit 2; }
-tw_peer_host "$HOSTNAME_ARG" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
+tw_peer_require_host "$HOSTNAME_ARG"
+tw_peer_host "${HOSTNAME_ARG:-questhub}" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
 tw_peer_ssh_prepare
 echo "front door: $INSTANCE ($UNIT on $RHOST)"
 

@@ -5,7 +5,9 @@
  * logic: the grant list edits (idempotent, case-insensitive, validated,
  * 0600, SIGHUP), the guards (demo has no grant list, an undeployed unit is
  * refused), the links built from the loopback card, and the claim ceremony's
- * persona instruction and its "already bound" refusal.
+ * persona instruction and its "already bound" refusal; the personal
+ * instance's host is never defaulted; --republish-cards fails loudly when a
+ * card cannot be republished (deploy_wot.sh relies on that).
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,15 +25,17 @@ function fakeHost() {
   const write = (name, body) => { writeFileSync(path.join(bin, name), '#!/bin/sh\n' + body); chmodSync(path.join(bin, name), 0o755) }
   write('ssh', `host="$1"; shift
 echo "$host :: $*" >> "${root}/ssh.log"
-cmd=$(printf '%s' "$*" | sed -e "s#/var/lib/trustweb-peer-personal#${root}/state#g" -e "s#/var/lib/trustweb-peer#${root}/state#g" -e "s#/etc/trustweb-peer-personal#${root}/etc#g")
+cmd=$(printf '%s' "$*" | sed -e "s#/var/lib/trustweb-peer-personal#${root}/state#g" -e "s#/var/lib/trustweb-peer#${root}/state#g" -e "s#/etc/trustweb-peer-personal#${root}/etc#g" -e "s#/srv/questhub-static#${root}/srv#g")
 exec sh -c "$cmd"
 `)
   write('sudo', 'exec "$@"\n')
   write('chown', `echo "chown $*" >> "${root}/calls.log"\n`)
   write('ssh-add', 'exit 0\n')
+  write('chcon', `echo "chcon $*" >> "${root}/calls.log"\n`)
   write('systemctl', `echo "systemctl $*" >> "${root}/calls.log"
 case "$1" in
   cat) [ -f "${root}/unit-present" ] ;;
+  list-units) cat "${root}/active-units" 2>/dev/null || true ;;
   restart) if [ -f "${root}/state/claim-open" ]; then touch "${root}/window"; else rm -f "${root}/window"; fi ;;
 esac
 `)
@@ -138,6 +142,56 @@ describe('trustweb_peer_claim.sh --instance personal', () => {
     expect(r.code).toBe(1)
     expect(r.stderr).toContain('--instance personal --host questhub --reset')
     expect(existsSync(path.join(h.root, 'state', 'claim-open'))).toBe(false)
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+})
+
+describe('the personal host is never a default', () => {
+  it('deploy, claim and grant refuse --instance personal without --host, before touching any host', async () => {
+    const h = fakeHost()
+    for (const [script, args] of [
+      ['deploy_trustweb_peer.sh', ['--instance', 'personal', '--dry-run']],
+      ['trustweb_peer_claim.sh', ['--instance', 'personal', '--status']],
+      ['trustweb_peer_grant.sh', ['--instance', 'personal', '--list']],
+    ]) {
+      const r = await run(script, args, h.env)
+      expect(r.code, script).toBe(2)
+      expect(r.stderr, script).toMatch(/host is your decision: pass --host sebra or --host questhub/)
+    }
+    expect(existsSync(path.join(h.root, 'ssh.log'))).toBe(false)
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+})
+
+describe('deploy_trustweb_peer.sh --republish-cards', () => {
+  function withDemoActive() {
+    const h = fakeHost()
+    writeFileSync(path.join(h.root, 'active-units'), 'trustweb-peer.service loaded active running demo\ntrustweb-peer-personal.service loaded active running personal\n')
+    writeFileSync(path.join(h.root, 'state', 'demo-peer.json'), JSON.stringify(CARD))
+    return h
+  }
+  it('republishes the demo card, skips the personal one (no public card), reports both', async () => {
+    const h = withDemoActive()
+    mkdirSync(path.join(h.root, 'srv', 'app-idea2-trustweb'), { recursive: true })
+    const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)
+    expect(r.code).toBe(0)
+    expect(JSON.parse(readFileSync(path.join(h.root, 'srv', 'app-idea2-trustweb', 'demo-peer.json'), 'utf8'))).toEqual(CARD)
+    expect(r.stdout).toContain('personal: no public card by design')
+    expect(r.stdout).toContain('republish: 2 instance(s) handled')
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+  it('fails (non-zero) when a card cannot be republished, so deploy_wot.sh stops instead of losing the card silently', async () => {
+    const h = withDemoActive()   // no srv/app-idea2-trustweb dir: the copy fails
+    const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)
+    expect(r.code).not.toBe(0)
+    expect(r.stderr).toMatch(/card republish FAILED for trustweb-peer.service \(demo\)/)
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+  it('nothing active: nothing to do, exit 0', async () => {
+    const h = fakeHost()
+    const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toContain('no active front door on questhub')
     rmSync(h.root, { recursive: true })
   }, 60_000)
 })

@@ -9,6 +9,7 @@
 #     --republish-cards  the card of EVERY active trustweb-peer* instance on the host (deploy_wot.sh calls this)
 #     --off              stop and disable the instance (demo: also remove its card); state is kept
 #   Defaults: --instance demo --host questhub (the demo instance runs on questhub only).
+#   --instance personal REQUIRES --host (where it runs is Jakob's decision, never a default).
 #   --dry-run          prints the plan and the rendered unit, runs READ-ONLY checks on the host, changes nothing.
 #
 # Why --card-only / --republish-cards exist: scripts/deploy_wot.sh clears the
@@ -36,7 +37,7 @@ CARD_DIR=/srv/questhub-static/app-idea2-trustweb
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good (see deploy_wot.sh)
 RELAY=https://app.idea2.site
 
-MODE=full; DRY=0; INST=demo; HOSTNAME_ARG=questhub
+MODE=full; DRY=0; INST=demo; HOSTNAME_ARG=""
 usage() { echo "usage: $0 [--instance demo|personal] [--host questhub|sebra] [--dry-run] [--card-only|--republish-cards|--off]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,7 +51,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 tw_peer_instance "$INST" || { echo "unknown instance: $INST (demo|personal)" >&2; exit 2; }
-tw_peer_host "$HOSTNAME_ARG" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
+[ "$MODE" = republish ] || tw_peer_require_host "$HOSTNAME_ARG"
+tw_peer_host "${HOSTNAME_ARG:-questhub}" || { echo "unknown host: $HOSTNAME_ARG (questhub|sebra)" >&2; exit 2; }
 if [ "$INSTANCE" = demo ] && [ "$RHOST" != questhub ]; then
   echo "the demo instance runs on questhub only (its card is published from questhub's static tree)" >&2; exit 2
 fi
@@ -156,9 +158,15 @@ republish_cards() {
     inst="$(tw_peer_instance_of_unit "$u")" || continue
     if ! (tw_peer_instance "$inst") 2>/dev/null; then echo "skipping $u: unknown instance '$inst'"; continue; fi
     echo "active: $u -> --card-only --instance $inst"
-    local args=(--card-only --instance "$inst" --host "$RHOST")
+    local args=(--card-only --instance "$inst" --host "$RHOST") out
     [ "$DRY" = 1 ] && args+=(--dry-run)
-    "$HERE/deploy_trustweb_peer.sh" "${args[@]}" | grep -v -e '^\.\.\. deploy_trustweb_peer running' -e '^--------$' || true
+    # Capture first, filter after: a failed card publish must fail this run (deploy_wot.sh relies on it).
+    if ! out="$("$HERE/deploy_trustweb_peer.sh" "${args[@]}" 2>&1)"; then
+      printf '%s\n' "$out" >&2
+      echo "card republish FAILED for $u ($inst)" >&2
+      return 1
+    fi
+    printf '%s\n' "$out" | grep -v -e '^\.\.\. deploy_trustweb_peer running' -e '^--------$' || true
     n=$((n + 1))
   done
   echo "republish: $n instance(s) handled"

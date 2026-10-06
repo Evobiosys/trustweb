@@ -35,6 +35,14 @@ tw_peer_host() {
   esac
 }
 
+# The personal front door's host is Jakob's decision: never a default. $1 = the --host value given ('' = none).
+tw_peer_require_host() {
+  if [ "$INSTANCE" = personal ] && [ -z "$1" ]; then
+    echo "the personal front door's host is your decision: pass --host sebra or --host questhub" >&2
+    exit 2
+  fi
+}
+
 # The unit name -> instance name (trustweb-peer -> demo, trustweb-peer-personal -> personal).
 tw_peer_instance_of_unit() {
   local u="${1%.service}"
