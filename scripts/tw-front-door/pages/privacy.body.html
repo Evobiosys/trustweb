@@ -23,13 +23,16 @@
   <p>Our server runs at Infomaniak, in Switzerland. Several things pass through it, each one
   only because you used the matching feature:</p>
   <ul>
-    <li><b>The relay.</b> It carries encrypted messages between phones: asks, answers and
-    connection steps. It can see routing details (which address a message is for, from which
-    network address it was sent, and when), not the content.</li>
+    <li><b>The relay.</b> It carries messages between phones: asks, answers and the links to shared meetings.
+    They are encrypted on one phone and opened on the other, so the relay cannot read them. It can see
+    routing details (which address a message is for, from which network address it was sent, and when).
+    The one exception is the very first connection step between two phones, sent before they share a
+    key: that message is not encrypted.</li>
     <li><b>Encrypted backup.</b> A backup is encrypted on your phone before it is uploaded. The
     server keeps ciphertext it cannot read.</li>
     <li><b>Sending a meeting.</b> The notes and transcript are encrypted with a fresh key and
-    stored on the same server. The key is only in the link you send, never on the server.</li>
+    stored on the same server. The key is only in the link you send, and that link reaches the other
+    person as an encrypted message, so the server never holds the key.</li>
     <!--IF:soon--><li><b>Hosted recordings (starting soon, experimental).</b> When this is switched on,
     your recordings will be stored on the server as ciphertext it cannot read. A recording that
     is neither written nor opened for 90 days may be removed.</li>

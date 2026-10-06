@@ -7,7 +7,7 @@
     <summary>What is TrustWeb?</summary>
     <p>An app for your phone where you keep notes on the people you meet, place them in three
     rings (close friend, friend, acquaintance), and later ask your web a question in plain words.
-    Your question travels through people you trust, and each of them decides whether to answer.</p>
+    Your question goes to the people you are connected with, and each of them decides whether to answer.</p>
   </details>
   <details class="q" id="q-who-sees">
     <summary>Who sees what I write?</summary>
@@ -17,18 +17,19 @@
   </details>
   <details class="q" id="q-asks">
     <summary>Who sees my ask, and can people say no?</summary>
-    <p>Only the people your ask reaches through the rings you chose. Each of them can share, or
+    <p>Only the people you are connected with whose ring allows your ask. Each of them can share, or
     decline. A decline looks exactly like "no match", so a "no" gives nothing away.</p>
   </details>
   <details class="q" id="q-data">
     <summary>Where does my data live?</summary>
     <p>On your phone first. If you make a backup, or send a meeting, an encrypted copy is kept on
-    a server in Switzerland. The messages between phones pass through a relay on the same server.</p>
+    a server in Switzerland. The messages between phones pass through a relay on the same server, encrypted so the relay cannot read them.</p>
   </details>
   <details class="q" id="q-server">
     <summary>What does the server know?</summary>
     <p>It stores ciphertext it cannot read. The relay can see routing details, such as which
-    address a message is for and when it arrived, but not what it says. Details are on the
+    address a message is for and when it arrived, but not what it says. (The very first connection
+    step between two phones, sent before they share a key, is the one message that is not encrypted.) Details are on the
     <a href="privacy.html">privacy page</a>.</p>
   </details>
   <details class="q" id="q-cost">

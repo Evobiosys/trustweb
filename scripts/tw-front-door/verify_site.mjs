@@ -138,7 +138,7 @@ async function checkPage(browser, name, width) {
   if (name === 'index.html') {
     const p = await page.evaluate(popups)
     check(`${tag}: ${p.count} term popups stay inside the viewport`, p.count >= 11 && p.bad.length === 0, p.bad.join(', '))
-    const m2 = await page.evaluate(() => { document.querySelector('.term')?.focus(); return null })
+    await page.evaluate(() => { document.querySelector('.term')?.focus() })
     const open = await page.evaluate(measure)
     check(`${tag}: no overflow with a popup open`, !open.docOverflow && open.wide.length === 0, open.wide.join(', '))
   }
