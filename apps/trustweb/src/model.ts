@@ -248,6 +248,54 @@ export interface PastMeeting {
   transcript: TranscriptLine[]
   /** Another phone sent it (notes and transcript of a meeting they recorded). */
   fromName?: string
+  /** The Swiss server's transcription of this recording (wave 1733 round B). Absent: never asked. */
+  serverJob?: ServerJob
+  /**
+   * Sent (Meet code or inside TrustWeb) while its transcript was still arriving:
+   * the key of each such pack, kept until the full version replaced it (A3).
+   * The key text alone is enough: the pack's slot id and write token are derived from it. Absent: none waiting.
+   */
+  outbox?: OutboxPack[]
+  /** When the full version last replaced the packs sent early. Absent: never needed or not yet. */
+  fullSentAt?: number
+  /** Kept from another phone while its transcript was still arriving: where to look for the full version. Absent: complete. */
+  late?: LateLink
+}
+
+/** Where the Swiss server's transcription of one recording stands. A fixed set. */
+export enum ServerJobState {
+  /** A call is out (saved BEFORE each call, so a reload never sends the audio again by itself). */
+  Running = 'running',
+  Done = 'done',
+  /** Refused or failed (nothing charged, or charged back): may be tried again. */
+  Failed = 'failed',
+  /** The answer was lost (timeout, dropped connection, the app closed): it may still be charged. */
+  MaybeCharged = 'maybe-charged',
+}
+
+export interface ServerJob {
+  state: ServerJobState
+  at: number
+  /** Takes already transcribed (their lines are in the transcript); a new try goes on from the next one. */
+  takesDone: number
+  /** Why it stopped (swiss_server.ts SwissError), for the message. */
+  error?: string
+}
+
+/** A pack sent before its transcript was complete; dropped once the full version went out (or was finalised without it). */
+export interface OutboxPack {
+  keyText: string
+  title: string
+  /** The notes the early pack carried, so the full one carries the same. */
+  notes: string[]
+  at: number
+}
+
+/** A kept pack whose transcript was still arriving: its key and the version (ETag) this phone has. */
+export interface LateLink {
+  keyText: string
+  etag?: string
+  since: number
 }
 
 /** A meeting another phone sent inside TrustWeb: an encrypted pack on the backup server, its key only in the link. */
@@ -259,6 +307,8 @@ export interface ReceivedShare {
   link: string
   title: string
   openedAt?: number
+  /** The pack said its transcript was still arriving when it was last opened. Absent: complete or never opened. */
+  pending?: boolean
 }
 
 /** Which side of the raised Record button each outer tab sits on (Inventory settings). */
@@ -320,6 +370,41 @@ export interface AppState {
    * Only in force while demo content is on this phone (`demo` set).
    */
   demoOnlyForDemoAccounts?: boolean
+  /**
+   * Recordings on the Swiss server (wave 1733 round B): the hosted account's
+   * secret (made on this phone, rides inside the encrypted backup) and what is
+   * stored there. The same account carries the server transcription. Absent: never used.
+   */
+  hosting?: HostingState
+  /** The person said yes, once, to audio going through the Swiss server for transcription. Absent: not asked yet. */
+  serverTranscriptionConsentAt?: number
+  /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
+  imports?: ImportBatch[]
+}
+
+export interface HostingState {
+  /** 32 random bytes, hex (swiss_server.ts hostedAccount derives account, token and key from it). */
+  secret: string
+  /** Settings > "Hosted on the Swiss server": new recordings go up by themselves. */
+  on: boolean
+  recs: HostedRec[]
+}
+
+/** One recording stored on the Swiss server: which meeting it belongs to and its id there. */
+export interface HostedRec {
+  meetingId: string
+  rid: string
+  seconds: number
+  bytes: number
+  at: number
+}
+
+/** One "Import inventory file": what it added, so Undo removes exactly that (and nothing the person changed since). */
+export interface ImportBatch {
+  id: string
+  at: number
+  exportedOn: string
+  items: { itemId: string; key: string; text: string; audience: Audience }[]
 }
 
 /** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
@@ -418,10 +503,15 @@ export enum TranscriptionChoice {
   OnDevice = 'on-device',
   /** Nothing live: the recording is transcribed later on the computer. */
   Later = 'later',
+  /**
+   * The Swiss server, when the recording stops (wave 1733 round B): the audio
+   * leaves this phone, after a one-time yes. A build that does not know it reads Auto.
+   */
+  Server = 'server',
 }
 
 export const TRANSCRIPTION_CHOICES: readonly TranscriptionChoice[] = [
-  TranscriptionChoice.Auto, TranscriptionChoice.TalkWeave, TranscriptionChoice.OnDevice, TranscriptionChoice.Later,
+  TranscriptionChoice.Auto, TranscriptionChoice.TalkWeave, TranscriptionChoice.OnDevice, TranscriptionChoice.Server, TranscriptionChoice.Later,
 ]
 
 /** Settings > Recording: what the Record tab opens for a fresh draft (owner 2026-10-06). */
@@ -465,6 +555,8 @@ export function enginePlan(choice: TranscriptionChoice): EnginePlan {
     case TranscriptionChoice.TalkWeave: return { sameOrigin: true, direct: true, onDevice: true }
     case TranscriptionChoice.OnDevice: return { sameOrigin: false, direct: false, onDevice: true }
     case TranscriptionChoice.Later: return { sameOrigin: false, direct: false, onDevice: false }
+    // Nothing live: the server transcribes when the recording stops.
+    case TranscriptionChoice.Server: return { sameOrigin: false, direct: false, onDevice: false }
   }
 }
 

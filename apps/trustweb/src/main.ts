@@ -25,10 +25,10 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
-import { isMeetingPack, parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
+import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
@@ -53,6 +53,11 @@ import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
 import { createPastMeetings, whenLabel } from './past_meetings_view'
+import { createSwissContext } from './swiss_context'
+import { createTranscriptionView } from './transcription_view'
+import type { JobTake } from './server_transcription'
+import { createPackView } from './pack_view'
+import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -660,6 +665,7 @@ function openSheet(children: (Node | null)[]): void {
   past.stopPlayer()
   delete sheet.dataset.kind
   delete sheet.dataset.meeting
+  delete sheet.dataset.pack
   sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
   sheet.inert = false
@@ -1641,7 +1647,53 @@ function recPromptsView(): HTMLElement {
 const past = createPastMeetings({
   state: st, save, sheet, openSheet, toast, audio: audioStore, personSheet, tagChip, dummyChip,
   transcriptRow, icon, clockLong,
+  extra: (m) => transcription.meetingExtras(m),
+  opened: (m) => packs.checkOne(m),
 })
+
+// The Swiss server's newer services (wave 1733 round B): never on a demo phone or a demo account.
+const swiss = createSwissContext({ state: st, save, enabled: () => !solo && !isDemoPersona(persona) && Boolean(state) && !state?.testOf })
+const transcription = createTranscriptionView({
+  ctx: swiss, state: st, save, audio: audioStore, openSheet, closeSheet, toast, onJobChange, when: whenLabel,
+  uploadPack: async (keyText, pack) => { await backupNow(parseKeyText(keyText), pack) },
+  fromName: () => st().me.displayName,
+})
+const packs = createPackView({
+  state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,
+  onMeetingChange: (m) => past.refresh(m),
+})
+
+/** The takes of this draft as the server job wants them: one timeline, end to end. */
+function jobTakes(): JobTake[] {
+  let offsetMs = 0
+  return takes.map((t) => { const j = { blob: t.blob, mimeType: t.mimeType, offsetMs, durationMs: t.durationMs }; offsetMs += t.durationMs; return j })
+}
+
+/** The recording just ended with no transcript: the Swiss server transcribes it where the person chose so (stored first). */
+function serverAfterTake(): void {
+  if (!transcribing || draft.segments.length || !takes.length || !transcription.willTranscribe(engine)) return
+  recordPastMeeting()
+  const m = st().meetings?.find((x) => x.id === draft.meetingId)
+  if (m) transcription.start(m, jobTakes())
+}
+
+/** A server job changed a meeting: the draft takes its transcript (Review picks lines from it), screens redraw. */
+function onJobChange(m: PastMeeting): void {
+  if (draft.meetingId === m.id && m.serverJob?.state === ServerJobState.Done && !draft.segments.length && m.transcript.length) {
+    draft.segments = m.transcript.map((t, i) => ({ id: `srv${i}`, speaker: t.speaker, text: t.text, atMs: t.atMs, final: true }))
+    if (screen === Screen.Review) {
+      // The stand-in "Voice memo ... to transcribe later" goes; the transcript's lines come in with their moments.
+      const memo = S.memoLine(clock(totalMs()))
+      const have = new Set(draft.lines.map((l) => l.text))
+      draft.lines = [
+        ...draft.lines.filter((l) => l.text !== memo),
+        ...linesFromTranscript(draft.segments).filter((l) => !have.has(l.text)).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends, atMs: l.atMs, line: l.line })),
+      ]
+    }
+  }
+  past.refresh(m)
+  if (screen === Screen.Record || screen === Screen.Meeting || screen === Screen.Review) render()
+}
 const pastMeetingsLink = (): HTMLElement => past.link()
 const pastMeetingSheet = (m: PastMeeting, focus?: PastFocus, from?: ItemSource): void => past.open(m, focus, from)
 
@@ -1713,6 +1765,11 @@ const RECEIVED_MAX = 20
 /** The pack made for this draft's Meet code, uploaded once per Meet visit. */
 let meetShare: ShareLink | null = null
 
+/** The stored meeting of this draft, if End meeting (or a server job) already wrote it. */
+function draftMeeting(): PastMeeting | undefined {
+  return draft.meetingId ? st().meetings?.find((m) => m.id === draft.meetingId) : undefined
+}
+
 function packFromDraft(): MeetingPack {
   const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
   const notes = (draft.lines.length ? draft.lines.map((l) => l.text) : extractLines(prose).map((l) => l.text))
@@ -1722,16 +1779,27 @@ function packFromDraft(): MeetingPack {
     v: 1, kind: 'meeting', from: st().me.displayName, about: draft.name.trim(), where: draft.context.trim(),
     startedAt: takes[0]?.startedAt ?? Date.now(), durationMs: totalMs(), notes,
     transcript: draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text })),
+    // The Swiss server is still transcribing it: the full version replaces this one under the same key (late_pack.ts).
+    ...(transcriptStillComing(draftMeeting()) ? { pending: true } : {}),
   }
 }
 
-/** Encrypts the pack with a fresh key on the backup server; the key never leaves this phone except inside the link. */
+/**
+ * Encrypts the pack with a fresh key on the backup server; the key never leaves this phone except inside the link.
+ * A pack whose transcript is still arriving keeps its key with the meeting until the full version went out (A3).
+ */
 async function uploadPack(pack: MeetingPack): Promise<ShareLink> {
   if (backup.available() === null) await backup.probe()
   if (!backup.available()) throw new Error('no backup server')
   const key = await newRandomKey()
   await backupNow(key, pack)
-  return { keyText: key.text, title: S.shareTitleFor(pack.about) }
+  const link = { keyText: key.text, title: S.shareTitleFor(pack.about) }
+  const m = draftMeeting()
+  if (pack.pending && m) {
+    addToOutbox(m, { keyText: key.text, title: link.title, notes: pack.notes, at: Date.now() })
+    save()
+  }
+  return link
 }
 
 /** End meeting > "Send inside TrustWeb to...": pick one connected person; they get the sealed link over the relay. */
@@ -1744,10 +1812,11 @@ function sendMeetingSheet(): void {
     busy = true
     msg.textContent = S.shareWorking
     try {
-      const link = await uploadPack(packFromDraft())
+      const pack = packFromDraft()
+      const link = await uploadPack(pack)
       await net.sendText(peer, shareUrl(APP_URL, link))
       closeSheet()
-      toast(S.shareSent(peer.displayName))
+      toast(pack.pending ? S.shareSentPending(peer.displayName) : S.shareSent(peer.displayName))
     } catch {
       busy = false
       msg.textContent = S.shareFailed
@@ -1794,59 +1863,7 @@ function onSharedText(peer: Peer, text: string): void {
   ])
 }
 
-async function openShare(link: ShareLink, entry?: ReceivedShare): Promise<void> {
-  const msg = el('p', { class: 'meta' }, [S.recvOpening])
-  openSheet([el('h3', {}, [link.title || S.pastTitle]), msg])
-  let pack: unknown
-  try {
-    pack = await restore(parseKeyText(link.keyText))
-  } catch {
-    msg.textContent = S.recvFailed
-    return
-  }
-  if (!isMeetingPack(pack)) { msg.textContent = S.recvFailed; return }
-  if (entry) { entry.openedAt = Date.now(); save() }
-  showPack(pack)
-}
-
-function showPack(pack: MeetingPack): void {
-  const facts = [pack.about ? S.recvAbout(pack.about) : '', pack.where ? S.pastWhere(pack.where) : '', whenLabel(pack.startedAt), pack.durationMs ? clock(pack.durationMs) : '']
-    .filter(Boolean).join(' · ')
-  openSheet([
-    el('h3', {}, [S.recvHeading(pack.from)]),
-    el('p', { class: 'meta' }, [S.recvLead(pack.from)]),
-    el('p', { class: 'meta' }, [facts]),
-    el('h4', { class: 'eyebrow' }, [S.pastNotes]),
-    pack.notes.length
-      ? el('div', { class: 'sheet-lines' }, pack.notes.map((t) => el('div', { class: 'sline' }, [el('span', {}, [t])])))
-      : el('p', { class: 'meta' }, [S.pastNoNotes]),
-    el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
-    pack.transcript.length ? past.transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
-    el('button', { class: 'btn btn-electric', onclick: () => { keepPack(pack); closeSheet(); toast(S.recvKept); render() } }, [S.recvKeep]),
-    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recvClose]),
-  ])
-}
-
-/** Keeps a received meeting: its notes go to the sender's card (only me, like notes shared by a Meet code), the whole thing to past meetings. */
-function keepPack(pack: MeetingPack): void {
-  const s = st()
-  const now = Date.now()
-  let person = s.people.find((p) => p.name.toLowerCase() === pack.from.toLowerCase())
-  if (!person) {
-    person = { id: randomId(8), name: pack.from, context: S.notesReceivedContext(pack.from), ring: Ring.Acquaintance, metAt: pack.startedAt, lines: [] }
-    s.people.push(person)
-  }
-  for (const text of pack.notes) {
-    person.lines.push({ id: randomId(8), text, tag: extractLines(text)[0]?.tag ?? Tag.Note, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now, source: sharedSource(pack.from) })
-  }
-  const m: PastMeeting = {
-    id: randomId(8), about: person.name, kind: AboutKind.Who, personId: person.id, where: pack.where, startedAt: pack.startedAt,
-    endedAt: pack.startedAt + pack.durationMs, durationMs: pack.durationMs, meeting: true,
-    lines: pack.notes.map((t) => ({ text: t, tag: Tag.Note })), transcript: pack.transcript, fromName: pack.from,
-  }
-  s.meetings = past.cap([m, ...(s.meetings ?? [])])
-  save()
-}
+const openShare = (link: ShareLink, entry?: ReceivedShare): Promise<void> => packs.open(link, entry)
 
 /** A share link opened directly (not inside a connect link): once the app has a record. */
 function maybeOpenPendingShare(): void {
@@ -1873,8 +1890,9 @@ async function startSolo(): Promise<void> {
 async function sendSolo(): Promise<void> {
   if (recorder.live) await recorder.stop()
   if (!takes.length && !draft.extraLines.length) return
-  if (!draft.name.trim()) { aboutSheet(() => void makeNotes()); return }
-  await makeNotes()
+  const next = (): void => { serverAfterTake(); void makeNotes() }
+  if (!draft.name.trim()) { aboutSheet(next); return }
+  next()
 }
 
 function screenRecord(): Node[] {
@@ -1939,7 +1957,18 @@ function screenRecord(): Node[] {
 const PIN_SLACK_PX = 24
 
 async function ensureEngine(): Promise<TranscriberEngine> {
-  engine ??= await detectEngine(enginePlan(transcriptionChoice(st()))).catch(() => TranscriberEngine.None)
+  if (engine !== null) return engine
+  const choice = transcriptionChoice(st())
+  const live = (c: TranscriptionChoice): Promise<TranscriberEngine> => detectEngine(enginePlan(c)).catch(() => TranscriberEngine.None)
+  if (choice !== TranscriptionChoice.Server) {
+    engine = await live(choice)
+    // Automatic hands a recording nobody could transcribe live to the Swiss server (after the one-time yes).
+    if (engine === TranscriberEngine.None) await swiss.probe()
+    return engine
+  }
+  // The Swiss server transcribes when the take stops; until it is switched on there, the live engines stand in.
+  engine = (await swiss.probe())?.transcribe === true ? TranscriberEngine.None : await live(TranscriptionChoice.Auto)
+  if (transcription.serverOff()) recNotice = S.trServerOff
   return engine
 }
 
@@ -2001,6 +2030,7 @@ async function endMeeting(): Promise<void> {
   transcriber = null
   // The transcript is kept the moment the meeting ends, whatever happens next.
   if (draftIsMeeting()) recordPastMeeting()
+  serverAfterTake()
   render()
   endMeetingSheet()
 }
@@ -2072,7 +2102,7 @@ function engineLabel(): string {
   switch (engine) {
     case TranscriberEngine.TalkWeave: return S.trTalkWeave
     case TranscriberEngine.OnDevice: return S.trOnDevice
-    case TranscriberEngine.None: return S.trLater
+    case TranscriberEngine.None: return transcription.willTranscribe(engine) ? S.trServer : S.trLater
     default: return S.trChecking
   }
 }
@@ -2252,7 +2282,7 @@ function meetTrustWebPage(): HTMLElement {
     const share = await meetSharePack()
     if (share) {
       frag += (frag ? '&' : '') + shareFragment(share)
-      sharedDd.textContent = S.meetSharedTranscript
+      sharedDd.textContent = transcriptStillComing(draftMeeting()) ? S.meetSharedPending : S.meetSharedTranscript
     }
     if (frag) link += '#' + frag
     qr.setAttribute('data-payload', link)
@@ -2707,6 +2737,7 @@ function screenReview(): Node[] {
     header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(recordScreen()) } }),
     el('div', { class: 'scroll pad' }, [
       takes.length ? recordingCard() : null,
+      transcriptStillComing(draftMeeting()) ? el('p', { class: 'meta job-state', 'data-job': 'running' }, [S.reviewServerPending]) : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
       rows.length ? el('div', { class: 'lines' }, rows) : el('p', { class: 'empty' }, [S.reviewEmpty]),
       el('button', {
@@ -2923,7 +2954,7 @@ function editNameSheet(): void {
  * Record tab starts as "Just me" or "A meeting". Choosing a transcription
  * replaces the older "Use TalkWeave on this computer" switch for good.
  */
-function recordingSettings(s: AppState): HTMLElement[] {
+function recordingSettings(s: AppState): (HTMLElement | null)[] {
   const choice = transcriptionChoice(s)
   const start = defaultRecording(s)
   return [
@@ -2935,10 +2966,15 @@ function recordingSettings(s: AppState): HTMLElement[] {
     }, [el('b', {}, [S.setDefaultRecordingLabel[d]]), el('small', {}, [S.setDefaultRecordingHint[d]])])),
     el('p', { class: 'meta' }, [S.setDefaultRecordingNote]),
     el('p', { class: 'meta set-sub' }, [S.setTranscription]),
-    ...TRANSCRIPTION_CHOICES.map((c) => el('button', {
-      class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
-      onclick: () => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() },
-    }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [S.setTranscriptionHint[c]])])),
+    ...TRANSCRIPTION_CHOICES.filter((c) => c !== TranscriptionChoice.Server || swiss.enabled()).map((c) => {
+      const pick = (): void => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() }
+      return el('button', {
+        class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
+        // The Swiss server only after the one-time yes (audio leaves the phone).
+        onclick: () => (c === TranscriptionChoice.Server ? transcription.askConsent(pick) : pick()),
+      }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [S.setTranscriptionHint[c]])])
+    }),
+    transcription.settingsNote(),
     audioKeptLine(),
   ]
 }
@@ -2954,6 +2990,8 @@ function audioKeptLine(): HTMLElement {
 
 function settingsSheet(): void {
   const s = st()
+  // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
+  if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const order = s.tabOrder ?? TabOrder.WebLeft
   const pick = (o: TabOrder, label: string): HTMLElement => el('button', {
     class: 'radio' + (order === o ? ' on' : ''),
@@ -3024,6 +3062,7 @@ function settingsSheet(): void {
       },
     }, [S.resetPhone]),
   ])
+  sheet.dataset.kind = 'settings'
 }
 
 // ---------------------------------------------------------------------------
@@ -3277,6 +3316,14 @@ if (state && !state.testOf?.handedOverAt) {
   offerDemoContent()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
+  // Round B: a cut-off server job reads "may still be charged"; early packs whose transcript is done go out;
+  // kept meetings whose transcript was still arriving look for it.
+  if (swiss.enabled()) {
+    transcription.boot()
+    // Someone who uses the Swiss server gets its status at once (the past meetings' buttons depend on it).
+    if (st().serverTranscriptionConsentAt || st().hosting) void swiss.probe()
+  }
+  packs.checkLate()
   // Resume the approve step after a reload while a phone still waits.
   const pending = demoAccounts().find((t) => t.pending)
   if (pending) showAllowCard(pending)

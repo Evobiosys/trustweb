@@ -41,6 +41,10 @@ export interface PastMeetingsHooks {
   icon: (name: string) => string
   /** "00:01:05", the transcript's own clock. */
   clockLong: (ms: number) => string
+  /** More lines under the transcript (wave 1733 round B: the server job, packs sent early). */
+  extra?: (m: PastMeeting) => (Node | null)[]
+  /** The meeting was opened (round B: a kept meeting looks for its late transcript). */
+  opened?: (m: PastMeeting) => void
 }
 
 export interface PastMeetings {
@@ -52,6 +56,8 @@ export interface PastMeetings {
   cap(list: PastMeeting[]): PastMeeting[]
   stopPlayer(): void
   transcriptView(lines: readonly TranscriptLine[], prefix: string): HTMLElement
+  /** Redraws the meeting's sheet if it is the one on screen (its transcript or job changed). */
+  refresh(m: PastMeeting): void
 }
 
 export function whenLabel(at: number): string {
@@ -147,12 +153,15 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
       el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
       el('div', { id: 'pm-player-slot' }),
       m.transcript.length ? transcriptView(m.transcript, m.id + ':') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
+      m.late ? el('p', { class: 'meta', 'data-late': '1' }, [S.pastLateWaiting]) : null,
+      ...(h.extra?.(m) ?? []),
       person ? el('button', { class: 'btn btn-ghost', onclick: () => h.personSheet(person.id) }, [S.pastOpenPerson(person.name)]) : null,
       isStored(m) ? el('button', { class: 'btn btn-ghost pm-delete', onclick: () => void remove(m) }, [S.pastDelete]) : null,
     ])
     sheet.dataset.meeting = m.id
     if (focus) highlight(m, focus)
     void attachPlayer(m, from)
+    h.opened?.(m)
   }
 
   return {
@@ -184,5 +193,6 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     },
     stopPlayer,
     transcriptView,
+    refresh: (m) => { if (sheet.dataset.meeting === m.id && sheet.classList.contains('on')) open(m) },
   }
 }

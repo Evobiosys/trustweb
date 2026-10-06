@@ -40,6 +40,11 @@ export interface MeetingPack {
   durationMs: number
   notes: string[]
   transcript: TranscriptLine[]
+  /**
+   * The transcript is still arriving (wave 1733 round B): the sender replaces
+   * this pack under the same key when it is done. Absent: complete.
+   */
+  pending?: boolean
 }
 
 export function shareFragment(link: ShareLink): string {
@@ -84,4 +89,5 @@ export function isMeetingPack(v: unknown): v is MeetingPack {
     && typeof o.startedAt === 'number' && typeof o.durationMs === 'number'
     && Array.isArray(o.notes) && o.notes.length <= NOTES_MAX && o.notes.every((n) => typeof n === 'string')
     && Array.isArray(o.transcript) && o.transcript.length <= TRANSCRIPT_MAX && o.transcript.every(isTranscriptLine)
+    && (o.pending === undefined || typeof o.pending === 'boolean')
 }

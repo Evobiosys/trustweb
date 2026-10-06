@@ -33,7 +33,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { NOW, preWaveState as fixture } from '../fixtures/pre_wave_state.mjs'
+import { NOW, preWaveState as fixture, roundBFields, roundBState } from '../fixtures/pre_wave_state.mjs'
 import { createIdentity, serializeIdentity } from '../../../demo/src/did.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -236,6 +236,56 @@ async function partD(browser, base, newRecord) {
   }
 }
 
+/**
+ * F (wave 1733 round B): a record holding every field round B adds. The new
+ * build keeps them all (only a job cut off mid-call turns "may still be
+ * charged", by design); the pre-wave build opens it and its saves keep every
+ * one of them; the new build reads that back unchanged.
+ */
+async function partF(browser, base) {
+  console.log('F. round B fields: kept by this build and by the pre-wave build (rollback)')
+  const rb = roundBState()
+  rb.identity = IDENTITY
+  rb.testAccounts[0].expiresAt = Date.now() + 6 * 86_400_000
+  const raw = JSON.stringify(rb)
+  const { ctx, page, errors } = await pageWith(browser, base, { [ME]: raw })
+  await webUp(page)
+  await page.waitForTimeout(1_500)
+  const s1 = JSON.parse((await readAll(page))[ME])
+  const expected = JSON.parse(raw)
+  expected.meetings[1].serverJob.state = 'maybe-charged'
+  ok('round B record: opens on the web, nothing lost', JSON.stringify(counts(s1)) === JSON.stringify(counts(expected)))
+  ok('round B record: every round-B field kept; only the cut-off job now reads "may still be charged"', roundBFields(s1) === roundBFields(expected), roundBFields(s1))
+  ok('round B record: unknown fields kept at three levels', s1.unknownTopLevel?.n === 1 && s1.people[1].futureField?.keep === 'me' && s1.meetings[2].laterField === 7)
+  ok('round B record: no page errors', errors.length === 0, errors.join(' | '))
+  const settled = (await readAll(page))[ME]
+  await ctx.close()
+  if (!OLD_DIST || !existsSync(path.join(OLD_DIST, 'index.html'))) { console.log('  SKIP  no TW_OLD_DIST: the rollback half of F'); return }
+  const server = await serveDist(OLD_DIST, OLD_PORT)
+  const oldBase = `http://127.0.0.1:${OLD_PORT}/`
+  try {
+    const old = await pageWith(browser, oldBase, { [ME]: settled })
+    await webUp(old.page)
+    ok('the pre-wave build opens the round-B record on the web', await old.page.getByLabel('Your first name').count() === 0)
+    await old.page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    ok('the pre-wave build lists every thing', await old.page.locator('.inv').count() === JSON.parse(settled).inventory.length)
+    await old.page.locator('.inv .mini').first().click()
+    await old.page.locator('.inv .mini').first().click()
+    const back = JSON.parse((await readAll(old.page))[ME])
+    ok('after a pre-wave-build save: nothing lost', JSON.stringify(counts(back)) === JSON.stringify(counts(JSON.parse(settled))))
+    ok('after a pre-wave-build save: every round-B field is still there', roundBFields(back) === roundBFields(JSON.parse(settled)), roundBFields(back))
+    ok('pre-wave build: no page errors', old.errors.length === 0, old.errors.join(' | '))
+    await old.ctx.close()
+    const again = await pageWith(browser, base, { [ME]: JSON.stringify(back) })
+    await webUp(again.page)
+    await again.page.waitForTimeout(1_000)
+    ok('and this build reads it back without a change', (await readAll(again.page))[ME] === JSON.stringify(back))
+    await again.ctx.close()
+  } finally {
+    await new Promise((r) => server.close(r))
+  }
+}
+
 async function recordAndSaveMemo(page) {
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
@@ -300,6 +350,7 @@ async function main() {
     await partC(browser, base)
     await partD(browser, base, newRecord)
     await partE(browser, base)
+    await partF(browser, base)
   } catch (e) {
     failures++
     console.log('  FAIL  run aborted: ' + (e?.stack ?? e))

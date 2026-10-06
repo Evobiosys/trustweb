@@ -73,3 +73,51 @@ export function preWaveState() {
     unknownTopLevel: { from: 'a later build', n: 1 },
   }
 }
+
+/** The secret of the hosted account in the round-B record (64 hex). */
+export const HOSTED_SECRET = 'ab'.repeat(32)
+
+/**
+ * The record as wave 1733 round B saves it: the pre-wave record (with sources
+ * now) plus EVERY optional field round B adds, at every level: a server
+ * transcription job (one cut off mid-call, one done), packs sent while the
+ * transcript was still arriving (with their keys, A3), a kept pack still
+ * arriving, the consent, the hosted account with its recordings, an import
+ * batch, the Feed settings, a person's fediverse handle, an item's image.
+ * The regression net for rolling round B back: the pre-wave build must open
+ * it, and its saves must keep every one of these fields.
+ */
+export function roundBState() {
+  const s = preWaveState()
+  s.inventory[0].source = { kind: 'typed' }
+  s.inventory[1].source = { kind: 'recorded-solo', meetingId: 'm-inv', atMs: 0 }
+  s.inventory[2].source = { kind: 'demo' }
+  for (const p of s.people) for (const l of p.lines) l.source = p.id === 'demo-p1' ? { kind: 'demo' } : { kind: 'typed' }
+  s.inventory.push({ id: 'imp1', text: 'Knows the Graz housing co-op board', audience: 'me', included: true, createdAt: NOW - DAY, source: { kind: 'tana', ref: '0123456789abcdef' } })
+  s.inventory[0].imageId = 'img-1'
+  s.transcription = 'server'
+  s.serverTranscriptionConsentAt = NOW - DAY
+  s.meetings[0].serverJob = { state: 'done', at: NOW - 3 * DAY, takesDone: 1 }
+  s.meetings[0].fullSentAt = NOW - 3 * DAY
+  s.meetings[1].serverJob = { state: 'running', at: NOW - DAY, takesDone: 0 }
+  s.meetings[1].outbox = [{ keyText: 'TW1R-AAAAA-BBBBB', title: 'Meeting with Cargo bike', notes: ['borrowable'], at: NOW - DAY }]
+  s.meetings[2].late = { keyText: 'TW1R-CCCCC-DDDDD', etag: '"0123456789abcdef0123456789abcdef"', since: Date.now() - 1000 }
+  s.received[0].pending = true
+  s.hosting = { secret: HOSTED_SECRET, on: true, recs: [{ meetingId: 'm-anna', rid: 'cd'.repeat(16), seconds: 3600, bytes: 14_400_000, at: NOW - DAY }] }
+  s.imports = [{ id: 'imp-batch-1', at: NOW - DAY, exportedOn: '2026-10-06', items: [{ itemId: 'imp1', key: '0123456789abcdef', text: 'Knows the Graz housing co-op board', audience: 'me' }] }]
+  s.feed = { on: true, remote: true, images: false, myInstance: 'mastodon.social' }
+  s.people[0].fediverse = { handle: 'anna@mastodon.social', show: true, reach: 'api' }
+  return s
+}
+
+/** The round-B fields of a record, for comparing them across saves (what an older build must keep). */
+export function roundBFields(s) {
+  return JSON.stringify({
+    transcription: s.transcription, consent: s.serverTranscriptionConsentAt, hosting: s.hosting, imports: s.imports, feed: s.feed,
+    meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late })),
+    received: (s.received ?? []).map((r) => r.pending),
+    fediverse: s.people.map((p) => p.fediverse ?? null),
+    images: s.inventory.map((i) => i.imageId ?? null),
+    tana: s.inventory.map((i) => i.source ?? null),
+  })
+}

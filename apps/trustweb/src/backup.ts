@@ -274,7 +274,30 @@ export async function restore(key: BackupKey, base: string = DEFAULT_BASE): Prom
   if (res.status === 404) throw new BackupNotFound()
   if (res.status === 429) throw new Error('Too many attempts. Try again in a minute')
   if (!res.ok) throw new Error(`Restore failed (server answered ${res.status})`)
-  const blob = new Uint8Array(await res.arrayBuffer())
+  return openBlob(encKey, id, new Uint8Array(await res.arrayBuffer()))
+}
+
+/** What a conditional read found: nothing new (304), or the content and its new validator. */
+export type ChangedRead = { changed: false } | { changed: true; data: unknown; etag: string | null }
+
+/**
+ * restore(), but cheap when nothing changed (wave 1733 round B: a meeting pack
+ * uploaded while its transcript was still arriving is replaced later under the
+ * same key). Sends If-None-Match with the ETag of what the reader already has;
+ * the server answers 304 without a body when the stored bytes are unchanged.
+ */
+export async function restoreIfChanged(key: BackupKey, etag: string | null, base: string = DEFAULT_BASE): Promise<ChangedRead> {
+  const { encKey, id } = await derive(key)
+  const res = await fetch(endpoint(base, id), { method: 'GET', cache: 'no-store', headers: etag ? { 'If-None-Match': etag } : {} })
+  if (res.status === 304) return { changed: false }
+  if (res.status === 404) throw new BackupNotFound()
+  if (res.status === 429) throw new Error('Too many attempts. Try again in a minute')
+  if (!res.ok) throw new Error(`Restore failed (server answered ${res.status})`)
+  const data = await openBlob(encKey, id, new Uint8Array(await res.arrayBuffer()))
+  return { changed: true, data, etag: res.headers.get('ETag') }
+}
+
+async function openBlob(encKey: CryptoKey, id: string, blob: Uint8Array): Promise<unknown> {
   if (blob.length < 1 + IV_BYTES + 16 || blob[0] !== FORMAT_VERSION) throw new Error('The backup has an unknown format')
   let plain: ArrayBuffer
   try {
