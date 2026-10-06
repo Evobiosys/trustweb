@@ -22,9 +22,10 @@ export const IMPORT_VERSION = 1
 /** Bigger files are refused before they are read as JSON. */
 export const IMPORT_MAX_BYTES = 1_000_000
 /**
- * Lines read from one file (the rest are counted and said, never dropped
- * silently). 1000 lines of 160 characters add about 300 KB to the record,
- * which rides a backup capped at 1 MB (review-app-b: 2000 came to 1 MB).
+ * New lines added by one import; the rest are counted, said, and added by
+ * importing the same file again (re-import skips what is already here).
+ * 1000 lines of 160 characters add about 300 KB to the record, which rides a
+ * backup capped at 1 MB (review-app-b: 2000 came to 1 MB).
  */
 export const IMPORT_MAX_ITEMS = 1000
 const TEXT_MAX = 160
@@ -51,8 +52,6 @@ export interface ParsedImport {
   lines: ImportLine[]
   /** Entries in the file that were not shaped as a line (left out). */
   unreadable: number
-  /** Entries past IMPORT_MAX_ITEMS (left out, said in the summary). */
-  leftOut: number
 }
 
 export interface ImportPlan {
@@ -61,6 +60,7 @@ export interface ImportPlan {
   /** Already in this inventory (by key or by text), skipped. */
   already: number
   unreadable: number
+  /** New lines past IMPORT_MAX_ITEMS: not added this time (said; the same file again adds them). */
   leftOut: number
   allowedInAdvance: number
 }
@@ -90,28 +90,29 @@ export function parseImportFile(raw: string): ParsedImport | ImportProblem {
   if (o.format !== IMPORT_FORMAT) return ImportProblem.WrongFormat
   if (o.version !== IMPORT_VERSION) return ImportProblem.WrongVersion
   if (!Array.isArray(o.items)) return ImportProblem.WrongFormat
-  const entries = o.items.slice(0, IMPORT_MAX_ITEMS)
+  const entries = o.items
   const lines = entries.map(lineOf).filter((l): l is ImportLine => l !== null)
   if (!lines.length) return ImportProblem.Empty
   const exportedOn = typeof o.exportedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.exportedOn) ? o.exportedOn : ''
-  return { exportedOn, lines, unreadable: entries.length - lines.length, leftOut: o.items.length - entries.length }
+  return { exportedOn, lines, unreadable: entries.length - lines.length }
 }
 
 /** What would be added: new keys and new texts only (also within the file itself). */
 export function planImport(s: Pick<AppState, 'inventory'>, parsed: ParsedImport): ImportPlan {
   const keys = new Set(s.inventory.map((i) => (i.source?.kind === Provenance.Tana ? i.source.ref : undefined)).filter((k): k is string => Boolean(k)))
   const texts = new Set(s.inventory.map((i) => normalise(i.text)))
-  const add: ImportLine[] = []
+  const fresh: ImportLine[] = []
   for (const l of parsed.lines) {
     const n = normalise(l.text)
     if (keys.has(l.key) || texts.has(n)) continue
     keys.add(l.key)
     texts.add(n)
-    add.push(l)
+    fresh.push(l)
   }
+  const add = fresh.slice(0, IMPORT_MAX_ITEMS)
   return {
-    exportedOn: parsed.exportedOn, add, already: parsed.lines.length - add.length, unreadable: parsed.unreadable,
-    leftOut: parsed.leftOut ?? 0, allowedInAdvance: add.filter((l) => l.allowedInAdvance).length,
+    exportedOn: parsed.exportedOn, add, already: parsed.lines.length - fresh.length, unreadable: parsed.unreadable,
+    leftOut: fresh.length - add.length, allowedInAdvance: add.filter((l) => l.allowedInAdvance).length,
   }
 }
 

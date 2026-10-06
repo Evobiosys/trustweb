@@ -792,7 +792,7 @@ export const S = {
   impHint: 'A trustweb-inventory-import.json made on your computer (from Tana). Its lines land as "Only me": nobody can ask about them until you change that. Nothing is sent anywhere.',
   impTitle: 'Import inventory file',
   impSummary: (n: number, already: number, on: string) => `${n === 1 ? '1 new line' : `${n} new lines`}${already ? `, ${already} already here (skipped)` : ''}${on ? ` (exported ${on})` : ''}.`,
-  impLeftOut: (n: number, max: number) => `${n === 1 ? '1 more line' : `${n} more lines`} past the first ${max} are left out (import them from a second file).`,
+  impLeftOut: (n: number, max: number) => `${n === 1 ? '1 more new line waits' : `${n} more new lines wait`}: one import adds at most ${max}. Import the same file again to add the next ones.`,
   impUnreadable: (n: number) => `${n === 1 ? '1 entry' : `${n} entries`} in the file could not be read and are left out.`,
   impAllowed: (n: number) => `${n === 1 ? '1 of them is' : `${n} of them are`} marked "allowed in advance" for your front door; here they still land as "Only me".`,
   impHow: 'They land as "Only me", marked "from Tana". "Undo import" takes away what this import added, except the lines you changed since.',
