@@ -11,8 +11,9 @@
 # script); the app is still one click away via this page's own "Live demo"
 # card, which points at app.idea2.site/trustweb/, a separate site block.
 #
-#   - hero-explainer.html: inserted right under the h1. The "targeted /
-#     discreet / scalable" sentence, as focusable-span terms that reveal
+#   - hero-explainer.html: inserted right under the h1. The "scalable /
+#     discreet / targeted" sentence (ranked strongest first after feedback
+#     2026-10-06), as focusable-span terms that reveal
 #     their reasoning and an example on hover, tap, or keyboard focus, each
 #     with a "Learn more" link into why.html. The source's own subline and
 #     herochips get dropped outright (owner: remove them).
