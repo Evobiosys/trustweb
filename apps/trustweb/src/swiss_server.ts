@@ -346,8 +346,9 @@ export async function transcribe(
     signal,
   })
   if (!res.ok) throw await failure(res)
+  // The job ran (and was charged); an answer that does not arrive whole is a LOST answer, not a refusal (review-app-b).
   const t = parseTranscript(await res.json().catch(() => null))
-  if (!t) throw new SwissServerError(SwissError.Server, res.status)
+  if (!t) throw new SwissServerError(SwissError.Timeout, res.status)
   return t
 }
 

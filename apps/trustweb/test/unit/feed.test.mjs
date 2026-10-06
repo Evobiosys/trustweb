@@ -59,6 +59,21 @@ describe('the Feed', () => {
     expect(by('Dummy thing').dummy).toBe(true)
     expect(posts.some((p) => ['Only mine', 'Paused', 'My own note', 'Mine'].includes(p.text))).toBe(false)
   })
+  it('an answer is attributed by the peer that sent it, never by the name inside it (review-app-b); odd items never break it', () => {
+    const s = state()
+    s.people.push({ id: 'ben', name: 'Ben', context: '', ring: Ring.Friend, metAt: NOW, lines: [], peerId: 'peer-ben' })
+    s.found = [{ id: 'f2', at: NOW - 10, text: 'van?', shared: [
+      { from: 'Ben', peerId: 'peer-ben', items: [{ text: 'Anna lends her van', context: '', when: '' }] },
+      // a peer not on any card whose answer names itself "Anna": never opens (or marks) Anna's card
+      { from: 'Anna', peerId: 'peer-unknown', items: [{ text: 'Claims to be Anna', context: '', when: '' }, { text: 5 }, null, { text: { x: 1 } }] },
+    ] }]
+    const posts = buildFeed(s).filter((p) => p.kind === PostKind.Answer && p.id.startsWith('answer:f2'))
+    expect(posts.map((p) => [p.who, p.personId ?? null, p.text])).toEqual([
+      ['Ben', 'ben', 'Anna lends her van'],
+      ['Anna', null, 'Claims to be Anna'],
+    ])
+    expect(posts.find((p) => p.text === 'Claims to be Anna').open).toEqual({ kind: 'none' })
+  })
   it('building it sends nothing: no fetch, no socket, no beacon', () => {
     const calls = []
     const saved = { fetch: globalThis.fetch, WebSocket: globalThis.WebSocket, sendBeacon: globalThis.navigator?.sendBeacon }
@@ -117,6 +132,48 @@ describe('Mastodon and Pixelfed as services', () => {
       ['s4', 'javascript', null, 'https://x.org/'],
     ])
     expect(await publicStatuses(h, '1', ok({ not: 'a list' }))).toBe(FetchProblem.Malformed)
+  })
+  it('a hostile instance (review-app-b): local, reserved and private names refused; only https links and pictures, never SVG', async () => {
+    for (const bad of ['anna@router.local', 'anna@x.localhost', 'anna@nas.internal', 'anna@box.lan', 'anna@x.home.arpa', 'anna@10.0.0.1', 'anna@[::1]', 'anna@printer.intranet', 'anna@a.onion']) {
+      expect(parseHandle(bad)).toBe(null)
+      expect(parseInstance(bad.split('@')[1])).toBe(null)
+    }
+    const h = { user: 'anna', host: 'x.org' }
+    const body = [
+      { id: 'a', created_at: '2026-10-06T10:00:00Z', content: 'local', url: 'http://127.0.0.1:5290/@anna/a', media_attachments: [{ type: 'image', preview_url: 'http://127.0.0.1:5290/p.png' }] },
+      { id: 'b', created_at: '2026-10-06T10:00:00Z', content: 'svg', url: 'https://x.org/@anna/b', media_attachments: [{ type: 'image', preview_url: 'https://cdn.x.org/p.svg?x=1' }] },
+      { id: 'c', created_at: '2026-10-06T10:00:00Z', content: 'plain http', url: 'http://x.org/@anna/c', media_attachments: [{ type: 'image', url: 'http://cdn.x.org/p.png' }] },
+      { id: 'd', created_at: '2026-10-06T10:00:00Z', content: 'private ip', url: 'https://192.168.1.1/x', media_attachments: [{ type: 'image', url: 'https://[::1]/p.png' }] },
+      { id: 'e', created_at: '2026-10-06T10:00:00Z', content: 'data', url: 'data:text/html,hi', media_attachments: [{ type: 'image', url: 'blob:https://x.org/1' }] },
+    ]
+    const got = await publicStatuses(h, '1', async () => new Response(JSON.stringify(body)))
+    expect(got.map((s) => [s.id, s.imageUrl ?? null, s.url])).toEqual([
+      ['a', null, 'https://x.org/'], ['b', null, 'https://x.org/@anna/b'], ['c', null, 'https://x.org/'], ['d', null, 'https://x.org/'], ['e', null, 'https://x.org/'],
+    ])
+  })
+  it('a hostile instance: every request omits credentials and referrer and refuses redirects', async () => {
+    const inits = []
+    const f = async (url, init) => { inits.push(init); return new Response(JSON.stringify({ id: '1' })) }
+    await lookupAccount({ user: 'anna', host: 'x.org' }, f)
+    await publicStatuses({ user: 'anna', host: 'x.org' }, '1', async (url, init) => { inits.push(init); return new Response('[]') })
+    for (const i of inits) expect(i).toMatchObject({ credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' })
+  })
+  it('a hostile instance: 10,000 statuses, a 5 MB body, a 2 MB post, bidi and control characters', async () => {
+    const h = { user: 'anna', host: 'x.org' }
+    const many = Array.from({ length: 10_000 }, (_, i) => ({ id: 's' + i, created_at: '2026-10-06T10:00:00Z', content: '<p>post ' + i + '</p>' }))
+    const t0 = Date.now()
+    const got = await publicStatuses(h, '1', async () => new Response(JSON.stringify(many)))
+    // Only the first 10 are ever read (an instance that ignores ?limit=10 cannot make the phone parse 10,000).
+    expect(Array.isArray(got) && got.map((s) => s.id)).toEqual(many.slice(0, 10).map((s) => s.id))
+    expect(Date.now() - t0).toBeLessThan(2000)
+    expect(await publicStatuses(h, '1', async () => new Response('[' + '"x",'.repeat(1_300_000) + '"x"]'))).toBe(FetchProblem.Malformed)
+    expect(await publicStatuses(h, '1', async () => new Response('[]', { headers: { 'Content-Length': '5000000' } }))).toBe(FetchProblem.Malformed)
+    const big = await publicStatuses(h, '1', async () => new Response(JSON.stringify([{ id: 'big', created_at: '2026-10-06T10:00:00Z', content: '<p>' + 'a'.repeat(400_000) + '</p>' }])))
+    expect(big[0].text.length).toBeLessThanOrEqual(500)
+    expect(htmlToText('<p>a' + 'b'.repeat(3_000_000) + '</p>').length).toBeLessThanOrEqual(500)
+    expect(htmlToText('<p>abc‮def⁦g\u0007h\u0000</p>')).toBe('abcdefgh')
+    expect(htmlToText('&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;')
+    expect(htmlToText('<svg><script>x()</script><text>hi</text></svg><math><mi>z</mi></math>')).toBe('hiz')
   })
   it('remote posts carry pictures only when pictures are switched on, and open the post on its instance', () => {
     const p = { id: 'anna', name: 'Anna' }

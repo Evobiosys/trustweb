@@ -9,12 +9,12 @@
 import { el } from '../../demo/src/ui/dom'
 import { buildFeed, PostKind } from './feed'
 import type { Post } from './feed'
-import { FetchProblem, handleText, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
+import { FetchProblem, handleText, isProblem, lookupAccount, parseHandle, parseInstance, profileUrl, publicStatuses, remotePosts, shareOrder, ShareTarget, shareUrlFor } from './fediverse'
 import type { RemoteStatus } from './fediverse'
 import type { ImageStore } from './image_store'
 import { shrink } from './image_store'
 import { ageLabel, FediverseReach, feedOn } from './model'
-import type { AppState, FeedSettings, InventoryItem, Person } from './model'
+import type { AppState, FediverseLink, FeedSettings, InventoryItem, Person } from './model'
 import { provenanceChip } from './provenance_view'
 import { askPersist } from './storage_persist'
 import { S } from './strings'
@@ -68,8 +68,23 @@ export function createFeedView(h: FeedViewHooks): FeedView {
   const remoteOn = (): boolean => h.state().feed?.remote === true
   const imagesOn = (): boolean => h.state().feed?.images === true
 
-  /** Who the Feed reads from: people with an address, shown, reachable, and the switch on. */
-  const followed = (): Person[] => (remoteOn() ? h.state().people.filter((p) => p.fediverse?.show && p.fediverse.reach === FediverseReach.Api) : [])
+  /**
+   * Who the Feed reads from: BOTH switches on (Settings > Feed "Also show posts
+   * from", and this person's own), and not known to refuse this page. Nothing is
+   * asked of any instance before that (review-app-b): whether it lets this page
+   * read it is found out by the first real read, not when the address is typed.
+   */
+  const followed = (): Person[] => (remoteOn() ? h.state().people.filter((p) => p.fediverse?.show === true && p.fediverse.reach !== FediverseReach.Link) : [])
+
+  /** What the first read found out about the instance, kept with the address (link out only where it refused). */
+  function learnReach(link: FediverseLink, found: string | FetchProblem): void {
+    const reach = found === FetchProblem.Unreachable ? (link.reach === FediverseReach.Api ? FediverseReach.Api : FediverseReach.Link)
+      : isProblem(found) ? link.reach : FediverseReach.Api
+    if (reach !== link.reach) {
+      if (reach) link.reach = reach; else delete link.reach
+      h.save()
+    }
+  }
 
   async function refreshRemote(p: Person): Promise<void> {
     const link = p.fediverse
@@ -79,8 +94,9 @@ export function createFeedView(h: FeedViewHooks): FeedView {
     try {
       const known = remote.get(link.handle)
       const id = known?.accountId ?? await lookupAccount(handle, fetch)
-      const statuses = typeof id === 'string' && !(Object.values(FetchProblem) as string[]).includes(id) ? await publicStatuses(handle, id, fetch) : id as FetchProblem
-      remote.set(link.handle, { at: Date.now(), statuses, ...(typeof id === 'string' && Array.isArray(statuses) ? { accountId: id } : {}) })
+      learnReach(link, id)
+      const statuses = isProblem(id) ? id : await publicStatuses(handle, id, fetch, allowLocal)
+      remote.set(link.handle, { at: Date.now(), statuses, ...(!isProblem(id) && Array.isArray(statuses) ? { accountId: id } : {}) })
     } finally {
       fetching.delete(link.handle)
     }
@@ -118,7 +134,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
 
   function imageEl(post: Post): HTMLElement | null {
     if (post.imageUrl) {
-      return el('img', { class: 'post-img', src: post.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+      return el('img', { class: 'post-img', src: post.imageUrl, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' })
     }
     if (!post.imageId) return null
     const img = el('img', { class: 'post-img', alt: '', 'data-local-image': post.imageId }) as HTMLImageElement
@@ -213,22 +229,21 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         }
         const input = el('input', { class: 'field', placeholder: S.fedPh, value: link?.handle ?? '', 'aria-label': S.fedPh, autocomplete: 'off', 'data-fed-input': '1' }) as HTMLInputElement
         const msg = el('p', { class: 'meta' }, [S.fedHint])
-        const save = async (): Promise<void> => {
+        // Kept on this phone only; nothing is asked of their instance here (only the Feed reads, with both switches on).
+        const save = (): void => {
           if (!input.value.trim()) { delete p.fediverse; h.save(); draw(false); return }
           const handle = parseHandle(input.value, allowLocal)
           if (!handle) { msg.textContent = S.fedBad; input.focus(); return }
-          msg.textContent = S.fedChecking
-          // Found out once, now: does their instance let this page read it? Else only a link out.
-          const id = await lookupAccount(handle, fetch)
-          const reach = id === FetchProblem.Unreachable || id === FetchProblem.RateLimited ? FediverseReach.Link : id === FetchProblem.NotFound || id === FetchProblem.Malformed ? null : FediverseReach.Api
-          if (reach === null) { msg.textContent = S.fedNotFound; return }
-          p.fediverse = { handle: handleText(handle), show: p.fediverse?.show ?? false, reach }
+          // Saving again is also "try again": what the instance allows is found out afresh by the next read.
+          const text = handleText(handle)
+          p.fediverse = { handle: text, show: p.fediverse?.show ?? false }
+          remote.delete(text)
           h.save()
           draw(false)
         }
-        input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void save() })
+        input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') save() })
         box.replaceChildren(el('h4', { class: 'eyebrow' }, [S.fedTitle]), input, msg, el('div', { class: 'rec-saves' }, [
-          el('button', { class: 'btn btn-electric btn-sm', 'data-fed-save': '1', onclick: () => void save() }, [S.chSave]),
+          el('button', { class: 'btn btn-electric btn-sm', 'data-fed-save': '1', onclick: save }, [S.chSave]),
           el('button', { class: 'btn btn-ghost btn-sm', onclick: () => draw(false) }, [S.chCancel]),
         ]))
         setTimeout(() => input.focus(), 0)
@@ -242,7 +257,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
           handle ? el('a', { class: 'ch-open', href: profileUrl(handle), target: '_blank', rel: 'noopener noreferrer' }, [S.fedOpen]) : null,
           el('button', { class: 'mini', onclick: () => draw(true) }, [S.chEditShort]),
         ]),
-        link.reach === FediverseReach.Api
+        link.reach !== FediverseReach.Link
           ? toggle(S.fedShow(p.name), remoteOn() ? S.fedShowHint : S.fedShowHintOff, link.show, 'data-fed-show', () => { link.show = !link.show; h.save(); draw(false) })
           : el('p', { class: 'meta', 'data-fed-reach': 'link' }, [S.fedLinkOnly]),
       )

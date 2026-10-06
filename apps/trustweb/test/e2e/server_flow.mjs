@@ -96,6 +96,18 @@ async function partA(browser, base) {
   await pickTranscription(page, 'server')
   await page.waitForTimeout(400)
   ok('the consent is asked once: choosing it again asks nothing', await page.locator('[data-consent]').count() === 0 && (await record(page)).transcription === 'server')
+  ok('after the yes, "Automatic" says it may send audio to the Swiss server (review-app-b)', /Swiss server \(you said yes/.test(await page.locator('[data-transcription="auto"]').innerText()))
+  // review-app-b: the yes can be taken back; then nothing goes there, also not under "Automatic", until asked again
+  await page.locator('[data-consent-withdraw]').click()
+  await page.waitForTimeout(300)
+  const rw = await record(page)
+  ok('"Take back my yes": the yes is gone, "The Swiss server" becomes "Automatic", which no longer mentions it', rw.serverTranscriptionConsentAt === undefined && rw.transcription === 'auto'
+    && !/Swiss server/.test(await page.locator('[data-transcription="auto"]').innerText()) && await page.locator('[data-consent-withdraw]').count() === 0)
+  await pickTranscription(page, 'server')
+  await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
+  ok('choosing the Swiss server again asks again', true)
+  await page.locator('[data-consent="yes"]').click()
+  await page.waitForTimeout(300)
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
   await page.locator('nav.tabs .tab-record').click()
   await page.getByRole('button', { name: 'Start recording' }).click()

@@ -27,7 +27,7 @@ describe('the round-B record', () => {
     expect(transcriptionChoice(s)).toBe(TranscriptionChoice.Server)
     expect(feedOn(s)).toBe(true)
     expect(readHosting(s)?.secret).toBe(HOSTED_SECRET)
-    expect(lastImport(s)?.id).toBe('imp-batch-1')
+    expect(lastImport(s)?.id).toBe('imp-batch-2')
   })
   it('a pre-wave record reads as before: Automatic, Feed on, nothing hosted, nothing imported', () => {
     const s = preWaveState()

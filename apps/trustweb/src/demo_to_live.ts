@@ -93,7 +93,24 @@ export function dummyIds(s: AppState, ctx: DemoContext): { people: Set<string>; 
 
 /** Without the relay link: a carried person is a contact here, not a connected peer (that connection was the demo identity's). */
 function unlinked(p: Person): Person {
-  const { peerId: _peer, ...rest } = p
+  // Nor their fediverse address: on the live phone it could fetch from a third party with no tap (review-app-b).
+  const { peerId: _peer, fediverse: _fed, ...rest } = p
+  return rest
+}
+
+/** A carried thing without its picture id (pictures live in the demo persona's own store, never carried). */
+function withoutPicture(i: InventoryItem): InventoryItem {
+  const { imageId: _img, ...rest } = i
+  return rest
+}
+
+/**
+ * A carried meeting without the round-B fields that act by themselves on the
+ * live phone (review-app-b): an outbox would PUT packs at boot, a late link
+ * would poll, a server job would read "may still be charged" for another account.
+ */
+function quietMeeting(m: PastMeeting): PastMeeting {
+  const { outbox: _o, late: _l, serverJob: _j, fullSentAt: _f, ...rest } = m
   return rest
 }
 
@@ -108,11 +125,11 @@ export function buildCarryOver(demo: AppState, ctx: DemoContext, choice: DemoCle
   const dummy = dummyIds(demo, ctx)
   const clean = choice === DemoCleanChoice.StartClean
   const people = demo.people.filter((p) => !p.peerId && !(clean && dummy.people.has(p.id))).map(unlinked)
-  const inventory = demo.inventory.filter((i) => !(clean && dummy.inventory.has(i.id))).map((i) => ({ ...i }))
+  const inventory = demo.inventory.filter((i) => !(clean && dummy.inventory.has(i.id))).map(withoutPicture)
   const kept = new Set(people.map((p) => p.id))
   const meetings = (demo.meetings ?? []).map((m): PastMeeting => {
-    if (!m.personId || kept.has(m.personId)) return { ...m }
-    const { personId: _gone, ...rest } = m
+    if (!m.personId || kept.has(m.personId)) return quietMeeting(m)
+    const { personId: _gone, ...rest } = quietMeeting(m)
     return rest
   })
   return {
@@ -146,8 +163,8 @@ export function mergeCarryOver(live: AppState, carry: CarryOver): AppState {
   const haveMeetings = ids(live.meetings ?? [])
   // Never a relay link: a carried person is a contact here (also where a record was not built by buildCarryOver).
   const people = carry.people.filter((p) => !havePeople.has(p.id)).map(unlinked)
-  const inventory = carry.inventory.filter((i) => !haveThings.has(i.id))
-  const meetings = carry.meetings.filter((m) => !haveMeetings.has(m.id))
+  const inventory = carry.inventory.filter((i) => !haveThings.has(i.id)).map(withoutPicture)
+  const meetings = carry.meetings.filter((m) => !haveMeetings.has(m.id)).map(quietMeeting)
   const out: AppState = {
     ...live,
     people: [...live.people, ...people],
@@ -235,8 +252,8 @@ export function parseCarry(raw: string | null, now: number = Date.now()): CarryO
   if (!Array.isArray(c.people) || !Array.isArray(c.inventory) || !Array.isArray(c.meetings) || !isRec(demo)
     || !Array.isArray(demo.people) || !Array.isArray(demo.inventory)) return null
   const people = uniqueById(c.people.map(cleanPerson).filter((p): p is Person => p !== null), CARRY_MAX.people)
-  const inventory = uniqueById(c.inventory.filter(isItem), CARRY_MAX.inventory)
-  const meetings = uniqueById(c.meetings.filter(isMeeting), CARRY_MAX.meetings)
+  const inventory = uniqueById(c.inventory.filter(isItem), CARRY_MAX.inventory).map(withoutPicture)
+  const meetings = uniqueById(c.meetings.filter(isMeeting), CARRY_MAX.meetings).map(quietMeeting)
   const carried = { people: new Set(people.map((p) => p.id)), inventory: new Set(inventory.map((i) => i.id)) }
   return {
     v: 1, at: c.at, name: c.name.trim().slice(0, 40), people, inventory, meetings,

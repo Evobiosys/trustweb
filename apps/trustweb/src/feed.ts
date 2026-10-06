@@ -63,14 +63,28 @@ function personByName(s: AppState, name: string): string | undefined {
   return s.people.find((p) => p.name.toLowerCase() === n)?.id
 }
 
+const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+
+/**
+ * The person an answer came from: by the peer that sent it (a name inside the
+ * answer is the sender's own claim, review-app-b); only finds saved before the
+ * peer was kept (demo accounts) fall back to the name.
+ */
+function answerPerson(s: AppState, sh: { from?: unknown; peerId?: unknown }): string | undefined {
+  if (typeof sh.peerId === 'string') return s.people.find((p) => p.peerId === sh.peerId)?.id
+  return sh.from ? personByName(s, str(sh.from)) : undefined
+}
+
 function answers(s: AppState): Post[] {
-  return (Array.isArray(s.found) ? s.found : []).flatMap((f) => (Array.isArray(f?.shared) ? f.shared : []).flatMap((sh, j) => {
-    const personId = personByName(s, sh.from)
-    return (Array.isArray(sh.items) ? sh.items : []).map((it, k): Post => ({
-      id: `answer:${f.id}:${j}:${k}`, kind: PostKind.Answer, who: sh.from, personId, at: f.at, text: it.text, context: f.text,
+  return (Array.isArray(s.found) ? s.found : []).flatMap((f) => (f && Array.isArray(f.shared) ? f.shared : []).flatMap((sh, j) => {
+    if (!sh || typeof sh !== 'object') return []
+    const personId = answerPerson(s, sh)
+    const who = (personId ? s.people.find((p) => p.id === personId)?.name : undefined) ?? str(sh.from)
+    return (Array.isArray(sh.items) ? sh.items : []).flatMap((it, k): Post[] => (it && typeof it.text === 'string' ? [{
+      id: `answer:${f.id}:${j}:${k}`, kind: PostKind.Answer, who, personId, at: Number(f.at) || 0, text: it.text, context: str(f.text),
       provenance: Provenance.SharedByPerson, dummy: Boolean(personId && isDemoPerson(s, personId)),
       open: personId ? { kind: 'person', personId } : { kind: 'none' },
-    }))
+    }] : []))
   }))
 }
 

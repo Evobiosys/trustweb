@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
-import { applyImport, IMPORT_MAX_BYTES, ImportProblem, lastImport, parseImportFile, planImport, undoImport } from './inventory_import'
+import { applyImport, IMPORT_MAX_BYTES, IMPORT_MAX_ITEMS, ImportProblem, lastImport, parseImportFile, planImport, undoImport } from './inventory_import'
 import type { ImportPlan } from './inventory_import'
 import type { AppState } from './model'
 import { S } from './strings'
@@ -68,6 +68,7 @@ function summary(h: ImportViewHooks, raw: string): void {
     el('h3', {}, [S.impTitle]),
     el('p', { class: 'meta', 'data-import-summary': `${plan.add.length}/${plan.already}` }, [S.impSummary(plan.add.length, plan.already, plan.exportedOn)]),
     plan.unreadable ? el('p', { class: 'meta' }, [S.impUnreadable(plan.unreadable)]) : null,
+    plan.leftOut ? el('p', { class: 'warn', 'data-import-left-out': String(plan.leftOut) }, [S.impLeftOut(plan.leftOut, IMPORT_MAX_ITEMS)]) : null,
     plan.allowedInAdvance ? el('p', { class: 'meta' }, [S.impAllowed(plan.allowedInAdvance)]) : null,
     el('p', { class: 'meta' }, [S.impHow]),
     plan.add.length

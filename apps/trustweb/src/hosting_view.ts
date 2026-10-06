@@ -11,7 +11,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { aboutUrl, AboutPage } from './about'
 import type { AudioStore } from './audio_store'
-import { fetchBack, hostAll, hostingRows, HostOutcome, hostOne, hoursOf, reconcile, toHost, unhost } from './hosting'
+import { fetchBack, hostAll, hostingRows, HostOutcome, hostOne, hoursOf, reconcile, toHost, unhost, unknownOnServer } from './hosting'
 import type { HostingDeps } from './hosting'
 import type { AppState, PastMeeting } from './model'
 import { clock } from './recorder'
@@ -20,7 +20,7 @@ import { S } from './strings'
 import type { SwissContext } from './swiss_context'
 import { readHosting } from './swiss_context'
 import { deleteRecording, fetchUsage, getRecording, listRecordings, putRecording } from './swiss_server'
-import type { Usage } from './swiss_server'
+import type { HostedRecordingInfo, Usage } from './swiss_server'
 
 export interface HostingViewHooks {
   ctx: SwissContext
@@ -33,6 +33,8 @@ export interface HostingViewHooks {
   when: (at: number) => string
   /** Settings redraws (the toggle and the usage line live there). */
   redrawSettings: () => void
+  /** Back to Settings (after the switch-on question). */
+  openSettings: () => void
 }
 
 export interface HostingView {
@@ -48,9 +50,13 @@ export interface HostingView {
 }
 
 const SHEET_KIND = 'hosting'
+/** Recordings named one by one in the confirmation; the rest are counted. */
+const CONFIRM_LISTED = 8
 
 export function createHostingView(h: HostingViewHooks): HostingView {
   let usage: Usage | null = null
+  /** What the server holds under this account that this phone knows nothing of (from the last list; removable). */
+  let unknown: HostedRecordingInfo[] = []
   /** The server answered 402 this visit: the next recording did not fit (cleared when something is removed). */
   let refused = false
   let busy = false
@@ -74,13 +80,21 @@ export function createHostingView(h: HostingViewHooks): HostingView {
   const redraw = (): void => { if (showing()) open(); else h.redrawSettings() }
   const meetings = (): PastMeeting[] => h.state().meetings ?? []
 
+  /**
+   * The server's numbers and list, for an account this phone already has. Never
+   * makes one: looking at the sheet asks nothing of the server for a phone that
+   * never switched hosting on (review-app-b).
+   */
   async function refreshUsage(): Promise<void> {
+    if (!readHosting(h.state())) return
     try {
       const a = await h.ctx.account()
       usage = await fetchUsage(a)
       const server = await listRecordings(a)
       const hs = readHosting(h.state())
       if (hs && reconcile(hs, server)) h.save()
+      const unknownIds = new Set(hs ? unknownOnServer(hs, server) : [])
+      unknown = server.filter((r) => unknownIds.has(r.id))
     } catch { /* the sheet keeps what it knew */ }
   }
 
@@ -105,6 +119,31 @@ export function createHostingView(h: HostingViewHooks): HostingView {
       busy = false
       redraw()
     }
+  }
+
+  /**
+   * Switching on asks first and names what goes up now (review-app-b): every
+   * recording kept on this phone, by meeting. Nothing is made or sent before the yes.
+   */
+  async function confirmOn(): Promise<void> {
+    const hs = readHosting(h.state())
+    const ids = toHost(hs ?? { secret: '', on: false, recs: [] }, await h.audio.entries(), meetings())
+    const label = (id: string): string => {
+      const m = meetings().find((x) => x.id === id)
+      return m ? `${m.about} · ${h.when(m.startedAt)}${m.durationMs ? ' · ' + clock(m.durationMs) : ''}` : S.hostMeetingGone
+    }
+    const shown = ids.slice(0, CONFIRM_LISTED)
+    h.openSheet([
+      el('h3', {}, [S.hostConfirmTitle]),
+      el('p', { class: 'meta', 'data-hosting-confirm': String(ids.length) }, [S.hostConfirmWhat(ids.length)]),
+      shown.length ? el('ul', { class: 'host-confirm-list' }, [
+        ...shown.map((id) => el('li', { 'data-hosting-confirm-item': id }, [label(id)])),
+        ids.length > shown.length ? el('li', {}, [S.hostConfirmMore(ids.length - shown.length)]) : null,
+      ]) : null,
+      el('p', { class: 'meta' }, [S.hostConfirmHow]),
+      el('button', { class: 'btn btn-electric', 'data-hosting-confirm-yes': '1', onclick: () => { h.openSettings(); setOn(true) } }, [S.hostConfirmYes(ids.length)]),
+      el('button', { class: 'btn btn-ghost', 'data-hosting-confirm-no': '1', onclick: h.openSettings }, [S.hostConfirmNo]),
+    ])
   }
 
   function setOn(on: boolean): void {
@@ -163,6 +202,24 @@ export function createHostingView(h: HostingViewHooks): HostingView {
     ])
   }
 
+  /** A recording on the server this phone knows nothing of: it can only be removed (the key opens it, nothing here says what it was). */
+  function unknownRow(r: HostedRecordingInfo): HTMLElement {
+    return el('div', { class: 'conn-row host-row', 'data-host-unknown': r.id }, [
+      el('b', {}, [S.hostUnknownRow(Math.max(1, Math.round(r.seconds / 60)))]),
+      el('span', {}, [S.hostStateServerOnly]),
+      el('div', { class: 'test-actions' }, [el('button', {
+        class: 'btn btn-ghost btn-sm', 'data-unhost-unknown': r.id,
+        onclick: () => {
+          if (busy) return
+          busy = true
+          void (async (): Promise<void> => {
+            try { await deleteRecording(await h.ctx.account(), r.id); h.toast(S.hostRemoved) } catch { h.toast(S.hostFailed) }
+          })().finally(() => { busy = false; void refreshUsage().then(redraw) })
+        },
+      }, [S.hostRemove])]),
+    ])
+  }
+
   function open(): void {
     const first = !showing()
     const body = el('div', { class: 'host-list' }, [el('p', { class: 'meta' }, [S.hostListLoading])])
@@ -181,7 +238,10 @@ export function createHostingView(h: HostingViewHooks): HostingView {
       const hs = readHosting(h.state())
       const rows = hs ? hostingRows(hs, await h.audio.entries(), meetings()) : []
       if (!showing()) return
-      body.replaceChildren(...(rows.length ? rows.map(rowView) : [el('p', { class: 'meta' }, [S.hostNone])]))
+      body.replaceChildren(
+        ...(rows.length ? rows.map(rowView) : [el('p', { class: 'meta' }, [S.hostNone])]),
+        ...(unknown.length ? [el('h4', { class: 'eyebrow' }, [S.hostUnknownTitle]), ...unknown.map(unknownRow)] : []),
+      )
     })()
   }
 
@@ -198,7 +258,7 @@ export function createHostingView(h: HostingViewHooks): HostingView {
       head,
       el('button', {
         class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-hosting-toggle': '1',
-        onclick: () => setOn(!on),
+        onclick: () => { if (on) setOn(false); else void confirmOn() },
       }, [el('b', {}, [S.hostToggle]), el('small', {}, [S.hostToggleHint])]),
       on ? usageView() : null,
       on ? allowanceView() : null,

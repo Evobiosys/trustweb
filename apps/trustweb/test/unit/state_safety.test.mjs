@@ -223,6 +223,30 @@ describe('a hostile, stale or broken carry-over cannot break or pollute the live
     const out = mergeCarryOver(preWaveState(), c)
     expect(() => migrateSources(out)).not.toThrow()
   })
+  it('round-B fields that act on their own never ride a carry-over (review-app-b: outbox, late, job, fediverse, picture)', () => {
+    const meeting = {
+      id: 'c-m', about: 'Kim', kind: 'who', where: 'Cafe', startedAt: NOW - 60_000, endedAt: NOW, durationMs: 60_000, meeting: true,
+      lines: [{ text: 'Has a van', tag: 'note' }], transcript: [{ speaker: 1, atMs: 0, text: 'hello' }],
+      outbox: [{ keyText: 'TW1-xxxx', title: 'x', notes: [], at: NOW }], late: { keyText: 'TW1-yyyy', since: NOW },
+      serverJob: { state: 'running', at: NOW, takesDone: 0 }, fullSentAt: NOW,
+    }
+    const c = parseCarry(JSON.stringify(goodCarry({
+      people: [{ ...goodCarry().people[0], fediverse: { handle: 'kim@example.social', show: true, reach: 'api' } }],
+      inventory: [{ ...goodCarry().inventory[0], imageId: 'img-demo' }],
+      meetings: [meeting],
+    })), NOW)
+    const m = c.meetings[0]
+    expect(m.id).toBe('c-m')
+    expect(m.transcript).toEqual(meeting.transcript)
+    for (const k of ['outbox', 'late', 'serverJob', 'fullSentAt']) expect(m[k]).toBeUndefined()
+    expect(c.people[0].fediverse).toBeUndefined()
+    expect(c.inventory[0].imageId).toBeUndefined()
+    // straight into merge too (a record that skipped parseCarry)
+    const raw = mergeCarryOver(preWaveState(), goodCarry({ meetings: [meeting], people: [{ ...goodCarry().people[0], fediverse: { handle: 'kim@example.social', show: true } }] }))
+    const rm = raw.meetings.find((x) => x.id === 'c-m')
+    for (const k of ['outbox', 'late', 'serverJob', 'fullSentAt']) expect(rm[k]).toBeUndefined()
+    expect(raw.people.find((p) => p.id === 'c-own').fediverse).toBeUndefined()
+  })
   it('a live id carried again never replaces the live one; replaying adds nothing', () => {
     const live = preWaveState()
     const c = parseCarry(JSON.stringify(goodCarry({ people: [{ id: 'anna', name: 'NOT ANNA', context: '', ring: Ring.Friend, metAt: 1, lines: [] }] })), NOW)

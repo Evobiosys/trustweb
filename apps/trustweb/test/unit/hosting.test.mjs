@@ -5,7 +5,7 @@
  * recording: sealed, at most an hour, never twice at once, the allowance as a
  * plain outcome, fetched back intact on a new phone.
  */
-import { fetchBack, hostAll, hostingRows, HostOutcome, hostOne, hoursOf, reconcile, toHost, unhost } from '../../src/hosting.ts'
+import { fetchBack, hostAll, hostingRows, HostOutcome, hostOne, hoursOf, reconcile, toHost, unhost, unknownOnServer } from '../../src/hosting.ts'
 import { hostedAccount, newHostedSecret, SwissError, SwissServerError } from '../../src/swiss_server.ts'
 
 const entry = (id, savedAt) => ({ id, savedAt, bytes: 100 })
@@ -100,5 +100,45 @@ describe('hosting: one recording', () => {
     deps.remove = async () => { throw new Error('offline') }
     expect(await unhost('m1', deps)).toBe(false)
     expect(hosting.recs.length).toBe(1)
+  })
+})
+
+describe('hosting: an answer that never arrived (review-app-b)', () => {
+  it('a PUT that reached the server but lost its 204: retried under the SAME id (an idempotent replace, never a second copy), with a new IV', async () => {
+    const bodies = []
+    let lose = true
+    const put = async (a, rid, seconds, sealed) => {
+      bodies.push({ rid, bytes: new Uint8Array(await sealed.arrayBuffer()) })
+      if (lose) { lose = false; throw new SwissServerError(SwissError.Network, 0) }
+      return seconds
+    }
+    const { deps, hosting } = await setup({ put })
+    expect(await hostOne('m1', deps)).toBe(HostOutcome.Failed)
+    expect(hosting.recs.length).toBe(1)
+    expect(hosting.recs[0].pending).toBe(true)
+    expect(toHost(hosting, [entry('m1', 1)], [meeting('m1')])).toEqual(['m1'])
+    expect(hostingRows(hosting, [entry('m1', 1)], [meeting('m1')])[0].rec).toBe(null)
+    expect(await hostOne('m1', deps)).toBe(HostOutcome.Hosted)
+    expect(bodies.map((b) => b.rid)).toEqual([hosting.recs[0].rid, hosting.recs[0].rid])
+    expect(hosting.recs[0].pending).toBeUndefined()
+    // same key, same id, a fresh IV: never a nonce reused under one key
+    expect([...bodies[0].bytes.slice(1, 13)].join()).not.toBe([...bodies[1].bytes.slice(1, 13)].join())
+  })
+  it('a refusal the server answered (402, 413, 400, 403) stored nothing: nothing pending is kept', async () => {
+    for (const [code, status, outcome] of [[SwissError.AllowanceReached, 402, HostOutcome.Allowance], [SwissError.TooLarge, 413, HostOutcome.TooLong], [SwissError.BadRequest, 400, HostOutcome.Failed], [SwissError.Forbidden, 403, HostOutcome.Failed]]) {
+      const { deps, hosting } = await setup({ put: async () => { throw new SwissServerError(code, status) } })
+      expect(await hostOne('m1', deps)).toBe(outcome)
+      expect(hosting.recs).toEqual([])
+    }
+  })
+  it('the server list settles what is pending, and lists what this phone does not know (removable)', () => {
+    const h = { secret: 'x', on: true, recs: [
+      { meetingId: 'a', rid: 'r1', seconds: 1, bytes: 1, at: 1, pending: true },
+      { meetingId: 'b', rid: 'r2', seconds: 1, bytes: 1, at: 1, pending: true },
+    ] }
+    const server = [{ id: 'r1', bytes: 1, seconds: 1, stored: '' }, { id: 'r9', bytes: 1, seconds: 1, stored: '' }]
+    expect(reconcile(h, server)).toBe(true)
+    expect(h.recs.map((r) => [r.rid, r.pending ?? false])).toEqual([['r1', false], ['r2', true]])
+    expect(unknownOnServer(h, server)).toEqual(['r9'])
   })
 })

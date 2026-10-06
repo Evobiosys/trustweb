@@ -52,6 +52,10 @@ export interface TranscriptionView {
   meetingExtras(m: PastMeeting): (Node | null)[]
   /** Settings > Recording: a line saying whether the server's transcription is switched on. */
   settingsNote(): HTMLElement | null
+  /** The yes was given (audio may go to the Swiss server, also under "Automatic"). */
+  consented(): boolean
+  /** Settings: take the yes back ("Automatic" then never uses the server; "The Swiss server" becomes "Automatic"). */
+  withdrawButton(after: () => void): HTMLElement | null
   /** At app open: settle cut-off jobs, send the full packs that are due. */
   boot(): void
 }
@@ -184,6 +188,21 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     return out
   }
 
+  function withdrawButton(after: () => void): HTMLElement | null {
+    if (!consented()) return null
+    return el('button', {
+      class: 'btn btn-ghost btn-sm', 'data-consent-withdraw': '1',
+      onclick: () => {
+        const s = h.state()
+        delete s.serverTranscriptionConsentAt
+        if (transcriptionChoice(s) === TranscriptionChoice.Server) s.transcription = TranscriptionChoice.Auto
+        h.save()
+        h.toast(S.consentWithdrawn)
+        after()
+      },
+    }, [S.consentWithdraw])
+  }
+
   function settingsNote(): HTMLElement | null {
     if (!h.ctx.enabled()) return null
     const st = h.ctx.status()
@@ -207,6 +226,8 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     start,
     meetingExtras: (m) => [...jobLines(m), ...outboxLines(m)],
     settingsNote,
+    consented,
+    withdrawButton,
     boot,
   }
 }

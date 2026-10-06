@@ -90,9 +90,13 @@ function codeOf(e: unknown): SwissError {
   return e instanceof SwissServerError ? e.code : SwissError.Network
 }
 
-/** Lost answers (timeout, dropped connection): may be charged. Everything else the server refused: not charged. */
+/**
+ * Lost answers (timeout, dropped connection, a torn body) and the server's own
+ * unexpected errors (500: the job may have run): may be charged. What the
+ * server or the provider refused (4xx, 502, 503): not charged.
+ */
 function stateFor(code: SwissError): ServerJobState {
-  return code === SwissError.Timeout || code === SwissError.Network ? ServerJobState.MaybeCharged : ServerJobState.Failed
+  return code === SwissError.Timeout || code === SwissError.Network || code === SwissError.Server ? ServerJobState.MaybeCharged : ServerJobState.Failed
 }
 
 async function callOnce(a: HostedAccount, take: JobTake, deps: JobDeps): Promise<TranscribeResult> {

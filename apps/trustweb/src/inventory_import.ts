@@ -15,12 +15,18 @@
  */
 import { Audience, Provenance } from './model'
 import type { AppState, ImportBatch, InventoryItem } from './model'
+import { fingerprint, stripUnsafe } from './safe_text'
 
 export const IMPORT_FORMAT = 'trustweb-inventory-import'
 export const IMPORT_VERSION = 1
 /** Bigger files are refused before they are read as JSON. */
 export const IMPORT_MAX_BYTES = 1_000_000
-export const IMPORT_MAX_ITEMS = 2000
+/**
+ * Lines read from one file (the rest are counted and said, never dropped
+ * silently). 1000 lines of 160 characters add about 300 KB to the record,
+ * which rides a backup capped at 1 MB (review-app-b: 2000 came to 1 MB).
+ */
+export const IMPORT_MAX_ITEMS = 1000
 const TEXT_MAX = 160
 const KEY_RE = /^[0-9a-f]{16}$/
 /** Import batches kept for "Undo import", newest first. */
@@ -45,6 +51,8 @@ export interface ParsedImport {
   lines: ImportLine[]
   /** Entries in the file that were not shaped as a line (left out). */
   unreadable: number
+  /** Entries past IMPORT_MAX_ITEMS (left out, said in the summary). */
+  leftOut: number
 }
 
 export interface ImportPlan {
@@ -53,6 +61,7 @@ export interface ImportPlan {
   /** Already in this inventory (by key or by text), skipped. */
   already: number
   unreadable: number
+  leftOut: number
   allowedInAdvance: number
 }
 
@@ -65,7 +74,8 @@ function lineOf(v: unknown): ImportLine | null {
   if (typeof v !== 'object' || v === null) return null
   const o = v as Record<string, unknown>
   if (typeof o.key !== 'string' || !KEY_RE.test(o.key) || typeof o.text !== 'string') return null
-  const text = o.text.replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX)
+  // Control and bidi characters never land (a hidden byte, a line that displays in a spoofed order).
+  const text = stripUnsafe(o.text).replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX)
   if (!text) return null
   return { key: o.key, text, allowedInAdvance: o.allowedInAdvance === true }
 }
@@ -84,7 +94,7 @@ export function parseImportFile(raw: string): ParsedImport | ImportProblem {
   const lines = entries.map(lineOf).filter((l): l is ImportLine => l !== null)
   if (!lines.length) return ImportProblem.Empty
   const exportedOn = typeof o.exportedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.exportedOn) ? o.exportedOn : ''
-  return { exportedOn, lines, unreadable: entries.length - lines.length }
+  return { exportedOn, lines, unreadable: entries.length - lines.length, leftOut: o.items.length - entries.length }
 }
 
 /** What would be added: new keys and new texts only (also within the file itself). */
@@ -99,7 +109,10 @@ export function planImport(s: Pick<AppState, 'inventory'>, parsed: ParsedImport)
     texts.add(n)
     add.push(l)
   }
-  return { exportedOn: parsed.exportedOn, add, already: parsed.lines.length - add.length, unreadable: parsed.unreadable, allowedInAdvance: add.filter((l) => l.allowedInAdvance).length }
+  return {
+    exportedOn: parsed.exportedOn, add, already: parsed.lines.length - add.length, unreadable: parsed.unreadable,
+    leftOut: parsed.leftOut ?? 0, allowedInAdvance: add.filter((l) => l.allowedInAdvance).length,
+  }
 }
 
 /** Writes the plan: the new items (Only me, from Tana, the key kept), and the batch for "Undo import". */
@@ -108,14 +121,20 @@ export function applyImport(s: AppState, plan: ImportPlan, now: number, newId: (
   const items: InventoryItem[] = plan.add.map((l) => ({
     id: newId(), text: l.text, audience: Audience.OnlyMe, included: true, createdAt: now, source: { kind: Provenance.Tana, ref: l.key },
   }))
-  for (const it of items) batch.items.push({ itemId: it.id, key: it.source?.ref ?? '', text: it.text, audience: it.audience })
+  for (const it of items) batch.items.push({ itemId: it.id, key: it.source?.ref ?? '', sig: signature(it) })
   s.inventory.unshift(...items)
   s.imports = [batch, ...(Array.isArray(s.imports) ? s.imports : [])].slice(0, IMPORTS_KEPT)
   return batch
 }
 
+/** The text and who can ask, as one fingerprint. */
+function signature(item: Pick<InventoryItem, 'text' | 'audience'>): string {
+  return fingerprint(`${item.audience}\u0000${item.text}`)
+}
+
 /** Has the person changed this imported item since (its text or who can ask)? Then Undo leaves it. */
 function changed(item: InventoryItem, as: ImportBatch['items'][number]): boolean {
+  if (typeof as.sig === 'string') return signature(item) !== as.sig
   return item.text !== as.text || item.audience !== as.audience
 }
 

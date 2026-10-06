@@ -104,17 +104,29 @@ export function roundBState() {
   s.meetings[2].late = { keyText: 'TW1R-CCCCC-DDDDD', etag: '"0123456789abcdef0123456789abcdef"', since: Date.now() - 1000 }
   s.received[0].pending = true
   s.received[0].keptAs = 'm-lea'
-  s.hosting = { secret: HOSTED_SECRET, on: true, recs: [{ meetingId: 'm-anna', rid: 'cd'.repeat(16), seconds: 3600, bytes: 14_400_000, at: NOW - DAY }] }
-  s.imports = [{ id: 'imp-batch-1', at: NOW - DAY, exportedOn: '2026-10-06', items: [{ itemId: 'imp1', key: '0123456789abcdef', text: 'Knows the Graz housing co-op board', audience: 'me' }] }]
+  s.hosting = { secret: HOSTED_SECRET, on: true, recs: [
+    { meetingId: 'm-anna', rid: 'cd'.repeat(16), seconds: 3600, bytes: 14_400_000, at: NOW - DAY },
+    // review-app-b: an upload whose answer was lost, waiting to go again under the same id
+    { meetingId: 'm-inv', rid: 'ef'.repeat(16), seconds: 60, bytes: 240_000, at: NOW - DAY, pending: true },
+  ] }
+  s.imports = [
+    // review-app-b: a fingerprint instead of a second copy of the text; and a batch saved before that
+    { id: 'imp-batch-2', at: NOW - DAY, exportedOn: '2026-10-06', items: [{ itemId: 'imp1', key: '0123456789abcdef', sig: '1a2b3c4d' }] },
+    { id: 'imp-batch-1', at: NOW - 2 * DAY, exportedOn: '2026-10-05', items: [{ itemId: 'imp0', key: 'fedcba9876543210', text: 'Old import line', audience: 'me' }] },
+  ]
+  // review-app-b: what an ask brought back, attributed by the peer that answered
+  s.found = [{ id: 'f-1', at: NOW - DAY, text: 'Who has a ladder?', shared: [{ from: 'Anna', peerId: 'peer-anna', items: [{ text: 'Ladder, 3 m', context: 'What I have', when: 'early October' }] }] }]
   s.feed = { on: true, remote: true, images: false, myInstance: 'mastodon.social' }
   s.people[0].fediverse = { handle: 'anna@mastodon.social', show: true, reach: 'api' }
+  // review-app-b: an address saved but never read yet (whether the instance allows this page is found out by the first read)
+  s.people[1].fediverse = { handle: 'max@pixelfed.social', show: false }
   return s
 }
 
 /** The round-B fields of a record, for comparing them across saves (what an older build must keep). */
 export function roundBFields(s) {
   return JSON.stringify({
-    transcription: s.transcription, consent: s.serverTranscriptionConsentAt, hosting: s.hosting, imports: s.imports, feed: s.feed,
+    transcription: s.transcription, consent: s.serverTranscriptionConsentAt, hosting: s.hosting, imports: s.imports, feed: s.feed, found: s.found,
     meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late })),
     received: (s.received ?? []).map((r) => [r.pending, r.keptAs]),
     fediverse: s.people.map((p) => p.fediverse ?? null),

@@ -15,6 +15,7 @@ import { canStartJob, linesFromResult, runServerJob, settleInterruptedJobs } fro
 import { addToOutbox, applyLatePack, flushOutbox, fullPackFor, lateStillWanted, LATE_KEEP_MS, OUTBOX_MAX, pollDelay, POLL_MAX_MS, SEND_BACKOFF_MS } from '../../src/late_pack.ts'
 import { openRecording, sealRecording } from '../../src/hosted_recording.ts'
 import { isMeetingPack } from '../../src/share.ts'
+import { backupNow, newRandomKey } from '../../src/backup.ts'
 
 const meeting = (extra = {}) => ({
   id: 'm1', about: 'Anna', kind: 'who', where: 'Impact Hub', startedAt: 1000, endedAt: 2000, durationMs: 5000, meeting: true,
@@ -178,6 +179,19 @@ describe('the server job', () => {
       expect(m.serverJob.error).toBe(code)
     }
   })
+  it('a job answered 200 whose body never arrived whole, or a 500: may still be charged, never "failed" (review-app-b)', async () => {
+    const torn = async () => new Response('{"text":"hal', { status: 200 })
+    expect((await transcribe(ACCOUNT, new Blob(['x']), 1, 'audio/webm', new AbortController().signal, torn).catch((x) => x)).code).toBe(SwissError.Timeout)
+    const fiveHundred = async () => new Response(JSON.stringify({ error: 'server_error' }), { status: 500 })
+    const e500 = await transcribe(ACCOUNT, new Blob(['x']), 1, 'audio/webm', new AbortController().signal, fiveHundred).catch((x) => x)
+    const m = meeting({ id: 'm500' })
+    const { d, calls } = deps([e500])
+    expect(await runServerJob(m, async () => [take(0, 1000)], d)).toBe(ServerJobState.MaybeCharged)
+    expect(calls.length).toBe(1)
+    // a refusal the provider gave (502) or "not switched on" (503) stays failed: nothing was charged
+    const m2 = meeting({ id: 'm502' })
+    expect(await runServerJob(m2, async () => [take(0, 1000)], deps([new SwissServerError(SwissError.Provider, 502)]).d)).toBe(ServerJobState.Failed)
+  })
   it('429 busy is waited out (Retry-After), a few times, then stops as failed', async () => {
     const m = meeting()
     const waits = []
@@ -244,6 +258,21 @@ describe('the server job', () => {
 })
 
 describe('the link that fills in later', () => {
+  it('the full pack goes to the SAME slot under the same key with a FRESH IV every time (review-app-b: never a nonce reused)', async () => {
+    const key = await newRandomKey()
+    const puts = []
+    const saved = globalThis.fetch
+    globalThis.fetch = async (url, init) => { puts.push({ url, body: new Uint8Array(init.body) }); return new Response(null, { status: 204 }) }
+    try {
+      await backupNow(key, { v: 1, pending: true }, 'https://backup.test/backup')
+      await backupNow(key, { v: 1 }, 'https://backup.test/backup')
+    } finally {
+      globalThis.fetch = saved
+    }
+    expect(puts[0].url).toBe(puts[1].url)
+    expect(puts[0].url.startsWith('https://backup.test/backup/')).toBe(true)
+    expect([...puts[0].body.slice(1, 13)].join()).not.toBe([...puts[1].body.slice(1, 13)].join())
+  })
   const entry = (k, notes = ['n1']) => ({ keyText: k, title: 'Meeting with Anna', notes, at: 5 })
   const sendDeps = (fail = 0) => {
     const sent = []

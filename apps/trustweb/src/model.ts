@@ -240,7 +240,12 @@ export interface Found {
   id: string
   at: number
   text: string
-  shared: { from: string; items: { text: string; context: string; when: string }[] }[]
+  /**
+   * `from`: this phone's name for the peer that answered; `peerId`: that peer
+   * (wave 1733 round B, review: the Feed links an answer to a person by the
+   * peer, never by a name inside the answer). Absent in finds saved before.
+   */
+  shared: { from: string; peerId?: string; items: { text: string; context: string; when: string }[] }[]
 }
 
 /** One line of a meeting transcript as kept on this phone (who said it, when in the recording, what). */
@@ -444,6 +449,12 @@ export interface HostedRec {
   seconds: number
   bytes: number
   at: number
+  /**
+   * Written BEFORE the upload, cleared when the server said it stored it
+   * (review-app-b): an answer lost on the way is retried under the SAME id (an
+   * idempotent replace), never a second copy charged to the allowance. Absent: stored.
+   */
+  pending?: boolean
 }
 
 /** One "Import inventory file": what it added, so Undo removes exactly that (and nothing the person changed since). */
@@ -451,7 +462,12 @@ export interface ImportBatch {
   id: string
   at: number
   exportedOn: string
-  items: { itemId: string; key: string; text: string; audience: Audience }[]
+  /**
+   * `sig`: a fingerprint of the text and who can ask as imported (safe_text.ts),
+   * so Undo can tell "changed since" without a second copy of every text in the
+   * record (review-app-b). Batches saved before kept `text` and `audience` instead.
+   */
+  items: { itemId: string; key: string; sig?: string; text?: string; audience?: Audience }[]
 }
 
 /** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
