@@ -645,6 +645,24 @@ export const S = {
     transcript: 'Transcript',
   } as Record<string, string>,
 
+  // The chain of proof (wave 1733, item 4a): where an item or a note came from.
+  provLabel: {
+    'recorded-solo': 'recorded by you',
+    'recorded-meeting': 'recorded in a meeting',
+    typed: 'typed',
+    tana: 'from Tana',
+    'shared-by-person': 'shared with you',
+    demo: 'demo',
+  } as Record<string, string>,
+  provFromMeeting: (about: string, when: string) => `From the meeting with ${about}, ${when}`,
+  provFromMemo: (about: string, when: string) => `From your memo about ${about}, ${when}`,
+  provMeetingGone: 'The recording it came from is no longer on this phone.',
+  provNoRecording: 'Noted on Record, without a recording.',
+  provSharedBy: (name: string) => `Shared by ${name}`,
+  itemSheetLead: 'Who can ask about it, and where it came from. Only you see where it came from; an answer never carries it.',
+  itemWho: (audience: string) => `Who can ask: ${audience}`,
+  itemPaused: 'Paused: nobody can ask about it right now.',
+
   // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
   d2lButton: 'Install',
   d2lTitle: 'Clean out your demo contacts first?',

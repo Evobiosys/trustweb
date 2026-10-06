@@ -27,7 +27,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, DemoAccount, Found, NoteLine, PastMeeting, Peer, Person, ReceivedShare, TranscriptLine } from './model'
+import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare, TranscriptLine } from './model'
 import { isMeetingPack, parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
@@ -49,6 +49,9 @@ import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCa
 import type { CarryOver } from './demo_to_live'
 import { isoDateLabels, SearchField } from './search'
 import { meetingSearchPanel } from './meeting_search_view'
+import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, typedSource } from './provenance'
+import type { SourceFocus } from './provenance'
+import { sourceView } from './provenance_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -83,6 +86,10 @@ interface DraftLine {
   tag: Tag
   customTag?: string
   audience: Audience
+  /** The moment in the recording it belongs to (provenance.ts): stamped during a take, or its transcript line's offset. */
+  atMs?: number
+  /** The transcript line it was picked from (index into draft.segments, as stored with the meeting). */
+  line?: number
 }
 
 interface Draft {
@@ -173,6 +180,9 @@ if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
   carryNotice = fresh ? S.carryWelcome(state.me.displayName) : S.carryMerged
   pendingCarry = null
 }
+// Every item and note gets a source once (provenance.ts): demo content "demo", the rest "typed"
+// or, where a stored meeting holds the same note, "recorded" with that meeting. Idempotent.
+if (state && migrateSources(state)) save()
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -711,6 +721,7 @@ function addDemoContent(): void {
   const s = st()
   if (s.demo) return
   const seed = seedState(Persona.Holder, Date.now(), ctx)
+  markDemo(seed.people, seed.inventory)
   s.people.push(...seed.people)
   s.inventory.push(...seed.inventory)
   s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }
@@ -786,6 +797,7 @@ function createMe(name: string): void {
   state = solo
     ? { ...seedState(persona as Persona, Date.now(), ctx), me: { id: randomId(12), displayName } }
     : { v: 1, me: { id: randomId(12), displayName }, peers: [], people: [], inventory: [], log: [], notificationsOn: false }
+  if (solo) markDemo(state.people, state.inventory)
   save()
 }
 
@@ -812,7 +824,7 @@ async function completePendingConnect(): Promise<void> {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
     for (const l of extractLines(sharedNotes)) {
-      person.lines.push({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now })
+      person.lines.push({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now, source: sharedSource(peer.displayName) })
     }
   }
   save()
@@ -1239,6 +1251,30 @@ function dummyChip(): HTMLElement {
   return el('span', { class: 'tagpill dummy-chip' }, [S.dummyChip])
 }
 
+/** An item's or a note's source, linked to the past meeting it came from where that is still stored (provenance_view.ts). */
+function sourceFor(source: ItemSource | undefined, text: string): HTMLElement | null {
+  const m = source?.meetingId ? pastMeetings(st()).find((x) => x.id === source.meetingId) : undefined
+  return sourceView(source, {
+    meeting: m,
+    open: () => { if (m && source) pastMeetingSheet(m, focusFor(m, source, text) ?? undefined, source) },
+    when: whenLabel,
+  })
+}
+
+/** One inventory item: who can ask, and where it came from (the chain of proof). */
+function itemSheet(itemId: string): void {
+  const s = st()
+  const item = s.inventory.find((i) => i.id === itemId)
+  if (!item) return
+  openSheet([
+    el('h3', {}, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
+    el('p', { class: 'meta' }, [S.itemSheetLead]),
+    el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience]) : S.itemPaused]),
+    sourceFor(item.source, item.text),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
+  ])
+}
+
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
@@ -1249,8 +1285,9 @@ function personSheet(personId: string): void {
     el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected : S.sheetNotesOnly]),
     current.length
-      ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline' }, [
+      ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline', 'data-line': l.id }, [
           tagChip(l.tag, l.customTag), el('span', {}, [l.text]), el('em', {}, [S.audienceLabel[l.audience]]),
+          sourceFor(l.source, l.text),
         ])))
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
@@ -1552,7 +1589,8 @@ function recAdvancedView(): HTMLElement {
     const add = (): void => {
       const text = input.value.trim()
       if (!text) return
-      draft.extraLines.push({ id: randomId(8), text, tag, audience: Audience.Friends })
+      // During a take the line is stamped with the take's current moment (the chain of proof, provenance.ts).
+      draft.extraLines.push({ id: randomId(8), text, tag, audience: Audience.Friends, ...(recorder.live ? { atMs: totalMs() + recorder.elapsed() } : {}) })
       render()
       document.querySelector<HTMLInputElement>(`[data-adv="${tag}"] input`)?.focus()
     }
@@ -1665,7 +1703,7 @@ interface PastFocus {
   index: number
 }
 
-function highlightPastLine(m: PastMeeting, f: PastFocus): void {
+function highlightPastLine(m: PastMeeting, f: PastFocus | SourceFocus): void {
   const target = f.field === SearchField.Note
     ? sheet.querySelector<HTMLElement>(`[data-pm-note="${f.index}"]`)
     : sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${f.index}`)}"]`)
@@ -1678,7 +1716,8 @@ function transcriptView(lines: TranscriptLine[], prefix: string): HTMLElement {
   return el('div', { class: 'tr-list tr-static' }, lines.map((t, i) => transcriptRow({ id: `${prefix}${i}`, speaker: t.speaker, text: t.text, atMs: t.atMs, final: true })))
 }
 
-function pastMeetingSheet(m: PastMeeting, focus?: PastFocus): void {
+function pastMeetingSheet(m: PastMeeting, focus?: PastFocus | SourceFocus, from?: ItemSource): void {
+  void from
   const s = st()
   const person = m.personId ? s.people.find((p) => p.id === m.personId) : undefined
   openSheet([
@@ -1701,6 +1740,12 @@ function draftIsMeeting(): boolean {
   return Boolean(draft.meetingId) || takes.length > 0 || draft.segments.length > 0 || draft.mode === RecordMode.Meeting
 }
 
+/** Was this draft a meeting (rather than a memo by yourself)? The stored meeting knows, even after a switch to "Just me". */
+function draftWasMeeting(): boolean {
+  const stored = draft.meetingId ? st().meetings?.find((m) => m.id === draft.meetingId) : undefined
+  return stored?.meeting ?? draft.mode === RecordMode.Meeting
+}
+
 /**
  * Writes the stored past meeting for the current draft, or completes the one
  * End meeting already wrote: the transcript at End meeting, the notes and the
@@ -1719,7 +1764,9 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   m.endedAt = Date.now()
   m.durationMs = Math.max(m.durationMs, totalMs())
   m.meeting = m.meeting || draft.mode === RecordMode.Meeting
-  const lines = draft.lines.filter((l) => l.text.trim()).map((l) => ({ text: l.text.trim(), tag: l.tag }))
+  const lines = draft.lines.filter((l) => l.text.trim()).map((l) => ({
+    text: l.text.trim(), tag: l.tag, ...(l.atMs === undefined ? {} : { atMs: l.atMs }), ...(l.line === undefined ? {} : { line: l.line }),
+  }))
   if (lines.length) m.lines = lines
   const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
   if (transcript.length) m.transcript = transcript
@@ -1862,7 +1909,7 @@ function keepPack(pack: MeetingPack): void {
     s.people.push(person)
   }
   for (const text of pack.notes) {
-    person.lines.push({ id: randomId(8), text, tag: extractLines(text)[0]?.tag ?? Tag.Note, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now })
+    person.lines.push({ id: randomId(8), text, tag: extractLines(text)[0]?.tag ?? Tag.Note, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now, source: sharedSource(pack.from) })
   }
   const m: PastMeeting = {
     id: randomId(8), about: person.name, kind: AboutKind.Who, personId: person.id, where: pack.where, startedAt: pack.startedAt,
@@ -2176,12 +2223,15 @@ async function makeNotes(): Promise<void> {
   await transcriber?.stop()
   transcriber = null
   if (!draft.lines.length) {
-    const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
-    draft.lines = extractLines(prose).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends }))
+    // Picked one utterance at a time, so every line keeps its moment in the recording (provenance.ts).
+    draft.lines = [
+      ...linesFromTranscript(draft.segments).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends, atMs: l.atMs, line: l.line })),
+      ...extractLines(draft.text).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends })),
+    ]
     // Nothing transcribed here: keep the memo itself as a line, so saving
     // never dead-ends; the audio is transcribed later on the computer.
     if (!draft.lines.length && takes.length) {
-      draft.lines = [{ id: randomId(8), text: S.memoLine(clock(totalMs())), tag: Tag.Note, audience: Audience.OnlyMe }]
+      draft.lines = [{ id: randomId(8), text: S.memoLine(clock(totalMs())), tag: Tag.Note, audience: Audience.OnlyMe, atMs: 0 }]
     }
   }
   for (const l of draft.extraLines) if (!draft.lines.some((x) => x.id === l.id)) draft.lines.push({ ...l })
@@ -2786,14 +2836,16 @@ function saveDraftWhat(): void {
   const now = Date.now()
   const what = draft.name.trim()
   const lines = draft.lines.filter((l) => l.text.trim())
+  // The meeting is stored first, so every item can point at it (the chain of proof).
+  if (draftIsMeeting()) recordPastMeeting()
+  const meeting = draftWasMeeting()
   for (const l of lines) {
     const text = l.text.trim()
     s.inventory.push({
       id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
-      audience: l.audience, included: true, createdAt: now,
+      audience: l.audience, included: true, createdAt: now, source: recordedSource(meeting, draft.meetingId, l),
     })
   }
-  if (draftIsMeeting()) recordPastMeeting()
   save()
   toast(S.savedWhatToast(lines.length))
   newDraft()
@@ -2813,13 +2865,15 @@ function saveDraft(): void {
   if (draft.context.trim()) p.context = draft.context.trim()
   const peer = s.peers.find((x) => x.id === p.peerId)
   if (peer) peer.ring = draft.ring
+  // The meeting is stored first, so every note can point at it (the chain of proof).
+  if (draftIsMeeting()) recordPastMeeting({ personId: p.id })
+  const meeting = draftWasMeeting()
   for (const l of draft.lines) {
     p.lines.push({
       id: l.id, text: l.text.trim(), tag: l.tag, customTag: l.customTag, audience: l.audience,
-      status: LineStatus.Current, notedAt: now, checkedAt: now,
+      status: LineStatus.Current, notedAt: now, checkedAt: now, source: recordedSource(meeting, draft.meetingId, l),
     })
   }
-  if (draftIsMeeting()) recordPastMeeting({ personId: p.id })
   save()
   toast(S.savedToast(p.name, S.ringLabel[p.ring]))
   newDraft()
@@ -3183,7 +3237,7 @@ function screenInventory(): Node[] {
   const add = (): void => {
     const v = input.value.trim()
     if (!v) { input.focus(); return }
-    s.inventory.unshift({ id: randomId(8), text: v, audience: Audience.FriendsOfFriends, included: true, createdAt: Date.now() })
+    s.inventory.unshift({ id: randomId(8), text: v, audience: Audience.FriendsOfFriends, included: true, createdAt: Date.now(), source: typedSource() })
     save()
     render()
   }
@@ -3202,7 +3256,7 @@ function screenInventory(): Node[] {
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       ...s.inventory.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('span', { class: 'inv-text' }, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
+        el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
         el('div', { class: 'inv-actions' }, [
           audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
           el('button', { class: 'mini', onclick: () => { item.included = !item.included; save(); render() } }, [item.included ? S.invOn : S.invOff]),

@@ -63,6 +63,48 @@ export interface NoteLine {
   status: LineStatus
   notedAt: number
   checkedAt: number
+  /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
+  source?: ItemSource
+}
+
+/** Where an item or a note came from: the chain of proof (wave 1733, owner 2026-10-06). A fixed set. */
+export enum Provenance {
+  /** Noted in a recording by yourself ("Just me"). */
+  RecordedSolo = 'recorded-solo',
+  /** Noted in a meeting recording. */
+  RecordedMeeting = 'recorded-meeting',
+  /** Typed in by hand (and everything saved before provenance existed). */
+  Typed = 'typed',
+  /** Imported from Tana. */
+  Tana = 'tana',
+  /** A person shared it with you (a Meet code's notes, a meeting sent inside TrustWeb). */
+  SharedByPerson = 'shared-by-person',
+  /** Demo content (imaginary friends and things). */
+  Demo = 'demo',
+}
+
+export const PROVENANCES: readonly Provenance[] = [
+  Provenance.RecordedSolo, Provenance.RecordedMeeting, Provenance.Typed, Provenance.Tana, Provenance.SharedByPerson, Provenance.Demo,
+]
+
+/**
+ * Where one item came from. Kept on this phone only: never put into what an
+ * asker can be matched against, never into an answer, a Meet code or a
+ * meeting sent inside TrustWeb (threadsForRing and sharedItems read text,
+ * context and date only; test/unit/provenance.test.mjs proves it).
+ */
+export interface ItemSource {
+  kind: Provenance
+  /** Recorded: the past meeting or memo it was noted in (AppState.meetings id). */
+  meetingId?: string
+  /** Recorded: the moment, in ms from the start of the recording. */
+  atMs?: number
+  /** Recorded: the transcript line it was picked from (index into that meeting's transcript). */
+  line?: number
+  /** Shared by a person: who. */
+  fromName?: string
+  /** Tana: the source node's reference. Local only, NEVER sent to anyone. */
+  ref?: string
 }
 
 export interface Person {
@@ -110,6 +152,8 @@ export interface InventoryItem {
   audience: Audience
   included: boolean
   createdAt: number
+  /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
+  source?: ItemSource
 }
 
 export enum LogOutcome {
@@ -199,7 +243,8 @@ export interface PastMeeting {
   durationMs: number
   /** A meeting (who, where, consent) rather than a memo by yourself. */
   meeting: boolean
-  lines: { text: string; tag: Tag }[]
+  /** The notes; `atMs` / `line` say where in the recording each was noted, when known (wave 1733). */
+  lines: { text: string; tag: Tag; atMs?: number; line?: number }[]
   transcript: TranscriptLine[]
   /** Another phone sent it (notes and transcript of a meeting they recorded). */
   fromName?: string
@@ -485,6 +530,15 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { t
     }
   }
   return { threads, refs }
+}
+
+/**
+ * What an answer carries for each shared line: its text, a coarse date and its
+ * context, nothing else (no ids, no provenance, no exact time). net.ts builds
+ * every answer with this, so the no-leak test covers exactly what is sent.
+ */
+export function sharedItems(matches: readonly LineRef[]): { text: string; when: string; context: string }[] {
+  return matches.map((m) => ({ text: m.text, when: coarseWhen(m.at), context: m.context }))
 }
 
 /** "early/mid/late <Month>", coarse on purpose: a shared line never carries an exact date. */

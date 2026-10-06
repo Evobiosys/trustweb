@@ -33,7 +33,7 @@ import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, ChatEnvelope, DecodedAnswer, MatchResult, QueryEnvelope, SharedPayload } from '../../demo/src/types'
 import { askTemplate } from './lexicon'
-import { LogOutcome, coarseWhen, threadsForRing } from './model'
+import { LogOutcome, sharedItems, threadsForRing } from './model'
 import type { AppState, LineRef, MatchScope, Peer, Ring } from './model'
 
 export type { RelayStatus }
@@ -308,7 +308,7 @@ export class Net {
           ? {
               from: this.hooks.state().me.displayName,
               templateId: tpl.id,
-              items: matches.map((m) => ({ text: m.text, when: coarseWhen(m.at), context: m.context })),
+              items: sharedItems(matches),
             }
           : null
         await answer(payload)

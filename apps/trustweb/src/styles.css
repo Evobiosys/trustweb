@@ -597,3 +597,13 @@ textarea.field{resize:vertical; line-height:1.5}
   :root:not([data-theme="light"]) .pm-hit{background:#4A3B12; box-shadow:0 0 0 2px #C99A2E}
   :root:not([data-theme="light"]) .ms-hit mark{background:#5A4A1A}
 }
+
+/* The chain of proof (wave 1733, item 4a): an item's source and the link to the meeting line. */
+button.inv-text{border:0; background:transparent; padding:0; text-align:left; font:inherit; font-size:14.5px; color:var(--ink); cursor:pointer}
+button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+.src{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:8px 0 4px}
+.sline .src{margin:2px 0 0}
+.prov-chip{background:var(--mist); color:var(--ink-soft); font-size:11px}
+.src-link{border:0; background:transparent; padding:0; font:inherit; font-size:13px; font-weight:600; color:var(--violet); text-align:left; cursor:pointer; text-decoration:underline; text-underline-offset:2px}
+.src-link:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+.src-note{font-size:12.5px; color:var(--ink-soft)}
