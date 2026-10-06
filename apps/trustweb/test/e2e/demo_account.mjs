@@ -186,7 +186,7 @@ async function main() {
     await a.getByRole('heading', { name: 'Anna-demo is ready' }).waitFor({ timeout: 10_000 })
     await a.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     const link = await a.getAttribute('.qrwrap', 'data-payload')
-    ok('the code is a connect link with account, id and end in the fragment', /\?connect=did%3Apeer/.test(link) && /#t=Anna-demo&a=[A-Za-z0-9]{8}&x=\d{13}(&p=did%3Apeer[^&]+&pi=[^&]+&pn=[^&]+)?$/.test(link), link)
+    ok('the code is a connect link with account, id and end in the fragment', /\?connect=did%3Apeer/.test(link) && /#t=Anna-demo&a=[A-Za-z0-9_-]{8}&x=\d{13}(&p=did%3Apeer[^&]+&pi=[^&]+&pn=[^&]+)?$/.test(link), link)
     const facts = await text(a.locator('.qr-facts'))
     ok('the card says you allow it first and it ends in 7 days', /once you allow it/.test(facts) && /Ends in 7 days/.test(facts), facts)
     ok('the row counts down: not opened yet, 7 days left', /not opened yet · 7 days left/.test(await text(a.locator('.test-card'))))
@@ -250,10 +250,9 @@ async function main() {
     // 4b. Jakob records a short meeting with Anna-demo and sends it to her INSIDE TrustWeb
     // (owner 2026-10-06: pick the recipient from the people already connected; notes and
     // transcript travel encrypted via the backup server, the key only in the link).
+    // From Inventory the Record tab opens a meeting straight away (record default by origin, wave 1733).
     await a.locator('nav.tabs .tab-record').click()
-    await a.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
-    await a.getByRole('button', { name: 'Meeting', exact: true }).click()
-    await a.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    await a.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 10_000 })
     await a.getByLabel('Who are you meeting?').fill('Anna-demo')
     await a.getByLabel('Where are you meeting?').fill('Café Prückel')
     await a.getByRole('switch', { name: /Transcribing/ }).click()
