@@ -1,0 +1,28 @@
+900CRM, by 900 Labs
+https://github.com/900Labs/900CRM
+Copyright 2026 900 Labs
+Licensed under the Apache License, Version 2.0 (the file LICENSE next to this notice,
+read from the repository's default branch, commit f49ef2207998c9d97f1201cde56da4b11ce47c90
+of 2026-09-10, fetched and checked 2026-10-06).
+
+What of 900CRM lives on in apps/crm (TrustWeb CRM), adapted, not copied verbatim:
+
+  src/kanban_board.svelte   from apps/desktop/src/lib/components/KanbanBoard.svelte
+                            (generic columns, native HTML5 drag and drop, a card snippet per item)
+  src/event_row.svelte      from apps/desktop/src/lib/components/ActivityFeed.svelte
+                            (icon circle with the SVG icon paths, subject, meta line, completed state)
+  src/person_row.svelte     from apps/desktop/src/lib/components/ContactCard.svelte
+                            (avatar initials with a colour from the id's hash, name, meta lines)
+  src/log_now.svelte        from apps/desktop/src/lib/components/LogJustHappened.svelte
+                            (one-tap "log what just happened" buttons)
+  src/empty_state.svelte    from apps/desktop/src/lib/components/EmptyState.svelte
+  model shape               docs/DATA_MODEL.md: activities with a type, a due date and a completed
+                            flag; the deal stage stored on the record, not in a stage table
+
+Changes from the original: Tauri IPC, SvelteKit routing, i18n `t()` and the 900CRM store layer are
+replaced by TrustWeb's model, strings table and localStorage; styling moved to TrustWeb's tokens;
+wording follows TrustWeb. Each adapted file carries this attribution in its header.
+
+The rest of apps/crm is original work under the repository's own licence (see the repository root
+LICENSE and NOTICE). The Apache-2.0 terms above apply to the adapted parts and are compatible with
+the repository's AGPL-3.0-or-later (Apache-2.0 material may be included in an AGPL-3.0 work).
