@@ -40,11 +40,12 @@ import { nfcWriteSupported, writeLinkToTag } from './nfc'
 import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine } from './meeting_transcriber'
 import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
-import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
-import type { BackupKey } from './backup'
+import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
+import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
-import { installSheetContent, setUpInstall } from './install'
+import { setUpInstall } from './install'
+import { createInstallSheets } from './install_sheets'
 import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, typedSource } from './provenance'
@@ -1726,8 +1727,8 @@ function packFromDraft(): MeetingPack {
 
 /** Encrypts the pack with a fresh key on the backup server; the key never leaves this phone except inside the link. */
 async function uploadPack(pack: MeetingPack): Promise<ShareLink> {
-  if (backupAvailable === null) await probeBackup()
-  if (!backupAvailable) throw new Error('no backup server')
+  if (backup.available() === null) await backup.probe()
+  if (!backup.available()) throw new Error('no backup server')
   const key = await newRandomKey()
   await backupNow(key, pack)
   return { keyText: key.text, title: S.shareTitleFor(pack.about) }
@@ -2586,8 +2587,8 @@ function handoverSheet(): void {
   const run = async (): Promise<void> => {
     make.setAttribute('disabled', '')
     msg.textContent = S.handWorking
-    if (backupAvailable === null) await probeBackup()
-    if (!backupAvailable) { msg.textContent = S.handNoServer; make.removeAttribute('disabled'); return }
+    if (backup.available() === null) await backup.probe()
+    if (!backup.available()) { msg.textContent = S.handNoServer; make.removeAttribute('disabled'); return }
     try {
       const key = await newRandomKey()
       const pack: AppState = { ...s, testOf: { ...t, own: undefined } }
@@ -3026,151 +3027,14 @@ function settingsSheet(): void {
 }
 
 // ---------------------------------------------------------------------------
-// backup: the whole phone record, end-to-end encrypted, to a Swiss server
-// (questhub, Infomaniak). The key is made on this phone (or derived from a
-// passphrase the person chooses) and never sent; the server only ever sees
-// ciphertext. backup.ts holds the crypto; this is the UI around it.
+// backup: the card in Inventory and its sheets (backup_view.ts)
 // ---------------------------------------------------------------------------
 
-interface BackupInfo { keyText: string; fromPassphrase: boolean; lastAt: number; lastBytes: number }
-
-function backupStoreKey(): string {
-  return `trustweb.backup.${persona}${storeCtx ? '.' + storeCtx : ''}`
-}
-
-function loadBackupInfo(): BackupInfo | null {
-  try {
-    const raw = localStorage.getItem(backupStoreKey())
-    return raw ? JSON.parse(raw) as BackupInfo : null
-  } catch { return null }
-}
-
-function saveBackupInfo(info: BackupInfo | null): void {
-  try {
-    if (info) localStorage.setItem(backupStoreKey(), JSON.stringify(info))
-    else localStorage.removeItem(backupStoreKey())
-  } catch { /* storage blocked: the backup still works this visit */ }
-}
-
-async function runBackup(key: BackupKey): Promise<void> {
-  try {
-    const r = await backupNow(key, st())
-    saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: r.at, lastBytes: r.bytes })
-    toast(S.bkDone(Math.max(1, Math.round(r.bytes / 1024))))
-  } catch {
-    toast(S.bkFailed)
-  }
-  if (screen === Screen.Inventory) render()
-}
-
-/** Shows a fresh recovery key; the backup only runs after "I saved it". */
-function recoveryKeySheet(key: BackupKey): void {
-  const saved = el('input', { type: 'checkbox', id: 'bk-saved' })
-  const go2 = el('button', { class: 'btn btn-electric', disabled: true, onclick: () => { closeSheet(); void runBackup(key) } }, [S.bkBackUpNow])
-  saved.addEventListener('change', () => { if (saved.checked) go2.removeAttribute('disabled'); else go2.setAttribute('disabled', '') })
-  const download = (): void => {
-    const a = el('a', { href: URL.createObjectURL(new Blob([S.bkKeyFile(key.text)], { type: 'text/plain' })), download: 'trustweb-recovery-key.txt' })
-    document.body.append(a); a.click(); a.remove()
-    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
-  }
-  openSheet([
-    el('h3', {}, [S.bkKeyTitle]),
-    el('p', { class: 'meta' }, [key.fromPassphrase ? S.bkKeyLeadPass : S.bkKeyLead]),
-    el('code', { class: 'recovery-key' }, [key.text]),
-    el('div', { class: 'rec-saves' }, [
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void navigator.clipboard?.writeText(key.text).then(() => toast(S.bkCopied), () => toast(S.meetingCopyFailed)) } }, [S.bkCopy]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: download }, [S.bkDownload]),
-    ]),
-    el('label', { class: 'consent' }, [saved, el('span', {}, [S.bkSaved])]),
-    go2,
-  ])
-}
-
-function passphraseSheet(): void {
-  const pass = el('input', { class: 'field', type: 'password', placeholder: S.bkPassPh, autocomplete: 'new-password', 'aria-label': S.bkPassPh })
-  const msg = el('p', { class: 'meta' }, [S.bkPassLead])
-  const ok = async (): Promise<void> => {
-    try { recoveryKeySheet(await keyFromPassphrase(pass.value)) } catch { msg.textContent = S.bkPassShort; pass.focus() }
-  }
-  pass.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') void ok() })
-  openSheet([el('h3', {}, [S.bkPassTitle]), msg, pass, el('button', { class: 'btn btn-electric', onclick: () => void ok() }, [S.bkPassOk])])
-  setTimeout(() => pass.focus(), 320)
-}
-
-function restoreSheet(): void {
-  const input = el('input', { class: 'field', placeholder: S.bkRestorePh, 'aria-label': S.bkRestorePh, autocomplete: 'off' })
-  const msg = el('p', { class: 'meta' }, [S.bkRestoreLead])
-  const run = async (): Promise<void> => {
-    const text = input.value.trim()
-    if (!text) { input.focus(); return }
-    let key: BackupKey
-    try { key = text.startsWith('TW1') ? parseKeyText(text) : await keyFromPassphrase(text) } catch { msg.textContent = S.bkBadKey; return }
-    try {
-      const data = await restore(key) as Partial<AppState> | null
-      if (!data || data.v !== 1 || !data.me) { msg.textContent = S.bkBadData; return }
-      if (!confirm(S.bkRestoreConfirm)) return
-      state = data as AppState
-      save()
-      saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: Date.now(), lastBytes: 0 })
-      location.reload()
-    } catch (e) {
-      msg.textContent = e instanceof BackupNotFound ? S.bkNotFound : S.bkFailed
-    }
-  }
-  openSheet([el('h3', {}, [S.bkRestoreTitle]), msg, input, el('button', { class: 'btn btn-electric', onclick: () => void run() }, [S.bkRestoreOk])])
-}
-
-// The card only shows where the backup service answers: a static deploy
-// without it must not offer a backup that can only fail.
-let backupAvailable: boolean | null = null
-
-let backupProbe: Promise<void> | null = null
-
-/**
- * Probed once. When the answer arrives it fills the card's slot in place, never
- * a full re-render: that would wipe whatever is being typed on the screen.
- */
-function probeBackup(): Promise<void> {
-  backupProbe ??= (async (): Promise<void> => {
-    try {
-      const r = await fetch('/backup/health', { cache: 'no-store' })
-      backupAvailable = r.ok && (await r.text()).trim() === 'ok'
-    } catch {
-      backupAvailable = false
-    }
-    const slot = document.getElementById('backup-slot')
-    if (slot) slot.replaceChildren(...[backupCardInner()].filter((c): c is HTMLElement => c !== null))
-  })()
-  return backupProbe
-}
-
-function backupCard(): HTMLElement {
-  if (backupAvailable === null) void probeBackup()
-  const inner = backupCardInner()
-  return el('div', { id: 'backup-slot' }, inner ? [inner] : [])
-}
-
-function backupCardInner(): HTMLElement | null {
-  if (!backupAvailable) return null
-  const info = loadBackupInfo()
-  if (!info) {
-    return el('div', { class: 'verse backup' }, [
-      el('h3', {}, [S.bkQuestion]),
-      el('p', {}, [S.bkLead]),
-      el('button', { class: 'btn btn-electric btn-sm', onclick: () => void newRandomKey().then(recoveryKeySheet) }, [S.bkStart]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: passphraseSheet }, [S.bkOwnPass]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: restoreSheet }, [S.bkRestore]),
-    ])
-  }
-  const key = ((): BackupKey | null => { try { return parseKeyText(info.keyText) } catch { return null } })()
-  return el('div', { class: 'verse backup' }, [
-    el('h3', {}, [S.bkOn]),
-    el('p', {}, [S.bkLast(new Date(info.lastAt).toLocaleString())]),
-    key ? el('button', { class: 'btn btn-electric btn-sm', onclick: () => void runBackup(key) }, [S.bkBackUpNow]) : null,
-    key ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => recoveryKeySheet(key) }, [S.bkShowKey]) : null,
-    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.bkForgetConfirm)) { saveBackupInfo(null); render() } } }, [S.bkForget]),
-  ])
-}
+const backup = createBackupView({
+  persona, storeCtx, state: st, openSheet, closeSheet, toast,
+  replaceRecord: (s) => { state = s; save(); location.reload() },
+  redraw: () => { if (screen === Screen.Inventory) render() },
+})
 
 function screenInventory(): Node[] {
   const s = st()
@@ -3204,7 +3068,7 @@ function screenInventory(): Node[] {
           el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() } }, ['×']),
         ]),
       ])),
-      backupCard(),
+      backup.card(),
     ]),
     requests,
   ]
@@ -3388,43 +3252,11 @@ function decide(share: boolean): void {
 
 const installable = !solo && !isDemoPersona(persona) && window.top === window
 
-function openInstallSheet(): void {
-  const s = state
-  const hasData = Boolean(s && (s.people.length || s.inventory.length || s.meetings?.length))
-  if (hasData && backupAvailable === null) void probeBackup().then(() => { if (sheet.dataset.kind === 'install') openInstallSheet() })
-  openSheet(installSheetContent({
-    hasData,
-    backupAvailable,
-    openBackup: () => {
-      closeSheet()
-      go(Screen.Inventory)
-      toast(S.instMoveToast)
-      document.getElementById('backup-slot')?.scrollIntoView({ block: 'center' })
-    },
-    redraw: () => { if (sheet.dataset.kind === 'install') openInstallSheet() },
-    toast,
-  }))
-  sheet.dataset.kind = 'install'
-}
-
-/** The live app already has people: the demo's carry-over is merged only on a yes, never overwriting anything. */
-function carryAskSheet(c: CarryOver, then: () => void): void {
-  const done = (merge: boolean): void => {
-    if (merge && state) { state = mergeCarryOver(state, c); save() }
-    dropCarry()
-    pendingCarry = null
-    closeSheet()
-    render()
-    toast(merge ? S.carryMerged : S.carryCancelled)
-    then()
-  }
-  openSheet([
-    el('h3', {}, [S.carryAskTitle]),
-    el('p', { class: 'meta' }, [S.carryAskBody(c.people.length, c.inventory.length, st().people.length)]),
-    el('button', { class: 'btn btn-electric', 'data-carry': 'merge', onclick: () => done(true) }, [S.carryMerge]),
-    el('button', { class: 'btn btn-ghost', 'data-carry': 'cancel', onclick: () => done(false) }, [S.carryCancel]),
-  ])
-}
+const installSheets = createInstallSheets({
+  sheet, state: () => state, setState: (s) => { state = s; save() }, openSheet, closeSheet, toast, render, backup,
+  openBackup: () => go(Screen.Inventory),
+})
+const openInstallSheet = installSheets.openInstall
 
 // ---------------------------------------------------------------------------
 // boot
@@ -3433,7 +3265,7 @@ function carryAskSheet(c: CarryOver, then: () => void): void {
 render()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
 const afterCarry = (): void => { if (installable && wantInstall) openInstallSheet() }
-if (pendingCarry) carryAskSheet(pendingCarry, afterCarry)
+if (pendingCarry) installSheets.carryAsk(pendingCarry, () => { pendingCarry = null; afterCarry() })
 else {
   if (carryNotice) toast(carryNotice)
   afterCarry()
