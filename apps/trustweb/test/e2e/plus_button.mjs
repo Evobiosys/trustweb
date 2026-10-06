@@ -134,7 +134,10 @@ async function main() {
     // Record: who (orange) or what (blue), picked from where you came; Advanced folds the extra notes away
     await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await page.locator('nav.tabs .tab-record').click()
-    ok('from Inventory, Record asks "what" first', await page.locator('.about-kind.what.on').count() === 1 && /Who\s*or\s*what\s*was this about\?/.test(await page.locator('.about-row').innerText()))
+    await page.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
+    ok('from Inventory, the Record tab opens a meeting (owner 2026-10-06, origin rule)', true)
+    await page.getByRole('button', { name: 'Just me', exact: true }).click()
+    ok('"Just me" from there asks "what" first (it came from Inventory)', await page.locator('.about-kind.what.on').count() === 1 && /Who\s*or\s*what\s*was this about\?/.test(await page.locator('.about-row').innerText()))
     ok('no hint "i" on a desktop/mouse screen', await page.locator('.hint-i').count() === 0)
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     await page.locator('nav.tabs .tab-record').click()
@@ -173,6 +176,7 @@ async function main() {
     // "what": the notes go to the inventory, with who may ask about each line
     await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await page.locator('nav.tabs .tab-record').click()
+    await page.getByRole('button', { name: 'Just me', exact: true }).click()
     await page.locator('.about-kind.what').click()
     await page.getByLabel('What was this about?').fill('Cargo bike')
     await page.getByRole('button', { name: 'Done' }).click()

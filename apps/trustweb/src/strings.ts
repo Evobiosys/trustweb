@@ -431,6 +431,8 @@ export const S = {
     [TranscriptionChoice.Later]: 'Nothing live. The recording is transcribed later on your computer.',
   } as Record<TranscriptionChoice, string>,
   setDefaultRecording: 'The Record tab starts with',
+  // Record default by origin (owner 2026-10-06): Settings only decides where the origin does not.
+  setDefaultRecordingNote: 'From Inventory or the QR code, Record opens a meeting; from Web, just you. Everywhere else, this choice.',
   setDefaultRecordingLabel: {
     [DefaultRecording.Solo]: 'Just me',
     [DefaultRecording.Meeting]: 'A meeting',

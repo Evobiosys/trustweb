@@ -218,6 +218,7 @@ async function main() {
       && soloSlot !== null && meetSlot !== null && Math.abs(soloSlot.x - meetSlot.x) < 2 && Math.abs(soloSlot.y - meetSlot.y) < 2,
       JSON.stringify([meetSlot, soloSlot]))
     ok('the QR stays put on Meeting', await page.locator('.status-pill.qr').isVisible())
+    ok('Meeting has no "‹" back arrow (owner 2026-10-06): Just me and the bottom bar lead out', await page.locator('.hdr .back').count() === 0)
     await page.getByRole('button', { name: 'Just me' }).click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
     ok('"Just me" switches back to recording by yourself', true)
@@ -243,7 +244,7 @@ async function main() {
     ok('a live meeting says "Recording meeting" and keeps the QR', /Recording/.test(await page.locator('.meeting-clock').innerText()) && await page.locator('.status-pill.qr').isVisible())
     await page.getByRole('button', { name: 'Just me' }).click()
     await page.waitForTimeout(200)
-    ok('"Just me" is refused while a take is live (same rule as the back arrow)',
+    ok('"Just me" is refused while a take is live',
       await page.getByRole('heading', { name: 'Meeting', exact: true }).isVisible() && await page.getByText('Stop or send the recording first.').isVisible())
     await page.waitForTimeout(1500)
     // a pause leaves a divider in the transcript (from TalkWeave): when, then for how long
@@ -433,8 +434,11 @@ async function main() {
     await p3.getByRole('button', { name: 'Discard' }).click()
     await p3.getByRole('button', { name: 'Web', exact: true }).click()
     await p3.locator('nav.tabs .tab-record').click()
+    await p3.getByRole('heading', { name: 'Record', exact: true }).waitFor({ timeout: 5_000 })
+    ok('from Web, the Record tab opens "Just me" even with "A meeting" in Settings (the origin wins)', true)
+    await p3.locator('nav.tabs .tab-record').click()
     await p3.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
-    ok('with "A meeting" the Record tab opens the Meeting view', true)
+    ok('from anywhere else (here: Record itself), Settings decides: the Record tab opens the Meeting view', true)
     await p3.getByLabel('Who are you meeting?').fill('Ben')
     await p3.locator('#consent').check()
     await p3.getByRole('button', { name: 'Start recording' }).click()

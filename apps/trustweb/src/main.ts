@@ -42,6 +42,7 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
 import type { BackupKey } from './backup'
+import { RecordOrigin, recordModeFor } from './record_origin'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 
@@ -399,13 +400,31 @@ function recordScreen(): Screen {
   return draft.mode === RecordMode.Meeting ? Screen.Meeting : Screen.Record
 }
 
+/** The screen a Record tap came from, for record_origin.ts: Web's own sub-screens count as Web. */
+function recordOriginOf(s: Screen): RecordOrigin {
+  switch (s) {
+    case Screen.Web:
+    case Screen.Curate:
+    case Screen.StillTrue:
+      return RecordOrigin.Web
+    case Screen.Inventory:
+      return RecordOrigin.Inventory
+    case Screen.Meet:
+      return RecordOrigin.Meet
+    default:
+      return RecordOrigin.Other
+  }
+}
+
 function onRecordTap(): void {
   // The Record tab never wipes a draft in progress (audio, transcript,
-  // who/where); it only starts fresh when nothing is in flight, and then as
-  // Settings > Recording says: just me, or a meeting (owner 2026-10-06).
+  // who/where), so a live take is never switched; it only starts fresh when
+  // nothing is in flight, and then by where the tap came from (record_origin.ts):
+  // Inventory or Meet -> a meeting, Web -> just me, else Settings > Recording.
   if (!draftInProgress()) {
+    const origin = recordOriginOf(screen)
     newDraft()
-    if (state && defaultRecording(state) === DefaultRecording.Meeting) draft.mode = RecordMode.Meeting
+    if (state && recordModeFor(origin, defaultRecording(state)) === DefaultRecording.Meeting) draft.mode = RecordMode.Meeting
   }
   go(recordScreen())
 }
@@ -432,8 +451,9 @@ function draftInProgress(): boolean {
 
 function go(s: Screen): void {
   // Coming to Record from Inventory means "what", from Web "who" (owner
-  // 2026-10-06); only while nothing has been named or recorded yet.
-  if (s === Screen.Record && !draftInProgress() && !draft.name.trim()) {
+  // 2026-10-06), whichever of Record or Meeting the tap opens; only while
+  // nothing has been named or recorded yet.
+  if ((s === Screen.Record || s === Screen.Meeting) && !draftInProgress() && !draft.name.trim()) {
     if (screen === Screen.Inventory) draft.about = AboutKind.What
     else if (screen === Screen.Web) draft.about = AboutKind.Who
   }
@@ -2044,12 +2064,13 @@ function screenMeeting(): Node[] {
     class: 'chip' + (speaker === n ? ' on' : ''), 'aria-pressed': String(speaker === n), onclick: () => setSpeaker(n),
   }, [S.speaker(n)])))
 
-  // Back to recording by yourself: the same rule as the back arrow (never while a take is live).
+  // Back to recording by yourself, never while a take is live. The "‹" back arrow is gone (owner 2026-10-06):
+  // "Just me" and the bottom bar lead out of the Meeting view.
   const toSolo = (): void => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; recNotice = ''; go(Screen.Record) }
   // Icon only, in the slot where Record shows the Meeting button (owner 2026-10-06); the QR stays put.
   const justMe = iconButton('solo', S.recJustMe, toSolo, 'solo-btn')
   return [
-    header(S.meetingTitle, { back: toSolo, after: justMe, pill: false }),
+    header(S.meetingTitle, { after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
@@ -2858,6 +2879,7 @@ function recordingSettings(s: AppState): HTMLElement[] {
       class: 'radio' + (start === d ? ' on' : ''), 'aria-pressed': String(start === d), 'data-default-recording': d,
       onclick: () => { s.defaultRecording = d; save(); settingsSheet() },
     }, [el('b', {}, [S.setDefaultRecordingLabel[d]]), el('small', {}, [S.setDefaultRecordingHint[d]])])),
+    el('p', { class: 'meta' }, [S.setDefaultRecordingNote]),
     el('p', { class: 'meta set-sub' }, [S.setTranscription]),
     ...TRANSCRIPTION_CHOICES.map((c) => el('button', {
       class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
