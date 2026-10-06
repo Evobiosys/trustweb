@@ -27,7 +27,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, NoteLine, Person } from './model'
+import type { AppState, NoteLine, Person, TestAccount } from './model'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
@@ -40,6 +40,8 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
 import type { BackupKey } from './backup'
+import { demoFragment, isDemoPeerRef, parseDemoFragment, testAccountName } from './demo_account'
+import type { DemoPeerRef } from './demo_account'
 
 enum Screen {
   Start = 'start',
@@ -121,6 +123,9 @@ let pendingConnect = parseConnectLinkParams(location.search)
 // Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
 // browser never sends to the server, so they stay out of access logs.
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
+// A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
+// the account name and, optionally, the demo inventory peer, also in the fragment.
+const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : ''))
 
@@ -206,15 +211,18 @@ const net = new Net({
   },
   onPeerConnected: (peer) => {
     const s = st()
-    const byName = draft.name.trim()
+    // A demo account this phone made, opened on their phone: pin it to its entry.
+    const test = (s.testAccounts ?? []).find((t) => !t.peerId && t.name === peer.displayName)
+    const byName = test ? '' : draft.name.trim()
     let person = s.people.find((p) => p.peerId === peer.id)
       ?? (byName ? s.people.find((p) => p.name.toLowerCase() === byName.toLowerCase()) : undefined)
     if (!person) {
-      if (screen === Screen.Meet && !byName) draft.name = peer.displayName
-      person = { id: randomId(8), name: peer.displayName, context: draft.context, ring: peer.ring, metAt: Date.now(), lines: [] }
+      if (screen === Screen.Meet && !byName && !test) draft.name = peer.displayName
+      person = { id: randomId(8), name: peer.displayName, context: test ? S.testAccountContext : draft.context, ring: peer.ring, metAt: Date.now(), lines: [] }
       s.people.push(person)
     }
     person.peerId = peer.id
+    if (test) test.peerId = peer.id
     save()
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -711,15 +719,46 @@ async function completePendingConnect(): Promise<void> {
     }
   }
   save()
-  toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+  // A demo account: also connect to the demo inventory peer the link names,
+  // then open the ask right away (that is what the account is for).
+  if (demoLink) {
+    if (demoLink.peer) await connectDemoPeer(demoLink.peer)
+    queryOpen = true
+    toast(S.testConnectedToast(peer.displayName))
+  } else {
+    toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+  }
   render()
 }
 
+/** The demo inventory (services/trustweb-peer) named in a demo-account link: one more acquaintance. */
+async function connectDemoPeer(ref: DemoPeerRef): Promise<void> {
+  const s = st()
+  if (s.peers.some((p) => p.did === ref.did)) return
+  const peer = await net.completeConnect({ did: ref.did, from: { id: ref.id, displayName: ref.name } }, Ring.Acquaintance)
+  if (!s.people.some((p) => p.peerId === peer.id)) {
+    s.people.push({ id: randomId(8), name: peer.displayName, context: S.testPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
+  }
+  save()
+}
+
 function screenStart(): Node[] {
+  const invite = pendingConnect
+  const inviter = invite?.from.displayName || 'Someone'
+  // A demo-account link: the name is set by the inviter ("<first name>-test"), nothing to type.
+  const test = invite && demoLink ? demoLink : null
   const name = el('input', { class: 'field', placeholder: S.yourName, autocomplete: 'given-name', maxlength: '40', 'aria-label': S.yourName, value: defaultName })
   const submit = (): void => {
-    if (!name.value.trim()) { name.focus(); return }
-    createMe(name.value)
+    const typed = test ? test.account : name.value
+    if (!typed.trim()) { name.focus(); return }
+    createMe(typed)
+    if (test) {
+      const s = st()
+      s.testOf = { name: inviter, createdAt: Date.now() }
+      // Their first minute is for asking, not for a demo-content card.
+      s.demoOffered = true
+      save()
+    }
     screen = Screen.Web
     render()
     if (solo) showDemoFriends()
@@ -728,17 +767,21 @@ function screenStart(): Node[] {
     void completePendingConnect()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
-  const invite = pendingConnect
   return [el('div', { class: 'start' }, [
     el('div', { class: 'logo' }, ['◎']),
     el('h1', {}, [S.appName]),
     el('p', { class: 'tagline' }, [S.tagline]),
-    invite
-      ? el('div', { class: 'invite' }, [
-          el('b', {}, [S.connectInvite(invite.from.displayName || 'Someone')]),
-          sharedNotes ? el('p', {}, [S.connectInviteNotes(invite.from.displayName || 'Someone')]) : null,
+    test
+      ? el('div', { class: 'invite test-invite' }, [
+          el('b', {}, [S.testInvite(inviter)]),
+          el('p', {}, [S.testInviteSub(test.account)]),
         ])
-      : el('p', { class: 'lead' }, [S.startLead]),
+      : invite
+        ? el('div', { class: 'invite' }, [
+            el('b', {}, [S.connectInvite(inviter)]),
+            sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
+          ])
+        : el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
       ? el('a', { class: 'solo-card', href: APP_URL + 'demo/' }, [
           el('b', {}, [S.startSolo]),
@@ -746,8 +789,8 @@ function screenStart(): Node[] {
         ])
       : null,
     el('div', { class: 'start-form' }, [
-      name,
-      el('button', { class: 'btn btn-electric', onclick: submit }, [invite ? S.connectJoin : S.startOwn]),
+      test ? el('div', { class: 'field test-name', 'aria-label': S.yourName }, [test.account]) : name,
+      el('button', { class: 'btn btn-electric', onclick: submit }, [test ? S.testStart(test.account) : invite ? S.connectJoin : S.startOwn]),
     ]),
     el('p', { class: 'foot' }, [S.startFoot]),
   ])]
@@ -1653,11 +1696,13 @@ async function makeNotes(): Promise<void> {
 // meet: this phone's code (QR), NFC where the browser can, a link to copy
 // ---------------------------------------------------------------------------
 
-/** The pages of Meet: the TrustWeb code first, then my Signal code, then my Matrix code once set. */
+/** The pages of Meet: the TrustWeb code first, then my Signal code, then my Matrix code once set, then Demo account. */
 enum MeetPage {
   TrustWeb = 'trustweb',
   Signal = 'signal',
   Matrix = 'matrix',
+  /** A test account for the person in front of you (owner 2026-10-06). */
+  Demo = 'demo',
 }
 
 let meetPage: MeetPage = MeetPage.TrustWeb
@@ -1666,13 +1711,16 @@ function meetPages(): MeetPage[] {
   // Tana, 2026-08-24: "on the same page that one shows one's QR code, one should
   // also show one's Signal code, and once that is ready, one's Matrix code."
   const mine = st().myChannels ?? {}
-  return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : [])]
+  // Demo phones (solo) and test accounts do not hand out test accounts of their own.
+  const demo = solo || st().testOf ? [] : [MeetPage.Demo]
+  return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : []), ...demo]
 }
 
 function openMeet(from: Screen, notes = ''): void {
   meetFrom = from
   meetNotes = notes
   meetPage = MeetPage.TrustWeb
+  demoShowing = null
   go(Screen.Meet)
 }
 
@@ -1684,7 +1732,9 @@ function screenMeet(): Node[] {
     class: meetPage === pg ? 'on' : '', role: 'tab', 'aria-selected': String(meetPage === pg),
     onclick: () => { meetPage = pg; render() },
   }, [S.meetPage[pg]])))
-  const body = meetPage === MeetPage.TrustWeb ? meetTrustWebPage() : meetMessengerPage(meetPage === MeetPage.Signal ? Channel.Signal : Channel.Matrix)
+  const body = meetPage === MeetPage.TrustWeb ? meetTrustWebPage()
+    : meetPage === MeetPage.Demo ? meetDemoPage()
+    : meetMessengerPage(meetPage === MeetPage.Signal ? Channel.Signal : Channel.Matrix)
   // Swipe between the pages, like a second page under the QR code.
   let startX = 0
   body.addEventListener('pointerdown', (e) => { startX = e.clientX })
@@ -1763,6 +1813,139 @@ function meetMessengerPage(ch: Channel): HTMLElement {
     el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(S.chLabel[ch])]),
     el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
     ch === Channel.Signal && /^\+/.test(value) ? el('p', { class: 'meta' }, [S.meetSignalNumberNote]) : null,
+  ])
+}
+
+// ---------------------------------------------------------------------------
+// meet: demo (test) accounts, owner 2026-10-06. "<their first name>-test" is a
+// real connection to this web (acquaintance ring, consent per ask as always),
+// listed here and in Settings, removable any time. The link may also name the
+// demo inventory on the Swiss server (demo-peer.json next to the app, only
+// present once that service is deployed), so the account can ask it too.
+// ---------------------------------------------------------------------------
+
+/** The account whose code is on screen right now (this Meet visit only). */
+let demoShowing: string | null = null
+/** demo-peer.json: undefined = not asked yet, null = none published. */
+let demoPeer: DemoPeerRef | null | undefined
+let demoPeerProbe: Promise<DemoPeerRef | null> | null = null
+
+function probeDemoPeer(): Promise<DemoPeerRef | null> {
+  demoPeerProbe ??= (async (): Promise<DemoPeerRef | null> => {
+    try {
+      const r = await fetch(APP_URL + 'demo-peer.json', { cache: 'no-store' })
+      const v: unknown = r.ok ? await r.json() : null
+      demoPeer = isDemoPeerRef(v) ? v : null
+    } catch {
+      demoPeer = null
+    }
+    return demoPeer
+  })()
+  return demoPeerProbe
+}
+
+function testAccounts(): TestAccount[] {
+  return st().testAccounts ?? []
+}
+
+function createTestAccount(firstName: string): TestAccount | null {
+  const name = testAccountName(firstName)
+  if (!name) return null
+  const s = st()
+  const existing = (s.testAccounts ?? []).find((t) => t.name === name)
+  if (existing) return existing
+  const acct: TestAccount = { id: randomId(8), name, createdAt: Date.now() }
+  s.testAccounts = [...(s.testAccounts ?? []), acct]
+  save()
+  return acct
+}
+
+/** Forgets the account, its peer and its person: that phone can no longer ask this web. */
+function removeTestAccount(id: string): void {
+  const s = st()
+  const acct = (s.testAccounts ?? []).find((t) => t.id === id)
+  if (!acct) return
+  if (acct.peerId) {
+    s.peers = s.peers.filter((p) => p.id !== acct.peerId)
+    s.people = s.people.filter((p) => p.peerId !== acct.peerId)
+  }
+  s.testAccounts = (s.testAccounts ?? []).filter((t) => t.id !== id)
+  if (!s.testAccounts.length) delete s.testAccounts
+  if (demoShowing === id) demoShowing = null
+  save()
+  toast(S.demoAcctRemoved(acct.name))
+  render()
+}
+
+function testAccountRow(acct: TestAccount, onRemove: () => void): HTMLElement {
+  return el('div', { class: 'conn-row test-row' }, [
+    el('b', {}, [acct.name]),
+    el('span', {}, [acct.peerId ? S.demoAcctConnected : S.demoAcctWaiting]),
+    el('button', { class: 'mini', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: onRemove }, [S.demoAcctRemove]),
+  ])
+}
+
+function meetDemoPage(): HTMLElement {
+  const shown = demoShowing ? testAccounts().find((t) => t.id === demoShowing) : undefined
+  if (shown) return demoCodePage(shown)
+  const name = el('input', { class: 'field', placeholder: S.demoAcctNamePh, maxlength: '30', autocomplete: 'off', 'aria-label': S.demoAcctNamePh })
+  const make = (): void => {
+    const acct = createTestAccount(name.value)
+    if (!acct) { name.focus(); return }
+    demoShowing = acct.id
+    render()
+  }
+  name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') make() })
+  const list = testAccounts()
+  return el('div', { class: 'meet-page demo-acct' }, [
+    el('h3', {}, [S.demoAcctTitle]),
+    el('p', { class: 'hint' }, [S.demoAcctLead]),
+    name,
+    el('button', { class: 'btn btn-electric wide', onclick: make }, [S.demoAcctCreate]),
+    el('h4', { class: 'eyebrow' }, [S.demoAcctList]),
+    list.length ? el('div', { class: 'test-list' }, list.map((t) => el('button', {
+      class: 'conn-row name-row test-row', onclick: () => { demoShowing = t.id; render() },
+    }, [el('b', {}, [t.name]), el('span', {}, [t.peerId ? S.demoAcctConnected : S.demoAcctWaiting]), el('em', {}, [S.demoAcctShow])])))
+      : el('p', { class: 'meta' }, [S.demoAcctNone]),
+    el('p', { class: 'meta' }, [S.demoAcctHint]),
+  ])
+}
+
+/** The account's code: the connect link plus the account name (and the demo inventory peer) in the fragment. */
+function demoCodePage(acct: TestAccount): HTMLElement {
+  const qr = el('div', { class: 'qrwrap' })
+  let link = ''
+  const copy = el('button', {
+    class: 'btn btn-ghost', disabled: true,
+    onclick: () => { void navigator.clipboard?.writeText(link).then(() => toast(S.meetCopied), () => toast(link)) },
+  }, [S.meetCopy])
+  const nav = navigator as Navigator & { share?: (d: { title?: string; url?: string }) => Promise<void> }
+  const send = nav.share
+    ? el('button', { class: 'btn btn-ghost', disabled: true, onclick: () => { void nav.share?.({ title: S.demoAcctShareTitle(acct.name), url: link }).catch(() => {}) } }, [S.demoAcctSend])
+    : null
+  const asks = el('dd', {}, [S.demoAcctAsksYou])
+  void (async () => {
+    const [peer] = await Promise.all([probeDemoPeer(), net.start()])
+    link = net.connectLink(APP_URL) + '#' + demoFragment({ account: acct.name, peer: peer ?? undefined })
+    if (peer) asks.textContent = S.demoAcctAsksPeer(peer.name)
+    qr.setAttribute('data-payload', link)
+    await renderQr(qr, link)
+    copy.removeAttribute('disabled')
+    send?.removeAttribute('disabled')
+  })()
+  return el('div', { class: 'meet-page demo-acct' }, [
+    el('h3', {}, [S.demoAcctMade(acct.name)]),
+    el('p', { class: 'hint' }, [S.demoAcctScan]),
+    qr,
+    el('dl', { class: 'qr-facts' }, [
+      el('dt', {}, [S.demoAcctAccount]), el('dd', {}, [acct.name]),
+      el('dt', {}, [S.demoAcctAsks]), asks,
+      el('dt', {}, [S.demoAcctKeep]), el('dd', {}, [S.demoAcctKeepValue]),
+    ]),
+    copy,
+    send,
+    testAccountRow(acct, () => removeTestAccount(acct.id)),
+    el('button', { class: 'btn btn-ghost', onclick: () => { demoShowing = null; render() } }, [S.demoAcctAnother]),
   ])
 }
 
@@ -2065,10 +2248,17 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
+    s.testOf ? el('p', { class: 'meta' }, [S.setTestOf(s.testOf.name)]) : null,
     el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
       el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
     ]),
     connectionRow(),
+    ...(solo || s.testOf ? [] : [
+      el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
+      ...(s.testAccounts?.length
+        ? s.testAccounts.map((t) => testAccountRow(t, () => { removeTestAccount(t.id); settingsSheet() }))
+        : [el('p', { class: 'meta' }, [S.demoAcctNone])]),
+    ]),
     el('h4', { class: 'eyebrow' }, [S.setTabs]),
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),

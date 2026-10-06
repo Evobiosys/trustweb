@@ -131,6 +131,24 @@ export interface Me {
   displayName: string
 }
 
+/**
+ * A demo (test) account this phone made from the QR button (owner 2026-10-06):
+ * "<their first name>-test". `peerId` is set once that phone connected; until
+ * then the account is "waiting". Removing it forgets the peer and the person.
+ */
+export interface TestAccount {
+  id: string
+  name: string
+  createdAt: number
+  peerId?: string
+}
+
+/** Set on a phone that started from a demo-account link: whose test account it is. */
+export interface TestOf {
+  name: string
+  createdAt: number
+}
+
 /** Which side of the raised Record button each outer tab sits on (Inventory settings). */
 export enum TabOrder {
   WebLeft = 'web-left',
@@ -170,6 +188,10 @@ export interface AppState {
   showRingNames?: boolean
   /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
   hiddenHints?: string[]
+  /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. */
+  testAccounts?: TestAccount[]
+  /** This phone is somebody's demo account. Absent: an ordinary phone (today's behaviour). */
+  testOf?: TestOf
 }
 
 /** Things that explain themselves: a tooltip on desktop, a small "i" on a touch phone (owner 2026-10-06). */

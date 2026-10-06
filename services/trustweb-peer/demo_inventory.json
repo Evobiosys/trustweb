@@ -1,0 +1,12 @@
+{
+  "_note": "Fictional demo content for the demo inventory peer on the Swiss server. No real person, no real address. audience: fof = friends of friends (shared with every acquaintance), friends = friends and close friends only (never shared by this peer, every peer is an acquaintance), me = only me (never shared).",
+  "items": [
+    { "text": "Motorbike (125cc), can lend it for a weekend", "audience": "fof" },
+    { "text": "Spare desk in a coworking space, Fridays", "audience": "fof" },
+    { "text": "Projector and screen for a talk, Vienna", "audience": "fof" },
+    { "text": "Camping tent for four, from June", "audience": "fof" },
+    { "text": "Introductions to people hiring in climate tech", "audience": "fof" },
+    { "text": "Guest bed for a visiting friend, two nights", "audience": "friends" },
+    { "text": "Spare room in Vienna, for visiting friends", "audience": "me" }
+  ]
+}

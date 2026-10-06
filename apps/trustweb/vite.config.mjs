@@ -16,6 +16,10 @@ const repo = path.resolve(here, '../..')
 
 export default ({ command }) => ({
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
+  // No public/ directory of its own (nothing extra is ever copied into dist/).
+  // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,
+  // the demo inventory peer's card (services/trustweb-peer), next to the app.
+  publicDir: process.env.TW_PUBLIC_DIR ?? false,
   build: {
     target: 'es2020',
     outDir: 'dist',
