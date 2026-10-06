@@ -6,6 +6,15 @@
 //   GET /backup/<id>   returns the opaque bytes
 //   GET /health        returns "ok"
 //
+// Added 2026-10-06 (wave 1733; full contract in DEVLOG/trustweb-wave-1733/services-api-contract.txt):
+//   GET /backup/<id> now also sends ETag + Last-Modified and answers If-None-Match with 304 (late-transcript packs).
+//   /hosted/*      hosted recordings with a free allowance        (hosted.mjs, hosted_store.mjs, quota.mjs; HOSTED_DIR)
+//   POST /transcribe  server-side transcription proxy              (transcribe.mjs; TRANSCRIBE_URL/KEY)
+//   POST|OPTIONS /feedback  website feedback, CORS for FEEDBACK_ORIGINS only   (feedback.mjs; FEEDBACK_FILE)
+// The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
+// The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
+// (15 min) because a 20 MB upload from a phone takes minutes.
+//
 // <id> is exactly 64 lowercase hex characters (derived from the person's key on the phone).
 // The first PUT for an id claims the slot and stores SHA-256(token). Later PUTs must present
 // the same token. GET needs no token: the id itself is a 256-bit secret, and the bytes are
@@ -23,6 +32,9 @@
 // Env: BACKUP_DIR (required), PORT (8960), HOST (127.0.0.1), ALLOWED_HOSTS (comma list,
 //      default "localhost,127.0.0.1"), MAX_BYTES (1048576), RATE_LIMIT (30 requests),
 //      RATE_WINDOW_MS (60000), MAX_BLOBS (5000).
+//      New (all optional; see config.mjs for the full list and defaults): HOSTED_DIR, HOSTED_MAX_BYTES (2 GB),
+//      HOSTED_MIN_FREE_BYTES (2 GB), HOSTED_RETENTION_DAYS (90), TRANSCRIBE_URL, TRANSCRIBE_KEY, TRANSCRIBE_MODEL,
+//      TRANSCRIBE_DAILY_SECONDS (7200), FEEDBACK_FILE, FEEDBACK_ORIGINS.
 //
 // Client IP for rate limiting: the socket peer, except when the peer is loopback (the reverse
 // proxy on this machine), then the LAST X-Forwarded-For entry (the one the proxy appended).
@@ -35,6 +47,12 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadConfig } from './config.mjs'
+import { createFeedback } from './feedback.mjs'
+import { createHosted } from './hosted.mjs'
+import { createHostedStore } from './hosted_store.mjs'
+import { etagMatches, jsonError, sha256Hex } from './http_util.mjs'
+import { createTranscriber } from './transcribe.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
 const TOKEN_RE = /^[0-9a-f]{64}$/
@@ -67,12 +85,18 @@ export async function startServer(options = {}) {
     rateWindowMs: options.rateWindowMs ?? Number(process.env.RATE_WINDOW_MS ?? 60000),
     maxBlobs: options.maxBlobs ?? Number(process.env.MAX_BLOBS ?? 5000),
     log: options.log ?? ((line) => console.log(line)),
+    ...loadConfig(options),
   }
   if (!cfg.dir) throw new Error('BACKUP_DIR is required')
   await fs.mkdir(path.join(cfg.dir, 'tmp'), { recursive: true, mode: 0o700 })
   const blobDir = path.join(cfg.dir, 'blobs')
   await fs.mkdir(blobDir, { recursive: true, mode: 0o700 })
   let blobCount = (await fs.readdir(blobDir)).filter((n) => n.endsWith('.bin')).length
+
+  const store = cfg.hostedDir ? await createHostedStore(cfg) : null
+  const hosted = store === null ? null : createHosted({ cfg, store, withLock, clientOf })
+  const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
+  const feedback = createFeedback({ cfg, clientOf, withLock })
 
   const hits = new Map() // client -> timestamps within the window
   const locks = new Map() // id -> promise chain (serialises writes per id)
@@ -213,10 +237,13 @@ export async function startServer(options = {}) {
     send(res, outcome, outcome === 204 ? '' : outcome === 403 ? 'forbidden' : 'storage full')
   }
 
-  async function handleGet(res, id) {
+  async function handleGet(req, res, id) {
+    const file = path.join(blobDir, `${id}.bin`)
     let data
+    let mtime
     try {
-      data = await fs.readFile(path.join(blobDir, `${id}.bin`))
+      data = await fs.readFile(file)
+      mtime = (await fs.stat(file)).mtime
     } catch (err) {
       if (err.code === 'ENOENT') {
         send(res, 404, 'not found')
@@ -224,7 +251,27 @@ export async function startServer(options = {}) {
       }
       throw err
     }
-    send(res, 200, data.subarray(HEADER_BYTES))
+    const body = data.subarray(HEADER_BYTES)
+    // Strong validator: first 128 bits of SHA-256 of the stored bytes. A reader polling for a late transcript sends If-None-Match.
+    const etag = `"${sha256Hex(body).slice(0, 32)}"`
+    const validators = { ETag: etag, 'Last-Modified': mtime.toUTCString() }
+    if (etagMatches(req.headers['if-none-match'], etag)) {
+      send(res, 304, '', validators)
+      return
+    }
+    send(res, 200, body, validators)
+  }
+
+  /** The old request timeout (30 s to receive a request), kept per request so the long routes can have a longer one. */
+  function armDeadline(req, res, ms) {
+    const timer = setTimeout(() => {
+      if (!res.headersSent) send(res, 408, 'request timeout', { Connection: 'close' })
+      res.once('finish', () => req.socket.destroy())
+      setTimeout(() => req.socket.destroy(), 1000).unref()
+    }, ms)
+    const clear = () => clearTimeout(timer)
+    res.once('close', clear)
+    req.once('end', clear)
   }
 
   async function route(req, res) {
@@ -232,6 +279,17 @@ export async function startServer(options = {}) {
     if (typeof host !== 'string' || !cfg.allowedHosts.includes(hostOnly(host))) {
       send(res, 421, 'misdirected request')
       return 421
+    }
+    const pathname = (req.url ?? '').split('?')[0]
+    const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
+    if (!longRoute) armDeadline(req, res, cfg.shortRequestMs)
+    if (pathname === '/feedback' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+      // The one cross-origin route: its own exact-match Origin allowlist (feedback.mjs), checked INSTEAD of the same-host guard below.
+      if (limited(clientOf(req))) {
+        send(res, 429, 'slow down', { 'Retry-After': String(Math.ceil(cfg.rateWindowMs / 1000)) })
+        return 429
+      }
+      return feedback.handle(req, res)
     }
     const origin = req.headers.origin
     if (origin !== undefined) {
@@ -251,13 +309,15 @@ export async function startServer(options = {}) {
       send(res, 429, 'slow down', { 'Retry-After': String(Math.ceil(cfg.rateWindowMs / 1000)) })
       return 429
     }
-    const pathname = (req.url ?? '').split('?')[0]
     // /backup/health is the same probe as seen through the same-origin proxy
     // (the app hides its backup card unless this answers "ok").
     if ((pathname === '/health' || pathname === '/backup/health') && req.method === 'GET') {
       send(res, 200, 'ok')
       return 200
     }
+    if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
+    if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
+    if (pathname.startsWith('/hosted/')) return hosted === null ? jsonError(res, 503, 'not_configured') : hosted.handle(req, res, pathname)
     const m = ROUTE_RE.exec(pathname)
     if (m === null || !ID_RE.test(m[1])) {
       send(res, 400, 'bad id')
@@ -266,7 +326,7 @@ export async function startServer(options = {}) {
     if (req.method === 'PUT') {
       await handlePut(req, res, m[1])
     } else if (req.method === 'GET') {
-      await handleGet(res, m[1])
+      await handleGet(req, res, m[1])
     } else {
       send(res, 405, 'method not allowed', { Allow: 'GET, PUT' })
       return 405
@@ -282,7 +342,7 @@ export async function startServer(options = {}) {
         cfg.log(`${req.method} 500`)
       })
   })
-  server.requestTimeout = 30000
+  server.requestTimeout = cfg.longRequestMs // per-request deadlines (armDeadline) keep 30 s on the short routes
   server.headersTimeout = 10000
   await new Promise((resolve, reject) => {
     server.once('error', reject)

@@ -1,46 +1,125 @@
 #!/bin/bash
-# Install / update the TrustWeb encrypted-backup service on questhub and route
-# app.idea2.site/backup/* to it. Idempotent: re-running updates server.mjs and
-# leaves an existing Caddy block alone.
+# Install / update the TrustWeb server on questhub: encrypted backups, hosted recordings with a free
+# allowance, the transcription proxy and website feedback (services/trustweb-backup).
 #
-#   ./scripts/deploy_trustweb_backup.sh
+#   ./scripts/deploy_trustweb_backup.sh --staging [--keep] [--dry-run]
+#   ./scripts/deploy_trustweb_backup.sh --production [--dry-run]
+#   ./scripts/deploy_trustweb_backup.sh --print-caddy
 #
-# Same SSH recipe as deploy_wot.sh (questhub needs publickey + password; the
-# askpass helper reads both from the login Keychain). Safety protocol:
-# timestamped Caddyfile backup, `caddy validate` before reload, restore the
-# backup if validation fails. The app hides its backup card until
-# https://app.idea2.site/backup/health answers "ok", so the static app and this
-# service can be deployed in either order.
+# A mode flag is REQUIRED (the old no-flag run deployed production; that is now refused so a stray
+# run cannot touch Jakob's real backups).
+#
+#   --staging     A SECOND unit, trustweb-backup-staging, on loopback port 8970 with its own data dirs
+#                 (/var/lib/trustweb-backup-staging, /var/lib/trustweb-hosted-staging) and code dir
+#                 (/opt/trustweb-backup-staging), MemoryMax=128M, no Caddy route. Smoke-tests it over ssh
+#                 with curl, then STOPS and DISABLES it again (the server has 2 GB RAM) unless --keep.
+#                 Prints free -m and df -h before and after. Never touches the production unit, its data
+#                 dir or the Caddyfile.
+#   --production  Backs up the server copy (cp .bak.<timestamp>), installs the code, rewrites the unit
+#                 (adds the hosted data dir, an optional EnvironmentFile for the transcription key),
+#                 restarts, and adds the Caddy routes /hosted/*, /transcribe, /feedback (timestamped
+#                 Caddyfile backup, `caddy validate` before reload, restore on failure). RUN BY THE
+#                 ORCHESTRATOR ONLY, after review.
+#   --dry-run     Print what would be done; change nothing (local or remote).
+#   --keep        (staging) leave the staging unit running after the smoke test.
+#   --print-caddy Print the Caddy snippet and exit.
+#
+# Same SSH recipe as deploy_wot.sh (questhub needs publickey + password; the askpass helper reads both
+# from the login Keychain). questhub runs SELinux Enforcing: code dirs get usr_t, units are written in
+# place with `sudo tee` (never mv from /tmp), data dirs are created by systemd (StateDirectory) and
+# checked to carry var_lib_t like production.
 set -euo pipefail
-echo "… deploy_trustweb_backup running …"
-echo "--------"
+
+MODE=""
+DRY=0
+KEEP=0
+CONFLICT=0
+set_mode() { if [ -n "$MODE" ] && [ "$MODE" != "$1" ]; then CONFLICT=1; fi; MODE="$1"; }
+for arg in "$@"; do
+  case "$arg" in
+    --staging) set_mode staging ;;
+    --production) set_mode production ;;
+    --print-caddy) set_mode print-caddy ;;
+    --dry-run) DRY=1 ;;
+    --keep) KEEP=1 ;;
+    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+[ "$CONFLICT" = 0 ] || { echo "use only one of --staging / --production / --print-caddy" >&2; exit 2; }
+case "$MODE" in
+  staging|production|print-caddy) ;;
+  *) echo "usage: $0 --staging|--production [--dry-run] [--keep]   (or --print-caddy)" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC="$HERE/../services/trustweb-backup/server.mjs"
+SRC_DIR="$HERE/../services/trustweb-backup"
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
 rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
+TS="$(date +%Y%m%d_%H%M%S)"
 
-[ -f "$SRC" ] || { echo "missing $SRC" >&2; exit 1; }
-ssh-add --apple-load-keychain >/dev/null 2>&1 || true
+caddy_snippet() {
+  cat <<'CADDY'
+	# --- TrustWeb hosted recordings, transcription and feedback (wave 1733) ---
+	# Same upstream as /backup (127.0.0.1:8960). The path of /hosted/ carries an account id and the
+	# recording id: keep these paths out of any access log. Bodies are streamed by the server; the
+	# limits here are the outer guard (hosted: one recording is at most 30 MB; transcribe: 21.6 MB;
+	# feedback: 16 KB). Long timeouts: a phone upload of 20 MB takes minutes, a transcription up to
+	# ten minutes (the server polls the provider).
+	handle /hosted/* {
+		request_body {
+			max_size 31MB
+		}
+		reverse_proxy 127.0.0.1:8960 {
+			transport http {
+				read_timeout 15m
+				write_timeout 15m
+				response_header_timeout 15m
+			}
+		}
+	}
+	handle /transcribe {
+		request_body {
+			max_size 22MB
+		}
+		reverse_proxy 127.0.0.1:8960 {
+			transport http {
+				read_timeout 15m
+				write_timeout 15m
+				response_header_timeout 15m
+			}
+		}
+	}
+	handle /feedback {
+		request_body {
+			max_size 20KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+CADDY
+}
 
-echo "1/4 server.mjs -> /opt/trustweb-backup/"
-"${SSHENV[@]}" scp -q "$SRC" questhub:/tmp/trustweb-backup-server.mjs
-rsh 'sudo install -d -m 0755 /opt/trustweb-backup && sudo install -m 0644 /tmp/trustweb-backup-server.mjs /opt/trustweb-backup/server.mjs && rm -f /tmp/trustweb-backup-server.mjs && sudo restorecon -R /opt/trustweb-backup'
-
-echo "2/4 systemd unit"
-rsh 'sudo tee /etc/systemd/system/trustweb-backup.service >/dev/null' <<'UNIT'
+# The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max.
+unit_text() {
+  local s="$1" port="$2" mem="$3" allowed="app.idea2.site"
+  cat <<UNIT
 [Unit]
-Description=TrustWeb encrypted backup store (ciphertext only; see web-of-trust services/trustweb-backup)
+Description=TrustWeb server${s:+ (staging)}: encrypted backups, hosted recordings, transcription proxy, feedback (see web-of-trust services/trustweb-backup)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/node /opt/trustweb-backup/server.mjs
+ExecStart=/usr/bin/node /opt/trustweb-backup${s}/server.mjs
 Environment=HOST=127.0.0.1
-Environment=PORT=8960
-Environment=BACKUP_DIR=/var/lib/trustweb-backup
-Environment=ALLOWED_HOSTS=app.idea2.site
+Environment=PORT=${port}
+Environment=BACKUP_DIR=/var/lib/trustweb-backup${s}
+Environment=HOSTED_DIR=/var/lib/trustweb-hosted${s}
+Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
+Environment=ALLOWED_HOSTS=${allowed}
+# Transcription key and product id, placed by Jakob with scripts/trustweb_transcribe_switch_on.sh (0600, root).
+# Absent file = transcription answers 503 not_configured.
+EnvironmentFile=-/etc/trustweb-backup${s}.env
 DynamicUser=yes
-StateDirectory=trustweb-backup
+StateDirectory=trustweb-backup${s} trustweb-hosted${s}
 StateDirectoryMode=0700
 Restart=on-failure
 NoNewPrivileges=yes
@@ -51,53 +130,192 @@ PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-MemoryMax=256M
+MemoryMax=${mem}
 
 [Install]
 WantedBy=multi-user.target
 UNIT
-rsh 'sudo systemctl daemon-reload && sudo systemctl enable --now trustweb-backup && sudo systemctl restart trustweb-backup && sleep 1 && curl -fsS -H "Host: app.idea2.site" http://127.0.0.1:8960/health'
-echo
+}
 
-echo "3/4 Caddy: handle /backup/* inside app.idea2.site, before the relay block"
-rsh 'bash -s' <<'REMOTE'
+# Smoke test, run ON questhub through ssh (bash -s). $1 = port. Fails (non-zero) on the first wrong answer.
+smoke_script() {
+  cat <<'SMOKE'
+set -euo pipefail
+PORT="$1"
+B="http://127.0.0.1:$PORT"
+H='Host: app.idea2.site'
+ACC=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+TOK=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+RC=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+RID=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+expect() { [ "$1" = "$2" ] && echo "  ok   $3 -> $1" || { echo "  FAIL $3 -> got $1, expected $2" >&2; exit 1; }; }
+echo "health"
+expect "$(curl -fsS -H "$H" $B/health)" ok "GET /health"
+echo "hosted status"
+curl -fsS -H "$H" $B/hosted/status; echo
+echo "hosted recording cycle"
+printf 'smoke-test-ciphertext' > /tmp/tw_smoke.bin
+expect "$(code -H "$H" -X PUT -H "X-Write-Token: $TOK" -H 'X-Seconds: 60' -H "X-Read-Token: $RC" --data-binary @/tmp/tw_smoke.bin $B/hosted/$ACC/rec/$RID)" 204 "PUT recording"
+expect "$(code -H "$H" $B/hosted/$ACC/rec/$RID)" 403 "GET without credential"
+expect "$(code -H "$H" -H "X-Read-Token: $RC" $B/hosted/$ACC/rec/$RID)" 200 "GET with read capability"
+ETAG=$(curl -s -D - -o /dev/null -H "$H" -H "X-Write-Token: $TOK" $B/hosted/$ACC/rec/$RID | tr -d '\r' | awk -F': ' 'tolower($1)=="etag"{print $2}')
+expect "$(code -H "$H" -H "X-Write-Token: $TOK" -H "If-None-Match: $ETAG" $B/hosted/$ACC/rec/$RID)" 304 "GET If-None-Match"
+curl -fsS -H "$H" -H "X-Write-Token: $TOK" $B/hosted/$ACC/usage; echo
+expect "$(code -H "$H" -X DELETE -H "X-Write-Token: $TOK" $B/hosted/$ACC/rec/$RID)" 204 "DELETE recording"
+echo "backup route + late pack validators"
+BID=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+expect "$(code -H "$H" -X PUT -H "X-Write-Token: $TOK" --data-binary pending $B/backup/$BID)" 204 "PUT pack (pending)"
+BETAG=$(curl -s -D - -o /dev/null -H "$H" $B/backup/$BID | tr -d '\r' | awk -F': ' 'tolower($1)=="etag"{print $2}')
+expect "$(code -H "$H" -H "If-None-Match: $BETAG" $B/backup/$BID)" 304 "GET pack If-None-Match"
+expect "$(code -H "$H" -X PUT -H "X-Write-Token: $TOK" --data-binary complete $B/backup/$BID)" 204 "PUT pack again (same token)"
+expect "$(code -H "$H" -H "If-None-Match: $BETAG" $B/backup/$BID)" 200 "GET pack changed since"
+echo "origin guard"
+expect "$(code -H "$H" -H 'Origin: https://idea2.site' $B/backup/$BID)" 403 "/backup with Origin idea2.site"
+expect "$(code -H "$H" -H 'Origin: https://idea2.site' $B/hosted/status)" 403 "/hosted with Origin idea2.site"
+echo "feedback"
+expect "$(code -H "$H" -X POST -H 'Origin: https://idea2.site' -H 'Content-Type: application/json' -d '{"text":"smoke test, please ignore","kind":"feedback"}' $B/feedback)" 204 "POST /feedback"
+expect "$(code -H "$H" -X POST -H 'Origin: https://evil.example.com' -H 'Content-Type: application/json' -d '{"text":"x"}' $B/feedback)" 403 "POST /feedback foreign Origin"
+expect "$(code -H "$H" -X OPTIONS -H 'Origin: https://app.idea2.site' $B/feedback)" 204 "OPTIONS /feedback"
+echo "transcription (no key placed): not configured"
+expect "$(code -H "$H" -X POST -H "X-Account: $ACC" -H "X-Write-Token: $TOK" -H 'X-Audio-Seconds: 5' -H 'Content-Type: audio/webm' --data-binary @/tmp/tw_smoke.bin $B/transcribe)" 503 "POST /transcribe"
+rm -f /tmp/tw_smoke.bin
+echo "SMOKE OK"
+SMOKE
+}
+
+remote_state() { # label
+  echo "-------- $1"
+  rsh 'free -m; echo; df -h / | tail -n 2'
+}
+
+install_code() { # $1 = remote code dir
+  local dest="$1" stage="/tmp/twdeploy.$TS" f
+  echo "install code -> $dest"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] scp $(cd "$SRC_DIR" && ls ./*.mjs | tr '\n' ' ') -> questhub:$stage"
+    echo "[dry-run] ssh questhub: back up existing $dest/*.mjs to *.bak.$TS, install -m 0644 into $dest, chcon -R -t usr_t $dest"
+    return
+  fi
+  rsh "mkdir -p $stage"
+  for f in "$SRC_DIR"/*.mjs; do "${SSHENV[@]}" scp -q "$f" "questhub:$stage/"; done
+  rsh "set -e; sudo install -d -m 0755 $dest
+       for f in $dest/*.mjs; do [ -e \"\$f\" ] && sudo cp -p \"\$f\" \"\$f.bak.$TS\"; done
+       sudo install -m 0644 $stage/*.mjs $dest/
+       rm -rf $stage
+       sudo chcon -R -t usr_t $dest
+       ls -Z $dest | head -n 20"
+}
+
+install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
+  local unit="$1" file="/etc/systemd/system/$1.service"
+  echo "systemd unit $file (written in place with tee, never mv from /tmp)"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" | sed 's/^/    /'
+    return
+  fi
+  rsh "[ -e $file ] && sudo cp -p $file $file.bak.$TS || true"
+  unit_text "$2" "$3" "$4" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
+  rsh "sudo systemctl daemon-reload && sudo systemctl enable --now $unit && sudo systemctl restart $unit && sleep 1 && systemctl is-active $unit"
+}
+
+check_data_labels() { # $1 = suffix
+  local s="$1"
+  echo "data dir labels (production uses var_lib_t)"
+  if [ "$DRY" = 1 ]; then echo "[dry-run] sudo ls -Zd /var/lib/private/trustweb-backup$s /var/lib/private/trustweb-hosted$s; chcon -R -t var_lib_t if different"; return; fi
+  rsh "set -e
+       for d in /var/lib/private/trustweb-backup$s /var/lib/private/trustweb-hosted$s; do
+         t=\$(sudo ls -Zd \$d | awk '{print \$1}')
+         echo \"  \$d \$t\"
+         case \"\$t\" in *:var_lib_t:*) ;; *) sudo chcon -R -t var_lib_t \$d; echo '  relabelled to var_lib_t' ;; esac
+       done"
+}
+
+do_staging() {
+  echo "STAGING: unit trustweb-backup-staging on 127.0.0.1:8970, data /var/lib/trustweb-backup-staging + /var/lib/trustweb-hosted-staging"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] ssh questhub: free -m; df -h /"
+  else
+    remote_state "BEFORE (free -m, df -h)"
+  fi
+  install_code /opt/trustweb-backup-staging
+  install_unit trustweb-backup-staging -staging 8970 128M
+  check_data_labels -staging
+  echo "smoke test over ssh (curl against 127.0.0.1:8970)"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] smoke script:"; smoke_script | sed 's/^/    /'
+  else
+    smoke_script | rsh "bash -s -- 8970"
+    rsh 'systemctl show trustweb-backup-staging -p MemoryCurrent -p MemoryMax'
+  fi
+  if [ "$KEEP" = 1 ]; then
+    echo "--keep: staging unit left RUNNING (stop it: ssh questhub 'sudo systemctl disable --now trustweb-backup-staging')"
+  elif [ "$DRY" = 1 ]; then
+    echo "[dry-run] ssh questhub: sudo systemctl disable --now trustweb-backup-staging"
+  else
+    rsh 'sudo systemctl disable --now trustweb-backup-staging && echo "staging unit stopped and disabled: $(systemctl is-active trustweb-backup-staging || true)"'
+  fi
+  if [ "$DRY" != 1 ]; then remote_state "AFTER (free -m, df -h)"; fi
+}
+
+install_caddy_routes() {
+  echo "Caddy: handle /hosted/*, /transcribe, /feedback inside app.idea2.site, before the relay block"
+  if [ "$DRY" = 1 ]; then echo "[dry-run] snippet:"; caddy_snippet | sed 's/^/    /'; return; fi
+  caddy_snippet | rsh "cat > /tmp/twcaddy.$TS"
+  rsh "TS=$TS bash -s" <<'REMOTE'
 set -euo pipefail
 CF=/etc/caddy/Caddyfile
-if sudo grep -q "handle /backup/\*" "$CF"; then
-  echo "Caddy block already present, unchanged"
-  exit 0
+if sudo grep -q "handle /hosted/\*" "$CF"; then
+  echo "Caddy routes already present, unchanged"; rm -f /tmp/twcaddy.$TS; exit 0
 fi
 BAK="$CF.bak.$(date +%Y%m%d_%H%M%S)"
 sudo cp "$CF" "$BAK"
-# Insert right before the first "handle /relay/* {" that follows "app.idea2.site {".
-sudo awk '
+sudo awk -v snippet="/tmp/twcaddy.$TS" '
   /^app\.idea2\.site \{/ { inapp = 1 }
   inapp && !done && /^\thandle \/relay\/\* \{/ {
-    print "\t# --- TrustWeb encrypted backup (2026-10-05) ---"
-    print "\t# Ciphertext only, made on the phone (apps/trustweb/src/backup.ts);"
-    print "\t# trustweb-backup.service on 127.0.0.1:8960. The blob id in the path"
-    print "\t# is a secret: keep /backup/ out of any access log."
-    print "\thandle /backup/* {"
-    print "\t\trequest_body {"
-    print "\t\t\tmax_size 1100KB"
-    print "\t\t}"
-    print "\t\treverse_proxy 127.0.0.1:8960"
-    print "\t}"
+    while ((getline line < snippet) > 0) print line
     done = 1
   }
   { print }
 ' "$BAK" | sudo tee "$CF.new" >/dev/null
+rm -f /tmp/twcaddy.$TS
 if sudo caddy validate --config "$CF.new" --adapter caddyfile >/dev/null 2>&1; then
   sudo mv "$CF.new" "$CF" && sudo systemctl reload caddy && echo "Caddy reloaded (backup at $BAK)"
 else
   sudo rm -f "$CF.new"; echo "caddy validate FAILED, Caddyfile unchanged (backup at $BAK)" >&2; exit 1
 fi
 REMOTE
+}
 
-echo "4/4 verify through the public origin"
-sleep 1
-curl -fsS https://app.idea2.site/backup/health && echo "  <- https://app.idea2.site/backup/health"
-code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: https://evil.example.com' https://app.idea2.site/backup/health)
-echo "foreign Origin -> $code (expect 403)"
+do_production() {
+  echo "PRODUCTION: unit trustweb-backup on 127.0.0.1:8960 (orchestrator only)"
+  [ "$DRY" = 1 ] || remote_state "BEFORE (free -m, df -h)"
+  install_code /opt/trustweb-backup
+  install_unit trustweb-backup "" 8960 256M
+  check_data_labels ""
+  install_caddy_routes
+  if [ "$DRY" = 1 ]; then echo "[dry-run] verify: curl https://app.idea2.site/backup/health, /hosted/status, foreign Origin -> 403"; return; fi
+  echo "verify through the public origin"
+  sleep 1
+  curl -fsS https://app.idea2.site/backup/health && echo "  <- /backup/health"
+  curl -fsS https://app.idea2.site/hosted/status && echo "  <- /hosted/status"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: https://evil.example.com' https://app.idea2.site/backup/health)
+  echo "foreign Origin -> $code (expect 403)"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://idea2.site' https://app.idea2.site/feedback)
+  echo "feedback preflight from idea2.site -> $code (expect 204)"
+  remote_state "AFTER (free -m, df -h)"
+}
+
+echo "… deploy_trustweb_backup running ($MODE$([ "$DRY" = 1 ] && echo ", dry-run")) …"
 echo "--------"
-echo "all good"
+case "$MODE" in
+  print-caddy) caddy_snippet; exit 0 ;;
+esac
+[ -d "$SRC_DIR" ] || { echo "missing $SRC_DIR" >&2; exit 1; }
+[ "$DRY" = 1 ] || ssh-add --apple-load-keychain >/dev/null 2>&1 || true
+case "$MODE" in
+  staging) do_staging ;;
+  production) do_production ;;
+esac
+echo "--------"
+echo "done ($MODE)"
