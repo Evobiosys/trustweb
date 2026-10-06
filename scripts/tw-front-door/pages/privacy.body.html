@@ -44,7 +44,7 @@
     is neither written nor opened for 90 days may be removed.</li>
     <li><b>Server transcription (starting soon, experimental).</b> If you choose it, the audio of a
     recording leaves your phone: it goes through our server to Infomaniak AI Tools in Switzerland,
-    which turns it into text, and the text comes back to your phone. Unlike everything above, this
+    which turns it into text, and the text comes back to your phone. Unlike backups and hosted recordings, this
     audio is not encrypted for the server: our server and Infomaniak handle it as audio. Our server
     keeps neither the audio nor the text (the audio sits in a temporary file only while it is being
     transcribed); it counts the minutes used.</li><!--/IF-->
@@ -53,12 +53,13 @@
     your allowance. A recording that is neither written nor opened for 90 days may be removed.</li>
     <li><b>Server transcription.</b> If you choose it, the audio of a recording leaves your phone: it
     goes through our server to Infomaniak AI Tools in Switzerland, which turns it into text, and the
-    text comes back to your phone. Unlike everything above, this audio is not encrypted for the
+    text comes back to your phone. Unlike backups and hosted recordings, this audio is not encrypted for the
     server: our server and Infomaniak handle it as audio. Our server keeps neither the audio nor the
     text (the audio sits in a temporary file only while it is being transcribed); it counts the
     minutes used.</li><!--/IF-->
-    <li><b>Network addresses</b> reach the server with every request. It uses them in memory to limit
-    abuse (how many requests from one address) and does not write them to disk.</li>
+    <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
+    (backup, hosting, transcription, feedback) use them only in memory, to limit abuse; the web
+    server writes no access log.</li>
   </ul>
 </section>
 
