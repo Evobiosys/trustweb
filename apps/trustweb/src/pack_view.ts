@@ -114,7 +114,7 @@ export function createPackView(h: PackViewHooks): PackView {
         ? el('div', { class: 'sheet-lines' }, pack.notes.map((t) => el('div', { class: 'sline' }, [el('span', {}, [t])])))
         : el('p', { class: 'meta' }, [S.pastNoNotes]),
       el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
-      pack.transcript.length ? h.transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
+      pack.transcript.length ? h.transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [pending ? S.recvTranscriptComing : S.pastNoTranscript]),
       pending ? el('button', { class: 'btn btn-ghost', 'data-pack-check': '1', onclick: () => { if (poll) clearTimeout(poll.timer); void check(link, etag, entry, openedAt, token, attempt, true) } }, [S.recvCheckAgain]) : null,
       el('button', { class: 'btn btn-electric', 'data-pack-keep': '1', onclick: () => { keep(pack, link, etag, entry); h.closeSheet(); h.toast(S.recvKept); h.render() } }, [pending ? S.recvKeepPending : S.recvKeep]),
       el('button', { class: 'btn btn-ghost', onclick: h.closeSheet }, [S.recvClose]),

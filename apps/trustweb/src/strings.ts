@@ -735,6 +735,7 @@ export const S = {
   fullSent: (when: string) => `The full version went out (${when}).`,
   recvStillArriving: 'The transcript is still arriving. Here already: who, where, when and the notes. This looks again by itself while it is open.',
   recvCheckAgain: 'Check again',
+  recvTranscriptComing: 'Not here yet: it follows when the Swiss server is done.',
   recvNothingNew: 'Nothing new yet.',
   recvFilledIn: 'The transcript arrived.',
   recvKeepPending: 'Keep in my past meetings (the transcript follows)',
