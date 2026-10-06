@@ -184,6 +184,13 @@ async function main() {
     await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await tab.click()
     ok('leaving Record/Meeting closes the search', await page.locator('.past-search').count() === 0)
+    // Review P3 (round B): a Meeting draft with only "where" typed is a draft in progress: the next Record tap keeps it.
+    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs .tab-record').click()
+    await page.getByLabel('Where are you meeting?').fill('Volkskundemuseum')
+    await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await page.locator('nav.tabs .tab-record').click()
+    ok('a Meeting draft with only "where" typed is kept by the next Record tap (review P3)', await page.getByLabel('Where are you meeting?').inputValue().catch(() => '') === 'Volkskundemuseum')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
   } finally {
     await browser?.close()

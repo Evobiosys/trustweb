@@ -33,6 +33,16 @@ describe('pastMeetings', () => {
     expect(list.map((m) => m.id)).toEqual(['m1', 'notes:max:2'])
   })
   it('a person without notes makes no entry', () => expect(pastMeetings({ people: [anna] })).toEqual([]))
+  it('a day whose notes all came from a stored meeting is not listed again once that meeting is deleted (review P1); typed notes still are', () => {
+    const line = (id, text, day, source) => ({ id, text, tag: 'note', audience: 'friends', status: 'current', notedAt: day * DAY + 5, checkedAt: day * DAY, source })
+    const lea = { id: 'lea', name: 'Lea', context: 'Vienna', ring: 'friend', metAt: 0, lines: [
+      line('a', 'From the deleted meeting', 20, { kind: 'recorded-meeting', meetingId: 'gone' }),
+      line('b', 'Also from it', 20, { kind: 'recorded-meeting', meetingId: 'gone', atMs: 5 }),
+      line('c', 'Typed that day', 21, { kind: 'typed' }),
+      line('d', 'From the meeting', 21, { kind: 'recorded-meeting', meetingId: 'gone' }),
+    ] }
+    expect(pastMeetings({ people: [lea] }).map((m) => m.id)).toEqual(['notes:lea:21'])
+  })
 })
 
 describe('demo content', () => {

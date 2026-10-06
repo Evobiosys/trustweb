@@ -484,8 +484,9 @@ function startDraftFor(personId?: string): void {
 }
 
 function draftInProgress(): boolean {
-  return recorder.live || takes.length > 0
-    || Boolean(draft.name.trim() || draft.text.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
+  // "Where" and the other person's yes count too (review P3): a Meeting draft with only those is not dropped by the next Record tap.
+  return recorder.live || takes.length > 0 || draft.consent
+    || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
 function go(s: Screen): void {

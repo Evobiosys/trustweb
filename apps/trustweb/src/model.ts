@@ -491,6 +491,9 @@ const DAY_MS = 86_400_000
  * Past meetings, newest first: the stored ones plus, for notes saved before
  * meetings were stored at all, one entry per person and day built from their
  * notes (so an earlier meeting with its place is found again, nothing lost).
+ * A day whose notes ALL came from a stored meeting (their source names it) is
+ * left out: that meeting is listed itself, or was deleted on purpose, and the
+ * notes stay on the person's card either way (review P1, wave 1733 round B).
  */
 export function pastMeetings(s: Pick<AppState, 'meetings' | 'people'>): PastMeeting[] {
   const out: PastMeeting[] = [...(s.meetings ?? [])]
@@ -502,7 +505,7 @@ export function pastMeetings(s: Pick<AppState, 'meetings' | 'people'>): PastMeet
       byDay.set(day, [...(byDay.get(day) ?? []), l])
     }
     for (const [day, lines] of byDay) {
-      if (covered.has(`${p.id}:${day}`)) continue
+      if (covered.has(`${p.id}:${day}`) || lines.every((l) => Boolean(l.source?.meetingId))) continue
       const at = lines.map((l) => l.notedAt)
       out.push({
         id: `notes:${p.id}:${day}`, about: p.name, kind: AboutKind.Who, personId: p.id, where: p.context,

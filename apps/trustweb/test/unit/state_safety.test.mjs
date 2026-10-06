@@ -34,7 +34,15 @@ describe('a pre-wave record migrates safely', () => {
     const before = preWaveState()
     const s = preWaveState()
     expect(migrateSources(s)).toBe(true)
-    expect(count(s)).toEqual(count(before))
+    // Round B (review P1): a derived "Notes" day whose notes all belong to a stored meeting is no longer listed twice;
+    // every note of the past-meetings list before is still in the list after (in its stored meeting).
+    const { past: pastBefore, ...restBefore } = count(before)
+    const { past: pastAfter, ...restAfter } = count(s)
+    expect(restAfter).toEqual(restBefore)
+    expect(pastAfter).toBe(pastBefore - 1)
+    const listed = (x) => new Set(pastMeetings(x).flatMap((m) => m.lines.map((l) => l.text)))
+    const after = listed(s)
+    for (const t of listed(before)) expect(after.has(t)).toBe(true)
     expect(withoutSources(s)).toEqual(before)
     // unknown fields at every level are kept
     expect(s.unknownTopLevel).toEqual({ from: 'a later build', n: 1 })
