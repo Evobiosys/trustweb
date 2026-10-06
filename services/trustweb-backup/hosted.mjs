@@ -27,7 +27,7 @@ import {
   streamToFile,
   tooManyRequests,
 } from './http_util.mjs'
-import { createDailyMeter, createWindowLimiter } from './limits.mjs'
+import { createDailyMeter, createInFlight, createWindowLimiter, ipKey } from './limits.mjs'
 import { AllowanceReason, CapReason, checkBeforeWrite, planFromConfig, usageBody, usageOf, writeCap } from './quota.mjs'
 
 const ROUTE = /^\/hosted\/([^/]+)\/(rec|recs|usage)(?:\/([^/]+))?$/
@@ -55,7 +55,7 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
   const writes = createWindowLimiter({ limit: cfg.hostedWritesPerHourPerIp, windowMs: 3600000, now: cfg.now })
   const recReads = createWindowLimiter({ limit: cfg.recGetsPerHour, windowMs: 3600000, now: cfg.now })
   const creations = createDailyMeter({ limit: cfg.accountCreatesPerIpDay, now: cfg.now })
-  let uploadsInFlight = 0
+  const uploads = createInFlight({ total: cfg.maxConcurrentUploads, perKey: cfg.hostedUploadsPerIp })
 
   function allowanceBody(res, reason, recs, tSeconds) {
     return jsonError(res, 402, 'allowance_reached', { reason, ...usageBody(plan, recs, tSeconds) })
@@ -86,21 +86,23 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
     if (req.headers['x-read-token'] !== undefined) {
       const readToken = tokenHeader(req, 'x-read-token')
       if (readToken === null) return jsonError(res, 400, 'bad_request', { field: 'X-Read-Token' })
+      // A read capability equal to the account token would hand the account to everyone the link reaches.
+      if (readToken === token) return jsonError(res, 400, 'bad_request', { field: 'X-Read-Token' })
       readHash = sha256Hex(readToken)
     }
-    const hit = writes.hit(clientOf(req))
+    const ip = ipKey(clientOf(req))
+    const hit = writes.hit(ip)
     if (hit.limited) return tooManyRequests(res, 'rate_limited', hit.retryAfter)
-    if (uploadsInFlight >= cfg.maxConcurrentUploads) return refuse(req, res, 429, 'busy', {}, { 'Retry-After': '5' })
-    uploadsInFlight += 1
+    const release = uploads.tryAcquire(ip)
+    if (release === null) return refuse(req, res, 429, 'busy', { retryAfter: 5 }, { 'Retry-After': '5' })
     try {
-      return await withLock(`hosted:${account}`, () => putLocked(req, res, { account, rid, token, seconds, readHash }))
+      return await withLock(`hosted:${account}`, () => putLocked(req, res, { account, rid, token, seconds, readHash, ip }))
     } finally {
-      uploadsInFlight -= 1
+      release()
     }
   }
 
-  async function putLocked(req, res, { account, rid, token, seconds, readHash }) {
-    const ip = clientOf(req)
+  async function putLocked(req, res, { account, rid, token, seconds, readHash, ip }) {
     const acct = await store.loadAccount(account)
     if (acct !== null && !tokenMatches(acct.token, token)) return refuse(req, res, 403, 'forbidden_token')
     if (acct === null && !creations.fits(ip, 1)) {
@@ -151,18 +153,42 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
     }
   }
 
+  /** The recording and an open handle on its current file. A replace may swing the pointer between the two reads: retry once. */
+  async function openCurrent(account, rid) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const rec = await store.getRec(account, rid)
+      if (rec === null) return null
+      try {
+        return { rec, handle: await fsp.open(store.recFile(account, rec), 'r') }
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err
+      }
+    }
+    return null
+  }
+
   async function getRecording(req, res, account, rid) {
-    const rec = await store.getRec(account, rid)
-    const acct = rec === null ? null : await store.loadAccount(account)
-    if (rec === null || acct === null) return jsonError(res, 404, 'not_found')
-    const hit = recReads.hit(`${account}/${rid}`)
-    if (hit.limited) return tooManyRequests(res, 'rate_limited', hit.retryAfter)
-    const owner = tokenHeader(req, 'x-write-token')
-    const reader = tokenHeader(req, 'x-read-token')
-    const ownerOk = owner !== null && tokenMatches(acct.token, owner)
-    const readerOk = reader !== null && rec.readHash !== null && tokenMatches(rec.readHash, reader)
-    if (!ownerOk && !readerOk) return jsonError(res, 403, 'forbidden_token')
-    await store.touch(account, rid)
+    const acct = await store.loadAccount(account)
+    const found = acct === null ? null : await openCurrent(account, rid)
+    if (found === null) return jsonError(res, 404, 'not_found')
+    const { rec, handle } = found
+    try {
+      const owner = tokenHeader(req, 'x-write-token')
+      const reader = tokenHeader(req, 'x-read-token')
+      const ownerOk = owner !== null && tokenMatches(acct.token, owner)
+      const readerOk = reader !== null && rec.readHash !== null && tokenMatches(rec.readHash, reader)
+      if (!ownerOk && !readerOk) return jsonError(res, 403, 'forbidden_token')
+      // Counted only for authorised reads: a stranger who knows the ids cannot use up the owner's downloads.
+      const hit = recReads.hit(`${account}/${rid}`)
+      if (hit.limited) return tooManyRequests(res, 'rate_limited', hit.retryAfter)
+      await store.touch(account, rid)
+      return await sendRecording(req, res, rec, handle)
+    } finally {
+      await handle.close().catch(() => undefined)
+    }
+  }
+
+  async function sendRecording(req, res, rec, handle) {
     const etag = `"${rec.etag}"`
     const headers = {
       'Cache-Control': 'no-store',
@@ -176,20 +202,11 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
       res.end()
       return 304
     }
-    let handle
-    try {
-      handle = await fsp.open(store.recFile(account, rec), 'r')
-    } catch (err) {
-      if (err.code === 'ENOENT') return jsonError(res, 404, 'not_found')
-      throw err
-    }
     res.writeHead(200, { ...headers, 'Content-Type': 'application/octet-stream', 'Content-Length': String(rec.bytes) })
     try {
-      await pipeline(fs.createReadStream(null, { fd: handle.fd, autoClose: false }), res)
+      await pipeline(fs.createReadStream(null, { fd: handle.fd, autoClose: false, start: 0 }), res)
     } catch {
       res.destroy()
-    } finally {
-      await handle.close().catch(() => undefined)
     }
     return 200
   }

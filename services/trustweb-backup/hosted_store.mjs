@@ -6,6 +6,10 @@
 //                                                  the json is the atomic pointer; a reader never sees a half-replaced recording)
 //   <dir>/tmp/                                     uploads in flight (0600), emptied at start
 //
+// Crash safety: a version file is renamed into recs/ before its json pointer is written, and the replaced version is
+// removed after. A crash between those steps leaves a ciphertext file no json points at: removeOrphans() deletes such
+// files at start (before any request), so they never escape the byte count.
+//
 // A recording exists iff its json exists. "Touched" (for retention) = the json's mtime: a write or an owner/capability read.
 // The ciphertext is opaque; nothing here parses it.
 
@@ -135,6 +139,27 @@ export async function createHostedStore(cfg) {
     await saveAccount(account, acct)
   }
 
+  /** Start only (no request in flight): deletes version files that no json points at. Returns how many. */
+  async function removeOrphans() {
+    let removed = 0
+    for (const account of await fs.readdir(accountsDir)) {
+      let names
+      try {
+        names = await fs.readdir(recsDir(account))
+      } catch (err) {
+        if (err.code === 'ENOENT') continue
+        throw err
+      }
+      const live = new Set((await listRecs(account)).map((r) => r.file))
+      for (const name of names) {
+        if (name.endsWith('.json') || live.has(name)) continue
+        await ignoreMissing(fs.rm(path.join(recsDir(account), name)))
+        removed += 1
+      }
+    }
+    return removed
+  }
+
   /** Sums every recording (startup, and every 10 minutes so an external sweep is noticed). */
   async function rescan() {
     let sum = 0
@@ -155,11 +180,14 @@ export async function createHostedStore(cfg) {
   /** Bytes the server may still take for hosted data: the cap minus reservations, and the free-disk floor. */
   async function globalRemaining() {
     if (cfg.now() - lastScan > RESCAN_AFTER_MS) await rescan()
+    const free = await freeDiskBytes()
+    // Both read after the last await, so a reservation made meanwhile by another upload is counted.
     const byCap = cfg.hostedMaxBytes - totalBytes - reservedBytes
-    const byDisk = (await freeDiskBytes()) - cfg.hostedMinFreeBytes - reservedBytes
+    const byDisk = free - cfg.hostedMinFreeBytes - reservedBytes
     return Math.min(byCap, byDisk)
   }
 
+  await removeOrphans()
   await rescan()
 
   return {

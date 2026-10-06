@@ -390,3 +390,98 @@ test('retention sweeper: dry run reports and keeps everything; apply removes onl
     assert.equal((await fs.readdir(path.join(hostedDir, 'accounts', A, 'recs'))).length, 2) // only the fresh recording's json + bin
   })
 })
+
+// ---- review 2026-10-06 (adversarial pass): each test below failed on the builder's version ----
+
+test('review: one network holds at most HOSTED_UPLOADS_PER_IP uploads in flight (IPv6 counted per /64); others still upload', async () => {
+  await withServer(P, { hostedUploadsPerIp: 2, uploadIdleMs: 1500 }, async () => {
+    const stall = (account, ip) => {
+      const req = http.request({ host: '127.0.0.1', port: P, method: 'PUT', path: hosted(account, R1), headers: { Host: 'app.example.test', 'X-Forwarded-For': ip, 'X-Write-Token': T, 'X-Seconds': '60', 'Transfer-Encoding': 'chunked' } })
+      req.on('error', () => undefined)
+      req.write('first bytes, then silence')
+      return req
+    }
+    const held = [stall('1'.repeat(64), '2001:db8:5:5::1'), stall('2'.repeat(64), '2001:db8:5:5::2')]
+    await new Promise((r) => setTimeout(r, 150))
+    const third = await call(P, { method: 'PUT', url: hosted('3'.repeat(64), R1), headers: { 'X-Write-Token': T, 'X-Seconds': '1' }, body: 'x', ip: '2001:db8:5:5:ffff::9' })
+    assert.equal(third.status, 429)
+    assert.equal(third.json.error, 'busy')
+    assert.ok(Number(third.headers['retry-after']) > 0)
+    assert.equal((await call(P, { method: 'PUT', url: hosted('4'.repeat(64), R1), headers: { 'X-Write-Token': T, 'X-Seconds': '1' }, body: 'x', ip: '198.51.100.7' })).status, 204)
+    for (const req of held) req.destroy()
+  })
+})
+
+test('review: a read capability equal to the account token is refused (it would hand the account to every link holder)', async () => {
+  await withServer(P, {}, async () => {
+    const r = await put(P, A, R1, T, 60, 'x', { 'X-Read-Token': T })
+    assert.equal(r.status, 400)
+    assert.equal(r.json.field, 'X-Read-Token')
+    assert.equal((await usage(P, A)).json.recordings, 0)
+  })
+})
+
+test('review: the per-recording download limit counts only authorised reads, so a stranger cannot use it up', async () => {
+  await withServer(P, { recGetsPerHour: 2 }, async () => {
+    await put(P, A, R1, T, 1, 'x', { 'X-Read-Token': RC })
+    for (let i = 0; i < 5; i += 1) assert.equal((await getRec(P, A, R1, { 'X-Read-Token': 'e'.repeat(64) })).status, 403)
+    assert.equal((await getRec(P, A, R1, { 'X-Read-Token': RC })).status, 200)
+    assert.equal((await getRec(P, A, R1, { 'X-Write-Token': T })).status, 200)
+    assert.equal((await getRec(P, A, R1, { 'X-Write-Token': T })).status, 429)
+  })
+})
+
+test('review: version files no json points at (a crash between rename and pointer swing) are removed at start and never counted', async () => {
+  const keep = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'tworphan-'))
+  const opts = { hostedDir: path.join(keep, 'hosted'), dir: path.join(keep, 'backup'), hostedMaxBytes: 100 }
+  try {
+    await withServer(P, opts, async () => {
+      assert.equal((await put(P, A, R1, T, 60, Buffer.alloc(40, 1))).status, 204)
+    })
+    const recs = path.join(opts.hostedDir, 'accounts', A, 'recs')
+    await fs.writeFile(path.join(recs, `${R2}.0badc0ffee00.bin`), Buffer.alloc(90, 7)) // the new version, pointer never written
+    await fs.writeFile(path.join(recs, `${R1}.0ldversion00.bin`), Buffer.alloc(90, 8)) // the replaced version, never removed
+    await withServer(P, opts, async () => {
+      assert.deepEqual((await fs.readdir(recs)).filter((n) => n.endsWith('.bin')).length, 1)
+      assert.equal((await getRec(P, A, R1, { 'X-Write-Token': T })).body.length, 40)
+      assert.equal((await put(P, A, R2, T, 60, Buffer.alloc(60, 2))).status, 204) // 40 + 60 fit the 100-byte cap
+    })
+  } finally {
+    await fs.rm(keep, { recursive: true, force: true })
+  }
+})
+
+test('review: a GET that races a replace serves the new version instead of a spurious 404', async () => {
+  // maxConcurrentUploads raised: the slot of the setup PUT is released just after its 204 reaches the client
+  await withServer(P, { maxConcurrentUploads: 20 }, async () => {
+    await put(P, A, R1, T, 60, Buffer.alloc(200000, 1))
+    const results = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        i % 2 === 0
+          ? call(P, { method: 'PUT', url: hosted(A, R1), headers: { 'X-Write-Token': T, 'X-Seconds': '60' }, body: Buffer.alloc(200000, i + 2), ip: `192.0.2.${i}` })
+          : getRec(P, A, R1, { 'X-Write-Token': T }),
+      ),
+    )
+    for (const [i, r] of results.entries()) assert.equal(r.status, i % 2 === 0 ? 204 : 200, `request ${i}: ${r.text}`)
+  })
+})
+
+test('review: the shared limiter and the Origin guard answer the new routes in JSON; /backup keeps its plain text', async () => {
+  await withServer(P, { rateLimit: 2 }, async () => {
+    await call(P, { url: '/hosted/status' })
+    await call(P, { url: '/hosted/status' })
+    const json = await call(P, { url: '/hosted/status' })
+    assert.equal(json.status, 429)
+    assert.equal(json.json.error, 'rate_limited')
+    assert.ok(json.json.retryAfter > 0)
+    assert.ok(Number(json.headers['retry-after']) > 0)
+    const plain = await call(P, { url: '/backup/health' })
+    assert.equal(plain.status, 429)
+    assert.equal(plain.text, 'slow down')
+  })
+  await withServer(P, {}, async () => {
+    const o = await call(P, { url: '/hosted/status', headers: { Origin: 'https://evil.example.com' } })
+    assert.equal(o.json.error, 'forbidden_origin')
+    assert.equal((await call(P, { url: '/backup/health', headers: { Origin: 'https://evil.example.com' } })).text, 'forbidden origin')
+  })
+})

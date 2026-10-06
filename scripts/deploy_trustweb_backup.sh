@@ -305,10 +305,22 @@ sudo awk -v snippet="/tmp/twcaddy.$TS" '
   { print }
 ' "$BAK" | sudo tee "$CF.new" >/dev/null
 rm -f /tmp/twcaddy.$TS
-if sudo caddy validate --config "$CF.new" --adapter caddyfile >/dev/null 2>&1; then
-  sudo mv "$CF.new" "$CF" && sudo systemctl reload caddy && echo "Caddy reloaded (backup at $BAK)"
-else
+# The anchor (app.idea2.site's "handle /relay/* {") must have been found: otherwise the file would validate unchanged
+# and the routes would silently be missing.
+if ! sudo grep -q "handle /hosted/\*" "$CF.new"; then
+  sudo rm -f "$CF.new"; echo "anchor 'handle /relay/* {' not found inside app.idea2.site: Caddyfile unchanged (backup at $BAK)" >&2; exit 1
+fi
+if ! sudo caddy validate --config "$CF.new" --adapter caddyfile >/dev/null 2>&1; then
   sudo rm -f "$CF.new"; echo "caddy validate FAILED, Caddyfile unchanged (backup at $BAK)" >&2; exit 1
+fi
+sudo cp "$CF.new" "$CF" && sudo rm -f "$CF.new"
+if sudo systemctl reload caddy; then
+  echo "Caddy reloaded (backup at $BAK)"
+else
+  echo "caddy reload FAILED: restoring $BAK and reloading the old config" >&2
+  sudo cp "$BAK" "$CF"
+  sudo systemctl reload caddy || echo "reload of the restored Caddyfile failed too: check 'journalctl -u caddy'" >&2
+  exit 1
 fi
 REMOTE
 }

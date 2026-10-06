@@ -16,7 +16,7 @@ const VERBOSE = { task: 'transcribe', language: 'en', duration: 9.04, text: ' He
 
 /** A fake Infomaniak AI Tools: async submit + polling, scripted per test. */
 async function withProvider(script, body) {
-  const seen = { submits: [], polls: 0, rawBody: Buffer.alloc(0) }
+  const seen = { submits: [], polls: 0, rawBody: Buffer.alloc(0), active: 0, maxConcurrentSubmits: 0 }
   const state = { submit: { status: 200, body: { batch_id: 'b1' } }, results: [{ status: 'success', data: VERBOSE }], delayMs: 0 }
   Object.assign(state, script)
   const server = http.createServer(async (req, res) => {
@@ -29,7 +29,10 @@ async function withProvider(script, body) {
     }
     if (req.method === 'POST' && req.url === `/1/ai/${PRODUCT}/openai/audio/transcriptions`) {
       seen.submits.push({ auth: req.headers.authorization, contentType: req.headers['content-type'], text: buf.toString('latin1'), size: buf.length })
+      seen.active += 1
+      seen.maxConcurrentSubmits = Math.max(seen.maxConcurrentSubmits, seen.active)
       if (state.delayMs) await new Promise((r) => setTimeout(r, state.delayMs))
+      seen.active -= 1
       return json(state.submit.status, state.submit.body)
     }
     if (req.method === 'GET' && req.url === `/1/ai/${PRODUCT}/results/b1`) {
@@ -39,6 +42,7 @@ async function withProvider(script, body) {
       return typeof r === 'number' ? json(r, { result: 'error', error: { code: 'internal', description: 'RAW PROVIDER BODY MUST NOT LEAK' } }) : json(200, r)
     }
     if (req.method === 'GET' && req.url === '/dl/b1') return json(200, VERBOSE)
+    if (req.method === 'GET' && req.url === '/dl/hang') return // never answers
     json(404, {})
   })
   await new Promise((resolve) => server.listen(STUB, '127.0.0.1', resolve))
@@ -152,21 +156,126 @@ test('provider failures: submit 500, failed job, unusable body: 502 provider_err
   }
 })
 
-test('provider that never finishes: 504 provider_timeout after the deadline, refunded', async () => {
+test('an accepted job that never finishes: 504 provider_timeout, the charge stays and today\'s budget closes (its cost is unknown)', async () => {
   await withProvider({ results: [{ status: 'processing' }] }, async ({ seen }) => {
-    await withServer(P, { ...base, transcribeTimeoutMs: 300 }, async () => {
+    await withServer(P, { ...base, transcribeTimeoutMs: 300 }, async ({ lines }) => {
       const t0 = Date.now()
       const r = await transcribe(hdr())
       assert.equal(r.status, 504)
       assert.equal(r.json.error, 'provider_timeout')
       assert.ok(Date.now() - t0 < 2000)
       assert.ok(seen.polls >= 2)
-      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0)
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 60) // the provider may still bill it: no refund
+      const next = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '5' }), Buffer.alloc(1000, 1))
+      assert.equal(next.status, 429)
+      assert.equal(next.json.error, 'busy_today')
+      assert.equal(seen.submits.length, 1)
+      assert.ok(lines.some((l) => l === 'transcribe provider_timeout accepted=true'))
     })
   })
   await withProvider({ delayMs: 600 }, async () => {
     await withServer(P, { ...base, transcribeTimeoutMs: 200 }, async () => {
-      assert.equal((await transcribe(hdr())).status, 504) // the submit itself hangs
+      assert.equal((await transcribe(hdr())).status, 504) // the submit itself hangs: no batch id, so refunded
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0)
+    })
+  })
+})
+
+test('a result download that hangs is cut at the deadline (no slot stays taken forever)', async () => {
+  await withProvider({ results: [{ status: 'success', data: null, url: `http://127.0.0.1:${STUB}/dl/hang` }] }, async () => {
+    await withServer(P, { ...base, transcribeTimeoutMs: 400 }, async () => {
+      const t0 = Date.now()
+      const r = await transcribe(hdr())
+      assert.equal(r.status, 504)
+      assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`)
+    })
+  })
+})
+
+test('the phone hangs up after the upload: the provider job is still followed to its end and its real duration is booked', async () => {
+  const long = { status: 'success', data: { ...VERBOSE, duration: 500, segments: [{ start: 0, end: 500, text: 'long' }] } }
+  await withProvider({ results: [{ status: 'processing' }, { status: 'processing' }, { status: 'processing' }, long] }, async ({ seen }) => {
+    await withServer(P, { ...base, transcribePollMs: 100 }, async () => {
+      await new Promise((resolve) => {
+        const req = http.request({ host: '127.0.0.1', port: P, method: 'POST', path: '/transcribe', headers: { Host: 'app.example.test', ...hdr({ 'X-Audio-Seconds': '1' }) } })
+        req.on('error', () => resolve())
+        req.end(Buffer.alloc(6000, 1)) // a tiny body that claims 1 s
+        const poll = setInterval(() => {
+          if (seen.submits.length === 1) {
+            clearInterval(poll)
+            req.destroy() // gone right after the provider took the job
+            resolve()
+          }
+        }, 10)
+      })
+      let used = 0
+      for (let i = 0; i < 60 && used !== 500; i += 1) {
+        await new Promise((r) => setTimeout(r, 50))
+        used = (await usage(P, A)).json.transcription.secondsUsed
+      }
+      assert.equal(used, 500)
+      assert.equal(seen.polls, 4)
+      // the booked duration counts on the daily budget too: 7200 - 500 left, so a 3600 s job still fits, two do not
+      const big = Buffer.alloc(21_000_000, 1) // ~3500 s at 48 kbps
+      assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.1' })).status, 200)
+      const third = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.2' })
+      assert.equal(third.status, 429)
+      assert.equal(third.json.error, 'busy_today')
+    })
+  })
+})
+
+test('a caller that waits for the paid slot longer than TRANSCRIBE_QUEUE_WAIT_MS gets 429 busy and is not charged', async () => {
+  await withProvider({ delayMs: 500 }, async ({ seen }) => {
+    await withServer(P, { ...base, transcribeQueueWaitMs: 100 }, async () => {
+      const first = transcribe(hdr(), AUDIO, { ip: '3.3.3.1' })
+      await new Promise((r) => setTimeout(r, 100))
+      const waited = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '3.3.3.2' })
+      assert.equal(waited.status, 429)
+      assert.equal(waited.json.error, 'busy')
+      assert.equal(Number(waited.headers['retry-after']), 60)
+      assert.equal((await first).status, 200)
+      assert.equal(seen.submits.length, 1)
+      assert.equal((await usage(P, A2, T2)).json.transcription.secondsUsed, 0)
+    })
+  })
+})
+
+test('a phone that leaves while waiting for the paid slot costs nothing: its audio never reaches the provider', async () => {
+  await withProvider({ delayMs: 400 }, async ({ seen }) => {
+    await withServer(P, { ...base, transcribeMaxConcurrent: 1, transcribeQueue: 1 }, async () => {
+      const first = transcribe(hdr())
+      await new Promise((r) => setTimeout(r, 100))
+      await new Promise((resolve) => {
+        const req = http.request({ host: '127.0.0.1', port: P, method: 'POST', path: '/transcribe', headers: { Host: 'app.example.test', 'X-Forwarded-For': '4.4.4.4', ...hdr({ 'X-Account': A2, 'X-Write-Token': T2 }) } })
+        req.on('error', () => resolve())
+        req.end(AUDIO)
+        setTimeout(() => {
+          req.destroy()
+          resolve()
+        }, 100)
+      })
+      assert.equal((await first).status, 200)
+      await new Promise((r) => setTimeout(r, 100))
+      assert.equal(seen.submits.length, 1)
+      assert.equal((await usage(P, A2, T2)).json.transcription.secondsUsed, 0)
+    })
+  })
+})
+
+test('one client holds at most one audio upload: a second stalled upload from the same network is 429 busy, another network proceeds', async () => {
+  await withProvider({}, async () => {
+    await withServer(P, { ...base, transcribeQueue: 5, uploadIdleMs: 1500 }, async () => {
+      const stalled = http.request({ host: '127.0.0.1', port: P, method: 'POST', path: '/transcribe', headers: { Host: 'app.example.test', 'X-Forwarded-For': '2001:db8:1:2::1', 'Transfer-Encoding': 'chunked', ...hdr() } })
+      stalled.on('error', () => undefined)
+      stalled.write('first bytes, then silence')
+      await new Promise((r) => setTimeout(r, 100))
+      const same = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '2001:db8:1:2::77' }) // same /64
+      assert.equal(same.status, 429)
+      assert.equal(same.json.error, 'busy')
+      assert.ok(Number(same.headers['retry-after']) > 0)
+      assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '2001:db8:9:9::1' })).status, 200)
+      stalled.destroy()
     })
   })
 })
@@ -289,14 +398,28 @@ test('wrong token on a claimed account is 403 and the provider is never called; 
   })
 })
 
-test('too many in flight: 429 busy while the provider is slow', async () => {
-  await withProvider({ delayMs: 400 }, async () => {
-    await withServer(P, { ...base, transcribeMaxConcurrent: 1 }, async () => {
-      const first = transcribe(hdr())
+test('one paid job at a time by default: the next caller waits in a short queue, beyond it 429 busy before any audio is read', async () => {
+  await withProvider({ delayMs: 400 }, async ({ seen }) => {
+    await withServer(P, base, async () => {
+      const first = transcribe(hdr(), AUDIO, { ip: '3.3.3.1' })
       await new Promise((r) => setTimeout(r, 100))
-      const second = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }))
-      assert.equal(second.status, 429)
-      assert.equal(second.json.error, 'busy')
+      const queued = transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '3.3.3.2' })
+      const queued2 = transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '3.3.3.3' })
+      await new Promise((r) => setTimeout(r, 100))
+      const over = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '3.3.3.4' })
+      assert.equal(over.status, 429)
+      assert.equal(over.json.error, 'busy')
+      assert.ok(Number(over.headers['retry-after']) > 0)
+      assert.deepEqual([(await first).status, (await queued).status, (await queued2).status], [200, 200, 200])
+      assert.equal(seen.submits.length, 3)
+      assert.ok(seen.maxConcurrentSubmits <= 1, `provider saw ${seen.maxConcurrentSubmits} jobs at once`)
+    })
+  })
+  await withProvider({ delayMs: 400 }, async () => {
+    await withServer(P, { ...base, transcribeQueue: 0 }, async () => {
+      const first = transcribe(hdr(), AUDIO, { ip: '3.3.3.1' })
+      await new Promise((r) => setTimeout(r, 100))
+      assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '3.3.3.2' })).status, 429)
       assert.equal((await first).status, 200)
     })
   })

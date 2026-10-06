@@ -7,7 +7,7 @@
 
 import fsp from 'node:fs/promises'
 import { CapExceeded, jsonError, readSmallBody, refuse, sendJson, tooManyRequests } from './http_util.mjs'
-import { createWindowLimiter } from './limits.mjs'
+import { createWindowLimiter, ipKey } from './limits.mjs'
 
 const MAX_BODY_BYTES = 16384
 const KINDS = Object.freeze(['feedback', 'pricing', 'bug'])
@@ -75,12 +75,12 @@ export function createFeedback({ cfg, clientOf, withLock }) {
     if (origin === null) return refuse(req, res, 403, 'forbidden_origin')
     const cors = corsHeaders(origin)
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { 'Cache-Control': 'no-store', ...cors })
+      res.writeHead(204, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...cors })
       res.end()
       return 204
     }
     if (!cfg.feedbackFile) return jsonError(res, 503, 'not_configured', {}, cors)
-    const hit = limiter.hit(clientOf(req))
+    const hit = limiter.hit(ipKey(clientOf(req)))
     if (hit.limited) return tooManyRequests(res, 'rate_limited', hit.retryAfter, cors)
     if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) {
       return refuse(req, res, 415, 'unsupported_media', {}, cors)

@@ -51,7 +51,7 @@ import { loadConfig } from './config.mjs'
 import { createFeedback } from './feedback.mjs'
 import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
-import { etagMatches, jsonError, sendJson, sha256Hex } from './http_util.mjs'
+import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
@@ -282,13 +282,18 @@ export async function startServer(options = {}) {
     }
     const pathname = (req.url ?? '').split('?')[0]
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
+    // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
+    const jsonRoute = longRoute || pathname === '/feedback'
+    const slowDown = () => {
+      const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
+      if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
+      send(res, 429, 'slow down', { 'Retry-After': String(retryAfter) })
+      return 429
+    }
     if (!longRoute) armDeadline(req, res, cfg.shortRequestMs)
     if (pathname === '/feedback' && (req.method === 'POST' || req.method === 'OPTIONS')) {
       // The one cross-origin route: its own exact-match Origin allowlist (feedback.mjs), checked INSTEAD of the same-host guard below.
-      if (limited(clientOf(req))) {
-        send(res, 429, 'slow down', { 'Retry-After': String(Math.ceil(cfg.rateWindowMs / 1000)) })
-        return 429
-      }
+      if (limited(clientOf(req))) return slowDown()
       return feedback.handle(req, res)
     }
     const origin = req.headers.origin
@@ -301,14 +306,12 @@ export async function startServer(options = {}) {
         originHost = ''
       }
       if (!cfg.allowedHosts.includes(originHost)) {
+        if (jsonRoute) return jsonError(res, 403, 'forbidden_origin')
         send(res, 403, 'forbidden origin')
         return 403
       }
     }
-    if (limited(clientOf(req))) {
-      send(res, 429, 'slow down', { 'Retry-After': String(Math.ceil(cfg.rateWindowMs / 1000)) })
-      return 429
-    }
+    if (limited(clientOf(req))) return slowDown()
     // /backup/health is the same probe as seen through the same-origin proxy
     // (the app hides its backup card unless this answers "ok").
     if ((pathname === '/health' || pathname === '/backup/health') && req.method === 'GET') {

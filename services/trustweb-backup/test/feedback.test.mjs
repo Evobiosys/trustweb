@@ -196,3 +196,22 @@ test('an existing feedback file with loose permissions is tightened to 0600 on t
     assert.equal((await fs.stat(file)).mode & 0o777, 0o600)
   })
 })
+
+test('review: the reader script never sends a stored control character to the terminal (ANSI/OSC escapes, CR, C1, bidi)', async () => {
+  const { execFile } = await import('node:child_process')
+  const { fileURLToPath } = await import('node:url')
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../scripts/trustweb_feedback_read.sh')
+  await withServer(P, fb(), async ({ dir }) => {
+    const hostile = 'clear\u001b[2J title\u001b]0;pwned\u0007 cr\rover c1\u009b31m bidi\u202Eevil\nsecond line'
+    assert.equal((await post({ text: hostile, contact: 'me\u001b[31m', page: '/x\u2028y' })).status, 204)
+    const out = await new Promise((resolve, reject) =>
+      execFile('bash', [script, '--file', path.join(dir, 'feedback.jsonl')], (err, stdout) => (err ? reject(err) : resolve(stdout))),
+    )
+    const unsafe = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/
+    assert.equal(unsafe.test(out), false, JSON.stringify(out))
+    assert.ok(out.includes('clear\\u{001b}[2J'))
+    assert.ok(out.includes('bidi\\u{202e}evil\nsecond line')) // newlines inside the text stay readable
+    assert.ok(out.includes('contact: me\\u{001b}[31m'))
+    assert.ok(out.includes('1 entries'))
+  })
+})

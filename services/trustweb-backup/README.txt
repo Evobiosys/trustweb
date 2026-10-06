@@ -8,8 +8,12 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   or a per-recording read capability. 90 days untouched = removable by the sweeper (sweep_hosted.mjs).
   POST /transcribe  audio in, {text, segments} out; forwards to Infomaniak AI Tools Whisper (async batch API, polled), stores nothing.
                   503 not_configured until the key is placed (scripts/trustweb_transcribe_switch_on.sh).
+                  Money: ONE paid job at a time (short queue), booked before the call, followed to its end even when the
+                  phone leaves, the provider's duration booked afterwards; a job past the deadline closes the day's budget.
+                  Bytes do not bound duration (Opus DTX), so the residual is one crafted job per UTC day (see transcribe.mjs).
   POST /feedback  website feedback from https://idea2.site / https://app.idea2.site only (the one CORS route), one JSON line
-                  per entry in a 0600 file (read with scripts/trustweb_feedback_read.sh).
+                  per entry in a 0600 file (read with scripts/trustweb_feedback_read.sh, which shows control and
+                  bidi characters as \u{XXXX} so typed-in escapes never reach the terminal).
 
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
@@ -23,9 +27,10 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over seven files (71 tests: the 17
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over eight files (86 tests: the 17
 original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake provider, feedback
-and CORS, ETag/late packs). Fixed test ports 8971-8975, one per file. Nothing is left running.
+and CORS, ETag/late packs, the in-memory limiters). Fixed test ports 8971-8975, one per file. Nothing is left running.
+Per-client limits count IPv4 addresses as they are and IPv6 per /64 (limits.mjs ipKey); /backup keeps its old per-address limiter.
 
 DEPLOY (questhub)
   scripts/deploy_trustweb_backup.sh --staging [--keep] [--dry-run]    second unit trustweb-backup-staging on 127.0.0.1:8970, smoke test, then stopped

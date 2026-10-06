@@ -14,6 +14,7 @@
 //   ACCOUNT_CREATES_PER_IP_DAY       5            new accounts (first writes) per IP and UTC day
 //   REC_GETS_PER_HOUR                30           downloads per recording per hour
 //   MAX_CONCURRENT_UPLOADS           6
+//   HOSTED_UPLOADS_PER_IP            2            uploads in flight per client (IPv6: per /64), so one client cannot hold every slot
 //   UPLOAD_IDLE_MS                   30000        abort an upload that sends nothing for this long
 //   LONG_REQUEST_MS                  900000       request deadline of /hosted and /transcribe (the short routes keep SHORT_REQUEST_MS)
 //   SHORT_REQUEST_MS                 30000
@@ -24,7 +25,10 @@
 //   TRANSCRIBE_TIMEOUT_MS            600000       submit + polling, in total
 //   TRANSCRIBE_DAILY_SECONDS         7200         everyone together, per UTC day
 //   TRANSCRIBE_IP_DAILY_SECONDS      3600         per IP and UTC day
-//   TRANSCRIBE_MAX_CONCURRENT        2
+//   TRANSCRIBE_MAX_CONCURRENT        1            paid provider jobs at once (a job runs to its end even when the phone goes away)
+//   TRANSCRIBE_QUEUE                 2            callers that may wait for that slot (more: 429 busy before any audio is read)
+//   TRANSCRIBE_QUEUE_WAIT_MS         240000       longest wait for the slot (then 429 busy): wait + job stay inside Caddy's 15 min
+//   TRANSCRIBE_UPLOADS_PER_IP        1            audio uploads in flight per client (IPv6: per /64)
 //   TRANSCRIBE_MAX_BYTES             21600000     1 h at 48 kbps
 //   FEEDBACK_FILE                    path of the 0600 JSON-lines file. Unset = feedback off.
 //   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site
@@ -63,6 +67,7 @@ export function loadConfig(options = {}) {
     accountCreatesPerIpDay: pick(options, 'accountCreatesPerIpDay', 'ACCOUNT_CREATES_PER_IP_DAY', 5),
     recGetsPerHour: pick(options, 'recGetsPerHour', 'REC_GETS_PER_HOUR', 30),
     maxConcurrentUploads: pick(options, 'maxConcurrentUploads', 'MAX_CONCURRENT_UPLOADS', 6),
+    hostedUploadsPerIp: pick(options, 'hostedUploadsPerIp', 'HOSTED_UPLOADS_PER_IP', 2),
     uploadIdleMs: pick(options, 'uploadIdleMs', 'UPLOAD_IDLE_MS', 30000),
 
     transcribeUrl,
@@ -74,7 +79,10 @@ export function loadConfig(options = {}) {
     transcribeTimeoutMs: pick(options, 'transcribeTimeoutMs', 'TRANSCRIBE_TIMEOUT_MS', 600000),
     transcribeDailySeconds: pick(options, 'transcribeDailySeconds', 'TRANSCRIBE_DAILY_SECONDS', 7200),
     transcribeIpDailySeconds: pick(options, 'transcribeIpDailySeconds', 'TRANSCRIBE_IP_DAILY_SECONDS', 3600),
-    transcribeMaxConcurrent: pick(options, 'transcribeMaxConcurrent', 'TRANSCRIBE_MAX_CONCURRENT', 2),
+    transcribeMaxConcurrent: pick(options, 'transcribeMaxConcurrent', 'TRANSCRIBE_MAX_CONCURRENT', 1),
+    transcribeQueue: pick(options, 'transcribeQueue', 'TRANSCRIBE_QUEUE', 2),
+    transcribeQueueWaitMs: pick(options, 'transcribeQueueWaitMs', 'TRANSCRIBE_QUEUE_WAIT_MS', 240000),
+    transcribeUploadsPerIp: pick(options, 'transcribeUploadsPerIp', 'TRANSCRIBE_UPLOADS_PER_IP', 1),
     transcribeMaxBytes: pick(options, 'transcribeMaxBytes', 'TRANSCRIBE_MAX_BYTES', 21_600_000),
 
     feedbackFile,

@@ -20,13 +20,13 @@ read -r -s -p "Infomaniak API token (hidden, not stored in history): " key </dev
 echo
 [ -n "$key" ] || { echo "empty token, nothing changed" >&2; exit 1; }
 case "$key" in *[[:space:]\'\"\\]*) echo "the token holds characters that do not belong in a token, nothing changed" >&2; exit 1 ;; esac
-tmp="$(mktemp)"
 umask 077
-printf 'TRANSCRIBE_URL=https://api.infomaniak.com/1/ai/%s/openai/audio/transcriptions\nTRANSCRIBE_MODEL=whisper\nTRANSCRIBE_KEY=%s\n' "$pid" "$key" > "$tmp"
-unset key
 [ ! -e "$envfile" ] || sudo cp -p "$envfile" "$envfile.bak.$(date +%Y%m%d_%H%M%S)"
-sudo install -m 0600 -o root -g root "$tmp" "$envfile"
-rm -f "$tmp"
+# The token goes from the shell (printf is a builtin: no argument list) through a pipe straight into the root-only
+# file: it never lands in a temp file, in /proc/<pid>/cmdline or in history.
+printf 'TRANSCRIBE_URL=https://api.infomaniak.com/1/ai/%s/openai/audio/transcriptions\nTRANSCRIBE_MODEL=whisper\nTRANSCRIBE_KEY=%s\n' "$pid" "$key" |
+  sudo sh -c 'umask 077 && cat > "$1.new" && chown root:root "$1.new" && chmod 0600 "$1.new" && mv -f "$1.new" "$1"' _ "$envfile"
+unset key
 echo "wrote $envfile (0600 root)"
 sudo systemctl restart "$unit"
 sleep 1
