@@ -56,6 +56,7 @@ import { createPastMeetings, whenLabel } from './past_meetings_view'
 import { createSwissContext } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
+import { importGroup } from './import_view'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
@@ -3039,6 +3040,7 @@ function settingsSheet(): void {
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
+    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     notificationsCard(s),
     solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
     solo ? null : el('button', {
