@@ -159,6 +159,7 @@ async function main() {
     ok('Record has the Tana-style circle and clock, discard and send (the circle itself records)',
       await page.locator('.rec-circle').count() === 1 && await page.locator('.memo-controls .round').count() === 2)
     ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting' }).isVisible() && await page.locator('.meet-btn svg circle').count() === 3)
+    const meetSlot = await page.locator('.meet-btn').boundingBox()
     const qrOnRecord = await page.locator('.status-pill.qr').boundingBox()
     ok('the QR sits exactly where it sits on Web (muscle memory)', qrOnRecord !== null && Math.abs(qrOnRecord.x - qrOnWeb.x) < 1 && Math.abs(qrOnRecord.y - qrOnWeb.y) < 1, JSON.stringify([qrOnWeb, qrOnRecord]))
     ok('no consent wording on solo Record', !/agreed to/.test(await page.locator('.screen').innerText()))
@@ -204,6 +205,18 @@ async function main() {
     // Meeting view
     await page.getByRole('button', { name: 'Meeting' }).click()
     await page.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    // "Just me" (owner 2026-10-06): one person with sound arcs, in the slot where Record shows Meeting
+    const soloSlot = await page.locator('.solo-btn').boundingBox()
+    ok('Meeting shows "Just me" where Record shows the Meeting button',
+      await page.getByRole('button', { name: 'Just me' }).isVisible() && await page.locator('.solo-btn svg circle').count() === 1
+      && soloSlot !== null && meetSlot !== null && Math.abs(soloSlot.x - meetSlot.x) < 2 && Math.abs(soloSlot.y - meetSlot.y) < 2,
+      JSON.stringify([meetSlot, soloSlot]))
+    ok('the QR stays put on Meeting', await page.locator('.status-pill.qr').isVisible())
+    await page.getByRole('button', { name: 'Just me' }).click()
+    await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
+    ok('"Just me" switches back to recording by yourself', true)
+    await page.getByRole('button', { name: 'Meeting' }).click()
+    await page.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
     await page.getByLabel('Who are you meeting?').fill('Maya')
     await page.getByLabel('Where are you meeting?').fill('coffee at the Hub')
     ok('meeting shows "Maya agreed to recording the meeting."', await page.getByText('Maya agreed to recording the meeting.').isVisible())
@@ -221,7 +234,18 @@ async function main() {
     await page.getByRole('button', { name: 'Start recording' }).click()
     await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
     ok('a live meeting says "Recording meeting" and keeps the QR', /Recording/.test(await page.locator('.meeting-clock').innerText()) && await page.locator('.status-pill.qr').isVisible())
+    await page.getByRole('button', { name: 'Just me' }).click()
+    await page.waitForTimeout(200)
+    ok('"Just me" is refused while a take is live (same rule as the back arrow)',
+      await page.getByRole('heading', { name: 'Meeting' }).isVisible() && await page.getByText('Stop or send the recording first.').isVisible())
     await page.waitForTimeout(1500)
+    // a pause leaves a divider in the transcript (from TalkWeave): when, then for how long
+    await page.getByRole('button', { name: 'Pause' }).click()
+    ok('a pause leaves a divider in the transcript', /^Paused at 00:00:0\d$/.test((await page.locator('.tr-pause').innerText()).trim()), await page.locator('.tr-list').innerText())
+    await page.waitForTimeout(1200)
+    await page.getByRole('button', { name: 'Resume' }).click()
+    ok('after resuming the divider says for how long', /^Paused at 00:00:0\d for [12] s$/.test((await page.locator('.tr-pause').innerText()).trim()), await page.locator('.tr-pause').innerText())
+    await page.waitForTimeout(600)
     await shot(page, 'meeting_live')
     await page.getByRole('button', { name: 'End meeting' }).click()
     await page.getByRole('heading', { name: 'Meeting ended' }).waitFor({ timeout: 10_000 })
@@ -332,6 +356,71 @@ async function main() {
     ok('a take ended by the phone says so and is kept', /Recorded/.test(await p2.locator('.rec-status').innerText()))
     ok('the circle is no longer live, the QR is there', await p2.locator('.rec-circle.live').count() === 0 && await p2.locator('.status-pill.qr').isVisible())
     await ctx2.close()
+
+    // Settings > Recording (owner 2026-10-06): transcription choice and what the Record tab starts with
+    const ctx3 = await browser.newContext({ viewport: { width: 430, height: 900 }, permissions: ['microphone'] })
+    await ctx3.addInitScript(noSpeech)
+    const p3 = await ctx3.newPage()
+    const loopback = []
+    p3.on('request', (r) => { if (/127\.0\.0\.1:8990|\/talkweave\//.test(r.url())) loopback.push(r.url()) })
+    p3.on('pageerror', (e) => { errors.push(e.message); console.log('  [pageerror]', e.message) })
+    await p3.goto(base)
+    await p3.getByLabel('Your first name').fill('Jakob')
+    await p3.getByRole('button', { name: 'Start on this phone' }).click()
+    await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    // an older record that opted into "Use TalkWeave on this computer" keeps it
+    await p3.evaluate(() => {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        const v = JSON.parse(localStorage.getItem(k) ?? 'null')
+        if (v && v.v === 1 && v.me) { v.talkWeaveLocal = true; delete v.transcription; localStorage.setItem(k, JSON.stringify(v)) }
+      }
+    })
+    await p3.reload()
+    await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    const openSettings = async () => { await p3.getByRole('button', { name: 'More' }).click(); await p3.locator('.menu-item', { hasText: 'Settings' }).click() }
+    await openSettings()
+    const onLabel = async (attr) => (await p3.locator(`.radio.on[${attr}]`).allInnerTexts()).map((t) => t.split('\n')[0].trim())
+    ok('Settings > Recording: an old TalkWeave opt-in reads as "TalkWeave on this computer"', JSON.stringify(await onLabel('data-transcription')) === '["TalkWeave on this computer"]', JSON.stringify(await onLabel('data-transcription')))
+    ok('the Record tab starts with "Just me" by default', JSON.stringify(await onLabel('data-default-recording')) === '["Just me"]')
+    await p3.locator('.radio[data-transcription="later"]').scrollIntoViewIfNeeded()
+    if (SHOTS) await p3.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_settings_recording.png`) })
+    await p3.locator('.radio[data-transcription="later"]').click()
+    await p3.locator('.radio[data-default-recording="meeting"]').click()
+    const stored = await p3.evaluate(() => {
+      for (let i = 0; i < localStorage.length; i++) {
+        const v = JSON.parse(localStorage.getItem(localStorage.key(i)) ?? 'null')
+        if (v && v.v === 1 && v.me) return { t: v.transcription, d: v.defaultRecording, old: 'talkWeaveLocal' in v }
+      }
+      return null
+    })
+    ok('choosing replaces the old switch for good', JSON.stringify(stored) === JSON.stringify({ t: 'later', d: 'meeting', old: false }), JSON.stringify(stored))
+    await p3.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    // a note started from a person stays a solo note, whatever the Record tab starts with
+    await p3.locator('.rings-wrap').click({ position: { x: 176 + 114, y: 176 } })
+    await p3.getByPlaceholder('Name').first().fill('Lena')
+    await p3.getByRole('button', { name: 'Add to my web' }).click()
+    await p3.locator('.node', { hasText: 'Lena' }).click()
+    await p3.getByRole('button', { name: 'Add a note' }).click()
+    await p3.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
+    ok('a note started from a person opens solo Record even with "A meeting"', true)
+    p3.on('dialog', (d) => void d.accept())
+    await p3.getByRole('button', { name: 'Discard' }).click()
+    await p3.getByRole('button', { name: 'Web', exact: true }).click()
+    await p3.locator('nav.tabs .tab-record').click()
+    await p3.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    ok('with "A meeting" the Record tab opens the Meeting view', true)
+    await p3.getByLabel('Who are you meeting?').fill('Ben')
+    await p3.locator('#consent').check()
+    await p3.getByRole('button', { name: 'Start recording' }).click()
+    await p3.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
+    await p3.waitForTimeout(500)
+    ok('"Transcribe later" says so and never reaches for TalkWeave',
+      (await p3.locator('.tr-engine').innerText()).trim() === 'No transcriber here: the recording is transcribed later on your computer' && loopback.length === 0,
+      JSON.stringify([await p3.locator('.tr-engine').innerText(), loopback]))
+    if (SHOTS) await p3.screenshot({ path: path.join(SHOTS, `${String(++n).padStart(2, '0')}_meeting_default.png`) })
+    await ctx3.close()
+    ok('no page errors in the settings run', errors.length === 0, JSON.stringify(errors))
   } finally {
     await browser?.close()
     viteProc.kill()

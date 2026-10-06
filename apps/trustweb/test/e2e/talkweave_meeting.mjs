@@ -26,7 +26,7 @@
  *                     on-device check then crashes headless Chromium.
  *   TW_LABEL_ONLY    1: stop after the Start tap and only REPORT which engine the
  *                     page picked (and the console), without asserting it.
- *   TW_DIRECT         0: leave Settings > "Use TalkWeave on this computer" off
+ *   TW_DIRECT         0: leave Settings > Recording > "Transcribed by" on Automatic (no loopback probe)
  *                     (default: switch it on, so the direct path is tried).
  *   TW_BROWSER        chromium (default), webkit or firefox. Only Chromium
  *                     plays TW_SPEECH_WAV as the microphone; elsewhere only the
@@ -84,11 +84,12 @@ async function main() {
     if (process.env.TW_DIRECT !== '0') {
       await page.getByRole('button', { name: 'More' }).click()
       await page.locator('.menu-item', { hasText: 'Settings' }).click()
-      await page.locator('.radio', { hasText: 'Use TalkWeave on this computer' }).click()
+      await page.locator('.radio[data-transcription="talkweave"]').click()
       await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     }
     await page.locator('nav.tabs .tab-record').click()
-    await page.getByRole('button', { name: 'Meeting' }).click()
+    // exact: the closed Settings sheet stays in the DOM, and its radios mention meetings too
+    await page.getByRole('button', { name: 'Meeting', exact: true }).click()
     await page.getByLabel('Who are you meeting?').fill('Maya')
     await page.locator('#consent').check()
     await page.locator('.speakers .chip', { hasText: 'Speaker 2' }).click()

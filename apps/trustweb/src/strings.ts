@@ -4,7 +4,7 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, LogOutcome, QueryStyle, Ring, Tag } from './model'
+import { Audience, Channel, DefaultRecording, LogOutcome, QueryStyle, Ring, Tag, TranscriptionChoice } from './model'
 
 export const S = {
   appName: 'TrustWeb',
@@ -142,6 +142,8 @@ export const S = {
   recTitle: 'Record',
   recMeeting: 'Meeting',
   recSwitchWhileLive: 'Stop or send the recording first.',
+  /** The Meeting view's way back to recording by yourself (owner 2026-10-06). */
+  recJustMe: 'Just me',
   recPause: 'Pause',
   recResume: 'Resume',
   recSend: 'Send',
@@ -231,6 +233,8 @@ export const S = {
 
   trSave: 'Save audio file',
   trEmpty: 'No live transcript yet.',
+  /** The divider a pause leaves in the transcript (from TalkWeave): when, and for how long once resumed. */
+  trPause: (at: string, forSec: number | null) => forSec === null ? `Paused at ${at}` : `Paused at ${at} for ${forSec < 60 ? `${forSec} s` : `${Math.round(forSec / 60)} min`}`,
 
   meetTitle: 'Meet',
   meetTitleWith: (name: string) => `Meet ${name}`,
@@ -353,9 +357,30 @@ export const S = {
     [QueryStyle.Search]: 'A magnifying glass. Curate sits top right as a list.',
   } as Record<QueryStyle, string>,
 
-  setTalkWeave: 'Meeting transcription',
-  setTalkWeaveLabel: 'Use TalkWeave on this computer',
-  setTalkWeaveHint: 'Live transcripts from TalkWeave running here. Your browser asks once to let this page reach this computer.',
+  // Settings > Recording (owner 2026-10-06): who transcribes, and what the Record tab opens.
+  setRecording: 'Recording',
+  setTranscription: 'Transcribed by',
+  setTranscriptionLabel: {
+    [TranscriptionChoice.Auto]: 'Automatic',
+    [TranscriptionChoice.TalkWeave]: 'TalkWeave on this computer',
+    [TranscriptionChoice.OnDevice]: 'On this device',
+    [TranscriptionChoice.Later]: 'Transcribe later',
+  } as Record<TranscriptionChoice, string>,
+  setTranscriptionHint: {
+    [TranscriptionChoice.Auto]: 'TalkWeave where this site reaches it, else speech on this device, else later. Never asks to reach this computer.',
+    [TranscriptionChoice.TalkWeave]: 'Live transcripts from TalkWeave running here. Your browser asks once to let this page reach this computer. Without it: as Automatic.',
+    [TranscriptionChoice.OnDevice]: 'Only this device listens. Audio never leaves it; where it cannot, the recording is transcribed later.',
+    [TranscriptionChoice.Later]: 'Nothing live. The recording is transcribed later on your computer.',
+  } as Record<TranscriptionChoice, string>,
+  setDefaultRecording: 'The Record tab starts with',
+  setDefaultRecordingLabel: {
+    [DefaultRecording.Solo]: 'Just me',
+    [DefaultRecording.Meeting]: 'A meeting',
+  } as Record<DefaultRecording, string>,
+  setDefaultRecordingHint: {
+    [DefaultRecording.Solo]: 'A voice memo. The meeting button sits top right.',
+    [DefaultRecording.Meeting]: 'Who, where and their yes. The "Just me" button sits top right.',
+  } as Record<DefaultRecording, string>,
 
   queryTitle: 'Ask your web',
   queryClose: 'Close',

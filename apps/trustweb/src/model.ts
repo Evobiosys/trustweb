@@ -196,11 +196,15 @@ export interface AppState {
   /** My own messenger handles (Meet shows my Signal / Matrix code). This phone only. */
   myChannels?: Partial<Record<Channel, string>>
   /**
-   * Opt-in: the live site may reach TalkWeave on this computer
-   * (http://127.0.0.1:8990) for meeting transcription. Absent: off, so no
-   * visitor gets the browser's local-network prompt unasked (2026-10-05).
+   * Superseded by `transcription` (2026-10-06); still read from records saved
+   * before it: true there means TranscriptionChoice.TalkWeave. Settings drops
+   * it the first time a transcription choice is made.
    */
   talkWeaveLocal?: boolean
+  /** Settings > Recording: who transcribes. Absent: see transcriptionChoice() (Auto, or TalkWeave for an old opt-in). */
+  transcription?: TranscriptionChoice
+  /** Settings > Recording: what the Record tab opens for a fresh draft. Absent: DefaultRecording.Solo. */
+  defaultRecording?: DefaultRecording
   /**
    * Demo content added on request (imaginary friends and things, 2026-10-05):
    * the ids it added, so "Remove demo content" takes exactly those away again.
@@ -245,6 +249,66 @@ export enum AboutKind {
 export enum QueryStyle {
   Call = 'call',
   Search = 'search',
+}
+
+/** Settings > Recording: who turns a recording into text (owner 2026-10-06). */
+export enum TranscriptionChoice {
+  /** TalkWeave behind this site, else speech on this device, else later. Never reaches into this computer unasked. */
+  Auto = 'auto',
+  /** TalkWeave on this computer (the browser asks once to let this page reach it), else as Auto. */
+  TalkWeave = 'talkweave',
+  /** Only the device's own speech recognition; audio never leaves the phone. */
+  OnDevice = 'on-device',
+  /** Nothing live: the recording is transcribed later on the computer. */
+  Later = 'later',
+}
+
+export const TRANSCRIPTION_CHOICES: readonly TranscriptionChoice[] = [
+  TranscriptionChoice.Auto, TranscriptionChoice.TalkWeave, TranscriptionChoice.OnDevice, TranscriptionChoice.Later,
+]
+
+/** Settings > Recording: what the Record tab opens for a fresh draft (owner 2026-10-06). */
+export enum DefaultRecording {
+  /** "Just me": a voice memo. */
+  Solo = 'solo',
+  /** "A meeting": who/where, consent, speakers. */
+  Meeting = 'meeting',
+}
+
+export const DEFAULT_RECORDINGS: readonly DefaultRecording[] = [DefaultRecording.Solo, DefaultRecording.Meeting]
+
+/**
+ * The transcription choice in force. A record saved before the choice existed
+ * keeps what it had: the old opt-in "Use TalkWeave on this computer" reads as
+ * TalkWeave, everything else as Auto.
+ */
+export function transcriptionChoice(s: Pick<AppState, 'transcription' | 'talkWeaveLocal'>): TranscriptionChoice {
+  if (s.transcription && TRANSCRIPTION_CHOICES.includes(s.transcription)) return s.transcription
+  return s.talkWeaveLocal === true ? TranscriptionChoice.TalkWeave : TranscriptionChoice.Auto
+}
+
+/** What the record view starts from; anything unknown is Solo. */
+export function defaultRecording(s: Pick<AppState, 'defaultRecording'>): DefaultRecording {
+  return s.defaultRecording === DefaultRecording.Meeting ? DefaultRecording.Meeting : DefaultRecording.Solo
+}
+
+/** Which engines a recording may try, in order: TalkWeave (same-origin, then this computer), then on-device. */
+export interface EnginePlan {
+  /** TalkWeave behind this site (the dev server's /talkweave proxy). */
+  sameOrigin: boolean
+  /** TalkWeave on this computer (127.0.0.1): makes Chromium ask for local network access, so opt-in only. */
+  direct: boolean
+  /** The device's own speech recognition. */
+  onDevice: boolean
+}
+
+export function enginePlan(choice: TranscriptionChoice): EnginePlan {
+  switch (choice) {
+    case TranscriptionChoice.Auto: return { sameOrigin: true, direct: false, onDevice: true }
+    case TranscriptionChoice.TalkWeave: return { sameOrigin: true, direct: true, onDevice: true }
+    case TranscriptionChoice.OnDevice: return { sameOrigin: false, direct: false, onDevice: true }
+    case TranscriptionChoice.Later: return { sameOrigin: false, direct: false, onDevice: false }
+  }
 }
 
 /** Does `audience` admit someone I hold in `ring`? */

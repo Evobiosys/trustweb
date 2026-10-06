@@ -32,6 +32,7 @@ import {
   encodeChunk,
 } from './meeting_transcriber_core'
 import { startDictation, voiceSupport, VoiceSupport } from './speech'
+import type { EnginePlan } from './model'
 
 export { TranscriberEngine, TranscriberStatus }
 export type { Segment }
@@ -76,21 +77,22 @@ const SCRIPT_PROCESSOR_BUFFER = 4096
 const browserFetch: FetchLike = (url, init) => fetch(url, init as RequestInit) as unknown as ReturnType<FetchLike>
 
 /**
- * TalkWeave (same-origin, else direct) if up with an ASR engine, else
- * on-device, else nothing. The direct loopback probe only runs when the
- * person opted in (Settings), because it makes Chromium ask for local
- * network access.
+ * The first engine the plan (Settings > Recording) allows that is up:
+ * TalkWeave (same-origin, else direct) with an ASR engine, else on-device,
+ * else nothing. The direct loopback probe only runs when the person chose
+ * TalkWeave on this computer, because it makes Chromium ask for local
+ * network access; "Transcribe later" probes nothing at all.
  */
-export async function detectEngine(opts: { direct: boolean }): Promise<TranscriberEngine> {
-  const candidates = opts.direct ? TALKWEAVE_CANDIDATES : TALKWEAVE_CANDIDATES.slice(0, 1)
-  const found = typeof fetch === 'function' ? await discoverTalkWeave(candidates, browserFetch) : null
+export async function detectEngine(plan: EnginePlan): Promise<TranscriberEngine> {
+  const candidates = TALKWEAVE_CANDIDATES.filter((c) => c.base === TALKWEAVE_BASE ? plan.sameOrigin : plan.direct)
+  const found = candidates.length && typeof fetch === 'function' ? await discoverTalkWeave(candidates, browserFetch) : null
   if (found !== null) {
     talkWeaveBase = found
     return TranscriberEngine.TalkWeave
   }
   // NeedsDownload counts as unavailable here: installing the on-device model
   // needs a tap, which is the UI's job (speech.ts installVoice).
-  if (await voiceSupport() === VoiceSupport.Ready) return TranscriberEngine.OnDevice
+  if (plan.onDevice && await voiceSupport() === VoiceSupport.Ready) return TranscriberEngine.OnDevice
   return TranscriberEngine.None
 }
 

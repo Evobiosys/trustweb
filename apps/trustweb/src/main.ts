@@ -25,7 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS } from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, enginePlan, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, NoteLine, Person } from './model'
 import { extractLines } from './notes'
@@ -94,6 +94,16 @@ interface Draft {
   about: AboutKind
   /** Lines noted by hand under Record > Advanced; merged after the transcript is mined. */
   extraLines: DraftLine[]
+  /** Where the recording was paused, for the transcript's pause dividers (from TalkWeave, 2026-10-06). */
+  pauses: PauseMark[]
+}
+
+/** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
+interface PauseMark {
+  afterSegments: number
+  atMs: number
+  startedAt: number
+  forMs: number | null
 }
 
 interface Review {
@@ -190,7 +200,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [],
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [],
   }
 }
 
@@ -313,7 +323,7 @@ async function openWalkthrough(): Promise<void> {
   closeBtn.focus()
 }
 
-// Icons: web, inventory and query are this app's own; mic, pause, play, send,
+// Icons: web, inventory, query, meet, solo and call are this app's own; mic, pause, play, send,
 // x, qr, handshake, settings (a cog, never a sun-like icon: owner 2026-10-05),
 // users and info are Lucide icons (lucide.dev, ISC licence).
 const ICONS: Record<string, string> = {
@@ -327,6 +337,8 @@ const ICONS: Record<string, string> = {
   x: '<svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   qr: '<svg viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>',
   meet: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="5" r="2.4"/><circle cx="18.5" cy="5" r="2.4"/><path d="M2 21v-6.5A3.5 3.5 0 0 1 5.5 11a3.5 3.5 0 0 1 2.6 1.2l2.4 2.6"/><path d="M22 21v-6.5a3.5 3.5 0 0 0-3.5-3.5 3.5 3.5 0 0 0-2.6 1.2l-2.4 2.6"/><path d="M9 21v-3.5M15 21v-3.5"/><circle cx="12" cy="15.4" r="1.9" fill="currentColor"/></svg>',
+  // "Just me" (owner 2026-10-06): the Meeting icon's person on its own, three small sound arcs at the mouth.
+  solo: '<svg viewBox="0 0 24 24"><circle cx="8" cy="6" r="2.6"/><path d="M3 21v-6a3.8 3.8 0 0 1 3.8-3.8h2.4A3.8 3.8 0 0 1 13 15v6"/><path d="M8 21v-3.5"/><path d="M13.2 4.7a2 2 0 0 1 0 2.6"/><path d="M16 3a4.6 4.6 0 0 1 0 6"/><path d="M18.8 1.4a7.2 7.2 0 0 1 0 9.2"/></svg>',
   handshake: '<svg viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>',
   users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -378,8 +390,12 @@ function recordScreen(): Screen {
 
 function onRecordTap(): void {
   // The Record tab never wipes a draft in progress (audio, transcript,
-  // who/where); it only starts fresh when nothing is in flight.
-  if (!draftInProgress()) newDraft()
+  // who/where); it only starts fresh when nothing is in flight, and then as
+  // Settings > Recording says: just me, or a meeting (owner 2026-10-06).
+  if (!draftInProgress()) {
+    newDraft()
+    if (state && defaultRecording(state) === DefaultRecording.Meeting) draft.mode = RecordMode.Meeting
+  }
   go(recordScreen())
 }
 
@@ -1356,8 +1372,11 @@ function togglePause(): void {
   if (recorder.paused) {
     recorder.resume()
     transcriber?.resume()
+    const open = draft.pauses[draft.pauses.length - 1]
+    if (open && open.forMs === null) open.forMs = Date.now() - open.startedAt
     void keepScreenOn()
   } else {
+    draft.pauses.push({ afterSegments: draft.segments.length, atMs: totalMs() + recorder.elapsed(), startedAt: Date.now(), forMs: null })
     recorder.pause()
     transcriber?.pause()
     void wakeLock?.release().catch(() => {})
@@ -1530,8 +1549,7 @@ function screenRecord(): Node[] {
       aboutRowView(),
       recAdvancedView(),
       draft.segments.length || transcriber
-        ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' },
-            draft.segments.length ? draft.segments.map(transcriptRow) : [el('p', { class: 'tr-empty' }, [S.trEmpty])])
+        ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(S.trEmpty))
         : null,
     ]),
     el('div', { class: 'memo-controls' }, [
@@ -1562,8 +1580,11 @@ function screenRecord(): Node[] {
 // runs; on a phone, on-device speech or nothing ("transcribed later").
 // ---------------------------------------------------------------------------
 
+/** How close to the bottom still counts as following the live transcript. */
+const PIN_SLACK_PX = 24
+
 async function ensureEngine(): Promise<TranscriberEngine> {
-  engine ??= await detectEngine({ direct: st().talkWeaveLocal === true }).catch(() => TranscriberEngine.None)
+  engine ??= await detectEngine(enginePlan(transcriptionChoice(st()))).catch(() => TranscriberEngine.None)
   return engine
 }
 
@@ -1573,11 +1594,15 @@ function onSegment(seg: Segment): void {
   if (screen !== Screen.Meeting && screen !== Screen.Record) return
   const list = document.getElementById('tr-list')
   if (!list) return
+  // Follow the live line only while the reader is at the bottom (from TalkWeave):
+  // scrolling up to reread is never yanked back down.
+  const scroller = list.closest('.scroll')
+  const pinned = !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < PIN_SLACK_PX
   const row = transcriptRow(seg)
   const old = list.querySelector(`[data-seg="${CSS.escape(seg.id)}"]`)
   if (old) old.replaceWith(row); else list.append(row)
   list.querySelector('.tr-empty')?.remove()
-  row.scrollIntoView({ block: 'nearest' })
+  if (pinned) row.scrollIntoView({ block: 'nearest' })
 }
 
 async function startTranscriber(): Promise<void> {
@@ -1651,6 +1676,22 @@ function endMeetingSheet(): void {
   ])
 }
 
+/** The transcript in order, with a divider wherever the recording was paused. */
+function transcriptRows(empty: string): HTMLElement[] {
+  if (!draft.segments.length && !draft.pauses.length) return [el('p', { class: 'tr-empty' }, [empty])]
+  const rows: HTMLElement[] = []
+  const pauseRow = (p: PauseMark): HTMLElement => el('p', { class: 'tr-pause', role: 'separator' }, [
+    S.trPause(clockLong(p.atMs), p.forMs === null ? null : Math.max(1, Math.round(p.forMs / 1000))),
+  ])
+  let next = 0
+  draft.segments.forEach((seg, i) => {
+    while (next < draft.pauses.length && draft.pauses[next].afterSegments <= i) rows.push(pauseRow(draft.pauses[next++]))
+    rows.push(transcriptRow(seg))
+  })
+  while (next < draft.pauses.length) rows.push(pauseRow(draft.pauses[next++]))
+  return rows
+}
+
 function transcriptRow(seg: Segment): HTMLElement {
   return el('div', { class: 'tr-row' + (seg.final ? '' : ' interim'), 'data-seg': seg.id }, [
     el('span', { class: 'tr-dot', 'aria-hidden': 'true' }),
@@ -1711,11 +1752,12 @@ function screenMeeting(): Node[] {
     class: 'chip' + (speaker === n ? ' on' : ''), 'aria-pressed': String(speaker === n), onclick: () => setSpeaker(n),
   }, [S.speaker(n)])))
 
+  // Back to recording by yourself: the same rule as the back arrow (never while a take is live).
+  const toSolo = (): void => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; recNotice = ''; go(Screen.Record) }
+  // Icon only, in the slot where Record shows the Meeting button (owner 2026-10-06); the QR stays put.
+  const justMe = iconButton('solo', S.recJustMe, toSolo, 'solo-btn')
   return [
-    header(S.meetingTitle, {
-      back: () => { if (live) { toast(S.recSwitchWhileLive); return } draft.mode = RecordMode.Solo; go(Screen.Record) },
-      pill: false,
-    }),
+    header(S.meetingTitle, { back: toSolo, after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
@@ -1732,8 +1774,7 @@ function screenMeeting(): Node[] {
       el('p', { class: 'tr-engine' }, [engineLabel()]),
       recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
       speakers,
-      el('div', { class: 'tr-list', id: 'tr-list', 'aria-live': 'polite' },
-        draft.segments.length ? draft.segments.map(transcriptRow) : [el('p', { class: 'tr-empty' }, [transcribing ? S.trEmpty : S.trOffHint])]),
+      el('div', { class: 'tr-list', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(transcribing ? S.trEmpty : S.trOffHint)),
     ]),
     el('div', { class: 'cta' }, [el('button', {
       class: 'btn btn-teal', disabled: !live && !takes.length, onclick: () => void endMeeting(),
@@ -2496,6 +2537,29 @@ function editNameSheet(): void {
   name.select()
 }
 
+/**
+ * Settings > Recording (owner 2026-10-06): who transcribes, and whether the
+ * Record tab starts as "Just me" or "A meeting". Choosing a transcription
+ * replaces the older "Use TalkWeave on this computer" switch for good.
+ */
+function recordingSettings(s: AppState): HTMLElement[] {
+  const choice = transcriptionChoice(s)
+  const start = defaultRecording(s)
+  return [
+    el('h4', { class: 'eyebrow' }, [S.setRecording]),
+    el('p', { class: 'meta set-sub' }, [S.setDefaultRecording]),
+    ...DEFAULT_RECORDINGS.map((d) => el('button', {
+      class: 'radio' + (start === d ? ' on' : ''), 'aria-pressed': String(start === d), 'data-default-recording': d,
+      onclick: () => { s.defaultRecording = d; save(); settingsSheet() },
+    }, [el('b', {}, [S.setDefaultRecordingLabel[d]]), el('small', {}, [S.setDefaultRecordingHint[d]])])),
+    el('p', { class: 'meta set-sub' }, [S.setTranscription]),
+    ...TRANSCRIPTION_CHOICES.map((c) => el('button', {
+      class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
+      onclick: () => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() },
+    }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [S.setTranscriptionHint[c]])])),
+  ]
+}
+
 function settingsSheet(): void {
   const s = st()
   const order = s.tabOrder ?? TabOrder.WebLeft
@@ -2528,6 +2592,7 @@ function settingsSheet(): void {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
       onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    ...recordingSettings(s),
     notificationsCard(s),
     solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
     solo ? null : el('button', {
@@ -2552,12 +2617,6 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
-    el('h4', { class: 'eyebrow' }, [S.setTalkWeave]),
-    el('button', {
-      class: 'radio' + (s.talkWeaveLocal ? ' on' : ''),
-      'aria-pressed': String(s.talkWeaveLocal === true),
-      onclick: () => { s.talkWeaveLocal = !s.talkWeaveLocal; engine = null; save(); settingsSheet() },
-    }, [el('b', {}, [S.setTalkWeaveLabel]), el('small', {}, [S.setTalkWeaveHint])]),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
       onclick: () => { if (confirm(S.resetConfirm)) { dropRecording(); clearState(persona, storeCtx); location.reload() } },
