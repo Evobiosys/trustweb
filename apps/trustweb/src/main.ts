@@ -25,9 +25,11 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, enginePlan, HintId, HINTS, LineStatus, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, DemoAccount, Found, NoteLine, Person } from './model'
+import type { AppState, DemoAccount, Found, NoteLine, PastMeeting, Peer, Person, ReceivedShare, TranscriptLine } from './model'
+import { isMeetingPack, parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
+import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, saveState } from './store'
@@ -96,6 +98,8 @@ interface Draft {
   extraLines: DraftLine[]
   /** Where the recording was paused, for the transcript's pause dividers (from TalkWeave, 2026-10-06). */
   pauses: PauseMark[]
+  /** The stored past meeting this draft already wrote (at End meeting); completed when its notes are saved. */
+  meetingId?: string
 }
 
 /** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
@@ -140,6 +144,9 @@ const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '')
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
 // A hand-over link (?handover=1#k=...): a demo account moves to this phone.
 const handover: HandoverLink | null = params.get('handover') === '1' ? parseHandoverFragment(location.hash) : null
+// A meeting sent inside TrustWeb (?share=1#k=...&t=...), or riding in a Meet
+// code after a meeting (#n=...&k=...&t=...): opened once the app is up (share.ts).
+let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
@@ -262,6 +269,10 @@ const net = new Net({
   },
   ringForNewPeer: () => (solo ? Ring.Friend : Ring.Acquaintance),
   onLogChanged: () => { if (screen === Screen.Inventory) render() },
+  // A demo account asks: while demo content is on this phone it is matched
+  // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
+  askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
+  onText: (peer, text) => onSharedText(peer, text),
 })
 
 function notify(body: string): void {
@@ -768,6 +779,12 @@ async function completePendingConnect(): Promise<void> {
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
+  // The code carried the meeting too (notes and transcript, encrypted): open it now.
+  if (pendingShare) {
+    const link = pendingShare
+    pendingShare = null
+    void openShare(link)
+  }
 }
 
 /** The demo inventory (services/trustweb-peer) named in a demo-account link: one more acquaintance. */
@@ -805,6 +822,7 @@ function screenStart(): Node[] {
     else offerDemoContent()
     void net.start().then(announceLink)
     void completePendingConnect()
+    maybeOpenPendingShare()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -945,6 +963,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
         el('span', {}, [p.name]),
+        isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
       b.style.left = x + 'px'
@@ -965,7 +984,7 @@ function peopleView(s: AppState, only?: Person[]): HTMLElement {
   return el('div', { class: 'ppl' }, list.map((p) => el('button', { class: 'prow', onclick: () => personSheet(p.id) }, [
     avatar(p.name, p.id),
     el('div', { class: 'who' }, [
-      el('b', {}, [p.name]),
+      el('b', {}, [p.name, isDemoPerson(s, p.id) ? dummyChip() : null]),
       el('i', {}, [p.lines.filter((l) => l.status === LineStatus.Current).length + ' notes · ' + (p.peerId ? S.sheetConnected : S.sheetNotesOnly)]),
     ]),
     el('span', { class: 'shield ring-' + p.ring }, [S.ringLabel[p.ring]]),
@@ -1168,13 +1187,18 @@ function tagChip(tag: Tag, custom?: string): HTMLElement {
   return el('span', { class: 'tagpill tag-' + tag }, [tag === Tag.Custom && custom ? custom : S.tagLabel[tag]])
 }
 
+/** Demo content says so wherever a person or item shows (owner 2026-10-06: real and dummy friends side by side). */
+function dummyChip(): HTMLElement {
+  return el('span', { class: 'tagpill dummy-chip' }, [S.dummyChip])
+}
+
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   const current = p.lines.filter((l) => l.status === LineStatus.Current)
   const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
   openSheet([
-    el('h3', {}, [p.name]),
+    el('h3', {}, [p.name, isDemoPerson(st(), p.id) ? dummyChip() : null]),
     el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected : S.sheetNotesOnly]),
     current.length
@@ -1499,9 +1523,272 @@ function recAdvancedView(): HTMLElement {
   return el('div', { class: 'adv open' }, [
     withHint(toggle, HintId.RecAdvanced),
     engine !== null && (recorder.live || takes.length > 0) ? el('p', { class: 'tr-engine' }, [engineLabel()]) : null,
-    el('p', { class: 'hint' }, [S.recSoloHint]),
+    el('p', { class: 'hint' }, [draft.mode === RecordMode.Solo ? S.recSoloHint : S.promptHint]),
     ...sections,
   ])
+}
+
+/**
+ * "Listen for": prompts for what to note or create while recording (owner
+ * 2026-10-06: "the recording has hints as to what to write and create"). A tap
+ * opens that section of Advanced with its field focused; a section that
+ * already holds a line shows as on.
+ */
+function recPromptsView(): HTMLElement {
+  return el('div', { class: 'rec-prompts', role: 'group', 'aria-label': S.promptLabel }, [
+    el('span', { class: 'chips-lbl' }, [S.promptLabel]),
+    ...ADVANCED_TAGS.map((tag) => el('button', {
+      class: 'chip prompt' + (draft.extraLines.some((l) => l.tag === tag) ? ' on' : ''), 'data-prompt': tag,
+      onclick: () => {
+        recAdvancedOpen = true
+        render()
+        const input = document.querySelector<HTMLInputElement>(`[data-adv="${tag}"] input`)
+        input?.scrollIntoView({ block: 'center' })
+        input?.focus()
+      },
+    }, [S.promptFor[tag]])),
+  ])
+}
+
+// ---------------------------------------------------------------------------
+// past meetings: every meeting ended and every memo saved, with its place,
+// notes and transcript, openable again (owner 2026-10-06)
+// ---------------------------------------------------------------------------
+
+const MEETINGS_MAX = 200
+
+function pastMeetingsLink(): HTMLElement {
+  return el('button', { class: 'past-link', onclick: pastMeetingsSheet }, [S.pastLink(pastMeetings(st()).length)])
+}
+
+function whenLabel(at: number): string {
+  return new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function pastMeta(m: PastMeeting): string {
+  const kind = m.fromName ? S.pastFrom(m.fromName) : m.meeting ? S.pastKindMeeting : m.transcript.length || m.durationMs ? S.pastKindMemo : S.pastKindNotes
+  return [kind, whenLabel(m.startedAt), m.where ? S.pastWhere(m.where) : '', m.durationMs ? clock(m.durationMs) : '', S.pastCounts(m.lines.length, m.transcript.length)]
+    .filter(Boolean).join(' · ')
+}
+
+function pastMeetingsSheet(): void {
+  const s = st()
+  const list = pastMeetings(s)
+  openSheet([
+    el('h3', {}, [S.pastTitle]),
+    list.length === 0 ? el('p', { class: 'meta' }, [S.pastEmpty]) : null,
+    ...list.map((m) => el('button', { class: 'pm-row', onclick: () => pastMeetingSheet(m) }, [
+      el('b', {}, [m.about, m.personId && isDemoPerson(s, m.personId) ? dummyChip() : null]),
+      el('i', {}, [pastMeta(m)]),
+    ])),
+    el('p', { class: 'foot' }, [S.pastFoot]),
+  ])
+}
+
+function transcriptView(lines: TranscriptLine[], prefix: string): HTMLElement {
+  return el('div', { class: 'tr-list tr-static' }, lines.map((t, i) => transcriptRow({ id: `${prefix}${i}`, speaker: t.speaker, text: t.text, atMs: t.atMs, final: true })))
+}
+
+function pastMeetingSheet(m: PastMeeting): void {
+  const s = st()
+  const person = m.personId ? s.people.find((p) => p.id === m.personId) : undefined
+  openSheet([
+    el('button', { class: 'back-link', onclick: pastMeetingsSheet }, ['‹ ' + S.pastTitle]),
+    el('h3', {}, [m.about, person && isDemoPerson(s, person.id) ? dummyChip() : null]),
+    el('p', { class: 'meta' }, [pastMeta(m)]),
+    el('h4', { class: 'eyebrow' }, [S.pastNotes]),
+    m.lines.length
+      ? el('div', { class: 'sheet-lines' }, m.lines.map((l) => el('div', { class: 'sline' }, [tagChip(l.tag), el('span', {}, [l.text])])))
+      : el('p', { class: 'meta' }, [S.pastNoNotes]),
+    el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
+    m.transcript.length ? transcriptView(m.transcript, m.id + ':') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
+    person ? el('button', { class: 'btn btn-ghost', onclick: () => personSheet(person.id) }, [S.pastOpenPerson(person.name)]) : null,
+  ])
+}
+
+/** Is there anything of this draft worth keeping as a past meeting (a take, a transcript, or a meeting at all)? */
+function draftIsMeeting(): boolean {
+  return Boolean(draft.meetingId) || takes.length > 0 || draft.segments.length > 0 || draft.mode === RecordMode.Meeting
+}
+
+/**
+ * Writes the stored past meeting for the current draft, or completes the one
+ * End meeting already wrote: the transcript at End meeting, the notes and the
+ * person at save. Never loses what was recorded, whatever happens after.
+ */
+function recordPastMeeting(opts: { personId?: string } = {}): void {
+  const s = st()
+  const existing = draft.meetingId ? (s.meetings ?? []).find((m) => m.id === draft.meetingId) : undefined
+  const m: PastMeeting = existing ?? {
+    id: randomId(8), about: '', kind: draft.about, where: '', startedAt: takes[0]?.startedAt ?? Date.now(), endedAt: Date.now(),
+    durationMs: 0, meeting: draft.mode === RecordMode.Meeting, lines: [], transcript: [],
+  }
+  m.about = draft.name.trim() || m.about || S.pastUnnamed
+  m.kind = draft.about
+  m.where = draft.context.trim() || m.where
+  m.endedAt = Date.now()
+  m.durationMs = Math.max(m.durationMs, totalMs())
+  m.meeting = m.meeting || draft.mode === RecordMode.Meeting
+  const lines = draft.lines.filter((l) => l.text.trim()).map((l) => ({ text: l.text.trim(), tag: l.tag }))
+  if (lines.length) m.lines = lines
+  const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
+  if (transcript.length) m.transcript = transcript
+  if (opts.personId) m.personId = opts.personId
+  if (!existing) s.meetings = [m, ...(s.meetings ?? [])].slice(0, MEETINGS_MAX)
+  draft.meetingId = m.id
+  save()
+}
+
+// ---------------------------------------------------------------------------
+// sending a meeting inside TrustWeb (share.ts): packed here, encrypted on the
+// Swiss server, the key only in the link; to a connected peer, or in the Meet code
+// ---------------------------------------------------------------------------
+
+const RECEIVED_MAX = 20
+/** The pack made for this draft's Meet code, uploaded once per Meet visit. */
+let meetShare: ShareLink | null = null
+
+function packFromDraft(): MeetingPack {
+  const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
+  const notes = (draft.lines.length ? draft.lines.map((l) => l.text) : extractLines(prose).map((l) => l.text))
+    .concat(draft.extraLines.map((l) => l.text))
+    .map((t) => t.trim()).filter(Boolean)
+  return {
+    v: 1, kind: 'meeting', from: st().me.displayName, about: draft.name.trim(), where: draft.context.trim(),
+    startedAt: takes[0]?.startedAt ?? Date.now(), durationMs: totalMs(), notes,
+    transcript: draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text })),
+  }
+}
+
+/** Encrypts the pack with a fresh key on the backup server; the key never leaves this phone except inside the link. */
+async function uploadPack(pack: MeetingPack): Promise<ShareLink> {
+  if (backupAvailable === null) await probeBackup()
+  if (!backupAvailable) throw new Error('no backup server')
+  const key = await newRandomKey()
+  await backupNow(key, pack)
+  return { keyText: key.text, title: S.shareTitleFor(pack.about) }
+}
+
+/** End meeting > "Send inside TrustWeb to...": pick one connected person; they get the sealed link over the relay. */
+function sendMeetingSheet(): void {
+  const s = st()
+  const msg = el('p', { class: 'meta' }, [S.shareLead])
+  let busy = false
+  const run = async (peer: Peer): Promise<void> => {
+    if (busy) return
+    busy = true
+    msg.textContent = S.shareWorking
+    try {
+      const link = await uploadPack(packFromDraft())
+      await net.sendText(peer, shareUrl(APP_URL, link))
+      closeSheet()
+      toast(S.shareSent(peer.displayName))
+    } catch {
+      busy = false
+      msg.textContent = S.shareFailed
+    }
+  }
+  const demoPeerIds = new Set(demoAccounts().map((t) => t.peerId))
+  const rows = s.peers.map((peer) => el('button', { class: 'prow', 'data-send-to': peer.id, onclick: () => void run(peer) }, [
+    avatar(peer.displayName, peer.id),
+    el('div', { class: 'who' }, [
+      el('b', {}, [peer.displayName, demoPeerIds.has(peer.id) ? el('span', { class: 'tagpill demo-chip' }, [S.demoAcctChip]) : null]),
+      el('i', {}, [S.ringLabel[peer.ring]]),
+    ]),
+  ]))
+  openSheet([
+    el('h3', {}, [S.shareTitle]),
+    msg,
+    rows.length ? el('div', { class: 'ppl' }, rows) : el('p', { class: 'warn' }, [S.shareNoPeers]),
+  ])
+}
+
+/** The pack for the Meet code shown right after a meeting; null where there is nothing recorded or no server. */
+async function meetSharePack(): Promise<ShareLink | null> {
+  if (meetFrom !== Screen.Meeting || (!draft.segments.length && !takes.length)) return null
+  try {
+    meetShare ??= await uploadPack(packFromDraft())
+    return meetShare
+  } catch {
+    return null
+  }
+}
+
+/** A connected peer sent a text: only a share link to this very app is understood; anything else is dropped. */
+function onSharedText(peer: Peer, text: string): void {
+  const link = parseShareText(APP_URL, text)
+  if (!link) return
+  const s = st()
+  const entry: ReceivedShare = { id: randomId(8), at: Date.now(), fromName: peer.displayName, fromPeerId: peer.id, link: text, title: link.title }
+  s.received = [entry, ...(s.received ?? [])].slice(0, RECEIVED_MAX)
+  save()
+  notify(S.recvTitle(peer.displayName))
+  showNotice(S.recvTitle(peer.displayName), S.recvBody(link.title), [
+    el('button', { class: 'btn btn-electric btn-sm', onclick: () => { hideNotice(); void openShare(link, entry) } }, [S.recvOpen]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.recvLater]),
+  ])
+}
+
+async function openShare(link: ShareLink, entry?: ReceivedShare): Promise<void> {
+  const msg = el('p', { class: 'meta' }, [S.recvOpening])
+  openSheet([el('h3', {}, [link.title || S.pastTitle]), msg])
+  let pack: unknown
+  try {
+    pack = await restore(parseKeyText(link.keyText))
+  } catch {
+    msg.textContent = S.recvFailed
+    return
+  }
+  if (!isMeetingPack(pack)) { msg.textContent = S.recvFailed; return }
+  if (entry) { entry.openedAt = Date.now(); save() }
+  showPack(pack)
+}
+
+function showPack(pack: MeetingPack): void {
+  const facts = [pack.about ? S.recvAbout(pack.about) : '', pack.where ? S.pastWhere(pack.where) : '', whenLabel(pack.startedAt), pack.durationMs ? clock(pack.durationMs) : '']
+    .filter(Boolean).join(' · ')
+  openSheet([
+    el('h3', {}, [S.recvHeading(pack.from)]),
+    el('p', { class: 'meta' }, [S.recvLead(pack.from)]),
+    el('p', { class: 'meta' }, [facts]),
+    el('h4', { class: 'eyebrow' }, [S.pastNotes]),
+    pack.notes.length
+      ? el('div', { class: 'sheet-lines' }, pack.notes.map((t) => el('div', { class: 'sline' }, [el('span', {}, [t])])))
+      : el('p', { class: 'meta' }, [S.pastNoNotes]),
+    el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
+    pack.transcript.length ? transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
+    el('button', { class: 'btn btn-electric', onclick: () => { keepPack(pack); closeSheet(); toast(S.recvKept); render() } }, [S.recvKeep]),
+    el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.recvClose]),
+  ])
+}
+
+/** Keeps a received meeting: its notes go to the sender's card (only me, like notes shared by a Meet code), the whole thing to past meetings. */
+function keepPack(pack: MeetingPack): void {
+  const s = st()
+  const now = Date.now()
+  let person = s.people.find((p) => p.name.toLowerCase() === pack.from.toLowerCase())
+  if (!person) {
+    person = { id: randomId(8), name: pack.from, context: S.notesReceivedContext(pack.from), ring: Ring.Acquaintance, metAt: pack.startedAt, lines: [] }
+    s.people.push(person)
+  }
+  for (const text of pack.notes) {
+    person.lines.push({ id: randomId(8), text, tag: extractLines(text)[0]?.tag ?? Tag.Note, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now })
+  }
+  const m: PastMeeting = {
+    id: randomId(8), about: person.name, kind: AboutKind.Who, personId: person.id, where: pack.where, startedAt: pack.startedAt,
+    endedAt: pack.startedAt + pack.durationMs, durationMs: pack.durationMs, meeting: true,
+    lines: pack.notes.map((t) => ({ text: t, tag: Tag.Note })), transcript: pack.transcript, fromName: pack.from,
+  }
+  s.meetings = [m, ...(s.meetings ?? [])].slice(0, MEETINGS_MAX)
+  save()
+}
+
+/** A share link opened directly (not inside a connect link): once the app has a record. */
+function maybeOpenPendingShare(): void {
+  if (!pendingShare || pendingConnect || !state) return
+  const link = pendingShare
+  pendingShare = null
+  void openShare(link)
 }
 
 function discardDraft(): void {
@@ -1547,10 +1834,12 @@ function screenRecord(): Node[] {
       el('p', { class: 'rec-status center' }, [status]),
       recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
       aboutRowView(),
+      recPromptsView(),
       recAdvancedView(),
       draft.segments.length || transcriber
         ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(S.trEmpty))
         : null,
+      pastMeetingsLink(),
     ]),
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
@@ -1644,6 +1933,8 @@ async function endMeeting(): Promise<void> {
   if (recorder.live) await recorder.stop()
   await transcriber?.stop()
   transcriber = null
+  // The transcript is kept the moment the meeting ends, whatever happens next.
+  if (draftIsMeeting()) recordPastMeeting()
   render()
   endMeetingSheet()
 }
@@ -1670,6 +1961,7 @@ function endMeetingSheet(): void {
     el('p', { class: 'meta' }, [S.meetingEndedLead]),
     el('button', { class: 'btn btn-electric', onclick: () => void sendAsIs() }, [S.meetingSendAsIs]),
     el('button', { class: 'btn btn-teal', onclick: () => openMeet(Screen.Meeting, notes) }, [S.meetingMeet(name)]),
+    el('button', { class: 'btn btn-ghost', onclick: sendMeetingSheet }, [S.shareButton]),
     el('button', { class: 'btn btn-ghost', onclick: () => void makeNotes() }, [S.recMake]),
     takes.length ? el('div', { class: 'rec-saves' }, saveButtons('btn btn-ghost btn-sm')) : null,
     el('p', { class: 'meta' }, [S.meetingSendHonest]),
@@ -1774,7 +2066,10 @@ function screenMeeting(): Node[] {
       el('p', { class: 'tr-engine' }, [engineLabel()]),
       recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
       speakers,
+      recPromptsView(),
       el('div', { class: 'tr-list', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(transcribing ? S.trEmpty : S.trOffHint)),
+      recAdvancedView(),
+      pastMeetingsLink(),
     ]),
     el('div', { class: 'cta' }, [el('button', {
       class: 'btn btn-teal', disabled: !live && !takes.length, onclick: () => void endMeeting(),
@@ -1827,6 +2122,7 @@ function meetPages(): MeetPage[] {
 function openMeet(from: Screen, notes = ''): void {
   meetFrom = from
   meetNotes = notes
+  meetShare = null
   meetPage = MeetPage.TrustWeb
   demoShowing = null
   go(Screen.Meet)
@@ -1876,10 +2172,18 @@ function meetTrustWebPage(): HTMLElement {
         },
       }, [S.meetNfcWrite])
     : null
+  const sharedDd = el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes])
   void (async () => {
     await net.start()
     link = net.connectLink(APP_URL)
-    if (notes) link += '#n=' + encodeURIComponent(notes.slice(0, 300))
+    // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only.
+    let frag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
+    const share = await meetSharePack()
+    if (share) {
+      frag += (frag ? '&' : '') + shareFragment(share)
+      sharedDd.textContent = S.meetSharedTranscript
+    }
+    if (frag) link += '#' + frag
     qr.setAttribute('data-payload', link)
     await renderQr(qr, link)
     copy.removeAttribute('disabled')
@@ -1890,7 +2194,7 @@ function meetTrustWebPage(): HTMLElement {
     qr,
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
-      el('dt', {}, [S.meetShared]), el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes]),
+      el('dt', {}, [S.meetShared]), sharedDd,
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
@@ -2396,6 +2700,7 @@ function saveDraftWhat(): void {
       audience: l.audience, included: true, createdAt: now,
     })
   }
+  if (draftIsMeeting()) recordPastMeeting()
   save()
   toast(S.savedWhatToast(lines.length))
   newDraft()
@@ -2421,6 +2726,7 @@ function saveDraft(): void {
       status: LineStatus.Current, notedAt: now, checkedAt: now,
     })
   }
+  if (draftIsMeeting()) recordPastMeeting({ personId: p.id })
   save()
   toast(S.savedToast(p.name, S.ringLabel[p.ring]))
   newDraft()
@@ -2581,6 +2887,10 @@ function settingsSheet(): void {
       ...(s.testAccounts?.length
         ? s.testAccounts.map((t) => demoAccountRow(t, settingsSheet))
         : [el('p', { class: 'meta' }, [S.demoAcctNone])]),
+      el('button', {
+        class: 'radio' + (demoOnlyForDemoAccounts(s) ? ' on' : ''), 'aria-pressed': String(demoOnlyForDemoAccounts(s)), 'data-demo-only': '1',
+        onclick: () => { s.demoOnlyForDemoAccounts = !demoOnlyForDemoAccounts(s); save(); settingsSheet() },
+      }, [el('b', {}, [S.setDemoOnly]), el('small', {}, [S.setDemoOnlyHint])]),
     ]),
     el('h4', { class: 'eyebrow' }, [S.setTabs]),
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
@@ -2796,7 +3106,7 @@ function screenInventory(): Node[] {
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       ...s.inventory.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('span', { class: 'inv-text' }, [item.text]),
+        el('span', { class: 'inv-text' }, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
         el('div', { class: 'inv-actions' }, [
           audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
           el('button', { class: 'mini', onclick: () => { item.included = !item.included; save(); render() } }, [item.included ? S.invOn : S.invOff]),
@@ -2823,6 +3133,14 @@ function requestsSheet(): void {
     ]) : null,
     // Demo accounts waiting for the owner's yes (owner 2026-10-06: their asks and requests live here too).
     ...pendingDemo.map((t) => demoAccountRow(t, requestsSheet)),
+    // Meetings other phones sent inside TrustWeb (owner 2026-10-06).
+    ...(s.received?.length ? [
+      el('h4', { class: 'eyebrow' }, [S.recvList]),
+      ...s.received.map((r) => el('div', { class: 'conn-row recv-row' }, [
+        el('b', {}, [S.recvRow(r.fromName, r.title)]),
+        el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const l = parseShareText(APP_URL, r.link); if (l) void openShare(l, r) } }, [S.recvOpen]),
+      ])),
+    ] : []),
     el('h4', { class: 'eyebrow' }, [S.logTitle]),
     s.log.length === 0 ? el('p', { class: 'empty' }, [S.logEmpty]) : null,
     ...s.log.slice(0, 50).map((e) => el('div', { class: 'log' }, [
@@ -2944,13 +3262,13 @@ function renderAsk(): void {
   overlay.append(
     el('div', { class: 'orb orb1' }), el('div', { class: 'orb orb2' }),
     el('div', { class: 'ask' }, [
-      el('span', { class: 'eyebrow' }, [S.askEyebrow]),
+      el('span', { class: 'eyebrow' }, [a.relayed ? S.askRelayed(a.fromName) : S.askEyebrow]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       decided === null
         ? el('div', {}, [
             el('p', { class: 'ask-lbl' }, [S.askMatches]),
-            ...a.matches.map((m) => el('div', { class: 'ask-line' }, [el('span', {}, [m.text]), el('small', {}, [m.context])])),
+            ...a.matches.map((m) => el('div', { class: 'ask-line' }, [el('span', {}, [m.text, threadIsDemo(st(), m.threadId) ? dummyChip() : null]), el('small', {}, [m.context])])),
             el('button', { class: 'btn btn-mint', onclick: () => decide(true) }, [S.askShare]),
             el('button', { class: 'btn btn-ghost', onclick: () => decide(false) }, [S.askDecline]),
             el('p', { class: 'ask-foot' }, [S.askFoot(a.fromName)]),
@@ -2980,6 +3298,7 @@ render()
 if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
+  maybeOpenPendingShare()
   offerDemoContent()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

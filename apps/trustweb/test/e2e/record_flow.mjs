@@ -158,11 +158,17 @@ async function main() {
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
     ok('Record has the Tana-style circle and clock, discard and send (the circle itself records)',
       await page.locator('.rec-circle').count() === 1 && await page.locator('.memo-controls .round').count() === 2)
-    ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting' }).isVisible() && await page.locator('.meet-btn svg circle').count() === 2 && await page.locator('.meet-btn svg rect').count() === 2)
+    ok('Record carries the Meeting button (two people, handshake) top right', await page.getByRole('button', { name: 'Meeting', exact: true }).isVisible() && await page.locator('.meet-btn svg circle').count() === 2 && await page.locator('.meet-btn svg rect').count() === 2)
     const meetSlot = await page.locator('.meet-btn').boundingBox()
     const qrOnRecord = await page.locator('.status-pill.qr').boundingBox()
     ok('the QR sits exactly where it sits on Web (muscle memory)', qrOnRecord !== null && Math.abs(qrOnRecord.x - qrOnWeb.x) < 1 && Math.abs(qrOnRecord.y - qrOnWeb.y) < 1, JSON.stringify([qrOnWeb, qrOnRecord]))
     ok('no consent wording on solo Record', !/agreed to/.test(await page.locator('.screen').innerText()))
+    // "Listen for" prompts (owner 2026-10-06): what to note or create; a tap opens that Advanced section
+    ok('Record prompts what to listen for: opportunity, resource, looking for, offer, talent', await page.locator('.rec-prompts .chip.prompt').count() === 5 && /Listen for/.test(await page.locator('.rec-prompts').innerText()))
+    await page.locator('.rec-prompts .chip.prompt', { hasText: 'what they offer' }).click()
+    ok('a prompt opens Advanced with that field focused', await page.locator('.adv.open').count() === 1 && await page.evaluate(() => document.activeElement?.closest('[data-adv]')?.getAttribute('data-adv')) === 'offer')
+    await page.locator('.adv-toggle').click()
+    ok('the Past meetings link sits under the recording', /Past meetings/.test(await page.locator('.past-link').innerText()))
     await shot(page, 'record_idle')
     await page.locator('.rec-circle').click()
     await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
@@ -203,8 +209,8 @@ async function main() {
     ok('discard drops a take in progress', await page.locator('.rec-circle.live, .rec-circle.paused').count() === 0 && /0:00/.test(await page.locator('#rec-clock').innerText()))
 
     // Meeting view
-    await page.getByRole('button', { name: 'Meeting' }).click()
-    await page.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    await page.getByRole('button', { name: 'Meeting', exact: true }).click()
+    await page.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
     // "Just me" (owner 2026-10-06): one person with sound arcs, in the slot where Record shows Meeting
     const soloSlot = await page.locator('.solo-btn').boundingBox()
     ok('Meeting shows "Just me" where Record shows the Meeting button',
@@ -215,14 +221,15 @@ async function main() {
     await page.getByRole('button', { name: 'Just me' }).click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
     ok('"Just me" switches back to recording by yourself', true)
-    await page.getByRole('button', { name: 'Meeting' }).click()
-    await page.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    await page.getByRole('button', { name: 'Meeting', exact: true }).click()
+    await page.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
     await page.getByLabel('Who are you meeting?').fill('Maya')
     await page.getByLabel('Where are you meeting?').fill('coffee at the Hub')
     ok('meeting shows "Maya agreed to recording the meeting."', await page.getByText('Maya agreed to recording the meeting.').isVisible())
     await page.getByRole('button', { name: 'How to start' }).click()
     ok('the info button shows how to start', await page.getByText('Okay, we\'re recording now.', { exact: false }).isVisible())
     ok('an active-transcribing switch is there', await page.getByRole('switch', { name: /Transcribing/ }).isVisible())
+    ok('the Meeting view prompts what to listen for too', await page.locator('.rec-prompts .chip.prompt').count() === 5 && await page.locator('.adv-toggle').isVisible())
     // Headless Chromium crashes on the on-device speech probe, so this run
     // records audio only; the TalkWeave path has its own live probe test.
     await page.getByRole('switch', { name: /Transcribing/ }).click()
@@ -237,7 +244,7 @@ async function main() {
     await page.getByRole('button', { name: 'Just me' }).click()
     await page.waitForTimeout(200)
     ok('"Just me" is refused while a take is live (same rule as the back arrow)',
-      await page.getByRole('heading', { name: 'Meeting' }).isVisible() && await page.getByText('Stop or send the recording first.').isVisible())
+      await page.getByRole('heading', { name: 'Meeting', exact: true }).isVisible() && await page.getByText('Stop or send the recording first.').isVisible())
     await page.waitForTimeout(1500)
     // a pause leaves a divider in the transcript (from TalkWeave): when, then for how long
     await page.getByRole('button', { name: 'Pause' }).click()
@@ -252,6 +259,13 @@ async function main() {
     ok('End meeting offers Send as is and Meet Maya',
       await page.getByRole('button', { name: 'Send as is' }).isVisible() && await page.getByRole('button', { name: 'Meet Maya' }).isVisible())
     await shot(page, 'meeting_ended')
+    // Send inside TrustWeb (owner 2026-10-06): pick a connected person; this phone has none yet
+    await page.getByRole('button', { name: 'Send inside TrustWeb to...' }).click()
+    await page.getByRole('heading', { name: 'Send inside TrustWeb' }).waitFor({ timeout: 5_000 })
+    ok('"Send inside TrustWeb" asks whom, and says so when nobody is connected yet', /Nobody is connected on TrustWeb yet/.test(await page.locator('.sheet').innerText()))
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+    await page.getByRole('button', { name: 'End meeting' }).click()
+    await page.getByRole('heading', { name: 'Meeting ended' }).waitFor({ timeout: 10_000 })
     await page.getByRole('button', { name: 'Send as is' }).click()
     await page.waitForTimeout(400)
     const shared = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '')
@@ -263,6 +277,17 @@ async function main() {
     ok('Meet explains NFC honestly where it is unavailable', await page.getByText(/Tap-to-connect needs Chrome on Android/).isVisible())
     await shot(page, 'meet_after_meeting')
     await page.getByRole('button', { name: 'Back' }).click()
+
+    // Past meetings (owner 2026-10-06): the meeting that just ended is kept with its place, openable again
+    await page.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
+    await page.locator('.past-link').click()
+    await page.getByRole('heading', { name: 'Past meetings' }).waitFor({ timeout: 5_000 })
+    const pmRows = page.locator('.sheet .pm-row')
+    ok('Past meetings lists the meeting with Maya, where it was, as a meeting', (await pmRows.count()) >= 1 && /Maya/.test(await pmRows.first().innerText()) && /Meeting/.test(await pmRows.first().innerText()) && /at coffee at the Hub/.test(await pmRows.first().innerText()), await pmRows.first().innerText())
+    await pmRows.first().click()
+    ok('opening it shows notes and transcript sections', await page.locator('.sheet').getByRole('heading', { name: 'Maya', exact: true }).isVisible() && /transcript/i.test(await page.locator('.sheet').innerText()) && /notes/i.test(await page.locator('.sheet').innerText()), await page.locator('.sheet').innerText())
+    await shot(page, 'past_meeting')
+    await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // QR from a header: no notes, generic title
     await page.getByRole('button', { name: 'Web' }).click()
@@ -408,7 +433,7 @@ async function main() {
     await p3.getByRole('button', { name: 'Discard' }).click()
     await p3.getByRole('button', { name: 'Web', exact: true }).click()
     await p3.locator('nav.tabs .tab-record').click()
-    await p3.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    await p3.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
     ok('with "A meeting" the Record tab opens the Meeting view', true)
     await p3.getByLabel('Who are you meeting?').fill('Ben')
     await p3.locator('#consent').check()

@@ -230,6 +230,21 @@ textarea.field{resize:vertical; line-height:1.5}
 .tag-meet{background:#FCEFD3; color:#94620b}
 .tag-opportunity{background:#FDE3DC; color:var(--warn-ink)}
 .tag-talent{background:var(--tint-violet); color:var(--violet-deep)}
+/* demo content next to real people (2026-10-06): a small "dummy" chip wherever an imaginary person or thing shows */
+.dummy-chip,.demo-chip{background:var(--tint-sand); color:var(--ink-soft); margin-left:6px; vertical-align:middle; letter-spacing:.06em}
+.node .dummy-chip{margin:0; font-size:8.5px; padding:2px 5px}
+.sline .dummy-chip,.ask-line .dummy-chip{align-self:flex-start}
+/* "Listen for": prompts for what to note during a recording; a tap opens that Advanced section */
+.rec-prompts{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:12px 0 2px}
+.rec-prompts .chip.prompt.on{border-color:var(--teal); color:var(--teal); background:var(--tint-teal)}
+/* past meetings: a quiet link under the recording, rows in the sheet */
+.past-link{display:block; margin:14px auto 4px; border:0; background:none; color:var(--electric-deep); font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:3px}
+.past-link:focus-visible,.pm-row:focus-visible,.back-link:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.pm-row{display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; background:var(--card); border:0; border-radius:14px; padding:11px 14px; margin:0 0 8px; cursor:pointer; font:inherit; color:var(--ink)}
+.pm-row b{font-size:15px}
+.pm-row i{font-style:normal; font-size:12px; color:var(--ink-soft)}
+.back-link{border:0; background:none; color:var(--ink-soft); font:inherit; font-size:13px; cursor:pointer; padding:0; margin:0 0 4px; text-align:left}
+.tr-static{max-height:40vh; overflow:auto; margin:6px 0 12px}
 .tag-resource{background:#E0F1F8; color:var(--electric-deep)}
 .tag-note,.tag-custom{background:var(--tint-sand); color:var(--ink-soft)}
 .aud{border:1.5px solid var(--teal); background:var(--tint-teal); color:var(--teal); border-radius:999px; padding:4px 11px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0}

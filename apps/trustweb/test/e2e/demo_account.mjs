@@ -114,10 +114,11 @@ async function main() {
   let browser = null
   let peer = null
   try {
-    browser = await engine.launch({ headless: true })
+    // A fake microphone for the meeting Jakob records and sends inside TrustWeb (step 4b).
+    browser = await engine.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })
     const errors = []
     const mk = async () => {
-      const c = await browser.newContext({ viewport: { width: 390, height: 844 } })
+      const c = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['microphone'] })
       const p = await c.newPage()
       p.on('pageerror', (e) => errors.push(e.message))
       return p
@@ -245,6 +246,59 @@ async function main() {
     ok('the ask sits under Review / requests with a "demo" chip', (await a.locator('.sheet .log .demo-chip').count()) === 1 && /Anna-demo:.*demo.*Does anyone have a ladder/i.test(await text(a.locator('.sheet'))), await text(a.locator('.sheet')))
     await shot(a, '09-jakob-requests-demo-chip')
     await a.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+
+    // 4b. Jakob records a short meeting with Anna-demo and sends it to her INSIDE TrustWeb
+    // (owner 2026-10-06: pick the recipient from the people already connected; notes and
+    // transcript travel encrypted via the backup server, the key only in the link).
+    await a.locator('nav.tabs .tab-record').click()
+    await a.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
+    await a.getByRole('button', { name: 'Meeting', exact: true }).click()
+    await a.getByRole('heading', { name: 'Meeting' }).waitFor({ timeout: 5_000 })
+    await a.getByLabel('Who are you meeting?').fill('Anna-demo')
+    await a.getByLabel('Where are you meeting?').fill('Café Prückel')
+    await a.getByRole('switch', { name: /Transcribing/ }).click()
+    await a.locator('#consent').check()
+    await a.getByRole('button', { name: 'Start recording' }).click()
+    await a.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
+    await a.waitForTimeout(1500)
+    await a.getByRole('button', { name: 'End meeting' }).click()
+    await a.getByRole('heading', { name: 'Meeting ended' }).waitFor({ timeout: 10_000 })
+    await a.getByRole('button', { name: 'Send inside TrustWeb to...' }).click()
+    await a.getByRole('heading', { name: 'Send inside TrustWeb' }).waitFor({ timeout: 5_000 })
+    const sendRows = a.locator('.sheet [data-send-to]')
+    ok('"Send inside TrustWeb" lists the connected people, Anna-demo with her demo chip', (await sendRows.count()) === 1 && /Anna-demo/.test(await sendRows.first().innerText()) && (await sendRows.first().locator('.demo-chip').count()) === 1)
+    await shot(a, '09b-jakob-send-inside-trustweb')
+    await sendRows.first().click()
+    await a.locator('.toast.on', { hasText: 'Sent to Anna-demo inside TrustWeb' }).waitFor({ timeout: 30_000 })
+    ok('Jakob: "Sent to Anna-demo inside TrustWeb."', true)
+    const recvCard = b.locator('.demo-friends')
+    await recvCard.waitFor({ timeout: 30_000 })
+    ok('Anna: "Jakob sent you a meeting" card with Open', /Jakob sent you a meeting/.test(await recvCard.innerText()) && /Meeting with Anna-demo/.test(await recvCard.innerText()), await recvCard.innerText())
+    await shot(b, '09c-anna-received-card')
+    await recvCard.getByRole('button', { name: 'Open', exact: true }).click()
+    await b.locator('.sheet').getByRole('heading', { name: 'From Jakob' }).waitFor({ timeout: 30_000 })
+    const packText = await text(b.locator('.sheet'))
+    ok('it opens, decrypted on her phone: about, place, notes and transcript sections', /About Anna-demo/.test(packText) && /at Café Prückel/.test(packText) && /notes/i.test(packText) && /transcript/i.test(packText), packText.slice(0, 200))
+    await shot(b, '09d-anna-opened-meeting')
+    await b.getByRole('button', { name: 'Keep in my past meetings' }).click()
+    await b.locator('.toast.on', { hasText: 'Kept' }).waitFor({ timeout: 10_000 })
+    const bKept = await stored(b)
+    ok('Keep stores it as a past meeting sent by Jakob', bKept.meetings?.length === 1 && bKept.meetings[0].fromName === 'Jakob' && bKept.meetings[0].where === 'Café Prückel' && bKept.received?.length === 1 && Boolean(bKept.received[0].openedAt))
+    await b.locator('nav.tabs .tab-record').click()
+    await b.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
+    ok('Anna\'s Record screen links to Past meetings (1)', /Past meetings \(1\)/.test(await b.locator('.past-link').innerText()))
+    await b.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await b.locator('.query-dock textarea').waitFor({ timeout: 10_000 })
+    // Jakob's own phone kept the meeting too (End meeting wrote it, before any notes)
+    const aKept = await stored(a)
+    ok('Jakob\'s phone kept the ended meeting with Anna-demo at Café Prückel', aKept.meetings?.length === 1 && aKept.meetings[0].about === 'Anna-demo' && aKept.meetings[0].where === 'Café Prückel' && aKept.meetings[0].meeting === true)
+    // A reload drops the in-memory draft (the take is never stored), so the QR button is back for the steps below;
+    // the past meeting is in the record and survives.
+    await a.reload()
+    await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    ok('Jakob\'s past meeting survives a reload', (await stored(a)).meetings?.length === 1 && (await a.locator('.status-pill.qr').count()) === 1)
+    // Back where step 4 left him (Inventory), so step 5's tab clicks behave as before.
+    await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()
 
     // 5. Countdown, extend, end
     await a.getByRole('button', { name: 'More' }).click().catch(() => {})

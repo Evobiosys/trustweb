@@ -12,7 +12,7 @@ const a = await mk(), b = await mk()
 await a.goto(B); await a.fill('input.field', 'Anna'); await a.click('text=Start on this phone')
 // Notes ride along only from a meeting: Record > Meeting, consent, record, End meeting, Meet Ben.
 // (Transcription off: headless Chromium crashes on the on-device speech probe.)
-await a.locator('nav.tabs .tab-record').click(); await a.getByRole('button', { name: 'Meeting' }).click()
+await a.locator('nav.tabs .tab-record').click(); await a.getByRole('button', { name: 'Meeting', exact: true }).click()
 await a.fill('input[aria-label="Who are you meeting?"]', 'Ben'); await a.check('#consent')
 await a.getByRole('switch', { name: /Transcribing/ }).click()
 await a.getByRole('button', { name: 'Start recording' }).click(); await a.waitForTimeout(1200)

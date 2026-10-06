@@ -31,10 +31,10 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, DecodedAnswer, MatchResult, QueryEnvelope, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, ChatEnvelope, DecodedAnswer, MatchResult, QueryEnvelope, SharedPayload } from '../../demo/src/types'
 import { askTemplate } from './lexicon'
 import { LogOutcome, coarseWhen, threadsForRing } from './model'
-import type { AppState, LineRef, Peer, Ring } from './model'
+import type { AppState, LineRef, MatchScope, Peer, Ring } from './model'
 
 export type { RelayStatus }
 
@@ -49,6 +49,8 @@ export interface IncomingAsk {
   text: string
   matches: LineRef[]
   receivedAt: number
+  /** Forwarded by a front-door peer (services/trustweb-peer) on behalf of somebody who asked it. */
+  relayed: boolean
   decide(share: boolean): Promise<void>
 }
 
@@ -78,6 +80,10 @@ export interface NetHooks {
   /** Ring for a peer who just scanned this device's code. */
   ringForNewPeer(): Ring
   onLogChanged(): void
+  /** What this asker may be matched against; undefined = everything their ring admits. */
+  askScope(peer: Peer): MatchScope | undefined
+  /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). */
+  onText(peer: Peer, text: string, ts: number): void
 }
 
 function upsertPeer(s: AppState, p: Peer): Peer {
@@ -234,7 +240,20 @@ export class Net {
       return
     }
     if (env.t === 'query') await this.handleQuery(env, fromDid)
-    // chat and ping are deliberately ignored: no chat in this build.
+    if (env.t === 'chat') {
+      const peer = this.peerByDid(fromDid)
+      if (peer) this.hooks.onText(peer, env.text, env.ts)
+    }
+    // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
+  }
+
+  /** A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). */
+  async sendText(peer: Peer, text: string): Promise<void> {
+    await this.start()
+    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts: Date.now() }
+    const key = await this.pairKey(peer)
+    if (!this.channel) throw new Error('relay not connected')
+    await this.channel.send(peer.did, env, key)
   }
 
   private log(peer: Peer, text: string, outcome: LogOutcome): void {
@@ -253,7 +272,7 @@ export class Net {
     if (!peer || !this.channel) return
     const text = q.freeText ?? ''
     const tpl = askTemplate(text)
-    const { threads, refs } = threadsForRing(this.hooks.state(), peer.ring)
+    const { threads, refs } = threadsForRing(this.hooks.state(), peer.ring, this.hooks.askScope(peer))
     const match = text ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const key = await this.pairKey(peer)
@@ -280,6 +299,7 @@ export class Net {
       text,
       matches,
       receivedAt,
+      relayed: q.relayed === true,
       decide: async (share: boolean) => {
         if (decided) return
         decided = true

@@ -174,6 +174,48 @@ export interface Found {
   shared: { from: string; items: { text: string; context: string; when: string }[] }[]
 }
 
+/** One line of a meeting transcript as kept on this phone (who said it, when in the recording, what). */
+export interface TranscriptLine {
+  speaker: number
+  atMs: number
+  text: string
+}
+
+/**
+ * A meeting or memo this phone recorded, kept so past meetings can be opened
+ * again with their notes, place and transcript (owner 2026-10-06: "I had a
+ * meeting and took notes, incl. where we met"). Written when a meeting ends
+ * (transcript) and completed when its notes are saved (lines, person).
+ */
+export interface PastMeeting {
+  id: string
+  /** Who it was with (a person's name) or what it was about. */
+  about: string
+  kind: AboutKind
+  personId?: string
+  where: string
+  startedAt: number
+  endedAt: number
+  durationMs: number
+  /** A meeting (who, where, consent) rather than a memo by yourself. */
+  meeting: boolean
+  lines: { text: string; tag: Tag }[]
+  transcript: TranscriptLine[]
+  /** Another phone sent it (notes and transcript of a meeting they recorded). */
+  fromName?: string
+}
+
+/** A meeting another phone sent inside TrustWeb: an encrypted pack on the backup server, its key only in the link. */
+export interface ReceivedShare {
+  id: string
+  at: number
+  fromName: string
+  fromPeerId: string
+  link: string
+  title: string
+  openedAt?: number
+}
+
 /** Which side of the raised Record button each outer tab sits on (Inventory settings). */
 export enum TabOrder {
   WebLeft = 'web-left',
@@ -223,6 +265,76 @@ export interface AppState {
   testOf?: DemoOf
   /** A demo account's finds, newest first, capped. Absent: none. */
   found?: Found[]
+  /** Past meetings and memos, newest first (owner 2026-10-06). Absent: none stored yet; see pastMeetings(). */
+  meetings?: PastMeeting[]
+  /** Meetings other phones sent inside TrustWeb, newest first, capped. Absent: none. */
+  received?: ReceivedShare[]
+  /**
+   * Demo accounts see only the demo content (owner 2026-10-06: "make sure the
+   * entry of Max is not part of the demo for other people"). Absent: true.
+   * Only in force while demo content is on this phone (`demo` set).
+   */
+  demoOnlyForDemoAccounts?: boolean
+}
+
+/** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
+export function isDemoPerson(s: Pick<AppState, 'demo'>, personId: string): boolean {
+  return Boolean(s.demo?.people.includes(personId))
+}
+
+export function isDemoItem(s: Pick<AppState, 'demo'>, itemId: string): boolean {
+  return Boolean(s.demo?.inventory.includes(itemId))
+}
+
+export function demoOnlyForDemoAccounts(s: Pick<AppState, 'demoOnlyForDemoAccounts'>): boolean {
+  return s.demoOnlyForDemoAccounts !== false
+}
+
+/** What an asker may be matched against: only these people and items (absent set = everything). */
+export interface MatchScope {
+  people?: ReadonlySet<string>
+  inventory?: ReadonlySet<string>
+}
+
+/** The scope a demo account gets while demo content is on and the setting says so: the dummy content only. */
+export function demoAccountScope(s: Pick<AppState, 'demo' | 'demoOnlyForDemoAccounts'>): MatchScope | undefined {
+  if (!s.demo || !demoOnlyForDemoAccounts(s)) return undefined
+  return { people: new Set(s.demo.people), inventory: new Set(s.demo.inventory) }
+}
+
+/** The thread id a matcher hit carries ("inv:<item>" or "note:<person>:<line>") says whether it is demo content. */
+export function threadIsDemo(s: Pick<AppState, 'demo'>, threadId: string): boolean {
+  const [kind, id] = threadId.split(':')
+  return kind === 'inv' ? isDemoItem(s, id) : kind === 'note' ? isDemoPerson(s, id) : false
+}
+
+const DAY_MS = 86_400_000
+
+/**
+ * Past meetings, newest first: the stored ones plus, for notes saved before
+ * meetings were stored at all, one entry per person and day built from their
+ * notes (so an earlier meeting with its place is found again, nothing lost).
+ */
+export function pastMeetings(s: Pick<AppState, 'meetings' | 'people'>): PastMeeting[] {
+  const out: PastMeeting[] = [...(s.meetings ?? [])]
+  const covered = new Set(out.filter((m) => m.personId).map((m) => `${m.personId}:${Math.floor(m.startedAt / DAY_MS)}`))
+  for (const p of s.people) {
+    const byDay = new Map<number, NoteLine[]>()
+    for (const l of p.lines) {
+      const day = Math.floor(l.notedAt / DAY_MS)
+      byDay.set(day, [...(byDay.get(day) ?? []), l])
+    }
+    for (const [day, lines] of byDay) {
+      if (covered.has(`${p.id}:${day}`)) continue
+      const at = lines.map((l) => l.notedAt)
+      out.push({
+        id: `notes:${p.id}:${day}`, about: p.name, kind: AboutKind.Who, personId: p.id, where: p.context,
+        startedAt: Math.min(...at), endedAt: Math.max(...at), durationMs: 0, meeting: false,
+        lines: lines.map((l) => ({ text: l.text, tag: l.tag })), transcript: [],
+      })
+    }
+  }
+  return out.sort((a, b) => b.startedAt - a.startedAt)
 }
 
 /** Things that explain themselves: a tooltip on desktop, a small "i" on a touch phone (owner 2026-10-06). */
@@ -345,7 +457,7 @@ export interface LineRef {
  * matcher input: one synthetic single-message thread per line, source 'self'
  * (owner-declared, B-08), exactly like apps/demo's inventoryThreads().
  */
-export function threadsForRing(s: AppState, ring: Ring): { threads: ChatThread[]; refs: Map<string, LineRef> } {
+export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { threads: ChatThread[]; refs: Map<string, LineRef> } {
   const refs = new Map<string, LineRef>()
   const threads: ChatThread[] = []
   const push = (threadId: string, text: string, context: string, at: number): void => {
@@ -362,9 +474,11 @@ export function threadsForRing(s: AppState, ring: Ring): { threads: ChatThread[]
   }
   for (const item of s.inventory) {
     if (!item.included || !audienceAdmits(item.audience, ring)) continue
+    if (scope?.inventory && !scope.inventory.has(item.id)) continue
     push(`inv:${item.id}`, item.text, INVENTORY_CONTEXT, item.createdAt)
   }
   for (const person of s.people) {
+    if (scope?.people && !scope.people.has(person.id)) continue
     for (const line of person.lines) {
       if (line.status !== LineStatus.Current || !audienceAdmits(line.audience, ring)) continue
       push(`note:${person.id}:${line.id}`, line.text, notesContext(person), line.notedAt)
