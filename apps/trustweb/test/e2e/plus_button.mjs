@@ -67,7 +67,8 @@ async function main() {
     ok('"No thanks" closes it, the web stays empty', await offer.isHidden() && await page.locator('.node:not(.you)').count() === 0)
     ok('the QR button carries no status dot', await page.locator('.hdr .relay-dot').count() === 0)
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
-    ok('nav is exactly Web | Record | Inventory', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Inventory']), JSON.stringify(tabs))
+    // Round B (wave 1733): the Feed gets its own tab (on by default); feed_flow checks that "off" gives the old bar.
+    ok('nav is exactly Web | Record | Feed | Inventory', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Feed', 'Inventory']), JSON.stringify(tabs))
     ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
     const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
     ok('header right reads search, QR, more', hdr.length === 3 && /Search/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))

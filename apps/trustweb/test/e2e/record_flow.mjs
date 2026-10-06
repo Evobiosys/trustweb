@@ -308,7 +308,8 @@ async function main() {
     await page.getByRole('button', { name: 'Inventory on the left, Web on the right' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
-    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabs))
+    // Round B (wave 1733): the Feed tab sits between Record and the right-hand tab (Settings > Feed can switch it off).
+    ok('settings swap Web and Inventory around Record (the Feed stays next to Record)', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Feed', 'Web']), JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     await page.getByRole('button', { name: 'More' }).click()

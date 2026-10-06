@@ -122,6 +122,29 @@ export interface Person {
    * Absent in records saved before it existed.
    */
   channels?: Partial<Record<Channel, string>>
+  /**
+   * Their public Mastodon or Pixelfed address (wave 1733 round B, item 2), so
+   * the Feed can show their PUBLIC posts, fetched by this phone straight from
+   * that instance. This phone only. Absent: none.
+   */
+  fediverse?: FediverseLink
+}
+
+/** A person's fediverse address and whether the Feed shows their public posts. */
+export interface FediverseLink {
+  /** "user@instance", canonical (fediverse.ts). */
+  handle: string
+  /** Show their public posts in the Feed (off until turned on, per person). */
+  show: boolean
+  /** How the phone reaches the instance, found when the address was added: its public API, or only a link out. */
+  reach?: FediverseReach
+}
+
+export enum FediverseReach {
+  /** The instance's public API answers this page (CORS allowed). */
+  Api = 'api',
+  /** It does not (CORS refused or down): "Open their profile" instead. */
+  Link = 'link',
 }
 
 /** Messengers a contact can be opened in, in the owner's order (2026-10-05). */
@@ -154,6 +177,8 @@ export interface InventoryItem {
   createdAt: number
   /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
   source?: ItemSource
+  /** A picture the person attached (image_store.ts, this phone only; never sent). Absent: none. */
+  imageId?: string
 }
 
 export enum LogOutcome {
@@ -309,6 +334,8 @@ export interface ReceivedShare {
   openedAt?: number
   /** The pack said its transcript was still arriving when it was last opened. Absent: complete or never opened. */
   pending?: boolean
+  /** Kept in past meetings as this meeting (the Feed shows it once). Absent: not kept. */
+  keptAs?: string
 }
 
 /** Which side of the raised Record button each outer tab sits on (Inventory settings). */
@@ -380,6 +407,26 @@ export interface AppState {
   serverTranscriptionConsentAt?: number
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
+  /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed on, nothing from the fediverse. */
+  feed?: FeedSettings
+}
+
+export interface FeedSettings {
+  /** The Feed tab in the bottom bar. Absent: on. Off: the bar is exactly as before. */
+  on?: boolean
+  /** "Also show posts from" people's Mastodon / Pixelfed addresses. Absent: off. */
+  remote?: boolean
+  /** Show pictures in those posts (each one a second request to their instance). Absent: off. */
+  images?: boolean
+  /** The person's own Mastodon instance, for "Share to Mastodon" (host only). Absent: asked when sharing. */
+  myInstance?: string
+  /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
+  myPixelfed?: string
+}
+
+/** The Feed is on unless switched off. */
+export function feedOn(s: Pick<AppState, 'feed'>): boolean {
+  return s.feed?.on !== false
 }
 
 export interface HostingState {

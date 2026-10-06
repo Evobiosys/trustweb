@@ -116,7 +116,7 @@ export function createPackView(h: PackViewHooks): PackView {
       el('h4', { class: 'eyebrow' }, [S.pastTranscript]),
       pack.transcript.length ? h.transcriptView(pack.transcript, 'pk') : el('p', { class: 'meta' }, [S.pastNoTranscript]),
       pending ? el('button', { class: 'btn btn-ghost', 'data-pack-check': '1', onclick: () => { if (poll) clearTimeout(poll.timer); void check(link, etag, entry, openedAt, token, attempt, true) } }, [S.recvCheckAgain]) : null,
-      el('button', { class: 'btn btn-electric', 'data-pack-keep': '1', onclick: () => { keep(pack, link, etag); h.closeSheet(); h.toast(S.recvKept); h.render() } }, [pending ? S.recvKeepPending : S.recvKeep]),
+      el('button', { class: 'btn btn-electric', 'data-pack-keep': '1', onclick: () => { keep(pack, link, etag, entry); h.closeSheet(); h.toast(S.recvKept); h.render() } }, [pending ? S.recvKeepPending : S.recvKeep]),
       el('button', { class: 'btn btn-ghost', onclick: h.closeSheet }, [S.recvClose]),
     ])
     h.sheet.dataset.pack = token
@@ -124,7 +124,7 @@ export function createPackView(h: PackViewHooks): PackView {
   }
 
   /** Keeps a received meeting: its notes go to the sender's card (only me, like notes shared by a Meet code), the whole thing to past meetings. */
-  function keep(pack: MeetingPack, link: ShareLink, etag: string | null): void {
+  function keep(pack: MeetingPack, link: ShareLink, etag: string | null, entry?: ReceivedShare): void {
     const s = h.state()
     const now = Date.now()
     let person = s.people.find((p) => p.name.toLowerCase() === pack.from.toLowerCase())
@@ -142,6 +142,7 @@ export function createPackView(h: PackViewHooks): PackView {
       ...(pack.pending ? { late: { keyText: link.keyText, ...(etag ? { etag } : {}), since: now } } : {}),
     }
     s.meetings = h.cap([m, ...(s.meetings ?? [])])
+    if (entry) entry.keptAs = m.id
     h.save()
   }
 

@@ -25,7 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -57,6 +57,8 @@ import { createSwissContext } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { importGroup } from './import_view'
+import { createFeedView } from './feed_view'
+import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
@@ -77,6 +79,8 @@ enum Screen {
   Review = 'review',
   Place = 'place',
   StillTrue = 'still',
+  /** What people in your web shared with you, and what you share (wave 1733 round B). */
+  Feed = 'feed',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -423,7 +427,10 @@ function renderTabs(): void {
   const web = tabButton(Screen.Web, S.navWeb, 'web')
   const inv = tabButton(Screen.Inventory, S.navInventory, 'inventory')
   const invLeft = state?.tabOrder === TabOrder.InventoryLeft
-  tabs.replaceChildren(invLeft ? inv : web, recordButton(), invLeft ? web : inv)
+  // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
+  const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
+  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv)
+  tabs.classList.toggle('four', feedTab.length > 0)
 }
 renderTabs()
 
@@ -652,6 +659,7 @@ function render(): void {
       case Screen.Review: return screenReview()
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
+      case Screen.Feed: return [header(S.feedTitle), feed.body()]
     }
   })()
   host.replaceChildren(...body)
@@ -802,6 +810,7 @@ function createMe(name: string): void {
     : { v: 1, me: { id: randomId(12), displayName }, peers: [], people: [], inventory: [], log: [], notificationsOn: false }
   if (solo) markDemo(state.people, state.inventory)
   save()
+  renderTabs()
 }
 
 /** In the side-by-side demo, the first phone hands its connect link to the page for the others. */
@@ -1275,6 +1284,7 @@ function itemSheet(itemId: string): void {
     el('p', { class: 'meta' }, [S.itemSheetLead]),
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience]) : S.itemPaused]),
     sourceFor(item.source, item.text),
+    feed.itemExtras(item),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
 }
@@ -1298,6 +1308,7 @@ function personSheet(personId: string): void {
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
+    feed.personRow(p),
   ])
 }
 
@@ -1355,9 +1366,12 @@ function channelsView(owner: ChannelOwner, labels: { title: string; add: string;
   return box
 }
 
+/** Signal's link opens Molly where it is installed instead; Molly exists on Android only (A2), so only there it is named. */
+const chName = (ch: Channel): string => (ch === Channel.Signal && /Android/i.test(navigator.userAgent) ? S.chSignalMolly : S.chLabel[ch])
+
 function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
   const value = owner.get()[ch]
-  const label = el('span', { class: 'ch-name ch-' + ch }, [S.chLabel[ch]])
+  const label = el('span', { class: 'ch-name ch-' + ch }, [chName(ch)])
   if (edit) {
     const input = el('input', { class: 'field', placeholder: S.chPh[ch], value: value ?? '', 'aria-label': S.chPh[ch], autocomplete: 'off' })
     const msg = el('p', { class: 'meta ch-msg' })
@@ -1383,7 +1397,7 @@ function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (ed
   }
   return el('div', { class: 'ch-row' }, [
     label,
-    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(S.chLabel[ch])]),
+    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
     el('button', { class: 'mini', 'aria-label': S.chEdit(S.chLabel[ch]), onclick: () => redraw(ch) }, [S.chEditShort]),
   ])
 }
@@ -1665,6 +1679,15 @@ const transcription = createTranscriptionView({
 const hosting = createHostingView({
   ctx: swiss, state: st, save, audio: audioStore, sheet, openSheet, toast, when: whenLabel,
   redrawSettings: () => { if (sheet.dataset.kind === 'settings' && sheet.classList.contains('on')) settingsSheet() },
+})
+const images = new ImageStore(persona, storeCtx)
+const feed = createFeedView({
+  state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
+  openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
+  openMeeting: (id) => { const m = pastMeetings(st()).find((x) => x.id === id); if (m) pastMeetingSheet(m) },
+  redrawFeed: () => { if (screen === Screen.Feed) render() },
+  tabsChanged: () => { renderTabs(); if (screen === Screen.Feed && !feedOn(st())) screen = Screen.Web; render() },
+  settings: settingsSheet,
 })
 const packs = createPackView({
   state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,
@@ -2331,7 +2354,7 @@ function meetMessengerPage(ch: Channel): HTMLElement {
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetMineLead(S.chLabel[ch])]),
     qr,
-    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(S.chLabel[ch])]),
+    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
     el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
     ch === Channel.Signal && /^\+/.test(value) ? el('p', { class: 'meta' }, [S.meetSignalNumberNote]) : null,
   ])
@@ -2576,9 +2599,10 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
 
 const FOUND_MAX = 20
 
+/** What an ask brought back, kept (capped): a demo account hands it over, and the Feed shows it (round B). */
 function recordFound(text: string, results: AskResult[]): void {
   const s = state
-  if (!s?.testOf) return
+  if (!s) return
   const shared = results
     .filter((r) => r.decoded?.outcome === 'shared' && r.decoded.shared)
     .map((r) => ({ from: r.decoded?.shared?.from || r.peerName, items: (r.decoded?.shared?.items ?? []).map((it) => ({ text: it.text, context: it.context, when: it.when })) }))
@@ -3041,6 +3065,7 @@ function settingsSheet(): void {
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+    ...feed.settingsGroup(),
     notificationsCard(s),
     solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
     solo ? null : el('button', {
@@ -3072,7 +3097,7 @@ function settingsSheet(): void {
       onclick: () => {
         if (!confirm(S.resetConfirm)) return
         dropRecording()
-        void audioStore.clear().finally(() => { clearState(persona, storeCtx); location.reload() })
+        void Promise.all([audioStore.clear(), images.clear()]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
   ])
@@ -3118,7 +3143,7 @@ function screenInventory(): Node[] {
         el('div', { class: 'inv-actions' }, [
           audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
           el('button', { class: 'mini', onclick: () => { item.included = !item.included; save(); render() } }, [item.included ? S.invOn : S.invOff]),
-          el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() } }, ['×']),
+          el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
         ]),
       ])),
       backup.card(),
