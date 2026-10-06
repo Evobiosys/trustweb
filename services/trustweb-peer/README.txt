@@ -31,9 +31,13 @@ name leads the text; the app shows relayed asks like any ask today). The phone m
 peer's ring, prompts the owner, and answers the peer; the peer relays the shared items to the asker (owner items
 first, then preset hits, at most three). Decline, no match, phone off: the same bytes to the asker.
 
-STATUS 2026-10-06: built and tested locally (vitest: 14 tests incl. the whole owner flow against an in-memory
-relay with two fake phones). NOT DEPLOYED. The app only offers the peer in a demo-account link when
-<app>/demo-peer.json exists; the live site has no such file.
+STATUS 2026-10-06: DEPLOYED on questhub (Swiss server) as trustweb-peer.service, demo instance, fictional inventory
+only, forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
+in-memory relay with two fake phones) and checked live with the app's e2e test (apps/trustweb/test/e2e/
+demo_account.mjs, step 7 against https://app.idea2.site/trustweb/). The card is published at
+https://app.idea2.site/trustweb/demo-peer.json, so every demo-account code made in the app now names the demo front
+door as a second peer. NO OWNER IS BOUND until Jakob runs scripts/trustweb_peer_claim.sh and opens the printed link
+on his phone; until then only the preset lines answer and nothing is forwarded.
 
 RUN (local)
   cd <repo>
@@ -59,24 +63,31 @@ TEST
 BUILD (one dependency-free file for a server with only Node >= 22)
   sh services/trustweb-peer/build.sh     -> services/trustweb-peer/dist/peer.mjs (about 140 KB)
 
-DEPLOYMENT DESIGN (demo instance, Swiss server = questhub, Infomaniak CH; NOT executed, ask first)
-  Same shape as services/trustweb-backup (README.txt there):
-  1. scp dist/peer.mjs and demo_inventory.json to /opt/trustweb-peer/.
+DEPLOYMENT (done 2026-10-06; demo instance, Swiss server = questhub, Infomaniak CH)
+  scripts/deploy_trustweb_peer.sh does all of it, idempotent (sh services/trustweb-peer/build.sh first):
+  1. scp dist/peer.mjs and demo_inventory.json (both 0644) to /opt/trustweb-peer/ (node on questhub: v22.23.1).
   2. /etc/systemd/system/trustweb-peer.service: ExecStart=/usr/bin/node /opt/trustweb-peer/peer.mjs,
-     Environment=TW_PEER_STATE=/var/lib/trustweb-peer TW_PEER_INVENTORY=/opt/trustweb-peer/demo_inventory.json
-     TW_PEER_RELAY=https://app.idea2.site TW_PEER_HEALTH_PORT=8961 TW_PEER_NAME="Demo inventory",
-     DynamicUser=yes, StateDirectory=trustweb-peer, Restart=on-failure, the same hardening lines as the
-     backup unit. Node on questhub must be >= 22 (global WebSocket); check `node --version` first, else
-     the bundle needs `ws` injected (relay.ts accepts a wsCtor).
-  3. Claim: start once with TW_PEER_CLAIM=1, Jakob opens the connect link (health /card gives the DID; the link
-     is the app's connect URL with that DID) on his phone within 10 minutes; /status shows owner:true.
-  4. Publish the card: copy /var/lib/trustweb-peer/demo-peer.json to
-     /srv/questhub-static/app-idea2-trustweb/demo-peer.json (same SELinux chcon as the deploy script does).
-     From then on every demo-account code made in the app names the demo front door as a second peer.
-     Removing that file switches the feature off again without touching the app.
+     TW_PEER_STATE=/var/lib/trustweb-peer TW_PEER_INVENTORY=/opt/trustweb-peer/demo_inventory.json
+     TW_PEER_RELAY=https://app.idea2.site TW_PEER_HEALTH_PORT=8961 TW_PEER_NAME="Demo inventory" TW_PEER_FORWARD=1
+     TW_PEER_POLICY=open, DynamicUser=yes, StateDirectory=trustweb-peer (0700), Restart=on-failure, MemoryMax=256M,
+     the same hardening lines as trustweb-backup.service.
+  3. Claim (owner binding): scripts/trustweb_peer_claim.sh. The peer reads <state>/claim-open ONLY at start, so the
+     script touches the file, restarts the unit, removes the file again (so a later crash-restart or reboot cannot
+     reopen the window), checks /status claimOpen:true, and prints the connect link (built with the app's own
+     buildConnectLinkUrl from the published card) for Jakob's phone. Window: 10 minutes or the first claim.
+     --status, --close (restart without the file), --reset (forget the owner) are in the same script.
+     Never run the app's e2e test while a window is open: its test phone would become the owner.
+  4. The card: /var/lib/trustweb-peer/demo-peer.json (root-readable only, DynamicUser) is copied to
+     /srv/questhub-static/app-idea2-trustweb/demo-peer.json, chmod a+r and chcon --reference=wot-app.
+     Removing that file switches the feature off in the app without touching the app.
+     WARNING: scripts/deploy_wot.sh clears that whole directory (rm -rf app-idea2-trustweb/*) and so deletes the
+     card on every app deploy. Run `scripts/deploy_trustweb_peer.sh --card-only` after each app deploy.
   5. The relay: the peer drains wss://app.idea2.site/relay/drain and POSTs to /relay/send like a phone;
      server-to-server there is no CORS. The relay sees one more DID, nothing else.
-  Rollback: systemctl stop trustweb-peer; rm the card file.
+  Health (on questhub): curl -s -H "Host: 127.0.0.1:8961" http://127.0.0.1:8961/status
+  Journal: sudo journalctl -u trustweb-peer -n 50 --no-pager (counts and outcomes only).
+  Rollback: scripts/deploy_trustweb_peer.sh --off  (= systemctl disable --now trustweb-peer; rm the card file).
+  State survives a stop: re-enabling keeps the same DID. Forget everything: sudo rm -rf /var/lib/trustweb-peer.
 
 PERSONAL INSTANCE (German server = sebra, Contabo DE): DESIGN ONLY, see INVENTORY_ARCHITECTURE.txt
   Same bundle with TW_PEER_POLICY=granted and TW_PEER_NAME="Jakob (front door)". grants.json lists the demo

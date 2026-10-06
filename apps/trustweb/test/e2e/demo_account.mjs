@@ -26,7 +26,8 @@
  * proxied to a real backup server) + the peer in this process. Live:
  * TW_URL=https://app.idea2.site/trustweb/ runs steps 1-5 and 6 against the
  * deployed app, its relay and its backup server; step 7 runs only where the
- * live site publishes demo-peer.json (it does not until the peer is deployed).
+ * live site publishes demo-peer.json (since 2026-10-06 it does: the demo peer on questhub, so step 7 asks that
+ * real service; start it only while NO claim window is open or the test phone becomes the owner).
  * TW_SHOTS=<dir> saves screenshots.
  *
  * Run from apps/demo/ (it has tsx and the toolchain):
@@ -104,6 +105,9 @@ async function main() {
   const stopVite = (proc) => new Promise((resolve) => { proc.once('exit', resolve); proc.kill('SIGTERM') })
   let viteProc = LIVE ? null : await startVite()
   console.log('trustweb demo accounts against ' + base)
+  // Live, the demo peer's card is published from the start: every demo code then names it in the fragment and a demo phone has two peers.
+  const cardAtStart = LIVE ? await fetch(base + 'demo-peer.json', { cache: 'no-store' }).then((r) => r.ok && /json/.test(r.headers.get('content-type') ?? '')).catch(() => false) : false
+  const demoPeers = cardAtStart ? 2 : 1
 
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   const engine = (pw.chromium ? pw : pw.default).chromium
@@ -181,7 +185,7 @@ async function main() {
     await a.getByRole('heading', { name: 'Anna-demo is ready' }).waitFor({ timeout: 10_000 })
     await a.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     const link = await a.getAttribute('.qrwrap', 'data-payload')
-    ok('the code is a connect link with account, id and end in the fragment', /\?connect=did%3Apeer/.test(link) && /#t=Anna-demo&a=[A-Za-z0-9]{8}&x=\d{13}$/.test(link), link)
+    ok('the code is a connect link with account, id and end in the fragment', /\?connect=did%3Apeer/.test(link) && /#t=Anna-demo&a=[A-Za-z0-9]{8}&x=\d{13}(&p=did%3Apeer[^&]+&pi=[^&]+&pn=[^&]+)?$/.test(link), link)
     const facts = await text(a.locator('.qr-facts'))
     ok('the card says you allow it first and it ends in 7 days', /once you allow it/.test(facts) && /Ends in 7 days/.test(facts), facts)
     ok('the row counts down: not opened yet, 7 days left', /not opened yet · 7 days left/.test(await text(a.locator('.test-card'))))
@@ -221,7 +225,7 @@ async function main() {
     ok('Anna: "Jakob allowed it. Ask away."', true)
     ok('the ask is open now', await b.getByRole('button', { name: 'Ask my web' }).isEnabled())
     const bState = await stored(b)
-    ok('Anna\'s phone knows whose demo account it is and when it ends', bState.me.displayName === 'Anna-demo' && bState.testOf?.name === 'Jakob' && bState.testOf.approvedAt && bState.testOf.expiresAt && bState.peers.length === 1)
+    ok('Anna\'s phone knows whose demo account it is and when it ends', bState.me.displayName === 'Anna-demo' && bState.testOf?.name === 'Jakob' && bState.testOf.approvedAt && bState.testOf.expiresAt && bState.peers.length === demoPeers)
     await shot(b, '06-anna-allowed-ask-open')
 
     // 4. Anna asks, Jakob consents, the ask shows under Review / requests
@@ -272,7 +276,7 @@ async function main() {
     await here.waitFor({ timeout: 10_000 })
     for (let i = 0; i < 50 && (await here.getAttribute('aria-disabled')) === 'true'; i++) await a.waitForTimeout(100)
     const hereHref = await here.getAttribute('href')
-    ok('"Open it on this phone" opens the code under its own persona', /[?&]persona=demo-[a-z0-9]{8}/.test(hereHref) && /connect=did%3Apeer/.test(hereHref) && /&own=1/.test(hereHref), hereHref)
+    ok('"Open it on this phone" opens the code under its own persona', /[?&]persona=demo-[a-z0-9_-]{8}/.test(hereHref) && /connect=did%3Apeer/.test(hereHref) && /&own=1/.test(hereHref), hereHref)
     const [c] = await Promise.all([a.context().waitForEvent('page'), here.click()])
     c.on('pageerror', (e) => errors.push(e.message))
     await c.locator('.test-invite').waitFor({ timeout: 10_000 })
@@ -312,7 +316,7 @@ async function main() {
     await d.getByRole('button', { name: 'Take over Ben-demo' }).click()
     await d.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
     const dState = await stored(d)
-    ok('it took over identity, connection and finds', dState.me.displayName === 'Ben-demo' && dState.peers.length === 1 && dState.found?.length === 1 && dState.testOf?.name === 'Jakob' && !dState.testOf.own && !dState.testOf.handedOverAt)
+    ok('it took over identity, connection and finds', dState.me.displayName === 'Ben-demo' && dState.peers.length === demoPeers && dState.found?.length === 1 && dState.testOf?.name === 'Jakob' && !dState.testOf.own && !dState.testOf.handedOverAt)
     ok('Jakob is on its web', (await d.locator('.node', { hasText: 'Jakob' }).count()) === 1)
     await d.getByRole('button', { name: 'Call into your web' }).click()
     await d.locator('.query-dock textarea').fill('Anyone with a ladder?')
@@ -333,14 +337,20 @@ async function main() {
       return
     }
     const peerLog = []
-    peer = await startPeer({
-      stateDir: path.join(scratch, 'peer'), inventoryFile: path.join(REPO, 'services/trustweb-peer/demo_inventory.json'),
-      relayOrigin: `http://127.0.0.1:${relayPort}`, policy: PeerPolicy.Open, healthPort: 0, log: (l) => peerLog.push(l),
-    })
-    writeFileSync(path.join(publicDir, 'demo-peer.json'), JSON.stringify(peer.card))
-    await stopVite(viteProc)
-    viteProc = await startVite()
-    ok('the card is served next to the app', (await (await fetch(base + 'demo-peer.json')).json()).did === peer.card.did)
+    if (LIVE) {
+      // The deployed peer (services/trustweb-peer on questhub): its card is already served; its log is the journal.
+      const liveCard = await (await fetch(base + 'demo-peer.json', { cache: 'no-store' })).json()
+      ok('the live card names the demo inventory', /^did:peer:/.test(liveCard.did) && liveCard.name === 'Demo inventory', JSON.stringify(liveCard))
+    } else {
+      peer = await startPeer({
+        stateDir: path.join(scratch, 'peer'), inventoryFile: path.join(REPO, 'services/trustweb-peer/demo_inventory.json'),
+        relayOrigin: `http://127.0.0.1:${relayPort}`, policy: PeerPolicy.Open, healthPort: 0, log: (l) => peerLog.push(l),
+      })
+      writeFileSync(path.join(publicDir, 'demo-peer.json'), JSON.stringify(peer.card))
+      await stopVite(viteProc)
+      viteProc = await startVite()
+      ok('the card is served next to the app', (await (await fetch(base + 'demo-peer.json')).json()).did === peer.card.did)
+    }
     await a.reload()
     await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     await openDemoTab(a)
@@ -358,8 +368,12 @@ async function main() {
     await a.getByRole('button', { name: 'Back' }).click()
     await allowOn(a, 'Carl-demo', 'card')
     await b2.locator('.toast.on', { hasText: 'Jakob allowed it' }).waitFor({ timeout: 20_000 })
-    for (let i = 0; i < 50 && peer.peerCount() < 1; i++) await new Promise((r) => setTimeout(r, 100))
-    ok('the peer holds Carl-demo as its peer', peer.peerCount() === 1)
+    if (peer) {
+      for (let i = 0; i < 50 && peer.peerCount() < 1; i++) await new Promise((r) => setTimeout(r, 100))
+      ok('the peer holds Carl-demo as its peer', peer.peerCount() === 1)
+    } else {
+      await new Promise((r) => setTimeout(r, 3000)) // live: the peer's own count is in its journal, not here
+    }
     await shot(b2, '16-carl-connected-two-peers')
     await b2.locator('.query-dock textarea').fill('Does anyone have a motorbike I could borrow?')
     await b2.getByRole('button', { name: 'Ask my web' }).click()
@@ -368,7 +382,8 @@ async function main() {
     const outcome2 = await b2.locator('.card.asked .outcome').innerText()
     ok('the demo inventory answers by itself after the window', /Demo inventory chose to share/.test(outcome2) && /Motorbike/.test(outcome2), outcome2)
     ok('Jakob was not prompted (nothing of his matched)', (await a.locator('.overlay.on').count()) === 0)
-    ok('the peer logged the outcome, never the ask', peerLog.some((l) => /ask shared/.test(l)) && !peerLog.some((l) => /motorbike/i.test(l)))
+    if (peer) ok('the peer logged the outcome, never the ask', peerLog.some((l) => /ask shared/.test(l)) && !peerLog.some((l) => /motorbike/i.test(l)))
+    else console.log('  NOTE  live: the peer log is the journal on questhub (journalctl -u trustweb-peer); check it by hand')
     await shot(b2, '17-carl-answer-from-peer')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
   } catch (e) {
