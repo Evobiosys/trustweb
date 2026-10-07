@@ -31,6 +31,8 @@
 import type { AppState, InventoryItem, NoteLine, PastMeeting, Person } from './model'
 import { AboutKind, AUDIENCES, isDemoItem, isDemoPerson, LineStatus, RINGS, TAGS } from './model'
 import { DemoContext, Persona, seedState } from './seed'
+import { isPublicDemoPerson } from './demo_inventory_public'
+import { markDemo } from './provenance'
 
 /** The one-shot record the demo page leaves for the live app (same origin). */
 export const CARRY_KEY = 'trustweb.carry.v1'
@@ -73,6 +75,17 @@ export enum CarryPlan {
   MergeQuietly = 'merge-quietly',
   /** The live app already has people: ask merge or cancel, never overwrite. */
   Ask = 'ask',
+}
+
+/**
+ * What "Show demo content" adds to a LIVE phone (main.ts addDemoContent): the seeded web of the context, marked dummy,
+ * without the owner's public-lines person (isPublicDemoPerson: the embedded demo only).
+ */
+export function demoContentForLivePhone(now: number, ctx: DemoContext): { people: Person[]; inventory: InventoryItem[] } {
+  const seed = seedState(Persona.Holder, now, ctx)
+  const people = seed.people.filter((p) => !isPublicDemoPerson(p))
+  markDemo(people, seed.inventory)
+  return { people, inventory: seed.inventory }
 }
 
 /**
@@ -120,11 +133,13 @@ function quietMeeting(m: PastMeeting): PastMeeting {
  * behind; with "Start clean" so does every dummy person and thing, together
  * with the notes on them. Past meetings come along; one about a person who
  * stays behind keeps its name and notes but no longer points at them.
+ * The seeded owner person (isPublicDemoPerson) always stays behind, with either choice: the live web never gets him.
  */
 export function buildCarryOver(demo: AppState, ctx: DemoContext, choice: DemoCleanChoice, now: number): CarryOver {
   const dummy = dummyIds(demo, ctx)
   const clean = choice === DemoCleanChoice.StartClean
-  const people = demo.people.filter((p) => !p.peerId && !(clean && dummy.people.has(p.id))).map(unlinked)
+  const ownerDemo = (p: Person): boolean => dummy.people.has(p.id) && isPublicDemoPerson(p)
+  const people = demo.people.filter((p) => !p.peerId && !ownerDemo(p) && !(clean && dummy.people.has(p.id))).map(unlinked)
   const inventory = demo.inventory.filter((i) => !(clean && dummy.inventory.has(i.id))).map(withoutPicture)
   const kept = new Set(people.map((p) => p.id))
   const meetings = (demo.meetings ?? []).map((m): PastMeeting => {

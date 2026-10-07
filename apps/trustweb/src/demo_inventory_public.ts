@@ -15,6 +15,7 @@
  * owner allowed it in advance: change the test's list in the same commit.
  */
 import { Audience, Tag } from './model'
+import type { Person } from './model'
 
 export interface PublicDemoLine {
   text: string
@@ -29,6 +30,15 @@ export const PUBLIC_LINE_DEFAULT_AUDIENCE: Audience = Audience.Friends
 /** The demo person these lines belong to. The context pairs with the name when "Start clean" recognises seeded people. */
 export const JAKOB_DEMO_NAME = 'Jakob'
 export const JAKOB_DEMO_CONTEXT = 'TrustWeb founder, public demo lines'
+
+/**
+ * The seeded owner person (name plus context, as dummyIds matches seeded people). He belongs to the embedded demo
+ * web only: a live phone never gets him, neither by "Show demo content" nor by a carry-over from the demo, because a
+ * real web would then claim a Ring.Friend tie to a real person that nobody made (review-wave4, 2026-10-07).
+ */
+export function isPublicDemoPerson(p: Pick<Person, 'name' | 'context'>): boolean {
+  return p.name === JAKOB_DEMO_NAME && p.context === JAKOB_DEMO_CONTEXT
+}
 
 export const JAKOB_PUBLIC_LINES: readonly PublicDemoLine[] = [
   { text: 'I keep a tech stack doc covering LLM/AI, infrastructure, dev tools, knowledge, and communication channels.', tag: Tag.Note },

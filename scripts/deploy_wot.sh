@@ -108,9 +108,13 @@ unset VITE_WOT_SCENARIO
 unset VITE_TW_SITE_URL
 
 # Push one local directory to one remote directory, then repair its context.
+# Every build is scanned first for the owner's private inventory lines (digest denylist,
+# apps/trustweb/test/helpers/private_line_guard.mjs; wave 4): a hit, or nothing scanned, refuses the push.
 push_dir() {
   local src="$1" dest="$2"
   [ -d "$src" ] || { echo "missing source dir: $src" >&2; exit 1; }
+  node "$REPO/apps/trustweb/test/scan_bundle_for_private_lines.mjs" "$src" >/dev/null \
+    || { echo "private-line scan of $src failed or found a hit: not pushed (node apps/trustweb/test/scan_bundle_for_private_lines.mjs $src)" >&2; exit 1; }
   rsh "sudo mkdir -p $dest && sudo chown -R almalinux:almalinux $dest && rm -rf $dest/*"
   "${SSHENV[@]}" scp -q -r "$src"/* "questhub:$dest/"
   rsh "chmod -R a+rX $dest && sudo chcon -R --reference=$REF $dest"

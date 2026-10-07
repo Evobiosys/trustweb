@@ -6,16 +6,17 @@
  * and must appear nowhere (allowlist = the real guard, digest denylist =
  * the backup, see test/helpers/private_line_guard.mjs).
  *
- * Data safety: the seed reaches a live phone only through "Show demo content"
- * (addDemoContent in main.ts), which marks it dummy (state.demo, source demo)
- * and removes exactly that again; the round trip is replayed here.
+ * Data safety: the seeded owner person never reaches a live phone. "Show demo
+ * content" (addDemoContent in main.ts -> demoContentForLivePhone) adds the
+ * fictional web only, marked dummy, and removes exactly that again; a
+ * carry-over from the demo leaves him behind (review-wave4, 2026-10-07).
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { Audience, Provenance, Ring, isDemoItem, isDemoPerson } from '../../src/model.ts'
 import { DEMO_CONTEXTS, DemoContext, Persona, seedState } from '../../src/seed.ts'
-import { JAKOB_DEMO_CONTEXT, JAKOB_DEMO_NAME, JAKOB_PUBLIC_LINES, PUBLIC_LINE_DEFAULT_AUDIENCE } from '../../src/demo_inventory_public.ts'
-import { dummyIds } from '../../src/demo_to_live.ts'
+import { JAKOB_DEMO_CONTEXT, JAKOB_DEMO_NAME, JAKOB_PUBLIC_LINES, PUBLIC_LINE_DEFAULT_AUDIENCE, isPublicDemoPerson } from '../../src/demo_inventory_public.ts'
+import { demoContentForLivePhone, dummyIds } from '../../src/demo_to_live.ts'
 import { markDemo } from '../../src/provenance.ts'
 import { PRIVATE_LINE_DIGESTS, isPrivateLine, lineDigest, normaliseLine, scanText } from '../helpers/private_line_guard.mjs'
 
@@ -137,8 +138,8 @@ describe('private-line digest denylist (backup)', () => {
   })
 })
 
-describe('data safety: the seed reaches a live phone only through "Show demo content"', () => {
-  /** What main.ts addDemoContent / removeDemoContent do to the record, replayed on a live phone. */
+describe('data safety: the owner demo person never reaches a live phone', () => {
+  /** What main.ts addDemoContent / removeDemoContent do to the record, on a live phone (add uses the same builder). */
   function live() {
     return {
       v: 1, me: { id: 'live-me', displayName: 'Real Person' }, peers: [], log: [], notificationsOn: true,
@@ -146,9 +147,8 @@ describe('data safety: the seed reaches a live phone only through "Show demo con
       inventory: [{ id: 'real-item', text: 'My own bike', audience: Audience.OnlyMe, included: true, createdAt: NOW }],
     }
   }
-  function add(s) {
-    const seed = seedState(Persona.Holder, NOW)
-    markDemo(seed.people, seed.inventory)
+  function add(s, ctx = DemoContext.Generic) {
+    const seed = demoContentForLivePhone(NOW, ctx)
     s.people.push(...seed.people)
     s.inventory.push(...seed.inventory)
     s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }
@@ -159,12 +159,18 @@ describe('data safety: the seed reaches a live phone only through "Show demo con
     s.inventory = s.inventory.filter((i) => !demo.inventory.includes(i.id))
     delete s.demo
   }
-  it('adds Jakob as dummy and removes exactly that again; the live record stays v1 and otherwise untouched', () => {
+  it('"Show demo content" adds the fictional web without the owner person, removes exactly that again; the live record stays v1', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const s = live()
+      add(s, ctx)
+      expect(s.people.some((p) => isPublicDemoPerson(p))).toBe(false)
+      const text = JSON.stringify(s)
+      for (const line of ALLOWED) expect(text.includes(JSON.stringify(line).slice(1, -1))).toBe(false)
+      expect(s.people.filter((p) => p.id !== 'real-1').every((p) => isDemoPerson(s, p.id))).toBe(true)
+    }
     const s = live()
     const before = JSON.stringify(s)
     add(s)
-    const dummyJakob = s.people.find((p) => p.name === JAKOB_DEMO_NAME && p.context === JAKOB_DEMO_CONTEXT)
-    expect(isDemoPerson(s, dummyJakob.id)).toBe(true)
     expect(isDemoPerson(s, 'real-1')).toBe(false)
     expect(s.inventory.filter((i) => isDemoItem(s, i.id))).toHaveLength(2)
     expect(s.v).toBe(1)
@@ -173,16 +179,18 @@ describe('data safety: the seed reaches a live phone only through "Show demo con
   })
   it('"Start clean" recognises the seeded Jakob by name plus context, never a real friend named Jakob', () => {
     const s = live()
-    add(s)
+    const demoPhone = seedState(Persona.Holder, NOW)
+    s.people.push(...demoPhone.people)
     const ids = dummyIds(s, DemoContext.Generic)
     expect(ids.people.has('real-1')).toBe(false)
     expect(ids.people.size).toBe(7)
+    expect([...ids.people].some((id) => isPublicDemoPerson(s.people.find((p) => p.id === id)))).toBe(true)
   })
-  it('the seed is only built where the demo is on: seedState is referenced by solo (createMe), the demo toggle and nothing else', () => {
+  it('the seed is only built where the demo is on: seedState in main.ts only under solo (createMe); the demo toggle goes through demoContentForLivePhone', () => {
     const main = readFileSync(path.join(import.meta.dirname, '../../src/main.ts'), 'utf8')
     const uses = main.split('\n').filter((l) => l.includes('seedState('))
-    expect(uses).toHaveLength(2)
+    expect(uses).toHaveLength(1)
     expect(main).toMatch(/state = solo\s*\n\s*\? \{ \.\.\.seedState\(/)
-    expect(main).toMatch(/function addDemoContent\(\)[\s\S]{0,200}seedState\(Persona\.Holder/)
+    expect(main).toMatch(/function addDemoContent\(\)[\s\S]{0,200}demoContentForLivePhone\(/)
   })
 })

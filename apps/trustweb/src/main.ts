@@ -49,7 +49,7 @@ import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { setUpInstall } from './install'
 import { createInstallSheets } from './install_sheets'
-import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
+import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
@@ -735,8 +735,7 @@ function showDemoFriends(): void {
 function addDemoContent(): void {
   const s = st()
   if (s.demo) return
-  const seed = seedState(Persona.Holder, Date.now(), ctx)
-  markDemo(seed.people, seed.inventory)
+  const seed = demoContentForLivePhone(Date.now(), ctx)
   s.people.push(...seed.people)
   s.inventory.push(...seed.inventory)
   s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }

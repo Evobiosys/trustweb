@@ -6,6 +6,7 @@
  */
 import { Audience, LineStatus, Ring, Tag, isDemoItem, isDemoPerson } from '../../src/model.ts'
 import { DemoContext, Persona, seedState } from '../../src/seed.ts'
+import { isPublicDemoPerson } from '../../src/demo_inventory_public.ts'
 import {
   CarryPlan, DemoCleanChoice, buildCarryOver, carryPlan, dummyIds, freshFromCarry, mergeCarryOver, parseCarry,
 } from '../../src/demo_to_live.ts'
@@ -74,10 +75,11 @@ describe('buildCarryOver', () => {
     expect(c.meetings[1].personId).toBeUndefined()
     expect(c.meetings[0].personId).toBe('own-1')
   })
-  it('"Keep them": the dummy content too, still marked dummy', () => {
+  it('"Keep them": the dummy content too, still marked dummy, but never the seeded owner person', () => {
     const c = buildCarryOver(demoPhone(), DemoContext.Generic, DemoCleanChoice.KeepThem, NOW)
-    expect(c.people).toHaveLength(8)
-    expect(c.demo.people).toHaveLength(7)
+    expect(c.people).toHaveLength(7) // own-1 plus the six fictional friends; the owner's public demo person stays behind (review-wave4)
+    expect(c.demo.people).toHaveLength(6)
+    expect(c.people.some((p) => isPublicDemoPerson(p))).toBe(false)
     expect(c.demo.inventory).toHaveLength(2)
     expect(c.people.some((p) => p.lines.some((l) => l.text === 'Added by me to a dummy'))).toBe(true)
   })
