@@ -2,7 +2,7 @@
  * The wave-5 optional record fields (src/note_fields.ts): General notes, plain notes, item context. Dedupe, order, cap,
  * and a load that never throws and never alters a valid record.
  */
-import { CONTEXT_MAX, CONTEXT_TEXT_MAX, GENERAL_NOTES_MAX, appendContext, cleanGeneralNotes, contextOf, normaliseNoteFields, noteKey } from '../../src/note_fields.ts'
+import { CONTEXT_MAX, CONTEXT_TEXT_MAX, GENERAL_NOTES_MAX, appendContext, cleanGeneralNotes, contextOf, normaliseNoteFields, noteKey, travelsInPack } from '../../src/note_fields.ts'
 
 const item = (over = {}) => ({ id: 'i1', text: 'Loudspeakers', audience: 'fof', included: true, createdAt: 1, ...over })
 const state = (over = {}) => ({ v: 1, me: { id: 'me', displayName: 'J' }, peers: [], people: [], inventory: [item()], log: [], notificationsOn: false, ...over })
@@ -92,5 +92,16 @@ describe('normaliseNoteFields', () => {
   })
   it('noteKey compares by lower case and collapsed spacing', () => {
     expect(noteKey('  Hello   WORLD ')).toBe('hello world')
+  })
+})
+
+describe('travelsInPack (review-wave5: General notes stay home while Only me)', () => {
+  it('keeps the Only me General notes line out of a meeting pack', () => {
+    expect(travelsInPack({ typed: true, audience: 'me' })).toBe(false)
+  })
+  it('lets it travel once widened, and every other line as before (any audience)', () => {
+    for (const audience of ['fof', 'friends', 'close']) expect(travelsInPack({ typed: true, audience })).toBe(true)
+    for (const audience of ['fof', 'friends', 'close', 'me']) expect(travelsInPack({ audience })).toBe(true)
+    expect(travelsInPack({ typed: false, audience: 'me' })).toBe(true)
   })
 })

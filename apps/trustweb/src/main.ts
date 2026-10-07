@@ -56,7 +56,7 @@ import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
-import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields } from './note_fields'
+import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields, travelsInPack } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
@@ -1943,8 +1943,8 @@ function draftMeeting(): PastMeeting | undefined {
 
 function packFromDraft(): MeetingPack {
   const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
-  const notes = (draft.lines.length ? draft.lines.map((l) => l.text) : extractLines(prose).map((l) => l.text))
-    .concat(draft.extraLines.map((l) => l.text), cleanGeneralNotes(draft.generalNotes))
+  const notes = (draft.lines.length ? draft.lines.filter(travelsInPack).map((l) => l.text) : extractLines(prose).map((l) => l.text))
+    .concat(draft.extraLines.map((l) => l.text))
     .map((t) => t.trim()).filter((t, i, all) => Boolean(t) && all.indexOf(t) === i)
   return {
     v: 1, kind: 'meeting', from: st().me.displayName, about: draft.name.trim(), where: draft.context.trim(),

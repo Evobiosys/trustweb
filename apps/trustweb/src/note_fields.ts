@@ -7,6 +7,7 @@
  * round-tripped whole), a record without them reads as before. normaliseNoteFields never throws and never repairs what it
  * does not understand into something else: a wrong type is dropped, a valid field is left exactly as it is.
  */
+import { Audience } from './model'
 import type { AppState, InventoryContext, InventoryItem, PastMeeting } from './model'
 
 /** What the General notes field accepts (characters). */
@@ -19,6 +20,15 @@ export const CONTEXT_TEXT_MAX = 400
 /** The comparison form of a note: lower case, runs of whitespace collapsed, trimmed. */
 export function noteKey(text: string): string {
   return text.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * May this draft line travel in a meeting pack (Send meeting, the Meet code after a recording)? Not the General notes line while it
+ * is "Only me": the Meet code uploads its pack on its own and its summary names the transcript notes only, so private free text
+ * would leave unseen (review-wave5). Once widened on the Review screen it travels like every other note line.
+ */
+export function travelsInPack(line: { typed?: boolean; audience: Audience }): boolean {
+  return !(line.typed === true && line.audience === Audience.OnlyMe)
 }
 
 /** A General notes value as stored: trimmed and capped; empty reads as none. */
