@@ -28,8 +28,12 @@
 #                                       The pages are built exactly as for idea2, then scripts/tw_site_rehost.py
 #                                       rewrites the app, feedback and site URLs and the site label, and fails if
 #                                       any old idea2 TrustWeb URL is left.
-#   TW_SITE_HOST=trustintheweb.com      the hosting site (dir trustintheweb-com): its pages come from the site
-#                                       agent's scripts/tw-front-door/com/ (wave 3); refused until tw_site.py builds them.
+#   TW_SITE_HOST=trustintheweb.com      the hosting site (dir trustintheweb-com, draft at /draft/), app TW_APP_ORIGIN
+#                                       (default https://app.trustintheweb.org). Built by tw_site.py --site com from
+#                                       scripts/tw-front-door/com/ alone: no source page is fetched.
+#   tw_site.py is also handed --site-host and --app-base (the app's full base: <origin>/trustweb on app.idea2.site,
+#   the bare origin elsewhere), so the pages come out right natively (canonical, the white paper anchor, Demo,
+#   Install, the feedback endpoint); tw_site_rehost.py stays as the safety net that fails on any old URL.
 #   The live production site: TW_SITE_HOST=trustintheweb.org TW_SERVICES_LIVE=1 ./scripts/build_tw_front_door.sh
 #
 # TWO FLAGS (wave 2: transcription got its own, because it stays off until a
@@ -86,14 +90,17 @@ case "$SITE_HOST" in
     SITE_URL="https://trustintheweb.org"
     APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
   trustintheweb.com)
-    echo "TW_SITE_HOST=trustintheweb.com: the hosting site's pages come from scripts/tw-front-door/com/ (site agent, wave 3);" >&2
-    echo "this script does not build them yet. trustintheweb.com serves a placeholder meanwhile (scripts/trustweb_domains.sh placeholders)." >&2
-    exit 2 ;;
+    PROD_DIR=/srv/questhub-static/trustintheweb-com
+    SITE_URL="https://trustintheweb.com"
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
   *) echo "unknown TW_SITE_HOST: $SITE_HOST (idea2.site, trustintheweb.org or trustintheweb.com)" >&2; exit 2 ;;
 esac
 if [ "$SITE_HOST" = idea2.site ] && [ "$APP_ORIGIN" != https://app.idea2.site ]; then
   echo "TW_APP_ORIGIN applies to TW_SITE_HOST=trustintheweb.org only (the idea2 build keeps app.idea2.site/trustweb/)" >&2; exit 2
 fi
+# the app's base URL as tw_site.py wants it: under /trustweb on app.idea2.site, the bare origin on every other host
+if [ "$APP_ORIGIN" = https://app.idea2.site ]; then APP_BASE="$APP_ORIGIN/trustweb"; else APP_BASE="$APP_ORIGIN"; fi
+if [ "$SITE_HOST" = trustintheweb.com ]; then SITE_KIND=com; else SITE_KIND=org; fi
 DRAFT_DIR="$PROD_DIR/draft"
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
@@ -127,10 +134,12 @@ http_code() {
   node -e 'fetch(process.argv[1], { redirect: "manual", signal: AbortSignal.timeout(20000) }).then((r) => console.log(r.status), () => console.log("ERR"))' "$1"
 }
 
-echo "fetching $SRC"
-"${SSHENV[@]}" scp -q "questhub:$SRC" "$WORK/source_index.html"
-
-ARGS=(--src "$WORK/source_index.html" --frag "$FRAG" --out "$OUT")
+ARGS=(--frag "$FRAG" --out "$OUT" --site "$SITE_KIND" --site-host "$SITE_HOST" --app-base "$APP_BASE")
+if [ "$SITE_KIND" = org ]; then  # the hosting site is built from fragments alone, no source page
+  echo "fetching $SRC"
+  "${SSHENV[@]}" scp -q "questhub:$SRC" "$WORK/source_index.html"
+  ARGS+=(--src "$WORK/source_index.html")
+fi
 [ "$DRAFT" = 1 ] && ARGS+=(--draft)
 [ "$SERVICES_LIVE" = 1 ] && ARGS+=(--services-live)
 [ "$TRANSCRIBE_LIVE" = 1 ] && ARGS+=(--transcribe-live)
