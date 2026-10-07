@@ -70,7 +70,9 @@ for line in sys.stdin:
     if e.get("email") is not None or e.get("notify") or e.get("newsletter"):
         # wave 2: the person ticked "alert me" and/or "newsletter"; the address is theirs, shown only with a ticked box
         print("  stay informed: alert-me {}  newsletter {}  email: {}".format(
-            "yes" if e.get("notify") is True else "no", "yes" if e.get("newsletter") is True else "no", visible(e.get("email") or "-")))
+            "yes" if e.get("notify") is True else "no",
+            ("DEFERRED (not sent yet: the day's cap)" if e.get("deferred") is True else "yes") if e.get("newsletter") is True else "no",
+            visible(e.get("email") or "-")))
     print(visible(e.get("text", ""), keep_newlines=True))
     print("--------")
 print("{} entries".format(n))

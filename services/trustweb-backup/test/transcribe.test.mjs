@@ -219,7 +219,9 @@ test('the phone hangs up after the upload: the provider job is still followed to
       // the booked duration counts on the daily budget too: 7200 - 500 left, so a 3600 s job still fits, two do not
       const big = Buffer.alloc(21_000_000, 1) // ~3500 s at 48 kbps
       assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.1' })).status, 200)
-      const third = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.2' })
+      // review-wave2: the twin of the openrouter flake: the budget 429 comes before the audio is read, so a 21 MB body races it
+      // (write EPIPE, seen once in the review's run 1 of the full suite); the charge is the declared 3500 s either way
+      const third = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), Buffer.alloc(1000, 1), { ip: '9.9.9.2' })
       assert.equal(third.status, 429)
       assert.equal(third.json.error, 'busy_today')
     })

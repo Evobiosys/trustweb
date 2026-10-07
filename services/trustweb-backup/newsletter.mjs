@@ -4,18 +4,22 @@
 //   POST https://subscriber.questhub.eco/subscribe   {"email", "project":"questhub", "source":"trustweb", "gdpr":true}
 // and the service answers with a confirmation mail (double opt-in), so a mistyped or foreign address confirms nothing.
 // This module posts the same body from the server, and only for an entry whose newsletter box was ticked (feedback.mjs decides).
-// The URL comes from SUBSCRIBER_URL only (never from a request); unset or not http(s) = forwarding off, the opt-in stays in the feedback file.
+// The URL comes from SUBSCRIBER_URL only (never from a request); unset, not https (plain http only to loopback) = forwarding off,
+// the opt-in stays in the feedback file.
 
 const BODY_CONSTANTS = Object.freeze({ project: 'questhub', source: 'trustweb', gdpr: true })
 
 /** Result of one forward, for the log line only (never the address). */
 export const ForwardOutcome = Object.freeze({ Sent: 'sent', Rejected: 'rejected', Failed: 'failed', Off: 'off' })
 
-/** True for an absolute http(s) URL. */
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
+/** True for an absolute https URL, or plain http to this machine only (the staging/test fake); never with credentials in it. */
 export function isForwardUrl(value) {
   try {
     const u = new URL(value)
-    return u.protocol === 'https:' || u.protocol === 'http:'
+    if (u.username !== '' || u.password !== '') return false
+    return u.protocol === 'https:' || (u.protocol === 'http:' && LOOPBACK.has(u.hostname))
   } catch {
     return false
   }

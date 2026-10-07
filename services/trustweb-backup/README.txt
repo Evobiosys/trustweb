@@ -24,7 +24,11 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   per entry in a 0600 file. Optional {notify, newsletter, email} (wave 2, P14/P15): the email is validated and kept
                   only when notify or newsletter is true; ONLY newsletter:true forwards it (after the entry is stored) to the
                   subscriber service (SUBSCRIBER_URL; newsletter.mjs; same body as the join form; double opt-in at the subscriber;
-                  the answer stays 204 whatever it does; no retry). The file (read with scripts/trustweb_feedback_read.sh, which shows control and
+                  the answer stays 204 whatever it does; no retry). review-wave2: with a ticked box the message may be empty;
+                  at most NEWSLETTER_PER_DAY (20) forwards per UTC day for all visitors together (the subscriber allows this
+                  server's one address 50 a day), past it the entry is stored with deferred:true and logged "feedback newsletter
+                  deferred" for a later replay (the subscriber answers a repeat with already_subscribed/confirmation_pending,
+                  so a replay cannot double-subscribe). SUBSCRIBER_URL must be https (plain http to loopback only). The file (read with scripts/trustweb_feedback_read.sh, which shows control and
                   bidi characters as \u{XXXX} so typed-in escapes never reach the terminal).
 
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.

@@ -18,7 +18,7 @@ export const AllowanceReason = Object.freeze({ Seconds: 'seconds', Bytes: 'bytes
 export function planFromConfig(cfg) {
   return Object.freeze({
     name: 'free',
-        secondsLimit: cfg.accountSecondsLimit,
+    secondsLimit: cfg.accountSecondsLimit,
     bytesLimit: cfg.accountBytesLimit,
     maxSecondsPerRecording: cfg.maxRecSeconds,
     maxBytesPerRecording: cfg.maxRecBytes,

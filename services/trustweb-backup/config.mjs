@@ -45,6 +45,9 @@
 //   SUBSCRIBER_URL                   (unset = off) where a feedback entry with newsletter:true is forwarded, e.g. https://subscriber.questhub.eco/subscribe
 //                                    (the production unit sets it; staging points it at a fake). Never from a request.
 //   SUBSCRIBER_TIMEOUT_MS            4000         longest wait for the subscriber (the visitor gets 204 either way)
+//   NEWSLETTER_PER_DAY               20           forwards per UTC day, all visitors together (attempts). The subscriber limits this
+//                                                 server's one address to 3/min and 50/day; past this cap entries are kept with
+//                                                 deferred:true for a replay instead of burning the subscriber's bucket
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -139,5 +142,6 @@ export function loadConfig(options = {}) {
     feedbackPerHour: pick(options, 'feedbackPerHour', 'FEEDBACK_PER_HOUR', 5),
     subscriberUrl: pick(options, 'subscriberUrl', 'SUBSCRIBER_URL', '', String),
     subscriberTimeoutMs: pick(options, 'subscriberTimeoutMs', 'SUBSCRIBER_TIMEOUT_MS', 4000),
+    newsletterPerDay: pick(options, 'newsletterPerDay', 'NEWSLETTER_PER_DAY', 20),
   }
 }

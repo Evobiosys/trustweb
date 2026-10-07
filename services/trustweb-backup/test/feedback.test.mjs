@@ -396,3 +396,80 @@ test('the reader script shows the ticked boxes and the address, escaped like eve
     assert.ok(out.includes('3 entries'))
   })
 })
+
+// ---- review-wave2 (2026-10-07) ----
+
+test('review: an address with an invisible or format character (zero-width, bidi, BOM, separators) or a box sent as [true] is 400', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed({ rateLimit: 1000 }), async ({ dir }) => {
+      const invisible = ['​', '‌', '‍', '‎', '‏', '‪', '‮', '⁠', '⁦', '⁩', '﻿', '­', ' ', '　', ' ', '᠎']
+      for (const ch of invisible) {
+        for (const email of [`a${ch}b@example.org`, `ab@exam${ch}ple.org`]) {
+          const r = await post({ text: 'x', newsletter: true, email })
+          assert.equal(r.status, 400, `U+${ch.codePointAt(0).toString(16)} in ${JSON.stringify(email)}`)
+          assert.equal(r.json.field, 'email')
+        }
+      }
+      for (const box of [[true], { v: true }, 'false', 0]) {
+        assert.equal((await post({ text: 'x', newsletter: box, email: 'a@example.org' })).json.field, 'newsletter', JSON.stringify(box))
+        assert.equal((await post({ text: 'x', notify: box, email: 'a@example.org' })).json.field, 'notify', JSON.stringify(box))
+      }
+      assert.deepEqual(await lines(path.join(dir, 'feedback.jsonl')), [])
+      assert.equal(seen.length, 0)
+      // letters of other scripts stay allowed (an internationalised address is still an address)
+      assert.equal((await post({ text: 'x', notify: true, email: 'jürgen@bücher.example' })).status, 204)
+    })
+  })
+})
+
+test('review: the message may be empty when a box is ticked (the form allows it), never otherwise', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed(), async ({ dir }) => {
+      assert.equal((await post({ text: '', newsletter: true, email: 'a@example.org' })).status, 204)
+      assert.equal((await post({ text: '   ', notify: true, email: 'b@example.org' })).status, 204)
+      assert.equal((await post({ notify: true, email: 'c@example.org' })).status, 204) // text absent
+      assert.equal((await post({ text: '', contact: 'c@example.org' })).json.field, 'text')
+      assert.equal((await post({ text: '', notify: false, newsletter: false })).json.field, 'text')
+      assert.equal((await post({ text: 5, notify: true, email: 'd@example.org' })).json.field, 'text')
+      const stored = await lines(path.join(dir, 'feedback.jsonl'))
+      assert.deepEqual(stored.map((e) => [e.text, e.email]), [['', 'a@example.org'], ['', 'b@example.org'], ['', 'c@example.org']])
+      assert.equal(seen.length, 1)
+    })
+  })
+})
+
+test('review: at most NEWSLETTER_PER_DAY forwards per UTC day (below the subscriber\'s shared 50); past it the entry is kept, marked deferred, logged, sent again the next day', async () => {
+  let clock = Date.parse('2026-10-07T10:00:00Z')
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed({ newsletterPerDay: 2, now: () => clock }), async ({ dir, lines: log }) => {
+      const file = path.join(dir, 'feedback.jsonl')
+      for (const who of ['a', 'b', 'c']) assert.equal((await post({ text: who, newsletter: true, email: `${who}@example.org` })).status, 204)
+      assert.equal((await post({ text: 'notify only', notify: true, email: 'n@example.org' })).status, 204) // does not count
+      assert.equal(seen.length, 2)
+      const stored = await lines(file)
+      assert.deepEqual(stored.map((e) => [e.text, e.deferred === true]), [['a', false], ['b', false], ['c', true], ['notify only', false]])
+      assert.equal(stored[3].deferred, undefined)
+      assert.equal(log.filter((l) => l === 'feedback newsletter deferred').length, 1)
+      assert.equal(JSON.stringify(log).includes('example.org'), false)
+      clock = Date.parse('2026-10-08T00:00:30Z')
+      assert.equal((await post({ text: 'd', newsletter: true, email: 'd@example.org' })).status, 204)
+      assert.equal(seen.length, 3)
+      assert.equal((await lines(file))[4].deferred, undefined)
+    })
+  })
+})
+
+test('review: a failed forward (subscriber down) counts against the day as well: the subscriber counts requests, not successes', async () => {
+  await withServer(P, subscribed({ subscriberUrl: 'http://127.0.0.1:1/subscribe', newsletterPerDay: 1 }), async ({ dir, lines: log }) => {
+    assert.equal((await post({ text: 'one', newsletter: true, email: 'a@example.org' })).status, 204)
+    assert.equal((await post({ text: 'two', newsletter: true, email: 'b@example.org' })).status, 204)
+    assert.deepEqual(log.filter((l) => l.startsWith('feedback newsletter')), ['feedback newsletter failed', 'feedback newsletter deferred'])
+    assert.deepEqual((await lines(path.join(dir, 'feedback.jsonl'))).map((e) => e.deferred === true), [false, true])
+  })
+})
+
+test('review: SUBSCRIBER_URL over plain http only to a loopback address; https anywhere', async () => {
+  const { isForwardUrl } = await import('../newsletter.mjs')
+  for (const ok of ['https://subscriber.questhub.eco/subscribe', 'http://127.0.0.1:8979/subscribe', 'http://localhost:8979/x', 'http://[::1]:8979/x']) assert.equal(isForwardUrl(ok), true, ok)
+  for (const bad of ['http://subscriber.questhub.eco/subscribe', 'http://10.0.0.1/x', 'ftp://example.org/x', 'not a url', '', 'https://user:pw@example.org/x']) assert.equal(isForwardUrl(bad), false, bad)
+})
