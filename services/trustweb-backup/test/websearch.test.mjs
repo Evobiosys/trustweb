@@ -262,6 +262,25 @@ test('per-client limit: the third search in a minute is 429 with Retry-After, an
   }
 })
 
+test('per-client day count: one client cannot spend the engine budget for everyone', async () => {
+  const brave = await fakeEngine((q, r) => json(r, braveBody([])))
+  try {
+    await withSearch({ brave, extra: { websearchPerDay: 3, websearchPerMinute: 100, websearchPerHour: 100, websearchDailyCaps: { brave: 100 } } }, async ({ port }) => {
+      const body = { q: 'x', engine: 'brave' }
+      const greedy = { 'X-Forwarded-For': '5.5.5.5' }
+      for (let i = 0; i < 3; i += 1) assert.equal((await post(port, body, greedy)).status, 200)
+      const over = await post(port, body, greedy)
+      assert.equal(over.status, 429)
+      assert.equal(over.json.error, 'rate_limited')
+      assert.ok(Number(over.headers['retry-after']) > 0 && Number(over.headers['retry-after']) <= 86400)
+      assert.equal(brave.seen.length, 3)
+      assert.equal((await post(port, body, { 'X-Forwarded-For': '6.6.6.6' })).status, 200) // everyone else still can
+    })
+  } finally {
+    await brave.close()
+  }
+})
+
 test('daily budget per engine: past it 429 engine_daily_cap with the seconds to UTC midnight; another engine keeps its own', async () => {
   const brave = await fakeEngine((q, r) => json(r, braveBody([])))
   const mojeek = await fakeEngine((q, r) => json(r, { response: { status: 'OK', results: [] } }))

@@ -42,7 +42,8 @@ const pick = (options, key, envName, fallback, parse = Number) => options[key] ?
 
 /**
  * Settings of the route. options (tests) win over env, env over defaults.
- *   WEBSEARCH_PER_MINUTE (6), WEBSEARCH_PER_HOUR (40)  per client (IPv4, IPv6 /64)
+ *   WEBSEARCH_PER_MINUTE (6), WEBSEARCH_PER_HOUR (40), WEBSEARCH_PER_DAY (10)  per client (IPv4, IPv6 /64); the day count keeps one
+ *                                                      client from spending an engine's whole daily budget for everyone
  *   WEBSEARCH_DAILY_<ID>                               calls per UTC day for one engine, e.g. WEBSEARCH_DAILY_BRAVE (default: the adapter's)
  *   WEBSEARCH_TIMEOUT_MS (8000), WEBSEARCH_MAX_BYTES (524288), WEBSEARCH_MAX_IN_FLIGHT (4)
  *   WEBSEARCH_BRAVE_URL, WEBSEARCH_MOJEEK_URL          upstream endpoints (https, or http to loopback)
@@ -61,6 +62,7 @@ export function loadWebsearchConfig(options = {}) {
     websearchDailyCaps: dailyCaps,
     websearchPerMinute: pick(options, 'websearchPerMinute', 'WEBSEARCH_PER_MINUTE', 6),
     websearchPerHour: pick(options, 'websearchPerHour', 'WEBSEARCH_PER_HOUR', 40),
+    websearchPerDay: pick(options, 'websearchPerDay', 'WEBSEARCH_PER_DAY', 10),
     websearchTimeoutMs: pick(options, 'websearchTimeoutMs', 'WEBSEARCH_TIMEOUT_MS', 8000),
     websearchMaxBytes: pick(options, 'websearchMaxBytes', 'WEBSEARCH_MAX_BYTES', 524288),
     websearchMaxInFlight: pick(options, 'websearchMaxInFlight', 'WEBSEARCH_MAX_IN_FLIGHT', 4),
@@ -112,6 +114,7 @@ async function readCapped(response, maxBytes) {
 export function createWebsearch({ cfg, clientOf, fetchImpl = globalThis.fetch, now = Date.now }) {
   const perMinute = createWindowLimiter({ limit: cfg.websearchPerMinute, windowMs: 60_000, now })
   const perHour = createWindowLimiter({ limit: cfg.websearchPerHour, windowMs: 3_600_000, now })
+  const perClientDay = createDailyMeter({ limit: cfg.websearchPerDay, now })
   const meters = new Map(ENGINES.filter((e) => e.mode === EngineMode.Api).map((e) => [e.id, createDailyMeter({ limit: cfg.websearchDailyCaps[e.id], now })]))
   const inFlight = createInFlight({ total: cfg.websearchMaxInFlight, perKey: 2 })
 
@@ -172,6 +175,7 @@ export function createWebsearch({ cfg, clientOf, fetchImpl = globalThis.fetch, n
     const minute = perMinute.hit(key)
     const hour = perHour.hit(key)
     if (minute.limited || hour.limited) return tooManyRequests(res, 'rate_limited', Math.max(minute.retryAfter, hour.retryAfter))
+    if (!perClientDay.fits(key, 1)) return tooManyRequests(res, 'rate_limited', perClientDay.secondsToReset())
     const meter = meters.get(engine.id)
     if (!meter.fits(null, 1)) {
       return fail(res, 429, 'engine_daily_cap', 'The daily budget of this engine is spent.', { retryAfter: meter.secondsToReset(), engine: engine.id }, { 'Retry-After': String(meter.secondsToReset()) })
@@ -179,6 +183,7 @@ export function createWebsearch({ cfg, clientOf, fetchImpl = globalThis.fetch, n
     const release = inFlight.tryAcquire(key)
     if (release === null) return fail(res, 503, 'busy', 'Too many searches at once.', {}, { 'Retry-After': '2' })
     meter.add(null, 1)
+    perClientDay.add(key, 1)
     let outcome
     try {
       outcome = await callEngine(engine, q)
