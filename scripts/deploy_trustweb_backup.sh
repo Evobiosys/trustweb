@@ -68,6 +68,14 @@ TS="$(date +%Y%m%d_%H%M%S)"
 # $CREDENTIALS_DIRECTORY, so the service user needs no access to /etc/trustweb. This script never reads the files.
 CRED_FILE=/etc/trustweb/orkey.json          # OpenRouter (the fallback provider)
 BERGET_CRED_FILE=/etc/trustweb/berget.json  # Berget AI (the default provider once this file exists; Jakob creates it, see the README)
+# Web results (wave 3, websearch.mjs): one key file per engine, placed by Jakob only (a key in place switches that engine on for every
+# phone: place it only after the terms and privacy lines, wave3/websearch-api-contract.txt section 7 step 0).
+BRAVE_CRED_FILE=/etc/trustweb/websearch-brave.json
+MOJEEK_CRED_FILE=/etc/trustweb/websearch-mojeek.json
+# The hosts the server answers for and the pages that may post feedback (wave 3: the TrustInTheWeb hosts too). Kept in the unit itself so
+# a deploy never depends on the drop-in of scripts/trustweb_domains.sh backup-env (same values; the drop-in may stay, it changes nothing).
+ALLOWED_HOSTS_PRODUCTION="app.idea2.site,app.trustintheweb.org"
+FEEDBACK_ORIGINS_ALL="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org"
 # Where feedback entries with newsletter:true are forwarded (services/trustweb-backup/newsletter.mjs). Staging must never reach the real service.
 SUBSCRIBER_URL_PRODUCTION="${TW_SUBSCRIBER_URL:-https://subscriber.questhub.eco/subscribe}"
 SUBSCRIBER_URL_STAGING="${TW_STAGING_SUBSCRIBER_URL:-http://127.0.0.1:8979/subscribe}"
@@ -110,14 +118,21 @@ caddy_snippet() {
 		}
 		reverse_proxy 127.0.0.1:8960
 	}
+	# Web results (wave 3): the app POSTs the words in the body, which Caddy never logs (a GET query string would be logged if the site logs).
+	handle /websearch* {
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
 CADDY
 }
 
 # The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max, $4 = 1 when the OpenRouter credential file exists on
-# questhub, $5 = 1 when the Berget one does (a LoadCredential= line for a missing file would stop the unit from starting, so each
-# line is written only when its file is there).
+# questhub, $5 = 1 when the Berget one does, $6 / $7 = 1 when the Brave / Mojeek web-search key files do (a LoadCredential= line for a
+# missing file would stop the unit from starting, so each line is written only when its file is there).
 unit_text() {
-  local s="$1" port="$2" mem="$3" cred="${4:-0}" berget="${5:-0}" allowed="app.idea2.site" cred_line="" subscriber="$SUBSCRIBER_URL_PRODUCTION" staging_line=""
+  local s="$1" port="$2" mem="$3" cred="${4:-0}" berget="${5:-0}" brave="${6:-0}" mojeek="${7:-0}" allowed="$ALLOWED_HOSTS_PRODUCTION" cred_line="" subscriber="$SUBSCRIBER_URL_PRODUCTION" staging_line=""
   if [ -n "$s" ]; then
     subscriber="$SUBSCRIBER_URL_STAGING"
     # The smoke test makes more than 30 requests and more than 5 feedback posts from one address (loopback): staging only, production keeps the defaults.
@@ -128,6 +143,10 @@ Environment=FEEDBACK_PER_HOUR=100
   [ "$cred" = 1 ] && cred_line="LoadCredential=orkey:${CRED_FILE}
 "
   [ "$berget" = 1 ] && cred_line="${cred_line}LoadCredential=berget:${BERGET_CRED_FILE}
+"
+  [ "$brave" = 1 ] && cred_line="${cred_line}LoadCredential=websearch-brave:${BRAVE_CRED_FILE}
+"
+  [ "$mojeek" = 1 ] && cred_line="${cred_line}LoadCredential=websearch-mojeek:${MOJEEK_CRED_FILE}
 "
   cat <<UNIT
 [Unit]
@@ -142,6 +161,7 @@ Environment=BACKUP_DIR=/var/lib/trustweb-backup${s}
 Environment=HOSTED_DIR=/var/lib/trustweb-hosted${s}
 Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
 Environment=ALLOWED_HOSTS=${allowed}
+Environment=FEEDBACK_ORIGINS=${FEEDBACK_ORIGINS_ALL}
 Environment=SUBSCRIBER_URL=${subscriber}
 ${staging_line}# Transcription: the provider is NOT pinned here (TRANSCRIBE_PROVIDER default auto = Berget when its key exists, else OpenRouter);
 # keys handed in as credentials, everything switched on by scripts/trustweb_transcribe_switch_on.sh (it writes TRANSCRIBE_ENABLED=1,
@@ -286,18 +306,20 @@ rollback() {
 }
 
 install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
-  local unit="$1" file="/etc/systemd/system/$1.service" cred=0 berget=0
+  local unit="$1" file="/etc/systemd/system/$1.service" cred=0 berget=0 brave=0 mojeek=0
   echo "systemd unit $file (written in place with tee, never mv from /tmp)"
   if [ "$DRY" = 1 ]; then
-    echo "[dry-run] LoadCredential=orkey:$CRED_FILE and LoadCredential=berget:$BERGET_CRED_FILE are each written only if 'sudo test -e <file>' succeeds on questhub (a missing file would stop the unit); both shown here as if present:"
-    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" 1 1 | sed 's/^/    /'
+    echo "[dry-run] LoadCredential=orkey:$CRED_FILE, berget:$BERGET_CRED_FILE, websearch-brave:$BRAVE_CRED_FILE and websearch-mojeek:$MOJEEK_CRED_FILE are each written only if 'sudo test -e <file>' succeeds on questhub (a missing file would stop the unit); all shown here as if present:"
+    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" 1 1 1 1 | sed 's/^/    /'
     echo "[dry-run] then: daemon-reload, enable, restart, health check on 127.0.0.1:$3; on failure the code and unit are rolled back from their .bak.$TS copies"
     return
   fi
   if rsh "sudo test -e $CRED_FILE"; then cred=1; echo "  OpenRouter credential file present on questhub: LoadCredential=orkey line written"; else echo "  $CRED_FILE is missing on questhub: no LoadCredential=orkey line (no OpenRouter fallback)" >&2; fi
   if rsh "sudo test -e $BERGET_CRED_FILE"; then berget=1; echo "  Berget credential file present on questhub: LoadCredential=berget line written"; else echo "  $BERGET_CRED_FILE is missing on questhub: no LoadCredential=berget line (Berget not available yet, see the README)" >&2; fi
+  if rsh "sudo test -e $BRAVE_CRED_FILE"; then brave=1; echo "  Brave web-search key file present on questhub: LoadCredential=websearch-brave line written (web results via Brave ON)"; else echo "  no $BRAVE_CRED_FILE: no websearch-brave line (Brave results off)"; fi
+  if rsh "sudo test -e $MOJEEK_CRED_FILE"; then mojeek=1; echo "  Mojeek web-search key file present on questhub: LoadCredential=websearch-mojeek line written (web results via Mojeek ON)"; else echo "  no $MOJEEK_CRED_FILE: no websearch-mojeek line (Mojeek results off)"; fi
   rsh "[ -e $file ] && sudo cp -p $file $file.bak.$TS || true"
-  unit_text "$2" "$3" "$4" "$cred" "$berget" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
+  unit_text "$2" "$3" "$4" "$cred" "$berget" "$brave" "$mojeek" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
   rsh "sudo systemctl daemon-reload && sudo systemctl enable $unit && sudo systemctl reset-failed $unit && sudo systemctl restart $unit" || true
   sleep 2
   if rsh "curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$3/health" >/dev/null 2>&1; then
@@ -350,7 +372,8 @@ do_staging() {
 }
 
 install_caddy_routes() {
-  echo "Caddy: handle /hosted/*, /transcribe, /feedback inside app.idea2.site, before the relay block"
+  echo "Caddy: handle /hosted/*, /transcribe, /feedback, /websearch* inside app.idea2.site, before the relay block"
+  echo "  (a Caddyfile that already has the /hosted/* route is left unchanged: /websearch* then goes in by hand when a web-search key goes live)"
   if [ "$DRY" = 1 ]; then echo "[dry-run] snippet:"; caddy_snippet | sed 's/^/    /'; return; fi
   caddy_snippet | rsh "cat > /tmp/twcaddy.$TS"
   rsh "TS=$TS bash -s" <<'REMOTE'

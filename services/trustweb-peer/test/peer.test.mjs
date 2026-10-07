@@ -80,8 +80,8 @@ async function phone(relayOrigin, name, decide) {
     /** The scanning side of the one-scan ceremony: tell the peer who we are. */
     connectTo: (did) => channel.sendRaw(did, encodeForQr(buildConnectAck(me, identity))),
     /** Ask one peer; resolves with the decoded answer or null on timeout. */
-    ask: async (did, text, timeoutMs = 4000) => {
-      const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text }
+    ask: async (did, text, timeoutMs = 4000, extra = {}) => {
+      const q = { v: 1, t: 'query', from: me, templateId: 'free', templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: text, ...extra }
       const answered = new Promise((resolve) => {
         const timer = setTimeout(() => { awaiting.delete(q.qid); resolve(null) }, timeoutMs)
         awaiting.set(q.qid, (env) => { clearTimeout(timer); awaiting.delete(q.qid); resolve(env) })
@@ -341,6 +341,30 @@ describe('the peer against an in-memory relay', () => {
     expect(jakob.asks).toHaveLength(0)
     expect(lines.some((l) => /ask shared \(1\): preset=1 owner=not-asked/.test(l))).toBe(true)
     jakob.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('an ask for direct contacts only (direct: true) is never forwarded to the owner: preset lines only (wave 3)', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Camping tent for four', audience: 'fof', preset: PRESET }])
+    const lines = []
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, answerWindowMs: WINDOW_MS, forwardWaitMs: 1500, log: (l) => lines.push(l) })
+    const jakob = await phone(relayOrigin, 'Jakob', () => { throw new Error('must not be asked') })
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const a = await anna.ask(peer.card.did, 'camping tent for four', 4000, { direct: true })
+    expect(a.outcome).toBe('shared')
+    expect(a.shared.items.map((i) => i.text)).toEqual(['Camping tent for four'])
+    const b = await anna.ask(peer.card.did, 'anyone with a projector for a talk', 4000, { direct: true })
+    expect(b.outcome).toBe('nothing')
+    expect(jakob.asks).toHaveLength(0)
+    expect(lines.some((l) => /ask shared \(1\): preset=1 owner=not-asked/.test(l))).toBe(true)
+    expect(lines.some((l) => /ask no-match \(0\): preset=0 owner=not-asked/.test(l))).toBe(true)
+    jakob.close(); anna.close()
     await peer.stop()
     rmSync(dir, { recursive: true })
   }, 30_000)

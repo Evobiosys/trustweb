@@ -36,6 +36,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/trustweb_peer_lib.sh"
 PEER_DIR="$HERE/../services/trustweb-peer"
 CARD_DIR=/srv/questhub-static/app-idea2-trustweb
+# Wave 3: the same app also runs at app.trustintheweb.org (its own folder, scripts/deploy_wot.sh TW_APP_TARGET=trustintheweb).
+# The demo card goes into every app folder that exists on the host, so a card republished later is never stale on one host.
+CARD_DIR_TRUSTINTHEWEB=/srv/questhub-static/app-trustintheweb
+CARD_DIRS="$CARD_DIR $CARD_DIR_TRUSTINTHEWEB"
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good (see deploy_wot.sh)
 RELAY=https://app.idea2.site
 
@@ -151,15 +155,27 @@ publish_card() {
     echo "$INSTANCE: no public card by design (its connect link goes only to its owner and the people granted; trustweb_peer_grant.sh --link)"
     return 0
   fi
+  local d
   if [ "$DRY" = 1 ]; then
-    say "copy $STATE/demo-peer.json to $CARD_DIR/demo-peer.json (a+r, SELinux context of $REF)"
+    for d in $CARD_DIRS; do
+      say "copy $STATE/demo-peer.json to $d/demo-peer.json (a+r, SELinux context of $REF) if $d exists"
+    done
     echo "[dry-run] card source today: $(rsh "sudo test -f $STATE/demo-peer.json && echo present || echo missing")"
+    echo "[dry-run] app folders today: $(rsh "for d in $CARD_DIRS; do [ -d \$d ] && printf '%s ' \$d; done; echo")"
     return 0
   fi
-  # The unit runs as a DynamicUser: its state dir is root-readable only.
-  rsh "for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 1; done;
-       sudo cat $STATE/demo-peer.json | sudo tee $CARD_DIR/demo-peer.json >/dev/null &&
-       sudo chmod a+r $CARD_DIR/demo-peer.json && sudo chcon --reference=$REF $CARD_DIR/demo-peer.json"
+  # The unit runs as a DynamicUser: its state dir is root-readable only. The first folder (app.idea2.site) must exist and get the
+  # card (deploy_wot.sh relies on the failure); any further app folder gets it when it exists.
+  rsh "set -eo pipefail
+       for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS -H '$HOSTHDR' http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 1; done
+       first=1
+       for d in $CARD_DIRS; do
+         if [ \$first = 0 ] && [ ! -d \$d ]; then echo \"  \$d absent: no card there\"; continue; fi
+         first=0
+         sudo cat $STATE/demo-peer.json | sudo tee \$d/demo-peer.json >/dev/null
+         sudo chmod a+r \$d/demo-peer.json && sudo chcon --reference=$REF \$d/demo-peer.json
+         echo \"  card -> \$d/demo-peer.json\"
+       done"
 }
 
 republish_cards() {
@@ -193,7 +209,7 @@ fi
 if [ "$MODE" = off ]; then
   say "stop and disable $UNIT on $RHOST (state in $STATE is kept: same DID and owner on re-enable)"
   if [ "$DRY" = 0 ]; then
-    if [ "$PUBLIC_CARD" = 1 ]; then rsh "sudo rm -f $CARD_DIR/demo-peer.json"; fi
+    if [ "$PUBLIC_CARD" = 1 ]; then rsh "for d in $CARD_DIRS; do sudo rm -f \$d/demo-peer.json; done"; fi
     rsh "sudo systemctl disable --now $UNIT"
     if [ "$PUBLIC_CARD" = 1 ]; then
       echo "card gone:  $(curl -s -o /dev/null -w '%{http_code}' https://app.idea2.site/trustweb/demo-peer.json) (expect 404 or the app's fallback page, no JSON)"

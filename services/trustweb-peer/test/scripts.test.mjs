@@ -247,6 +247,18 @@ describe('deploy_trustweb_peer.sh --republish-cards', () => {
     expect(JSON.parse(readFileSync(path.join(h.root, 'srv', 'app-idea2-trustweb', 'demo-peer.json'), 'utf8'))).toEqual(CARD)
     expect(r.stdout).toContain('personal: no public card by design')
     expect(r.stdout).toContain('republish: 2 instance(s) handled')
+    expect(r.stdout).toContain('app-trustintheweb absent: no card there') // no second app folder on this host: skipped, not a failure
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
+  it('wave 3: the demo card goes into BOTH app folders (app.idea2.site and app.trustintheweb.org) when both exist', async () => {
+    const h = withDemoActive()
+    mkdirSync(path.join(h.root, 'srv', 'app-idea2-trustweb'), { recursive: true })
+    mkdirSync(path.join(h.root, 'srv', 'app-trustintheweb'), { recursive: true })
+    const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)
+    expect(r.code).toBe(0)
+    for (const dir of ['app-idea2-trustweb', 'app-trustintheweb']) {
+      expect(JSON.parse(readFileSync(path.join(h.root, 'srv', dir, 'demo-peer.json'), 'utf8'))).toEqual(CARD)
+    }
     rmSync(h.root, { recursive: true })
   }, 60_000)
   it('fails (non-zero) when a card cannot be republished, so deploy_wot.sh stops instead of losing the card silently', async () => {

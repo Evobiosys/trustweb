@@ -459,8 +459,14 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     if (env.t === 'query') await handleQuery(env, fromDid)
   }
 
-  /** An ask is put in front of the owner when one is bound, forwarding is on, it has text, and it is not his own. */
-  const forwards = (self: boolean, text: string): boolean => forward && Boolean(state.owner) && !self && Boolean(text)
+  /**
+   * An ask is put in front of the owner when one is bound, forwarding is on,
+   * it has text, it is not his own, and its asker did not restrict it to their
+   * direct contacts (`direct: true`, wave 3: the front door answers from its
+   * preset lines and never passes such an ask on).
+   */
+  const forwards = (self: boolean, q: QueryEnvelope): boolean =>
+    forward && Boolean(state.owner) && !self && Boolean(q.freeText) && q.direct !== true
 
   /** Puts the ask in front of the owner, as the ask it is; resolves with what the owner's phone shared by `deadline`. */
   async function forwardToOwner(askerName: string, text: string, templateId: string, deadline: number): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
@@ -508,7 +514,8 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     // RELAY_DEADLINE_MS). Only the owner's live share goes early: its content
     // says so anyway.
     const ownerDeadline = receivedAt + Math.max(answerWindowMs, forwardWaitMs)
-    const settleMs = forwards(self, text) ? Math.max(answerWindowMs, forwardWaitMs) : answerWindowMs
+    const passOn = forwards(self, q)
+    const settleMs = passOn ? Math.max(answerWindowMs, forwardWaitMs) : answerWindowMs
     const answer = async (payload: SharedPayload | null, early = false): Promise<void> => {
       await settleAt(receivedAt, early ? answerWindowMs : settleMs)
       const out = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
@@ -536,7 +543,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       : []
 
     // 1. The owner's live decision, in parallel with the answer window.
-    const owner = self ? { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] } : await forwardToOwner(peer.displayName, text, tpl.id, ownerDeadline)
+    const owner = passOn ? await forwardToOwner(peer.displayName, text, tpl.id, ownerDeadline) : { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] }
 
     const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
     // Shape kept stable for apps/trustweb/test/e2e/demo_account.mjs ("ask shared"): outcome first, then the parts.
