@@ -2312,7 +2312,7 @@ function screenMeet(): Node[] {
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
-  const nfcStatus = el('p', { class: 'meta' }, [nfcWriteSupported() ? '' : S.meetNfcOff])
+  const nfcStatus = el('p', { class: 'meta' })
   let link = ''
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
@@ -2353,9 +2353,13 @@ function meetTrustWebPage(): HTMLElement {
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
-    el('h4', { class: 'eyebrow' }, [S.meetNfc]),
+    el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
+    el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),
+    el('p', { class: 'meta', 'data-ways': 'soon' }, [S.meetWaysSoon]),
+    el('p', { class: 'meta', 'data-ways': 'later' }, [S.meetWaysLater]),
+    // Where the browser can write a tag (Chrome on Android), the link can go onto one; phone to phone stays "later".
     nfc,
-    nfcStatus,
+    nfc ? nfcStatus : null,
     el('p', { class: 'meta center' }, [S.meetSwipe]),
   ])
 }

@@ -275,7 +275,9 @@ async function main() {
     await page.getByRole('heading', { name: 'Meet Maya' }).waitFor({ timeout: 5_000 })
     await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     ok('Meet after a meeting is named after the person', true)
-    ok('Meet explains NFC honestly where it is unavailable', await page.getByText(/Tap-to-connect needs Chrome on Android/).isVisible())
+    const ways = await page.locator('[data-ways]').allInnerTexts()
+    ok('Meet says how to connect (wave 2, P29, P32): QR code and link now, a moving QR code soon, NFC, Bluetooth, AirDrop later; never UWB',
+      /QR code, or the link/.test(ways[0]) && /Coming soon: a moving QR code/.test(ways[1]) && /Coming later: NFC, Bluetooth and AirDrop/.test(ways[2]) && !/UWB/.test(await page.locator('.meet-page').innerText()), JSON.stringify(ways))
     await shot(page, 'meet_after_meeting')
     await page.getByRole('button', { name: 'Back' }).click()
 

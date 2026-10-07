@@ -2,8 +2,11 @@
  * Wave 2 (2026-10-07), the pure parts:
  *   item 4 (P22, P26): who can ask about a line: the three tiers and "Only me";
  *     each tier admits itself and everyone closer; an unknown value admits nobody.
+ *   item 6 (P29, P32): contact methods: QR code and link now, a moving QR code
+ *     soon, NFC / Bluetooth / AirDrop later, never "UWB".
  */
 import { Audience, AUDIENCES, audienceAdmits, LineStatus, Ring, threadsForRing } from '../../src/model.ts'
+import { S } from '../../src/strings.ts'
 
 const NOW = Date.UTC(2026, 9, 7, 10, 0, 0)
 
@@ -47,5 +50,19 @@ describe('item 4: the three tiers and "Only me"', () => {
     expect(matched(s, Ring.Close)).toContain('inv:c')
     expect(matched(s, Ring.Close).some((id) => id.includes('l1'))).toBe(true)
     expect(matched(s, Ring.Friend).some((id) => id.includes('l1'))).toBe(false)
+  })
+})
+
+describe('item 6: how people connect, said plainly', () => {
+  const all = JSON.stringify(S, (_k, v) => (typeof v === 'function' ? v.toString() : v))
+  it('never says UWB; the code button says QR code and link', () => {
+    expect(/UWB/i.test(all)).toBe(false)
+    expect(S.qrOpen).toBe('Show my code (QR code and link)')
+    expect(/QR or NFC/.test(all)).toBe(false)
+  })
+  it('a moving QR code is "coming soon"; NFC, Bluetooth and AirDrop are "coming later"', () => {
+    expect(S.meetWaysSoon).toMatch(/Coming soon: a moving QR code/)
+    expect(S.meetWaysLater).toMatch(/Coming later: NFC, Bluetooth and AirDrop/)
+    expect(S.hintText.qr).toMatch(/moving QR code is coming soon; NFC, Bluetooth and AirDrop come later/)
   })
 })
