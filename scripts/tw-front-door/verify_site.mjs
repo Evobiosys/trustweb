@@ -1,4 +1,4 @@
-// Headless check of a built TrustInTheWeb site (real Chromium, five widths: 390, 768, 1024, 1280, 1440).
+// Headless check of a built TrustInTheWeb site (real Chromium, five widths: 360, 390, 768, 1024, 1280).
 //
 //   PLAYWRIGHT_PACKAGE=/Users/personal/Documents/SingularStructure/code/other/signal-orbit/node_modules/playwright-core/index.js \
 //   [TW_SITE=org|com] [TW_APP_BASE=https://app.idea2.site/trustweb] [TW_SITE_HOST=idea2.site] \
@@ -31,7 +31,7 @@ if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) {
   process.exit(2)
 }
 const BASE = liveBase ?? `http://127.0.0.1:${PORT}/`
-const WIDTHS = [390, 768, 1024, 1280, 1440]
+const WIDTHS = [360, 390, 768, 1024, 1280]
 const SITE = process.env.TW_SITE ?? 'org'
 if (!['org', 'com'].includes(SITE)) { console.error('TW_SITE must be org or com'); process.exit(2) }
 const APP = (process.env.TW_APP_BASE ?? 'https://app.idea2.site/trustweb').replace(/\/$/, '')
@@ -122,6 +122,9 @@ const chrome = () => {
     popsOutside: [...document.querySelectorAll('.pop')].filter((p) => !p.parentElement?.classList.contains('term')).length,
     robots: document.querySelector('meta[name=robots]')?.content ?? null,
     canonical: document.querySelector('link[rel=canonical]')?.href ?? null,
+    heroLabel: document.querySelectorAll('header.hero .eyebrow, .comhero .eyebrow').length,
+    love: [...document.querySelectorAll('.sitefooter .sf-love')].map((e) => e.textContent.trim()),
+    footerOther: [...document.querySelectorAll('.sitefooter a')].filter((a) => a.getAttribute('href').replace(/\/$/, '').toLowerCase() === 'https://trustintheweb.org').length,
   }
 }
 
@@ -169,7 +172,7 @@ async function heroChecks(page, tag) {
 }
 
 async function checkPage(browser, name, width) {
-  const ctx = await browser.newContext({ viewport: { width, height: 900 } })
+  const ctx = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: 'light' })
   const page = await ctx.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push('pageerror ' + e.message))
@@ -189,12 +192,15 @@ async function checkPage(browser, name, width) {
   check(`${tag}: site name ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} in the bar, Trust and Web bold, In and The regular`,
     c.siteName === (ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com') && c.brandWeights.length === 2 && c.brandWeights.every((w) => w >= 600) && c.brandRegular <= 500, JSON.stringify([c.siteName, c.brandWeights, c.brandRegular]))
   check(`${tag}: header link to the ${ORG ? 'hosting' : 'app'} site: visible, title exactly ${OTHER_HOST}, href the live site`,
-    !!c.hostHeader && c.hostHeader.inView && c.hostHeader.title === OTHER_HOST && c.hostHeader.href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase() && (!ORG || c.hostHeader.text === 'Do you need hosting?'), JSON.stringify(c.hostHeader))
+    !!c.hostHeader && c.hostHeader.inView && c.hostHeader.title === OTHER_HOST && c.hostHeader.href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase() && c.hostHeader.text === (ORG ? 'Do you need hosting?' : 'About the infrastructure'), JSON.stringify(c.hostHeader))
   if (ORG) {
     check(`${tag}: footer carries "Do you need hosting?" with the same title and target`,
       c.hostFooter.length === 1 && c.hostFooter[0].text === 'Do you need hosting?' && c.hostFooter[0].title === OTHER_HOST && c.hostFooter[0].href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase(), JSON.stringify(c.hostFooter))
     check(`${tag}: tw.org is free of pricing (no link to a pricing page, no "Pricing" entry)`, c.pricingLinks.length === 0, c.pricingLinks.join(', '))
   }
+  check(`${tag}: no small site label (eyebrow) under the header`, c.heroLabel === 0, String(c.heroLabel))
+  check(`${tag}: footer says "with love from Vienna"`, c.love.length === 1 && c.love[0] === 'with love from Vienna', JSON.stringify(c.love))
+  if (!ORG) check(`${tag}: the footer links back to TrustInTheWeb.org`, c.footerOther >= 1, String(c.footerOther))
   check(`${tag}: brand slot links to evobiosys.org`, c.brandHref === 'https://evobiosys.org' && c.brandText.startsWith('TrustWeb, by EvoBioSys'))
   check(`${tag}: no div in p/span, no stray pop`, c.divInPOrSpan === 0 && c.popsOutside === 0)
   check(`${tag}: terms link only in the website's draft (the hosting site has no terms page yet)`, c.terms === (mode === 'draft' && ORG))
@@ -481,6 +487,9 @@ async function everyPageChecks(page) {
     check(`${name}: no HTML comment carries a meeting or a person`, !/<!--[^>]*(meeting with|transcript of the conversation|max-meeting)/i.test(t) && !/<!--(?:(?!-->)[\s\S])*(GAPS for|Jakob)/.test(t))
     check(`${name}: names itself ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} (title), never idea2.site as its name`,
       /<title>[^<]*TrustInTheWeb\.(org|com)<\/title>/.test(t) && new RegExp(`<title>[^<]*TrustInTheWeb\\.${SITE}</title>`).test(t) && !/<title>[^<]*idea2\.site/.test(t))
+    check(`${name}: neither "the app and its website" nor "the app and website" nor "app and the website" appears (title, meta, body)`, !/the app and (its |the )?web ?site|app and website/i.test(t.replace(/\s+/g, ' ')))
+    if (!ORG) check(`${name}: the hosting site fetches no font or other third-party asset (no fonts.googleapis / fonts.gstatic)`, !/fonts\.(googleapis|gstatic)/.test(t))
+    check(`${name}: the page names itself in the bar only (no "TRUSTINTHEWEB" eyebrow before the first heading)`, await page.evaluate(() => { const h = document.querySelector('h1'); return ![...document.querySelectorAll('.eyebrow')].some((e) => h && (e.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING) && /trustintheweb\.(org|com)/i.test(e.textContent)) }))
     check(`${name}: the hosting sentence says "The app is hosted on Infomaniak in Switzerland"`, /The app is hosted on Infomaniak in Switzerland/.test(vis))
   }
 }
@@ -604,7 +613,7 @@ async function contentChecksOrg(page) {
     /unreviewed until you keep them/.test(faq.text.replace(/\s+/g, ' ')) && /created step by step/.test(faq.text.replace(/\s+/g, ' ')))
   check('faq: web fallback exists (Google, Ecosia, Qwant, Brave; labelled untrusted; nothing sent before a tap; no referrer) and the trusted answer comes first',
     (() => { const t = faq.text.replace(/\s+/g, ' '); return /Search the web instead/.test(t) && /Google, Ecosia, Qwant and Brave/.test(t) && /untrusted/.test(t) && /nothing is sent to any engine until you tap one/.test(t) && /no referrer/.test(t) &&
-    /The trusted answer comes first\. The open web only comes second\./.test(t) && !/not in the app yet|is planned and not/.test(t) })())
+    /The trusted answer comes first\. The open web only comes second\./.test(t) && !/not in the app yet|is planned and not/.test(t) && !/calls no search service/.test(t) && /Show results here/.test(t) && /a Brave based search engine/.test(t) })())
   check('faq: the feed is optional, early and off by default', /optional and early: it is off by default/.test(faq.text.replace(/\s+/g, ' ')))
   await page.goto(BASE + 'why.html')
   const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
@@ -635,13 +644,94 @@ async function contentChecks(browser) {
   check('privacy: feedback form bullets (email only with a box, stored in Switzerland, write back / notify / newsletter via the newsletter service with confirmation)',
     /your email address only if you tick a box|email address only if you tick a box/.test(fbp) && /stored on our server in Switzerland/.test(fbp) && /Write back to me about this message": we keep your address so we can answer/.test(fbp) &&
     /Notify me when it is ready": we keep it for one note when TrustWeb is ready/.test(fbp) && /our server passes it on to our newsletter service, which first sends you a confirmation email/.test(fbp) && /only after you click the link in it/.test(fbp) && !/our waitlist/.test(fbp))
+  const wr = await page.evaluate(() => document.getElementById('web-results')?.textContent.replace(/\s+/g, ' ') ?? '')
+  check('privacy: "Using web results" (production page, not draft-gated): binding sentence, words go to Brave Search without the address, Brave may log them, we keep no copy, Powered by Brave',
+    /you agree not to scrape, store, cache or redistribute the results\. They come from Brave, and they are shown only to you, for the moment\./.test(wr) && /Show results here/.test(wr) &&
+    /go through our server to Brave Search, a Brave based search engine, without your network address\. Brave may log them under its own terms/.test(wr) &&
+    /keeps no copy of your words or of the results/.test(wr) && /Powered by Brave/.test(wr) && !/Mojeek/i.test(wr), wr.slice(0, 120))
+  check('privacy: Brave is named in the third-party list', await page.evaluate(() => /Brave Software/.test(document.getElementById('third-parties')?.textContent ?? '')))
+  check(`privacy: fonts line matches the site (${ORG ? 'Google Fonts named' : 'device typefaces, Google not named'})`,
+    await page.evaluate((org) => { const t = document.body.textContent; return org ? /Typefaces load from Google Fonts/.test(t) : /Typefaces come from your own device/.test(t) && !/Google Fonts/.test(t) }, ORG))
   const pv = await page.evaluate(() => document.getElementById('transcription')?.textContent.replace(/\s+/g, ' ') ?? '')
   const pvCommon = /Free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/.test(pv) && /not charged to you/.test(pv) && /keeps neither the audio nor the text/.test(pv) && /approximate/.test(pv) && !/Infomaniak|Switzerland/.test(pv)
   const pvOr = /OpenRouter/.test(pv) && /United States/.test(pv) && /OpenRouter picks which one; we cannot/.test(pv) && !/DeepInfra|Groq|Together/.test(pv) && /"deny"/.test(pv)
   const pvBerget = /Berget AI/.test(pv) && /Sweden/.test(pv)
   const pvOk = TX_PROVIDER === 'openrouter' ? pvOr && !/Berget/i.test(pv) : TX_PROVIDER === 'berget' ? pvBerget && pvOr : pvBerget && !/OpenRouter|United States/.test(pv)
   check(`privacy: transcription route is ${TX_PROVIDER} (names only the provider that runs), nothing kept by us, approximate times, failures not charged, no Infomaniak/Switzerland claim`, pvOk && pvCommon, pv.slice(0, 120))
+  if (pageNames.includes('terms.html')) {
+    await page.goto(BASE + 'terms.html')
+    const tm = await page.evaluate(() => document.getElementById('web-results')?.textContent.replace(/\s+/g, ' ') ?? '')
+    check('terms (draft page): the web results section binds users: not scrape, store, cache or redistribute; from Brave; Powered by Brave',
+      /you agree not to scrape, store, cache or redistribute the results\. They come from Brave, and they are shown only to you, for the moment\./.test(tm) && /Powered by Brave/.test(tm), tm.slice(0, 100))
+  }
   await ctx.close()
+}
+
+// ---- the hosting site's own face: inverse palette, other typefaces, WCAG AA contrast, in both system schemes ----
+const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+// every text-bearing thing a visitor reads, with the size class it is judged by (AA: 4.5, large text 3)
+const CONTRAST_TARGETS = [
+  ['body text', 'main p', 4.5], ['section heading', 'section h2', 4.5], ['page heading', 'h1:not(.wot)', 3], ['wordmark', 'h1.wot .wm-b', 3],
+  ['eyebrow', 'section .eyebrow', 4.5], ['link in text', 'main a:not(.btn-primary):not(.btn-ghost):not(.back)', 4.5], ['back link', 'a.back', 4.5],
+  ['primary button', '.btn-primary', 4.5], ['ghost button', '.btn-ghost', 4.5], ['bar Demo', '.tw-btn-demo', 4.5], ['bar Install', '.tw-btn-install', 4.5],
+  ['bar brand', '.sitebar-brand', 4.5], ['bar link to the other site', '.hostlink', 4.5], ['stamp', '.stamp', 4.5], ['draft strip', '.draftstrip', 4.5],
+  ['fact label', 'dl.facts dt', 4.5], ['table cell', 'table.plain td', 4.5], ['note', 'section p.note', 4.5], ['list item', 'main li', 4.5],
+  ['footer heading', '.sitefooter .sf-h', 4.5], ['footer link', '.sitefooter a', 4.5], ['footer brand text', '.sf-brand p', 4.5], ['footer fine print', '.sf-fine', 4.5],
+  ['footer love line', '.sf-love', 4.5], ['footer tag', '.sf-soon', 4.5],
+]
+const contrastInPage = (targets) => {
+  const parse = (c) => { const m = c.match(/rgba?\(([\d.]+)[, ]+([\d.]+)[, ]+([\d.]+)(?:[,/ ]+([\d.]+))?\)/); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null }
+  const over = (top, bottom) => { const a = top[3]; return [0, 1, 2].map((i) => top[i] * a + bottom[i] * (1 - a)) }
+  const bgOf = (el) => { const stack = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c[3] > 0) { stack.push(c); if (c[3] === 1) break } }
+    let base = [255, 255, 255]; for (const c of stack.reverse()) base = over(c, base); return base }
+  const out = []
+  for (const [label, sel, min] of targets) {
+    for (const el of document.querySelectorAll(sel)) {
+      if (!el.textContent.trim() || el.closest('.skip, .hp, [hidden]') || getComputedStyle(el).display === 'none') continue
+      const fg = parse(getComputedStyle(el).color); if (!fg) continue
+      const bg = bgOf(el), flat = over(fg, bg)
+      out.push({ label, sel, min, fg: flat.map(Math.round), bg: bg.map(Math.round), text: el.textContent.trim().slice(0, 24) })
+    }
+  }
+  const body = getComputedStyle(document.body)
+  const h1 = document.querySelector('h1')
+  return { items: out, bodyBg: parse(body.backgroundColor), bodyFont: body.fontFamily, h1Font: h1 ? getComputedStyle(h1).fontFamily : '', btn: (() => { const i = document.querySelector('.tw-btn-install'); return i ? { bg: parse(getComputedStyle(i).backgroundColor), font: getComputedStyle(i).fontFamily } : null })() }
+}
+
+async function comLookChecks(browser) {
+  for (const scheme of ['light', 'dark']) {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: scheme })
+    const page = await ctx.newPage()
+    const lows = [], seen = new Set()
+    let worst = 99, count = 0
+    for (const name of pageNames) {
+      await page.goto(BASE + (name === 'index.html' ? '' : name))
+      const r = await page.evaluate(contrastInPage, CONTRAST_TARGETS)
+      for (const it of r.items) {
+        const cr = ratio(it.fg, it.bg); count++
+        worst = Math.min(worst, cr)
+        if (cr < it.min) lows.push(`${name} ${it.label} ${it.text} ${cr.toFixed(2)} (${it.fg} on ${it.bg})`)
+        seen.add(it.label)
+      }
+      if (name === pageNames[0]) {
+        const L = lum(r.bodyBg.slice(0, 3))
+        check(`com look (system ${scheme}): the page is ${scheme === 'light' ? 'DARK (inverse of the website, which is cream)' : 'LIGHT (inverse of the website, which is navy)'}`, scheme === 'light' ? L < 0.05 : L > 0.5, `body background ${r.bodyBg}`)
+        check(`com look (system ${scheme}): own typefaces, not the website's (display ${r.h1Font.slice(0, 40)}; text ${r.bodyFont.slice(0, 40)})`,
+          /Avenir Next|Segoe UI|Helvetica Neue/.test(r.h1Font) && /Charter|Iowan|Georgia|Cambria|Sitka/.test(r.bodyFont) && !/Fraunces|IBM Plex/.test(r.h1Font + r.bodyFont))
+        check(`com look (system ${scheme}): Install button is the swapped primary (${scheme === 'light' ? 'rose' : 'wine red'}), not the website's navy`,
+          !!r.btn && (scheme === 'light' ? r.btn.bg[0] > r.btn.bg[2] && r.btn.bg[0] > 200 : r.btn.bg[0] > r.btn.bg[2] * 2 && r.btn.bg[0] > 120), JSON.stringify(r.btn))
+      }
+    }
+    check(`com contrast (system ${scheme}): ${count} text samples on ${pageNames.length} pages, ${seen.size} kinds, all at WCAG AA (worst ${worst.toFixed(2)})`, lows.length === 0, lows.slice(0, 4).join(' | '))
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(BASE)
+      fs.mkdirSync(shots, { recursive: true })
+      await page.screenshot({ path: path.join(shots, `${liveBase ? 'live-' : ''}${mode}_index_${scheme === 'dark' ? 'dark' : 'light'}scheme_${width}.png`), fullPage: true })
+    }
+    await ctx.close()
+  }
 }
 
 const server = liveBase ? null : await serve()
@@ -649,6 +739,7 @@ const browser = await chromium.launch({ headless: true })
 try {
   for (const name of pageNames) for (const w of WIDTHS) await checkPage(browser, name, w)
   await contentChecks(browser)
+  if (!ORG) await comLookChecks(browser)
   await formChecks(browser)
   await linkAudit(browser)
 } finally {
