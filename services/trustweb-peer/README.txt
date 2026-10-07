@@ -63,14 +63,14 @@ per asker), TW_PEER_FORWARD (1|0, default 1), TW_PEER_FORWARD_WAIT_MS (default 1
 180 s), TW_PEER_CLAIM (1 opens a claim window at start), TW_PEER_CLAIM_MINUTES (default 10). SIGHUP reloads the
 inventory and the grants.
 
-TEST (2026-10-06, wave 1733: 43 tests in 4 files)
+TEST (2026-10-07, wave 1733: 57 tests in 4 files)
   cd services/trustweb-peer && TW_VITEST_CACHE=$(mktemp -d) ../../apps/demo/node_modules/.bin/vitest run --config test/vitest.config.mjs --root .
   ../../apps/demo/node_modules/.bin/tsc --noEmit -p tsconfig.json      (peer.ts, inventory_export.ts, the exporter CLI)
   test/peer.test.mjs             the peer (14): presets, claim, forward, granted policy, against an in-memory relay
-  test/inventory_export.test.mjs the exporter (18): marks, Tana reader, the four outputs, property test "nothing unmarked
+  test/inventory_export.test.mjs the exporter (24): marks, Tana reader, the four outputs, property test "nothing unmarked
                                  leaves" over 400 random inventories, CLI dry run against a fake tana_mcp.sh
-  test/personal.test.mjs         "without an app" end to end (2): exporter -> server file -> personal peer -> granted asker
-  test/scripts.test.mjs          grant, claim and --republish-cards against a fake host; personal --host never defaulted (9)
+  test/personal.test.mjs         "without an app" end to end (6): exporter -> server file -> personal peer -> granted asker
+  test/scripts.test.mjs          grant, claim and --republish-cards against a fake host; personal --host never defaulted (13)
   TW_VITEST_CACHE gives a run its own cache dir (node_modules are shared with the primary checkout).
   (The app's e2e test demo_account.mjs step 6 ran against the OLD auto-answering peer; it needs an owner phone
   or preset lines now. Not changed by this pass: apps/trustweb is another agent's.)
@@ -122,6 +122,8 @@ PERSONAL INSTANCE (2026-10-06, wave 1733): BUILT, TESTED, NOT DEPLOYED (host = J
     scripts/trustweb_peer_grant.sh --instance personal --host ... --add <name> | --remove <name> | --list | --link
     node_modules/.bin/tsx scripts/trustweb_inventory_export.ts [--choices kimi-ticked.json] [--mac-folder dir]
         dry run by default (nothing leaves the Mac); --send --host ... after reading the review file
+        --mac-folder reads ONLY regular .txt files (Jakob 2026-10-07: txt only for now); .md, other file types,
+        symlinks and subfolders are skipped and named in the review file ("NOT READ in the Mac folder")
   Grants are display names (NFC, trimmed, whitespace collapsed, case-insensitive: grantKey in peer.ts, the same
   in the grant script); a name is not a secret, so the connect link is the other half: hand it only to the people
   granted. Since the review (2026-10-06): one granted name binds ONE phone (a second phone sending it is refused

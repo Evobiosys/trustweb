@@ -10,7 +10,7 @@
  *      line with "Allow in advance";
  *   2. Tana: a child node "allowed in advance" or "allowed in advance: <note>"
  *      under an inventory node;
- *   3. the Mac folder: a line that starts with "+ ".
+ *   3. the Mac folder: a line that starts with "+ " in a regular .txt file (nothing else in the folder is read).
  * Everything else stays on the Mac (the full local file and the phone import
  * file). A marked line that carries something identifying (a Tana node id or
  * link, a DID, a timestamp finer than a day) stays too: the review file says
@@ -495,6 +495,8 @@ export interface ReviewContext {
   mode: 'dry run' | 'send'
   destination: string
   inputs: string[]
+  /** Mac folder entries that were not read (not a regular .txt file), each named with its reason. */
+  skipped?: string[]
   files: string[]
 }
 
@@ -512,6 +514,7 @@ export function renderReview(lines: readonly ExportLine[], ctx: ReviewContext): 
     'Read from (read-only):',
     ...ctx.inputs.map((i) => '  ' + i),
     '',
+    ...((ctx.skipped ?? []).length ? ['NOT READ in the Mac folder (only regular .txt files are read):', ...(ctx.skipped ?? []).map((m) => '  ' + m), ''] : []),
     `WOULD LEAVE THIS MAC: ${leaving.length} line(s), to ${ctx.destination}.`,
     'An asker you granted sees each one marked "Allowed in advance by <you> (<day>)". Nothing else goes there.',
     ...(leaving.length ? leaving.map(leaveRow) : ['  (none: nothing would leave this Mac)']),
@@ -524,7 +527,7 @@ export function renderReview(lines: readonly ExportLine[], ctx: ReviewContext): 
     '',
     'To allow a line in advance: tick "Allow in advance" on the review page, or add a child that reads exactly',
     '"allowed in advance" (or "allowed in advance: <note>"; the note is shown to the asker) under the node in Tana,',
-    'or start the line with "+ " in a .txt file of your Mac folder. Then run the dry run again and read this file.',
+    'or start the line with "+ " in a regular .txt file of your Mac folder (.md and every other file type are not read). Then run the dry run again and read this file.',
     '',
   ].join('\n')
 }

@@ -16,7 +16,7 @@ WHAT IS TRUE NOW (wave 1733, read this first; the sections below keep the design
   - Review fixes (2026-10-06, adversarial review): a Tana mark is EXACTLY "allowed in advance" or "allowed in
     advance: <note>" (anything looser, "allowed in advance? ask first", is no mark); the note is shown in the
     review file and in the --send confirmation exactly as the asker sees it; --send needs a typed "y" (ENTER is
-    no); the Mac folder reads only regular files in the folder (no symlinks); the phone import file replaces a
+    no); the Mac folder reads only regular .txt files in the folder (no symlinks, no .md); the phone import file replaces a
     DID, a Tana link or node id and a date-time as a whole token; answers to forwarded asks leave at one fixed
     moment (section 3 d).
 
@@ -34,7 +34,8 @@ queried if I don't have this laptop on".
        2026-10-06) with the local Tana MCP; the phone talks to sebra, sebra reads Tana. Read-only from sebra
        (standing rule since 2026-05-17: no Tana writes from sebra).
    The Mac (private material, Obsidian-style local folder, R18)
-     - A folder of .md lines next to the Tana export, same {items:[...]} shape, same exporter. Reachable only
+     - A folder of .txt lines next to the Tana export (regular .txt files only since 2026-10-07, Jakob: "yes txt only
+       for now"; .md and every other file type are skipped and named in the review file), same {items:[...]} shape, same exporter. Reachable only
        while the laptop is on; the peer says "nothing" for those while it is off (same bytes as no match).
    The phone (the TrustWeb app's own inventory and notes)
      - What Jakob typed or recorded in the app; answers through the forward (section 3) with his live tap.
@@ -69,7 +70,7 @@ queried if I don't have this laptop on".
 
 4. THE EXPORTER (BUILT 2026-10-06, wave 1733; the design below, as built: marks = the choices file's
    "Allow in advance", a Tana child that reads exactly "allowed in advance" or "allowed in advance: <note>" under
-   the node, or "+ " in a regular file of the Mac folder; the unmarked default is "not written" for the server
+   the node, or "+ " in a regular .txt file of the Mac folder (.md and anything else is skipped and named in the review file); the unmarked default is "not written" for the server
    file; --send needs --host, a terminal, a review file written by the same run, and a typed "y" (ENTER = no);
    the "edited since" sync is NOT built)
    A script on the Mac (never on sebra): reads the "Personal TrustWeb Inventory" node, follows "referenced" one

@@ -281,20 +281,42 @@ describe('buildExport and the four outputs', () => {
 })
 
 describe('the Mac folder', () => {
-  it('reads only regular files in the folder itself: a symlink to a file elsewhere is skipped and named', () => {
+  it('reads only regular .txt files in the folder itself: a symlink to a file elsewhere is skipped and named', () => {
     const dir = tmp()
     const folder = path.join(dir, 'folder')
     mkdirSync(folder)
     writeFileSync(path.join(dir, 'elsewhere.txt'), '+ secret from outside the folder\n')
     writeFileSync(path.join(folder, 'mine.txt'), '+ Spare desk, Fridays\n')
     symlinkSync(path.join(dir, 'elsewhere.txt'), path.join(folder, 'link.txt'))
-    mkdirSync(path.join(folder, 'sub.md'))
-    const warned = []
-    const c = readFolder(folder, (m) => warned.push(m))
-    expect(c.map((x) => x.text)).toEqual(['Spare desk, Fridays'])
-    expect(warned.join('\n')).toMatch(/skipped link\.txt/)
-    expect(warned.join('\n')).toMatch(/skipped sub\.md/)
+    mkdirSync(path.join(folder, 'sub.txt'))
+    const { candidates, skipped } = readFolder(folder)
+    expect(candidates.map((x) => x.text)).toEqual(['Spare desk, Fridays'])
+    expect(skipped.join('\n')).toMatch(/skipped link\.txt: not a regular file/)
+    expect(skipped.join('\n')).toMatch(/skipped sub\.txt: not a regular file/)
     rmSync(dir, { recursive: true })
+  })
+
+  it('.md and every other file type are skipped and named, never read (A19: a Markdown "+ " bullet marks nothing)', () => {
+    const dir = tmp()
+    writeFileSync(path.join(dir, 'notes.md'), '+ a markdown bullet\n')
+    writeFileSync(path.join(dir, 'UPPER.MD'), '+ another markdown bullet\n')
+    writeFileSync(path.join(dir, 'list.csv'), '+ csv line\n')
+    writeFileSync(path.join(dir, 'noext'), '+ no extension\n')
+    writeFileSync(path.join(dir, 'mine.txt'), '+ Spare desk, Fridays\n')
+    writeFileSync(path.join(dir, 'LOUD.TXT'), '- Upper case extension still counts\n')
+    const { candidates, skipped } = readFolder(dir)
+    expect(candidates.map((x) => x.text)).toEqual(['Upper case extension still counts', 'Spare desk, Fridays'])
+    expect(skipped).toHaveLength(4)
+    for (const n of ['notes.md', 'UPPER.MD', 'list.csv', 'noext']) expect(skipped.join('\n')).toContain(`skipped ${n}: not a .txt file`)
+    rmSync(dir, { recursive: true })
+  })
+
+  it('the review file names the skipped files, and says nothing about them when there are none', () => {
+    const base = { runId: 'r1', by: 'Jakob', today: '2026-10-07', generatedAt: 'now', mode: 'dry run', destination: 'x', inputs: [], files: [] }
+    expect(renderReview([], { ...base, skipped: ['skipped notes.md: not a .txt file (only regular .txt files are read)'] }))
+      .toMatch(/NOT READ in the Mac folder \(only regular \.txt files are read\):\n {2}skipped notes\.md/)
+    expect(renderReview([], base)).not.toContain('NOT READ')
+    expect(renderReview([], { ...base, skipped: [] })).not.toContain('NOT READ')
   })
 })
 
@@ -469,7 +491,8 @@ console.log(JSON.stringify({ children: page, total: all.length, hasMore: a.offse
     const { sh, log } = fakeScript(dir, { ...TREE, qAo6KedrMFrC: TREE.ROOT00000001 })
     const mac = path.join(dir, 'mac')
     mkdirSync(mac)
-    writeFileSync(path.join(mac, 'private.md'), '# mine\n+ Spare desk, Fridays\n- my diary\n')
+    writeFileSync(path.join(mac, 'private.txt'), '# mine\n+ Spare desk, Fridays\n- my diary\n')
+    writeFileSync(path.join(mac, 'notes.md'), '+ a markdown bullet that must not be read\n')
     const out = path.join(dir, 'out')
     const review = path.join(dir, 'review.txt')
     const r = await run(['--out', out, '--review', review, '--mac-folder', mac], { TW_TANA_MCP: sh })
@@ -487,6 +510,8 @@ console.log(JSON.stringify({ children: page, total: all.length, hasMore: a.offse
     expect(existsSync(path.join(out, 'personal-inventory_server.json'))).toBe(false)
     const text = readFileSync(review, 'utf8')
     expect(text).toMatch(/WOULD LEAVE THIS MAC: 3 line\(s\)/)
+    expect(text).toContain('skipped notes.md: not a .txt file')
+    expect(text).not.toContain('a markdown bullet that must not be read')
     expect(text).toContain('+ Spare desk, Fridays')
     rmSync(dir, { recursive: true })
   }, 60_000)

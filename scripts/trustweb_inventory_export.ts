@@ -9,7 +9,8 @@
  *     (title + first line), through ~/.claude/scripts/tana_mcp.sh. Only
  *     get_children is ever called; --write is never passed.
  *   - --choices <kimi-ticked.json>: the review page's saved choices.
- *   - --mac-folder <dir>: *.txt / *.md lines; "+ " marks a line.
+ *   - --mac-folder <dir>: lines of the regular .txt files in it (nothing else is read,
+ *     .md included; skipped files are named in the review file); "+ " marks a line.
  * Writes (files 0600, folder 0700), all on this Mac:
  *   (a) <out>/personal-inventory_full.json      every line, source, verdict
  *   (c) the review file (--review)              what WOULD leave, what stays, why
@@ -110,22 +111,31 @@ export function tanaViaScript(script: string): TanaCall {
   })
 }
 
+/** What readFolder found: the lines of the regular .txt files, and every directory entry it did not read, named with the reason. */
+export interface FolderRead {
+  candidates: Candidate[]
+  skipped: string[]
+}
+
 /**
- * The Mac folder's lines. Only REGULAR files that sit in the folder itself
- * count: a symlink (to a file anywhere else on the Mac), a subfolder or a
- * device is skipped and named, so no "+ " line can come from outside it.
+ * The Mac folder's lines. Only REGULAR .txt files that sit in the folder
+ * itself count (Jakob 2026-10-07: "txt only for now"). Everything else, .md
+ * included, is skipped and named, and so is a symlink (to a file anywhere else
+ * on the Mac), a subfolder or a device, so no "+ " line can come from outside
+ * the folder or from a note that merely uses "+ " as a Markdown bullet (A19).
  */
-export function readFolder(dir: string, warn: (msg: string) => void = (m) => console.log(m)): Candidate[] {
-  const out: Candidate[] = []
-  for (const f of readdirSync(dir).filter((n) => /\.(txt|md)$/i.test(n)).sort()) {
-    const st = lstatSync(path.join(dir, f))
-    if (!st.isFile()) { warn(`skipped ${f}: not a regular file in the folder (a symlink or folder is never read)`); continue }
+export function readFolder(dir: string): FolderRead {
+  const candidates: Candidate[] = []
+  const skipped: string[] = []
+  for (const f of readdirSync(dir).sort()) {
+    if (!/\.txt$/i.test(f)) { skipped.push(`skipped ${f}: not a .txt file (only regular .txt files are read)`); continue }
+    if (!lstatSync(path.join(dir, f)).isFile()) { skipped.push(`skipped ${f}: not a regular file in the folder (a symlink or folder is never read)`); continue }
     for (const raw of readFileSync(path.join(dir, f), 'utf8').split(/\r?\n/)) {
       const c = parseFolderLine(raw, f)
-      if (c) out.push(c)
+      if (c) candidates.push(c)
     }
   }
-  return out
+  return { candidates, skipped }
 }
 
 function writePrivate(file: string, content: string): void {
@@ -220,6 +230,7 @@ export async function main(argv: readonly string[]): Promise<void> {
   const today = localDay(new Date())
   const candidates: Candidate[] = []
   const inputs: string[] = []
+  const skippedFiles: string[] = []
   let knownIds = new Set<string>()
   let readIds: string[] = []
 
@@ -237,9 +248,11 @@ export async function main(argv: readonly string[]): Promise<void> {
     inputs.push(`choices file ${args.choices}: ${c.length} ticked line(s), ${c.filter((x) => x.mark).length} allowed in advance`)
   }
   if (args.macFolder) {
-    const c = readFolder(args.macFolder)
+    const { candidates: c, skipped } = readFolder(args.macFolder)
     candidates.push(...c)
-    inputs.push(`Mac folder ${args.macFolder}: ${c.length} line(s), ${c.filter((x) => x.mark).length} marked "+ "`)
+    skippedFiles.push(...skipped)
+    for (const msg of skipped) console.log(msg)
+    inputs.push(`Mac folder ${args.macFolder}: ${c.length} line(s), ${c.filter((x) => x.mark).length} marked "+ ", ${skipped.length} file(s) skipped`)
   }
   if (!inputs.length) inputs.push('(no source: --no-tana without --choices or --mac-folder)')
 
@@ -265,6 +278,7 @@ export async function main(argv: readonly string[]): Promise<void> {
     mode: args.send ? 'send' : 'dry run',
     destination: args.host ? `the personal front door on ${args.host}` : 'the personal front door (only with --send; this run sends nothing)',
     inputs,
+    skipped: skippedFiles,
     files,
   }))
 
