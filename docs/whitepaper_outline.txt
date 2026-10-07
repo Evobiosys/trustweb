@@ -87,7 +87,7 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
 2A. THE POWER OF WEAK TIES, AND FIFTY YEARS OF WORK ON THIS  (Jakob 10-07 15:37: "a proper outline also including the power of weak ties, how people have been working on this since the 1970s")
 ======================================================================
 Placement: numbered 2A so every cross-reference in this file stays valid; renumber (2A becomes 3, the rest shift) when the outline is promoted to a draft paper. The chimpanzee and bonobo section (2.5) is unchanged.
-Reading rule: this lineage is historical by design. Nearly every source here is older than 10 years, so each such entry carries ⚠️ here and in the register (section 10); the sign marks age, not doubt. Confidence figures (0 to 1) appear only on uncertain claims, and below 0.7 they carry ⚠️ as well.
+Reading rule: this lineage is historical by design. Nearly every source here is older than 10 years, so each such entry is marked ⚠️ in the register (section 10), and inline only where a claim is also uncertain; the sign marks age, not doubt. Confidence figures (0 to 1) appear only on uncertain claims, and below 0.7 they carry ⚠️ as well.
 Source status in this pass: "(register)" = found by the wave 3 research agents (W3/research-favours and research-prior-art source lists; some read, some seen via search summaries, as each list states). "(recall)" = added by me from memory of the literature, NOT fetched. Every "(recall)" entry and every "[locator to confirm]" needs a page-level check before anything is cited in print or on the site. I invented no DOI, page number or quote; where I am unsure the locator says so.
 One-sentence thesis for the paper: five decades of network research say that new information arrives through acquaintances and bridges, that short paths exist but people rarely pass a request along, and that earlier systems either measured the network, searched it from a central server, or authenticated keys; TrustWeb makes the passing-along cheap and consent-based, and keeps the data on each person's device.
 
@@ -148,7 +148,7 @@ One-sentence thesis for the paper: five decades of network research say that new
   - Bakshy, Rosenn, Marlow, Adamic 2012 (WWW 2012, pp. 519 to 528; recall; confidence 0.85): on Facebook, a person is more likely to share what close friends shared, but weak ties as a group supply more of the novel information because there are so many of them. Means: the information value of acquaintances is large even when each is less active. Evidence: Bakshy [A].
   - Rajkumar, Saint-Jacques, Bojinov, Brynjolfsson, Aral 2022 (Science 377(6612), 15 Sept 2022; register; DOI 10.1126/science.abl4476, metadata confirmed; pages to confirm): randomised experiments on about 20 million LinkedIn users between 2015 and 2019. Moderately weak ties were the most useful for job mobility (an inverted U), and the best strength differed by industry: weaker ties helped more in digital industries, stronger ties in less digital ones. (confidence 0.8; from search summaries) This is the strongest modern evidence and not older than 10 years.
   - Means for TrustWeb: the ring design should not assume "weaker is always better"; the acquaintance ring is the new-information ring, the friend ring the best-balance ring, and TrustWeb lets each person choose. Caution: all three studies measure information and job mobility, not favours or borrowing a cargo bike; the step to TrustWeb's use cases is an inference (confidence 0.6, ⚠️).
-  - Willingness, the other half (register): people underestimate how willing others are to help (Zhao and Epley, Psychological Science 33(10), 2022) and overestimate the cost of declining an invitation (Givi and Kirk, J. Personality and Social Psychology, 2024); questions to Facebook friends get useful answers but carry social costs (Gray et al., ACM CSCW 2013; Ellison et al., AAAI ICWSM 2013). Means: asking is worth lowering the cost of; supports 1.3 and 3.4. Evidence: the four papers [A]; findings from search summaries or abstracts only, confidence 0.65 to 0.75 per the wave 3 list.
+  - Willingness, the other half (register): people underestimate how willing others are to help (Zhao and Epley, Psychological Science 33(10), 2022) and overestimate the cost of declining an invitation (Givi and Kirk, J. Personality and Social Psychology, 2024); questions to Facebook friends get useful answers but carry social costs (Gray et al., ACM CSCW 2013; Ellison et al., AAAI ICWSM 2013). Means: asking is worth lowering the cost of; supports 1.3 and 3.4. Evidence: the four papers [A]; findings from search summaries or abstracts only, confidence 0.65 to 0.75 per the wave 3 list ⚠️ (the lower end is below 0.7).
 
 2A.6 Asking your network: search, introductions, and why they died
   Aardvark (Horowitz and Kamvar, "The Anatomy of a Large-Scale Social Search Engine", WWW 2010, pp. 431 to 440; register; numbers from a TechCrunch summary only)
@@ -310,45 +310,45 @@ One-sentence thesis for the paper: five decades of network research say that new
 [C] Tana notes (read only): w7fWTRC7ZWds (concepts), BI_4kdn-iTit, 7oxUPezZrFpA, j7YaUjve2RVb, FcHArIYVp4yZ, HzWPsD_QKYez, lnjIV9IZVPp_, CxY8mkORvM_y, -qlGMZZfzpG0, WSjMYsLyO8EL.
 
 --- Added in v0.2 for section 2A (lineage). Status: (register) = on the wave 3 lists; (recall) = from memory, NOT fetched, locator to confirm. ⚠️ = older than 10 years. ---
-[A] Granovetter MS. The Strength of Weak Ties. American Journal of Sociology 78(6), 1360-1380, May 1973 ⚠️ (register: abstract read on an MIT library mirror; pages from memory)
+[A] Granovetter MS. The Strength of Weak Ties. University of Chicago Press, American Journal of Sociology 78(6), 1360-1380, May 1973 ⚠️ (register: abstract read on an MIT library mirror; pages from memory)
 [A] Granovetter MS. Getting a Job: A Study of Contacts and Careers. Harvard University Press, 1974 (2nd ed. University of Chicago Press, 1995) ⚠️ (recall)
-[A] Granovetter M. The Strength of Weak Ties: A Network Theory Revisited. Sociological Theory 1, 201-233, 1983 ⚠️ (recall)
-[A] Granovetter M. Economic Action and Social Structure: The Problem of Embeddedness. American Journal of Sociology 91(3), 481-510, 1985 ⚠️ (recall)
-[A] Marsden PV, Campbell KE. Measuring Tie Strength. Social Forces 63(2), 482-501, 1984 ⚠️ (recall)
+[A] Granovetter M. The Strength of Weak Ties: A Network Theory Revisited. American Sociological Association, Sociological Theory 1, 201-233, 1983 (publisher to confirm) ⚠️ (recall)
+[A] Granovetter M. Economic Action and Social Structure: The Problem of Embeddedness. University of Chicago Press, American Journal of Sociology 91(3), 481-510, 1985 ⚠️ (recall)
+[A] Marsden PV, Campbell KE. Measuring Tie Strength. University of North Carolina Press (now Oxford University Press), Social Forces 63(2), 482-501, 1984 ⚠️ (recall)
 [A] Krackhardt D. The Strength of Strong Ties: The Importance of Philos in Organizations. In Nohria N, Eccles RG (eds), Networks and Organizations, Harvard Business School Press, 1992 ⚠️ (recall; pages to confirm)
 [A] Burt RS. Structural Holes: The Social Structure of Competition. Harvard University Press, 1992 ⚠️ (recall)
-[A] Burt RS. Structural Holes and Good Ideas. American Journal of Sociology 110(2), 349-399, September 2004. doi 10.1086/421787 ⚠️ (register; metadata confirmed, findings via summary)
-[A] Coleman JS. Social Capital in the Creation of Human Capital. American Journal of Sociology 94 (supplement), S95-S120, 1988 ⚠️ (recall)
-[A] Lin N, Ensel WM, Vaughn JC. Social Resources and Strength of Ties: Structural Factors in Occupational Status Attainment. American Sociological Review 46(4), 393-405, 1981 ⚠️ (recall)
+[A] Burt RS. Structural Holes and Good Ideas. University of Chicago Press, American Journal of Sociology 110(2), 349-399, September 2004. doi 10.1086/421787 ⚠️ (register; metadata confirmed, findings via summary)
+[A] Coleman JS. Social Capital in the Creation of Human Capital. University of Chicago Press, American Journal of Sociology 94 (supplement), S95-S120, 1988 ⚠️ (recall)
+[A] Lin N, Ensel WM, Vaughn JC. Social Resources and Strength of Ties: Structural Factors in Occupational Status Attainment. American Sociological Association, American Sociological Review 46(4), 393-405, 1981 ⚠️ (recall)
 [A] Lin N. Social Capital: A Theory of Social Structure and Action. Cambridge University Press, 2001 ⚠️ (recall)
 [A] Putnam RD. Bowling Alone: The Collapse and Revival of American Community. Simon and Schuster, 2000 ⚠️ (recall; scholarly argument from a trade publisher; chapter 1, page to confirm)
-[A] Pool I de S, Kochen M. Contacts and Influence. Social Networks 1(1), 5-51, 1978 (circulated from about 1958) ⚠️ (recall)
-[A] Milgram S. The Small-World Problem. Psychology Today 1(1), May 1967 ⚠️ (recall; pages to confirm)
-[A] Travers J, Milgram S. An Experimental Study of the Small World Problem. Sociometry 32(4), 425-443, 1969 ⚠️ (recall)
-[A] Watts DJ, Strogatz SH. Collective dynamics of "small-world" networks. Nature 393, 440-442, 4 June 1998 ⚠️ (recall)
-[A] Kleinberg JM. Navigation in a small world. Nature 406, 845, 24 August 2000 ⚠️ (recall)
-[A] Dodds PS, Muhamad R, Watts DJ. An Experimental Study of Search in Global Social Networks. Science 301(5634), 827-829, 8 August 2003 ⚠️ (recall)
-[A] Onnela J-P et al. Structure and tie strengths in mobile communication networks. Proceedings of the National Academy of Sciences 104(18), 7332-7336, 2007 ⚠️ (recall)
-[A] Bakshy E, Rosenn I, Marlow C, Adamic L. The Role of Social Networks in Information Diffusion. Proceedings of WWW 2012 (ACM), 519-528 (recall)
-[A] Rajkumar K et al. (see the existing Rajkumar entry above): pages 1304-1310 from memory, to confirm; doi 10.1126/science.abl4476 (register)
+[A] Pool I de S, Kochen M. Contacts and Influence. Elsevier, Social Networks 1(1), 5-51, 1978 (publisher to confirm) (circulated from about 1958) ⚠️ (recall)
+[A] Milgram S. The Small-World Problem. Psychology Today (publisher to confirm) 1(1), May 1967 ⚠️ (recall; pages to confirm)
+[A] Travers J, Milgram S. An Experimental Study of the Small World Problem. American Sociological Association, Sociometry 32(4), 425-443, 1969 ⚠️ (recall)
+[A] Watts DJ, Strogatz SH. Collective dynamics of "small-world" networks. Nature Publishing Group, Nature 393, 440-442, 4 June 1998 ⚠️ (recall)
+[A] Kleinberg JM. Navigation in a small world. Nature Publishing Group, Nature 406, 845, 24 August 2000 ⚠️ (recall)
+[A] Dodds PS, Muhamad R, Watts DJ. An Experimental Study of Search in Global Social Networks. AAAS, Science 301(5634), 827-829, 8 August 2003 ⚠️ (recall)
+[A] Onnela J-P et al. Structure and tie strengths in mobile communication networks. National Academy of Sciences, Proceedings of the National Academy of Sciences 104(18), 7332-7336, 2007 ⚠️ (recall)
+[A] Bakshy E, Rosenn I, Marlow C, Adamic L. The Role of Social Networks in Information Diffusion. Proceedings of WWW 2012, ACM, 519-528 (recall)
+[A] AAAS, Science 377(6612), 15 September 2022: Rajkumar K et al. (pointer to the existing Rajkumar entry above): pages 1304-1310 from memory, to confirm; doi 10.1126/science.abl4476 (register)
 [A] Horowitz D, Kamvar SD. The Anatomy of a Large-Scale Social Search Engine. Proceedings of WWW 2010 (ACM), 431-440. https://archives.iw3c2.org/www2010/proceedings/www/p431.pdf ⚠️ (register; the W3 collectors could not fetch the paper, numbers via TechCrunch; read it before quoting)
 [A] Gray R, Ellison NB, Vitak J, Lampe C. Who wants to know? Question-asking and answering practices among Facebook users. ACM CSCW 2013. doi 10.1145/2441776.2441913 ⚠️ (register; findings via search summary)
 [A] Ellison N, Gray R, Vitak J, Lampe C, Fiore A. Calling All Facebook Friends: Exploring Requests for Help on Facebook. AAAI ICWSM 2013 ⚠️ (register)
-[A] Zhao X, Epley N. Surprisingly Happy to Have Helped. Psychological Science 33(10), 1708-1731, 2022 (register)
+[A] Zhao X, Epley N. Surprisingly Happy to Have Helped. Association for Psychological Science, Psychological Science 33(10), 1708-1731, 2022 (register)
 [A] Givi J, Kirk CP. The Negative Ramifications From Invitation Declines Are Overestimated. American Psychological Association, Journal of Personality and Social Psychology, 2024 (register; release PDF unreadable, via summary)
-[A] Whitten A, Tygar JD. Why Johnny Can't Encrypt. USENIX Security Symposium, 169-184, 1999 ⚠️ (recall)
+[A] Whitten A, Tygar JD. Why Johnny Can't Encrypt. USENIX Association, USENIX Security Symposium, 169-184, 1999 ⚠️ (recall)
 [A] Zimmermann P. The Official PGP User's Guide. MIT Press, 1995 ⚠️ (recall; primary document by the author; web of trust described in the PGP 2.0 era, 1992, locator to confirm)
 [A] Kamvar SD, Schlosser MT, Garcia-Molina H. The EigenTrust Algorithm for Reputation Management in P2P Networks. Proceedings of WWW 2003 (ACM), 640-651 ⚠️ (recall)
 [A] Guha R, Kumar R, Raghavan P, Tomkins A. Propagation of Trust and Distrust. Proceedings of WWW 2004 (ACM), 403-412 ⚠️ (recall)
-[A] Jøsang A, Ismail R, Boyd C. A survey of trust and reputation systems for online service provision. Decision Support Systems 43(2), 618-644, 2007 ⚠️ (recall)
+[A] Jøsang A, Ismail R, Boyd C. A survey of trust and reputation systems for online service provision. Elsevier, Decision Support Systems 43(2), 618-644, 2007 ⚠️ (recall)
 [A] Levien R. Attack-Resistant Trust Metrics. In Golbeck J (ed.), Computing with Social Trust, Springer, 2009 ⚠️ (recall; pages to confirm)
-[A] IETF. RFC 4880 OpenPGP Message Format, November 2007 ⚠️ (recall; replaced by RFC 9580 OpenPGP, 2024, locator to confirm)
+[A] Internet Engineering Task Force (RFC Editor). RFC 4880 OpenPGP Message Format, November 2007 ⚠️ (recall; replaced by RFC 9580 OpenPGP, 2024, locator to confirm)
 [A] W3C. Decentralized Identifiers (DIDs) v1.0, Recommendation, July 2022 (recall; date to confirm)
-[A] Smith SM. Key Event Receipt Infrastructure (KERI). arXiv, 2019 ⚠️ (recall; identifier to confirm)
+[A] Smith SM. Key Event Receipt Infrastructure (KERI). Cornell University, arXiv, 2019 ⚠️ (recall; identifier to confirm)
 [B] TechCrunch. Aardvark Publishes A Research Paper Offering Unprecedented Insights Into Social Search, April 2010 ⚠️ (register)
 [B] VentureBeat. Google closes Aardvark, 2011 ⚠️ (register)
 [B] CNBC. Zoom buys Keybase as part of 90-day plan to fix security flaws, 2020-05-07 (register)
-[B] Kleinfeld JS. Could it be a big world after all? The "six degrees of separation" myth. Society 39(2), 61-66, 2002 ⚠️ (recall; a social-science magazine article, hence B; locator to confirm)
+[B] Kleinfeld JS. Could it be a big world after all? The "six degrees of separation" myth. Springer, Society 39(2), 61-66, 2002 ⚠️ (recall; a social-science magazine article, hence B; locator to confirm)
 [B] OpenVTC organisation repositories, GitHub, read 2026-10-07 (register); GnuPG software page, gnupg.org, 2026-10-07 (register)
 [C] Wikipedia: Web of trust; Advogato; Keybase; SixDegrees.com; Aardvark (search engine); Jelly (app), accessed 2026-10-07 ⚠️ (register; secondary pages, used only for dates and status)
 [C] Rebooting the Web of Trust workshop series, community site (weboftrust.info; about 2015 to date) (recall; locator to confirm)
