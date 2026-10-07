@@ -76,6 +76,8 @@ export const S = {
   demoFriendsTitle: 'We have given you some (imaginary ;) friends :)',
   demoFriendsBody: 'They live only on this demo phone. Tap one to see what you noted about them.',
   demoFriendsOk: 'Got it',
+  // Under "Got it", smaller and in another colour (owner 2026-10-07): the dummy content goes away again.
+  demoFriendsDismiss: 'Dismiss them',
   demoFriendsBodyOwn: 'They live only on this phone. Tap one to see what you noted about them; remove them any time in Settings.',
   demoOfferTitle: 'Want to try it with demo content?',
   demoOfferBody: 'We give you some (imaginary ;) friends and a few things to share. Remove them any time in Settings.',
@@ -799,6 +801,8 @@ export const S = {
 
   // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
   d2lButton: 'Install',
+  // Under the Install button, smaller and lighter (owner 2026-10-07): the demo is shared; the installed app is the person's own.
+  d2lButtonSub: 'for yourself',
   // Wave 2 (P12, P13): the flow reads "Make it your personal account"; nobody types their notes again.
   d2lButtonTitle: 'Make it your personal account, then install TrustWeb',
   d2lTitle: 'Make it your personal account',

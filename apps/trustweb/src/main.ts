@@ -48,7 +48,9 @@ import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { setUpInstall } from './install'
+import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
+import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
@@ -376,7 +378,8 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
     el('span', {}, [S.addDeviceShort]),
   ])
   const see = el('button', { class: 'see-action', onclick: () => void openWalkthrough() }, [S.seeInAction])
-  root.append(el('div', { class: 'page-dock' }, [add, see]), demoToggle)
+  // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle)
 }
 
 /**
@@ -723,7 +726,20 @@ function showNotice(title: string, body: string, actions: HTMLElement[], autoHid
   if (autoHideMs) friendsTimer = setTimeout(hideNotice, autoHideMs)
 }
 function showDemoFriends(): void {
-  showNotice(S.demoFriendsTitle, solo ? S.demoFriendsBody : S.demoFriendsBodyOwn, [el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.demoFriendsOk])], 9000)
+  showNotice(S.demoFriendsTitle, solo ? S.demoFriendsBody : S.demoFriendsBodyOwn, [
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.demoFriendsOk]),
+    // Smaller and in another colour, under "Got it" (owner 2026-10-07): takes the dummy content away again.
+    el('button', { class: 'notice-dismiss', 'data-dismiss-demo': '1', onclick: dismissDemoFriends }, [S.demoFriendsDismiss]),
+  ], 9000)
+}
+
+/** "Dismiss them": a demo phone drops its seeded web, a live phone only what "Show demo content" added (demo_dismiss.ts). */
+function dismissDemoFriends(): void {
+  hideNotice()
+  removeDummyContent(st(), ctx, solo ? DismissScope.Seeded : DismissScope.Added)
+  save()
+  render()
+  toast(S.demoRemoved)
 }
 
 // ---------------------------------------------------------------------------
@@ -747,11 +763,8 @@ function addDemoContent(): void {
 
 function removeDemoContent(): void {
   const s = st()
-  const demo = s.demo
-  if (!demo) return
-  s.people = s.people.filter((p) => !demo.people.includes(p.id))
-  s.inventory = s.inventory.filter((i) => !demo.inventory.includes(i.id))
-  delete s.demo
+  if (!s.demo) return
+  removeDummyContent(s, ctx, DismissScope.Added)
   save()
   render()
   toast(S.demoRemoved)
@@ -766,7 +779,7 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  */
 function offerDemoContent(): void {
   const s = state
-  if (!s || solo || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth()) return
+  if (!s || solo || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth() || runsAsInstalledApp()) return
   const answer = (yes: boolean): void => {
     document.removeEventListener('pointerdown', onElsewhere, true)
     st().demoOffered = true
@@ -783,7 +796,7 @@ function offerDemoContent(): void {
 }
 
 function updateDemoToggle(): void {
-  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window
+  demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
   if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
 }
 
@@ -3096,6 +3109,7 @@ function settingsSheet(): void {
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const order = s.tabOrder ?? TabOrder.WebLeft
+  const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
   const pick = (o: TabOrder, label: string): HTMLElement => el('button', {
     class: 'radio' + (order === o ? ' on' : ''),
     onclick: () => { s.tabOrder = o; save(); renderTabs(); render(); settingsSheet() },
@@ -3134,12 +3148,13 @@ function settingsSheet(): void {
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     ...feed.settingsGroup(),
     notificationsCard(s),
-    solo ? null : el('h4', { class: 'eyebrow' }, [S.setDemo]),
-    solo ? null : el('button', {
+    // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
+    demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
+    demoSettingsShown ? el('button', {
       class: 'radio' + (s.demo ? ' on' : ''),
       'aria-pressed': String(Boolean(s.demo)),
       onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
-    }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]),
+    }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
     el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),

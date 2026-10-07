@@ -30,7 +30,10 @@ const CSS = `
   :root:not([data-theme="light"]) .tw-btn-install:hover{background:#a6b9e3; border-color:#a6b9e3}
   :root:not([data-theme="light"]) .tw-btn:focus-visible{outline-color:#8fa7d8}
 }
-.demo-topbar{max-width:1100px; margin:0 auto 6px; display:flex; justify-content:flex-end}
+.demo-topbar{max-width:1100px; margin:0 auto 6px; display:flex; justify-content:flex-end; align-items:flex-start; gap:10px}
+.demo-install{display:flex; flex-direction:column; align-items:center; gap:4px}
+/* "for yourself": smaller, lighter weight and colour than the button it sits under (owner 2026-10-07) */
+.demo-install-sub{font:400 11px/1.2 "IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--soft)}
 .d2l-veil{position:fixed; inset:0; z-index:50; background:rgba(18,12,26,.55); display:grid; place-items:center; padding:16px}
 .d2l{background:var(--card); color:var(--ink); border-radius:20px; padding:22px 22px 18px; max-width:420px; width:100%;
   box-shadow:0 24px 80px rgba(36,27,46,.45); font-size:14.5px; line-height:1.55}
@@ -100,7 +103,9 @@ export function demoInstallBar(ctx: DemoContext, base: string): HTMLElement {
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.append(style)
-  const btn = el('button', { class: 'tw-btn tw-btn-install', 'data-demo-install': '1', title: S.d2lButtonTitle }, [S.d2lButton])
+  const btn = el('button', { class: 'tw-btn tw-btn-install', 'data-demo-install': '1', title: S.d2lButtonTitle, 'aria-describedby': 'demo-install-sub' }, [S.d2lButton])
   btn.addEventListener('click', () => askClean(ctx, base, btn))
-  return el('div', { class: 'demo-topbar' }, [btn])
+  // The sub-line sits OUTSIDE the button, so the button's name stays exactly "Install"; the button points at it as its description.
+  const sub = el('span', { class: 'demo-install-sub', id: 'demo-install-sub' }, [S.d2lButtonSub])
+  return el('div', { class: 'demo-topbar' }, [el('div', { class: 'demo-install' }, [btn, sub])])
 }
