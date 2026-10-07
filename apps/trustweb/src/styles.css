@@ -38,8 +38,9 @@ button{font-family:inherit}
 .phone{
   width:390px; height:812px; max-height:calc(100dvh - 48px); background:var(--linen); border-radius:46px;
   box-shadow:0 24px 80px rgba(36,27,46,.35), 0 0 0 10px #17111e, 0 0 0 12px #3a2f47;
-  overflow:hidden; position:relative; flex-shrink:0; color:var(--ink);
+  overflow:hidden; overflow:clip; position:relative; flex-shrink:0; color:var(--ink);
 }
+/* overflow:clip, not only hidden: the closed sheet (bottom:-100%) overflows the phone, and a focus or a tap scrolling an overflow:hidden box moved the whole phone up, so the bars and the page misaligned (wave 5, item e) */
 @media (max-width:480px){
   body{padding:0}
   .phone{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
@@ -47,7 +48,7 @@ button{font-family:inherit}
 .phone.embedded{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
 body:has(.phone.embedded){padding:0}
 
-.screen{position:absolute; inset:0 0 86px; display:flex; flex-direction:column; overflow:hidden; background:var(--linen)}
+.screen{position:absolute; inset:0 0 86px; display:flex; flex-direction:column; overflow:hidden; overflow:clip; background:var(--linen)}
 .screen.start{inset:0}
 .scroll{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:24px}
 .scroll.pad{padding:0 20px 24px}
@@ -265,7 +266,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .status-pill:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 
 /* record (solo): Tana mobile's voice memo layout */
-.scroll.memo{display:flex; flex-direction:column; padding-bottom:150px}
+.scroll.memo{display:flex; flex-direction:column}
+/* the X / send bar sits UNDER the scrolling area, in the flow (wave 5, item e): nothing scrolls beneath it, so no fade can overlap a line and the last line stays reachable */
+.screen.record .scroll.memo{padding-bottom:20px}
 .memo-hero{display:flex; align-items:center; justify-content:center; gap:34px; margin:46px 0 14px}
 .rec-circle{width:132px; height:132px; border-radius:50%; border:0; cursor:pointer; flex-shrink:0;
   background:radial-gradient(circle at 35% 30%, #D9CFF7, #B9A9EE 70%); box-shadow:0 10px 30px rgba(154,55,240,.25);
@@ -319,11 +322,7 @@ textarea.field{resize:vertical; line-height:1.5}
 /* the two fabs on Inventory never cover the last line or the backup card */
 .screen.inventory .scroll{padding-bottom:84px}
 .hint-again{display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
-.memo-controls{position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-evenly; align-items:center; padding:26px 26px 22px;
-  background:linear-gradient(to bottom, transparent, var(--linen) 45%);
-  /* the fade is only a look: taps on it reach what scrolls underneath (the Past meetings link, 2026-10-06), the buttons still take theirs */
-  pointer-events:none}
-.memo-controls .round{pointer-events:auto}
+.memo-controls{flex-shrink:0; display:flex; justify-content:space-between; align-items:center; padding:10px 36px 16px; background:var(--linen)}
 .round{width:62px; height:62px; border-radius:50%; border:0; cursor:pointer; background:var(--card); color:var(--ink);
   display:grid; place-items:center; box-shadow:0 4px 14px rgba(36,27,46,.12)}
 .round svg{width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
