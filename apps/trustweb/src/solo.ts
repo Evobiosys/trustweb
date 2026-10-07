@@ -138,7 +138,7 @@ function rememberedDevices(): Persona[] {
 }
 
 function rememberDevices(devices: readonly Persona[]): void {
-  try { localStorage.setItem(DEVICES_KEY, serializeDevices(devices)) } catch { /* this visit only */ }
+  try { localStorage.setItem(DEVICES_KEY, serializeDevices(devices, ORDER)) } catch { /* this visit only */ }
 }
 
 function phoneColumn(p: Persona): { col: HTMLElement; slot: HTMLElement } {

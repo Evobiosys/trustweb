@@ -1938,8 +1938,8 @@ function draftMeeting(): PastMeeting | undefined {
 function packFromDraft(): MeetingPack {
   const prose = [meetingToNoteText(draft.segments), draft.text].filter((t) => t.trim()).join('. ')
   const notes = (draft.lines.length ? draft.lines.map((l) => l.text) : extractLines(prose).map((l) => l.text))
-    .concat(draft.extraLines.map((l) => l.text))
-    .map((t) => t.trim()).filter(Boolean)
+    .concat(draft.extraLines.map((l) => l.text), cleanGeneralNotes(draft.generalNotes))
+    .map((t) => t.trim()).filter((t, i, all) => Boolean(t) && all.indexOf(t) === i)
   return {
     v: 1, kind: 'meeting', from: st().me.displayName, about: draft.name.trim(), where: draft.context.trim(),
     startedAt: takes[0]?.startedAt ?? Date.now(), durationMs: totalMs(), notes,

@@ -140,7 +140,7 @@ async function partG(browser, base) {
   await page.locator('.dock .add').click()
   t.ok('g: three devices after two "Add a device"', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 2', 'Device 3']), JSON.stringify(await titles()))
   t.ok('g: the first device has no remove, the others have one', await page.locator('.col').nth(0).locator('.remove-device').count() === 0 && await page.locator('.remove-device').count() === 2)
-  t.ok('g: the page remembers the open devices as a list', (await devicesKey()) === 'holder,seeker,third', String(await devicesKey()))
+  t.ok('g: while nothing is removed the page still stores the old count', (await devicesKey()) === '3', String(await devicesKey()))
   await page.locator('.col[data-persona="seeker"] .remove-device').click()
   t.ok('g: removing the middle phone leaves Device 1 and Device 3', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 3']), JSON.stringify(await titles()))
   t.ok('g: its stored record is gone, the first device keeps its own', await page.evaluate(() => localStorage.getItem('trustweb.v1.generic.seeker') === null && localStorage.getItem('trustweb.v1.generic.holder') !== null))

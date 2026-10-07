@@ -27,10 +27,17 @@ describe('parseDevices / serializeDevices', () => {
     expect(parseDevices('fourth,holder,fourth,bogus', ORDER)).toEqual([Persona.Holder, Persona.Fourth])
     expect(parseDevices('seeker', ORDER)).toEqual([Persona.Holder, Persona.Seeker])
   })
-  it('serialises as a comma list that parses back to the same devices', () => {
-    const open = [Persona.Holder, Persona.Third, Persona.Fourth]
-    expect(serializeDevices(open)).toBe('holder,third,fourth')
-    expect(parseDevices(serializeDevices(open), ORDER)).toEqual(open)
+  it('serialises the old count while the devices are the first n (a rollback reads that), a list only where a middle phone is gone', () => {
+    expect(serializeDevices([Persona.Holder], ORDER)).toBe('1')
+    expect(serializeDevices([Persona.Holder, Persona.Seeker, Persona.Third], ORDER)).toBe('3')
+    const gap = [Persona.Holder, Persona.Third, Persona.Fourth]
+    expect(serializeDevices(gap, ORDER)).toBe('holder,third,fourth')
+    expect(serializeDevices([Persona.Holder, Persona.Seeker, Persona.Fourth, Persona.Third], ORDER)).toBe('holder,seeker,fourth,third')
+  })
+  it('whatever is written parses back to the same devices', () => {
+    for (const open of [[Persona.Holder], [Persona.Holder, Persona.Seeker], [Persona.Holder, Persona.Third, Persona.Fourth], [Persona.Holder, Persona.Fourth, Persona.Seeker]]) {
+      expect(parseDevices(serializeDevices(open, ORDER), ORDER)).toEqual(open)
+    }
   })
 })
 

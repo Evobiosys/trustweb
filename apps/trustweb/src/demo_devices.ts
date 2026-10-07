@@ -23,8 +23,13 @@ export function parseDevices(raw: string | null, order: readonly Persona[]): Per
   return [first, ...unique.filter((p) => p !== first)]
 }
 
-export function serializeDevices(devices: readonly Persona[]): string {
-  return devices.join(',')
+/**
+ * The stored form. The old build stored a count, and a rollback reads only that: so while the open devices are exactly the
+ * first n of the order (nothing removed from the middle) the count is written, and only a gap (a removed middle phone) writes the list.
+ */
+export function serializeDevices(devices: readonly Persona[], order: readonly Persona[]): string {
+  const prefix = devices.length > 0 && devices.every((p, i) => p === order[i])
+  return prefix ? String(devices.length) : devices.join(',')
 }
 
 /** The persona "Add a device" opens next: the first of the order that is not open. Null when all are open. */
