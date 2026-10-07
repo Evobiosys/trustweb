@@ -1,0 +1,24 @@
+<script>
+/* Keeps a term's popup inside the viewport at every width. The popup is centred on its term;
+   when that would push it past an edge (a term in the first or last column of the lists at
+   tablet widths), it is shifted back by the overshoot. Phones use the fixed bottom sheet. */
+(function () {
+  "use strict";
+  var MARGIN = 8;
+  function fit(term) {
+    var pop = term.querySelector(".pop");
+    if (!pop || getComputedStyle(pop).position === "fixed") return;
+    pop.style.transform = "";
+    var r = pop.getBoundingClientRect();
+    var vw = document.documentElement.clientWidth;
+    var dx = r.left < MARGIN ? MARGIN - r.left : r.right > vw - MARGIN ? vw - MARGIN - r.right : 0;
+    if (dx !== 0) pop.style.transform = "translateX(calc(-50% + " + Math.round(dx) + "px))";
+  }
+  function onEnter(ev) {
+    var term = ev.target.closest && ev.target.closest(".term");
+    if (term) fit(term);
+  }
+  document.addEventListener("focusin", onEnter);
+  document.addEventListener("mouseover", onEnter);
+})();
+</script>

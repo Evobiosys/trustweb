@@ -1,4 +1,4 @@
-"""Assembles the TrustWeb site (idea2.site/trustweb) into a directory.
+"""Assembles the TrustInTheWeb sites into a directory: the website (org) and the hosting site (com).
 
 Called by scripts/build_tw_front_door.sh, which fetches the source page from
 the server first and deploys the output afterwards. Nothing here touches the
@@ -6,23 +6,39 @@ network or the server.
 
     tw_site.py --src SOURCE_INDEX --frag FRAGMENT_DIR --out OUT_DIR
                [--draft] [--services-live] [--transcribe-live] [--publish-terms]
+               [--site org|com] [--site-host HOST] [--app-base URL]
+
+--site org (default) builds TrustInTheWeb.org, --site com builds
+TrustInTheWeb.com (the hosted service, with the pricing). --site-host is the
+host the output is served from (default idea2.site, where the org site lives
+under /trustweb/ until it moves); --app-base is the app's base URL (default
+https://app.idea2.site/trustweb; on the new host https://app.trustintheweb.org).
+Every default reproduces the pre-wave-3 build, so an older caller still works.
 
 What it builds (see the fragments next to this file):
-  index.html   the fetched idea2 web-of-trust page, edited by exact-text and
-               regex replacements (a source that drifted fails loudly) plus
-               the committed fragments
-  why.html, pricing.html, feedback.html, faq.html, imprint.html, privacy.html
-  terms.html   only with --draft or --publish-terms (Jakob has not approved it)
+  org: index.html   the fetched idea2 web-of-trust page, edited by exact-text and
+                    regex replacements (a source that drifted fails loudly) plus
+                    the committed fragments
+       why.html, feedback.html, faq.html, imprint.html, privacy.html, whitepaper.html
+       terms.html   only with --draft or --publish-terms (Jakob has not approved it)
+       No pricing anywhere: only a link "Do you need hosting?" to the com site.
+  com: index.html (the hosted service), pricing.html, feedback.html, imprint.html, privacy.html
+       (feedback, imprint and privacy are the same fragments as on the org site)
 
 Conditional blocks in fragments: <!--IF:name-->...<!--/IF--> is kept when the
 name is active and dropped otherwise. Names: soon / live (hosting is described
 as "starting soon" until --services-live), tx-off / tx-on (server transcription
 is described as "coming, switched off today" until --transcribe-live; it has its
 own flag because it stays off until a provider key is placed, whatever hosting
-does), draft / prod, terms. Blocks must not nest.
+does), draft / prod, org / com, terms. Blocks must not nest.
+
+Tokens in fragments, replaced in the finished page: {{APP}} app base, {{API}}
+app origin, {{ORG}} / {{COM}} prefix of a link to the other site (empty for the
+own site, so own links stay relative), {{SELF_URL}}, {{WHITEPAPER}},
+{{SITE_NAME}}, {{BACK}}, and the fragments {{WORDMARK}} and {{SWIRLS}}.
 
 Every link between the site's own pages is relative, so the same output works
-under /trustweb/ and under /trustweb/draft/.
+under /trustweb/, under /trustweb/draft/ and at the root of a domain.
 """
 
 from __future__ import annotations
@@ -31,10 +47,25 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from urllib.parse import urlsplit
 
 BLOCK_RE = re.compile(r"<!--IF:([\w-]+)-->(.*?)<!--/IF-->", re.DOTALL)
-TW_URL = "https://idea2.site/trustweb/"
+TOKEN_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
+IDEA2_HOST = "idea2.site"
+IDEA2_URL = "https://idea2.site/trustweb/"
+DEFAULT_APP_BASE = "https://app.idea2.site/trustweb"
+ORG_HOST = "trustintheweb.org"
+COM_HOST = "trustintheweb.com"
+ORG_LIVE_URL = f"https://{ORG_HOST}/"
+COM_LIVE_URL = f"https://{COM_HOST}/"
+WHITEPAPER_ANCHOR = "whitepaper.html#bonobos"
+
+
+class Site(str, Enum):
+    ORG = "org"
+    COM = "com"
 
 
 @dataclass(frozen=True)
@@ -43,20 +74,62 @@ class Flags:
     services_live: bool
     transcribe_live: bool
     publish_terms: bool
+    site: Site = Site.ORG
+    site_host: str = IDEA2_HOST
+    app_base: str = DEFAULT_APP_BASE
 
     @property
     def terms_visible(self) -> bool:
         return self.draft or self.publish_terms
+
+    @property
+    def is_org(self) -> bool:
+        return self.site is Site.ORG
+
+    @property
+    def self_url(self) -> str:
+        """Absolute URL of this site's front page (canonical, lineage link)."""
+        if self.site_host == IDEA2_HOST:
+            return IDEA2_URL if self.is_org else COM_LIVE_URL
+        return f"https://{self.site_host}/"
+
+    @property
+    def api_origin(self) -> str:
+        parts = urlsplit(self.app_base)
+        return f"{parts.scheme}://{parts.netloc}"
 
     def active_blocks(self) -> frozenset[str]:
         names = {
             "live" if self.services_live else "soon",
             "tx-on" if self.transcribe_live else "tx-off",
             "draft" if self.draft else "prod",
+            self.site.value,
         }
         if self.terms_visible:
             names.add("terms")
         return frozenset(names)
+
+    def tokens(self) -> dict[str, str]:
+        """Plain-text tokens; the fragment tokens WORDMARK and SWIRLS are added by the builder."""
+        # In production on the website's own host the link is the absolute anchor Jakob named;
+        # in a draft or on a preview host it stays relative, so it resolves inside that copy.
+        relative = self.is_org and (self.draft or self.site_host != ORG_HOST)
+        whitepaper = WHITEPAPER_ANCHOR if relative else ORG_LIVE_URL + WHITEPAPER_ANCHOR
+        back = (
+            '<a class="back" href="./">&larr; back to TrustInTheWeb.org</a>'
+            if self.is_org
+            else '<a class="back" href="./">&larr; back to the hosted service</a>'
+        )
+        return {
+            "APP": self.app_base.rstrip("/"),
+            "API": self.api_origin,
+            "ORG": "" if self.is_org else ORG_LIVE_URL,
+            "COM": COM_LIVE_URL if self.is_org else "",
+            "SELF_URL": self.self_url,
+            "WHITEPAPER": whitepaper,
+            "SITE_NAME": "TrustInTheWeb.org" if self.is_org else "TrustInTheWeb.com",
+            "BACK": back,
+        }
 
 
 @dataclass(frozen=True)
@@ -64,52 +137,70 @@ class Page:
     name: str
     title: str
     description: str
-    body: str
+    body: str  # path of the body fragment, relative to the fragment directory
 
 
-PAGES: tuple[Page, ...] = (
+ORG_PAGES: tuple[Page, ...] = (
     Page(
         "why",
         "Why TrustWeb",
-        "The reasoning behind TrustWeb: scalable, discreet, targeted, and where it matters.",
-        "why.body.html",
-    ),
-    Page(
-        "pricing",
-        "Pricing",
-        "TrustWeb is free while we test. Hosting beyond the free allowance: contact us to make a solid agreement.",
-        "pricing.body.html",
+        "The vision: the reasoning behind TrustWeb, scalable, discreet, targeted, and where it matters.",
+        "pages/why.body.html",
     ),
     Page(
         "feedback",
         "Feedback",
         "Send feedback or a bug report, ask to be told when TrustWeb is ready, or join the newsletter.",
-        "feedback.body.html",
+        "pages/feedback.body.html",
     ),
     Page(
         "faq",
         "FAQ",
         "Questions people ask about TrustWeb, answered as it works today.",
-        "faq.body.html",
+        "pages/faq.body.html",
     ),
     Page(
         "imprint",
         "Imprint",
-        "Imprint (Impressum, Offenlegung) of the TrustWeb site.",
-        "imprint.body.html",
+        "Imprint (Impressum, Offenlegung) of the TrustInTheWeb sites.",
+        "pages/imprint.body.html",
     ),
     Page(
         "privacy",
         "Privacy Policy",
         "What stays on your phone, what passes through the server, what this website does.",
-        "privacy.body.html",
+        "pages/privacy.body.html",
     ),
     Page(
         "terms",
         "Terms (draft)",
         "Draft terms for the experimental TrustWeb service. Not in force.",
-        "terms.body.html",
+        "pages/terms.body.html",
     ),
+    Page(
+        "whitepaper",
+        "White paper",
+        "The TrustWeb white paper: outline in progress.",
+        "pages/whitepaper.body.html",
+    ),
+)
+
+COM_PAGES: tuple[Page, ...] = (
+    Page(
+        "index",
+        "Hosting",
+        "The hosted TrustWeb service: free while we test, smooth updates, and a solid agreement when you need more.",
+        "com/pages/index.body.html",
+    ),
+    Page(
+        "pricing",
+        "Pricing",
+        "TrustWeb hosting is free while we test. Beyond the free allowance: contact us to make a solid agreement.",
+        "com/pages/pricing.body.html",
+    ),
+    ORG_PAGES[1],  # feedback (same fragment as the website)
+    ORG_PAGES[3],  # imprint
+    ORG_PAGES[4],  # privacy
 )
 
 
@@ -144,12 +235,30 @@ def resolve_blocks(text: str, active: frozenset[str]) -> str:
 
 
 def chrome_pieces(frag_dir: Path, flags: Flags) -> tuple[str, str]:
-    """The site bar and the footer, resolved for the flags."""
+    """The site bar and the footer, resolved for the flags (the com site has its own pair)."""
     active = flags.active_blocks()
+    folder = "" if flags.is_org else "com/"
     return (
-        resolve_blocks(fragment(frag_dir, "sitebar.html"), active),
-        resolve_blocks(fragment(frag_dir, "site-footer.html"), active),
+        resolve_blocks(fragment(frag_dir, folder + "sitebar.html"), active),
+        resolve_blocks(fragment(frag_dir, folder + "site-footer.html"), active),
     )
+
+
+def fill_tokens(text: str, frag_dir: Path, flags: Flags) -> str:
+    """Replace {{TOKEN}} with the site's values; the two fragment tokens expand first, so
+    tokens inside them resolve too. An unknown token is left in place (verify_site fails on it)."""
+    values = {
+        **flags.tokens(),
+        "WORDMARK": fragment(frag_dir, "wordmark.html").strip(),
+        "SWIRLS": fragment(frag_dir, "swirls.html").strip(),
+    }
+    expanded = TOKEN_RE.sub(
+        lambda m: (
+            values[m.group(1)] if m.group(1) in ("WORDMARK", "SWIRLS") else m.group(0)
+        ),
+        text,
+    )
+    return TOKEN_RE.sub(lambda m: values.get(m.group(1), m.group(0)), expanded)
 
 
 def newsletter_script() -> str:
@@ -235,7 +344,15 @@ def edit_text_and_head(doc: Doc, frag_dir: Path, flags: Flags) -> None:
     for old, new in (
         (
             "<title>Web of Trust · idea2.site</title>",
-            "<title>TrustWeb · idea2.site</title>",
+            "<title>TrustInTheWeb.org</title>",
+        ),
+        (
+            '<p class="eyebrow"><span class="dot"></span> idea2.site</p>',
+            '<p class="eyebrow"><span class="dot"></span> TrustInTheWeb.org</p>',
+        ),
+        (
+            "We have always trusted our friends,",
+            'We have <a class="alwayslink" href="{{WHITEPAPER}}">always</a> trusted our friends,',
         ),
         ("Join the Web of Trust", "Join TrustWeb"),
         (
@@ -247,13 +364,14 @@ def edit_text_and_head(doc: Doc, frag_dir: Path, flags: Flags) -> None:
         doc.replace(old, new)
     doc.replace(
         '<h1 class="wot">Web <span class="of">of</span> Trust</h1>',
-        '<h1 class="wot">TrustWeb</h1>\n' + fragment(frag_dir, "hero-explainer.html"),
+        "{{WORDMARK}}\n" + fragment(frag_dir, "hero-explainer.html"),
     )
+    doc.regex(r'<div class="knot-field" aria-hidden="true">.*?</div>\n', "{{SWIRLS}}\n")
     canonical_old = '<link rel="canonical" href="https://idea2.site/web-of-trust/">'
     if flags.draft:
         doc.replace(canonical_old, '<meta name="robots" content="noindex, nofollow">')
     else:
-        doc.replace(canonical_old, f'<link rel="canonical" href="{TW_URL}">')
+        doc.replace(canonical_old, '<link rel="canonical" href="{{SELF_URL}}">')
 
 
 def edit_hero_and_chrome(doc: Doc, frag_dir: Path, flags: Flags) -> None:
@@ -327,7 +445,11 @@ def edit_bottom_sections(doc: Doc, frag_dir: Path) -> None:
         + fragment(frag_dir, "about-us.html")
     )
     doc.replace("<footer>", sections + "\n" + bottom_join + "<footer>", 1)
-    doc.replace("</body>", newsletter_script() + "</body>", 1)
+    doc.replace(
+        "</body>",
+        newsletter_script() + fragment(frag_dir, "popup-fit.html") + "</body>",
+        1,
+    )
     doc.replace(
         '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Jakob Possert-Bienzle</h3>',
         '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Main Builder: Jakob Possert-Bienzle</h3>',
@@ -419,7 +541,7 @@ def build_subpage(page: Page, frag_dir: Path, flags: Flags) -> str:
     sitebar, footer = chrome_pieces(frag_dir, flags)
     shell = fragment(frag_dir, "subpage-shell.html")
     css = fragment(frag_dir, "subpage-base.css") + fragment(frag_dir, "chrome.css")
-    body = resolve_blocks(fragment(frag_dir / "pages", page.body), active)
+    body = resolve_blocks(fragment(frag_dir, page.body), active)
     values = {
         "ROBOTS": "noindex, nofollow",
         "TITLE": page.title,
@@ -432,23 +554,31 @@ def build_subpage(page: Page, frag_dir: Path, flags: Flags) -> str:
     out = shell
     for key, value in values.items():
         out = out.replace("{{" + key + "}}", value)
-    return out
+    return fill_tokens(out, frag_dir, flags)
 
 
 def pages_for(flags: Flags) -> list[Page]:
-    return [p for p in PAGES if p.name != "terms" or flags.terms_visible]
+    if not flags.is_org:
+        return list(COM_PAGES)
+    return [p for p in ORG_PAGES if p.name != "terms" or flags.terms_visible]
+
+
+def build_outputs(source: str, frag_dir: Path, flags: Flags) -> dict[str, str]:
+    outputs: dict[str, str] = {}
+    if flags.is_org:
+        index = build_index(source, frag_dir, flags)
+        outputs["index.html"] = fill_tokens(index, frag_dir, flags)
+    for page in pages_for(flags):
+        outputs[f"{page.name}.html"] = build_subpage(page, frag_dir, flags)
+    return outputs
 
 
 def build_all(source: str, frag_dir: Path, out_dir: Path, flags: Flags) -> list[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    written = []
-    outputs = {"index.html": build_index(source, frag_dir, flags)}
-    for page in pages_for(flags):
-        outputs[f"{page.name}.html"] = build_subpage(page, frag_dir, flags)
+    outputs = build_outputs(source, frag_dir, flags)
     for name, text in outputs.items():
         (out_dir / name).write_text(text, encoding="utf-8")
-        written.append(name)
-    return written
+    return list(outputs)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -457,9 +587,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     ap.add_argument(
         "--src",
-        required=True,
         type=Path,
-        help="the fetched idea2 web-of-trust index.html",
+        help="the fetched idea2 web-of-trust index.html (needed for --site org only)",
     )
     ap.add_argument("--frag", required=True, type=Path, help="scripts/tw-front-door")
     ap.add_argument("--out", required=True, type=Path, help="output directory")
@@ -483,6 +612,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="publish terms.html outside the draft",
     )
+    ap.add_argument(
+        "--site",
+        choices=[site.value for site in Site],
+        default=Site.ORG.value,
+        help="org = TrustInTheWeb.org (the website), com = TrustInTheWeb.com (the hosted service)",
+    )
+    ap.add_argument(
+        "--site-host",
+        default=IDEA2_HOST,
+        help="host the output is served from (default idea2.site, where the org site lives under /trustweb/)",
+    )
+    ap.add_argument(
+        "--app-base",
+        default=DEFAULT_APP_BASE,
+        help="base URL of the app (default https://app.idea2.site/trustweb; new host https://app.trustintheweb.org)",
+    )
     return ap.parse_args(argv)
 
 
@@ -493,14 +638,19 @@ def main(argv: list[str]) -> int:
         services_live=args.services_live,
         transcribe_live=args.transcribe_live,
         publish_terms=args.publish_terms,
+        site=Site(args.site),
+        site_host=args.site_host,
+        app_base=args.app_base,
     )
-    written = build_all(
-        args.src.read_text(encoding="utf-8"), args.frag, args.out, flags
-    )
+    if flags.is_org and args.src is None:
+        raise SystemExit("--src is required for --site org")
+    source = args.src.read_text(encoding="utf-8") if args.src else ""
+    written = build_all(source, args.frag, args.out, flags)
     print("built: " + " ".join(written))
     print(
         f"flags: draft={flags.draft} services_live={flags.services_live} "
-        f"transcribe_live={flags.transcribe_live} terms={flags.terms_visible}"
+        f"transcribe_live={flags.transcribe_live} terms={flags.terms_visible} "
+        f"site={flags.site.value} host={flags.site_host} app={flags.app_base}"
     )
     return 0
 

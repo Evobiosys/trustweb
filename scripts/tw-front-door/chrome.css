@@ -33,10 +33,65 @@
   .sitebar-actions{display:flex; align-items:center; gap:8px; flex:none}
   .draftstrip{background:var(--gold-soft); color:var(--ink); border-bottom:1px solid var(--line);
     text-align:center; padding:6px 20px; font:600 .78rem var(--mono); letter-spacing:.04em}
+  .sitebar-brand b{font-weight:680}
+  .sitebar-brand{font-weight:440}
+  /* second row of the bar: the one link to the other site, right under the buttons.
+     title carries the target; the hover also writes it out (data-url) */
+  .sitebar-sub{padding:0 28px 8px; display:flex; justify-content:flex-end}
+  .hostlink{position:relative; font:500 .8rem var(--sans); color:var(--ink-soft);
+    text-decoration:underline; text-underline-offset:3px}
+  .hostlink:hover, .hostlink:focus-visible{color:var(--indigo)}
+  .sitebar-sub .hostlink:hover::after, .sitebar-sub .hostlink:focus-visible::after{
+    content:attr(data-url); position:absolute; right:0; top:1.7em; z-index:40; white-space:nowrap;
+    padding:4px 9px; border-radius:6px; background:var(--ink); color:var(--paper);
+    font:500 .74rem var(--mono); text-decoration:none}
   @media (max-width:480px){
     .sitebar-in{padding:8px 16px}
+    .sitebar-sub{padding:0 16px 7px}
+    .sitebar-brand{font-size:1rem}
     .tw-btn{padding:0 13px}
   }
+
+  /* wordmark: "Trust in" on one line, "the Web" on the next; Trust and Web bold, in and the regular.
+     Self-contained (not relying on the source page's h1.wot) so the hosting site wears the same mark. */
+  h1.wot{position:relative; z-index:1; font-family:var(--serif); font-weight:440; font-style:normal;
+    font-size:clamp(3.1rem,13vw,8.4rem); line-height:.94; letter-spacing:-.03em;
+    margin:.32em 0 .3em; color:var(--ink); text-align:center; overflow-wrap:normal}
+  h1.wot .wm-l{display:block}
+  h1.wot .wm-b{font-weight:680}
+
+  /* the two swirls behind the mark. Sized from the viewport and kept inside the
+     header box: a rotated square grows to side*(cos+sin), so the inset adds that
+     overshoot. No negative offsets (the old left:-60px cut the left swirl off). */
+  .hero{--knot:clamp(84px, 21vw, 240px); --knot-r:calc(var(--knot) * .86)}
+  .knot-field{position:absolute; inset:0; pointer-events:none; z-index:0; overflow:hidden}
+  .knot-field svg.knot{position:absolute; display:block; color:var(--indigo); opacity:.09}
+  .knot-field svg.knot-l{width:var(--knot); height:var(--knot); left:calc(var(--knot) * .12); top:calc(var(--knot) * .12);
+    transform:rotate(-14deg)}
+  .knot-field svg.knot-r{width:var(--knot-r); height:var(--knot-r); right:calc(var(--knot-r) * .15); top:calc(var(--knot-r) * .2);
+    transform:rotate(20deg)}
+
+  /* what it can do today (hero) */
+  .herotoday{position:relative; z-index:1; max-width:56ch; margin:18px auto 0; padding:16px 20px 14px; text-align:left;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .herotoday-h{margin:0 0 8px; font:600 .72rem/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--indigo)}
+  .herotoday-list{margin:0; padding-left:1.15em; font-size:.95rem; color:var(--ink-soft)}
+  .herotoday-list li{margin:0 0 6px}
+  .herotoday-list b{color:var(--ink)}
+  .herotoday-more{margin:8px 0 0; font-size:.88rem; color:var(--ink-soft)}
+  a.alwayslink{text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px}
+
+  /* the hosting site's front page: same hero, without the app's popups */
+  /* the hosting page is narrower (720px), so its mark and swirls are a size smaller */
+  .comhero{--knot:clamp(64px, 12vw, 118px); position:relative; text-align:center; padding:26px 0 8px;
+    margin-bottom:22px; min-height:calc(var(--knot) * 1.55)}
+  .comhero h1.wot{font-size:clamp(3rem, 12vw, 6.2rem)}
+  .comhero .eyebrow{position:relative; z-index:1; display:inline-flex; gap:10px; align-items:center;
+    font:600 .74rem/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft)}
+  .comhero .herolead{position:relative; z-index:2; max-width:30ch; margin:6px auto 14px;
+    font:600 clamp(1.25rem,4.2vw,1.7rem)/1.3 var(--serif); color:var(--ink); text-wrap:balance}
+  .comhero .lede{position:relative; z-index:1; max-width:52ch; margin:0 auto 18px}
+  .comhero .btnrow{position:relative; z-index:1; justify-content:center}
 
   /* footer: calm, wide, dark, columns of plain links under small grey headings */
   .sitefooter{--sf-bg:#1b1e2a; --sf-ink:#e9e3d2; --sf-dim:#9b98a8; --sf-line:#2f3446;

@@ -18,15 +18,24 @@
 //   UPLOAD_IDLE_MS                   30000        abort an upload that sends nothing for this long
 //   LONG_REQUEST_MS                  900000       request deadline of /hosted and /transcribe (the short routes keep SHORT_REQUEST_MS)
 //   SHORT_REQUEST_MS                 30000
-//   TRANSCRIBE_PROVIDER              openrouter (default) | infomaniak
-//   TRANSCRIBE_ENABLED               1 switches the openrouter provider on (EnvironmentFile, written by scripts/trustweb_transcribe_switch_on.sh);
-//                                    without it /transcribe answers 503 not_configured even when the key is loaded
+//   TRANSCRIBE_PROVIDER              auto (default) | berget | openrouter | infomaniak
+//                                    auto = Berget (Sweden) when its key is present, else OpenRouter; berget = Berget first; openrouter = OpenRouter alone
+//   TRANSCRIBE_FALLBACK              openrouter (default when unset) | none; fails closed: any other value means none. Berget first: may OpenRouter (a PAID, US route) take over when Berget answers 5xx,
+//                                    times out or is not configured? (never on a 4xx or a 429: those are not a Berget outage)
+//   TRANSCRIBE_ENABLED               1 switches the berget/openrouter providers on (EnvironmentFile, written by scripts/trustweb_transcribe_switch_on.sh);
+//                                    without it /transcribe answers 503 not_configured even when a key is loaded
+//   BERGET_URL                       https://api.berget.ai/v1
 //   OPENROUTER_URL                   https://openrouter.ai/api/v1
-//   CREDENTIALS_DIRECTORY            set by systemd (LoadCredential=orkey:/etc/unfold-news/orkey.json); the openrouter key is read
-//   TRANSCRIBE_CREDENTIAL            orkey        from <CREDENTIALS_DIRECTORY>/<this> = JSON {"key": "sk-or-..."}; anything else = no key
+//   CREDENTIALS_DIRECTORY            set by systemd (LoadCredential=orkey:/etc/trustweb/orkey.json, LoadCredential=berget:/etc/trustweb/berget.json,
+//                                    each only when the file exists); the keys are read from there
+//   TRANSCRIBE_CREDENTIAL            orkey        <CREDENTIALS_DIRECTORY>/<this> = JSON {"key": "sk-or-..."} (OpenRouter); anything else = no key
+//   TRANSCRIBE_BERGET_CREDENTIAL     berget       <CREDENTIALS_DIRECTORY>/<this> = JSON {"key": "..."} (Berget); anything else = no key
 //   TRANSCRIBE_DATA_COLLECTION       deny         OpenRouter provider data policy sent with every call (deny | allow)
 //   TRANSCRIBE_URL, TRANSCRIBE_KEY   (infomaniak only) provider endpoint (full POST URL incl. product id) and bearer token (EnvironmentFile 0600)
 //   TRANSCRIBE_MODEL                 openai/whisper-large-v3-turbo (openrouter) | whisper (infomaniak)
+//   TRANSCRIBE_BERGET_MODEL          Systran/faster-whisper-large-v3 (multilingual; kb-whisper-large is tuned for Swedish and the bare alias "whisper" means it)
+//   TRANSCRIBE_BERGET_EUR_PER_SECOND 0.000033     Berget's published price (api.berget.ai/v1/models), only for the logged cost estimate
+//   TRANSCRIBE_BERGET_TIMEOUT_MS     300000       one Berget call (then the fallback gets its own TRANSCRIBE_TIMEOUT_MS; queue wait + both stay inside Caddy's 15 min)
 //   TRANSCRIBE_RESULTS_URL           (infomaniak) optional template with {batch_id}; derived from TRANSCRIBE_URL otherwise
 //   TRANSCRIBE_POLL_MS               2000         (infomaniak)
 //   TRANSCRIBE_TIMEOUT_MS            180000 (openrouter, one call; upstream cuts at ~60 s) | 600000 (infomaniak: submit + polling, in total)
@@ -39,7 +48,9 @@
 //   TRANSCRIBE_UPLOADS_PER_IP        1            audio uploads in flight per client (IPv6: per /64)
 //   TRANSCRIBE_MAX_BYTES             21600000     1 h at 48 kbps
 //   FEEDBACK_FILE                    path of the 0600 JSON-lines file. Unset = feedback off.
-//   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site
+//   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site plus the TrustInTheWeb sites
+//                                    (trustintheweb.org, trustintheweb.com, app.trustintheweb.org; production also sets it in a
+//                                    systemd drop-in, scripts/trustweb_domains.sh backup-env)
 //   FEEDBACK_MAX_BYTES               2000000
 //   FEEDBACK_PER_HOUR                5            per IP
 //   SUBSCRIBER_URL                   (unset = off) where a feedback entry with newsletter:true is forwarded, e.g. https://subscriber.questhub.eco/subscribe
@@ -54,19 +65,21 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const TranscribeProvider = Object.freeze({ OpenRouter: 'openrouter', Infomaniak: 'infomaniak' })
+export const TranscribeProvider = Object.freeze({ Berget: 'berget', OpenRouter: 'openrouter', Infomaniak: 'infomaniak' })
+/** The TRANSCRIBE_PROVIDER setting: the three providers plus "auto" (Berget when its key exists, else OpenRouter). */
+const PROVIDER_AUTO = 'auto'
+const FALLBACK_NONE = 'none'
 const flag = (raw) => raw === '1' || raw === 'true'
 /** What an API key may look like. Keeps a malformed credential (spaces, newlines, quotes) out of an Authorization header. */
-const KEY_SHAPE = /^[A-Za-z0-9._~+-]{20,256}$/
+export const KEY_SHAPE = /^[A-Za-z0-9_.~+-]{20,256}$/ // underscore included: Berget keys look like sk_ber_...
 
 /**
- * The OpenRouter key from the systemd credential: a JSON file {"key": "..."} (the shape unfold-news's /api/orkey served).
+ * A key from a systemd credential file: JSON {"key": "..."} at <CREDENTIALS_DIRECTORY>/<name> (the shape unfold-news's /api/orkey served).
  * Returns '' for a missing, unreadable or malformed credential. Never throws, never logs, never echoes the content.
  */
-export function readCredentialKey(env = process.env) {
+export function readCredential(name, env = process.env) {
   const dir = env.CREDENTIALS_DIRECTORY
   if (dir === undefined || dir === '') return ''
-  const name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey'
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) return ''
   try {
     const key = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))?.key
@@ -76,23 +89,53 @@ export function readCredentialKey(env = process.env) {
   }
 }
 
+/** The transcription key: the credential named by TRANSCRIBE_CREDENTIAL (default orkey = OpenRouter; Berget passes its own name). */
+export function readCredentialKey(env = process.env, name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey') {
+  return readCredential(name, env)
+}
+
 function pick(options, key, envName, fallback, parse = Number) {
   if (options[key] !== undefined) return options[key]
   const raw = process.env[envName]
   return raw === undefined || raw === '' ? fallback : parse(raw)
 }
 
+/**
+ * Which providers serve /transcribe, in order, from the settings and the keys that exist. Pure: no I/O.
+ *   auto / berget   Berget when its key exists; OpenRouter after it when the fallback is allowed (and its key exists),
+ *                   or alone when Berget has no key and the setting is auto (the pre-Berget behaviour)
+ *   openrouter      OpenRouter alone;  infomaniak: handled by the caller (one provider, own url and key)
+ * Returns provider names, [] when nothing can serve.
+ */
+export function transcribeChain({ setting, fallback, bergetKey, openrouterKey }) {
+  if (setting === TranscribeProvider.OpenRouter) return openrouterKey === '' ? [] : [TranscribeProvider.OpenRouter]
+  const chain = bergetKey === '' ? [] : [TranscribeProvider.Berget]
+  const openrouterAllowed = fallback !== FALLBACK_NONE || (setting === PROVIDER_AUTO && bergetKey === '')
+  if (openrouterKey !== '' && openrouterAllowed) chain.push(TranscribeProvider.OpenRouter)
+  return chain
+}
+
 const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean)
+/** Where the website feedback form may post from: the idea2 pages and the TrustInTheWeb sites (wave 3). */
+const DEFAULT_FEEDBACK_ORIGINS = 'https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org'
 
 export function loadConfig(options = {}) {
-  const transcribeProvider = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', TranscribeProvider.OpenRouter, String)
-  const openrouter = transcribeProvider === TranscribeProvider.OpenRouter
+  const setting = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', PROVIDER_AUTO, String) // an unknown name is kept: /transcribe answers 503 for it
+  const infomaniak = setting === TranscribeProvider.Infomaniak
   const transcribeUrl = pick(options, 'transcribeUrl', 'TRANSCRIBE_URL', '', String)
-  const transcribeKey = options.transcribeKey ?? (openrouter ? readCredentialKey() : pick(options, 'transcribeKey', 'TRANSCRIBE_KEY', '', String))
+  // transcribeKey = the key of the OpenRouter provider (its credential) or, for infomaniak, the bearer token from the env file
+  const transcribeKey = options.transcribeKey ?? (infomaniak ? pick(options, 'transcribeKey', 'TRANSCRIBE_KEY', '', String) : readCredentialKey())
+  const bergetKey = options.bergetKey ?? readCredentialKey(process.env, process.env.TRANSCRIBE_BERGET_CREDENTIAL ?? 'berget')
   const transcribeEnabled = pick(options, 'transcribeEnabled', 'TRANSCRIBE_ENABLED', false, flag)
-  const transcribeConfigured =
-    transcribeKey !== '' &&
-    (openrouter ? transcribeEnabled : transcribeProvider === TranscribeProvider.Infomaniak && transcribeUrl !== '')
+  // fails closed: only the exact word openrouter allows the paid US fallback, a typo (option or env) means none; unset = openrouter
+  const transcribeFallbackSetting = pick(options, 'transcribeFallback', 'TRANSCRIBE_FALLBACK', TranscribeProvider.OpenRouter, String) === TranscribeProvider.OpenRouter ? TranscribeProvider.OpenRouter : FALLBACK_NONE
+  const known = setting === PROVIDER_AUTO || setting === TranscribeProvider.Berget || setting === TranscribeProvider.OpenRouter
+  const transcribeChainNames = known ? transcribeChain({ setting, fallback: transcribeFallbackSetting, bergetKey, openrouterKey: transcribeKey }) : []
+  // The provider a status answer names: the one that would serve first, else what the setting points at (an honest "would be used").
+  const transcribeProvider = infomaniak || !known ? setting : transcribeChainNames[0] ?? (setting === TranscribeProvider.OpenRouter ? TranscribeProvider.OpenRouter : TranscribeProvider.Berget)
+  const transcribeConfigured = infomaniak
+    ? transcribeKey !== '' && transcribeUrl !== ''
+    : transcribeEnabled && transcribeChainNames.length > 0
   const feedbackFile = pick(options, 'feedbackFile', 'FEEDBACK_FILE', '', String)
   return {
     now: options.now ?? Date.now,
@@ -117,17 +160,26 @@ export function loadConfig(options = {}) {
     hostedUploadsPerIp: pick(options, 'hostedUploadsPerIp', 'HOSTED_UPLOADS_PER_IP', 2),
     uploadIdleMs: pick(options, 'uploadIdleMs', 'UPLOAD_IDLE_MS', 30000),
 
+    transcribeProviderSetting: setting,
     transcribeProvider,
+    transcribeChain: transcribeChainNames, // provider names, in order
+    transcribeFallback: transcribeChainNames.length > 1 ? transcribeChainNames[1] : null,
+    transcribeFallbackSetting,
     transcribeEnabled,
     transcribeUrl,
     transcribeKey,
+    bergetKey,
     transcribeConfigured,
+    bergetUrl: pick(options, 'bergetUrl', 'BERGET_URL', 'https://api.berget.ai/v1', String),
+    transcribeBergetModel: pick(options, 'transcribeBergetModel', 'TRANSCRIBE_BERGET_MODEL', 'Systran/faster-whisper-large-v3', String),
+    transcribeBergetEurPerSecond: pick(options, 'transcribeBergetEurPerSecond', 'TRANSCRIBE_BERGET_EUR_PER_SECOND', 0.000033),
+    transcribeBergetTimeoutMs: pick(options, 'transcribeBergetTimeoutMs', 'TRANSCRIBE_BERGET_TIMEOUT_MS', 300000),
     openrouterUrl: pick(options, 'openrouterUrl', 'OPENROUTER_URL', 'https://openrouter.ai/api/v1', String),
     transcribeDataCollection: pick(options, 'transcribeDataCollection', 'TRANSCRIBE_DATA_COLLECTION', 'deny', (v) => (v === 'allow' ? 'allow' : 'deny')),
-    transcribeModel: pick(options, 'transcribeModel', 'TRANSCRIBE_MODEL', openrouter ? 'openai/whisper-large-v3-turbo' : 'whisper', String),
+    transcribeModel: pick(options, 'transcribeModel', 'TRANSCRIBE_MODEL', infomaniak ? 'whisper' : 'openai/whisper-large-v3-turbo', String),
     transcribeResultsUrl: pick(options, 'transcribeResultsUrl', 'TRANSCRIBE_RESULTS_URL', '', String),
     transcribePollMs: pick(options, 'transcribePollMs', 'TRANSCRIBE_POLL_MS', 2000),
-    transcribeTimeoutMs: pick(options, 'transcribeTimeoutMs', 'TRANSCRIBE_TIMEOUT_MS', openrouter ? 180000 : 600000),
+    transcribeTimeoutMs: pick(options, 'transcribeTimeoutMs', 'TRANSCRIBE_TIMEOUT_MS', infomaniak ? 600000 : 180000),
     transcribeDailySeconds: pick(options, 'transcribeDailySeconds', 'TRANSCRIBE_DAILY_SECONDS', 7200),
     transcribeIpDailySeconds: pick(options, 'transcribeIpDailySeconds', 'TRANSCRIBE_IP_DAILY_SECONDS', 3600),
     transcribeMaxConcurrent: pick(options, 'transcribeMaxConcurrent', 'TRANSCRIBE_MAX_CONCURRENT', 1),
@@ -139,7 +191,7 @@ export function loadConfig(options = {}) {
 
     feedbackFile,
     feedbackConfigured: feedbackFile !== '',
-    feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? 'https://idea2.site,https://app.idea2.site'),
+    feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? DEFAULT_FEEDBACK_ORIGINS),
     feedbackMaxBytes: pick(options, 'feedbackMaxBytes', 'FEEDBACK_MAX_BYTES', 2_000_000),
     feedbackPerHour: pick(options, 'feedbackPerHour', 'FEEDBACK_PER_HOUR', 5),
     subscriberUrl: pick(options, 'subscriberUrl', 'SUBSCRIBER_URL', '', String),

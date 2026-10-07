@@ -2,7 +2,7 @@
  * Settings > About (src/about.ts, wave 1733 item 7): the four website pages
  * the contract names, under idea2.site/trustweb, and EvoBioSys as the maker.
  */
-import { ABOUT_PAGES, AboutPage, EVOBIOSYS_URL, aboutUrl } from '../../src/about.ts'
+import { ABOUT_PAGES, AboutPage, DEFAULT_SITE_URL, EVOBIOSYS_URL, aboutUrl, resolveSiteUrl } from '../../src/about.ts'
 
 describe('about links', () => {
   it('point at the website pages the contract names, in this order', () => {
@@ -16,5 +16,21 @@ describe('about links', () => {
   it('name EvoBioSys as the maker, never a GitHub repository', () => {
     expect(EVOBIOSYS_URL).toBe('https://evobiosys.org/')
     for (const p of Object.values(AboutPage)) expect(aboutUrl(p)).not.toMatch(/github/i)
+  })
+})
+
+describe('the website a build links to (wave 3: app.trustintheweb.org links to trustintheweb.org)', () => {
+  it('takes a plain https URL ending in a slash', () => {
+    expect(resolveSiteUrl('https://trustintheweb.org/')).toBe('https://trustintheweb.org/')
+    expect(resolveSiteUrl('https://idea2.site/trustweb/')).toBe('https://idea2.site/trustweb/')
+  })
+  it('falls back to the idea2 site for anything else', () => {
+    for (const bad of [undefined, null, '', 42, 'http://trustintheweb.org/', 'https://trustintheweb.org', 'https://trustintheweb.org/?x=1',
+      'https://trustintheweb.org/#a', 'javascript:alert(1)//', 'not a url/', 'HTTPS://TrustInTheWeb.org/']) {
+      expect(resolveSiteUrl(bad)).toBe(DEFAULT_SITE_URL)
+    }
+  })
+  it('is the idea2 site when the build names none (unit tests, deploy_wot.sh for app.idea2.site)', () => {
+    expect(aboutUrl(AboutPage.Faq)).toBe(DEFAULT_SITE_URL + 'faq.html')
   })
 })

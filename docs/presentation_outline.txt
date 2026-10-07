@@ -1,0 +1,96 @@
+PRESENTATION OUTLINE (draft v0.1, 2026-10-07). OUTLINE ONLY. 14 slides, about 20 minutes plus a live segment.
+For: Cybernetic Forest (around 31 Oct 2026) and later SplinterCon. Same core, two lengths: cut slides 5, 9 and 12 for a 10 minute version.
+Rule from Jakob (2026-10-07): lead with the QUERYING, not the recording. Open with a live query, then why, then how, then phases and the ask.
+Companion: docs/whitepaper_outline.txt (section numbers in brackets point there). A visualiser (Manuel, first name only) is expected to draw the visuals; this file only suggests content.
+Marks: [A]/[B]/[C] source tiers as in the white paper outline; [to confirm] awaits Jakob.
+No em dashes. Nothing here names a third party beyond first names; no private recordings or transcripts are shown.
+
+----------------------------------------------------------------------
+PART 1: SEE IT (live query)
+----------------------------------------------------------------------
+1. Title: "TrustInTheWeb: ask the people you trust, one hop further"
+   Line: TrustWeb, by EvoBioSys, Vienna. A first-person protocol for finding people and things.
+   Note: Start on this slide for ten seconds only, then go straight to the demo. Say who you are in one sentence and who you want to hear from after.
+
+2. LIVE: ask your web
+   Line: Two devices side by side on the real relay. One asks, "Does anyone have a cargo bike?"; the other person's phone decides, and what comes back is only what they chose to share, or "No match".
+   Note: Live today is one hop between connected devices, with consent, and a decline that looks exactly like "no match" (as in the app's own text). Audience join-in by QR or link is [to confirm: rehearse]; a three-person relay with a path such as "through Jonas" is roadmap work, shown only in the scripted walkthrough (slide 3).
+   Fallback: the scripted three-person walkthrough in the demo ("See it in action").
+
+3. What just happened (the second hop)
+   Line: The question reached people who consented; a refusal looks exactly like "nothing found"; the answer showed it was found "through Jonas", in a friend's inventory, not mine.
+   Note: Say plainly: today the live phones do one hop; this second-hop picture is the scripted version of what we are building. Honesty first, because trust is the subject.
+
+----------------------------------------------------------------------
+PART 2: WHY
+----------------------------------------------------------------------
+4. The problem: platforms versus people we trust
+   Line: We want leads from friends, not strangers; a superconnector reaches only the people they know, and reposting rarely travels. [whitepaper 1.1]
+   Note: Cite the weak-ties experiment (Rajkumar et al., Science, 2022 [A]) and the structural-virality study (Goel et al., Management Science, 2016 [A]); do not use the "under 4 percent" figure until it has a source [source needed].
+
+5. Where a platform is the wrong tool
+   Line: Leftover food tonight, a house-sitter, a sublet your landlord must not hear about, a bike to lend, a flat that never gets listed. [whitepaper 1.2]
+   Note: Pick three of the eight cases; let the audience shout a fourth. Each is an ask that fails when broadcast.
+
+6. We have always trusted our friends
+   Line: Chimpanzees trust bonded friends more; bonobos reach out to strangers; we build on both. [whitepaper 2.5, anchor #bonobos]
+   Note: Two sentences, then the honest limits (small samples, mostly young sanctuary animals, an analogy and not a proof). Cite Engelmann and Herrmann 2016, Tan and Hare 2013, Tan, Ariely and Hare 2017 [A].
+
+7. Our philosophy in four lines
+   Line: Trust we already carry; reach cannot be generated, only met; the question travels and the data stays; willingness to be asked is what we protect. [whitepaper 2.1, 2.2]
+   Note: This is the first-person protocol slide: the same core, several formats (Signal Orbit). Read the four lines aloud and stop; take questions only at the end.
+
+----------------------------------------------------------------------
+PART 3: HOW
+----------------------------------------------------------------------
+8. The mechanism in one picture
+   Line: Rings (close friend, friend, acquaintance), inventory lines with their own audience, consent at each hop, an answer that shows its path. [whitepaper 3.1 to 3.4]
+   Note: Rings are one of a hundred thousand possible views, the point is the action built on top (Jakob's own framing). No score, ever.
+
+9. Local first, no server decides
+   Line: Notes and inventory stay on your phone; questions go phone to phone through a relay in Switzerland that sees routing, not content. [whitepaper 3.5]
+   Note: Say what we do not claim: not a zero-knowledge system. Two places read content today, and the FAQ names them.
+
+10. How the inventory fills
+   Line: One conversation at a time (record a meeting or a spoken debrief) or one import of notes you already keep; every line remembers its source. [whitepaper 3.2]
+   Note: Recording serves the querying, not the other way round. Gatherings come first because new trust forms there.
+
+----------------------------------------------------------------------
+PART 4: PHASES AND THE ASK
+----------------------------------------------------------------------
+11. What exists today, in one honest column
+   Line: Live: web of people, record and notes, inventory, ask with consent per ask, demo, encrypted Swiss backup. Scripted: the second hop. Planned: audit, signed edges, independent review. [whitepaper 4]
+   Note: No adoption numbers exist; do not invent any. Show the three columns Live, Scripted, Planned.
+
+12. Phases
+   Line: Now: functional app and first community share. Then EAGxBerlin (13 to 15 Nov 2026, if funded), wrap-up until 17 Dec, a planned break, and a reduced-hours continuation from February. [whitepaper 5]
+   Note: Say that by the break the app must run without founder oversight, and that one maintainer holds the pen today. [to confirm: whether to say "break" or "pause" on stage]
+
+13. Model and licence
+   Line: Free while we test; hosting beyond the allowance by agreement at TrustInTheWeb.com; AGPL with an AMPL dual licence on request (from a budget of 100k per year); marketplace fee coming, wording [to confirm]. [whitepaper 6, 7]
+   Note: Never promise prices; they only go down. The marketplace fee ("80 percent of what others charge") stays off the slide until Jakob confirms it.
+
+14. The ask
+   Line: Collaborators for the first communities; funders (NLnet, Open Internet Freedom Fund); critics of the consent model; people who can run an event ring with us.
+   Note: End on the QR code to the demo and connect@trustintheweb.org. Invite one question: "Who in this room would you ask first?"
+   Ask list to confirm: NLnet and OIFF (due dates per whitepaper 5), collaborators, hosts for a pilot.
+
+---------------------------------------------------------------------------------------------------------------------------------------
+SCREENSHOTS TO USE (3, all generated in earlier waves; all inspected 2026-10-07 and show demo names only)
+----------------------------------------------------------------------
+A. Slide 2 (live ask, a decline looks like "no match"): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-09-web-search-after-ask_desktop.png
+   Phone with "Does anyone have a sailing boat?", "Asked 1 person in your web" and the "No match" card ("You do not learn why"). One hop, live behaviour.
+B. Slide 2 and 10 (the answer comes back): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/app-b/18-feed-answer-from-second-phone_desktop.png
+   Second phone shows "Ben shared with you: Cargo bike to lend on weekends. You asked: Does anyone have a cargo bike?" Note: this sits in the optional Feed tab; crop to the card.
+C. Slide 3 and 8 (second hop, scripted): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-07-second-degree_desktop.png
+   Three scripted phones, "Maya chose to share (through Jonas)", "Not in Jonas's inventory: in Maya's, his friend's." The page itself says "scripted" and "the live phones do one hop today"; caption it "scripted" on the slide.
+Optional for slide 1 or 14: /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/front/prod_index_1280.png is a 7,528 px full-page capture of the old front page (it still says "Taking notes comes first" and "1 %"); take a fresh capture of TrustInTheWeb.org instead.
+Do not use: /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/app-a/10_search_results_phone.png (shows a real meeting with a named place and person).
+Weak: wave2/screens/app/w2-02-query-from-inventory_phone.png (empty "nobody here yet" state).
+
+-----
+PRACTICAL
+----------------------------------------------------------------------
+- Rehearse the live segment with two phones and a hotspot; carry the scripted fallback offline.
+- Time boxes: part 1 five minutes, part 2 five, part 3 four, part 4 four, questions open.
+- Handouts: a one-page QR sheet pointing at the demo and at the white paper (when it exists).

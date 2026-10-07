@@ -18,6 +18,24 @@
 #   ./scripts/build_tw_front_door.sh             PRODUCTION: idea2.site/trustweb/ (keeps the draft/ folder)
 #   TW_BUILD_ONLY=<dir> ./scripts/build_tw_front_door.sh [--draft]   build into <dir>, touch nothing on the server
 #
+# WHERE (wave 3, 2026-10-07): TW_SITE_HOST picks the site's home, TW_APP_ORIGIN the app it links to.
+#   TW_SITE_HOST=idea2.site (default)   idea2.site/trustweb/ (dir idea2-tw), app https://app.idea2.site/trustweb/.
+#                                       Since the migration idea2.site/trustweb/* answers 301 to trustintheweb.org,
+#                                       so a PRODUCTION run for idea2.site is refused once that redirect is live
+#                                       (--draft still works: idea2.site/trustweb/draft/ is still served).
+#   TW_SITE_HOST=trustintheweb.org      https://trustintheweb.org/ (dir trustintheweb-org, draft at /draft/),
+#                                       app TW_APP_ORIGIN (default https://app.trustintheweb.org, the app at its root).
+#                                       The pages are built exactly as for idea2, then scripts/tw_site_rehost.py
+#                                       rewrites the app, feedback and site URLs and the site label, and fails if
+#                                       any old idea2 TrustWeb URL is left.
+#   TW_SITE_HOST=trustintheweb.com      the hosting site (dir trustintheweb-com, draft at /draft/), app TW_APP_ORIGIN
+#                                       (default https://app.trustintheweb.org). Built by tw_site.py --site com from
+#                                       scripts/tw-front-door/com/ alone: no source page is fetched.
+#   tw_site.py is also handed --site-host and --app-base (the app's full base: <origin>/trustweb on app.idea2.site,
+#   the bare origin elsewhere), so the pages come out right natively (canonical, the white paper anchor, Demo,
+#   Install, the feedback endpoint); tw_site_rehost.py stays as the safety net that fails on any old URL.
+#   The live production site: TW_SITE_HOST=trustintheweb.org TW_SERVICES_LIVE=1 ./scripts/build_tw_front_door.sh
+#
 # TWO FLAGS (wave 2: transcription got its own, because it stays off until a
 # provider key is placed, whatever hosting does):
 #   SERVICES_LIVE (TW_SERVICES_LIVE=1 or --services-live): 0 = pricing and privacy
@@ -61,7 +79,28 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRAG="$REPO/scripts/tw-front-door"
 SRC=/srv/questhub-static/idea2-web-of-trust/index.html
-PROD_DIR=/srv/questhub-static/idea2-tw
+SITE_HOST="${TW_SITE_HOST:-idea2.site}"
+case "$SITE_HOST" in
+  idea2.site)
+    PROD_DIR=/srv/questhub-static/idea2-tw
+    SITE_URL="https://idea2.site/trustweb"
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.idea2.site}" ;;
+  trustintheweb.org)
+    PROD_DIR=/srv/questhub-static/trustintheweb-org
+    SITE_URL="https://trustintheweb.org"
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
+  trustintheweb.com)
+    PROD_DIR=/srv/questhub-static/trustintheweb-com
+    SITE_URL="https://trustintheweb.com"
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
+  *) echo "unknown TW_SITE_HOST: $SITE_HOST (idea2.site, trustintheweb.org or trustintheweb.com)" >&2; exit 2 ;;
+esac
+if [ "$SITE_HOST" = idea2.site ] && [ "$APP_ORIGIN" != https://app.idea2.site ]; then
+  echo "TW_APP_ORIGIN applies to TW_SITE_HOST=trustintheweb.org only (the idea2 build keeps app.idea2.site/trustweb/)" >&2; exit 2
+fi
+# the app's base URL as tw_site.py wants it: under /trustweb on app.idea2.site, the bare origin on every other host
+if [ "$APP_ORIGIN" = https://app.idea2.site ]; then APP_BASE="$APP_ORIGIN/trustweb"; else APP_BASE="$APP_ORIGIN"; fi
+if [ "$SITE_HOST" = trustintheweb.com ]; then SITE_KIND=com; else SITE_KIND=org; fi
 DRAFT_DIR="$PROD_DIR/draft"
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
@@ -95,15 +134,20 @@ http_code() {
   node -e 'fetch(process.argv[1], { redirect: "manual", signal: AbortSignal.timeout(20000) }).then((r) => console.log(r.status), () => console.log("ERR"))' "$1"
 }
 
-echo "fetching $SRC"
-"${SSHENV[@]}" scp -q "questhub:$SRC" "$WORK/source_index.html"
-
-ARGS=(--src "$WORK/source_index.html" --frag "$FRAG" --out "$OUT")
+ARGS=(--frag "$FRAG" --out "$OUT" --site "$SITE_KIND" --site-host "$SITE_HOST" --app-base "$APP_BASE")
+if [ "$SITE_KIND" = org ]; then  # the hosting site is built from fragments alone, no source page
+  echo "fetching $SRC"
+  "${SSHENV[@]}" scp -q "questhub:$SRC" "$WORK/source_index.html"
+  ARGS+=(--src "$WORK/source_index.html")
+fi
 [ "$DRAFT" = 1 ] && ARGS+=(--draft)
 [ "$SERVICES_LIVE" = 1 ] && ARGS+=(--services-live)
 [ "$TRANSCRIBE_LIVE" = 1 ] && ARGS+=(--transcribe-live)
 [ "$PUBLISH_TERMS" = 1 ] && ARGS+=(--publish-terms)
 python3 -I "$FRAG/tw_site.py" "${ARGS[@]}"
+if [ "$SITE_HOST" != idea2.site ]; then
+  python3 -I "$REPO/scripts/tw_site_rehost.py" --dir "$OUT" --site-host "$SITE_HOST" --app-origin "$APP_ORIGIN"
+fi
 
 # Build-only mode: write the pages to TW_BUILD_ONLY and stop before touching the server.
 if [ -n "${TW_BUILD_ONLY:-}" ]; then
@@ -122,14 +166,20 @@ push_pages() {  # $1 = destination directory on the server
   rsh "chmod -R a+rX $dest && sudo chcon -R --reference=$REF $dest"
 }
 
+if [ "$DRAFT" = 0 ] && [ "$SITE_HOST" = idea2.site ] && [ "$(http_code https://idea2.site/trustweb/)" = 301 ]; then
+  echo "idea2.site/trustweb/ now redirects to https://trustintheweb.org/ (wave 3): a production build there would not be seen." >&2
+  echo "Build the live site with TW_SITE_HOST=trustintheweb.org (drafts on idea2.site still work with --draft)." >&2
+  exit 2
+fi
+
 if [ "$DRAFT" = 1 ]; then
-  BASE_URL="https://idea2.site/trustweb/draft"
+  BASE_URL="$SITE_URL/draft"
   # only ever touches the draft folder, never the production files next to it
   rsh "mkdir -p $DRAFT_DIR && find $DRAFT_DIR -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
   push_pages "$DRAFT_DIR"
   echo "  pushed draft -> $DRAFT_DIR"
 else
-  BASE_URL="https://idea2.site/trustweb"
+  BASE_URL="$SITE_URL"
   # everything except the draft folder is replaced
   rsh "sudo mkdir -p $PROD_DIR && sudo chown almalinux:almalinux $PROD_DIR && find $PROD_DIR -mindepth 1 -maxdepth 1 ! -name draft -exec rm -rf {} +"
   push_pages "$PROD_DIR"
@@ -146,7 +196,7 @@ for f in "$OUT"/*.html; do
   echo "  $url  $code"
   [ "$code" = "200" ] || status=1
 done
-if [ "$DRAFT" = 0 ]; then
+if [ "$DRAFT" = 0 ] && [ "$SITE_HOST" = idea2.site ]; then
   # Caddy's `redir ... temporary` answers 302; only /trustweb -> /trustweb/ is a 308.
   tw_alias_code="$(http_code https://idea2.site/tw)"
   echo "  https://idea2.site/tw (alias, expect 302)  $tw_alias_code"
