@@ -274,7 +274,7 @@ describe('the words', () => {
     expect(S.shortLinkFailed(ShortLinkError.RateLimited)).toMatch(/little while/)
   })
   it('use no em dash', () => {
-    for (const e of Object.values(ShortLinkError)) expect(S.shortLinkFailed(e, 5)).not.toMatch(/—/)
-    expect(S.shortLinkNote).not.toMatch(/—/)
+    for (const e of Object.values(ShortLinkError)) expect(S.shortLinkFailed(e, 5)).not.toMatch(/\\u2014/)
+    expect(S.shortLinkNote).not.toMatch(/\\u2014/)
   })
 })
