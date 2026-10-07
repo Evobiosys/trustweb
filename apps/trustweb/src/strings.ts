@@ -6,6 +6,7 @@
  */
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
+import { WebSearchError } from './web_results'
 
 /** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
 const PROVIDER_NAME: Readonly<Record<TranscribeProviderName, string>> = {
@@ -152,6 +153,30 @@ export const S = {
     [SearchEngine.Qwant]: 'Qwant',
     [SearchEngine.Brave]: 'Brave',
   } as Record<SearchEngine, string>,
+  // Wave 3: results inside the app, after a tap (websearch-api-contract v1.0 section 4, binding copy).
+  webResultsShow: 'Show results here',
+  webResultsFrom: 'Results from',
+  webResultsVia: (label: string) => `Outside TrustWeb, untrusted results, via ${label}.`,
+  webResultsSent: (label: string) => `Your words were sent to ${label} through our server. Your device address was not.`,
+  webResultsYourself: (label: string) => `Search on ${label} yourself`,
+  webResultsConsent: (label: string) => `Searching here sends your words to ${label}. Continue?`,
+  webResultsContinue: 'Continue',
+  webResultsNotNow: 'Not now',
+  webResultsLoading: (label: string) => `Asking ${label} through our server...`,
+  webResultsEmpty: (label: string) => `${label} found nothing for these words.`,
+  // Brave's terms ask for this attribution where its results are shown (contract section 3).
+  webResultsPoweredBy: (label: string) => `Powered by ${label}`,
+  webResultsError: {
+    [WebSearchError.NotConfigured]: 'Results inside TrustWeb are not available for this engine right now.',
+    [WebSearchError.RateLimited]: 'Too many web searches from here just now: try again later.',
+    [WebSearchError.DailyCap]: 'Today\'s budget for this engine on our server is used up: try again tomorrow.',
+    [WebSearchError.Busy]: 'Our server is busy: try again in a moment.',
+    [WebSearchError.Provider]: 'The search engine did not answer usefully.',
+    [WebSearchError.Timeout]: 'The search engine took too long to answer.',
+    [WebSearchError.BadRequest]: 'These words cannot be searched here.',
+    [WebSearchError.Forbidden]: 'Our server did not accept this search.',
+    [WebSearchError.Network]: 'Our server could not be reached.',
+  } as Record<WebSearchError, string>,
   searchCurate: 'Curate your web',
   searchCurateSub: 'Rings, notes and connections',
   moreOpen: 'More',

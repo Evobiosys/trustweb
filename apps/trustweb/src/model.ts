@@ -494,6 +494,11 @@ export interface AppState {
    * An older build ignores it.
    */
   askDirectOnly?: boolean
+  /**
+   * Wave 3: the web search engines this phone said yes to sending its words
+   * to, for results inside the app (web_results.ts; once per engine). Absent: none.
+   */
+  webSearchConsent?: string[]
   /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
   hiddenHints?: string[]
   /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. (Stored key kept from v1.) */

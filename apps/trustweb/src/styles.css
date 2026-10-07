@@ -454,6 +454,15 @@ textarea.field{resize:vertical; line-height:1.5}
 .web-search-head{margin:0; font-size:13px; line-height:1.45}
 .web-search-head small{display:block; color:var(--ink-soft); font-size:12px}
 a.web-engine{text-decoration:none; color:var(--ink)}
+/* Wave 3: results inside the app, after a tap; text only, no images, no favicons. */
+.web-results-show{margin-top:8px}
+.web-results{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line)}
+.web-results-list{list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:10px}
+.web-result a{font-weight:700; color:var(--ink); overflow-wrap:anywhere}
+.web-result-host{display:block; color:var(--ink-soft); font-size:12px; overflow-wrap:anywhere}
+.web-result p{margin:2px 0 0; font-size:13px; line-height:1.45; overflow-wrap:anywhere}
+.web-results-foot{margin:10px 0 0; font-size:13px; display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline}
+.web-results-powered{color:var(--ink-soft)}
 .chip{border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft); border-radius:999px; padding:6px 11px; font-size:12.5px; cursor:pointer; text-align:left}
 .card{background:var(--card); border-radius:18px; padding:16px; margin-top:16px; box-shadow:0 2px 14px rgba(36,27,46,.07)}
 .card .q{font-weight:600; margin-bottom:6px}

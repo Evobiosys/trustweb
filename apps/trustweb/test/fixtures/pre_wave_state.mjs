@@ -86,7 +86,7 @@ export const HOSTED_SECRET = 'ab'.repeat(32)
  * batch, the Feed settings, a person's fediverse handle, an item's image.
  * Wave 2 (2026-10-07) adds its optional fields here too: a meeting's roughTimes, the audience "close",
  * an imported line's reviewedAt.
- * Wave 3 (2026-10-07): askDirectOnly, serverTranscriptionConsent (kept next to the older bare timestamp here, as a
+ * Wave 3 (2026-10-07): askDirectOnly, webSearchConsent, serverTranscriptionConsent (kept next to the older bare timestamp here, as a
  * record written by both generations could hold them).
  * The regression net for rolling round B back: the pre-wave build must open
  * it, and its saves must keep every one of these fields.
@@ -132,6 +132,8 @@ export function roundBState() {
   // wave 3: asks go to direct contacts only (Settings > Advanced); the yes to server transcription bound to its route (D7)
   s.askDirectOnly = true
   s.serverTranscriptionConsent = { at: NOW - DAY, provider: 'berget', region: 'se', dataPolicy: null, fallback: { provider: 'openrouter', region: 'us', dataPolicy: 'deny' } }
+  // wave 3: the engines this phone said yes to for web results inside the app
+  s.webSearchConsent = ['brave']
   return s
 }
 
@@ -147,5 +149,6 @@ export function roundBFields(s) {
     audiences: s.inventory.map((i) => i.audience),
     directOnly: s.askDirectOnly,
     consentRoute: s.serverTranscriptionConsent,
+    webConsent: s.webSearchConsent,
   })
 }

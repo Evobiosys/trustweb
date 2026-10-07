@@ -6,6 +6,9 @@
  *     status; the yes bound to provider, region, data policy and fallback (D7);
  *     the old bare timestamp is no yes; "Automatic" never uses the server; the
  *     sheet's copy; failed and lost jobs are not charged to the person.
+ *   item 3: web results inside the app: the engine list, the answer read as
+ *     untrusted data, the request (POST, words in the body), the errors, the
+ *     once-per-engine yes, the link-outs.
  */
 import { decodeFromQr, encodeForQr } from '../../../demo/src/wire.ts'
 import { directFlag, mayPassOn, surfacesHere } from '../../src/direct_ask.ts'
@@ -13,6 +16,8 @@ import { askDirectOnly, ENGINE_CHOICES, InferenceRegion, ProviderDataPolicy, Tra
 import { consentCovers, consentFor, giveConsent, hasAnyConsent, readConsent, serverTranscribesByItself, withdrawConsent } from '../../src/server_consent.ts'
 import { parseProviderInfo, parseStatus } from '../../src/swiss_server.ts'
 import { S } from '../../src/strings.ts'
+import { errorOf, fetchEngines, giveWebConsent, parseEngines, parseResults, searchWeb, webConsents, webQuery, WebSearchError } from '../../src/web_results.ts'
+import { engineLinkUrl } from '../../src/web_search.ts'
 
 const QUERY = {
   v: 1, t: 'query', from: { id: 'sam', displayName: 'Sam' }, templateId: 'free', templateVersion: 1,
@@ -152,5 +157,102 @@ describe('wave 3 item 2: transcription on a server, never the default, the yes b
     expect(S.jobNotCharged).toBe('Not charged to you: failures are not charged to your allowance.')
     const all = Object.values(S).filter((v) => typeof v === 'string').join(' ')
     expect(all).not.toMatch(/may still have been charged|may have been charged/)
+  })
+})
+
+const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+const BRAVE = { id: 'brave', label: 'Brave' }
+
+describe('wave 3 item 3: web results inside the app (websearch-api-contract v1.0)', () => {
+  it('offers only engines with an API and a key; link-only, unconfigured, odd or doubled entries never', () => {
+    expect(parseEngines({ engines: [
+      { id: 'brave', label: 'Brave', mode: 'api', configured: true },
+      { id: 'mojeek', label: 'Mojeek', mode: 'api', configured: false },
+      { id: 'qwant', label: 'Qwant', mode: 'link_only', configured: true },
+      { id: 'Bad Id', label: 'X', mode: 'api', configured: true },
+      { id: 'brave', label: 'Brave again', mode: 'api', configured: true },
+      { id: 'nolabel', mode: 'api', configured: true },
+      null, 'brave',
+    ] })).toEqual([BRAVE])
+    for (const v of [null, {}, { engines: 'x' }, [], 'x']) expect(parseEngines(v)).toEqual([])
+  })
+
+  it('reads an answer as untrusted data: http(s) links only, host from the URL, text capped, unknown fields ignored', () => {
+    const r = parseResults({ engine: 'brave', label: 'Brave', untrusted: true, more: 1, results: [
+      { title: '  Cargo\n bikes ', url: 'https://example.org/a', snippet: 'x'.repeat(500) },
+      { title: 'js', url: 'javascript:alert(1)' }, { title: 'data', url: 'data:text/html,hi' }, { title: 'rel', url: '/relative' },
+      { title: '', url: 'http://bikes.example.net/' }, { url: 'https://' + 'a'.repeat(2001) }, 'x', null,
+    ] }, BRAVE)
+    expect(r.engine).toEqual(BRAVE)
+    expect(r.results.map((x) => [x.title, x.host])).toEqual([['Cargo bikes', 'example.org'], ['bikes.example.net', 'bikes.example.net']])
+    expect(r.results[0].snippet.length).toBe(400)
+    expect(parseResults({ results: Array.from({ length: 15 }, (_, i) => ({ title: 't', url: `https://e.org/${i}` })) }, BRAVE).results.length).toBe(10)
+    expect(parseResults({ results: [] }, BRAVE)).toEqual({ engine: BRAVE, results: [] })
+    for (const v of [null, {}, { results: 'x' }]) expect(parseResults(v, BRAVE)).toBeNull()
+  })
+
+  it('maps every error answer to its own words; unknown codes by status', () => {
+    expect(errorOf(503, { error: 'not_configured' })).toBe(WebSearchError.NotConfigured)
+    expect(errorOf(503, { error: 'busy' })).toBe(WebSearchError.Busy)
+    expect(errorOf(429, { error: 'engine_daily_cap' })).toBe(WebSearchError.DailyCap)
+    expect(errorOf(429, null)).toBe(WebSearchError.RateLimited)
+    expect(errorOf(504, { error: 'nope' })).toBe(WebSearchError.Timeout)
+    expect(errorOf(500, null)).toBe(WebSearchError.Network)
+    for (const e of Object.values(WebSearchError)) expect(S.webResultsError[e]).toMatch(/\w/)
+  })
+
+  it('searches with POST, the words in the JSON body (never in the URL), no referrer; empty words send nothing', async () => {
+    const calls = []
+    const f = async (url, init) => { calls.push({ url, init }); return json(200, { engine: 'brave', label: 'Brave', results: [{ title: 'T', url: 'https://e.org/', snippet: 's' }], untrusted: true }) }
+    const out = await searchWeb(BRAVE, '  cargo   bike ', f)
+    expect(out.ok).toBe(true)
+    expect(out.results[0].host).toBe('e.org')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('/websearch')
+    expect(calls[0].init.method).toBe('POST')
+    expect(calls[0].init.referrerPolicy).toBe('no-referrer')
+    expect(JSON.parse(calls[0].init.body)).toEqual({ q: 'cargo bike', engine: 'brave' })
+    expect(await searchWeb(BRAVE, '   ', f)).toEqual({ ok: false, error: WebSearchError.BadRequest })
+    expect(calls).toHaveLength(1)
+    expect(webQuery('x'.repeat(300)).length).toBe(200)
+  })
+
+  it('a refusal, a torn body or no server at all is an error, never results', async () => {
+    expect(await searchWeb(BRAVE, 'q', async () => json(503, { error: 'not_configured', engine: 'brave' }))).toEqual({ ok: false, error: WebSearchError.NotConfigured })
+    expect(await searchWeb(BRAVE, 'q', async () => new Response('<html>', { status: 200 }))).toEqual({ ok: false, error: WebSearchError.Network })
+    expect(await searchWeb(BRAVE, 'q', async () => { throw new TypeError('offline') })).toEqual({ ok: false, error: WebSearchError.Network })
+    expect(await searchWeb(BRAVE, 'q', async () => { const e = new Error('abort'); e.name = 'AbortError'; throw e })).toEqual({ ok: false, error: WebSearchError.Timeout })
+  })
+
+  it('the engine list: no route (404), HTML or no server = none (the button never shows)', async () => {
+    expect(await fetchEngines(async () => json(404, { error: 'not_found' }))).toEqual([])
+    expect(await fetchEngines(async () => new Response('<!doctype html>', { status: 200 }))).toEqual([])
+    expect(await fetchEngines(async () => { throw new TypeError('offline') })).toEqual([])
+    expect(await fetchEngines(async () => json(200, { engines: [{ id: 'brave', label: 'Brave', mode: 'api', configured: true }] }))).toEqual([BRAVE])
+  })
+
+  it('the yes is remembered once per engine, idempotent; odd stored values read as none', () => {
+    const s = {}
+    giveWebConsent(s, 'brave')
+    giveWebConsent(s, 'brave')
+    giveWebConsent(s, 'mojeek')
+    giveWebConsent(s, 'Not An Id')
+    expect(s.webSearchConsent).toEqual(['brave', 'mojeek'])
+    expect(webConsents({ webSearchConsent: 'brave' })).toEqual([])
+    expect(webConsents({ webSearchConsent: ['brave', 3, null, 'Bad Id'] })).toEqual(['brave'])
+  })
+
+  it('"Search on <engine> yourself": the wave-2 link-outs plus Mojeek; nothing for an engine without a known page', () => {
+    expect(engineLinkUrl('brave', 'cargo bike')).toBe('https://search.brave.com/search?q=cargo%20bike')
+    expect(engineLinkUrl('mojeek', 'a&b')).toBe('https://www.mojeek.com/search?q=a%26b')
+    expect(engineLinkUrl('metager', 'x')).toBeNull()
+    expect(engineLinkUrl('brave', '  ')).toBeNull()
+  })
+
+  it('the binding copy of the contract', () => {
+    expect(S.webResultsVia('Brave')).toBe('Outside TrustWeb, untrusted results, via Brave.')
+    expect(S.webResultsSent('Brave')).toBe('Your words were sent to Brave through our server. Your device address was not.')
+    expect(S.webResultsYourself('Brave')).toBe('Search on Brave yourself')
+    expect(S.webResultsConsent('Brave')).toBe('Searching here sends your words to Brave. Continue?')
   })
 })

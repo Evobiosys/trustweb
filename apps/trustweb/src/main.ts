@@ -37,6 +37,8 @@ import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './see
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
 import { webSearchRow } from './web_search'
+import type { WebResultsHooks } from './web_search'
+import { giveWebConsent, webConsents } from './web_results'
 import { nfcWriteSupported, writeLinkToTag } from './nfc'
 import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine } from './meeting_transcriber'
 import type { MeetingTranscriber, Segment } from './meeting_transcriber'
@@ -1117,7 +1119,7 @@ function searchPanel(s: AppState): HTMLElement {
     results.replaceChildren(hits.length ? peopleView(s, hits) : el('p', { class: 'empty' }, [S.searchNone]))
   }
   // Below the results, always: the same words on the web, as links (wave 2, B8; nothing sent before a tap).
-  const web = webSearchRow(searchText)
+  const web = webSearchRow(searchText, webResults)
   input.addEventListener('input', () => { searchText = input.value; fill(); web.update(searchText) })
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Escape') toggleSearch() })
   fill()
@@ -1732,6 +1734,17 @@ const packs = createPackView({
   state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,
   onMeetingChange: (m) => past.refresh(m),
 })
+
+/**
+ * Web results inside the app (wave 3): on the real app only, like the other
+ * server services (never on a demo phone or account: no imaginary person
+ * spends the operator's search budget); the yes is remembered per engine.
+ */
+const webResults: WebResultsHooks = {
+  enabled: () => swiss.enabled(),
+  consented: (id) => webConsents(st()).includes(id),
+  consent: (id) => { giveWebConsent(st(), id); save() },
+}
 
 /** The takes of this draft as the server job wants them: one timeline, end to end. */
 function jobTakes(): JobTake[] {
@@ -3318,7 +3331,7 @@ function queryDock(s: AppState): HTMLElement {
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
         el('p', { class: 'hint' }, [S.queryWindow]),
         run.results
-          ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text).el])
+          ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text, webResults).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt))])]),
       ])
     : null
