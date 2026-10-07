@@ -61,6 +61,14 @@
 //                                                 deferred:true for a replay instead of burning the subscriber's bucket
 //   NEWSLETTER_PER_MINUTE            2            the same, per sliding minute (the subscriber: 3/min)
 //   NEWSLETTER_PER_30_DAYS           240          the same, per sliding 30 days (the subscriber: 250/30 days; 20 a day would empty it in 12)
+//   LINK_HOSTS                       comma list, default app.idea2.site,app.trustintheweb.org: the only hosts a stored connect link may point at
+//                                    (and the only Origins POST /link accepts). Exact host match, no port, no userinfo.
+//   LINKS_FILE                       the short-link store (JSON, 0600, atomic rewrite). Default <BACKUP_DIR>/links.json (the unit's state dir).
+//   LINK_TTL_DAYS                    30           a short link answers 404 after this
+//   LINK_MAX                         5000         stored links in total; beyond it POST /link answers 507 storage_full
+//   LINK_MAX_BYTES                   2048         body cap of POST /link (413 above)
+//   LINK_PER_MINUTE, LINK_PER_HOUR   6, 30        POST /link per network address (IPv6: /64), kept in memory, NOT anonymous
+//   LINK_SWEEP_MS                    3600000      how often expired links are dropped (they are also dropped when read)
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -118,6 +126,9 @@ export function transcribeChain({ setting, fallback, bergetKey, openrouterKey })
 const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean)
 /** Where the website feedback form may post from: the idea2 pages and the TrustInTheWeb sites (wave 3). */
 const DEFAULT_FEEDBACK_ORIGINS = 'https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org'
+
+/** Where a short connect link may point: the two app hosts (wave 5). */
+const DEFAULT_LINK_HOSTS = 'app.idea2.site,app.trustintheweb.org'
 
 export function loadConfig(options = {}) {
   const setting = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', PROVIDER_AUTO, String) // an unknown name is kept: /transcribe answers 503 for it
@@ -199,5 +210,14 @@ export function loadConfig(options = {}) {
     newsletterPerDay: pick(options, 'newsletterPerDay', 'NEWSLETTER_PER_DAY', 20),
     newsletterPerMinute: pick(options, 'newsletterPerMinute', 'NEWSLETTER_PER_MINUTE', 2),
     newsletterPer30Days: pick(options, 'newsletterPer30Days', 'NEWSLETTER_PER_30_DAYS', 240),
+
+    linkHosts: (options.linkHosts ?? list(process.env.LINK_HOSTS ?? DEFAULT_LINK_HOSTS)).map((h) => h.toLowerCase()),
+    linksFile: pick(options, 'linksFile', 'LINKS_FILE', '', String),
+    linkTtlMs: pick(options, 'linkTtlDays', 'LINK_TTL_DAYS', 30) * 86_400_000,
+    linkMax: pick(options, 'linkMax', 'LINK_MAX', 5000),
+    linkMaxBytes: pick(options, 'linkMaxBytes', 'LINK_MAX_BYTES', 2048),
+    linkPerMinute: pick(options, 'linkPerMinute', 'LINK_PER_MINUTE', 6),
+    linkPerHour: pick(options, 'linkPerHour', 'LINK_PER_HOUR', 30),
+    linkSweepMs: pick(options, 'linkSweepMs', 'LINK_SWEEP_MS', 3_600_000),
   }
 }

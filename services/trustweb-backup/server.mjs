@@ -13,6 +13,8 @@
 //   POST|OPTIONS /feedback  website feedback, CORS for FEEDBACK_ORIGINS only   (feedback.mjs; FEEDBACK_FILE)
 // Added 2026-10-07 (wave 3): GET /websearch/engines, POST|GET /websearch  web results from Brave / Mojeek through this server
 //   (websearch.mjs; keys as systemd credentials websearch-brave / websearch-mojeek; 503 not_configured without a key).
+// Added 2026-10-07 (wave 5): POST /link + GET /l/<id>  short connect links (links.mjs, link_store.mjs; LINK_* settings, store <BACKUP_DIR>/links.json).
+//   These two routes are NOT logged at all (not even the method and status line): the id and the url are capabilities.
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -54,6 +56,8 @@ import { createFeedback } from './feedback.mjs'
 import { statusBody } from './status.mjs'
 import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
+import { createLinkStore } from './link_store.mjs'
+import { createLinks, notFoundPage } from './links.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
 import { createWebsearch, loadWebsearchConfig } from './websearch.mjs'
@@ -64,6 +68,8 @@ const ROUTE_RE = /^(?:\/backup)?\/([^/]+)$/
 const MAGIC = Buffer.from('TWB1')
 const HEADER_BYTES = MAGIC.length + 32
 const MAX_TRACKED_CLIENTS = 10000
+/** The short-link routes: never logged (see the header). */
+const isLinkPath = (pathname) => pathname === '/link' || pathname.startsWith('/l/')
 
 function hostOnly(value) {
   const v = String(value).trim().toLowerCase()
@@ -112,6 +118,19 @@ export async function startServer(options = {}) {
   const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
   const feedback = createFeedback({ cfg, clientOf, withLock, fetchImpl: options.fetchImpl })
   const websearch = createWebsearch({ cfg, clientOf, fetchImpl: options.websearchFetchImpl })
+
+  // Like hosting, the short links must never keep /backup from starting: if the store cannot open, links are off (503 not_configured).
+  let linkStore = null
+  try {
+    const opened = await createLinkStore({ file: cfg.linksFile || path.join(cfg.dir, 'links.json'), ttlMs: cfg.linkTtlMs, max: cfg.linkMax, now: cfg.now })
+    linkStore = opened
+    if (opened.recovered) cfg.log('link store unreadable: moved aside, links start empty')
+  } catch {
+    cfg.log('link store unavailable: short links off')
+  }
+  const links = linkStore === null ? null : createLinks({ cfg, store: linkStore, clientOf, now: cfg.now })
+  const linkSweep = linkStore === null ? null : setInterval(() => linkStore.prune().catch(() => undefined), cfg.linkSweepMs)
+  linkSweep?.unref()
 
   const hits = new Map() // client -> timestamps within the window
   const locks = new Map() // id -> promise chain (serialises writes per id)
@@ -299,7 +318,7 @@ export async function startServer(options = {}) {
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link'
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -335,6 +354,8 @@ export async function startServer(options = {}) {
       return 200
     }
     if (isWebsearch) return websearch.handle(req, res, pathname)
+    if (pathname === '/link') return links === null ? jsonError(res, 503, 'not_configured') : links.create(req, res)
+    if (pathname.startsWith('/l/')) return links === null ? notFoundPage(res) : links.open(req, res, pathname)
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
     if (pathname === '/hosted/status' && hosted === null && req.method === 'GET') {
@@ -360,11 +381,14 @@ export async function startServer(options = {}) {
   }
 
   const server = http.createServer((req, res) => {
+    const quiet = isLinkPath((req.url ?? '').split('?')[0])
     route(req, res)
-      .then((status) => cfg.log(`${req.method} ${status}`))
+      .then((status) => {
+        if (!quiet) cfg.log(`${req.method} ${status}`)
+      })
       .catch(() => {
         if (!res.headersSent) send(res, 500, 'server error')
-        cfg.log(`${req.method} 500`)
+        if (!quiet) cfg.log(`${req.method} 500`)
       })
   })
   server.requestTimeout = cfg.longRequestMs // per-request deadlines (armDeadline) keep 30 s on the short routes
@@ -379,6 +403,7 @@ export async function startServer(options = {}) {
     port: typeof address === 'object' && address !== null ? address.port : cfg.port,
     close: () =>
       new Promise((resolve) => {
+        clearInterval(linkSweep)
         server.close(() => resolve())
         server.closeAllConnections()
       }),

@@ -46,11 +46,18 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   budget per engine, calls in flight bounded, Sec-Fetch-Site cross-site refused; the query is never logged, cached or stored.
                   Contract: DEVLOG/trustweb-wave-1733/wave3/websearch-api-contract.txt.
 
+  /link, /l/<id>  (wave 5) short connect links: POST /link {"url"} -> 201 {"id","expires_at"} (200 when the same url is already stored),
+                  GET /l/<id> -> 302 to the stored long url, fragment included; unknown/expired/malformed id -> the same tiny 404 page.
+                  Only https urls of LINK_HOSTS (app.idea2.site, app.trustintheweb.org) with a connect parameter; 2 KB body cap, own-host Origin,
+                  6/min and 30/h per address, 30 days, at most 5000, store <BACKUP_DIR>/links.json (0600). Never logged (not even method and
+                  status): the modules have no logger. Caddy: scripts/trustweb_links_caddy_install.sh (log_skip). links.mjs, link_store.mjs.
+                  Contract: services-api-contract.txt section 9.
+
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
 One real call against questhub: scripts/trustweb_transcribe_probe.sh staging <audio> <mime> <seconds> (synthetic audio only).
 Modules: server.mjs (guard, routing, /backup), http_util.mjs, limits.mjs, quota.mjs (the allowance as pure arithmetic),
-hosted_store.mjs + hosted.mjs, status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_chain.mjs, transcribe_berget.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
+hosted_store.mjs + hosted.mjs, links.mjs + link_store.mjs, status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_chain.mjs, transcribe_berget.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
 
 RUN (local)
   BACKUP_DIR=/tmp/twbackup HOSTED_DIR=/tmp/twhosted PORT=8960 node server.mjs
@@ -59,7 +66,7 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over ten files (151 tests since wave 3: 130 before it plus 21 for Berget, the chain and the person-never-pays rule; the 17
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over twelve files (190 tests after wave 5: 166 before it plus 24 for the short links, links.test.mjs; earlier, 151 since wave 3: 130 before it plus 21 for Berget, the chain and the person-never-pays rule; the 17
 original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake Infomaniak and a fake
 OpenRouter (23 tests: success, bad model JSON, 400/401/402/403/429/500, gateway statuses counted, timeout, oversized, budgets, hang-up), feedback
 and CORS, ETag/late packs, the in-memory limiters; transcribe_berget.test.mjs: a fake Berget and a fake OpenRouter). Fixed test ports 8971-8976

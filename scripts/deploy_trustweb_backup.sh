@@ -125,6 +125,19 @@ caddy_snippet() {
 		}
 		reverse_proxy 127.0.0.1:8960
 	}
+	# Short connect links (wave 5): POST /link stores a long connect url, GET /l/<id> answers 302 to it. Both are kept out of the access log.
+	# (A live Caddyfile gets these through scripts/trustweb_links_caddy_install.sh, this snippet only seeds a fresh install.)
+	handle /link {
+		log_skip
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /l/* {
+		log_skip
+		reverse_proxy 127.0.0.1:8960
+	}
 CADDY
 }
 

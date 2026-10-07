@@ -6,7 +6,7 @@
 //
 // PRIVACY: the engine receives the query words, the operator's key and a fixed User-Agent. Never the person's IP (we are its client),
 // cookies, Referer, Accept-Language or X-Forwarded-For. Nothing about the query or the results is stored, cached or logged: a log line
-// carries the engine id and a status, never req.url, q or the upstream URL (which can hold the key). Counters are anonymous, in memory.
+// carries the engine id and a status, never req.url, q or the upstream URL (which can hold the key). Counters are kept per network address in memory, not anonymous.
 // MONEY: anyone can call this route, so the operator's key is protected by a per-client rate limit, a daily budget per engine,
 // a bound on calls in flight, and a refusal of Sec-Fetch-Site: cross-site.
 // SAFETY: engine output is untrusted: capped body, JSON only, results cleaned by websearch_clean.mjs (plain text, http(s) urls, caps).
