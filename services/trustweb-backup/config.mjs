@@ -6,10 +6,10 @@
 //   HOSTED_MAX_BYTES                 2000000000   total hosted ciphertext on this server
 //   HOSTED_MIN_FREE_BYTES            2000000000   refuse new hosted writes when the filesystem has less free (backups must never starve)
 //   HOSTED_RETENTION_DAYS            90           the sweeper removes recordings untouched this long
-//   ACCOUNT_SECONDS_LIMIT            36000        free plan: total declared seconds per account (10 x 1 h)
-//   ACCOUNT_BYTES_LIMIT              200000000    free plan: total ciphertext bytes per account (4000 B/s x 36000 s = 144 MB, plus headroom)
+//   ACCOUNT_SECONDS_LIMIT            36000        free plan: total declared seconds per account (10 x 1 h), a guard beside the recording count
+//   ACCOUNT_BYTES_LIMIT              1000000000   free plan: total ciphertext bytes per account, a backstop (10 recordings x 30 MB = 300 MB is the real ceiling)
 //   MAX_REC_BYTES                    30000000     one recording (1 h at ~67 kbps)
-//   MAX_RECORDINGS                   50           slots per account (anti-spam only)
+//   MAX_RECORDINGS                   10           THE free allowance: recordings per account (each up to 1 h); shown as used/limit
 //   HOSTED_WRITES_PER_HOUR_PER_IP    60
 //   ACCOUNT_CREATES_PER_IP_DAY       5            new accounts (first writes) per IP and UTC day
 //   REC_GETS_PER_HOUR                30           downloads per recording per hour
@@ -42,6 +42,9 @@
 //   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site
 //   FEEDBACK_MAX_BYTES               2000000
 //   FEEDBACK_PER_HOUR                5            per IP
+//   SUBSCRIBER_URL                   (unset = off) where a feedback entry with newsletter:true is forwarded, e.g. https://subscriber.questhub.eco/subscribe
+//                                    (the production unit sets it; staging points it at a fake). Never from a request.
+//   SUBSCRIBER_TIMEOUT_MS            4000         longest wait for the subscriber (the visitor gets 204 either way)
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -97,10 +100,10 @@ export function loadConfig(options = {}) {
     hostedMinFreeBytes: pick(options, 'hostedMinFreeBytes', 'HOSTED_MIN_FREE_BYTES', 2_000_000_000),
     retentionDays: pick(options, 'retentionDays', 'HOSTED_RETENTION_DAYS', 90),
     accountSecondsLimit: pick(options, 'accountSecondsLimit', 'ACCOUNT_SECONDS_LIMIT', 36000),
-    accountBytesLimit: pick(options, 'accountBytesLimit', 'ACCOUNT_BYTES_LIMIT', 200_000_000),
+    accountBytesLimit: pick(options, 'accountBytesLimit', 'ACCOUNT_BYTES_LIMIT', 1_000_000_000),
     maxRecSeconds: 3600,
     maxRecBytes: pick(options, 'maxRecBytes', 'MAX_REC_BYTES', 30_000_000),
-    maxRecordings: pick(options, 'maxRecordings', 'MAX_RECORDINGS', 50),
+    maxRecordings: pick(options, 'maxRecordings', 'MAX_RECORDINGS', 10),
     sanityBytesPerSecond: 16000,
     hostedWritesPerHourPerIp: pick(options, 'hostedWritesPerHourPerIp', 'HOSTED_WRITES_PER_HOUR_PER_IP', 60),
     accountCreatesPerIpDay: pick(options, 'accountCreatesPerIpDay', 'ACCOUNT_CREATES_PER_IP_DAY', 5),
@@ -134,5 +137,7 @@ export function loadConfig(options = {}) {
     feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? 'https://idea2.site,https://app.idea2.site'),
     feedbackMaxBytes: pick(options, 'feedbackMaxBytes', 'FEEDBACK_MAX_BYTES', 2_000_000),
     feedbackPerHour: pick(options, 'feedbackPerHour', 'FEEDBACK_PER_HOUR', 5),
+    subscriberUrl: pick(options, 'subscriberUrl', 'SUBSCRIBER_URL', '', String),
+    subscriberTimeoutMs: pick(options, 'subscriberTimeoutMs', 'SUBSCRIBER_TIMEOUT_MS', 4000),
   }
 }

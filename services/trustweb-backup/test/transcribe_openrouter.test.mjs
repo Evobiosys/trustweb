@@ -331,7 +331,8 @@ test('the phone hangs up after the upload: the provider call is still followed t
       assert.equal(used, 500)
       const big = Buffer.alloc(21_000_000, 1) // ~3500 s at 48 kbps: 7200 - 500 left, so one fits, a second does not
       assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.1' })).status, 200)
-      const third = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.2' })
+      // the budget answer comes before the audio is read, so a 21 MB body would race the early 429 (EPIPE, flaky since wave 1733): the charge is the declared 3500 s either way
+      const third = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), Buffer.alloc(1000, 1), { ip: '9.9.9.2' })
       assert.equal(third.status, 429)
       assert.equal(third.json.error, 'busy_today')
     })

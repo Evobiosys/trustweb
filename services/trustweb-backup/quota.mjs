@@ -1,9 +1,9 @@
 // The free allowance as pure arithmetic: no I/O, so every edge is unit-testable.
 //
-// Plan "free" = the EQUIVALENT of 10 recordings of 1 hour per person:
-//   36000 declared seconds in total, 200 MB of ciphertext in total (the app records speech at
-//   32 kbps Opus = 4000 B/s = 14.4 MB/h, so 10 h = 144 MB, plus headroom for container overhead,
-//   AES-GCM tags and iOS AAC), one recording at most 3600 s and 30 MB, 50 slots (anti-spam only).
+// Plan "free" = 10 RECORDINGS of up to 1 hour per person (wave 2, P10: the allowance is counted in recordings, not in gigabytes):
+//   the number of recordings is the primary figure (MAX_RECORDINGS, shown as used/limit); declared seconds (36000 in total,
+//   3600 per recording) and ciphertext bytes (1 GB per account) stay as guards. The byte guard never binds before the others:
+//   10 recordings x 30 MB = 300 MB at most, and the global cap and free-disk floor (hosted_store.mjs) protect the backups.
 
 /** Why a write stopped; each reason maps to one HTTP status in hosted.mjs. */
 export const CapReason = Object.freeze({
@@ -13,17 +13,16 @@ export const CapReason = Object.freeze({
   Global: 'global', // the server's hosted-bytes cap or free-disk floor -> 507
 })
 
-export const AllowanceReason = Object.freeze({ Seconds: 'seconds', Bytes: 'bytes', Slots: 'slots' })
+export const AllowanceReason = Object.freeze({ Seconds: 'seconds', Bytes: 'bytes', Recordings: 'recordings' })
 
 export function planFromConfig(cfg) {
   return Object.freeze({
     name: 'free',
-    equivalentRecordings: Math.round(cfg.accountSecondsLimit / cfg.maxRecSeconds),
-    secondsLimit: cfg.accountSecondsLimit,
+        secondsLimit: cfg.accountSecondsLimit,
     bytesLimit: cfg.accountBytesLimit,
     maxSecondsPerRecording: cfg.maxRecSeconds,
     maxBytesPerRecording: cfg.maxRecBytes,
-    maxRecordings: cfg.maxRecordings,
+    maxRecordings: cfg.maxRecordings, // THE allowance: recordings per account (also the `limit` of the usage body)
     sanityBytesPerSecond: cfg.sanityBytesPerSecond,
   })
 }
@@ -45,15 +44,17 @@ export function sanityBytes(plan, seconds) {
 }
 
 /**
- * Pre-stream check with what is already known (the declared seconds, the slot count).
- * Returns null when the write may start, else {reason}. `replaced` = the recording this write
- * replaces ({seconds, bytes}) or null: its seconds, bytes and slot are freed first.
+ * Pre-stream check with what is already known (the recording count, the declared seconds).
+ * Returns null when the write may start, else {reason}. A write to an existing id replaces it: its seconds and bytes
+ * are freed first, and it never counts against the recording limit (an account above the limit, e.g. from before the
+ * limit was lowered, can still replace what it holds; it just cannot add).
  */
 export function checkBeforeWrite(plan, recs, id, seconds) {
   const others = recs.filter((r) => r.id !== id)
   const usage = usageOf(others)
+  const replacing = others.length !== recs.length
+  if (!replacing && recs.length >= plan.maxRecordings) return { reason: AllowanceReason.Recordings }
   if (usage.seconds + seconds > plan.secondsLimit) return { reason: AllowanceReason.Seconds }
-  if (others.length >= plan.maxRecordings) return { reason: AllowanceReason.Slots }
   if (usage.bytes >= plan.bytesLimit) return { reason: AllowanceReason.Bytes }
   return null
 }
@@ -79,8 +80,8 @@ export function usageBody(plan, recs, transcribedSeconds) {
   const usage = usageOf(recs)
   return {
     plan: plan.name,
-    used: Math.round((usage.seconds / plan.maxSecondsPerRecording) * 100) / 100,
-    limit: plan.equivalentRecordings,
+    used: usage.count, // recordings held (wave 2, P10); hours come from secondsUsed / secondsLimit
+    limit: plan.maxRecordings,
     secondsUsed: usage.seconds,
     secondsLimit: plan.secondsLimit,
     bytesUsed: usage.bytes,

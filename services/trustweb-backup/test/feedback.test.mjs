@@ -2,9 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import http from 'node:http'
 import { A, T, call, hosted, withServer } from './helpers.mjs'
 
 const P = 8974
+const SUB = 8979 // the fake subscriber (the one free port of 8971-8979)
 const SITE = 'https://idea2.site'
 const APP = 'https://app.idea2.site'
 
@@ -213,5 +215,184 @@ test('review: the reader script never sends a stored control character to the te
     assert.ok(out.includes('bidi\\u{202e}evil\nsecond line')) // newlines inside the text stay readable
     assert.ok(out.includes('contact: me\\u{001b}[31m'))
     assert.ok(out.includes('1 entries'))
+  })
+})
+
+// ---- wave 2 (P14, P15): notify / newsletter / email, forwarded to the subscriber only for a ticked newsletter box ----
+
+/** A fake subscriber on 127.0.0.1:8979. `answer(req, n)` -> {status, headers?, delayMs?}; collects every request it receives. */
+async function withSubscriber(answer, body) {
+  const seen = []
+  const srv = http.createServer((req, res) => {
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => {
+      seen.push({ method: req.method, url: req.url, type: req.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') })
+      const a = answer(req, seen.length)
+      setTimeout(() => {
+        res.writeHead(a.status, a.headers ?? {})
+        res.end()
+      }, a.delayMs ?? 0)
+    })
+  })
+  await new Promise((resolve) => srv.listen(SUB, '127.0.0.1', resolve))
+  try {
+    await body(seen)
+  } finally {
+    await new Promise((resolve) => srv.close(resolve))
+  }
+}
+const ok = () => ({ status: 200 })
+const subscribed = (extra = {}) => fb({ subscriberUrl: `http://127.0.0.1:${SUB}/subscribe`, feedbackPerHour: 1000, ...extra })
+
+test('newsletter:true forwards exactly the join-form body to the subscriber, stores the entry with its email, never logs the address', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed(), async ({ dir, lines: log }) => {
+      const r = await post({ text: 'great idea', email: '  person@example.org ', notify: true, newsletter: true })
+      assert.equal(r.status, 204)
+      assert.equal(r.body.length, 0)
+      assert.equal(seen.length, 1)
+      assert.equal(seen[0].method, 'POST')
+      assert.equal(seen[0].url, '/subscribe')
+      assert.match(seen[0].type, /^application\/json/)
+      assert.deepEqual(JSON.parse(seen[0].body), { email: 'person@example.org', project: 'questhub', source: 'trustweb', gdpr: true })
+      const [entry] = await lines(path.join(dir, 'feedback.jsonl'))
+      assert.deepEqual(Object.keys(entry).sort(), ['contact', 'email', 'kind', 'newsletter', 'notify', 'page', 't', 'text'])
+      assert.deepEqual([entry.email, entry.notify, entry.newsletter], ['person@example.org', true, true])
+      assert.ok(log.some((l) => l === 'feedback newsletter sent status=200'), JSON.stringify(log))
+      assert.equal(JSON.stringify(log).includes('example.org'), false)
+    })
+  })
+})
+
+test('notify only: the email is stored, nothing goes to the subscriber', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed(), async ({ dir }) => {
+      assert.equal((await post({ text: 'tell me when ready', email: 'a@example.org', notify: true })).status, 204)
+      assert.equal((await post({ text: 'explicitly not', email: 'b@example.org', notify: true, newsletter: false })).status, 204)
+      const stored = await lines(path.join(dir, 'feedback.jsonl'))
+      assert.deepEqual(stored.map((e) => [e.email, e.notify, e.newsletter]), [['a@example.org', true, false], ['b@example.org', true, false]])
+      assert.equal(seen.length, 0)
+    })
+  })
+})
+
+test('no ticked box: an email that comes along is neither validated, stored nor forwarded, and the stored keys stay the old five', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed(), async ({ dir }) => {
+      for (const extra of [{ email: 'x@example.org' }, { email: 'x@example.org', notify: false, newsletter: false }, { email: 'not an address', notify: null, newsletter: null }, { notify: false, newsletter: false }]) {
+        assert.equal((await post({ text: 'just text', ...extra })).status, 204, JSON.stringify(extra))
+      }
+      const stored = await lines(path.join(dir, 'feedback.jsonl'))
+      assert.equal(stored.length, 4)
+      for (const e of stored) assert.deepEqual(Object.keys(e).sort(), ['contact', 'kind', 'page', 't', 'text'])
+      assert.equal(JSON.stringify(stored).includes('example.org'), false)
+      assert.equal(seen.length, 0)
+    })
+  })
+})
+
+test('validation: the boxes must be real booleans, a ticked box needs a plausible single address; nothing is stored or forwarded on 400', async () => {
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed(), async ({ dir }) => {
+      const field = async (body, expected) => {
+        const r = await post({ text: 'SECRET-INPUT', ...body })
+        assert.equal(r.status, 400, JSON.stringify(body).slice(0, 80))
+        assert.equal(r.json.field, expected)
+        assert.equal(r.text.includes('SECRET-INPUT') || r.text.includes('@'), false)
+      }
+      await field({ newsletter: 'true', email: 'a@example.org' }, 'newsletter')
+      await field({ newsletter: 1, email: 'a@example.org' }, 'newsletter')
+      await field({ notify: 'yes', email: 'a@example.org' }, 'notify')
+      await field({ notify: [], email: 'a@example.org' }, 'notify')
+      await field({ newsletter: true }, 'email')
+      await field({ notify: true, email: '' }, 'email')
+      await field({ newsletter: true, email: 7 }, 'email')
+      for (const bad of ['plainaddress', 'a@b', '@example.org', 'a b@example.org', 'a@@example.org', 'a@example.org\u0000', 'a@exa\nmple.org', `${'a'.repeat(250)}@example.org`, 'a@example.org, b@example.org']) {
+        await field({ newsletter: true, email: bad }, 'email')
+      }
+      assert.deepEqual(await lines(path.join(dir, 'feedback.jsonl')), [])
+      assert.equal(seen.length, 0)
+      assert.equal((await post({ text: 'fine', newsletter: true, email: `${'a'.repeat(64)}@${'b'.repeat(63)}.example.org` })).status, 204)
+      assert.equal(seen.length, 1)
+    })
+  })
+})
+
+test('nothing is forwarded for a honeypot hit, a rate-limited call, a wrong origin, a wrong type or a full file', async () => {
+  await withSubscriber(ok, async (seen) => {
+    const mail = { email: 'a@example.org', newsletter: true }
+    await withServer(P, subscribed({ feedbackPerHour: 1 }), async () => {
+      assert.equal((await post({ text: 'spam', homepage: 'http://spam.example', ...mail }, { ip: '5.5.5.5' })).status, 204)
+      assert.equal((await post({ text: 'x', ...mail }, { origin: 'https://evil.example.com' })).status, 403)
+      assert.equal((await post({ text: 'x', ...mail }, { origin: null })).status, 403)
+      assert.equal((await post(JSON.stringify({ text: 'x', ...mail }), { raw: true, headers: { 'Content-Type': 'text/plain' } })).status, 415)
+      assert.equal((await post({ text: 'x'.repeat(20000), ...mail }, { ip: '6.6.6.6' })).status, 413)
+      assert.equal(seen.length, 0)
+      assert.equal((await post({ text: 'first', ...mail }, { ip: '7.7.7.7' })).status, 204)
+      assert.equal((await post({ text: 'second', ...mail }, { ip: '7.7.7.7' })).status, 429)
+      assert.equal(seen.length, 1) // only the one that was stored
+    })
+    await withServer(P, subscribed({ feedbackMaxBytes: 50 }), async ({ dir }) => {
+      assert.equal((await post({ text: 'x'.repeat(100), ...mail })).status, 507)
+      assert.deepEqual(await lines(path.join(dir, 'feedback.jsonl')), [])
+      assert.equal(seen.length, 1)
+    })
+  })
+})
+
+test('a subscriber that refuses, hangs, redirects or is gone never changes the answer: 204, the entry stays stored, the outcome is logged', async () => {
+  const mail = { email: 'a@example.org', newsletter: true }
+  const cases = [
+    ['rejected', () => ({ status: 500 }), 'feedback newsletter rejected status=500'],
+    ['rejected', () => ({ status: 400 }), 'feedback newsletter rejected status=400'],
+    ['failed', () => ({ status: 200, delayMs: 1500 }), 'feedback newsletter failed'],
+    ['failed', () => ({ status: 302, headers: { Location: `http://127.0.0.1:${SUB}/elsewhere` } }), 'feedback newsletter failed'],
+  ]
+  for (const [, answer, expected] of cases) {
+    await withSubscriber(answer, async (seen) => {
+      await withServer(P, subscribed({ subscriberTimeoutMs: 300 }), async ({ dir, lines: log }) => {
+        const r = await post({ text: 'still stored', ...mail })
+        assert.equal(r.status, 204)
+        assert.equal((await lines(path.join(dir, 'feedback.jsonl'))).length, 1)
+        assert.ok(log.includes(expected), `${expected} in ${JSON.stringify(log)}`)
+        assert.equal(seen.filter((q) => q.url === '/elsewhere').length, 0) // a redirect is never followed
+      })
+    })
+  }
+  await withServer(P, subscribed({ subscriberUrl: 'http://127.0.0.1:1/subscribe' }), async ({ dir, lines: log }) => {
+    assert.equal((await post({ text: 'nobody home', ...mail })).status, 204) // connection refused
+    assert.equal((await lines(path.join(dir, 'feedback.jsonl'))).length, 1)
+    assert.ok(log.includes('feedback newsletter failed'))
+  })
+})
+
+test('no SUBSCRIBER_URL (or one that is not http(s)): the opt-in is stored, nothing leaves, logged as off', async () => {
+  for (const subscriberUrl of ['', 'ftp://example.org/x', 'not a url']) {
+    await withSubscriber(ok, async (seen) => {
+      await withServer(P, fb({ subscriberUrl }), async ({ dir, lines: log }) => {
+        assert.equal((await post({ text: 'x', email: 'a@example.org', newsletter: true })).status, 204)
+        assert.equal((await lines(path.join(dir, 'feedback.jsonl')))[0].newsletter, true)
+        assert.ok(log.includes('feedback newsletter off'), JSON.stringify(log))
+        assert.equal(seen.length, 0)
+      })
+    })
+  }
+})
+
+test('the reader script shows the ticked boxes and the address, escaped like everything else', async () => {
+  const { execFile } = await import('node:child_process')
+  const { fileURLToPath } = await import('node:url')
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../scripts/trustweb_feedback_read.sh')
+  await withServer(P, fb(), async ({ dir }) => {
+    const file = path.join(dir, 'feedback.jsonl')
+    assert.equal((await post({ text: 'one', email: 'a@example.org', notify: true, newsletter: true })).status, 204)
+    assert.equal((await post({ text: 'two' })).status, 204)
+    await fs.appendFile(file, `${JSON.stringify({ t: '2026-10-07T10:00Z', kind: 'feedback', text: 'hand-edited', email: 'x@example.org\u001b[31m', notify: true })}\n`)
+    const out = await new Promise((resolve, reject) => execFile('bash', [script, '--file', file], (err, stdout) => (err ? reject(err) : resolve(stdout))))
+    assert.ok(out.includes('stay informed: alert-me yes  newsletter yes  email: a@example.org'), out)
+    assert.ok(out.includes('alert-me yes  newsletter no  email: x@example.org\\u{001b}[31m'), out)
+    assert.equal(out.split('stay informed').length - 1, 2) // the entry without boxes prints no such line
+    assert.ok(out.includes('3 entries'))
   })
 })

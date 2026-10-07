@@ -21,11 +21,37 @@ test('status route: hosting on, transcription and feedback off until configured'
   })
 })
 
+test('status route (wave 2, P10): `provider` tells the app who transcribes and where, the old booleans stay', async () => {
+  const off = { enabled: false, provider: 'openrouter', region: 'us', dataPolicy: 'deny' }
+  await withServer(P, {}, async () => {
+    const r = (await call(P, { url: '/hosted/status' })).json
+    assert.deepEqual(r.provider, { transcribe: off })
+    assert.equal(r.transcribe, false) // the old boolean is untouched
+  })
+  await withServer(P, { transcribeKey: 'k'.repeat(24), transcribeEnabled: true }, async () => {
+    const r = (await call(P, { url: '/hosted/status' })).json
+    assert.equal(r.transcribe, true)
+    assert.deepEqual(r.provider.transcribe, { ...off, enabled: true })
+  })
+  await withServer(P, { transcribeProvider: 'infomaniak', transcribeUrl: 'http://127.0.0.1:1/x', transcribeKey: 'k'.repeat(24) }, async () => {
+    assert.deepEqual((await call(P, { url: '/hosted/status' })).json.provider.transcribe, { enabled: true, provider: 'infomaniak', region: 'ch', dataPolicy: null })
+  })
+  await withServer(P, { transcribeDataCollection: 'allow' }, async () => {
+    assert.equal((await call(P, { url: '/hosted/status' })).json.provider.transcribe.dataPolicy, 'allow')
+  })
+})
+
 test('hosting off (no HOSTED_DIR): status says hosted:false, every other hosted route is 503 not_configured', async () => {
   await withServer(P, { hostedDir: '' }, async () => {
     const r = await call(P, { url: '/hosted/status' })
     assert.equal(r.status, 200)
-    assert.deepEqual(r.json, { hosted: false, transcribe: false, feedback: false, plan: null })
+    assert.deepEqual(r.json, {
+      hosted: false,
+      transcribe: false,
+      feedback: false,
+      plan: null,
+      provider: { transcribe: { enabled: false, provider: 'openrouter', region: 'us', dataPolicy: 'deny' } },
+    })
     assert.equal((await usage(P, A)).json.error, 'not_configured')
     assert.equal((await put(P, A, R1, T, 60, cipher('x'))).status, 503)
   })
@@ -114,8 +140,8 @@ test('validation: ids, token, X-Seconds, X-Read-Token, empty body are 400; unkno
   })
 })
 
-test('allowance edges: 10th hour accepted, 11th is 402, replace and delete free their share, delete then re-add works', async () => {
-  await withServer(P, {}, async () => {
+test('seconds guard: 10th hour accepted, 11th is 402, replace and delete free their share, delete then re-add works (recording cap raised so the seconds guard is what answers)', async () => {
+  await withServer(P, { maxRecordings: 50 }, async () => {
     const ids = Array.from({ length: 11 }, (_, i) => String(i + 10).repeat(16))
     for (let i = 0; i < 10; i += 1) assert.equal((await put(P, A, ids[i], T, 3600, cipher(`r${i}`))).status, 204, `recording ${i + 1}`)
     const full = (await usage(P, A)).json
@@ -125,7 +151,7 @@ test('allowance edges: 10th hour accepted, 11th is 402, replace and delete free 
     assert.equal(over.status, 402)
     assert.equal(over.json.error, 'allowance_reached')
     assert.equal(over.json.reason, 'seconds')
-    assert.equal(over.json.limit, 10)
+    assert.equal(over.json.limit, 50)
     assert.equal(over.json.secondsLimit, 36000)
     assert.equal(over.json.plan, 'free')
     // replacing recording 3 with a shorter one frees seconds ...
@@ -141,15 +167,51 @@ test('allowance edges: 10th hour accepted, 11th is 402, replace and delete free 
   })
 })
 
-test('slot cap (anti-spam) refuses new slots with reason slots; existing slots stay writable', async () => {
-  await withServer(P, { maxRecordings: 2 }, async () => {
-    assert.equal((await put(P, A, R1, T, 1, 'a')).status, 204)
-    assert.equal((await put(P, A, R2, T, 1, 'a')).status, 204)
-    const r = await put(P, A, R3, T, 1, 'a')
-    assert.equal(r.status, 402)
-    assert.equal(r.json.reason, 'slots')
-    assert.equal((await put(P, A, R2, T, 1, 'b')).status, 204)
+test('recordings are the allowance (wave 2, P10): the 11th recording is 402 reason recordings with used:10 limit:10, whatever its length', async () => {
+  await withServer(P, {}, async () => {
+    const ids = Array.from({ length: 11 }, (_, i) => String(i + 10).repeat(16))
+    for (let i = 0; i < 10; i += 1) assert.equal((await put(P, A, ids[i], T, 60, cipher(`r${i}`))).status, 204, `recording ${i + 1}`)
+    const u = (await usage(P, A)).json
+    assert.deepEqual([u.used, u.limit, u.recordings, u.maxRecordings, u.secondsUsed], [10, 10, 10, 10, 600])
+    const over = await put(P, A, ids[10], T, 1, cipher('eleventh'))
+    assert.equal(over.status, 402)
+    assert.equal(over.json.error, 'allowance_reached')
+    assert.equal(over.json.reason, 'recordings')
+    assert.deepEqual([over.json.used, over.json.limit, over.json.recordings], [10, 10, 10])
+    assert.equal(over.json.plan, 'free')
+    // replacing one of the ten stays legal, delete then add works, another person is unaffected
+    assert.equal((await put(P, A, ids[4], T, 3600, cipher('longer'))).status, 204)
+    assert.equal((await call(P, { method: 'DELETE', url: hosted(A, ids[0]), headers: { 'X-Write-Token': T } })).status, 204)
+    assert.equal((await put(P, A, ids[10], T, 1, cipher('eleventh again'))).status, 204)
+    assert.equal((await usage(P, A)).json.used, 10)
+    assert.equal((await put(P, A2, R1, T2, 60, cipher('other'))).status, 204)
   })
+})
+
+test('an account already above the recording limit keeps what it has: it can replace and delete, not add', async () => {
+  const dir = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'twover-'))
+  try {
+    const NEW = 'f'.repeat(32)
+    const ids = Array.from({ length: 5 }, (_, i) => String(i + 1).repeat(32))
+    await withServer(P, { hostedDir: dir, maxRecordings: 5 }, async () => {
+      for (const id of ids) assert.equal((await put(P, A, id, T, 60, cipher(id.slice(0, 4)))).status, 204)
+    })
+    await withServer(P, { hostedDir: dir, maxRecordings: 3 }, async () => {
+      const u = (await usage(P, A)).json
+      assert.deepEqual([u.used, u.limit], [5, 3])
+      assert.equal((await put(P, A, ids[1], T, 120, cipher('replaced'))).status, 204)
+      assert.equal((await put(P, A, NEW, T, 60, cipher('new'))).status, 402)
+      const del = async (id) => (await call(P, { method: 'DELETE', url: hosted(A, id), headers: { 'X-Write-Token': T } })).status
+      assert.equal(await del(ids[0]), 204)
+      assert.equal((await put(P, A, NEW, T, 60, cipher('new'))).status, 402) // 4 left, limit 3
+      assert.equal(await del(ids[1]), 204)
+      assert.equal((await put(P, A, NEW, T, 60, cipher('new'))).status, 402) // 3 left, limit 3
+      assert.equal(await del(ids[2]), 204)
+      assert.equal((await put(P, A, NEW, T, 60, cipher('new'))).status, 204) // 2 left: room for one
+    })
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('byte allowance and caps: account bytes 402, one recording 413, sanity 400; the old content survives each refusal', async () => {
@@ -251,8 +313,8 @@ test('usage and list of an unknown account are empty (and create nothing); a wro
   await withServer(P, {}, async ({ hostedDir }) => {
     const u = await usage(P, A)
     assert.equal(u.status, 200)
-    assert.deepEqual([u.json.used, u.json.limit, u.json.secondsLimit, u.json.bytesLimit, u.json.plan], [0, 10, 36000, 200_000_000, 'free'])
-    assert.equal(u.json.maxRecordings, 50)
+    assert.deepEqual([u.json.used, u.json.limit, u.json.secondsLimit, u.json.bytesLimit, u.json.plan], [0, 10, 36000, 1_000_000_000, 'free'])
+    assert.equal(u.json.maxRecordings, 10)
     assert.deepEqual((await call(P, { url: `/hosted/${A}/recs`, headers: { 'X-Write-Token': T } })).json, { recordings: [] })
     assert.deepEqual(await fs.readdir(path.join(hostedDir, 'accounts')), [])
     await put(P, A, R1, T, 1, 'x')
