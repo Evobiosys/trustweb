@@ -25,7 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -394,7 +394,7 @@ async function openWalkthrough(): Promise<void> {
   panel.append(closeBtn)
   const slot = el('div', {})
   panel.append(slot)
-  const stop = mountWalkthrough(slot, { liveHint: S.seeInActionHint })
+  const stop = mountWalkthrough(slot, { liveHint: S.seeInActionHint, directOnly: state ? askDirectOnly(state) : false })
   document.addEventListener('keydown', onKey)
   document.body.append(layer)
   closeBtn.focus()
@@ -3149,6 +3149,11 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('button', {
+      class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
+      // Off is stored as absent: the record keeps only what differs from the default.
+      onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
     ...HINTS.map((id) => el('button', {
       class: 'radio' + (hintHidden(id) ? '' : ' on'),
       'aria-pressed': String(!hintHidden(id)),
@@ -3325,6 +3330,7 @@ function queryDock(s: AppState): HTMLElement {
     ? el('div', { class: 'card asked' }, [
         el('p', { class: 'q' }, ['"' + run.text + '"']),
         el('p', {}, [S.queryAsked(run.asked)]),
+        askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
         el('p', { class: 'hint' }, [S.queryWindow]),
         run.results
           ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text).el])
@@ -3338,6 +3344,7 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
+      !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,

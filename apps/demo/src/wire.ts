@@ -80,6 +80,10 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   // rejects the whole envelope.
   if ('escalated' in o && o.escalated !== true) return null
   const escalated = o.escalated === true ? (true as const) : undefined
+  // `direct` (TrustWeb wave 3, "ask only my direct contacts"; types.ts's
+  // QueryEnvelope.direct doc comment): the same convention once more.
+  if ('direct' in o && o.direct !== true) return null
+  const direct = o.direct === true ? (true as const) : undefined
   return {
     v: WIRE_VERSION,
     t: 'query',
@@ -91,6 +95,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(freeText ? { freeText } : {}),
     ...(relayed ? { relayed } : {}),
     ...(escalated ? { escalated } : {}),
+    ...(direct ? { direct } : {}),
   }
 }
 

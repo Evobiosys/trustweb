@@ -32,8 +32,9 @@ import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, ChatEnvelope, DecodedAnswer, MatchResult, QueryEnvelope, SharedPayload } from '../../demo/src/types'
+import { directFlag, surfacesHere } from './direct_ask'
 import { askTemplate } from './lexicon'
-import { LogOutcome, sharedItems, threadsForRing } from './model'
+import { askDirectOnly, LogOutcome, sharedItems, threadsForRing } from './model'
 import type { AppState, LineRef, MatchScope, Peer, Ring } from './model'
 
 export type { RelayStatus }
@@ -273,7 +274,8 @@ export class Net {
     const text = q.freeText ?? ''
     const tpl = askTemplate(text)
     const { threads, refs } = threadsForRing(this.hooks.state(), peer.ring, this.hooks.askScope(peer))
-    const match = text ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
+    // Passed on although its asker wanted direct contacts only (direct_ask.ts): answered like no match, never shown.
+    const match = text && surfacesHere(q) ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const key = await this.pairKey(peer)
 
@@ -316,16 +318,20 @@ export class Net {
     })
   }
 
-  /** Ask every connected peer; resolves once every answer is in or has timed out. */
+  /**
+   * Ask every connected peer; resolves once every answer is in or has timed
+   * out. With "Ask only my direct contacts" on, each ask says so (`direct`).
+   */
   async ask(text: string): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
+    const flag = directFlag(askDirectOnly(s))
     return Promise.all(s.peers.map(async (peer): Promise<AskResult> => {
       const q: QueryEnvelope = {
         v: 1, t: 'query', from: s.me,
         templateId: askTemplate(freeText).id, templateVersion: 1,
-        qid: randomId(12), issuedAt: Date.now(), freeText,
+        qid: randomId(12), issuedAt: Date.now(), freeText, ...flag,
       }
       const key = await this.pairKey(peer)
       const answered = new Promise<AnswerEnvelope | null>((resolve) => {

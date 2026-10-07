@@ -453,6 +453,13 @@ export interface AppState {
   demoOffered?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
+  /**
+   * Settings > Advanced (wave 3): ask only my direct contacts. On: every ask
+   * carries `direct: true` and nobody passes it on. Absent or anything but
+   * true: off (the default: one hop, plus whatever the front doors allow).
+   * An older build ignores it.
+   */
+  askDirectOnly?: boolean
   /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
   hiddenHints?: string[]
   /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. (Stored key kept from v1.) */
@@ -496,6 +503,11 @@ export interface FeedSettings {
   myInstance?: string
   /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
   myPixelfed?: string
+}
+
+/** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
+export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
+  return s.askDirectOnly === true
 }
 
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */

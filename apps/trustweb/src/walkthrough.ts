@@ -42,6 +42,12 @@ interface Mode {
   people: Who[]
   links: Link[]
   steps: Step[]
+  /**
+   * The same story when the asker chose "Ask only my direct contacts" (wave 3,
+   * Settings > Advanced): the ask stops at the friend in the middle, so the
+   * "(through Jonas)" answer never comes. Only modes with a second hop have it.
+   */
+  direct?: Step[]
 }
 
 // ----------------------------------------------------------------- screens
@@ -57,6 +63,13 @@ const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb ap
 /** The friend in the middle: his yes to this hop, given once in Settings (wave 2, P24: "per default I am happy to be the relay"). */
 const relayYes = (who: string, q: string): string =>
   `<div class="wt-cosmic"><b>${who} asks your friends</b><br>"${q}"<br><small>Your setting: pass on asks from people you know to your friends. <b>On</b> (you said yes once).</small>${card('ok', 'Passed on. You never see the answer.')}</div>`
+/** The asker's screen with the setting on: the ask and the line saying it stops at direct contacts. */
+const askDirect = (q: string): string => `${ask(q, 1)}<br><small>${DIRECT_ONLY}</small>`
+/** The friend in the middle, with an ask that says "direct contacts only": checked on his phone, never passed on. */
+const directHere = (who: string): string =>
+  `<div class="wt-cosmic"><b>${who} asks you</b><br><small>${who} asks direct contacts only: checked against your own inventory, not passed on to your friends.</small>${card('', 'Nothing of yours matches. Nothing is passed on.')}</div>`
+const noMatch = `<div class="wt-h">Call into your web</div>${card('', '<b>No match</b>')}<small>Only your direct contacts were asked.</small>`
+const DIRECT_ONLY = 'Ask only my direct contacts: <b>On</b>'
 const AISHA_REAL = 'In real life: she just opened an animal welfare fund.'
 /** The widest tier, as the app names it (wave 2, P22): acquaintances, and through a friend, friends of friends. */
 const WIDEST = 'Shared with: acquaintances (and friends of friends, through a friend)'
@@ -177,6 +190,28 @@ const MODES: Mode[] = [
         screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's inventory: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
+    direct: [
+      {
+        title: 'Months ago, Jonas met Sam', changed: [],
+        text: 'Sam is an acquaintance of Jonas. Maya is Jonas\'s friend. Sam and Maya have never met. Sam has switched on "Ask only my direct contacts" (Settings > Advanced).',
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+      },
+      {
+        title: 'Maya notes an opening', changed: ['maya'],
+        text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
+      },
+      {
+        title: 'Sam calls into his web, direct contacts only', changed: ['sam', 'jonas'], path: ['sam', 'jonas'],
+        text: '"Who is hiring?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on, whatever his own setting says.',
+        screens: { sam: askDirect('Who is hiring?'), jonas: directHere('Sam'), maya: quiet('Nothing reaches Maya.') },
+      },
+      {
+        title: 'Sam sees "No match"', changed: ['sam'], path: ['jonas', 'sam'],
+        text: 'Nothing in Jonas\'s own inventory matched, so Sam sees "No match". Maya\'s opening stays where it is: an answer "through Jonas" comes only when Sam lets his asks go further.',
+        screens: { sam: noMatch, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+      },
+    ],
   },
   {
     id: '4',
@@ -227,6 +262,28 @@ const MODES: Mode[] = [
         screens: { lena: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${FUND}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
     ],
+    direct: [
+      {
+        title: 'Four people, three apps', changed: [],
+        text: 'Lena works on an animal welfare project. Aisha does not use TrustWeb at all. Lena has switched on "Ask only my direct contacts" (Settings > Advanced).',
+        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
+      },
+      {
+        title: 'Maya notes what she heard', changed: ['maya'],
+        text: 'After meeting Aisha, Maya notes it, for people she regards as friends. Aisha\'s phone is not involved.',
+        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: `<div class="wt-h">Notes about Aisha</div>${card('', `${FUND}<br><small>${WIDEST}</small>`)}`, aisha: noApp(AISHA_REAL) },
+      },
+      {
+        title: 'Lena calls into her web, direct contacts only', changed: ['lena', 'jonas'], path: ['lena', 'jonas'],
+        text: '"Any new animal welfare funding?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on to Maya.',
+        screens: { lena: askDirect('Any new animal welfare funding?'), jonas: directHere('Lena'), maya: quiet('Nothing reaches Maya.'), aisha: noApp('Nothing reaches Aisha.') },
+      },
+      {
+        title: 'Lena sees "No match"', changed: ['lena'], path: ['jonas', 'lena'],
+        text: 'Nothing in Jonas\'s own inventory matched, so Lena sees "No match". Maya\'s note about the fund stays where it is: an answer "through Jonas" comes only when Lena lets her asks go further.',
+        screens: { lena: noMatch, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
+      },
+    ],
   },
 ]
 
@@ -251,6 +308,8 @@ const CSS = `
 .wt-modes button{border:0;background:transparent;border-radius:999px;padding:7px 14px;font:inherit;font-weight:700;font-size:13px;color:var(--soft);cursor:pointer}
 .wt-modes button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 6px rgba(36,27,46,.15)}
 .wt-speed{font-size:13px;color:var(--soft);display:flex;align-items:center;gap:6px}
+.wt-direct{font-size:13px;color:var(--soft);display:flex;align-items:center;gap:6px;cursor:pointer}
+.wt-direct[hidden]{display:none}
 .wt-speed select{font:inherit;border-radius:8px;border:1px solid var(--soft);background:var(--card);color:var(--ink);padding:3px 6px}
 .wt-intro{font-size:13.5px;color:var(--soft);margin:0 0 6px;line-height:1.5}
 .wt-intro b{color:var(--ink)}
@@ -403,7 +462,13 @@ function strip(mode: Mode): { el: HTMLElement; light(step: number, path?: string
 }
 
 /** Builds the player into `host`. Returns a function that pauses playback. */
-export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } = {}): () => void {
+export interface WalkthroughOptions {
+  liveHint?: string
+  /** Start with the asker's "Ask only my direct contacts" on (the app passes its own setting). Default off. */
+  directOnly?: boolean
+}
+
+export function mountWalkthrough(host: HTMLElement, opts: WalkthroughOptions = {}): () => void {
   if (!document.getElementById('wt-style')) {
     const style = document.createElement('style')
     style.id = 'wt-style'
@@ -414,7 +479,10 @@ export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } 
   let index = 0
   let playing = false
   let speed = loadSpeed()
+  let directOnly = opts.directOnly === true
   let timer: ReturnType<typeof setTimeout> | undefined
+  /** The steps in force: the direct-contacts-only story where the mode has one and the toggle is on. */
+  const steps = (): Step[] => (directOnly && mode.direct ? mode.direct : mode.steps)
 
   const box = el('section', 'wt')
   box.setAttribute('aria-label', 'See it in action: TrustWeb on several phones, step by step')
@@ -431,8 +499,16 @@ export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } 
   speedSel.onchange = (): void => { speed = Number(speedSel.value); saveSpeed(speed); schedule() }
   const speedLbl = el('label', 'wt-speed')
   speedLbl.append('Autoplay:', speedSel, 'per step')
+  // The asker's setting, as a toggle on the walkthrough itself (only the modes with a second hop change).
+  const directBox = el('input')
+  directBox.type = 'checkbox'
+  directBox.checked = directOnly
+  directBox.dataset.wtDirect = '1'
+  directBox.onchange = (): void => { pause(); directOnly = directBox.checked; buildMode(); show(0) }
+  const directLbl = el('label', 'wt-direct')
+  directLbl.append(directBox, 'Ask only direct contacts')
   const top = el('div', 'wt-top')
-  top.append(modes, speedLbl)
+  top.append(modes, directLbl, speedLbl)
   const scripted = el('p', 'wt-scripted', opts.liveHint ?? 'Illustration: these phones are scripted, not live. The real phones are further down the page.')
   const intro = el('p', 'wt-intro')
   const stripSlot = el('div')
@@ -481,22 +557,23 @@ export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } 
       return col
     }))
     track.replaceChildren(el('div', 'wt-rail'), fill)
-    ticks = mode.steps.map((st, i) => {
+    ticks = steps().map((st, i) => {
       const t = el('button', 'wt-tick')
-      t.style.left = `${(i / (mode.steps.length - 1)) * 100}%`
+      t.style.left = `${(i / (steps().length - 1)) * 100}%`
       t.setAttribute('aria-label', `Step ${i + 1}: ${st.title}`)
       t.title = st.title
       t.onclick = (): void => { pause(); show(i) }
       track.appendChild(t)
       return t
     })
-    note.textContent = mode.note ?? ''
-    note.hidden = !mode.note
+    directLbl.hidden = !mode.direct
+    note.textContent = directOnly && mode.direct ? 'Scripted: the asker switched on "Ask only my direct contacts", so the ask stops at the friend in the middle.' : (mode.note ?? '')
+    note.hidden = !note.textContent
   }
 
   function show(i: number): void {
-    index = Math.max(0, Math.min(mode.steps.length - 1, i))
-    const s = mode.steps[index]
+    index = Math.max(0, Math.min(steps().length - 1, i))
+    const s = steps()[index]
     banner.innerHTML = `<span class="wt-eyebrow">This happened now</span><h3>${s.title}</h3><p>${s.text}</p>`
     for (const p of mode.people) {
       const scr = screens.get(p.id)
@@ -509,17 +586,17 @@ export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } 
     light(index, s.path)
     hint.hidden = playing || index > 0
     ticks.forEach((t, k) => { t.classList.toggle('on', k === index); t.classList.toggle('done', k < index) })
-    fill.style.width = `${(index / (mode.steps.length - 1)) * 100}%`
-    count.textContent = `${index + 1} / ${mode.steps.length}`
+    fill.style.width = `${(index / (steps().length - 1)) * 100}%`
+    count.textContent = `${index + 1} / ${steps().length}`
     prev.disabled = index === 0
-    next.disabled = index === mode.steps.length - 1
+    next.disabled = index === steps().length - 1
   }
 
   function schedule(): void {
     clearTimeout(timer)
     if (!playing) return
     timer = setTimeout(() => {
-      if (index >= mode.steps.length - 1) { pause(); return }
+      if (index >= steps().length - 1) { pause(); return }
       show(index + 1)
       schedule()
     }, speed * 1000)
@@ -536,7 +613,7 @@ export function mountWalkthrough(host: HTMLElement, opts: { liveHint?: string } 
   function pause(): void { setPlaying(false) }
 
   play.onclick = (): void => {
-    if (!playing && index >= mode.steps.length - 1) show(0)
+    if (!playing && index >= steps().length - 1) show(0)
     setPlaying(!playing)
   }
   prev.onclick = (): void => { pause(); show(index - 1) }

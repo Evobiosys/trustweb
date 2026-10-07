@@ -294,6 +294,18 @@ export interface QueryEnvelope {
    * again, because the field is not where the "spent" state lives.
    */
   escalated?: true
+  /**
+   * "Ask only my direct contacts" (TrustWeb wave 3, Settings > Advanced).
+   * Present and `true` ONLY when the ASKER chose to reach their direct
+   * contacts and nobody beyond them: a device that receives such an ask
+   * answers from its own lines and never passes it on (no relay, no front
+   * door forwarding it to a second person). Same `undefined`-means-nothing
+   * convention as `relayed`/`escalated`; an older build ignores the field
+   * (parseQuery picks known fields only), so it is safe across a rollback.
+   * A relaying hop never sets it on the ask it composes, so `relayed` and
+   * `direct` together mean a hop ignored the asker's wish (never surfaced).
+   */
+  direct?: true
 }
 
 /** Bound for QueryEnvelope.freeText, same reasoning as wire.ts's CHAT_MAX_LEN

@@ -266,6 +266,26 @@ describe('encodeForQr / decodeFromQr round trip', () => {
     }
   })
 
+  // TrustWeb wave 3: QueryEnvelope.direct, "ask only my direct contacts" --
+  // same optional-`true`-only convention as `relayed` and `escalated` above.
+  it('round-trips a QueryEnvelope carrying direct: true', () => {
+    const direct: QueryEnvelope = { ...QUERY, direct: true }
+    expect(decodeFromQr(encodeForQr(direct))).toEqual(direct)
+  })
+
+  it('a QueryEnvelope with no direct field parses with direct left undefined -- every ask before wave 3', () => {
+    const decoded = decodeFromQr(encodeForQr(QUERY))
+    expect(decoded).not.toBeNull()
+    expect('direct' in (decoded as QueryEnvelope)).toBe(false)
+  })
+
+  it('rejects a QueryEnvelope whose direct field is present but not exactly true', () => {
+    for (const bad of [false, 1, 0, 'true', null, {}, []]) {
+      const raw = JSON.stringify({ ...QUERY, direct: bad })
+      expect(decodeFromQr(raw)).toBeNull()
+    }
+  })
+
   it('round-trips an AnswerEnvelope', () => {
     expect(decodeFromQr(encodeForQr(ANSWER))).toEqual(ANSWER)
   })

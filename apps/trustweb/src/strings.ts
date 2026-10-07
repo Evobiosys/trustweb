@@ -59,6 +59,9 @@ export const S = {
   setAdvanced: 'Advanced',
   setRingNames: 'Show ring names on the web',
   setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
+  // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
+  setDirectOnly: 'Ask only my direct contacts',
+  setDirectOnlyHint: 'Your asks go to the people you are connected with and stop there: each one answers from their own inventory and never passes your ask on to their friends or to a front door. Off: they may pass it on where they allowed it.',
   addDeviceShort: 'Add a device',
   // Your own name, editable any time: tap yourself in the web, or Settings (owner 2026-10-05).
   meNameTitle: 'Your name',
@@ -499,6 +502,7 @@ export const S = {
   queryNoPeers: 'You are not connected to anyone on TrustWeb yet. Tap the QR button at the top and let them scan your code.',
   queryAsked: (n: number) => (n === 1 ? 'Asked 1 person in your web.' : `Asked ${n} people in your web.`),
   queryWindow: 'Every answer is held for 30 seconds, so a "no" looks exactly like "no match".',
+  queryDirectOnly: 'Only your direct contacts are asked; nobody passes your ask on (Settings > Advanced).',
   queryWaiting: (s: number) => (s > 0 ? `Answers in about ${s} s` : 'Waiting for anyone still deciding...'),
   resultShared: (name: string) => `${name} chose to share`,
   resultNothing: 'No match',

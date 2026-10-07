@@ -86,6 +86,7 @@ export const HOSTED_SECRET = 'ab'.repeat(32)
  * batch, the Feed settings, a person's fediverse handle, an item's image.
  * Wave 2 (2026-10-07) adds its optional fields here too: a meeting's roughTimes, the audience "close",
  * an imported line's reviewedAt.
+ * Wave 3 (2026-10-07): askDirectOnly.
  * The regression net for rolling round B back: the pre-wave build must open
  * it, and its saves must keep every one of these fields.
  */
@@ -127,6 +128,8 @@ export function roundBState() {
   s.people[0].fediverse = { handle: 'anna@mastodon.social', show: true, reach: 'api' }
   // review-app-b: an address saved but never read yet (whether the instance allows this page is found out by the first read)
   s.people[1].fediverse = { handle: 'max@pixelfed.social', show: false }
+  // wave 3: asks go to direct contacts only (Settings > Advanced)
+  s.askDirectOnly = true
   return s
 }
 
@@ -140,5 +143,6 @@ export function roundBFields(s) {
     images: s.inventory.map((i) => i.imageId ?? null),
     tana: s.inventory.map((i) => i.source ?? null),
     audiences: s.inventory.map((i) => i.audience),
+    directOnly: s.askDirectOnly,
   })
 }
