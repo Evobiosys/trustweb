@@ -1,7 +1,7 @@
 /**
  * The Feed and Mastodon/Pixelfed as services (wave 1733 round B, items 1, 2),
  * in the real app, local only:
- *   1. Bar layout: Web | Record | Feed | Inventory; Settings > Feed off gives
+ *   1. Bar layout: off by default (wave 2, P9); switched on Web | Record | Feed | Inventory; Settings > Feed off gives
  *      exactly the old bar; the empty Feed explains what will show up; opening
  *      it sends nothing.
  *   2. Posts from a second phone: Ben shares a line in an answer; it shows in
@@ -98,8 +98,13 @@ async function main() {
     const a = await newPhone(browser, errors)
     await startPhone(a, vite.base, 'Jakob')
 
-    // 1. the bar, the empty Feed, nothing sent
-    ok('the bar: Web | Record | Feed | Inventory', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'Inventory']), JSON.stringify(await tabLabels(a)))
+    // 1. the bar, the empty Feed, nothing sent. Wave 2 (P9): the Feed is optional and early, OFF by default.
+    ok('the bar by default: Web | Record | Inventory (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Inventory']), JSON.stringify(await tabLabels(a)))
+    await openSettings(a)
+    ok('Settings > Feed stays, says "optional, early" and is off', /optional, early/.test(await a.locator('[data-feed-toggle]').innerText()) && (await a.locator('[data-feed-toggle]').getAttribute('aria-pressed')) === 'false')
+    await a.locator('[data-feed-toggle]').click()
+    ok('switched on: Web | Record | Feed | Inventory', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'Inventory']) && (await record(a)).feed.on === true)
+    await closeSheet(a)
     const sent = []
     a.on('request', (r) => sent.push(r.method() + ' ' + r.url()))
     await a.locator('nav.tabs button', { hasText: 'Feed' }).click()

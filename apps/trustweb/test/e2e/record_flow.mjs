@@ -308,8 +308,8 @@ async function main() {
     await page.getByRole('button', { name: 'Inventory on the left, Web on the right' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
-    // Round B (wave 1733): the Feed tab sits between Record and the right-hand tab (Settings > Feed can switch it off).
-    ok('settings swap Web and Inventory around Record (the Feed stays next to Record)', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Feed', 'Web']), JSON.stringify(tabs))
+    // Wave 2 (P9): the Feed is off by default, so the bar is the old three.
+    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     await page.getByRole('button', { name: 'More' }).click()
@@ -405,7 +405,12 @@ async function main() {
     })
     await p3.reload()
     await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-    const openSettings = async () => { await p3.getByRole('button', { name: 'More' }).click(); await p3.locator('.menu-item', { hasText: 'Settings' }).click() }
+    // The sheet redraws once the server's status is in (no server here: "did not answer"); wait for that, so no click lands on the old sheet.
+    const openSettings = async () => {
+      await p3.getByRole('button', { name: 'More' }).click()
+      await p3.locator('.menu-item', { hasText: 'Settings' }).click()
+      await p3.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
+    }
     await openSettings()
     const onLabel = async (attr) => (await p3.locator(`.radio.on[${attr}]`).allInnerTexts()).map((t) => t.split('\n')[0].trim())
     ok('Settings > Recording: an old TalkWeave opt-in reads as "TalkWeave on this computer"', JSON.stringify(await onLabel('data-transcription')) === '["TalkWeave on this computer"]', JSON.stringify(await onLabel('data-transcription')))

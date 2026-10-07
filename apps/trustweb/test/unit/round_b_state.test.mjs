@@ -29,10 +29,10 @@ describe('the round-B record', () => {
     expect(readHosting(s)?.secret).toBe(HOSTED_SECRET)
     expect(lastImport(s)?.id).toBe('imp-batch-2')
   })
-  it('a pre-wave record reads as before: Automatic, Feed on, nothing hosted, nothing imported', () => {
+  it('a pre-wave record reads as before: Automatic, Feed off (wave 2, P9), nothing hosted, nothing imported', () => {
     const s = preWaveState()
     expect(transcriptionChoice({ ...s, talkWeaveLocal: false })).toBe(TranscriptionChoice.Auto)
-    expect(feedOn(s)).toBe(true)
+    expect(feedOn(s)).toBe(false)
     expect(readHosting(s)).toBe(null)
     expect(lastImport(s)).toBe(null)
     expect(() => buildFeed(s)).not.toThrow()

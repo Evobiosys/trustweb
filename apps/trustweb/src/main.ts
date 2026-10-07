@@ -1227,11 +1227,19 @@ function fitRings(): void {
 }
 window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
 
+/** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
+function openQuery(): void {
+  queryOpen = true
+  searchOpen = false
+  if (screen === Screen.Web) render()
+  else go(Screen.Web)
+}
+
 function queryFab(): HTMLElement {
   const call = queryStyle() === QueryStyle.Call
   const b = el('button', {
-    class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery,
-    onclick: () => { queryOpen = true; searchOpen = false; render() },
+    class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
+    onclick: openQuery,
   })
   b.innerHTML = icon(call ? 'call' : 'query')
   b.append(call
@@ -3149,6 +3157,10 @@ function screenInventory(): Node[] {
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
+  // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
+  const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
+  call.innerHTML = icon('call')
+  call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
   return [
     header(S.invTitle, { after: gear }),
     el('div', { class: 'scroll pad' }, [
@@ -3166,6 +3178,7 @@ function screenInventory(): Node[] {
       ])),
       backup.card(),
     ]),
+    call,
     requests,
   ]
 }

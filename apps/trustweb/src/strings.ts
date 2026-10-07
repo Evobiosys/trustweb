@@ -830,8 +830,8 @@ export const S = {
     'where you switch it on: the public posts of people you follow on Mastodon or Pixelfed',
   ],
   feedFoot: 'Only what this phone already holds. Opening the Feed sends nothing anywhere (public posts from Mastodon or Pixelfed only where you switched them on).',
-  feedToggle: 'Show the Feed',
-  feedToggleHint: 'Its own tab in the bottom bar. Off: the bar is as it was.',
+  feedToggle: 'Show the Feed (optional, early)',
+  feedToggleHint: 'An early, optional view: its own tab in the bottom bar. Off (the default): the bar is Web, Record and Inventory.',
 
   // Mastodon and Pixelfed as services (wave 1733 round B, item 2; no code of theirs in the app).
   fedTitle: 'Mastodon or Pixelfed',

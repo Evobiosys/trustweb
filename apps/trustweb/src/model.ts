@@ -412,12 +412,12 @@ export interface AppState {
   serverTranscriptionConsentAt?: number
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
-  /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed on, nothing from the fediverse. */
+  /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
 }
 
 export interface FeedSettings {
-  /** The Feed tab in the bottom bar. Absent: on. Off: the bar is exactly as before. */
+  /** The Feed tab in the bottom bar. Absent: off (wave 2, P9: optional and later). Off: the bar is exactly as before. */
   on?: boolean
   /** "Also show posts from" people's Mastodon / Pixelfed addresses. Absent: off. */
   remote?: boolean
@@ -429,9 +429,9 @@ export interface FeedSettings {
   myPixelfed?: string
 }
 
-/** The Feed is on unless switched off. */
+/** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
 export function feedOn(s: Pick<AppState, 'feed'>): boolean {
-  return s.feed?.on !== false
+  return s.feed?.on === true
 }
 
 export interface HostingState {
