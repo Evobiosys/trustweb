@@ -32,12 +32,13 @@
 #                              "Live demo" card on idea2.site/trustweb/ below. Deploy it
 #                              ALONE with ONLY_TRUSTWEB=1 ./scripts/deploy_wot.sh --
 #                              leaves every /wot/* demo untouched.
-#   .../trustweb/demo/           generic seeded demo, no real people (2026-09-27).
+#   .../trustweb/demo/           generic seeded demo, no real people but Jakob (the owner's ten public
+#                                allow-in-advance lines, marked dummy, 2026-10-07).
 #   .../trustweb/emergent-demo/  Emergent Ventures grantee personas, plus Tyler Cowen
 #                                at "Intending to connect" -- no other real person.
 #   .../trustweb/ea-demo/        effective-giving/EA conference personas, plus William
 #                                MacAskill at "Intending to connect" (ea-demo ONLY,
-#                                2026-09-27 demo-edit-3) -- no other real person.
+#                                2026-09-27 demo-edit-3) -- no other real person but Jakob (every context).
 #                              One build (apps/trustweb/vite.config.mjs has all three
 #                              as extra rollupOptions.input entries alongside index.html
 #                              and solo.html), context chosen by path at runtime

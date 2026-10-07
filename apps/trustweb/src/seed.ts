@@ -9,7 +9,8 @@
  * types and rings, so a funder trying the Query flow has several different
  * things to ask about without the "People" list feeling like a phonebook:
  *
- *   - Generic  (demo/):           fictional contacts only, no real people.
+ *   - Generic  (demo/):           fictional contacts only, no real people (Jakob, the
+ *                                 owner, aside: see the end of this comment).
  *   - Emergent (emergent-demo/):  fictional Emergent Ventures grantee
  *                                 personas, plus Tyler Cowen at
  *                                 Ring.Intending -- see below.
