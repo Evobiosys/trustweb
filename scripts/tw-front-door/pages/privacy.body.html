@@ -1,12 +1,15 @@
 {{BACK}}
+{{AI_DRAFT}}
 <h1>Privacy Policy</h1>
-<p class="lede">In plain words: what stays on your phone, what passes through our server, and what the website does.</p>
+<p class="lede">In plain words: what stays on your phone, what passes through our server, what the website does, and what you can ask of us. The <a href="data-policy.html">data policy</a> lists every kind of data, where it lives, how long it stays and how to delete it.</p>
 <p class="stamp">Experimental service, 2026-10-07</p>
 
 <section id="who">
   <p class="eyebrow">Who is responsible</p>
-  <h2>Jakob Possert-Bienzle, EvoBioSys, Vienna</h2>
-  <p>See the <a href="imprint.html">imprint</a>. Questions about your data: <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>.</p>
+  <h2>Jakob Possert-Bienzle, Vienna</h2>
+  <p>The controller (Verantwortlicher, Art. 4 no. 7 GDPR / DSGVO) is Jakob Possert-Bienzle, a sole proprietor (Einzelunternehmen) in Vienna, Austria,
+  who runs TrustWeb as part of EvoBioSys. See the <a href="imprint.html">imprint</a>. Questions about your data, and every request under "Your rights" below:
+  <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>.</p>
 </section>
 
 <section id="phone">
@@ -26,25 +29,34 @@
     <li><b>The relay.</b> It carries messages between phones: asks, answers and the links to shared meetings.
     They are encrypted on one phone and opened on the other, so the relay cannot read them. It can see
     routing details (which address a message is for, from which network address it was sent, and when).
-    The one exception is the very first connection step between two phones, sent before they share a
+    It holds a message it could not deliver for 72 hours at most (older ones are cleared when the relay next handles a message), and drops it as soon as the receiving phone confirms it.
+    The one exception to the encryption is the very first connection step between two phones, sent before they share a
     key: that message is not encrypted.</li>
     <li><b>Encrypted backup.</b> A backup is encrypted on your phone before it is uploaded. The
-    server keeps ciphertext it cannot read, with its size and when it was last written.</li>
+    server keeps ciphertext it cannot read, with its size and when it was last written. There is no
+    automatic expiry for a backup, and no delete button for it yet; the <a href="data-policy.html#d-backup">data policy</a> says what you can do.</li>
     <li><b>Sending a meeting.</b> The notes and transcript are encrypted with a fresh key and
     stored on the same server. The key is only in the link you send, and that link reaches the other
     person as an encrypted message, so the server never holds the key.</li>
-    <li><b>The demo inventory.</b> A demo account can be connected to "Demo inventory", a small
-    always-on TrustWeb contact that runs on this server and holds made-up lines. An ask sent to it is
-    opened there and matched against those lines. It is also passed on, with the name you use in the
-    demo, to the phone of the person who runs it (named in the <a href="imprint.html">imprint</a>), who
-    can answer it live or not at all. Its log keeps counts and outcomes, never the text of an ask or a name.</li>
+    <li id="front-doors"><b>The front doors.</b> A "front door" is a small always-on TrustWeb contact that runs on this server, with no person
+    at the keyboard. There are two, both run by the person named in the <a href="imprint.html">imprint</a>: the "Demo inventory",
+    which holds made-up lines, and a personal one, which answers only from lines its owner allowed in advance. Both keep the name and the
+    identifier of each phone that connected to them, in a file only the service can read. An ask sent to a front door is opened there and matched
+    against its lines, and it is also passed on, with the name you use, to the phone of the person who runs it, who can answer it live or not at
+    all. The front doors keep no copy of an ask on disk, and their logs keep counts and outcomes, never the text of an ask or a name.</li>
+    <li id="short-links"><b>Short connect links.</b> Where the app offers a short link next to the long one, the long connect link (which carries the name you
+    chose and what another phone needs to connect to yours) is stored on our server under a random ten-character id for up to 30 days, and the short link
+    opens it. We do not write the link or its id to any log. The long link is a capability you already share openly, for example in a QR code, and it
+    is not encrypted on the server beyond the connection itself, so share a short link only where you would share the long one. Making one is limited
+    per network address (counted in memory). You can always show and use the long link instead.</li>
     <!--IF:soon--><li><b>Hosted recordings (starting soon, experimental).</b> When this is switched on,
     your recordings will be stored on the server as ciphertext it cannot read, with each one's size,
-    length and when it was last written or opened, counted against your allowance. A recording that
-    is neither written nor opened for 90 days may be removed.</li><!--/IF-->
+    length and when it was last written or opened, counted against your allowance. You can delete a recording from the app at any time.
+    A recording that is neither written nor opened for 90 days may be removed; that clean-up is run by hand today, not on a timer.</li><!--/IF-->
     <!--IF:live--><li><b>Hosted recordings.</b> Your recordings are stored on the server as ciphertext it
     cannot read, with each one's size, length and when it was last written or opened, counted against
-    your allowance. A recording that is neither written nor opened for 90 days may be removed.</li><!--/IF-->
+    your allowance. You can delete a recording from the app at any time. A recording that is neither written nor opened for 90 days may be
+    removed; that clean-up is run by hand today, not on a timer.</li><!--/IF-->
     <li id="transcription"><b>Server transcription<!--IF:tx-off--> (coming, switched off today)<!--/IF--><!--IF:tx-on--> (experimental)<!--/IF-->.</b>
     <!--IF:tx-off-->It is switched off today, and nothing described here happens. When it is switched on and you choose it,<!--/IF--><!--IF:tx-on-->If you choose it,<!--/IF-->
     the audio of a recording leaves your phone.
@@ -61,26 +73,28 @@
     <!--IF:prov-berget-only-->It goes through our server to Berget AI, a company that runs its servers in Sweden. Berget states that no data leaves Sweden
     and that it keeps nothing; we rely on that statement and cannot check it. The audio goes nowhere else.
     Unlike backups and hosted recordings, this audio is not encrypted for the server or Berget: they handle it as audio.<!--/IF-->
-    Our server keeps neither the audio nor the text (the audio sits in a temporary file only while it is being transcribed);
-    it counts the minutes used. Free while we test: up to 10 hours of audio per person, within a daily budget
+    Our server keeps neither the audio nor the text (the audio sits in a temporary file only while it is being transcribed, and the temporary folder is emptied when the server starts);
+    it counts the seconds used. Free while we test: up to 10 hours of audio per person, within a daily budget
     shared by everyone. A transcription that fails is not counted against that allowance and is not charged to you. The text comes back to your phone, and the times of the sentences may be approximate.</li>
-    <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
-    (backup, hosting, transcription, feedback, web results) use them only in memory, to limit abuse; the web
-    server writes no access log.</li>
+    <li id="addresses"><b>Network addresses</b> reach the server with every request. TrustWeb's own services
+    (backup, hosting, transcription, feedback, web results, short links) count requests per network address in memory only, to limit abuse: nothing about the count is
+    written to disk and it is gone when the service restarts. That is not anonymous: while it is held, it is tied to your address.
+    The web server keeps no access log. Its error log, in the server's system journal, can note the network address and the page requested when a request fails
+    (for example while a service restarts), never the content of a request. TrustWeb's own services write log lines that hold a method and a status, or an outcome, and no address. Two older services on the same server, the newsletter service and the ReBioSys relay that the main page's waitlist form used before 2026-10-07, do write the requester's network address in their system logs; see the <a href="data-policy.html#d-logs">data policy</a>.</li>
   </ul>
 </section>
 
 <section id="web-results">
   <p class="eyebrow">Web results</p>
   <h2>Using web results</h2>
-  <p>Where we have switched it on, TrustWeb can show a few web results inside the app, below the answer from your own web.
+  <p>TrustWeb can show a few web results inside the app, below the answer from your own web.
   They are outside TrustWeb and untrusted. Powered by Brave.</p>
   <ul>
     <li><b>What you agree to.</b> When you use "Show results here", you agree not to scrape, store, cache or redistribute the results.
     They come from Brave, and they are shown only to you, for the moment.</li>
     <li><b>Your search words.</b> The words you type into the web results go through our server to Brave Search, a Brave based
     search engine, without your network address. Brave may log them under its own terms.</li>
-    <li><b>What we keep.</b> Our server keeps no copy of your words or of the results. To limit abuse it counts searches per network address, in memory only (never written to disk, gone when the server restarts), and its log notes only the engine and a status.</li>
+    <li><b>What we keep.</b> Our server keeps no copy of your words or of the results. To limit abuse it counts searches per network address, in memory only (never written to disk, gone when the server restarts, and not anonymous while held), and its log notes only the engine and a status.</li>
     <li><b>The plain links</b> to Google, Ecosia, Qwant and Brave work differently: your browser, not our server, sends the words, and only when you tap one.</li>
   </ul>
 </section>
@@ -89,13 +103,14 @@
   <p class="eyebrow">This website</p>
   <h2>What it does when you visit</h2>
   <ul>
-    <li>No analytics, no tracking cookies, no advertising.</li>
+    <li>No analytics, no tracking cookies, no advertising, and nothing stored in your browser.</li>
     <!--IF:org--><li>Typefaces load from Google Fonts. That means your browser contacts Google, and Google
     receives your network address.</li><!--/IF-->
     <!--IF:com--><li>Typefaces come from your own device. This site fetches no fonts, scripts or images from anyone else.</li><!--/IF-->
-    <li>As of 2026-10-06 the web server is not configured to write access logs for this site.</li>
-    <li><b>The waitlist form</b> sends your email address to our server, only when you press the button. The
-    optional newsletter box sends it to our newsletter service.</li>
+    <li>The web server is not configured to write access logs for these sites.</li>
+    <li><b>The "notify me" form on the main page</b> sends your email address to our server, only when you press the button, and
+    keeps it for one note when TrustWeb is stable. The optional newsletter box passes it on to our newsletter service (see below).
+    It is stored like a feedback message (next point).</li>
     <li><b>The feedback form</b> sends what you type, the kind of message and the page you wrote from. It sends your
     email address only if you tick a box. All of it is stored on our server in Switzerland with the time to the minute, in
     a file only the server can read. We do not store your network address or browser details. We read the messages by hand.</li>
@@ -103,7 +118,8 @@
     "Write back to me about this message": we keep your address so we can answer.
     "Notify me when it is ready": we keep it for one note when TrustWeb is ready.
     "Stay informed with our newsletter": we keep it, and our server passes it on to our newsletter service, which first sends
-    you a confirmation email; you are on the list only after you click the link in it. You can ask us at any time to take you off.
+    you a confirmation email; you are on the list only after you click the link in it. You can ask us at any time to take you off,
+    or use the unsubscribe link in any newsletter email, which deletes your address from that service.
     The newsletter service runs on our own server.</li>
   </ul>
 </section>
@@ -112,25 +128,42 @@
   <p class="eyebrow">Third parties</p>
   <h2>Who else is involved</h2>
   <ul>
-    <li><b>Infomaniak</b>, in Switzerland: hosting of our server, which holds the relay, backups and hosted recordings.</li>
+    <li><b>Infomaniak</b>, in Switzerland: hosting of our server, which holds the relay, backups, hosted recordings, the front doors and the newsletter service.</li>
     <!--IF:prov-openrouter--><li><b>OpenRouter</b> and the inference provider behind it, in the United States: only for server transcription, only if it is
     switched on and you choose it. See <a href="#transcription">above</a>.</li><!--/IF-->
     <!--IF:prov-berget--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. <b>OpenRouter</b> and the
     inference provider behind it, in the United States: only when Berget cannot take a recording. See <a href="#transcription">above</a>.</li><!--/IF-->
     <!--IF:prov-berget-only--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. See
     <a href="#transcription">above</a>.</li><!--/IF-->
-    <li><b>Brave Software</b>, in the United States: Brave Search, only for web results, only if they are switched on and you choose "Show results here". See <a href="#web-results">above</a>.</li>
+    <li><b>Brave Software</b>, in the United States: Brave Search, only for web results, only if you choose "Show results here". See <a href="#web-results">above</a>.</li>
     <!--IF:org--><li><b>Google Fonts</b>: typefaces on this site.</li><!--/IF-->
     <li>No advertising networks, no analytics providers.</li>
+  </ul>
+  <p>For the two providers in the United States, the safeguards for a transfer of personal data out of the EU (for example the EU-US Data Privacy
+  Framework or standard contractual clauses) are <span class="tbc">to confirm</span>. That is one more reason these two are used only when you choose them.</p>
+</section>
+
+<section id="bases">
+  <p class="eyebrow">Why we may do this</p>
+  <h2>Legal bases, in plain words</h2>
+  <ul>
+    <li><b>To give you what you asked for</b> (Art. 6(1)(b) GDPR): the relay, backup, hosted recordings, sending a meeting, the front doors and short links exist only because you use them.</li>
+    <li><b>Your consent</b> (Art. 6(1)(a)): audio leaving your phone for transcription, "Show results here", and every box you tick or form you send with your email address. You can withdraw it at any time by writing to us; that does not affect what was done before.</li>
+    <li><b>Our legitimate interest in keeping the service safe</b> (Art. 6(1)(f)): the per-address counters that limit abuse, and the short-lived technical logs. You may object to this.</li>
+    <li>We do not use your data for advertising, profiling or analytics, and we do not sell it.</li>
   </ul>
 </section>
 
 <section id="rights">
   <p class="eyebrow">Your rights</p>
-  <h2>Access, deletion, complaint</h2>
-  <p>You can ask us what we hold about you, and ask us to delete it, by writing to
-  <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>. Most of your data is only on
-  your phone, where you control it. You can also complain to the Austrian data protection
+  <h2>Access, correction, deletion, complaint</h2>
+  <p>You can ask us what we hold about you (access), to correct it, to delete it (erasure), to restrict its use, to receive it in a usable form
+  (portability), and you can object to processing based on our legitimate interest and withdraw a consent. Write to
+  <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>; we answer within one month. Most of your data is only on
+  your phone, where you control it. Ciphertext on our server (backups, hosted recordings, sent meetings) cannot be tied to you by us, because we hold no
+  account, name or email address for it: to find yours we need an identifier that only your phone can derive. How that works is
+  <span class="tbc">to confirm</span>; the <a href="data-policy.html">data policy</a> says what is possible today.</p>
+  <p>You can also complain to the Austrian data protection
   authority, the <a href="https://www.dsb.gv.at">Datenschutzbehörde</a>.</p>
 </section>
 
@@ -138,5 +171,5 @@
   <p class="eyebrow">Status</p>
   <h2>An experimental first version</h2>
   <p>TrustWeb is an experiment. This page describes how it works on 2026-10-07 and will change
-  as it does. The date above shows the version you are reading.</p>
+  as it does. The date above shows the version you are reading. Applicable law: the GDPR and the Austrian Datenschutzgesetz.</p>
 </section>

@@ -1,4 +1,4 @@
-"""Tests of the wave-4 site changes in scripts/tw-front-door/tw_site.py (the subpages need no source page).
+"""Tests of the wave-4 and wave-5 site changes in scripts/tw-front-door/tw_site.py (the subpages need no source page).
 
 python3 -I -m unittest discover -s scripts -p 'test_tw_site.py'
 """
@@ -21,22 +21,26 @@ OLD_PHRASES = re.compile(
 BINDING = "you agree not to scrape, store, cache or redistribute the results"
 
 
-def flags(which: site.Site, *, draft: bool = False) -> site.Flags:
+def flags(
+    which: site.Site, *, draft: bool = False, publish_terms: bool = False
+) -> site.Flags:
     host = site.ORG_HOST if which is site.Site.ORG else site.COM_HOST
     return site.Flags(
         draft=draft,
         services_live=True,
         transcribe_live=False,
-        publish_terms=False,
+        publish_terms=publish_terms,
         site=which,
         site_host=host,
         app_base="https://app.trustintheweb.org",
     )
 
 
-def pages(which: site.Site, *, draft: bool = False) -> dict[str, str]:
+def pages(
+    which: site.Site, *, draft: bool = False, publish_terms: bool = False
+) -> dict[str, str]:
     """Every subpage of the site (the org front page needs the fetched source and is checked by verify_site.mjs)."""
-    f = flags(which, draft=draft)
+    f = flags(which, draft=draft, publish_terms=publish_terms)
     return {f"{p.name}.html": site.build_subpage(p, FRAG, f) for p in site.pages_for(f)}
 
 
@@ -52,11 +56,92 @@ class Subpages(unittest.TestCase):
                 self.assertIn("Brave may log them under its own terms", text)
                 self.assertIn("keeps no copy of your words or of the results", text)
 
-    def test_terms_exist_only_in_the_org_draft_and_carry_the_binding_line(self) -> None:
-        self.assertNotIn("terms.html", pages(site.Site.ORG))
-        self.assertNotIn("terms.html", pages(site.Site.COM, draft=True))
-        terms = re.sub(r"\s+", " ", pages(site.Site.ORG, draft=True)["terms.html"])
-        self.assertIn(BINDING, terms)
+    def test_terms_are_built_only_when_published_and_then_on_both_sites(self) -> None:
+        for which in site.Site:
+            with self.subTest(site=which.value):
+                self.assertNotIn("terms.html", pages(which))
+                for kwargs in ({"draft": True}, {"publish_terms": True}):
+                    built = pages(which, **kwargs)
+                    self.assertIn(BINDING, re.sub(r"\s+", " ", built["terms.html"]))
+                    self.assertIn("AGPL-3.0-or-later", built["terms.html"])
+                    self.assertNotIn("not in force", built["terms.html"])
+
+    def test_every_legal_page_opens_with_the_ai_banner_on_both_sites(self) -> None:
+        legal = ("privacy.html", "data-policy.html", "terms.html", "imprint.html")
+        for which in site.Site:
+            built = pages(which, publish_terms=True)
+            for name in legal:
+                with self.subTest(site=which.value, page=name):
+                    self.assertIn(name, built)
+                    body = built[name].split('<main id="main"', 1)[1]
+                    self.assertLess(
+                        body.index("AI drafted, subject to review."), body.index("<h1")
+                    )
+            self.assertNotIn(
+                '<aside class="banner ai-draft"', built.get("feedback.html", "")
+            )
+
+    def test_legal_footer_links_follow_the_publishing_flag(self) -> None:
+        for which in site.Site:
+            footer = pages(which, publish_terms=True)["privacy.html"].split(
+                'class="sitefooter"', 1
+            )[1]
+            self.assertLess(
+                footer.index('href="privacy.html">Privacy'),
+                footer.index('href="data-policy.html"'),
+            )
+            self.assertIn('href="terms.html">Terms</a>', footer)
+            self.assertNotIn(
+                'href="terms.html">Terms</a>', pages(which)["privacy.html"]
+            )
+
+    def test_the_data_policy_answers_five_questions_per_data_kind(self) -> None:
+        for which in site.Site:
+            html = pages(which)["data-policy.html"]
+            sections = re.findall(
+                r'<section id="(d-[a-z-]+)">(.*?)</section>', html, re.DOTALL
+            )
+            self.assertEqual(len(sections), 16)
+            for ident, body in sections:
+                with self.subTest(site=which.value, section=ident):
+                    self.assertEqual(
+                        re.findall(r"<dt>(.*?)</dt>", body),
+                        [
+                            "What",
+                            "Where",
+                            "How long",
+                            "Who can read it",
+                            "How to delete it",
+                        ],
+                    )
+
+    def test_no_legal_page_claims_anonymous_counters_or_an_invented_address(
+        self,
+    ) -> None:
+        for which in site.Site:
+            for name, html in pages(which, publish_terms=True).items():
+                with self.subTest(site=which.value, page=name):
+                    self.assertIsNone(
+                        re.search(
+                            r"anonymous (in-memory )?counters", html, re.IGNORECASE
+                        )
+                    )
+        imprint = pages(site.Site.ORG)["imprint.html"]
+        self.assertGreaterEqual(imprint.count("[to be completed by the owner]"), 6)
+        self.assertIsNone(re.search(r"\b\d{4}\s+Wien\b|ATU\s?\d{8}", imprint))
+
+    def test_the_faq_section_comes_from_the_one_faq_fragment(self) -> None:
+        f = flags(site.Site.ORG)
+        section = site.faq_section(FRAG, f)
+        self.assertEqual(section.count('<details class="q"'), 10)
+        self.assertIn('<a href="faq.html">All questions', section)
+        self.assertNotIn("<!--", section.replace("<!-- ===", "").replace("=== -->", ""))
+
+    def test_the_waitlist_copy_is_exactly_what_jakob_dictated(self) -> None:
+        self.assertEqual(
+            site.WAITLIST_COPY,
+            "You can use it right now. If you want to be notified once it is stable, leave your email here.",
+        )
 
     def test_com_fetches_no_fonts_and_says_so_on_privacy(self) -> None:
         com = pages(site.Site.COM)

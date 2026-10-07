@@ -25,16 +25,13 @@
     :root:not([data-theme="light"]) .tw-btn:focus-visible{outline-color:#8fa7d8}
   }
 
-  /* top bar: brand left, [Demo] [Install] right, where people look for sign in */
+  /* top bar: [Demo] [Install] on the right, where people look for sign in (the site name no longer sits top left, wave 5) */
   .sitebar{position:relative; z-index:30; border-bottom:1px solid var(--line); background:var(--paper)}
   .sitebar-in{padding:10px 28px; display:flex;
-    align-items:center; justify-content:space-between; gap:12px}
-  .sitebar-brand{font:600 1.15rem var(--serif); color:var(--ink); text-decoration:none; letter-spacing:.01em}
+    align-items:center; justify-content:flex-end; gap:12px}
   .sitebar-actions{display:flex; align-items:center; gap:8px; flex:none}
   .draftstrip{background:var(--gold-soft); color:var(--ink); border-bottom:1px solid var(--line);
     text-align:center; padding:6px 20px; font:600 .78rem var(--mono); letter-spacing:.04em}
-  .sitebar-brand b{font-weight:680}
-  .sitebar-brand{font-weight:440}
   /* second row of the bar: the one link to the other site, right under the buttons.
      title carries the target; the hover also writes it out (data-url) */
   .sitebar-sub{padding:0 28px 8px; display:flex; justify-content:flex-end}
@@ -48,7 +45,6 @@
   @media (max-width:480px){
     .sitebar-in{padding:8px 16px}
     .sitebar-sub{padding:0 16px 7px}
-    .sitebar-brand{font-size:1rem}
     .tw-btn{padding:0 13px}
   }
 
@@ -114,7 +110,11 @@
     .sf-brand{grid-column:1 / -1}
   }
 
-  /* "draft, not in force" banner on terms.html */
+  /* "AI drafted, subject to review" banner at the top of every legal page, and the "to confirm" marker
+     for a fact that is not settled yet (a gold chip, ink on gold-soft, so it reads in both themes) */
   .banner{margin:0 0 22px; padding:14px 18px; border-radius:var(--radius-sm);
     background:var(--cochineal-soft); border:1px solid var(--cochineal); color:var(--ink)}
   .banner b{color:var(--cochineal)}
+  .banner.ai-draft{font-size:.95rem}
+  .tbc{display:inline-block; padding:0 7px; border-radius:99px; background:var(--gold-soft); color:var(--ink);
+    border:1px solid var(--gold); font:600 .78rem/1.5 var(--mono); letter-spacing:.02em}

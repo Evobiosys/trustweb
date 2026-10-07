@@ -21,7 +21,7 @@ What it builds (see the fragments next to this file):
                     regex replacements (a source that drifted fails loudly) plus
                     the committed fragments
        why.html, feedback.html, faq.html, imprint.html, privacy.html, whitepaper.html
-       terms.html   only with --draft or --publish-terms (Jakob has not approved it)
+       data-policy.html (wave 5), terms.html only with --draft or --publish-terms (both sites)
        No pricing anywhere: only a link "Do you need hosting?" to the com site.
   com: index.html (the hosted service), pricing.html, feedback.html, imprint.html, privacy.html
        (feedback, imprint and privacy are the same fragments as on the org site)
@@ -167,7 +167,15 @@ class Flags:
             "SITE_KIND": self.site.value,
             "TX_ROUTE": TX_ROUTE[self.transcribe_provider],
             "BACK": back,
+            "AI_DRAFT": AI_DRAFT_BANNER,
         }
+
+
+# Wave 5: every legal page opens with this banner (Jakob 2026-10-07: "ai drafted subject to review").
+AI_DRAFT_BANNER = (
+    '<aside class="banner ai-draft" role="note"><b>AI drafted, subject to review.</b> '
+    "This text was written with the help of AI and has not been through a legal review yet.</aside>"
+)
 
 
 @dataclass(frozen=True)
@@ -200,19 +208,25 @@ ORG_PAGES: tuple[Page, ...] = (
     Page(
         "imprint",
         "Imprint",
-        "Imprint (Impressum, Offenlegung) of the TrustInTheWeb sites.",
+        "Imprint (Impressum, Offenlegung) of the TrustInTheWeb sites. AI drafted, subject to review.",
         "pages/imprint.body.html",
     ),
     Page(
         "privacy",
         "Privacy Policy",
-        "What stays on your phone, what passes through the server, what this website does.",
+        "What stays on your phone, what passes through the server, what this website does. AI drafted, subject to review.",
         "pages/privacy.body.html",
     ),
     Page(
+        "data-policy",
+        "Data policy",
+        "Every kind of data TrustWeb handles: what, where it lives, how long, who can read it, how to delete it. AI drafted, subject to review.",
+        "pages/data-policy.body.html",
+    ),
+    Page(
         "terms",
-        "Terms (draft)",
-        "Draft terms for the experimental TrustWeb service. Not in force.",
+        "Terms",
+        "The terms for using TrustWeb and the experimental hosted service. AI drafted, subject to review.",
         "pages/terms.body.html",
     ),
     Page(
@@ -237,8 +251,7 @@ COM_PAGES: tuple[Page, ...] = (
         "com/pages/pricing.body.html",
     ),
     ORG_PAGES[1],  # feedback (same fragment as the website)
-    ORG_PAGES[3],  # imprint
-    ORG_PAGES[4],  # privacy
+    *(p for p in ORG_PAGES if p.name in ("imprint", "privacy", "data-policy", "terms")),
 )
 
 
@@ -299,35 +312,67 @@ def fill_tokens(text: str, frag_dir: Path, flags: Flags) -> str:
     return TOKEN_RE.sub(lambda m: values.get(m.group(1), m.group(0)), expanded)
 
 
-def newsletter_script() -> str:
-    """Second submit listener on the join form: subscribes to the newsletter when ticked."""
+WAITLIST_COPY = "You can use it right now. If you want to be notified once it is stable, leave your email here."
+# Wave 5: the source page's join form posted straight to the ReBioSys relay (idea2.site/rebiosys/api/waitlist) and
+# the newsletter box straight to the subscriber service. Neither allows the TrustInTheWeb origins in its CORS
+# answer, so a browser on trustintheweb.org could not send them. The form now posts once to this site's own
+# feedback route ({{API}}/feedback, which allows the TrustInTheWeb origins, stores no network address, and itself
+# forwards a ticked newsletter box to the subscriber service with double opt-in).
+JOIN_SCRIPT_RE = (
+    r'<script>\n\(function \(\) \{\n  "use strict";\n  var form = document\.getElementById\("join-form"\);'
+    r".*?\}\)\(\);\n</script>\n"
+)
+
+
+def join_script() -> str:
+    """The notify form: one JSON POST to the feedback route, notify:true, newsletter when the box is ticked."""
     return (
         "<script>\n"
         "(function () {\n"
+        '  "use strict";\n'
+        '  var FEEDBACK_URL = "{{API}}/feedback";\n'
+        "  var TIMEOUT_MS = 15000;\n"
         '  var form = document.getElementById("join-form");\n'
+        '  var emailEl = document.getElementById("j-email");\n'
         '  var nl = document.getElementById("j-newsletter");\n'
-        '  var status = document.getElementById("j-nl-status");\n'
-        "  if (!form || !nl || !status) return;\n"
-        "  function validEmail(v) { return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v); }\n"
-        '  form.addEventListener("submit", function () {\n'
-        "    if (!nl.checked) return;\n"
-        '    status.className = "join-msg";\n'
-        '    status.textContent = "";\n'
-        '    var emailEl = document.getElementById("j-email");\n'
-        "    var email = emailEl && emailEl.value.trim();\n"
-        "    if (!email || !validEmail(email)) return; // the form's own required-field/pattern error already covers this\n"
-        '    fetch("https://subscriber.questhub.eco/subscribe", {\n'
+        '  var errEl = document.getElementById("j-err");\n'
+        '  var msgEl = document.getElementById("j-msg");\n'
+        '  var nlMsgEl = document.getElementById("j-nl-status");\n'
+        '  var btn = document.getElementById("j-submit");\n'
+        "  if (!form || !emailEl || !nl || !errEl || !msgEl || !nlMsgEl || !btn) return;\n"
+        "  function validEmail(v) { return v.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v); }\n"
+        "  function setMsg(kind, text) {\n"
+        '    msgEl.className = "join-msg " + kind;\n'
+        "    msgEl.textContent = text;\n"
+        "  }\n"
+        '  form.addEventListener("submit", function (ev) {\n'
+        "    ev.preventDefault();\n"
+        "    var email = emailEl.value.trim();\n"
+        "    var bad = !validEmail(email);\n"
+        '    errEl.style.display = bad ? "block" : "none";\n'
+        '    if (bad) { setMsg("", ""); return; }\n'
+        "    btn.disabled = true;\n"
+        '    nlMsgEl.className = "join-msg";\n'
+        '    nlMsgEl.textContent = "";\n'
+        "    var controller = new AbortController();\n"
+        "    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);\n"
+        "    fetch(FEEDBACK_URL, {\n"
         '      method: "POST",\n'
         '      headers: { "Content-Type": "application/json" },\n'
-        '      body: JSON.stringify({ email: email, project: "questhub", source: "trustweb", gdpr: true })\n'
+        "      signal: controller.signal,\n"
+        '      body: JSON.stringify({ kind: "feedback", text: "", page: "main page: notify me when stable", notify: true, newsletter: nl.checked, email: email })\n'
         "    }).then(function (r) {\n"
+        '      if (r.status === 429) { setMsg("err", "Several requests came in a short time. Please try again in a while."); return; }\n'
         '      if (!r.ok) throw new Error("http_" + r.status);\n'
-        '      status.className = "join-msg ok";\n'
-        '      status.textContent = "Check your inbox to confirm the newsletter.";\n'
+        '      setMsg("ok", "Thank you. We will write to you once, when it is stable.");\n'
+        "      if (nl.checked) {\n"
+        '        nlMsgEl.className = "join-msg ok";\n'
+        '        nlMsgEl.textContent = "A confirmation email will follow; you join the newsletter only after you click the link in it.";\n'
+        "      }\n"
+        "      form.reset();\n"
         "    }).catch(function () {\n"
-        '      status.className = "join-msg err";\n'
-        '      status.textContent = "Newsletter signup failed, please try again.";\n'
-        "    });\n"
+        '      setMsg("err", "Could not send right now. Please try again later, or write to connect@evobiosys.org.");\n'
+        "    }).finally(function () { clearTimeout(timer); btn.disabled = false; });\n"
         "  });\n"
         "})();\n"
         "</script>\n"
@@ -373,7 +418,7 @@ DESCRIPTION_OLD = (
 )
 DESCRIPTION_NEW = (
     '<meta name="description" content="TrustWeb: find people and things through people you trust. '
-    'Ask your web a question in plain words; each person decides what to share. An experimental app by EvoBioSys.">'
+    'Call into your web with a question in plain words; each person decides what to share. An experimental app by EvoBioSys.">'
 )
 
 
@@ -466,14 +511,20 @@ def edit_bottom_sections(doc: Doc, frag_dir: Path) -> None:
     )
     if with_checkbox == JOINPANEL_OLD:
         doc.missing.append("joinpanel checkbox insertion point")
+    with_copy = with_checkbox.replace(
+        "Puts you on the waitlist. No accounts, no tracking, one note when the web widens.",
+        WAITLIST_COPY,
+    ).replace("Join TrustWeb</button>", "Notify me</button>")
+    if with_copy.count(WAITLIST_COPY) != 1 or "Notify me</button>" not in with_copy:
+        doc.missing.append("joinpanel waitlist copy")
     bottom_join = (
         '<hr class="rule">\n\n'
         "<!-- ================= JOIN, AT THE BOTTOM ================= -->\n"
         '<section class="block joinbottom" id="join">\n'
         '  <div class="sechead">\n'
         '    <p class="chnum">Stay close</p>\n'
-        "    <h2>Join TrustWeb</h2>\n"
-        "  </div>\n" + with_checkbox + "</section>\n\n"
+        "    <h2>Get a notice when it is stable</h2>\n"
+        "  </div>\n" + with_copy + "</section>\n\n"
     )
     sections = (
         fragment(frag_dir, "source-code.html")
@@ -481,18 +532,45 @@ def edit_bottom_sections(doc: Doc, frag_dir: Path) -> None:
         + fragment(frag_dir, "about-us.html")
     )
     doc.replace("<footer>", sections + "\n" + bottom_join + "<footer>", 1)
-    doc.replace(
-        "</body>",
-        newsletter_script() + fragment(frag_dir, "popup-fit.html") + "</body>",
-        1,
-    )
+    doc.regex(JOIN_SCRIPT_RE, join_script())
+    doc.replace("</body>", fragment(frag_dir, "popup-fit.html") + "</body>", 1)
     doc.replace(
         '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Jakob Possert-Bienzle</h3>',
         '<h3 style="margin:0 0 6px;font:600 1.1rem var(--sans);color:var(--ink)">Main Builder: Jakob Possert-Bienzle</h3>',
     )
 
 
-def edit_sections(doc: Doc, frag_dir: Path) -> None:
+FAQ_QUESTIONS_RE = re.compile(r'<section id="questions">(.*?)</section>', re.DOTALL)
+
+
+def faq_section(frag_dir: Path, flags: Flags) -> str:
+    """The FAQ as a section of the main page (wave 5). The questions come from the one source,
+    pages/faq.body.html, so the section and faq.html cannot drift apart."""
+    body = fragment(frag_dir, "pages/faq.body.html")
+    found = FAQ_QUESTIONS_RE.search(body)
+    if found is None:
+        raise SystemExit(
+            'pages/faq.body.html: no <section id="questions"> to build the FAQ section from'
+        )
+    questions = HTML_COMMENT_RE.sub(
+        "", resolve_blocks(found.group(1), flags.active_blocks())
+    )
+    return (
+        '<hr class="rule">\n\n'
+        "<!-- ================= FAQ ================= -->\n"
+        '<section class="block" id="faq">\n'
+        '  <div class="sechead">\n'
+        '    <p class="chnum">Questions people ask first</p>\n'
+        "    <h2>FAQ</h2>\n"
+        '    <p class="dek">Answered as TrustWeb works today. Where the honest answer is "not yet", it says so.</p>\n'
+        "  </div>\n"
+        '  <div class="faqlist">' + questions.strip() + "</div>\n"
+        '  <p class="faqall"><a href="faq.html">All questions &rarr;</a></p>\n'
+        "</section>\n"
+    )
+
+
+def edit_sections(doc: Doc, frag_dir: Path, flags: Flags) -> None:
     ecosystem_marker = (
         '<hr class="rule">\n\n<!-- ================= ECOSYSTEM ================= -->'
     )
@@ -530,6 +608,8 @@ def edit_sections(doc: Doc, frag_dir: Path) -> None:
         + fragment(frag_dir, "features.html")
         + "\n"
         + fragment(frag_dir, "use-cases.html")
+        + "\n"
+        + faq_section(frag_dir, flags)
     )
     doc.regex(
         r"<!-- ================= HOW IT WORKS ================= -->\n"
@@ -559,7 +639,7 @@ def build_index(source: str, frag_dir: Path, flags: Flags) -> str:
     edit_hero_and_chrome(doc, frag_dir, flags)
     edit_ecosystem(doc)
     edit_bottom_sections(doc, frag_dir)
-    edit_sections(doc, frag_dir)
+    edit_sections(doc, frag_dir, flags)
     edit_footer(doc, frag_dir, flags)
     if doc.missing:
         raise SystemExit(
@@ -599,9 +679,9 @@ def build_subpage(page: Page, frag_dir: Path, flags: Flags) -> str:
 
 
 def pages_for(flags: Flags) -> list[Page]:
-    if not flags.is_org:
-        return list(COM_PAGES)
-    return [p for p in ORG_PAGES if p.name != "terms" or flags.terms_visible]
+    """The pages of the site; terms.html only when it is published (--draft or --publish-terms), on both sites."""
+    pages = ORG_PAGES if flags.is_org else COM_PAGES
+    return [p for p in pages if p.name != "terms" or flags.terms_visible]
 
 
 def build_outputs(source: str, frag_dir: Path, flags: Flags) -> dict[str, str]:

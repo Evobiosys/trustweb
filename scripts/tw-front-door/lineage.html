@@ -6,66 +6,45 @@
     <p class="chnum">Where this grows from</p>
     <h2>Lineage</h2>
   </div>
-  <p class="dek">EvoBioSys roots the work. QuestHub is where it fans out toward other
-  communities. TrustWeb grows from that same soil - the page you're on right now.</p>
+  <p class="dek">Where the fields meet is QuestHub. TrustWeb grows from that soil: the page you are on right now.</p>
 
-  <div class="lineage-wrap">
-    <svg viewBox="0 0 400 460" class="lineage-svg" role="img" aria-labelledby="lineage-title">
-      <title id="lineage-title">Diagram: EvoBioSys at the root, QuestHub as the point where
-      the spreading toward other communities happens, and TrustWeb growing from that same
-      soil as the page you are currently on.</title>
+  <figure class="lineage-wrap">
+    <svg viewBox="0 0 340 300" class="lineage-svg" role="img" aria-labelledby="lineage-title lineage-desc">
+      <title id="lineage-title">Overlapping fields: EvoBioSys, other people's fields, QuestHub and TrustWeb</title>
+      <desc id="lineage-desc">Two large circles overlap. The left one is EvoBioSys, the field of Jakob. The right one stands for the
+      fields of other people. A smaller circle, QuestHub, sits where the two overlap, because that is where they meet. Below it a
+      fourth circle, TrustWeb, grows from that shared soil and is the page you are on.</desc>
 
-      <defs>
-        <linearGradient id="lineage-stem" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stop-color="var(--gold)" />
-          <stop offset="100%" stop-color="var(--indigo)" />
-        </linearGradient>
-      </defs>
+      <!-- the two fields -->
+      <circle class="fld fld-evo" cx="118" cy="120" r="98" />
+      <circle class="fld fld-others" cx="222" cy="120" r="98" />
+      <!-- the stem: from where they meet down to TrustWeb -->
+      <path class="fld-stem" d="M 170 163 L 170 188" />
+      <!-- QuestHub, in the overlap -->
+      <circle class="fld fld-quest" cx="170" cy="120" r="43" />
+      <!-- TrustWeb, growing from the overlap's lower tip -->
+      <circle class="fld fld-tw" cx="170" cy="240" r="52" />
 
-      <!-- ---- spreading cone, fanning out from QuestHub ---- -->
-      <path d="M 200 232 L 42 98 Q 200 50 358 98 Z" fill="var(--indigo)" opacity="0.05" />
-      <path d="M 200 232 L 42 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="3 5" opacity="0.35" fill="none" />
-      <path d="M 200 232 L 358 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="3 5" opacity="0.35" fill="none" />
-      <path d="M 42 98 Q 200 50 358 98" stroke="var(--indigo)" stroke-width="1" stroke-dasharray="2 6" opacity="0.22" fill="none" />
-
-      <!-- other communities, dim shapes at the cone's edge -->
-      <g opacity="0.55">
-        <ellipse cx="48" cy="94" rx="22" ry="8" fill="var(--indigo)" opacity="0.35" />
-        <ellipse cx="352" cy="94" rx="24" ry="9" fill="var(--indigo)" opacity="0.35" />
-      </g>
-      <text x="358" y="118" text-anchor="end" class="lineage-caption">other communities</text>
-
-      <!-- ---- EvoBioSys: the root, quiet, no bloom ---- -->
-      <circle cx="200" cy="58" r="4" fill="var(--ink-soft)" />
       <a href="https://evobiosys.org" target="_blank" rel="noopener noreferrer">
-        <text x="200" y="40" text-anchor="middle" class="lineage-node">EvoBioSys</text>
+        <text class="fld-name" x="72" y="115" text-anchor="middle">EvoBioSys</text>
       </a>
+      <text class="fld-sub" x="72" y="135" text-anchor="middle">Jakob's field</text>
 
-      <!-- stem: EvoBioSys down to QuestHub -->
-      <path d="M 200 63 L 200 224" stroke="url(#lineage-stem)" stroke-width="2.5" fill="none" />
+      <text class="fld-name" x="268" y="100" text-anchor="middle">Other</text>
+      <text class="fld-name" x="268" y="119" text-anchor="middle">people's</text>
+      <text class="fld-sub" x="268" y="138" text-anchor="middle">fields</text>
 
-      <!-- ---- QuestHub: where the spreading happens ---- -->
-      <circle cx="200" cy="232" r="9" fill="var(--paper)" stroke="var(--indigo)" stroke-width="2" />
-      <circle cx="200" cy="232" r="3.5" fill="var(--indigo)" />
       <a href="https://questhub.eco" target="_blank" rel="noopener noreferrer">
-        <text x="200" y="258" text-anchor="middle" class="lineage-node lineage-node-lg">QuestHub</text>
+        <text class="fld-name" x="170" y="107" text-anchor="middle">QuestHub</text>
       </a>
-      <text x="200" y="276" text-anchor="middle" class="lineage-caption">where the spreading happens</text>
+      <text class="fld-sub" x="170" y="125" text-anchor="middle">where they</text>
+      <text class="fld-sub" x="170" y="141" text-anchor="middle">meet</text>
 
-      <!-- stem: QuestHub down to TrustWeb -->
-      <path d="M 200 240 C 197 300 203 348 200 386" stroke="url(#lineage-stem)" stroke-width="3" fill="none" />
-
-      <!-- ---- TrustWeb: grounded, this page ---- -->
-      <ellipse cx="200" cy="410" rx="140" ry="34" fill="var(--gold)" opacity="0.10" />
-      <path d="M 68 420 Q 200 364 332 420" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="1.5" opacity="0.55" />
-      <g stroke="var(--gold)" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.55">
-        <path d="M 150 401 q -4 -12 -12 -16" />
-        <path d="M 250 400 q 4 -11 12 -14" />
-      </g>
       <a href="{{SELF_URL}}" class="lineage-here-link">
-        <text x="200" y="440" text-anchor="middle" class="lineage-node lineage-node-lg lineage-node-here">TrustWeb</text>
+        <text class="fld-name fld-name-here" x="170" y="238" text-anchor="middle">TrustWeb</text>
       </a>
-      <text x="200" y="456" text-anchor="middle" class="lineage-caption">you are here</text>
+      <text class="fld-sub" x="170" y="257" text-anchor="middle">you are here</text>
     </svg>
-  </div>
+    <figcaption>EvoBioSys is Jakob's field; it overlaps with the fields of other people</figcaption>
+  </figure>
 </section>

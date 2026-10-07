@@ -97,19 +97,35 @@
     font-size:.85rem; color:var(--ink-soft); cursor:pointer}
   .nlcheck input{margin:0; accent-color:var(--indigo)}
 
-  /* lineage diagram: EvoBioSys (root) -> QuestHub (where it spreads) ->
-     TrustWeb (grounded, this page). Plain SVG <a> anchors, no HTML overlay --
-     avoids the div-in-p nesting trap already hit once on this page (see
-     project_trustweb_front_door.md), and needs no coordinate-sync CSS. */
+  /* FAQ section on the main page (wave 5): the same details.q rules as faq.html, scoped to the section */
+  #faq details.q{border-top:1px solid var(--line); padding:12px 0}
+  #faq details.q:first-of-type{border-top:none; padding-top:0}
+  #faq details.q summary{cursor:pointer; font:600 1rem var(--sans); color:var(--ink); list-style-position:outside}
+  #faq details.q summary:focus-visible{outline:2px solid var(--indigo); outline-offset:3px}
+  #faq details.q p{margin:8px 0 0; font-size:.94rem; color:var(--ink-soft)}
+  #faq details.q .de{font-weight:400; color:var(--ink-soft)}
+  #faq .faqlist{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow)}
+  #faq .faqall{margin:14px 0 0; font-weight:600}
+
+  /* lineage: overlapping fields (wave 5). Four circles in inline SVG: EvoBioSys, the fields of other people,
+     QuestHub where they meet, TrustWeb growing from that soil. Fills are translucent so the overlaps show;
+     every label is the ink colour with a paper halo, so its contrast is ink on paper in both themes
+     (circle edges are 3:1 or better against the paper). Sizes are in viewBox units: the figure is
+     at least 300px wide, so labels stay at 12px or larger. */
   .lineage-wrap{max-width:420px; margin:8px auto 0}
   .lineage-svg{display:block; width:100%; height:auto}
-  .lineage-node{font:600 15px var(--sans); fill:var(--indigo)}
-  .lineage-node-lg{font-size:17px}
-  .lineage-node-here{fill:var(--gold)}
+  .lineage-wrap figcaption{margin:10px auto 0; max-width:34ch; text-align:center; font-size:.92rem; color:var(--ink-soft)}
+  .lineage-svg .fld{stroke-width:1.75; fill-opacity:.17}
+  .lineage-svg .fld-evo{fill:var(--indigo); stroke:var(--indigo)}
+  .lineage-svg .fld-others{fill:var(--cochineal); stroke:var(--cochineal)}
+  .lineage-svg .fld-quest{fill:var(--paper); fill-opacity:.82; stroke:var(--ink)}
+  .lineage-svg .fld-tw{fill:var(--gold); fill-opacity:.24; stroke:var(--gold); stroke-width:2.25}
+  .lineage-svg .fld-stem{fill:none; stroke:var(--ink-soft); stroke-width:2; stroke-linecap:round}
+  .lineage-svg text{fill:var(--ink); stroke:var(--paper); stroke-width:3px; stroke-linejoin:round; paint-order:stroke}
+  .lineage-svg .fld-name{font:700 16px var(--sans)}
+  .lineage-svg .fld-sub{font:500 13px var(--sans)}
   .lineage-svg a{cursor:pointer}
-  .lineage-svg a:hover .lineage-node,
-  .lineage-svg a:focus-visible .lineage-node{text-decoration:underline}
-  .lineage-caption{font:600 9px var(--mono); letter-spacing:.06em; text-transform:uppercase; fill:var(--ink-soft)}
+  .lineage-svg a:hover .fld-name, .lineage-svg a:focus-visible .fld-name{text-decoration:underline}
 
   /* Ecosystem section only (#ecosystem scoping keeps the Advisors section's
      own .ecorow, 5 cards, on its original grid): SovSwitch and SoTranscribe
