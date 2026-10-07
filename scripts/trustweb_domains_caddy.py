@@ -167,6 +167,28 @@ IDEA2_OLD_SERVE = """	@trustweb_bare path /trustweb
 		file_server
 	}
 """
+# The first version (installed 2026-10-07 12:10) had two sibling handle_path blocks, /trustweb/draft/* and
+# /trustweb/*; Caddy did not prefer the longer one, so the draft answered 301 too. Kept verbatim so the
+# transform upgrades a file that carries it. The current version nests the draft inside the one block.
+IDEA2_DRAFT_V1 = """	handle_path /trustweb/draft/* {
+		root * /srv/questhub-static/idea2-tw/draft
+		file_server
+	}
+	handle_path /trustweb/* {
+		redir https://trustintheweb.org{uri} permanent
+	}
+"""
+IDEA2_DRAFT_V2 = """	handle_path /trustweb/* {
+		@trustweb_draft path /draft/*
+		handle @trustweb_draft {
+			root * /srv/questhub-static/idea2-tw
+			file_server
+		}
+		handle {
+			redir https://trustintheweb.org{uri} permanent
+		}
+	}
+"""
 IDEA2_NEW_SERVE = f"""	{IDEA2_MARKER} the site moved to https://trustintheweb.org.
 	# /trustweb and every page under it answer 301 to the same page there (the deployed app links
 	# to idea2.site/trustweb/faq.html etc.: those keep working). /trustweb/draft/ still serves the
@@ -175,14 +197,7 @@ IDEA2_NEW_SERVE = f"""	{IDEA2_MARKER} the site moved to https://trustintheweb.or
 	redir @trustweb_bare https://trustintheweb.org/ permanent
 	@trustweb_draft_bare path /trustweb/draft
 	redir @trustweb_draft_bare /trustweb/draft/ 308
-	handle_path /trustweb/draft/* {{
-		root * /srv/questhub-static/idea2-tw/draft
-		file_server
-	}}
-	handle_path /trustweb/* {{
-		redir https://trustintheweb.org{{uri}} permanent
-	}}
-"""
+""" + IDEA2_DRAFT_V2
 IDEA2_OLD_ALIAS = """	handle @trustweb_alias {
 		redir https://idea2.site/trustweb/ temporary
 	}
@@ -234,6 +249,8 @@ def add_sites(text: str) -> str:
 
 def idea2_redirect(text: str) -> str:
     if IDEA2_MARKER in text:
+        if IDEA2_DRAFT_V1 in text:
+            return _replace_once_in_block(text, "idea2.site, www.idea2.site {", IDEA2_DRAFT_V1, IDEA2_DRAFT_V2)
         return text
     header = "idea2.site, www.idea2.site {"
     text = _replace_once_in_block(text, header, IDEA2_OLD_SERVE, IDEA2_NEW_SERVE)

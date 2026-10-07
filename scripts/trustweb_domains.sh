@@ -260,7 +260,7 @@ cmd_placeholders() {
 cmd_redirects() {
   echo "redirects: idea2.site/trustweb + /tw -> trustintheweb.org; evobiosys.org /tw + /trustweb -> /trustintheweb/"
   local probe
-  probe="$(rsh "curl -sS --max-time 15 https://trustintheweb.org/ -o /tmp/twprobe.$TS -w '%{http_code}'; grep -c 'trustintheweb.org' /tmp/twprobe.$TS || true; rm -f /tmp/twprobe.$TS" | tr '\n' ' ')"
+  probe="$(rsh "curl -sS --max-time 15 https://trustintheweb.org/ -o /tmp/twprobe.$TS -w '%{http_code}\\n'; grep -c 'trustintheweb.org' /tmp/twprobe.$TS || true; rm -f /tmp/twprobe.$TS" | tr '\n' ' ')"
   case "$probe" in
     "200 "[1-9]*) say "https://trustintheweb.org/ answers 200 with the migrated site ($probe)" ;;
     *) echo "https://trustintheweb.org/ is not serving the migrated site yet ($probe): redirects refused" >&2; return 1 ;;

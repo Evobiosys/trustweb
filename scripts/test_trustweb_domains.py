@@ -60,11 +60,19 @@ class CaddyTransforms(unittest.TestCase):
     def test_idea2_redirect_keeps_the_draft_and_preserves_the_path(self) -> None:
         text = caddy.idea2_redirect(FIXTURE)
         self.assertIn("redir https://trustintheweb.org{uri} permanent", text)
-        self.assertIn("root * /srv/questhub-static/idea2-tw/draft", text)
+        self.assertIn("@trustweb_draft path /draft/*", text)
         self.assertNotIn("redir https://idea2.site/trustweb/ temporary", text)
         self.assertIn("redir https://trustintheweb.org/ permanent", text)
         # the demo-context redirect to the app is untouched
         self.assertIn("redir @trustweb_demos https://app.idea2.site{uri} temporary", text)
+
+    def test_idea2_redirect_upgrades_the_first_version_once(self) -> None:
+        v2 = caddy.idea2_redirect(FIXTURE)
+        v1 = v2.replace(caddy.IDEA2_DRAFT_V2, caddy.IDEA2_DRAFT_V1)
+        self.assertNotEqual(v1, v2)
+        self.assertEqual(caddy.idea2_redirect(v1), v2)
+        self.assertEqual(caddy.idea2_redirect(v2), v2)
+        self.assertNotIn("handle_path /trustweb/draft/*", v2)
 
     def test_idea2_redirect_fails_without_its_anchor(self) -> None:
         with self.assertRaises(caddy.TransformError):
