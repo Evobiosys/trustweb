@@ -54,6 +54,9 @@ test('validation: wrong host, lookalike host, userinfo, port, http, no/empty con
       `https://${APP}/?id=x`,
       `https://${APP}/?connect=`,
       `https://${APP}/#?connect=x`,
+      `https://${APP}/?handover=1#k=SECRETKEY&a=x0000&t=Ada`, // a hand-over link carries a private key: never stored
+      `https://${APP}/?connect=x&handover=1#t=Ada`,
+      `https://${APP}/?connect=x#k=SECRETKEY`,
       'javascript:alert(1)',
       'not a url',
       '',

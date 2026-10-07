@@ -29,7 +29,7 @@ const NOT_FOUND_PAGE =
 /**
  * The normalized url (WHATWG href) when `raw` is an acceptable connect link for one of `hosts`, else null.
  * Rejects: other schemes, other hosts (also lookalikes such as app.idea2.site.evil.com), ports, userinfo, a missing or empty
- * `connect` parameter, and anything over `maxChars`.
+ * `connect` parameter, a hand-over link (it carries a private key), and anything over `maxChars`.
  */
 export function validLongUrl(raw, hosts, maxChars = 2048) {
   if (typeof raw !== 'string' || raw === '' || raw.length > maxChars) return null
@@ -42,7 +42,16 @@ export function validLongUrl(raw, hosts, maxChars = 2048) {
   if (u.protocol !== 'https:' || u.port !== '' || u.username !== '' || u.password !== '') return null
   if (!hosts.includes(u.hostname)) return null
   if ((u.searchParams.get('connect') ?? '') === '') return null
+  if (carriesPrivateKey(u)) return null
   return u.href.length <= maxChars ? u.href : null
+}
+
+/**
+ * A hand-over link (?handover=1#k=<recovery key>&...) moves a demo account to another phone and carries its private key in the fragment.
+ * It is not a connect link and must never be stored on a server, even when a client adds a `connect` parameter to it.
+ */
+function carriesPrivateKey(u) {
+  return u.searchParams.has('handover') || new URLSearchParams(u.hash.replace(/^#/, '')).has('k')
 }
 
 /** Is `origin` (the Origin header) one of the app hosts? Anything unparsable, including the string "null", is not. */
