@@ -108,6 +108,25 @@ let connectLink: string | null = null
 let shown = 0
 const pending: HTMLElement[] = []
 
+/**
+ * Coming back to the demo shows it as it was left (wave 2, P12): each phone's
+ * record is kept in this browser anyway (store.ts, per persona), and the page
+ * remembers how many devices were open, so a second visit reopens them all.
+ * "Start over" forgets both. A convenience only: without storage, one device.
+ */
+const DEVICES_KEY = `trustweb.demo.devices.${ctx}`
+
+function rememberedDevices(): number {
+  try {
+    const n = Number(localStorage.getItem(DEVICES_KEY))
+    return Number.isInteger(n) && n >= 1 && n <= ORDER.length ? n : 1
+  } catch { return 1 }
+}
+
+function rememberDevices(n: number): void {
+  try { localStorage.setItem(DEVICES_KEY, String(n)) } catch { /* this visit only */ }
+}
+
 function phoneColumn(p: Persona): { col: HTMLElement; slot: HTMLElement } {
   // No name above a phone: each person names their own phone on its start screen.
   const col = h('div', 'col', '')
@@ -139,8 +158,13 @@ function addDevice(): void {
     slot.dataset.persona = p
   }
   updateDock()
-  // Not for the first phone: scrolling on load would hide the page title.
-  if (shown > 1) col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  rememberDevices(shown)
+}
+
+/** "Add a device" (a tap): the new phone, scrolled into view. */
+function addDeviceTap(): void {
+  addDevice()
+  phones.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
 }
 
 function linkFor(p: Persona, url: string): string {
@@ -155,7 +179,7 @@ function linkFor(p: Persona, url: string): string {
 const dock = h('div', 'dock', '')
 const addBtn = document.createElement('button')
 addBtn.className = 'add'
-addBtn.onclick = addDevice
+addBtn.onclick = addDeviceTap
 const seeBtn = document.createElement('button')
 seeBtn.className = 'see'
 seeBtn.setAttribute('aria-expanded', 'false')
@@ -197,6 +221,7 @@ const foot = (() => {
     for (const p of ORDER) {
       try { localStorage.removeItem(storageKey(p, ctx)) } catch { /* nothing stored */ }
     }
+    try { localStorage.removeItem(DEVICES_KEY) } catch { /* nothing stored */ }
     location.reload()
   }
   return reset
@@ -204,7 +229,8 @@ const foot = (() => {
 
 // The one [Install] button, top right (wave 1733, A2): demo to live, then install.
 root.append(demoInstallBar(ctx, BASE), head, actionSlot, phones, foot, dock)
-addDevice()
+const reopen = rememberedDevices()
+while (shown < reopen) addDevice()
 
 window.addEventListener('message', (e: MessageEvent) => {
   const holder = phones.querySelector<HTMLIFrameElement>('iframe[title="Device 1"]')

@@ -680,8 +680,11 @@ export const S = {
 
   // From the demo to the live app (wave 1733, amendment A2): the demo pages' one Install button.
   d2lButton: 'Install',
-  d2lTitle: 'Clean out your demo contacts first?',
-  d2lLead: (name: string) => `Next, the real TrustWeb opens on this device. What you added as ${name} comes along: your name, the people and things you added, your notes and past meetings. The imaginary friends and things can stay (marked dummy) or go.`,
+  // Wave 2 (P12, P13): the flow reads "Make it your personal account"; nobody types their notes again.
+  d2lButtonTitle: 'Make it your personal account, then install TrustWeb',
+  d2lTitle: 'Make it your personal account',
+  d2lLead: (name: string) => `The real TrustWeb opens on this device with everything you added as ${name}: your name, the people and things you added, your notes and past meetings. Nothing needs to be typed again. Then you can install it on your home screen.`,
+  d2lQuestion: 'The imaginary friends and things: keep them (marked dummy) or start clean?',
   d2lClean: 'Start clean',
   d2lKeep: 'Keep them',
   d2lCancel: 'Not now',

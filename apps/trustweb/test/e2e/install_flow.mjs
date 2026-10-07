@@ -99,8 +99,9 @@ async function demoToLive(browser, base, shot, errors) {
   await pa.setViewportSize({ width: 1280, height: 900 })
   const demoRec = Object.entries(await records(pa)).find(([k]) => k.endsWith('.holder'))[1]
   await install.click()
-  await pa.getByRole('dialog', { name: 'Clean out your demo contacts first?' }).waitFor({ timeout: 5_000 })
-  ok('Install asks "Clean out your demo contacts first?" with start clean / keep them', await pa.locator('[data-d2l="clean"]').isVisible() && await pa.locator('[data-d2l="keep"]').isVisible())
+  await pa.getByRole('dialog', { name: 'Make it your personal account' }).waitFor({ timeout: 5_000 })
+  ok('Install reads "Make it your personal account" (wave 2, P12): nothing typed again; start clean / keep them', await pa.locator('[data-d2l="clean"]').isVisible() && await pa.locator('[data-d2l="keep"]').isVisible()
+    && /Nothing needs to be typed again/.test(await pa.locator('.d2l').innerText()))
   await shot(pa, '06_demo_clean_question')
   await pa.setViewportSize({ width: 1280, height: 900 })
   await pa.locator('[data-d2l="clean"]').click()

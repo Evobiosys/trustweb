@@ -1,6 +1,6 @@
 /**
  * From the demo to the live app (wave 1733, item 6 / amendment A2): the demo
- * page's one [Install] button asks "Clean out your demo contacts first?" and
+ * page's one [Install] button asks "Make it your personal account" (keep or drop the demo contacts) and
  * then opens the live app, carrying over what is the person's own.
  *
  * What a demo device is (read from the code, solo.ts / store.ts / seed.ts):

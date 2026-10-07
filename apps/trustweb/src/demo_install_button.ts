@@ -1,8 +1,9 @@
 /**
  * The demo pages' ONE button, top right (wave 1733, amendment A2): [Install],
  * looking like the website's (its CSS block copied verbatim from the website's
- * chrome.css, scripts/tw-front-door). It runs demo-to-live: "Clean out your
- * demo contacts first?" (start clean / keep them), leaves the carry-over for
+ * chrome.css, scripts/tw-front-door). It runs demo-to-live, read as "Make it
+ * your personal account" (wave 2, P12): everything the person added comes
+ * along; the imaginary friends stay or go (start clean / keep them); it leaves the carry-over for
  * the live app (demo_to_live.ts) and opens the live app with ?install=1. When
  * the demo's first phone was never started there is nothing to carry: straight on.
  */
@@ -35,6 +36,7 @@ const CSS = `
   box-shadow:0 24px 80px rgba(36,27,46,.45); font-size:14.5px; line-height:1.55}
 .d2l h2{font-size:19px; margin:0 0 8px}
 .d2l p{color:var(--soft); margin:0 0 14px}
+.d2l p.q{color:var(--ink); font-weight:600}
 .d2l .row{display:flex; flex-direction:column; gap:8px}
 .d2l button{font:inherit; font-weight:700; border-radius:999px; padding:11px 16px; cursor:pointer; border:1.5px solid #33456b}
 .d2l .clean{background:#33456b; color:#f4f6fa}
@@ -53,7 +55,7 @@ function closeDialog(veil: HTMLElement, opener: HTMLElement): void {
   opener.focus()
 }
 
-/** "Clean out your demo contacts first?": the two answers, then on to the live app. */
+/** "Make it your personal account": keep or drop the imaginary friends, then on to the live app. */
 function askClean(ctx: DemoContext, base: string, opener: HTMLElement): void {
   const demo = loadState(Persona.Holder, ctx)
   if (!demo) { location.assign(liveUrl(base)); return }
@@ -66,6 +68,7 @@ function askClean(ctx: DemoContext, base: string, opener: HTMLElement): void {
   const dialog = el('div', { class: 'd2l', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'd2l-title' }, [
     el('h2', { id: 'd2l-title' }, [S.d2lTitle]),
     el('p', {}, [S.d2lLead(demo.me.displayName)]),
+    el('p', { class: 'q' }, [S.d2lQuestion]),
     el('div', { class: 'row' }, [
       clean,
       el('button', { class: 'keep', 'data-d2l': DemoCleanChoice.KeepThem, onclick: () => go(DemoCleanChoice.KeepThem) }, [S.d2lKeep]),
@@ -84,7 +87,7 @@ export function demoInstallBar(ctx: DemoContext, base: string): HTMLElement {
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.append(style)
-  const btn = el('button', { class: 'tw-btn tw-btn-install', 'data-demo-install': '1' }, [S.d2lButton])
+  const btn = el('button', { class: 'tw-btn tw-btn-install', 'data-demo-install': '1', title: S.d2lButtonTitle }, [S.d2lButton])
   btn.addEventListener('click', () => askClean(ctx, base, btn))
   return el('div', { class: 'demo-topbar' }, [btn])
 }
