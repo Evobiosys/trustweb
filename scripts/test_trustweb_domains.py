@@ -106,7 +106,6 @@ class CaddyTransforms(unittest.TestCase):
 PAGE = (
     "<title>TrustWeb · idea2.site</title>\n"
     '<link rel="canonical" href="https://idea2.site/trustweb/">\n'
-    '<p class="eyebrow"><span class="dot"></span> idea2.site</p>\n'
     '<a href="https://app.idea2.site/trustweb/?install=1">Install</a>\n'
     '<a href="https://app.idea2.site/trustweb/demo/">Demo</a>\n'
     '<form data-endpoint="https://app.idea2.site/feedback"></form>\n'
@@ -115,14 +114,13 @@ PAGE = (
 
 
 class Rehost(unittest.TestCase):
-    def test_rewrites_app_feedback_site_and_label(self) -> None:
+    def test_rewrites_app_feedback_site_and_title_label(self) -> None:
         out = rehost.rehost_text(PAGE, "trustintheweb.org", "https://app.trustintheweb.org")
         self.assertIn("<title>TrustWeb · TrustInTheWeb.org</title>", out)
         self.assertIn('href="https://trustintheweb.org/"', out)
         self.assertIn("https://app.trustintheweb.org/?install=1", out)
         self.assertIn("https://app.trustintheweb.org/demo/", out)
         self.assertIn('"https://app.trustintheweb.org/feedback"', out)
-        self.assertIn('<span class="dot"></span> TrustInTheWeb.org</p>', out)
         self.assertIn("https://app.idea2.site/wot/demo/", out)  # older demos stay where they are
         self.assertIsNone(rehost.LEFTOVER.search(out))
 

@@ -44,10 +44,14 @@ The orchestrator flips it to berget or berget-only in the same step that switche
 (GET /hosted/status, provider.transcribe) reads that provider. Blocks: prov-openrouter / prov-berget / prov-berget-only;
 the token {{TX_ROUTE}} carries the short phrase used in headings and sentences.
 
+LOOK. The two sites are one family with two faces. org wears the cream and navy palette with Fraunces and IBM Plex (Google Fonts);
+com (fragments in com/, look in com/theme.css) wears the inverse: dark where org is light and light where org is dark, the
+wine red as primary and the navy as accent, and device typefaces only (no font is fetched, so the com pages contact no third party).
+
 Tokens in fragments, replaced in the finished page: {{APP}} app base, {{API}}
 app origin, {{ORG}} / {{COM}} prefix of a link to the other site (empty for the
 own site, so own links stay relative), {{SELF_URL}}, {{WHITEPAPER}},
-{{SITE_NAME}}, {{BACK}}, and the fragments {{WORDMARK}} and {{SWIRLS}}.
+{{SITE_NAME}}, {{SITE_KIND}} (org or com), {{BACK}}, and the fragments {{WORDMARK}} and {{SWIRLS}}.
 
 Every link between the site's own pages is relative, so the same output works
 under /trustweb/, under /trustweb/draft/ and at the root of a domain.
@@ -75,6 +79,7 @@ COM_HOST = "trustintheweb.com"
 ORG_LIVE_URL = f"https://{ORG_HOST}/"
 COM_LIVE_URL = f"https://{COM_HOST}/"
 WHITEPAPER_ANCHOR = "whitepaper.html#bonobos"
+COM_THEME = "com/theme.css"  # the hosting site's own palette and typefaces, appended after the shared CSS
 
 
 class Site(str, Enum):
@@ -159,6 +164,7 @@ class Flags:
             "SELF_URL": self.self_url,
             "WHITEPAPER": whitepaper,
             "SITE_NAME": "TrustInTheWeb.org" if self.is_org else "TrustInTheWeb.com",
+            "SITE_KIND": self.site.value,
             "TX_ROUTE": TX_ROUTE[self.transcribe_provider],
             "BACK": back,
         }
@@ -378,10 +384,8 @@ def edit_text_and_head(doc: Doc, frag_dir: Path, flags: Flags) -> None:
             "<title>Web of Trust · idea2.site</title>",
             "<title>TrustInTheWeb.org</title>",
         ),
-        (
-            '<p class="eyebrow"><span class="dot"></span> idea2.site</p>',
-            '<p class="eyebrow"><span class="dot"></span> TrustInTheWeb.org</p>',
-        ),
+        # the small site label above the wordmark is gone (wave 4): the bar already names the site
+        ('  <p class="eyebrow"><span class="dot"></span> idea2.site</p>\n', ""),
         (
             "We have always trusted our friends,",
             'We have <a class="alwayslink" href="{{WHITEPAPER}}">always</a> trusted our friends,',
@@ -571,10 +575,14 @@ def build_index(source: str, frag_dir: Path, flags: Flags) -> str:
 def build_subpage(page: Page, frag_dir: Path, flags: Flags) -> str:
     active = flags.active_blocks()
     sitebar, footer = chrome_pieces(frag_dir, flags)
-    shell = fragment(frag_dir, "subpage-shell.html")
+    shell = resolve_blocks(fragment(frag_dir, "subpage-shell.html"), active)
     css = fragment(frag_dir, "subpage-base.css") + fragment(frag_dir, "chrome.css")
+    if not flags.is_org:
+        css += fragment(frag_dir, COM_THEME)
     # Author notes in a body fragment (e.g. the imprint's list of gaps) stay in the repo: comments are not served.
-    body = HTML_COMMENT_RE.sub("", resolve_blocks(fragment(frag_dir, page.body), active))
+    body = HTML_COMMENT_RE.sub(
+        "", resolve_blocks(fragment(frag_dir, page.body), active)
+    )
     values = {
         "ROBOTS": "noindex, nofollow",
         "TITLE": page.title,
@@ -642,7 +650,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     ap.add_argument(
         "--transcribe-provider",
-        default=os.environ.get(TRANSCRIBE_PROVIDER_ENV, TranscribeProvider.OPENROUTER.value),
+        default=os.environ.get(
+            TRANSCRIBE_PROVIDER_ENV, TranscribeProvider.OPENROUTER.value
+        ),
         help="who the copy says transcribes on the server: openrouter (default), berget (Berget, OpenRouter fallback) or "
         f"berget-only; default read from ${TRANSCRIBE_PROVIDER_ENV}",
     )

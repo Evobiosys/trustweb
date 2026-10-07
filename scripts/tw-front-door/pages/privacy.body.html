@@ -70,13 +70,29 @@
   </ul>
 </section>
 
+<section id="web-results">
+  <p class="eyebrow">Web results</p>
+  <h2>Using web results</h2>
+  <p>Where we have switched it on, TrustWeb can show a few web results inside the app, below the answer from your own web.
+  They are outside TrustWeb and untrusted. Powered by Brave.</p>
+  <ul>
+    <li><b>What you agree to.</b> When you use "Show results here", you agree not to scrape, store, cache or redistribute the results.
+    They come from Brave, and they are shown only to you, for the moment.</li>
+    <li><b>Your search words.</b> The words you type into the web results go through our server to Brave Search, a Brave based
+    search engine, without your network address. Brave may log them under its own terms.</li>
+    <li><b>What we keep.</b> Our server keeps no copy of your words or of the results. It keeps anonymous counters in memory to limit abuse, and its log notes only the engine and a status.</li>
+    <li><b>The plain links</b> to Google, Ecosia, Qwant and Brave work differently: your browser, not our server, sends the words, and only when you tap one.</li>
+  </ul>
+</section>
+
 <section id="site">
   <p class="eyebrow">This website</p>
   <h2>What it does when you visit</h2>
   <ul>
     <li>No analytics, no tracking cookies, no advertising.</li>
-    <li>Typefaces load from Google Fonts. That means your browser contacts Google, and Google
-    receives your network address.</li>
+    <!--IF:org--><li>Typefaces load from Google Fonts. That means your browser contacts Google, and Google
+    receives your network address.</li><!--/IF-->
+    <!--IF:com--><li>Typefaces come from your own device. This site fetches no fonts, scripts or images from anyone else.</li><!--/IF-->
     <li>As of 2026-10-06 the web server is not configured to write access logs for this site.</li>
     <li><b>The waitlist form</b> sends your email address to our server, only when you press the button. The
     optional newsletter box sends it to our newsletter service.</li>
@@ -103,7 +119,8 @@
     inference provider behind it, in the United States: only when Berget cannot take a recording. See <a href="#transcription">above</a>.</li><!--/IF-->
     <!--IF:prov-berget-only--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. See
     <a href="#transcription">above</a>.</li><!--/IF-->
-    <li><b>Google Fonts</b>: typefaces on this site.</li>
+    <li><b>Brave Software</b>, in the United States: Brave Search, only for web results, only if they are switched on and you choose "Show results here". See <a href="#web-results">above</a>.</li>
+    <!--IF:org--><li><b>Google Fonts</b>: typefaces on this site.</li><!--/IF-->
     <li>No advertising networks, no analytics providers.</li>
   </ul>
 </section>

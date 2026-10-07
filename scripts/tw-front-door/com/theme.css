@@ -1,0 +1,91 @@
+
+  /* ---------------- TrustInTheWeb.com: the inverse face of TrustInTheWeb.org (wave 4) ----------------
+     Appended after subpage-base.css and chrome.css by tw_site.py, for the hosting site only, so every
+     rule here wins by order. Never write the closing style tag's own text in this comment.
+
+     COLOUR. The website (org) is cream with navy in a light system and navy with cream in a dark one; the
+     hosting site is the inverse in each: DARK when the system is light, LIGHT when the system is dark.
+     Primary and accent swap: org leads with navy and keeps wine red as the accent; com leads with wine
+     red (the rose in the dark scheme) and keeps navy as the accent. The shared rules say --indigo for
+     "primary" and --cochineal for "accent", so those two names are re-pointed at the swapped colours.
+
+     TYPE. org: Fraunces (serif display) over IBM Plex Sans, fetched web fonts. com: a heavy humanist sans
+     for display over a book serif for text, both from the reader's own device (nothing is fetched), so
+     the two read as different brands at a glance. */
+
+  :root[data-site="com"]{
+    color-scheme:dark;
+    /* dark scheme (shown in a light system): org's dark neutrals, rose primary, periwinkle accent */
+    --paper:#1a1d28; --panel:#222636; --panel-2:#2a2f42; --ink:#e9e3d2; --ink-soft:#b3ae9a; --line:#363c52;
+    --primary:#e0899a; --primary-soft:#3a2530; --primary-ink:#1b1017; --primary-hover:#ea9dab;
+    --accent:#8fa7d8; --accent-soft:#2a3450;
+    --gold:#e0b869; --gold-soft:#3a3221;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 14px 32px rgba(0,0,0,.4);
+    --display:"Avenir Next","Avenir","Segoe UI Variable Display","Segoe UI","Helvetica Neue","Trebuchet MS",Arial,system-ui,sans-serif;
+    --text:Charter,"Bitstream Charter","Iowan Old Style","Sitka Text",Cambria,Georgia,serif;
+    --serif:var(--display); --sans:var(--text);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --radius:10px; --radius-sm:6px;
+    --indigo:var(--primary); --indigo-soft:var(--primary-soft); --indigo-ink:var(--primary-ink);
+    --cochineal:var(--accent); --cochineal-soft:var(--accent-soft);
+  }
+  @media (prefers-color-scheme: dark){
+    :root[data-site="com"]{
+      color-scheme:light;
+      /* light scheme (shown in a dark system): org's light neutrals, wine primary, navy accent */
+      --paper:#efe8d9; --panel:#f8f4e9; --panel-2:#e7dfcb; --ink:#241f19; --ink-soft:#5d5346; --line:#d7cdb5;
+      --primary:#93273e; --primary-soft:#f2dde1; --primary-ink:#fdf4f6; --primary-hover:#7b2034;
+      --accent:#33456b; --accent-soft:#dde2ec;
+      --gold:#93641f; --gold-soft:#f1e4c9;
+      --shadow:0 1px 0 rgba(36,31,25,.05), 0 10px 26px rgba(36,31,25,.08);
+    }
+  }
+
+  /* the text face: a book serif; the display face: a heavy sans */
+  :root[data-site="com"] body{font-family:var(--text); font-size:17px; line-height:1.62}
+  :root[data-site="com"] h1, :root[data-site="com"] section h2, :root[data-site="com"] .group{
+    font-family:var(--display); font-weight:800; letter-spacing:-.02em}
+  :root[data-site="com"] h1{letter-spacing:-.03em}
+  :root[data-site="com"] section .eyebrow, :root[data-site="com"] dl.facts dt, :root[data-site="com"] .fbform fieldset.keepinfo legend,
+  :root[data-site="com"] .stamp, :root[data-site="com"] .back, :root[data-site="com"] .draftstrip, :root[data-site="com"] .sf-h{
+    font-family:var(--display); font-weight:700; letter-spacing:.12em}
+  :root[data-site="com"] .sitebar-brand{font-family:var(--display); font-weight:400; letter-spacing:-.01em}
+  :root[data-site="com"] .sitebar-brand b{font-weight:800}
+  :root[data-site="com"] h1.wot{font-weight:400; letter-spacing:-.045em}
+  :root[data-site="com"] h1.wot .wm-b{font-weight:800}
+  :root[data-site="com"] .comhero .herolead{font-family:var(--display); font-weight:700; letter-spacing:-.015em}
+  :root[data-site="com"] .hostlink, :root[data-site="com"] .sf-soon{font-family:var(--display)}
+  :root[data-site="com"] .sf-brandlink{font-family:var(--display); font-weight:700}
+
+  /* the plan card's rule follows the swapped primary */
+  :root[data-site="com"] section.plan{border-left-color:var(--primary)}
+
+  /* buttons: same shape language as the app's two, in com's colours, a squarer corner than org's pill */
+  :root[data-site="com"] .tw-btn, :root[data-site="com"] .btn-primary, :root[data-site="com"] .btn-ghost{
+    font-family:var(--display); border-radius:8px}
+  :root[data-site="com"] .tw-btn{border-color:var(--primary)}
+  :root[data-site="com"] .tw-btn-demo{background:transparent; color:var(--primary)}
+  :root[data-site="com"] .tw-btn-demo:hover{background:var(--primary-soft)}
+  :root[data-site="com"] .tw-btn-install{background:var(--primary); color:var(--primary-ink)}
+  :root[data-site="com"] .tw-btn-install:hover{background:var(--primary-hover); border-color:var(--primary-hover)}
+  :root[data-site="com"] .tw-btn:focus-visible{outline-color:var(--primary)}
+  :root[data-site="com"] .btn-primary{background:var(--primary); color:var(--primary-ink)}
+  :root[data-site="com"] .btn-ghost{border-color:var(--primary); color:var(--primary)}
+
+  /* the link to the other site, and the footer links, in the accent */
+  :root[data-site="com"] .hostlink{color:var(--ink-soft)}
+  :root[data-site="com"] .hostlink:hover, :root[data-site="com"] .hostlink:focus-visible{color:var(--accent)}
+  :root[data-site="com"] .sitebar-sub .hostlink:hover::after, :root[data-site="com"] .sitebar-sub .hostlink:focus-visible::after{
+    background:var(--ink); color:var(--paper)}
+
+  /* feedback messages: success wears the accent tint, an error the primary (wine) tint, never the other way round */
+  :root[data-site="com"] .fbmsg.ok{background:var(--accent-soft)}
+  :root[data-site="com"] .fbmsg.err{background:var(--primary-soft)}
+
+  /* the footer is the inverse of the page's mood: light under the dark scheme, dark under the light one.
+     chrome.css sets the --sf-* tokens on .sitefooter itself, so they are re-set on that element here. */
+  :root[data-site="com"] .sitefooter{--sf-bg:#e9e1ce; --sf-ink:#241f19; --sf-dim:#5d5346; --sf-line:#cdc2a8;
+    border-top:1px solid var(--line)}
+  @media (prefers-color-scheme: dark){
+    :root[data-site="com"] .sitefooter{--sf-bg:#1b1e2a; --sf-ink:#e9e3d2; --sf-dim:#a5a2b3; --sf-line:#2f3446}
+  }

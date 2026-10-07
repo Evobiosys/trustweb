@@ -8,7 +8,7 @@ another home (trustintheweb.org with the app at https://app.trustintheweb.org/):
   https://app.idea2.site/trustweb/...   ->  <app origin>/...      (Install, Demo)
   https://app.idea2.site/feedback       ->  <app origin>/feedback (the feedback form posts there)
   https://idea2.site/trustweb/...       ->  https://<site host>/... (canonical, og:url, own links)
-  the visible "idea2.site" site label   ->  the site's own name   (title, eyebrow)
+  the visible "idea2.site" site label   ->  the site's own name   (title)
 
 It is a post-processing step, not an edit of the fragments, so the fragments
 stay host-neutral and the site agent's branding lands through the same build.
@@ -19,6 +19,7 @@ and to other projects stay as they are.
 
   python3 -I scripts/tw_site_rehost.py --dir <built pages> --site-host trustintheweb.org --app-origin https://app.trustintheweb.org
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,9 +34,14 @@ OLD_SITE = "https://idea2.site/trustweb/"
 OLD_SITE_BARE = "https://idea2.site/trustweb"
 
 # What must be gone after the rewrite (a fragment naming the old homes in another spelling).
-LEFTOVER = re.compile(r"https?://(?:www\.)?(?:app\.)?idea2\.site/(?:trustweb|feedback|tw)\b", re.IGNORECASE)
+LEFTOVER = re.compile(
+    r"https?://(?:www\.)?(?:app\.)?idea2\.site/(?:trustweb|feedback|tw)\b",
+    re.IGNORECASE,
+)
 
-HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+HOST_RE = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+)
 ORIGIN_RE = re.compile(r"^https://(?P<host>[^/:]+)$")
 
 
@@ -58,9 +64,8 @@ def rehost_text(text: str, site_host: str, app_origin: str) -> str:
     text = text.replace(OLD_APP, app).replace(OLD_APP_BARE, app_origin)
     text = text.replace(OLD_FEEDBACK, app_origin + "/feedback")
     text = text.replace(OLD_SITE, site).replace(OLD_SITE_BARE, f"https://{site_host}")
-    # The visible site label (tw_site.py: "<title>TrustWeb · idea2.site</title>" and the hero eyebrow).
+    # The visible site label (tw_site.py: "<title>TrustWeb · idea2.site</title>"; the hero eyebrow is gone since wave 4).
     text = text.replace(" · idea2.site</title>", f" · {label}</title>")
-    text = text.replace('<span class="dot"></span> idea2.site</p>', f'<span class="dot"></span> {label}</p>')
     return text
 
 
@@ -83,7 +88,9 @@ def rehost_dir(directory: Path, site_host: str, app_origin: str) -> list[str]:
         new = rehost_text(page.read_text(encoding="utf-8"), site_host, app_origin)
         left = sorted(set(LEFTOVER.findall(new)))
         if left:
-            raise RehostError(f"{page.name} still names the old home: {', '.join(left)}")
+            raise RehostError(
+                f"{page.name} still names the old home: {', '.join(left)}"
+            )
         results[page] = new
     changed = []
     for page, new in results.items():
@@ -94,7 +101,9 @@ def rehost_dir(directory: Path, site_host: str, app_origin: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--dir", required=True, type=Path)
     parser.add_argument("--site-host", required=True)
     parser.add_argument("--app-origin", required=True)
@@ -104,7 +113,9 @@ def main(argv: list[str]) -> int:
     except RehostError as e:
         print(f"tw_site_rehost: {e}", file=sys.stderr)
         return 1
-    print(f"rehosted for {args.site_host} (app {args.app_origin}): {' '.join(changed) or 'nothing to change'}")
+    print(
+        f"rehosted for {args.site_host} (app {args.app_origin}): {' '.join(changed) or 'nothing to change'}"
+    )
     return 0
 
 
