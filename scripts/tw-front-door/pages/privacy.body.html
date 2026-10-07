@@ -65,7 +65,7 @@
     it counts the minutes used. Free while we test: up to 10 hours of audio per person, within a daily budget
     shared by everyone. A transcription that fails is not counted against that allowance and is not charged to you. The text comes back to your phone, and the times of the sentences may be approximate.</li>
     <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
-    (backup, hosting, transcription, feedback) use them only in memory, to limit abuse; the web
+    (backup, hosting, transcription, feedback, web results) use them only in memory, to limit abuse; the web
     server writes no access log.</li>
   </ul>
 </section>
@@ -80,7 +80,7 @@
     They come from Brave, and they are shown only to you, for the moment.</li>
     <li><b>Your search words.</b> The words you type into the web results go through our server to Brave Search, a Brave based
     search engine, without your network address. Brave may log them under its own terms.</li>
-    <li><b>What we keep.</b> Our server keeps no copy of your words or of the results. It keeps anonymous counters in memory to limit abuse, and its log notes only the engine and a status.</li>
+    <li><b>What we keep.</b> Our server keeps no copy of your words or of the results. To limit abuse it counts searches per network address, in memory only (never written to disk, gone when the server restarts), and its log notes only the engine and a status.</li>
     <li><b>The plain links</b> to Google, Ecosia, Qwant and Brave work differently: your browser, not our server, sends the words, and only when you tap one.</li>
   </ul>
 </section>
