@@ -48,9 +48,9 @@ export async function startApp(port) {
   }
 }
 
-export async function launch() {
+export async function launch(args = []) {
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
-  return (pw.chromium ? pw : pw.default).chromium.launch({ headless: true })
+  return (pw.chromium ? pw : pw.default).chromium.launch({ headless: true, args })
 }
 
 /** Starts a fresh phone: types the name and lands on the Web screen. */

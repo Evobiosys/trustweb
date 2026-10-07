@@ -46,6 +46,12 @@ const KEY_PEER_ID = 'pi'
 const KEY_PEER_NAME = 'pn'
 const KEY_HANDOVER_KEY = 'k'
 
+/**
+ * The fragment keys of a demo-account connect link that may travel to the short-link service (short_link.ts): the account,
+ * its id and end, and the demo inventory peer. Not "own" (that link opens a tab on this very phone) and never the hand-over key.
+ */
+export const SHORTENABLE_FRAGMENT_KEYS: readonly string[] = [KEY_ACCOUNT, KEY_ACCOUNT_ID, KEY_EXPIRES, KEY_PEER_DID, KEY_PEER_ID, KEY_PEER_NAME]
+
 /** A peer the demo account should also connect to (the demo inventory). */
 export interface DemoPeerRef {
   did: string

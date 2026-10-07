@@ -7,6 +7,7 @@
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
 import { WebSearchError } from './web_results'
+import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 
 /** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
 const PROVIDER_NAME: Readonly<Record<TranscribeProviderName, string>> = {
@@ -326,7 +327,7 @@ export const S = {
   savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to your inventory.`,
   hintText: {
     meeting: 'Meeting: record a conversation you both agreed to, with a live transcript and who said what.',
-    qr: 'Your code: someone scans it, or you send them the link, to connect with you. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
+    qr: `Your code: someone scans it, or you send them the link, to connect with you. The link can be shortened if you tap Short link: it is then kept on our server for ${SHORT_LINK_DAYS} days. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.`,
     'call-web': 'Checking for resonance: call into your web and feel the vibrations come back.',
     'web-tap': 'Tap empty space in the web to add someone. Tap a person to see your notes.',
     'about-who': 'Who: the recording is about a person. The notes go to them in your web.',
@@ -436,6 +437,28 @@ export const S = {
   meetNfcFailed: 'Could not write the tag.',
   meetCopy: 'Copy link',
   meetCopied: 'Link copied.',
+  // Short connect links (wave 5): an option under the code, never made until tapped; the long link always stays available.
+  shortLinkButton: 'Short link',
+  shortLinkNote: `A short link stores this link, with your name in it, on our server for ${SHORT_LINK_DAYS} days, then it expires. Without a short link, nothing about this link is kept on our server.`,
+  shortLinkBusy: 'Making the short link...',
+  shortLinkMade: 'Short link ready. The QR code and Copy now use it.',
+  shortLinkShowLong: 'Show the long link',
+  shortLinkHideLong: 'Hide the long link',
+  shortLinkCopyLong: 'Copy the long link',
+  shortLinkFailed: (e: ShortLinkError, retryAfterSeconds?: number): string => {
+    const stays = ' The long link works as before.'
+    switch (e) {
+      case ShortLinkError.Private: return 'This code carries your notes or a key inside the link, so it cannot be shortened: our server would have to keep them.'
+      case ShortLinkError.TooLong: return 'This link is too long to shorten.' + stays
+      case ShortLinkError.Network: return 'The short link could not be made: no answer from our server.' + stays
+      case ShortLinkError.RateLimited: return `Too many short links from here just now. ${retryAfterSeconds ? `Try again in ${retryAfterSeconds} ${retryAfterSeconds === 1 ? 'second' : 'seconds'}.` : 'Try again in a little while.'}` + stays
+      case ShortLinkError.Off: return 'Short links are not switched on at the moment.' + stays
+      case ShortLinkError.Full: return 'Our server holds as many short links as it can right now. Try again later.' + stays
+      case ShortLinkError.Refused: return 'Our server did not accept this link as a short link.' + stays
+      case ShortLinkError.Server: return 'Our server did not answer properly.' + stays
+      case ShortLinkError.NotHere: return ''
+    }
+  },
   meetNoChat: 'No chat in this version.',
 
   reviewTitle: (name: string) => `Notes about ${name}`,

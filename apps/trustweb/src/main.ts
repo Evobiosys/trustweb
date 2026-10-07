@@ -21,6 +21,10 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { renderQr } from '../../demo/src/ui/qr'
+import { createShortLinker } from './short_link'
+import type { ShortLinker } from './short_link'
+import { createLinkChooser } from './short_link_view'
+import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
@@ -2431,28 +2435,42 @@ function screenMeet(): Node[] {
   ]
 }
 
+/** One short-link maker per visit: it remembers each long link's short form, so a tap never asks the server twice for the same link. */
+let shortLinker: ShortLinker | null = null
+
+/** Copies a link and says so (the toast shows the link itself where the clipboard is refused). */
+function copyLink(text: string): void {
+  void navigator.clipboard?.writeText(text).then(() => toast(S.meetCopied), () => toast(text))
+}
+
+/** The short-link choice for a connect code: its QR follows the choice, as do Copy, Send and NFC (chooser.current()). Not offered in an embedded demo phone. */
+function connectLinkChooser(qr: HTMLElement): LinkChooser {
+  shortLinker ??= createShortLinker({ origin: location.origin, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
+  return createLinkChooser({ origin: location.origin, offer: !solo, linker: shortLinker, qr, renderQr, copy: copyLink })
+}
+
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
+  const chooser = connectLinkChooser(qr)
   const nfcStatus = el('p', { class: 'meta' })
-  let link = ''
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
-    onclick: () => { void navigator.clipboard?.writeText(link).then(() => toast(S.meetCopied), () => toast(link)) },
+    onclick: () => copyLink(chooser.current()),
   }, [S.meetCopy])
   const nfc = nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
           nfcStatus.textContent = S.meetNfcWaiting
-          writeLinkToTag(link).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
+          writeLinkToTag(chooser.current()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
         },
       }, [S.meetNfcWrite])
     : null
   const sharedDd = el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes])
   void (async () => {
     await net.start()
-    link = net.connectLink(APP_URL)
+    let link = net.connectLink(APP_URL)
     // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only.
     let frag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
     const share = await meetSharePack()
@@ -2461,8 +2479,7 @@ function meetTrustWebPage(): HTMLElement {
       sharedDd.textContent = transcriptStillComing(draftMeeting()) ? S.meetSharedPending : S.meetSharedTranscript
     }
     if (frag) link += '#' + frag
-    qr.setAttribute('data-payload', link)
-    await renderQr(qr, link)
+    chooser.setLink(link)
     copy.removeAttribute('disabled')
     nfc?.removeAttribute('disabled')
   })()
@@ -2475,6 +2492,7 @@ function meetTrustWebPage(): HTMLElement {
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
+    chooser.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
     el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),
     el('p', { class: 'meta', 'data-ways': 'soon' }, [S.meetWaysSoon]),
@@ -2691,14 +2709,14 @@ function meetDemoPage(): HTMLElement {
 /** The account's code: the connect link plus the account, its id, its end (and the demo inventory peer) in the fragment. */
 function demoCodePage(acct: DemoAccount): HTMLElement {
   const qr = el('div', { class: 'qrwrap' })
-  let link = ''
+  const chooser = connectLinkChooser(qr)
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
-    onclick: () => { void navigator.clipboard?.writeText(link).then(() => toast(S.meetCopied), () => toast(link)) },
+    onclick: () => copyLink(chooser.current()),
   }, [S.meetCopy])
   const nav = navigator as Navigator & { share?: (d: { title?: string; url?: string }) => Promise<void> }
   const send = nav.share
-    ? el('button', { class: 'btn btn-ghost', disabled: true, onclick: () => { void nav.share?.({ title: S.demoAcctShareTitle(acct.name), url: link }).catch(() => {}) } }, [S.demoAcctSend])
+    ? el('button', { class: 'btn btn-ghost', disabled: true, onclick: () => { void nav.share?.({ title: S.demoAcctShareTitle(acct.name), url: chooser.current() }).catch(() => {}) } }, [S.demoAcctSend])
     : null
   // On this phone: a second tab under the account's own persona, opened on the same code.
   const here = el('a', { class: 'btn btn-ghost open-here', href: '#', target: '_blank', rel: 'noopener', 'aria-disabled': 'true' }, [S.demoAcctOpenHere])
@@ -2708,14 +2726,13 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
     const [peer] = await Promise.all([probeDemoPeer(), net.start()])
     const base = net.connectLink(APP_URL)
     const frag = { account: acct.name, accountId: acct.id, expiresAt, peer: peer ?? undefined }
-    link = base + '#' + demoFragment(frag)
+    const link = base + '#' + demoFragment(frag)
     const ownUrl = new URL(base)
     ownUrl.searchParams.set('persona', demoPersona(acct.id))
     here.href = ownUrl.toString() + '#' + demoFragment({ ...frag, own: true })
     here.removeAttribute('aria-disabled')
     if (peer) asks.textContent = S.demoAcctAsksPeer(peer.name)
-    qr.setAttribute('data-payload', link)
-    await renderQr(qr, link)
+    chooser.setLink(link)
     copy.removeAttribute('disabled')
     send?.removeAttribute('disabled')
   })()
@@ -2730,6 +2747,7 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
     ]),
     copy,
     send,
+    chooser.el,
     here,
     el('p', { class: 'meta' }, [S.demoAcctOpenHereHint]),
     demoAccountRow(acct, () => {}),
