@@ -57,16 +57,15 @@ import path from 'node:path'
 export const TranscribeProvider = Object.freeze({ OpenRouter: 'openrouter', Infomaniak: 'infomaniak' })
 const flag = (raw) => raw === '1' || raw === 'true'
 /** What an API key may look like. Keeps a malformed credential (spaces, newlines, quotes) out of an Authorization header. */
-const KEY_SHAPE = /^[A-Za-z0-9._~+-]{20,256}$/
+export const KEY_SHAPE = /^[A-Za-z0-9._~+-]{20,256}$/
 
 /**
- * The OpenRouter key from the systemd credential: a JSON file {"key": "..."} (the shape unfold-news's /api/orkey served).
+ * A key from a systemd credential file: JSON {"key": "..."} at <CREDENTIALS_DIRECTORY>/<name>.
  * Returns '' for a missing, unreadable or malformed credential. Never throws, never logs, never echoes the content.
  */
-export function readCredentialKey(env = process.env) {
+export function readCredential(name, env = process.env) {
   const dir = env.CREDENTIALS_DIRECTORY
   if (dir === undefined || dir === '') return ''
-  const name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey'
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) return ''
   try {
     const key = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))?.key
@@ -74,6 +73,11 @@ export function readCredentialKey(env = process.env) {
   } catch {
     return ''
   }
+}
+
+/** The OpenRouter key (the shape unfold-news's /api/orkey served): the credential named by TRANSCRIBE_CREDENTIAL (default orkey). */
+export function readCredentialKey(env = process.env) {
+  return readCredential(env.TRANSCRIBE_CREDENTIAL ?? 'orkey', env)
 }
 
 function pick(options, key, envName, fallback, parse = Number) {

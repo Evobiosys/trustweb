@@ -11,6 +11,8 @@
 //   /hosted/*      hosted recordings with a free allowance        (hosted.mjs, hosted_store.mjs, quota.mjs; HOSTED_DIR)
 //   POST /transcribe  server-side transcription proxy              (transcribe.mjs; TRANSCRIBE_URL/KEY)
 //   POST|OPTIONS /feedback  website feedback, CORS for FEEDBACK_ORIGINS only   (feedback.mjs; FEEDBACK_FILE)
+// Added 2026-10-07 (wave 3): GET /websearch/engines, POST|GET /websearch  web results from Brave / Mojeek through this server
+//   (websearch.mjs; keys as systemd credentials websearch-brave / websearch-mojeek; 503 not_configured without a key).
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -54,6 +56,7 @@ import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
 import { createTranscriber } from './transcribe.mjs'
+import { createWebsearch, loadWebsearchConfig } from './websearch.mjs'
 
 const ID_RE = /^[0-9a-f]{64}$/
 const TOKEN_RE = /^[0-9a-f]{64}$/
@@ -87,6 +90,7 @@ export async function startServer(options = {}) {
     maxBlobs: options.maxBlobs ?? Number(process.env.MAX_BLOBS ?? 5000),
     log: options.log ?? ((line) => console.log(line)),
     ...loadConfig(options),
+    ...loadWebsearchConfig(options),
   }
   if (!cfg.dir) throw new Error('BACKUP_DIR is required')
   await fs.mkdir(path.join(cfg.dir, 'tmp'), { recursive: true, mode: 0o700 })
@@ -107,6 +111,7 @@ export async function startServer(options = {}) {
   const hosted = store === null ? null : createHosted({ cfg, store, withLock, clientOf })
   const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
   const feedback = createFeedback({ cfg, clientOf, withLock, fetchImpl: options.fetchImpl })
+  const websearch = createWebsearch({ cfg, clientOf, fetchImpl: options.websearchFetchImpl })
 
   const hits = new Map() // client -> timestamps within the window
   const locks = new Map() // id -> promise chain (serialises writes per id)
@@ -293,7 +298,8 @@ export async function startServer(options = {}) {
     const pathname = (req.url ?? '').split('?')[0]
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
-    const jsonRoute = longRoute || pathname === '/feedback'
+    const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -328,6 +334,7 @@ export async function startServer(options = {}) {
       send(res, 200, 'ok')
       return 200
     }
+    if (isWebsearch) return websearch.handle(req, res, pathname)
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
     if (pathname === '/hosted/status' && hosted === null && req.method === 'GET') {
