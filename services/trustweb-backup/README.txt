@@ -9,16 +9,23 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   backups are protected by the server-wide pool (HOSTED_MAX_BYTES 2 GB, free-disk floor 2 GB), not by it.
                   Opaque ciphertext, own directory (HOSTED_DIR), account token to read or a per-recording read capability.
                   90 days untouched = removable by the sweeper (sweep_hosted.mjs).
-                  GET /hosted/status also says who transcribes: provider.transcribe {enabled, provider, region, dataPolicy} (status.mjs).
-  POST /transcribe  audio in, {text, segments} out; forwards to OpenRouter's speech-to-text endpoint (Whisper, one synchronous call,
-                  USD 0.012-0.04 per hour of audio), stores nothing. Provider code: transcribe_openrouter.mjs (default),
-                  transcribe_infomaniak.mjs (TRANSCRIBE_PROVIDER=infomaniak, async batch API); shared shape in transcribe_provider.mjs.
-                  The OpenRouter key reaches the unit as a systemd credential (LoadCredential=orkey:/etc/unfold-news/orkey.json, JSON
-                  {"key": "..."}); no secret is read by any script. Segment times are the model's own when they are plausible, else
-                  sentence-level estimates and the answer says "approx": true. Audio goes with data policy "deny" to a US inference provider.
-                  503 not_configured until switched on: scripts/trustweb_transcribe_switch_on.sh production (no prompt; "off" reverses it).
-                  Money: ONE paid job at a time (short queue), booked before the call, followed to its end even when the
-                  phone leaves, the provider's duration booked afterwards; a job past the deadline closes the day's budget.
+                  GET /hosted/status also says who transcribes: provider.transcribe {enabled, provider, region, dataPolicy, fallback} (status.mjs).
+  POST /transcribe  audio in, {text, segments} out, stores nothing. PROVIDERS (wave 3): Berget AI (Sweden, Whisper, EUR 0.000033 per second =
+                  about EUR 0.12 per hour; transcribe_berget.mjs) is the default once its key exists; OpenRouter (Whisper, USD 0.012-0.04 per hour,
+                  US inference, data policy "deny"; transcribe_openrouter.mjs) is the fallback behind it, or the provider when there is no Berget key;
+                  transcribe_infomaniak.mjs (TRANSCRIBE_PROVIDER=infomaniak, async batch API) stays for reference. transcribe_chain.mjs makes
+                  Berget+OpenRouter ONE provider: OpenRouter only takes over on a Berget outage (5xx, timeout, no answer) or when Berget cannot take
+                  the file type (it takes webm, m4a/mp4, mp3, wav; NOT ogg/opus/aac/flac), never on a 4xx or a 429. Shared shape: transcribe_provider.mjs.
+                  There is NO free transcription on either service (checked 2026-10-07).
+                  KEYS reach the unit as systemd credentials, JSON {"key": "..."}, 0600 root, owned by TrustWeb:
+                    /etc/trustweb/orkey.json   OpenRouter   (LoadCredential=orkey:...)
+                    /etc/trustweb/berget.json  Berget       (LoadCredential=berget:...; the line is written at DEPLOY, only when the file exists)
+                  No secret is read by any script. Segment times are the model's own when plausible, else sentence-level estimates ("approx": true).
+                  503 not_configured until switched on: scripts/trustweb_transcribe_switch_on.sh production berget | berget-only | openrouter | off.
+                  WHO PAYS: the person's allowance is charged only for a transcript they RECEIVED; a failed, timed-out or lost job is always refunded
+                  to the person. OUR budgets (global day, per client) stay conservative: a job that may still have been billed keeps its seconds there.
+                  Money: ONE paid job at a time (short queue), booked before the call, followed to its end even when the phone leaves, the provider's
+                  duration booked afterwards; a timeout closes the day's global budget; the third maybe-billed failure of a day does too.
                   Bytes do not bound duration (Opus DTX), so the residual is one crafted job per UTC day (see transcribe.mjs).
   POST /feedback  website feedback from https://idea2.site / https://app.idea2.site only (the one CORS route), one JSON line
                   per entry in a 0600 file. Optional {notify, newsletter, email} (wave 2, P14/P15): the email is validated and kept
@@ -36,7 +43,7 @@ API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trus
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
 One real call against questhub: scripts/trustweb_transcribe_probe.sh staging <audio> <mime> <seconds> (synthetic audio only).
 Modules: server.mjs (guard, routing, /backup), http_util.mjs, limits.mjs, quota.mjs (the allowance as pure arithmetic),
-hosted_store.mjs + hosted.mjs, status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
+hosted_store.mjs + hosted.mjs, status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_chain.mjs, transcribe_berget.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
 
 RUN (local)
   BACKUP_DIR=/tmp/twbackup HOSTED_DIR=/tmp/twhosted PORT=8960 node server.mjs
@@ -45,11 +52,12 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over nine files (124 tests since wave 2: 113 before it, plus status provider, recordings allowance, feedback opt-in; the 17
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over ten files (151 tests since wave 3: 130 before it plus 21 for Berget, the chain and the person-never-pays rule; the 17
 original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake Infomaniak and a fake
 OpenRouter (23 tests: success, bad model JSON, 400/401/402/403/429/500, gateway statuses counted, timeout, oversized, budgets, hang-up), feedback
-and CORS, ETag/late packs, the in-memory limiters). Fixed test ports 8971-8976 and 8978, one per file (8977 is taken by
-another program on the dev machine); 8979 is the fake subscriber of feedback.test.mjs. Nothing is left running.
+and CORS, ETag/late packs, the in-memory limiters; transcribe_berget.test.mjs: a fake Berget and a fake OpenRouter). Fixed test ports 8971-8976
+and 8978, one per file (8977 is taken by another program on the dev machine); 8979 is the fake subscriber of feedback.test.mjs;
+transcribe_berget.test.mjs takes no fixed port (its server and both fakes listen on port 0). Nothing is left running.
 
 ANONYMOUS USAGE STATISTICS (P19, "down the road": NOT built, design note only)
 When it comes, it counts per day and nothing else: one integer per UTC day and event kind (for example recordings stored, transcriptions run,
@@ -66,9 +74,10 @@ DEPLOY (questhub)
   scripts/deploy_trustweb_backup.sh --print-caddy                      the Caddy snippet
 The unit text lives in the script (unit_text). Notes for the production unit:
   - StateDirectory=trustweb-backup trustweb-hosted (hosted data and feedback.jsonl live in /var/lib/trustweb-hosted, never in BACKUP_DIR)
-  - Environment=TRANSCRIBE_PROVIDER=openrouter and LoadCredential=orkey:/etc/unfold-news/orkey.json (the line is written only when that
-    file exists on questhub: a missing credential file would stop the unit). EnvironmentFile=-/etc/trustweb-backup.env (0600 root)
-    holds TRANSCRIBE_ENABLED=1 (written by the switch-on script); absent = transcription off (503 not_configured)
+  - LoadCredential=orkey:/etc/trustweb/orkey.json and LoadCredential=berget:/etc/trustweb/berget.json (each line is written only when its file
+    exists on questhub at deploy time: a missing credential file would stop the unit; after creating a key file, DEPLOY AGAIN). The provider is
+    not pinned in the unit (default auto = Berget if its key exists, else OpenRouter). EnvironmentFile=-/etc/trustweb-backup.env (0600 root)
+    holds TRANSCRIBE_ENABLED=1, TRANSCRIBE_PROVIDER and TRANSCRIBE_FALLBACK (written by the switch-on script); absent = transcription off (503 not_configured)
   - Environment=SUBSCRIBER_URL=https://subscriber.questhub.eco/subscribe (production; TW_SUBSCRIBER_URL overrides): where newsletter opt-ins of
     the feedback form go. The STAGING unit points at a throwaway fake on 127.0.0.1:8979 that the smoke test starts and kills, plus
     RATE_LIMIT=300 and FEEDBACK_PER_HOUR=100 (the smoke test posts more than the production limits allow from one address).

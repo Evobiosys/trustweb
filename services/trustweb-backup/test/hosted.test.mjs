@@ -22,7 +22,9 @@ test('status route: hosting on, transcription and feedback off until configured'
 })
 
 test('status route (wave 2, P10): `provider` tells the app who transcribes and where, the old booleans stay', async () => {
-  const off = { enabled: false, provider: 'openrouter', region: 'us', dataPolicy: 'deny' }
+  // wave 3: nothing configured = what WOULD be used first (Berget, Sweden); `fallback` is null without a second provider
+  const off = { enabled: false, provider: 'berget', region: 'se', dataPolicy: null, fallback: null }
+  const openrouter = { enabled: false, provider: 'openrouter', region: 'us', dataPolicy: 'deny', fallback: null }
   await withServer(P, {}, async () => {
     const r = (await call(P, { url: '/hosted/status' })).json
     assert.deepEqual(r.provider, { transcribe: off })
@@ -31,12 +33,15 @@ test('status route (wave 2, P10): `provider` tells the app who transcribes and w
   await withServer(P, { transcribeKey: 'k'.repeat(24), transcribeEnabled: true }, async () => {
     const r = (await call(P, { url: '/hosted/status' })).json
     assert.equal(r.transcribe, true)
-    assert.deepEqual(r.provider.transcribe, { ...off, enabled: true })
+    assert.deepEqual(r.provider.transcribe, { ...openrouter, enabled: true }) // only the OpenRouter key exists: it is the active provider
+  })
+  await withServer(P, { transcribeKey: 'k'.repeat(24) }, async () => {
+    assert.deepEqual((await call(P, { url: '/hosted/status' })).json.provider.transcribe, openrouter) // key but not switched on
   })
   await withServer(P, { transcribeProvider: 'infomaniak', transcribeUrl: 'http://127.0.0.1:1/x', transcribeKey: 'k'.repeat(24) }, async () => {
-    assert.deepEqual((await call(P, { url: '/hosted/status' })).json.provider.transcribe, { enabled: true, provider: 'infomaniak', region: 'ch', dataPolicy: null })
+    assert.deepEqual((await call(P, { url: '/hosted/status' })).json.provider.transcribe, { enabled: true, provider: 'infomaniak', region: 'ch', dataPolicy: null, fallback: null })
   })
-  await withServer(P, { transcribeDataCollection: 'allow' }, async () => {
+  await withServer(P, { transcribeKey: 'k'.repeat(24), transcribeDataCollection: 'allow' }, async () => {
     assert.equal((await call(P, { url: '/hosted/status' })).json.provider.transcribe.dataPolicy, 'allow')
   })
 })
@@ -50,7 +55,7 @@ test('hosting off (no HOSTED_DIR): status says hosted:false, every other hosted 
       transcribe: false,
       feedback: false,
       plan: null,
-      provider: { transcribe: { enabled: false, provider: 'openrouter', region: 'us', dataPolicy: 'deny' } },
+      provider: { transcribe: { enabled: false, provider: 'berget', region: 'se', dataPolicy: null, fallback: null } },
     })
     assert.equal((await usage(P, A)).json.error, 'not_configured')
     assert.equal((await put(P, A, R1, T, 60, cipher('x'))).status, 503)
