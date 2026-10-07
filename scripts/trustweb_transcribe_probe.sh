@@ -6,7 +6,8 @@
 #   e.g. ./scripts/trustweb_transcribe_probe.sh staging /tmp/clip.webm 'audio/webm;codecs=opus' 5
 #
 # Prints the HTTP status, the answer (text, segments, approx, secondsCharged) and the server's own "transcribe ok" log line
-# (provider, seconds, cost in USD). Use synthetic audio only: the audio goes to OpenRouter and its inference provider.
+# (provider, seconds, cost: cost_usd for OpenRouter, cost_eur_est for Berget). Use synthetic audio only: the audio goes to whichever
+# provider /hosted/status names (Berget in Sweden, or OpenRouter and its US inference provider).
 set -euo pipefail
 target="${1:-}"; file="${2:-}"; mime="${3:-}"; seconds="${4:-}"
 case "$target" in production) port=8960; unit=trustweb-backup ;; staging) port=8970; unit=trustweb-backup-staging ;; *) echo "usage: $0 staging|production <audio-file> <mime> <seconds>" >&2; exit 2 ;; esac

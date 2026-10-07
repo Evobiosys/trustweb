@@ -15,26 +15,12 @@
 // A failed or rejected call never relays the provider's body (it is not even read). The key only ever goes to OPENROUTER_URL.
 
 import fsp from 'node:fs/promises'
-import { ProviderError, ProviderFailure, normalizeTranscript, withSegments } from './transcribe_provider.mjs'
+import { ProviderError, ProviderFailure, isoLanguage, normalizeTranscript, withSegments } from './transcribe_provider.mjs'
+
+export { isoLanguage } // kept here for the importers that already take it from this module
 
 /** Our file extension (transcribe.mjs AUDIO_TYPES) -> the `format` OpenRouter expects. */
 const FORMATS = Object.freeze({ webm: 'webm', ogg: 'ogg', opus: 'ogg', m4a: 'm4a', mp3: 'mp3', wav: 'wav', aac: 'aac', flac: 'flac' })
-
-/** Whisper reports the language by English name; the contract says ISO 639-1. */
-const LANGUAGE_CODES = Object.freeze({
-  german: 'de', english: 'en', french: 'fr', italian: 'it', spanish: 'es', dutch: 'nl', portuguese: 'pt', russian: 'ru', polish: 'pl',
-  czech: 'cs', slovak: 'sk', slovenian: 'sl', hungarian: 'hu', croatian: 'hr', serbian: 'sr', swedish: 'sv', danish: 'da',
-  norwegian: 'no', finnish: 'fi', turkish: 'tr', ukrainian: 'uk', greek: 'el', romanian: 'ro', bulgarian: 'bg', japanese: 'ja',
-  chinese: 'zh', korean: 'ko', arabic: 'ar', hindi: 'hi', swahili: 'sw', latin: 'la',
-})
-
-/** ISO code from whatever the provider reported, or null. */
-export function isoLanguage(raw) {
-  if (typeof raw !== 'string') return null
-  const v = raw.trim().toLowerCase()
-  if (/^[a-z]{2}$/.test(v)) return v
-  return Object.hasOwn(LANGUAGE_CODES, v) ? LANGUAGE_CODES[v] : null
-}
 
 export function createOpenRouterProvider({ cfg, fetchImpl = fetch }) {
   const endpoint = `${cfg.openrouterUrl.replace(/\/+$/, '')}/audio/transcriptions`
@@ -77,9 +63,11 @@ export function createOpenRouterProvider({ cfg, fetchImpl = fetch }) {
     try {
       body = await response.json()
     } catch {
-      throw new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error)
+      // The provider ANSWERED (a 2xx) but the body is unusable: the audio was processed, probably billed. That is not an outage, so no
+      // fallback (a second provider would bill the same audio again); the job ends as a 502. Only a deadline during the read is a timeout.
+      throw new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error, response.status)
     }
-    if (body === null || typeof body !== 'object' || Array.isArray(body) || typeof body.text !== 'string') throw new ProviderError(ProviderFailure.Error)
+    if (body === null || typeof body !== 'object' || Array.isArray(body) || typeof body.text !== 'string') throw new ProviderError(ProviderFailure.Error, response.status)
     return body
   }
 
@@ -107,5 +95,5 @@ export function createOpenRouterProvider({ cfg, fetchImpl = fetch }) {
     return withSegments({ ...parsed, duration: reported, language: isoLanguage(body.language), cost }, request.seconds)
   }
 
-  return { name: 'openrouter', transcribe }
+  return { name: 'openrouter', timeoutMs: cfg.transcribeTimeoutMs, supports: () => true, transcribe }
 }

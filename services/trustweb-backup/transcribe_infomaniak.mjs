@@ -99,5 +99,5 @@ export function createInfomaniakProvider({ cfg, fetchImpl = fetch }) {
     return normalizeTranscript(await awaitResult(batchId, signal))
   }
 
-  return { name: 'infomaniak', transcribe }
+  return { name: 'infomaniak', timeoutMs: cfg.transcribeTimeoutMs, supports: () => true, transcribe }
 }

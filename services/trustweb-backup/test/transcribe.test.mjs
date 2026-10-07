@@ -156,7 +156,7 @@ test('provider failures: submit 500, failed job, unusable body: 502 provider_err
   }
 })
 
-test('an accepted job that never finishes: 504 provider_timeout, the charge stays and today\'s budget closes (its cost is unknown)', async () => {
+test('an accepted job that never finishes: 504 provider_timeout, the PERSON is refunded, today\'s budget closes (the provider may still bill it)', async () => {
   await withProvider({ results: [{ status: 'processing' }] }, async ({ seen }) => {
     await withServer(P, { ...base, transcribeTimeoutMs: 300 }, async ({ lines }) => {
       const t0 = Date.now()
@@ -165,9 +165,9 @@ test('an accepted job that never finishes: 504 provider_timeout, the charge stay
       assert.equal(r.json.error, 'provider_timeout')
       assert.ok(Date.now() - t0 < 2000)
       assert.ok(seen.polls >= 2)
-      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 60) // the provider may still bill it: no refund
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0) // wave 3: a failed job never counts against the person (it did before: 60)
       const next = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '5' }), Buffer.alloc(1000, 1))
-      assert.equal(next.status, 429)
+      assert.equal(next.status, 429) // ... but OUR budget stays conservative: the day is closed
       assert.equal(next.json.error, 'busy_today')
       assert.equal(seen.submits.length, 1)
       assert.ok(lines.some((l) => l === 'transcribe provider_timeout accepted=true'))
@@ -192,7 +192,7 @@ test('a result download that hangs is cut at the deadline (no slot stays taken f
   })
 })
 
-test('the phone hangs up after the upload: the provider job is still followed to its end and its real duration is booked', async () => {
+test('the phone hangs up after the upload: the provider job is still followed to its end, its real duration is booked on the DAY, the person is refunded', async () => {
   const long = { status: 'success', data: { ...VERBOSE, duration: 500, segments: [{ start: 0, end: 500, text: 'long' }] } }
   await withProvider({ results: [{ status: 'processing' }, { status: 'processing' }, { status: 'processing' }, long] }, async ({ seen }) => {
     // rateLimit raised: the usage polling below must not run into the shared 30/min limiter on a slow machine
@@ -209,12 +209,9 @@ test('the phone hangs up after the upload: the provider job is still followed to
           }
         }, 10)
       })
-      let used = 0
-      for (let i = 0; i < 100 && used !== 500; i += 1) {
-        await new Promise((r) => setTimeout(r, 50))
-        used = (await usage(P, A)).json.transcription.secondsUsed
-      }
-      assert.equal(used, 500)
+      for (let i = 0; i < 100 && seen.polls < 4; i += 1) await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300)) // the job ends, is booked on the day, and the person's seconds go back
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0) // wave 3: a lost job (phone gone before the answer) is not billed to the person
       assert.equal(seen.polls, 4)
       // the booked duration counts on the daily budget too: 7200 - 500 left, so a 3600 s job still fits, two do not
       const big = Buffer.alloc(21_000_000, 1) // ~3500 s at 48 kbps

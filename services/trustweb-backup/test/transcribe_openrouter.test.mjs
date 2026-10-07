@@ -19,7 +19,7 @@ const VERBOSE = { task: 'transcribe', language: 'german', duration: 9.04, text: 
 
 /** A fake OpenRouter: records every call, answers from `script.replies` (one per call; the last repeats). */
 async function withOpenRouter(script, body) {
-  const seen = { calls: [], active: 0, maxActive: 0 }
+  const seen = { calls: [], active: 0, maxActive: 0, answered: 0 }
   const state = { replies: [{ status: 200, json: VERBOSE }], delayMs: 0, ...script }
   const server = http.createServer(async (req, res) => {
     const chunks = []
@@ -40,6 +40,7 @@ async function withOpenRouter(script, body) {
     const reply = state.replies[Math.min(index, state.replies.length - 1)]
     res.writeHead(reply.status, { 'Content-Type': 'application/json' })
     res.end(reply.raw ?? JSON.stringify(reply.json ?? { error: { message: 'RAW PROVIDER BODY MUST NOT LEAK' } }))
+    seen.answered += 1
   })
   await new Promise((resolve) => server.listen(STUB, '127.0.0.1', resolve))
   try {
@@ -222,7 +223,7 @@ test('provider 429: the phone gets our own 429 busy with Retry-After, nothing is
   })
 })
 
-test('a call that never answers: 504 provider_timeout at the deadline, the charge stays and today\'s budget closes', async () => {
+test('a call that never answers: 504 provider_timeout at the deadline, the PERSON is refunded, today\'s budget closes', async () => {
   await withOpenRouter({ hang: true }, async ({ seen }) => {
     await withServer(P, { ...base, transcribeTimeoutMs: 300 }, async ({ lines }) => {
       const t0 = Date.now()
@@ -230,9 +231,9 @@ test('a call that never answers: 504 provider_timeout at the deadline, the charg
       assert.equal(r.status, 504)
       assert.equal(r.json.error, 'provider_timeout')
       assert.ok(Date.now() - t0 < 2500)
-      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 60) // the provider may still bill it: no refund
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0) // wave 3: a failed job never counts against the person (it did before: 60)
       const next = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '5' }), Buffer.alloc(1000, 1))
-      assert.equal(next.status, 429)
+      assert.equal(next.status, 429) // ... but OUR budget stays conservative: the day is closed
       assert.equal(next.json.error, 'busy_today')
       assert.equal(seen.calls.length, 1)
       assert.ok(lines.includes('transcribe provider_timeout accepted=true'))
@@ -307,7 +308,7 @@ test('a lying X-Audio-Seconds is charged by size; the provider\'s billed seconds
   })
 })
 
-test('the phone hangs up after the upload: the provider call is still followed to its end and the billed seconds are booked on the day too', async () => {
+test('the phone hangs up after the upload: the provider call is still followed to its end, the billed seconds are booked on the DAY, the person is refunded', async () => {
   const long = { text: 'long', duration: 500, segments: [{ start: 0, end: 500, text: 'long' }], usage: { seconds: 500, cost: 0.003 } }
   await withOpenRouter({ replies: [{ status: 200, json: long }], delayMs: 400 }, async ({ seen }) => {
     await withServer(P, { ...base, rateLimit: 1000 }, async () => {
@@ -323,12 +324,9 @@ test('the phone hangs up after the upload: the provider call is still followed t
           }
         }, 10)
       })
-      let used = 0
-      for (let i = 0; i < 100 && used !== 500; i += 1) {
-        await new Promise((r) => setTimeout(r, 50))
-        used = (await usage(P, A)).json.transcription.secondsUsed
-      }
-      assert.equal(used, 500)
+      for (let i = 0; i < 100 && seen.answered < 1; i += 1) await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300)) // the job is booked on the day and the person's seconds go back
+      assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0) // wave 3: a lost job is not billed to the person (it was 500)
       const big = Buffer.alloc(21_000_000, 1) // ~3500 s at 48 kbps: 7200 - 500 left, so one fits, a second does not
       assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2, 'X-Audio-Seconds': '3500' }), big, { ip: '9.9.9.1' })).status, 200)
       // the budget answer comes before the audio is read, so a 21 MB body would race the early 429 (EPIPE, flaky since wave 1733): the charge is the declared 3500 s either way
