@@ -48,9 +48,17 @@ check_status() { # $1 = expected transcribe value (true|false)
 }
 
 # $1 = credential file on disk, $2 = the credential name the unit must load, $3 = what it is called in messages. Exits 1 when either is missing.
+# True when the unit loads the credential named $1. The unit text goes into a variable first: `systemctl cat | grep -q` dies of SIGPIPE
+# under pipefail whenever grep exits before systemctl has finished writing (seen on the longer production unit: exit 141, intermittently).
+unit_loads_credential() {
+  local text
+  text="$(sudo systemctl cat "$unit" 2>/dev/null || true)"
+  grep -q "^LoadCredential=$1:" <<<"$text"
+}
+
 require_credential() {
   sudo test -e "$1" || { echo "$1 ($3 key) is missing on this server: nothing changed" >&2; exit 1; }
-  sudo systemctl cat "$unit" 2>/dev/null | grep -q "^LoadCredential=$2:" ||
+  unit_loads_credential "$2" ||
     { echo "the unit $unit has no LoadCredential=$2 line: run scripts/deploy_trustweb_backup.sh --$target again (the line is only written when the file exists at deploy time), nothing changed" >&2; exit 1; }
 }
 
@@ -60,7 +68,7 @@ case "$mode" in
     fallback=openrouter
     [ "$mode" = berget-only ] && fallback=none
     if [ "$fallback" = openrouter ]; then
-      if sudo test -e "$cred" && sudo systemctl cat "$unit" 2>/dev/null | grep -q '^LoadCredential=orkey:'; then :; else
+      if sudo test -e "$cred" && unit_loads_credential orkey; then :; else
         echo "note: the OpenRouter credential is not loaded by the unit, so there is no fallback until it is (the Berget route still works)" >&2
       fi
     fi
