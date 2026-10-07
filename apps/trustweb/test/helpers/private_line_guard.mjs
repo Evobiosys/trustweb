@@ -96,10 +96,10 @@ function walk(dir, out = []) {
   return out
 }
 
-/** Scans every text file under a directory; returns { files, hits: [{ file, digest }] }. */
-export function scanDirectory(dir) {
+/** Scans every text file under a directory; returns { files, hits: [{ file, digest }] }. `deny`: see isPrivateLine. */
+export function scanDirectory(dir, deny = DENY) {
   const files = walk(dir).filter((f) => TEXT_EXT.has(path.extname(f).toLowerCase()))
   const hits = []
-  for (const f of files) for (const digest of scanText(readFileSync(f, 'utf8'), { json: f.endsWith('.json') })) hits.push({ file: f, digest })
+  for (const f of files) for (const digest of scanText(readFileSync(f, 'utf8'), { json: f.endsWith('.json'), deny })) hits.push({ file: f, digest })
   return { files: files.length, hits }
 }
