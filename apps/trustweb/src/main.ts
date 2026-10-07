@@ -51,6 +51,7 @@ import { setUpInstall } from './install'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
+import { canEndDemoAccount } from './demo_devices'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
@@ -2493,7 +2494,8 @@ function createDemoAccount(raw: string): DemoAccount | null {
 function removeDemoAccount(id: string, why: 'ended' | 'expired' = 'ended'): void {
   const s = st()
   const acct = (s.testAccounts ?? []).find((t) => t.id === id)
-  if (!acct) return
+  // Never the account this tab runs as: the current device is not removed (demo_devices.ts).
+  if (!acct || !canEndDemoAccount(s.testOf, id)) return
   if (acct.peerId) {
     s.peers = s.peers.filter((p) => p.id !== acct.peerId)
     s.people = s.people.filter((p) => p.peerId !== acct.peerId)
@@ -2572,7 +2574,7 @@ function demoAccountRow(acct: DemoAccount, after: () => void): HTMLElement {
       acct.pending ? el('button', { class: 'btn btn-electric btn-sm', 'aria-label': `${S.demoAcctAllow} ${acct.name}`, onclick: () => { void allowDemoAccount(acct.id, true).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctAllow]) : null,
       acct.pending ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void allowDemoAccount(acct.id, false).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctDeny]) : null,
       el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctExtend} ${acct.name}`, onclick: () => { extendDemoAccount(acct.id); after() } }, [S.demoAcctExtend]),
-      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: () => { removeDemoAccount(acct.id); after() } }, [S.demoAcctRemove]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: () => { if (!confirm(S.demoAcctRemoveConfirm(acct.name))) return; removeDemoAccount(acct.id); after() } }, [S.demoAcctRemove]),
     ]),
   ])
 }

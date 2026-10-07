@@ -3,13 +3,14 @@
  *   a  "Dismiss them" under "Got it": the embedded demo drops its seeded web, a live phone only what "Show demo content" added
  *   b  the demo's Install button carries "for yourself" beneath it (outside the button)
  *   f  the installed app (display-mode: standalone, navigator.standalone) hides "Add a device" and "Show demo content"
+ *   g  the demo page removes a device (never the first); a removed middle phone's persona is reused, never doubled
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8984 ../../node_modules/.bin/tsx ../trustweb/test/e2e/wave5_flow.mjs
  */
 import { launch, startApp, startPhone, tally } from '../helpers/e2e_harness.mjs'
 
 const t = tally()
-const PARTS = (process.env.PARTS || 'a,b,f').split(',')
+const PARTS = (process.env.PARTS || 'a,b,f,g').split(',')
 const errors = []
 const people = (page) => page.locator('.node:not(.you)')
 
@@ -123,6 +124,41 @@ async function partF(browser, base) {
   }
 }
 
+async function partG(browser, base) {
+  const { ctx, page } = await newPage(browser, { width: 1280, height: 900 })
+  await page.goto(base + 'demo/')
+  const titles = () => page.locator('iframe').evaluateAll((fs) => fs.map((f) => f.title))
+  const devicesKey = () => page.evaluate(() => localStorage.getItem('trustweb.demo.devices.generic'))
+  const first = demoDevice(page, 1)
+  await first.getByLabel('Your first name').fill('Maya')
+  await first.getByRole('button', { name: 'Start on this phone' }).click()
+  await first.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.locator('.dock .add').click()
+  await page.locator('.dock .add').click()
+  t.ok('g: three devices after two "Add a device"', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 2', 'Device 3']), JSON.stringify(await titles()))
+  t.ok('g: the first device has no remove, the others have one', await page.locator('.col').nth(0).locator('.remove-device').count() === 0 && await page.locator('.remove-device').count() === 2)
+  t.ok('g: the page remembers the open devices as a list', (await devicesKey()) === 'holder,seeker,third', String(await devicesKey()))
+  await page.locator('.col[data-persona="seeker"] .remove-device').click()
+  t.ok('g: removing the middle phone leaves Device 1 and Device 3', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 3']), JSON.stringify(await titles()))
+  t.ok('g: its stored record is gone, the first device keeps its own', await page.evaluate(() => localStorage.getItem('trustweb.v1.generic.seeker') === null && localStorage.getItem('trustweb.v1.generic.holder') !== null))
+  t.ok('g: the remembered list follows', (await devicesKey()) === 'holder,third', String(await devicesKey()))
+  t.ok('g: Device 3 is in front, so the switch offers Device 1', /Switch to device 1/.test(await page.locator('.switch').innerText()))
+  await page.locator('.switch').click()
+  t.ok('g: from Device 1 the switch offers Device 3, numbered by the phone\'s own title, not by its position', /Switch to device 3/.test(await page.locator('.switch').innerText()), await page.locator('.switch').innerText())
+  await page.locator('.dock .add').click()
+  const after = await titles()
+  t.ok('g: "Add a device" reuses the freed persona and never opens one twice', JSON.stringify(after) === JSON.stringify(['Device 1', 'Device 3', 'Device 2']) && new Set(after).size === after.length, JSON.stringify(after))
+  await page.reload()
+  await page.locator('iframe').first().waitFor()
+  t.ok('g: after a reload the same three devices come back', JSON.stringify((await titles()).sort()) === JSON.stringify(['Device 1', 'Device 2', 'Device 3']), JSON.stringify(await titles()))
+  // all but the first can go; the first stays whatever is pressed
+  await page.locator('.col[data-persona="seeker"] .remove-device').click()
+  await page.locator('.col[data-persona="third"] .remove-device').click()
+  t.ok('g: with every added phone removed one device is left, and the page says "demo" again', JSON.stringify(await titles()) === JSON.stringify(['Device 1']) && /TrustWeb demo/.test(await page.title()), JSON.stringify(await titles()) + ' / ' + await page.title())
+  t.ok('g: no remove is offered on the last one', await page.locator('.remove-device').count() === 0)
+  await ctx.close()
+}
+
 async function main() {
   const app = await startApp(Number(process.env.TW_PORT || 8984))
   const browser = await launch()
@@ -130,6 +166,7 @@ async function main() {
     if (PARTS.includes('b')) await partB(browser, app.base)
     if (PARTS.includes('a')) await partA(browser, app.base)
     if (PARTS.includes('f')) await partF(browser, app.base)
+    if (PARTS.includes('g')) await partG(browser, app.base)
   } finally {
     await browser.close()
     await app.stop()

@@ -647,6 +647,8 @@ export const S = {
   demoAcctPending: 'asks to connect',
   demoAcctConnected: 'connected',
   demoAcctRemove: 'End now',
+  // Ending a demo account (a device of this web) asks first (wave 5, owner 2026-10-07: removing a device is possible, with a confirm).
+  demoAcctRemoveConfirm: (name: string) => `End ${name}? That phone can no longer ask your web.`,
   demoAcctExtend: 'Extend a week',
   demoAcctExtended: (name: string, left: string) => `${name} now ends in ${left}.`,
   demoAcctShow: 'Show code',
@@ -813,6 +815,8 @@ export const S = {
   d2lFrontDoorLink: 'TrustInTheWeb.com',
   // The side-by-side demo's device switch (wave 2, P24): one tap, one "whoosh" to the other phone.
   demoSwitch: (n: number) => `Switch to device ${n}`,
+  // Under every added phone of the demo page (wave 5, owner 2026-10-07): the phone goes, its persona is free again.
+  demoRemoveDevice: 'Remove this device',
   d2lClean: 'Start clean',
   d2lKeep: 'Keep them',
   d2lCancel: 'Not now',

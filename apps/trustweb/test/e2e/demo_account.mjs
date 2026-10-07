@@ -309,6 +309,12 @@ async function main() {
     await settings.getByRole('button', { name: 'Extend a week Anna-demo' }).click()
     ok('Extend a week -> 14 days', /Anna-demo now ends in 14 days\./.test(await a.locator('.toast').innerText()) && /14 days left/.test(await text(a.locator('.sheet'))))
     await shot(a, '10-jakob-settings-demo-accounts')
+    // The real app asks before it ends a device (wave 5): decline once (nothing ends), then accept.
+    let asked = ''
+    a.once('dialog', (d) => { asked = d.message(); void d.dismiss() })
+    await a.locator('.sheet').getByRole('button', { name: 'End now Anna-demo' }).click()
+    ok('End now asks first, and a decline ends nothing', /End Anna-demo\?/.test(asked) && (await stored(a)).testAccounts?.some((t) => t.name === 'Anna-demo'), asked)
+    a.once('dialog', (d) => void d.accept())
     await a.locator('.sheet').getByRole('button', { name: 'End now Anna-demo' }).click()
     await a.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const after = await stored(a)
