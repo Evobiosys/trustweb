@@ -1,84 +1,131 @@
 <a class="back" href="./">&larr; back to TrustWeb</a>
-<h1>First questions</h1>
-<p class="lede">The questions a newcomer usually has, answered as TrustWeb works today. Where the honest answer is "not yet", it says so.</p>
+<h1>FAQ</h1>
+<p class="lede">The questions people ask first, answered as TrustWeb works today. Where the honest answer is "not yet", it says so.</p>
 
 <section id="questions">
-  <details class="q" id="q-what">
-    <summary>What is TrustWeb?</summary>
-    <p>An app for your phone where you keep notes on the people you meet, place them in three
-    rings (close friend, friend, acquaintance), and later ask your web a question in plain words.
-    Your question goes to the people you are connected with, and each of them decides whether to answer.</p>
-  </details>
-  <details class="q" id="q-who-sees">
-    <summary>Who sees what I write?</summary>
-    <p>Your notes, transcripts and recordings stay on your phone. Nothing leaves it unless you
-    choose to share it, for example by sending a meeting to a person you are connected with, or
-    by making a backup. Both are encrypted on your phone first.<!--IF:soon--> Two optional
-    services are starting soon: hosting your recordings (encrypted the same way) and transcription
-    on the server, where the audio itself goes to the server to be turned into text.<!--/IF--><!--IF:live-->
-    Hosting your recordings is encrypted the same way. Server transcription, if you choose it, is
-    the exception: the audio itself goes to the server to be turned into text.<!--/IF--></p>
-  </details>
-  <details class="q" id="q-asks">
-    <summary>Who sees my ask, and can people say no?</summary>
-    <p>Only the people you are connected with whose ring allows your ask. Each of them can share, or
-    decline. A decline looks exactly like "no match", so a "no" gives nothing away.</p>
-  </details>
-  <details class="q" id="q-data">
-    <summary>Where does my data live?</summary>
-    <p>On your phone first. If you make a backup, or send a meeting<!--IF:live-->, or have your
-    recordings hosted<!--/IF-->, an encrypted copy is kept on a server in Switzerland. The messages
-    between phones pass through a relay on the same server, encrypted so the relay cannot read them.</p>
-  </details>
-  <details class="q" id="q-server">
-    <summary>What does the server know?</summary>
-    <p>It stores ciphertext it cannot read, with sizes and dates. The relay can see routing details, such as which
-    address a message is for and when it arrived, but not what it says. (The very first connection
-    step between two phones, sent before they share a key, is the one message that is not encrypted.)
-    Two exceptions read content: the demo inventory (see <a href="#q-demo-account">demo accounts</a>)
-    and, if you choose it, server transcription, which handles your audio. Details are on the
-    <a href="privacy.html">privacy page</a>.</p>
-  </details>
-  <details class="q" id="q-cost">
-    <summary>What does it cost?</summary>
-    <p>The app is free today. A server in Switzerland can host your recordings, free up to the
-    equivalent of 10 recordings of up to 1 hour each per person. Beyond that it will cost
-    something, and we are still working out what. See <a href="pricing.html">pricing</a>.</p>
-  </details>
-  <details class="q" id="q-start">
-    <summary>How do I start?</summary>
-    <p>Tap <b>Demo</b> to try it with imaginary friends, no setup. Tap <b>Install</b> to put the
-    app on your home screen. On an iPhone, open the page in Safari, tap Share, then
-    "Add to Home Screen".</p>
-  </details>
-  <details class="q" id="q-demo-account">
-    <summary>What is a demo account?</summary>
-    <p>A pretend identity for trying TrustWeb: imaginary friends, each labelled "dummy", so you
-    can ask, answer and see consent. By default, a demo account only ever sees demo content, never
-    someone's real notes. One demo contact, "Demo inventory", is a small service on our server with
-    made-up lines; an ask to it is also shown, with your demo name, to the person who runs it, who can
-    answer it live. When you move to the live app, you can clear the demo contacts first.</p>
-  </details>
-  <details class="q" id="q-leave">
-    <summary>Can I leave and take my data?</summary>
-    <p>Your data lives on your phone, so it goes with you. Settings has a "Reset this phone"
-    button that deletes everything TrustWeb stored on it, after a confirmation. An encrypted backup can be restored on another phone. A
-    plain export of notes and transcripts as a text file is not built yet.</p>
-  </details>
-  <details class="q" id="q-code">
-    <summary>Is the code open?</summary>
-    <p>The code will be published as part of EvoBioSys. The public copy is older than the live app.
-    If you want to read the current code now, <a href="feedback.html?topic=source-code">ask us</a>.</p>
+  <details class="q" id="q-facebook">
+    <summary>Is this not just Facebook with a different look? <span class="de">(Ist das nicht Facebook in anderer Darstellung?)</span></summary>
+    <p><b>Facebook lets you repost. TrustWeb lets you ask, and each person you trust decides whether to answer.</b></p>
+    <p>Reposting is a poor way to find anything: you hear about an offer only if you follow the right
+    channel or someone happens to repost it. In TrustWeb you ask your web a question in plain words, and
+    the people you are connected with decide, one by one, whether to share. It is built so that, in time, a question can
+    travel on through several steps of trust, with consent at each step, instead of being broadcast.
+    Today a question reaches the people you are directly connected with; passing it on a further step
+    is in the works. The rings on the screen are one of many ways to draw a network. What counts
+    is what you can do on top of it. A feed, where you tell people things, is optional and comes later.</p>
   </details>
 
-  <!-- FAQ-PLACEHOLDER (marked place): questions from real conversations go here, as further
-       <details class="q" id="q-..."> blocks, once Jakob exports the transcript of the conversation
-       that held them. Keep them generic: no names, no attribution to a person or a meeting. -->
-  <p class="note" id="more-questions">More questions, taken from real conversations, will be added here.</p>
+  <details class="q" id="q-always-on">
+    <summary>Do I have to document everything I do and say, all day? <span class="de">(rund um die Uhr)</span></summary>
+    <p>No. There are two ways in, and neither needs you to log your day.</p>
+    <p><b>One conversation at a time.</b> Record a meeting, or speak a short debrief after an event
+    ("I just met this person, they have this opportunity"). The app makes a transcript, and you pick the
+    lines worth keeping as notes or as lines of your inventory. Each such line remembers the moment in the
+    recording it came from. Trust grows one conversation at a time, and your inventory grows the same way.</p>
+    <p><b>One set-up step.</b> If you already keep notes elsewhere, an import can add them as lines of
+    your inventory, each marked with where it came from, so you can tell imported lines from the ones you made
+    step by step. Imported lines start as "Only me": nobody can ask about them until you say so. Today the import
+    file is prepared on a Mac from one notes tool, so this route is for early users.</p>
+  </details>
+
+  <details class="q" id="q-incentive">
+    <summary>What makes people put their information in? <span class="de">(Was motiviert die Leute?)</span></summary>
+    <p>You do not fill in a form for the network's sake. You note what you learned in a conversation anyway,
+    and you get something back when you look for something: you search, and you find. The idea for a group is that
+    someone well connected starts with a good inventory, so the first searches already find something. And you decide
+    for each line who may ask about it, down to "Only me".</p>
+  </details>
+
+  <details class="q" id="q-encryption">
+    <summary>Is it encrypted? How do I know my most sensitive data is safe? <span class="de">(Verschlüsselt? Sensible Daten?)</span></summary>
+    <p>The problem exists without any app: what you tell people, they can pass on. What TrustWeb adds is
+    control. You share only what you choose, and each inventory line has its own audience: anyone in your rings,
+    your friends, or only you.</p>
+    <p>Where things live: your notes, inventory, transcripts and recordings stay on your phone. There is no
+    central database of everyone's inventory to attack. A question goes from phone to phone through a relay on
+    our server in Switzerland. Messages are encrypted on one phone and opened on the other, so the relay cannot
+    read them; it can see routing details, such as which address a message is for and when it arrived. The very first
+    connection step between two phones, sent before they share a key, is the one message that is not encrypted.
+    Backups, hosted recordings and sent meetings are encrypted on your phone first.</p>
+    <p>We do not claim a "zero-knowledge" system as a whole, because two things do read content. The demo
+    inventory ("Demo inventory", a demo contact on our server with made-up lines) opens an ask sent to it and also shows it,
+    with your demo name, to the person who runs it. And server transcription<!--IF:tx-off-->, once it is switched on (it is off today),<!--/IF-->
+    handles your audio as audio, because the audio itself goes to be turned into text. Details are on the
+    <a href="privacy.html">privacy page</a>.</p>
+  </details>
+
+  <details class="q" id="q-trusted">
+    <summary>How trusted is a "trusted network" really? <span class="de">(Wie vertrauenswürdig ist das Netzwerk?)</span></summary>
+    <p>Trust in TrustWeb is not a score. You place each person in one of three rings you choose yourself
+    (close friend, friend, acquaintance). Only people you have connected with can ask you anything, the ring
+    sets what they may ask about, and every answer needs a yes from you: given live, or given in advance for a
+    line you marked that way. A no looks exactly like "no match", so a decline gives nothing away.
+    The honest limit: a network is only as trusted as the people you let into it, and TrustWeb cannot make
+    a stranger trustworthy. Share only what you would be content to see passed on.</p>
+  </details>
+
+  <details class="q" id="q-habit">
+    <summary>How do you make it a habit people keep? <span class="de">(Wie wird es zur Gewohnheit?)</span></summary>
+    <p>By pull, not push. Many people switch push notifications off, so TrustWeb does not depend on them: asks
+    that reach you wait in one place for you to review. The reason to open the app is that you are looking
+    for something and want to find it. Onboarding and habit are the hard part, and they are early: today the
+    demo is the way in, with imaginary friends and nothing to set up.</p>
+  </details>
+
+  <details class="q" id="q-one-use">
+    <summary>What is the one use case other apps do not already have? Why open TrustWeb instead of a dedicated app?</summary>
+    <p>Finding people and things through people you trust. You do not open TrustWeb to call a ride, a
+    dedicated app does that better. You open it for what is not listed anywhere, or where it matters who is
+    on the other end: who knows a good pediatrician, who has a room free for a few weeks, who has done this before.
+    A marketplace could run on top of it later (marketplace is a planned use case, see <a href="./#use-cases">use cases</a>).</p>
+  </details>
+
+  <details class="q" id="q-web-results">
+    <summary>Where would web results come from? How can you trust a Google API?</summary>
+    <p>You should not have to, and today TrustWeb searches your own web only: no web results, no Google.
+    A fallback is planned and not in the app yet: when your web has no match, a button
+    would run an ordinary web search at an engine you pick (for example Google, Ecosia, Qwant or Brave),
+    with the results labelled as untrusted, and nothing would be sent to any engine before you tap.
+    The trusted answer comes first. The open web only comes second.</p>
+  </details>
+
+  <details class="q" id="q-need-it">
+    <summary>As a user, do I really need this? I am worn out by apps. <span class="de">(Brauche ich das wirklich?)</span></summary>
+    <p>You do not need the app. You need the things you can find through it
+    <span class="de">(Du brauchst die App nicht, du brauchst die Sachen, die du durch sie findest.)</span>
+    TrustWeb is meant as one way in with several uses (meeting people, introductions, lending and
+    sharing), not another feed to check. If asking a friend already gets you what you need, you do not need
+    it. It is for the cases where you would ask a friend, but the friend does not know, and you do not want to
+    ask three hundred people in a group chat. Try the <a href="https://app.idea2.site/trustweb/demo/">demo</a>:
+    it needs no setup.</p>
+  </details>
+
+  <details class="q" id="q-introductions">
+    <summary>So it is first of all for meeting people, and for introductions? <span class="de">(Kennenlernen, Introductions?)</span></summary>
+    <p>Yes, meeting people and introductions come first. An example: someone with many years of experience
+    in a field sits in a contact's inventory. You search for that topic, you see the line, and you ask for an
+    introduction through the person you both trust. Shared interests are what connects people. Today you ask
+    the people you are directly connected with; passing a question on a further step, so an introduction stays
+    warm, is in the works.</p>
+  </details>
+
+  <details class="q" id="q-money">
+    <summary>How will you make money with it? <span class="de">(Von irgendwas muss man leben.)</span></summary>
+    <p>Being worked out, see <a href="pricing.html">pricing</a>.</p>
+  </details>
+
+  <details class="q" id="q-transcript-value">
+    <summary>A transcript read weeks later has lost the feeling of the conversation. How useful is it then?
+    <span class="de">(Emotionale Verbindung?)</span></summary>
+    <p>That is why the recording is kept next to the transcript, not only the text. Where the audio was kept
+    on your phone, you tap a transcript line, or a line you noted, and the recording plays from that moment, so
+    you can hear how it was said. Recording a meeting needs a tick that the other person agreed.</p>
+  </details>
 </section>
 
 <section id="ask-us">
   <h2>Something else?</h2>
   <p>Send us your question. We read everything.</p>
-  <div class="btnrow"><a class="btn-primary" href="feedback.html">Ask a question</a></div>
+  <div class="btnrow"><a class="btn-primary" href="feedback.html">Ask a question</a>
+  <a class="btn-ghost" href="https://app.idea2.site/trustweb/demo/">Try the demo</a></div>
 </section>

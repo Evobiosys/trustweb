@@ -1,46 +1,78 @@
 <a class="back" href="./">&larr; back to TrustWeb</a>
 <h1>Feedback</h1>
-<p class="lede">Tell us what works, what does not, what would be fair to pay, or ask us for the source code. A person reads every message.</p>
+<p class="lede">Tell us what works and what does not, ask us for the source code, or ask to be told when TrustWeb is ready. A person reads every message.</p>
 
 <section id="form-card">
   <form id="fb-form" class="fbform" novalidate>
     <label for="fb-kind">What kind of message is it?</label>
     <select id="fb-kind" name="kind">
       <option value="feedback">Feedback</option>
-      <option value="pricing">Pricing: what would be fair</option>
+      <option value="pricing">Pricing or an agreement for your group</option>
       <option value="bug">Bug</option>
     </select>
 
-    <label for="fb-text">Your message</label>
-    <textarea id="fb-text" name="text" maxlength="4000" required></textarea>
+    <label for="fb-text">Your message <span class="hint">Optional if you only tick a box below.</span></label>
+    <textarea id="fb-text" name="text" maxlength="4000"></textarea>
 
-    <label for="fb-contact">How can we reach you? <span class="hint">Optional. Only if you want an answer.</span></label>
+    <label for="fb-contact">Your email <span class="hint">Optional. Needed if you want an answer or tick a box below.</span></label>
     <input type="text" id="fb-contact" name="contact" maxlength="200" autocomplete="email" inputmode="email">
+    <p class="fbmsg" id="fb-email-msg" role="status" aria-live="polite"></p>
 
     <div class="hp" aria-hidden="true">
       <label for="fb-homepage">Leave this field empty</label>
       <input type="text" id="fb-homepage" name="homepage" tabindex="-1" autocomplete="off">
     </div>
 
+    <fieldset class="keepinfo">
+      <legend>Keep in touch</legend>
+      <p class="hint">Both boxes start unticked. Nothing is sent to us for a box you leave unticked.</p>
+      <label class="tick"><input type="checkbox" id="fb-notify" name="notify">
+        <span>Notify me when it is ready <span class="hint">(one email, once)</span></span></label>
+      <label class="tick"><input type="checkbox" id="fb-news" name="newsletter">
+        <span>Stay informed with our newsletter <span class="hint">(at most every one or two weeks)</span></span></label>
+      <button type="button" class="infobtn" id="fb-info-btn" aria-expanded="false" aria-controls="fb-info">&#9432; Why is the newsletter box not ticked already?</button>
+      <p class="note" id="fb-info" hidden>If you give us feedback, you may or may not want our newsletter, and it is
+      your decision. EU data-protection law (the GDPR) says consent needs a clear action from you, and a box that
+      is already ticked does not count as one. So the box stays yours to tick. If you tick it, we first send a
+      confirmation email to the address above, and you join the newsletter only after you click the link in it.
+      You can ask us at any time to take you off.</p>
+    </fieldset>
+
     <div class="btnrow"><button type="submit" class="btn-primary" id="fb-send">Send</button></div>
     <p class="fbmsg" id="fb-msg" role="status" aria-live="polite"></p>
   </form>
-  <p style="margin-top:14px;font-size:.86rem">We store what you type here, your optional contact and the kind, and
+  <p style="margin-top:14px;font-size:.86rem">We store what you type here, your optional email and the kind, and
   the page you sent it from. No address, no browser details. See the <a href="privacy.html">privacy page</a>.</p>
 </section>
 
 <script>
 (function () {
   "use strict";
-  var ENDPOINT = "https://app.idea2.site/feedback";
+  var FEEDBACK_URL = "https://app.idea2.site/feedback";
+  var WAITLIST_URL = "https://idea2.site/rebiosys/api/waitlist";
+  var SUBSCRIBE_URL = "https://subscriber.questhub.eco/subscribe";
   var TIMEOUT_MS = 15000;
   var KINDS = ["feedback", "pricing", "bug"];
+  // Common typos in the part after the @ (a hint, never a block on the second try).
+  var DOMAIN_TYPOS = {
+    "gmial.com": "gmail.com", "gmal.com": "gmail.com", "gmail.con": "gmail.com", "gmail.co": "gmail.com",
+    "gamil.com": "gmail.com", "hotmial.com": "hotmail.com", "hotmail.con": "hotmail.com",
+    "outlok.com": "outlook.com", "outlook.con": "outlook.com", "yaho.com": "yahoo.com", "yahoo.con": "yahoo.com",
+    "gmx.con": "gmx.at", "icloud.con": "icloud.com", "proton.me.com": "proton.me"
+  };
   var TEXT = {
-    empty: "Please write a message first.",
+    empty: "Please write a message first, or tick one of the boxes below.",
+    badEmail: "Please enter a real email address for the box you ticked, in the form name@example.org.",
+    typo: function (fix) { return "Did you mean " + fix + "? Correct it, or press Send again if it is right."; },
     sending: "Sending...",
     ok: "Thank you. Your message arrived.",
     rate: "You have sent several messages in a short time. Please try again in a while. Your text is still here.",
-    fail: "Could not send right now. Your text is still here. Please try again later, or write to connect@evobiosys.org."
+    fail: "Could not send right now. Your text is still here. Please try again later, or write to connect@evobiosys.org.",
+    notifyOk: "We will write to you once, when TrustWeb is ready.",
+    notifyFail: "Could not add you to the notification list just now. Please try again later.",
+    newsOk: "Check your inbox: we sent a confirmation email. You join the newsletter once you click the link in it.",
+    newsFail: "The newsletter signup failed just now. Please try again later.",
+    nothingMore: "You are all set. There is nothing more to send."
   };
   var SOURCE_CODE_PREFILL = "I would like to read the current source code of TrustWeb now.";
 
@@ -49,13 +81,32 @@
   var textEl = document.getElementById("fb-text");
   var contactEl = document.getElementById("fb-contact");
   var honeyEl = document.getElementById("fb-homepage");
+  var notifyEl = document.getElementById("fb-notify");
+  var newsEl = document.getElementById("fb-news");
+  var infoBtn = document.getElementById("fb-info-btn");
+  var infoEl = document.getElementById("fb-info");
   var sendEl = document.getElementById("fb-send");
   var msgEl = document.getElementById("fb-msg");
-  if (!form || !kindEl || !textEl || !contactEl || !honeyEl || !sendEl || !msgEl) return;
+  var emailMsgEl = document.getElementById("fb-email-msg");
+  if (!form || !kindEl || !textEl || !contactEl || !honeyEl || !notifyEl || !newsEl || !infoBtn || !infoEl || !sendEl || !msgEl || !emailMsgEl) return;
 
-  function setMsg(kind, text) {
-    msgEl.className = "fbmsg " + kind;
-    msgEl.textContent = text;
+  // What already went through for which address in this visit, so a retry never signs anyone up twice.
+  var done = { notify: "", news: "" };
+  var typoShownFor = "";
+
+  function setMsg(el, kind, text) {
+    el.className = "fbmsg " + kind;
+    el.textContent = text;
+  }
+
+  function validEmail(v) {
+    if (v.length > 200 || !/^[^\s@,;<>()]+@[^\s@,;<>()]+\.[A-Za-z]{2,}$/.test(v)) return false;
+    return v.indexOf("..") === -1 && v.charAt(0) !== "." && v.indexOf(".@") === -1;
+  }
+
+  function typoFix(v) {
+    var domain = v.slice(v.lastIndexOf("@") + 1).toLowerCase();
+    return DOMAIN_TYPOS[domain] ? v.slice(0, v.lastIndexOf("@") + 1) + DOMAIN_TYPOS[domain] : "";
   }
 
   function applyQuery() {
@@ -65,14 +116,13 @@
     if (params.get("topic") === "source-code" && !textEl.value) textEl.value = SOURCE_CODE_PREFILL;
   }
 
-  function payload() {
+  function feedbackBody(text, contact) {
     var body = {
-      text: textEl.value.trim(),
+      text: text,
       kind: kindEl.value,
       page: location.pathname.slice(0, 200),
       homepage: honeyEl.value
     };
-    var contact = contactEl.value.trim();
     if (contact) body.contact = contact.slice(0, 200);
     return body;
   }
@@ -83,28 +133,93 @@
     return "fail";
   }
 
-  function send(body) {
+  function post(url, body, toOutcome) {
     var ctl = new AbortController();
     var timer = setTimeout(function () { ctl.abort(); }, TIMEOUT_MS);
-    return fetch(ENDPOINT, {
+    return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: ctl.signal
-    }).then(function (res) { return outcomeFor(res.status); },
+    }).then(function (res) { return toOutcome(res); },
             function () { return "fail"; })
       .then(function (outcome) { clearTimeout(timer); return outcome; });
   }
 
+  function sendFeedback(text, contact) {
+    return post(FEEDBACK_URL, feedbackBody(text, contact), function (res) { return outcomeFor(res.status); });
+  }
+
+  function sendNotify(email) {
+    return post(WAITLIST_URL, { email: email, note: "trustweb:notify-ready", channel: "human" },
+      function (res) { return res.ok ? "ok" : "fail"; });
+  }
+
+  function sendNewsletter(email) {
+    // The same request the join form on the front page sends.
+    return post(SUBSCRIBE_URL, { email: email, project: "questhub", source: "trustweb", gdpr: true },
+      function (res) { return res.ok ? "ok" : "fail"; });
+  }
+
+  // One action after the other, each reported on its own; a failed one never cancels the next.
+  function runActions(plan) {
+    var lines = [], allOk = true, feedbackOk = false;
+    return plan.reduce(function (chain, step) {
+      return chain.then(function () {
+        return step.run().then(function (outcome) {
+          lines.push(step.say[outcome] || step.say.fail);
+          if (outcome !== "ok") allOk = false;
+          else if (step.id === "feedback") feedbackOk = true;
+          else done[step.id] = step.email;
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      return { text: lines.join(" "), allOk: allOk, feedbackOk: feedbackOk };
+    });
+  }
+
+  function planFor(text, email, honeypotFilled) {
+    var plan = [];
+    if (text) plan.push({ id: "feedback", run: function () { return sendFeedback(text, email); },
+      say: { ok: TEXT.ok, rate: TEXT.rate, fail: TEXT.fail } });
+    if (honeypotFilled) return plan;   // a bot: no side requests
+    if (notifyEl.checked && done.notify !== email) plan.push({ id: "notify", email: email, run: function () { return sendNotify(email); },
+      say: { ok: TEXT.notifyOk, fail: TEXT.notifyFail } });
+    if (newsEl.checked && done.news !== email) plan.push({ id: "news", email: email, run: function () { return sendNewsletter(email); },
+      say: { ok: TEXT.newsOk, fail: TEXT.newsFail } });
+    return plan;
+  }
+
+  infoBtn.addEventListener("click", function () {
+    var open = infoEl.hidden;
+    infoEl.hidden = !open;
+    infoBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
-    var body = payload();
-    if (!body.text) { setMsg("err", TEXT.empty); textEl.focus(); return; }
+    var text = textEl.value.trim();
+    var email = contactEl.value.trim();
+    var wantsMail = notifyEl.checked || newsEl.checked;
+    setMsg(emailMsgEl, "", "");
+    if (!text && !wantsMail) { setMsg(msgEl, "err", TEXT.empty); textEl.focus(); return; }
+    if (wantsMail) {
+      if (!validEmail(email)) { setMsg(msgEl, "err", TEXT.badEmail); contactEl.focus(); return; }
+      var fix = typoFix(email);
+      if (fix && typoShownFor !== email) {
+        typoShownFor = email;
+        setMsg(emailMsgEl, "err", TEXT.typo(fix));
+        contactEl.focus();
+        return;
+      }
+    }
+    var plan = planFor(text, email, honeyEl.value !== "");
+    if (plan.length === 0) { setMsg(msgEl, "ok", TEXT.nothingMore); return; }
     sendEl.disabled = true;
-    setMsg("ok", TEXT.sending);
-    send(body).then(function (outcome) {
-      if (outcome === "ok") { textEl.value = ""; setMsg("ok", TEXT.ok); }
-      else setMsg("err", TEXT[outcome]);   // the typed text stays
+    setMsg(msgEl, "ok", TEXT.sending);
+    runActions(plan).then(function (r) {
+      if (r.feedbackOk) textEl.value = "";   // on a failed feedback the typed text stays
+      setMsg(msgEl, r.allOk ? "ok" : "err", r.text);
       sendEl.disabled = false;
     });
   });

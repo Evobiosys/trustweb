@@ -1,37 +1,56 @@
 <a class="back" href="./">&larr; back to TrustWeb</a>
 <h1>Pricing</h1>
-<p class="lede">Free while we learn. This is experimental pricing, and we want to hear what would be fair.</p>
-<p class="stamp">Experimental, first version, 2026-10-06</p>
+<p class="lede">Free while we test. Recordings stay on your phone. If you want us to host more than the free allowance, contact us and we make a solid agreement.</p>
+<p class="stamp">Experimental, 2026-10-07</p>
 
-<section id="free">
-  <p class="eyebrow">Free</p>
-  <h2>The app, and a server in Switzerland that holds your recordings</h2>
-  <p>The app itself costs nothing today. On top of that, a server in Switzerland can host your
-  recordings for you, so a copy is kept off your phone. The free allowance is the equivalent of
-  <b>10 recordings of up to 1 hour each (10 hours in total) per person</b>.</p>
-  <!--IF:soon--><p class="note">Hosting is starting soon (experimental). Until it is switched on, your recordings stay on your phone.</p><!--/IF-->
-  <!--IF:live--><p class="note">Hosting is switched on (experimental).</p><!--/IF-->
-  <p>Hosted recordings are stored as ciphertext the server cannot read. A recording that is
-  neither written nor opened for 90 days may be removed.</p>
-</section>
+<div class="plans">
+  <section id="free" class="plan">
+    <p class="eyebrow">Free while we test</p>
+    <h2>The app and a free hosting allowance</h2>
+    <ul>
+      <li>The app costs nothing today.</li>
+      <li>Recordings stay on your phone.</li>
+      <li>Our server in Switzerland can keep an encrypted copy of your recordings, free up to
+      <b>the equivalent of 10 recordings of up to an hour each</b> (10 hours in total) per person.</li>
+    </ul>
+    <!--IF:soon--><p class="note">Hosting is starting soon (experimental). Until it is switched on, your recordings stay on your phone.</p><!--/IF-->
+    <!--IF:live--><p class="note">Hosting is switched on (experimental).</p><!--/IF-->
+    <p>Hosted recordings are stored as ciphertext the server cannot read. A recording that is
+    neither written nor opened for 90 days may be removed.</p>
+  </section>
 
-<section id="beyond">
-  <p class="eyebrow">Beyond the allowance</p>
-  <h2>It will cost something</h2>
-  <p>Past the free allowance, hosting will be paid. We have not set any price yet, and we will
-  not publish one until we have heard from people. Paid plans are being worked out.</p>
-</section>
+  <section id="beyond" class="plan">
+    <p class="eyebrow">Hosting beyond the free allowance</p>
+    <h2>Contact us</h2>
+    <ul>
+      <li>For more than the free allowance, for a community, a team or an organisation: contact us and we make a solid agreement together.</li>
+      <li>No price list for individuals. We would rather agree on what fits you than guess.</li>
+      <li>Prices only ever go down later.</li>
+    </ul>
+    <div class="btnrow"><a class="btn-primary" href="feedback.html?kind=pricing">Contact us</a>
+    <a class="btn-ghost" href="mailto:connect@evobiosys.org">connect@evobiosys.org</a></div>
+  </section>
+
+  <section id="updates" class="plan">
+    <p class="eyebrow">Updates and migrations</p>
+    <h2>Hosted or on your own</h2>
+    <ul>
+      <li><b>The hosted version</b> promises smooth updates and migrations: when TrustWeb changes, your notes and settings move along with it.</li>
+      <li><b>An offline install</b> is on its own: once you install it and run it without us, we are no longer responsible for keeping it current.</li>
+    </ul>
+  </section>
+</div>
 
 <section id="transcription">
   <p class="eyebrow">Server transcription</p>
-  <!--IF:soon--><h2>Coming, terms to be worked out</h2>
-  <p>Today a transcript is made on your own device where that works. Transcription on the
-  server is coming, and what it will cost, and what is included for free, is still to be worked out.</p><!--/IF-->
-  <!--IF:live--><h2>Switched on (experimental), terms to be worked out</h2>
+  <!--IF:tx-off--><h2>Coming, outside providers via OpenRouter, see privacy</h2>
+  <p>Today a transcript is made on your own device where that works. Transcription on the server is
+  coming: it will run through outside providers via OpenRouter, and we promise nothing free yet. It is switched off today. How it works and
+  what it means for your audio is on the <a href="privacy.html#server">privacy page</a>.</p><!--/IF-->
+  <!--IF:tx-on--><h2>Switched on (experimental), outside providers via OpenRouter, see privacy</h2>
   <p>A transcript is made on your own device where that works. If you choose it, the server can
-  transcribe a recording instead (the audio then goes to the server, see the
-  <a href="privacy.html#server">privacy page</a>). What it will cost, and what is included for free,
-  is still to be worked out.</p><!--/IF-->
+  transcribe a recording instead, through outside providers via OpenRouter (the audio then leaves
+  your phone, see the <a href="privacy.html#server">privacy page</a>). We promise nothing free yet.</p><!--/IF-->
 </section>
 
 <section id="marketplace">
@@ -43,9 +62,9 @@
 </section>
 
 <section id="fair">
-  <p class="eyebrow">Tell us</p>
-  <h2>What would be fair?</h2>
-  <p>All of this is experimental. If a limit feels too tight, too loose, or the idea of paying
-  feels wrong for your situation, tell us. Your answer shapes the real prices.</p>
-  <div class="btnrow"><a class="btn-primary" href="feedback.html?kind=pricing">Tell us what would be fair</a></div>
+  <p class="eyebrow">Talk to us</p>
+  <h2>What would a solid agreement look like for you?</h2>
+  <p>All of this is experimental. If you plan to use TrustWeb with a group and want more room,
+  tell us what you need. Your answer shapes the real terms.</p>
+  <div class="btnrow"><a class="btn-primary" href="feedback.html?kind=pricing">Contact us</a></div>
 </section>
