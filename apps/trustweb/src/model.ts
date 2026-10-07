@@ -22,17 +22,24 @@ export enum Ring {
 
 export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
-/** Who may ask about one line. */
+/**
+ * Who may ask about one line: the three tiers (acquaintances, friends, close
+ * friends) and "Only me" (Jakob, wave 2, P22/P26). Each tier admits itself and
+ * everyone closer. Never sent anywhere: it only decides what an asker is matched against.
+ */
 export enum Audience {
-  /** Anyone in my rings (and, once the second hop ships here, their friends). */
+  /** Acquaintances too: anyone in my rings (and, once the second hop ships here, their friends). Value kept from before wave 2. */
   FriendsOfFriends = 'fof',
   /** Friends and close friends only. */
   Friends = 'friends',
+  /** Close friends only (wave 2). An older build reads it as "nobody": its matcher admits no ring for an unknown value. */
+  Close = 'close',
   /** Nobody but me. */
   OnlyMe = 'me',
 }
 
-export const AUDIENCES: readonly Audience[] = [Audience.FriendsOfFriends, Audience.Friends, Audience.OnlyMe]
+/** In the order the pill cycles through and the item sheet lists them: widest first. */
+export const AUDIENCES: readonly Audience[] = [Audience.FriendsOfFriends, Audience.Friends, Audience.Close, Audience.OnlyMe]
 
 export enum Tag {
   Looking = 'looking',
@@ -638,8 +645,13 @@ export function audienceAdmits(audience: Audience, ring: Ring): boolean {
       return false
     case Audience.Friends:
       return ring === Ring.Friend || ring === Ring.Close
+    case Audience.Close:
+      return ring === Ring.Close
     case Audience.FriendsOfFriends:
       return true
+    default:
+      // A value this build does not know (a newer build's) admits nobody: fail closed.
+      return false
   }
 }
 

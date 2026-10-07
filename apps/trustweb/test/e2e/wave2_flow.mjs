@@ -2,6 +2,8 @@
  * Wave 2 (2026-10-07) in the real app, local only:
  *   1. P9: the Feed is off by default (the old bar); querying ("Call into your
  *      web") is one tap from Web, in both query styles, and from Inventory.
+ *   4. P22, P26: an inventory item's sheet offers all three tiers and "Only me";
+ *      the pill cycles through the same four.
  * Ports: Vite 5281, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/wave2_flow.mjs
  */
@@ -59,6 +61,26 @@ async function partQuery(a) {
   await a.locator('.query-dock .x').click()
 }
 
+/** Item 4: who can ask about an inventory item: acquaintances, friends, close friends, only me. */
+async function partAudience(a) {
+  await tab(a, 'Inventory')
+  await a.getByPlaceholder(/Motorbike/).fill('Spare room in Vienna for visitors')
+  await a.getByRole('button', { name: 'Add', exact: true }).click()
+  const row = a.locator('.inv', { hasText: 'Spare room in Vienna for visitors' })
+  await row.locator('.inv-text').click()
+  const choices = await a.locator('.sheet.on [data-item-audience]').evaluateAll((bs) => bs.map((b) => b.querySelector('b').textContent))
+  ok('the item sheet offers all three tiers and "Only me"', JSON.stringify(choices) === JSON.stringify(['Acquaintances', 'Friends', 'Close friends', 'Only me']), JSON.stringify(choices))
+  await a.locator('.sheet.on [data-item-audience="close"]').click()
+  const item = () => a.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')).inventory.find((i) => i.text === 'Spare room in Vienna for visitors'))
+  ok('choosing "Close friends" is kept, and the sheet says so', (await item()).audience === 'close' && (await a.locator('.sheet.on [data-item-audience="close"]').getAttribute('aria-pressed')) === 'true'
+    && /Who can ask: Close friends/.test(await a.locator('.sheet.on').innerText()))
+  await shot(a, 'w2-05-item-audience')
+  await closeSheet(a)
+  const seen = []
+  for (let i = 0; i < 4; i++) { seen.push((await row.locator('.aud').innerText()).trim()); await row.locator('.aud').click() }
+  ok('the pill cycles through the same four', JSON.stringify(seen) === JSON.stringify(['Close friends', 'Only me', 'Acquaintances', 'Friends']), JSON.stringify(seen))
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
@@ -69,6 +91,7 @@ async function main() {
     const a = await newPhone(browser, errors)
     await startPhone(a, vite.base, 'Jakob')
     await partQuery(a)
+    await partAudience(a)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++

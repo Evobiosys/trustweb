@@ -27,7 +27,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import type { AppState, DemoAccount, Found, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
+import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
@@ -1291,11 +1291,23 @@ function itemSheet(itemId: string): void {
   openSheet([
     el('h3', {}, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
     el('p', { class: 'meta' }, [S.itemSheetLead]),
-    el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience]) : S.itemPaused]),
+    el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
+    ...itemAudienceChooser(item),
     sourceFor(item.source, item.text),
     feed.itemExtras(item),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
+}
+
+/** All four choices on the item's sheet (wave 2, P22): the three tiers and "Only me". */
+function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
+  return [
+    el('h4', { class: 'eyebrow' }, [S.itemAudienceTitle]),
+    ...AUDIENCES.map((a) => el('button', {
+      class: 'radio' + (item.audience === a ? ' on' : ''), 'aria-pressed': String(item.audience === a), 'data-item-audience': a,
+      onclick: () => { item.audience = a; save(); render(); itemSheet(item.id) },
+    }, [el('b', {}, [S.audienceLabel[a]]), el('small', {}, [S.audienceHint[a]])])),
+  ]
 }
 
 function personSheet(personId: string): void {
@@ -2814,6 +2826,7 @@ function screenReview(): Node[] {
 // ---------------------------------------------------------------------------
 
 function nextAudience(a: Audience): Audience {
+  // An unknown value (indexOf -1) moves on to the first, widest choice.
   return AUDIENCES[(AUDIENCES.indexOf(a) + 1) % AUDIENCES.length]
 }
 

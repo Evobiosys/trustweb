@@ -118,11 +118,20 @@ export const S = {
     [Ring.Acquaintance]: 'met in person, still getting to know',
     [Ring.Intending]: 'someone you plan to meet, not yet in your web',
   } as Record<Ring, string>,
+  // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {
-    [Audience.FriendsOfFriends]: 'Friends of friends',
-    [Audience.Friends]: 'My friends',
+    [Audience.FriendsOfFriends]: 'Acquaintances',
+    [Audience.Friends]: 'Friends',
+    [Audience.Close]: 'Close friends',
     [Audience.OnlyMe]: 'Only me',
   } as Record<Audience, string>,
+  audienceHint: {
+    [Audience.FriendsOfFriends]: 'Everyone in your web: acquaintances, friends and close friends. Good for an opportunity or a thing to lend.',
+    [Audience.Friends]: 'Friends and close friends.',
+    [Audience.Close]: 'Only your close friends: the few you share almost anything with.',
+    [Audience.OnlyMe]: 'Nobody can ask about it. A note for yourself.',
+  } as Record<Audience, string>,
+  itemAudienceTitle: 'Who can ask about it',
   tagLabel: {
     [Tag.Looking]: 'Looking for',
     [Tag.Offer]: 'Can offer',
