@@ -545,7 +545,7 @@ async function contentChecksOrg(page) {
     today.heading === 'What it can do today' && today.items.join('|') === 'Ask your direct contacts|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
   check('index: the hero links "the vision" to why.html', today.link === 'why.html', String(today.link))
   const always = await page.evaluate(() => { const a = document.querySelector('.hero a.alwayslink'); return { text: a?.textContent, href: a?.getAttribute('href'), tag: a?.closest('p')?.textContent.replace(/\s+/g, ' ').trim() } })
-  const wantAlways = SITE_HOST === 'trustintheweb.org' ? 'https://trustintheweb.org/whitepaper.html#bonobos' : 'whitepaper.html#bonobos'
+  const wantAlways = SITE_HOST === 'trustintheweb.org' && mode === 'prod' ? 'https://trustintheweb.org/whitepaper.html#bonobos' : 'whitepaper.html#bonobos'
   check(`index: "always" in "We have always trusted our friends" links to the white paper's bonobo section (${wantAlways})`,
     always.text === 'always' && always.href === wantAlways && /^We have always trusted our friends/.test(always.tag ?? ''), JSON.stringify(always))
   // order: querying first in the features and use-case lists, the footer, and how it works

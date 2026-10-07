@@ -111,9 +111,9 @@ class Flags:
 
     def tokens(self) -> dict[str, str]:
         """Plain-text tokens; the fragment tokens WORDMARK and SWIRLS are added by the builder."""
-        # On the website's own host the link is the absolute anchor Jakob named; on a preview
-        # host (idea2.site draft) it stays relative so it resolves before the domain is live.
-        relative = self.is_org and self.site_host != ORG_HOST
+        # In production on the website's own host the link is the absolute anchor Jakob named;
+        # in a draft or on a preview host it stays relative, so it resolves inside that copy.
+        relative = self.is_org and (self.draft or self.site_host != ORG_HOST)
         whitepaper = WHITEPAPER_ANCHOR if relative else ORG_LIVE_URL + WHITEPAPER_ANCHOR
         back = (
             '<a class="back" href="./">&larr; back to TrustInTheWeb.org</a>'
