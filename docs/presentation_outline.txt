@@ -13,8 +13,8 @@ PART 1: SEE IT (live query)
    Note: Start on this slide for ten seconds only, then go straight to the demo. Say who you are in one sentence and who you want to hear from after.
 
 2. LIVE: ask your web
-   Line: Two phones side by side, and the room is invited to join in. One person asks, "Does anyone have a motorbike I could borrow?"
-   Note: The audience scans a QR code or opens the link and takes a place in the demo web with imaginary friends; the question travels and the answer returns with its path. If the network or the venue Wi-Fi fails, switch to the recorded walkthrough (slide 3).
+   Line: Two devices side by side on the real relay. One asks, "Does anyone have a cargo bike?"; the other person's phone decides, and what comes back is only what they chose to share, or "No match".
+   Note: Live today is one hop between connected devices, with consent, and a decline that looks exactly like "no match" (as in the app's own text). Audience join-in by QR or link is [to confirm: rehearse]; a three-person relay with a path such as "through Jonas" is roadmap work, shown only in the scripted walkthrough (slide 3).
    Fallback: the scripted three-person walkthrough in the demo ("See it in action").
 
 3. What just happened (the second hop)
@@ -75,19 +75,20 @@ PART 4: PHASES AND THE ASK
    Note: End on the QR code to the demo and connect@trustintheweb.org. Invite one question: "Who in this room would you ask first?"
    Ask list to confirm: NLnet and OIFF (due dates per whitepaper 5), collaborators, hosts for a pilot.
 
+---------------------------------------------------------------------------------------------------------------------------------------
+SCREENSHOTS TO USE (3, all generated in earlier waves; all inspected 2026-10-07 and show demo names only)
 ----------------------------------------------------------------------
-SCREENSHOTS TO USE (3, all generated in earlier waves; check each for real names before projecting)
-----------------------------------------------------------------------
-A. Slide 3 and 8 (second hop, scripted): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-07-second-degree_desktop.png
-   Shows three scripted phones and the line "Maya chose to share (through Jonas)". Caption it "scripted" on the slide.
-B. Slide 2 and 8 (two devices side by side, inventory with audiences): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-06-device-whoosh_desktop.png
-   Shows the inventory lines with audiences (Acquaintances, Only me) and two phones connected as friends. Demo contacts only.
-C. Slide 1 or 14 (the front page, lead image): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/front/prod_index_1280.png
-   Check it against the new TrustInTheWeb.org front page when that is built; replace if the hero changed.
+A. Slide 2 (live ask, a decline looks like "no match"): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-09-web-search-after-ask_desktop.png
+   Phone with "Does anyone have a sailing boat?", "Asked 1 person in your web" and the "No match" card ("You do not learn why"). One hop, live behaviour.
+B. Slide 2 and 10 (the answer comes back): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/app-b/18-feed-answer-from-second-phone_desktop.png
+   Second phone shows "Ben shared with you: Cargo bike to lend on weekends. You asked: Does anyone have a cargo bike?" Note: this sits in the optional Feed tab; crop to the card.
+C. Slide 3 and 8 (second hop, scripted): /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave2/screens/app/w2-07-second-degree_desktop.png
+   Three scripted phones, "Maya chose to share (through Jonas)", "Not in Jonas's inventory: in Maya's, his friend's." The page itself says "scripted" and "the live phones do one hop today"; caption it "scripted" on the slide.
+Optional for slide 1 or 14: /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/front/prod_index_1280.png is a 7,528 px full-page capture of the old front page (it still says "Taking notes comes first" and "1 %"); take a fresh capture of TrustInTheWeb.org instead.
 Do not use: /Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/screens/app-a/10_search_results_phone.png (shows a real meeting with a named place and person).
-Weak choice: wave2/screens/app/w2-02-query-from-inventory_phone.png (empty "nobody here yet" state). A better slide-2 screenshot would show an answer coming back: see wave2/screens/app/w2-09-web-search-after-ask_desktop.png or W/screens/app-b/18-feed-answer-from-second-phone_desktop.png (not yet inspected).
+Weak: wave2/screens/app/w2-02-query-from-inventory_phone.png (empty "nobody here yet" state).
 
-----------------------------------------------------------------------
+-----
 PRACTICAL
 ----------------------------------------------------------------------
 - Rehearse the live segment with two phones and a hotspot; carry the scripted fallback offline.

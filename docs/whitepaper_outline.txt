@@ -131,7 +131,7 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
   - Free while we test: the app is free; a Swiss server keeps an encrypted copy of recordings, free up to the equivalent of ten recordings of up to one hour per person. [B: site pricing page, 2026-10-07]
   - Freemium hosting beyond the allowance: "contact us" for a solid agreement; B2B look; prices only ever go down later. Hosted version promises smooth updates and migrations; an offline install is on its own. [B: site pricing page; C: Jakob 10-07 08:20]
   - Hosting site: TrustInTheWeb.com (pricing lives there; TrustInTheWeb.org stays free of pricing and only links "Do you need hosting?"). [C: Jakob 10-07 11:44]
-  - Marketplace fee: Jakob's latest wording is "80 percent of what others are charging" (not 1 percent), coming soon, nothing built. [to confirm against his recent memo; the memo was not found in Tana by text search; the live pricing page still says 1 percent]
+  - Marketplace fee: "80 percent of what others are charging" (not 1 percent), coming soon, nothing built. [C: Jakob 10-07 11:44; to confirm against his recent memo, not found in Tana by text search; the live pricing page still says 1 percent]
   - Dual licence: AGPL-3.0-or-later; on request a licence under the Adapted Modular Public License (AMPL 1.0); for well-funded organisations at a cost, starting from a budget of 100k per year. [C: Jakob 10-07 11:44; A: LICENSE, NOTICE and README of the repository]
   - Earlier model ideas to reconcile or retire: 1 percent on money through a QuestHub flow, USD 940 per year managed instance, consulting, weaver dividend. [C: nucleus Orbit B, 2026-09-14] Never: advertising, data sale, sponsorships, purchasable visibility. [C: nucleus]
   - Funding path: NLnet / NGI (an EU public-interest fund), Open Internet Freedom Fund, Manifund (application open until 11 Oct 2026; stipend USD 2,500 plus costs for a USD 8,500 minimum) [C: application text]. Whether NLnet applies is to be confirmed.
@@ -153,7 +153,7 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
 ======================================================================
   1. Bonobo versus chimpanzee wording (2.5). Default: section covers both, claims only what each source supports.
   2. Whether Zutrauen/Vertrauen enters a public paper (2.3). Default: leave out.
-  3. Marketplace fee 80 percent versus 1 percent (6). Default: write "80 percent of what others charge [to confirm]" nowhere public until confirmed.
+  3. Marketplace fee: Jakob's current wording is "80 percent of what others are charging" [C: 10-07 11:44]; only the cross-check against his recent memo is open (not found in Tana by text search). Default: cite his wording with [to confirm] in the paper; keep it off the slides until confirmed.
   4. Hop-two consent model for real users (live today: one hop). Default: label as designed.
   5. Evidence that people query friends first (2.4). Default: state as a hypothesis, collect it in the first community pilot.
   6. Verification of how contacts met beyond QR (retroactive verification, NFC, moving QR). Default: later.
