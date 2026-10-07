@@ -20,7 +20,7 @@
  * DOM-free (fetch and WebCrypto only), so the unit tests run the exact code.
  */
 import { InferenceRegion, ProviderDataPolicy, TranscribeProviderName } from './model'
-import type { TranscribeProviderInfo } from './model'
+import type { TranscribeProviderInfo, TranscribeRoute } from './model'
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -200,16 +200,35 @@ function oneOf<T extends string>(values: readonly T[], v: unknown): T | null {
   return typeof v === 'string' && (values as readonly string[]).includes(v) ? (v as T) : null
 }
 
-/** The `provider.transcribe` block of /hosted/status, read defensively; null when absent or not an object. */
-export function parseProviderInfo(v: unknown): TranscribeProviderInfo | null {
-  const block = typeof v === 'object' && v !== null ? (v as Record<string, unknown>).transcribe : null
-  if (typeof block !== 'object' || block === null) return null
-  const b = block as Record<string, unknown>
+/** Who, where and which data policy, from one route object; unknown values read as null. */
+function routeOf(b: Record<string, unknown>): TranscribeRoute {
   return {
     provider: oneOf(Object.values(TranscribeProviderName), b.provider),
     region: oneOf(Object.values(InferenceRegion), b.region),
     dataPolicy: oneOf(Object.values(ProviderDataPolicy), b.dataPolicy),
   }
+}
+
+/**
+ * The block's `fallback` (wave 3): absent = the server did not say
+ * (undefined); null or false = none; an object = that route; anything else
+ * (say `true`) = one exists that this build cannot name, read as an
+ * all-unknown route, so the copy never claims there is none.
+ */
+function fallbackOf(b: Record<string, unknown>): TranscribeRoute | null | undefined {
+  if (!('fallback' in b) || b.fallback === undefined) return undefined
+  if (b.fallback === null || b.fallback === false) return null
+  if (typeof b.fallback === 'object') return routeOf(b.fallback as Record<string, unknown>)
+  return { provider: null, region: null, dataPolicy: null }
+}
+
+/** The `provider.transcribe` block of /hosted/status, read defensively; null when absent or not an object. */
+export function parseProviderInfo(v: unknown): TranscribeProviderInfo | null {
+  const block = typeof v === 'object' && v !== null ? (v as Record<string, unknown>).transcribe : null
+  if (typeof block !== 'object' || block === null) return null
+  const b = block as Record<string, unknown>
+  const fallback = fallbackOf(b)
+  return { ...routeOf(b), ...(fallback === undefined ? {} : { fallback }) }
 }
 
 export function parseStatus(v: unknown): ServerStatus | null {

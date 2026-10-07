@@ -5,17 +5,21 @@
  * and what happens at app open (a cut-off job reads "may still be charged";
  * early packs whose transcript is done go out now).
  *
- * The rules live in server_transcription.ts (the job) and late_pack.ts (the
- * packs); this file is the glue with thin hooks into main.ts.
+ * Wave 3: transcription on a server is an extra button under the engine list
+ * ("see where"), never the default, and its yes is bound to the route the
+ * server reports (server_consent.ts); "Automatic" never sends audio away.
+ *
+ * The rules live in server_transcription.ts (the job), server_consent.ts (the
+ * yes) and late_pack.ts (the packs); this file is the glue with thin hooks into main.ts.
  */
 import { el } from '../../demo/src/ui/dom'
 import { aboutUrl, AboutPage } from './about'
 import type { AudioStore } from './audio_store'
 import { flushOutbox, transcriptStillComing } from './late_pack'
 import type { SendDeps } from './late_pack'
-import { TranscriberEngine } from './meeting_transcriber'
-import { ServerJobState, TranscriptionChoice, transcriptionChoice } from './model'
-import type { AppState, PastMeeting } from './model'
+import { InferenceRegion, ProviderDataPolicy, ServerJobState, TranscribeProviderName, TranscriptionChoice, transcriptionChoice } from './model'
+import type { AppState, PastMeeting, ServerConsentRoute, TranscribeProviderInfo } from './model'
+import { consentCovers, giveConsent, hasAnyConsent, readConsent, serverTranscribesByItself, withdrawConsent } from './server_consent'
 import { canStartJob, isJobRunning, runServerJob, settleInterruptedJobs } from './server_transcription'
 import type { JobTake } from './server_transcription'
 import { S } from './strings'
@@ -40,21 +44,27 @@ export interface TranscriptionViewHooks {
 }
 
 export interface TranscriptionView {
-  /** Does a finished recording go to the server now (the choice, the yes, and the server)? */
-  willTranscribe(liveEngine: TranscriberEngine | null): boolean
-  /** Settings chose "The Swiss server": not switched on there yet, so live engines stand in. */
+  /** Does a finished recording go to the server now (the server button's choice, the yes for this route, and the server)? */
+  willTranscribe(): boolean
+  /** The server button was chosen but the server does not transcribe now: live engines stand in. */
   serverOff(): boolean
-  /** The one-time yes; `then` runs after a yes (at once when it was given before). */
+  /** The server button was chosen and the server transcribes, but the yes does not cover its route now: live engines stand in. */
+  needsYesAgain(): boolean
+  /** The yes for this one recording; `then` runs after a yes (at once when the yes covers the route). */
   askConsent(then: () => void): void
+  /** Settings > Recording: the extra button below the engine list (never the default), or null where it is not offered. */
+  serverButton(after: () => void): HTMLElement | null
   /** Sends the meeting's recording to the server (the takes in hand, or those kept on this phone). */
   start(m: PastMeeting, takes?: readonly JobTake[]): void
   /** The lines a past meeting shows about its job and its early packs. */
   meetingExtras(m: PastMeeting): (Node | null)[]
   /** Settings > Recording: a line saying whether the server's transcription is switched on. */
   settingsNote(): HTMLElement | null
-  /** The yes was given (audio may go to the Swiss server, also under "Automatic"). */
+  /** The yes covers the route the server reports now. */
   consented(): boolean
-  /** Settings: take the yes back ("Automatic" then never uses the server; "The Swiss server" becomes "Automatic"). */
+  /** Any yes is stored (of either generation): asks the server for its status at app open. */
+  anyConsent(): boolean
+  /** Settings: take the yes back (a server choice becomes "Automatic", which never uses the server). */
   withdrawButton(after: () => void): HTMLElement | null
   /** At app open: settle cut-off jobs, send the full packs that are due. */
   boot(): void
@@ -62,12 +72,31 @@ export interface TranscriptionView {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-export function createTranscriptionView(h: TranscriptionViewHooks): TranscriptionView {
-  const consented = (): boolean => typeof h.state().serverTranscriptionConsentAt === 'number'
+/** A failed or lost job is never charged to the person (wave 3; the server refunds every failure). */
+const notCharged = (): HTMLElement => el('p', { class: 'meta', 'data-not-charged': '1' }, [S.jobNotCharged])
 
+/** The route an earlier yes was given for, in the shape the copy names (unknown values read generic). */
+function routeFromConsent(c: ServerConsentRoute): TranscribeProviderInfo {
+  const pick = <T extends string>(values: readonly T[], v: string | null): T | null => (v !== null && (values as readonly string[]).includes(v) ? (v as T) : null)
+  return {
+    provider: pick(Object.values(TranscribeProviderName), c.provider),
+    region: pick(Object.values(InferenceRegion), c.region),
+    dataPolicy: pick(Object.values(ProviderDataPolicy), c.dataPolicy),
+  }
+}
+
+export function createTranscriptionView(h: TranscriptionViewHooks): TranscriptionView {
   function serverOn(): boolean {
     return h.ctx.enabled() && h.ctx.status()?.transcribe === true
   }
+
+  /** The route the server reports now (null: it did not say, or no status yet). */
+  const provider = (): TranscribeProviderInfo | null => h.ctx.status()?.provider ?? null
+
+  /** The yes covers the route the server reports now (wave 3, D7). Without a status there is nothing to compare with. */
+  const consented = (): boolean => Boolean(h.ctx.status()) && consentCovers(readConsent(h.state()), provider())
+
+  const chosen = (): boolean => transcriptionChoice(h.state()) === TranscriptionChoice.Server
 
   /** The free transcription hours per person from the server's plan, or null when it did not say. */
   function freeHours(): number | null {
@@ -75,20 +104,78 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     return limit > 0 ? Math.round((limit / 3600) * 10) / 10 : null
   }
 
-  function willTranscribe(liveEngine: TranscriberEngine | null): boolean {
-    if (!serverOn() || !consented()) return false
-    const choice = transcriptionChoice(h.state())
-    return choice === TranscriptionChoice.Server || (choice === TranscriptionChoice.Auto && liveEngine === TranscriberEngine.None)
+  function willTranscribe(): boolean {
+    return serverTranscribesByItself(transcriptionChoice(h.state()), serverOn(), consented())
   }
 
+  /**
+   * Where it is processed, before anything else: the route, its data policy,
+   * its fallback; an earlier yes for another route is named.
+   */
+  function routeLines(): HTMLElement[] {
+    const p = provider()
+    const earlier = readConsent(h.state())
+    const stale = earlier && !consented()
+    return [
+      el('p', { class: 'server-where', 'data-server-where': '1' }, [el('b', {}, [S.serverWhere(p)])]),
+      el('p', { class: 'meta', 'data-server-policy': '1' }, [S.serverPolicy(p)]),
+      ...(S.serverFallback(p) ? [el('p', { class: 'meta', 'data-server-fallback': '1' }, [S.serverFallback(p) ?? ''])] : []),
+      ...(stale ? [el('p', { class: 'warn', 'data-server-ask-again': '1' }, [S.serverAskAgain(S.serverRouteLabel(routeFromConsent(earlier)))])] : []),
+      el('p', { class: 'meta', 'data-consent-body': '1' }, [S.consentBody(p, freeHours())]),
+    ]
+  }
+
+  function yes(choose: boolean, then: () => void, label: string): HTMLElement {
+    return el('button', {
+      class: 'btn btn-electric', 'data-consent': 'yes',
+      onclick: () => {
+        const s = h.state()
+        giveConsent(s, provider(), Date.now())
+        if (choose) { s.transcription = TranscriptionChoice.Server; delete s.talkWeaveLocal }
+        h.save()
+        h.closeSheet()
+        then()
+      },
+    }, [label])
+  }
+
+  /** The yes for one recording (a past meeting's "Transcribe through our server"): the same sheet, the choice stays. */
   function askConsent(then: () => void): void {
     if (consented()) { then(); return }
+    h.openSheet([el('h3', {}, [S.consentTitle]), ...routeLines(), yes(false, then, S.consentYes), el('button', { class: 'btn btn-ghost', 'data-consent': 'no', onclick: h.closeSheet }, [S.consentNo])])
+  }
+
+  /** "Transcribe on a server (see where)": where first, then the yes that also makes it the choice, or the way back. */
+  function serverSheet(after: () => void): void {
+    const back = (): void => { h.closeSheet(); after() }
+    const stop = el('button', {
+      class: 'btn btn-ghost', 'data-server-stop': '1',
+      onclick: () => { withdrawConsent(h.state()); h.save(); h.toast(S.serverStopped); back() },
+    }, [S.serverStop])
+    if (!serverOn()) {
+      h.openSheet([el('h3', {}, [S.serverSheetTitle]), el('p', { class: 'meta' }, [S.serverNotOn]), chosen() ? stop : null])
+      return
+    }
+    const fine = chosen() && consented()
     h.openSheet([
-      el('h3', {}, [S.consentTitle]),
-      el('p', { class: 'meta', 'data-consent-body': '1' }, [S.consentBody(h.ctx.status()?.provider ?? null, freeHours())]),
-      el('button', { class: 'btn btn-electric', 'data-consent': 'yes', onclick: () => { h.state().serverTranscriptionConsentAt = Date.now(); h.save(); h.closeSheet(); then() } }, [S.consentYes]),
-      el('button', { class: 'btn btn-ghost', 'data-consent': 'no', onclick: h.closeSheet }, [S.consentNo]),
+      el('h3', {}, [S.serverSheetTitle]),
+      ...routeLines(),
+      fine ? el('p', { class: 'meta', 'data-server-chosen': '1' }, [S.serverChosen]) : yes(true, after, consented() ? S.serverUseAgain : S.serverChoose),
+      chosen() ? stop : el('button', { class: 'btn btn-ghost', 'data-consent': 'no', onclick: h.closeSheet }, [S.consentNo]),
     ])
+  }
+
+  /**
+   * Offered while the server transcribes; a phone that chose it before keeps
+   * seeing it (to move away), also while the server is off.
+   */
+  function serverButton(after: () => void): HTMLElement | null {
+    if (!h.ctx.enabled() || (!chosen() && !serverOn())) return null
+    const on = chosen()
+    return el('button', {
+      class: 'radio server-btn' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-server-button': '1',
+      onclick: () => serverSheet(after),
+    }, [el('b', {}, [S.setServerButton]), el('small', {}, [on && serverOn() ? S.setServerButtonChosen(S.serverRouteLabel(provider())) : S.setServerButtonHint])])
   }
 
   const sendDeps: SendDeps = { upload: (k, p) => h.uploadPack(k, p), sleep, now: Date.now, save: h.save }
@@ -167,10 +254,12 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     switch (job.state) {
       case ServerJobState.Done: return [el('p', { class: 'meta job-state', 'data-job': 'done' }, [m.roughTimes === true ? S.jobDoneRough : S.jobDone])]
       case ServerJobState.MaybeCharged:
-        return [el('p', { class: 'warn job-state', 'data-job': 'maybe-charged' }, [S.jobMaybeCharged]), serverOn() ? tryButton(S.jobTryAgain, S.jobTryAgainCharged) : null]
+        return [el('p', { class: 'warn job-state', 'data-job': 'maybe-charged' }, [S.jobMaybeCharged]), notCharged(), serverOn() ? tryButton(S.jobTryAgain, S.jobTryAgainLost) : null]
       case ServerJobState.Failed:
         return [
           el('p', { class: 'warn job-state', 'data-job': 'failed', 'data-job-error': job.error ?? '' }, [failureText(job.error)]),
+          // The allowance being used up is not a failed job: nothing ran.
+          job.error === SwissError.AllowanceReached ? null : notCharged(),
           job.error === SwissError.AllowanceReached ? el('a', { class: 'btn btn-ghost btn-sm', href: aboutUrl(AboutPage.Feedback), target: '_blank', rel: 'noopener noreferrer' }, [S.fairPrice]) : null,
           serverOn() && job.error !== SwissError.AllowanceReached && job.error !== SwissError.TooLarge ? tryButton(S.jobTryAgain) : null,
         ]
@@ -195,13 +284,11 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
   }
 
   function withdrawButton(after: () => void): HTMLElement | null {
-    if (!consented()) return null
+    if (!hasAnyConsent(h.state())) return null
     return el('button', {
       class: 'btn btn-ghost btn-sm', 'data-consent-withdraw': '1',
       onclick: () => {
-        const s = h.state()
-        delete s.serverTranscriptionConsentAt
-        if (transcriptionChoice(s) === TranscriptionChoice.Server) s.transcription = TranscriptionChoice.Auto
+        withdrawConsent(h.state())
         h.save()
         h.toast(S.consentWithdrawn)
         after()
@@ -227,12 +314,15 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
 
   return {
     willTranscribe,
-    serverOff: () => h.ctx.enabled() && transcriptionChoice(h.state()) === TranscriptionChoice.Server && h.ctx.status()?.transcribe !== true,
+    serverOff: () => h.ctx.enabled() && chosen() && h.ctx.status()?.transcribe !== true,
+    needsYesAgain: () => chosen() && serverOn() && !consented(),
     askConsent,
+    serverButton,
     start,
     meetingExtras: (m) => [...jobLines(m), ...outboxLines(m)],
     settingsNote,
     consented,
+    anyConsent: () => hasAnyConsent(h.state()),
     withdrawButton,
     boot,
   }

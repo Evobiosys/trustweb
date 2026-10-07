@@ -5,18 +5,52 @@
  * acquaintances", "a decline looks exactly like no match".
  */
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
-import type { TranscribeProviderInfo } from './model'
+import type { TranscribeProviderInfo, TranscribeRoute } from './model'
 
 /** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
 const PROVIDER_NAME: Readonly<Record<TranscribeProviderName, string>> = {
   [TranscribeProviderName.OpenRouter]: 'OpenRouter',
   [TranscribeProviderName.Infomaniak]: 'Infomaniak',
+  [TranscribeProviderName.Berget]: 'Berget',
 }
 
 /** Where the inference runs, as a phrase. */
 const REGION_PHRASE: Readonly<Record<InferenceRegion, string>> = {
   [InferenceRegion.Us]: 'in the United States',
   [InferenceRegion.Ch]: 'in Switzerland',
+  [InferenceRegion.Se]: 'in Sweden (EU)',
+  [InferenceRegion.Eu]: 'in the EU',
+}
+
+/** Where the inference runs, as the short label of the server sheet ("Berget, Sweden (EU)"). */
+const REGION_LABEL: Readonly<Record<InferenceRegion, string>> = {
+  [InferenceRegion.Us]: 'USA',
+  [InferenceRegion.Ch]: 'Switzerland',
+  [InferenceRegion.Se]: 'Sweden (EU)',
+  [InferenceRegion.Eu]: 'EU',
+}
+
+/** "Berget, Sweden (EU)", "OpenRouter, USA", "Infomaniak, Switzerland"; what the server did not say stays generic. */
+function routeLabel(r: TranscribeRoute | null): string {
+  const name = r?.provider ? PROVIDER_NAME[r.provider] : 'an outside transcription service'
+  return r?.region ? `${name}, ${REGION_LABEL[r.region]}` : name
+}
+
+/** The data policy a route is called with, as one sentence. */
+function policyLine(r: TranscribeRoute | null): string {
+  switch (r?.dataPolicy) {
+    case ProviderDataPolicy.Deny: return 'Data policy: every call asks for "no data collection", so the audio is not kept and not used for training.'
+    case ProviderDataPolicy.Allow: return 'Data policy: its own terms apply; we do not ask it to forgo keeping the audio.'
+    default: return 'Data policy: its own terms apply (no setting is sent with the call).'
+  }
+}
+
+/** The fallback, said plainly; null when the server did not say (no claim either way). */
+function fallbackLine(p: TranscribeProviderInfo | null): string | null {
+  if (!p || p.fallback === undefined) return null
+  if (p.fallback === null) return 'No fallback: if it cannot transcribe, no other service is tried.'
+  const policy = p.fallback.dataPolicy === ProviderDataPolicy.Deny ? ', asking for "no data collection"' : ''
+  return `Fallback: when it is down, ${routeLabel(p.fallback)} transcribes instead${policy}. Your yes covers both.`
 }
 
 /** The consent's first sentence: the route the server reports, or a generic one when it says nothing this build knows. */
@@ -471,14 +505,14 @@ export const S = {
     [TranscriptionChoice.Auto]: 'Automatic',
     [TranscriptionChoice.TalkWeave]: 'TalkWeave on this computer',
     [TranscriptionChoice.OnDevice]: 'On this device',
-    [TranscriptionChoice.Server]: 'Through our server (audio leaves this phone)',
+    [TranscriptionChoice.Server]: 'Transcribe on a server',
     [TranscriptionChoice.Later]: 'Transcribe later',
   } as Record<TranscriptionChoice, string>,
   setTranscriptionHint: {
     [TranscriptionChoice.Auto]: 'TalkWeave where this site reaches it, else speech on this device, else later. Never asks to reach this computer.',
     [TranscriptionChoice.TalkWeave]: 'Live transcripts from TalkWeave running here. Your browser asks once to let this page reach this computer. Without it: as Automatic.',
     [TranscriptionChoice.OnDevice]: 'Only this device listens. Audio never leaves it; where it cannot, the recording is transcribed later.',
-    [TranscriptionChoice.Server]: 'When a recording stops, its audio goes through our server to an outside transcription service and comes back as text; we keep nothing. Nothing live. Asks once first and says then who transcribes it, and where.',
+    [TranscriptionChoice.Server]: 'When a recording stops, its audio goes through our server to an outside transcription service and comes back as text; we keep nothing. Never the default: chosen with its own button, after seeing where.',
     [TranscriptionChoice.Later]: 'Nothing live. The recording is transcribed later on your computer.',
   } as Record<TranscriptionChoice, string>,
   setDefaultRecording: 'The Record tab starts with',
@@ -777,31 +811,49 @@ export const S = {
   consentNo: 'No, not now',
   trServer: 'Transcribed through our server when you stop (the audio leaves this phone)',
   trServerOff: 'Transcription through our server is not switched on yet: transcribing on this device instead, where it can.',
-  setServerOn: 'Transcription through our server is on. It asks once before the first recording goes there.',
-  setServerOnYes: 'Transcription through our server is on. You said yes to sending audio there.',
+  // Wave 3 (D7): the yes covers one route; another route asks again before any audio goes there.
+  trServerAskAgain: 'Where the server transcribes has changed since your yes: transcribing on this device instead, where it can. Settings > Recording asks again.',
+  setServerOn: 'Our server can also transcribe, as an extra: never the default, and only after you saw where and said yes.',
+  setServerOnYes: 'Our server can also transcribe. You said yes to the route it uses now.',
   setServerOff: 'Transcription through our server is not switched on yet, so it is not offered. Recordings are transcribed on this device where it can, else later.',
   setServerUnknown: 'Our server did not answer just now.',
-  // review-app-b: after the yes, "Automatic" also sends audio there; said, and the yes can be taken back.
-  setAutoWithServer: 'TalkWeave where this site reaches it, else speech on this device, else our server (you said yes: the audio leaves this phone), else later.',
+  // Wave 3 (Jakob 2026-10-07): server transcription is an extra button, never the default; "Automatic" never uses it.
+  setServerButton: 'Transcribe on a server (see where)',
+  setServerButtonHint: 'Not the default: the audio leaves this phone. Tap to see where it is processed before you choose it.',
+  setServerButtonChosen: (where: string) => `Chosen: ${where}. The audio of a recording goes there when it stops.`,
+  serverSheetTitle: 'Transcribe on a server',
+  serverWhere: (p: TranscribeProviderInfo | null) => `Processed by: ${routeLabel(p)}.`,
+  serverPolicy: (p: TranscribeProviderInfo | null) => policyLine(p),
+  serverFallback: (p: TranscribeProviderInfo | null) => fallbackLine(p),
+  serverRouteLabel: (p: TranscribeProviderInfo | null) => routeLabel(p),
+  serverAskAgain: (earlier: string) => `Your earlier yes was for ${earlier}. Where it is processed has changed since, so it asks again.`,
+  serverChosen: 'You chose it. Your yes covers exactly this route: if it changes, nothing is sent until you say yes again.',
+  serverChoose: 'Yes, transcribe my recordings there',
+  serverUseAgain: 'Use it for my recordings',
+  serverStop: 'Stop: transcribe on this device again',
+  serverStopped: 'Done: no audio goes to a server. "Automatic" transcribes on this device where it can, else later.',
+  serverNotOn: 'Our server does not transcribe right now, so nothing goes there; recordings are transcribed on this device where it can.',
+  // Failed or lost jobs (wave 3, Jakob: "don't bill the user with failed transcripts"; the server refunds every failure).
+  jobNotCharged: 'Not charged to you: failures are not charged to your allowance.',
   consentWithdraw: 'Take back my yes to transcription through our server',
-  consentWithdrawn: 'Done: no audio goes to our server for transcription any more. Recordings wait to be transcribed later.',
+  consentWithdrawn: 'Done: no audio goes to our server for transcription any more. "Automatic" transcribes on this device where it can, else later.',
   jobStart: 'Transcribe through our server',
   jobRunning: 'Transcribing through our server... This can take a few minutes: keep TrustWeb open until it is done (the screen stays on). You can go to other screens in TrustWeb.',
   jobDone: 'Transcribed through our server.',
   // The server estimated the times per sentence (its answer said approx): said once, next to the job's state (wave 2).
   jobDoneRough: 'Transcribed through our server. Rough times: the moments of the lines are estimated per sentence.',
   jobTryAgain: 'Try again',
-  jobTryAgainCharged: 'The last try may have been charged already. Send the recording again?',
-  jobMaybeCharged: 'The answer did not come back (the connection dropped, the app closed or it took too long). It may still have been charged to your allowance: check later before you try again.',
+  jobTryAgainLost: 'The answer of the last try was lost on the way. Send the recording to the server again?',
+  jobMaybeCharged: 'The answer did not come back (the connection dropped, the app closed or it took too long). You can send it again.',
   jobNotConfigured: 'Transcription through our server is not switched on yet. The recording stays on this phone: transcribe it later.',
   jobAllowance: 'Your free transcription allowance is used up. Beyond it, transcription will cost something; pricing is still being worked out.',
-  jobBusy: 'The transcription service asked us to wait. Nothing was charged: try again in a few minutes.',
-  jobBusyToday: 'Today\'s transcription budget on our server is used up. Nothing was charged: try again tomorrow.',
-  jobRateLimited: 'Too many tries just now. Nothing was charged: try again in a minute.',
+  jobBusy: 'The transcription service asked us to wait: try again in a few minutes.',
+  jobBusyToday: 'Today\'s transcription budget on our server is used up: try again tomorrow.',
+  jobRateLimited: 'Too many tries just now: try again in a minute.',
   jobTooLong: 'A take longer than 1 hour cannot be transcribed on the server.',
   jobUnsupported: 'The server does not take this recording\'s format.',
   jobNoAudio: 'The recording is no longer kept on this phone, so there is nothing to send.',
-  jobFailed: 'It could not be transcribed. Nothing was charged: try again.',
+  jobFailed: 'It could not be transcribed: try again.',
   fairPrice: 'Tell us what would be fair',
   reviewServerPending: 'Transcribing through our server... Keep TrustWeb open until it is done. The lines from the transcript appear here; you can also save now.',
 

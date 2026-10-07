@@ -414,6 +414,10 @@ textarea.field{resize:vertical; line-height:1.5}
 .radio.on{border-color:var(--teal); background:var(--tint-teal)}
 .radio.on::before{border-color:var(--teal); box-shadow:inset 0 0 0 4px #fff; background:var(--teal)}
 .radio small{font-size:12px; color:var(--ink-soft)}
+/* Wave 3: transcription on a server is an extra, set apart from the engine list (never the default). */
+.radio.server-btn{margin-top:12px; border-style:dashed}
+.radio.server-btn.on{border-style:solid}
+.server-where{margin:0 0 6px}
 .aud-list{background:var(--card); border-radius:14px; padding:2px 14px}
 .aud-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 0; font-size:14px; border-bottom:1px solid var(--line)}
 .aud-row:last-child{border-bottom:0}

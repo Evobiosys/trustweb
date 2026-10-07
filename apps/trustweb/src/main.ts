@@ -25,7 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -1741,7 +1741,7 @@ function jobTakes(): JobTake[] {
 
 /** The recording just ended with no transcript: the Swiss server transcribes it where the person chose so (stored first). */
 function serverAfterTake(): void {
-  if (!transcribing || draft.segments.length || !takes.length || !transcription.willTranscribe(engine)) return
+  if (!transcribing || draft.segments.length || !takes.length || !transcription.willTranscribe()) return
   recordPastMeeting()
   const m = st().meetings?.find((x) => x.id === draft.meetingId)
   if (m) transcription.start(m, jobTakes())
@@ -2030,16 +2030,16 @@ async function ensureEngine(): Promise<TranscriberEngine> {
   if (engine !== null) return engine
   const choice = transcriptionChoice(st())
   const live = (c: TranscriptionChoice): Promise<TranscriberEngine> => detectEngine(enginePlan(c)).catch(() => TranscriberEngine.None)
+  // Wave 3: only the server button's choice ever sends audio away; "Automatic" and the rest stay on this side.
   if (choice !== TranscriptionChoice.Server) {
     engine = await live(choice)
-    // Automatic hands a recording nobody could transcribe live to the Swiss server, only after the one-time yes
-    // (without it the server is not even asked whether it transcribes: review-app-b).
-    if (engine === TranscriberEngine.None && typeof st().serverTranscriptionConsentAt === 'number') await swiss.probe()
     return engine
   }
-  // The Swiss server transcribes when the take stops; until it is switched on there, the live engines stand in.
-  engine = (await swiss.probe())?.transcribe === true ? TranscriberEngine.None : await live(TranscriptionChoice.Auto)
+  // The server transcribes when the take stops; while it is off, or its route is not the one the yes was for, the live engines stand in.
+  await swiss.probe()
+  engine = transcription.willTranscribe() ? TranscriberEngine.None : await live(TranscriptionChoice.Auto)
   if (transcription.serverOff()) recNotice = S.trServerOff
+  else if (transcription.needsYesAgain()) recNotice = S.trServerAskAgain
   return engine
 }
 
@@ -2173,7 +2173,7 @@ function engineLabel(): string {
   switch (engine) {
     case TranscriberEngine.TalkWeave: return S.trTalkWeave
     case TranscriberEngine.OnDevice: return S.trOnDevice
-    case TranscriberEngine.None: return transcription.willTranscribe(engine) ? S.trServer : S.trLater
+    case TranscriberEngine.None: return transcription.willTranscribe() ? S.trServer : S.trLater
     default: return S.trChecking
   }
 }
@@ -3039,22 +3039,10 @@ function editNameSheet(): void {
  * Settings > Recording (owner 2026-10-06): who transcribes, and whether the
  * Record tab starts as "Just me" or "A meeting". Choosing a transcription
  * replaces the older "Use TalkWeave on this computer" switch for good.
+ * Wave 3: the engine list never holds the server; it is an extra button below
+ * it (transcription_view.ts serverButton), offered only while the server
+ * transcribes, or to a phone that chose it before (so it can move away).
  */
-/** "Automatic" says so when it may send audio through our server (after the yes, review-app-b). */
-function autoHint(c: TranscriptionChoice): string {
-  return c === TranscriptionChoice.Auto && swiss.enabled() && transcription.consented() ? S.setAutoWithServer : S.setTranscriptionHint[c]
-}
-
-/**
- * Transcription through our server is offered only while the server says it
- * transcribes (wave 2: hidden while /hosted/status says transcribe:false, as
- * production does until Jakob places the key). A phone that chose it before
- * still sees its choice, so it can move away from it.
- */
-function serverChoiceOffered(choice: TranscriptionChoice): boolean {
-  return swiss.enabled() && (choice === TranscriptionChoice.Server || swiss.status()?.transcribe === true)
-}
-
 function recordingSettings(s: AppState): (HTMLElement | null)[] {
   const choice = transcriptionChoice(s)
   const start = defaultRecording(s)
@@ -3067,15 +3055,12 @@ function recordingSettings(s: AppState): (HTMLElement | null)[] {
     }, [el('b', {}, [S.setDefaultRecordingLabel[d]]), el('small', {}, [S.setDefaultRecordingHint[d]])])),
     el('p', { class: 'meta' }, [S.setDefaultRecordingNote]),
     el('p', { class: 'meta set-sub' }, [S.setTranscription]),
-    ...TRANSCRIPTION_CHOICES.filter((c) => c !== TranscriptionChoice.Server || serverChoiceOffered(choice)).map((c) => {
-      const pick = (): void => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() }
-      return el('button', {
-        class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
-        // The Swiss server only after the one-time yes (audio leaves the phone).
-        onclick: () => (c === TranscriptionChoice.Server ? transcription.askConsent(pick) : pick()),
-      }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [autoHint(c)])])
-    }),
+    ...ENGINE_CHOICES.map((c) => el('button', {
+      class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
+      onclick: () => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() },
+    }, [el('b', {}, [S.setTranscriptionLabel[c]]), el('small', {}, [S.setTranscriptionHint[c]])])),
     transcription.settingsNote(),
+    transcription.serverButton(() => { engine = null; settingsSheet() }),
     transcription.withdrawButton(() => { engine = null; settingsSheet() }),
     audioKeptLine(),
   ]
@@ -3448,7 +3433,7 @@ if (state && !state.testOf?.handedOverAt) {
     transcription.boot()
     // Someone who uses the Swiss server gets its status at once (the past meetings' buttons depend on it);
     // nobody else is asked anything at app open (review-app-b).
-    if (typeof st().serverTranscriptionConsentAt === 'number' || readHosting(st())?.on === true) void swiss.probe()
+    if (transcription.anyConsent() || transcriptionChoice(st()) === TranscriptionChoice.Server || readHosting(st())?.on === true) void swiss.probe()
     hosting.boot()
   }
   packs.checkLate()

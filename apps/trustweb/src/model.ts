@@ -39,12 +39,18 @@ export enum SearchEngine {
 export enum TranscribeProviderName {
   OpenRouter = 'openrouter',
   Infomaniak = 'infomaniak',
+  /** Berget AI, Sweden (wave 3: the default provider; OpenRouter only as its fallback). */
+  Berget = 'berget',
 }
 
 /** Where the INFERENCE runs (not where our server is). */
 export enum InferenceRegion {
   Us = 'us',
   Ch = 'ch',
+  /** Sweden, in the EU (Berget). */
+  Se = 'se',
+  /** Somewhere in the EU, not narrowed down further. */
+  Eu = 'eu',
 }
 
 /** OpenRouter's data-collection setting sent with every call; Infomaniak has none (null). */
@@ -53,10 +59,38 @@ export enum ProviderDataPolicy {
   Allow = 'allow',
 }
 
-export interface TranscribeProviderInfo {
+/** One transcription route: who, where the inference runs, which data policy is sent. */
+export interface TranscribeRoute {
   provider: TranscribeProviderName | null
   region: InferenceRegion | null
   dataPolicy: ProviderDataPolicy | null
+}
+
+export interface TranscribeProviderInfo extends TranscribeRoute {
+  /**
+   * Wave 3: the provider that takes over when the active one is down (5xx,
+   * timeout), so audio can end up there too. null: the server says there is
+   * none. undefined: the server did not say (older servers).
+   */
+  fallback?: TranscribeRoute | null
+}
+
+/**
+ * The yes to transcription on a server, bound to the route it was given for
+ * (wave 3, D7 of review-wave2): provider, region, data policy and fallback as
+ * the server reported them at that moment. A different route asks again. The
+ * values are kept as the server's strings (an older or newer build may not
+ * know them as enum values).
+ */
+export interface ServerConsentRoute {
+  provider: string | null
+  region: string | null
+  dataPolicy: string | null
+}
+
+export interface ServerConsent extends ServerConsentRoute {
+  at: number
+  fallback: ServerConsentRoute | null
 }
 
 /** In the order the row shows them (Jakob's list, Max meeting 00:16:53). */
@@ -484,8 +518,15 @@ export interface AppState {
    * stored there. The same account carries the server transcription. Absent: never used.
    */
   hosting?: HostingState
-  /** The person said yes, once, to audio going through the Swiss server for transcription. Absent: not asked yet. */
+  /**
+   * Before wave 3: the bare time of the yes to server transcription. Wave 3
+   * reads it as NO consent (it names no route; no live phone holds one) and
+   * deletes it with every new yes or withdrawal, so a rollback never revives
+   * a yes that named nobody. Absent: never given (or replaced).
+   */
   serverTranscriptionConsentAt?: number
+  /** Wave 3: the yes to server transcription with the route it covers (server_consent.ts). Absent: not given. */
+  serverTranscriptionConsent?: ServerConsent
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
@@ -659,6 +700,16 @@ export enum TranscriptionChoice {
 
 export const TRANSCRIPTION_CHOICES: readonly TranscriptionChoice[] = [
   TranscriptionChoice.Auto, TranscriptionChoice.TalkWeave, TranscriptionChoice.OnDevice, TranscriptionChoice.Server, TranscriptionChoice.Later,
+]
+
+/**
+ * The engine list in Settings > Recording (wave 3): transcription on a server
+ * is never one of these radios but an extra button below them ("see where"),
+ * so "Automatic" and the rest never send audio away. TRANSCRIPTION_CHOICES
+ * still knows Server: a stored "server" stays readable.
+ */
+export const ENGINE_CHOICES: readonly TranscriptionChoice[] = [
+  TranscriptionChoice.Auto, TranscriptionChoice.TalkWeave, TranscriptionChoice.OnDevice, TranscriptionChoice.Later,
 ]
 
 /** Settings > Recording: what the Record tab opens for a fresh draft (owner 2026-10-06). */
