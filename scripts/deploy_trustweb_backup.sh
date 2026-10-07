@@ -16,7 +16,8 @@
 #                 Prints free -m and df -h before and after. Never touches the production unit, its data
 #                 dir or the Caddyfile.
 #   --production  Backs up the server copy (cp .bak.<timestamp>), installs the code, rewrites the unit
-#                 (adds the hosted data dir, an optional EnvironmentFile for the transcription key),
+#                 (adds the hosted data dir, TRANSCRIBE_PROVIDER=openrouter, the OpenRouter key as a systemd
+#                 credential when /etc/unfold-news/orkey.json exists on questhub, an optional EnvironmentFile),
 #                 restarts, and adds the Caddy routes /hosted/*, /transcribe, /feedback (timestamped
 #                 Caddyfile backup, `caddy validate` before reload, restore on failure). RUN BY THE
 #                 ORCHESTRATOR ONLY, after review.
@@ -57,6 +58,10 @@ SRC_DIR="$HERE/../services/trustweb-backup"
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
 rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
 TS="$(date +%Y%m%d_%H%M%S)"
+# The OpenRouter key unfold-news uses lives in this root-owned file ({"key": "..."}). The unit receives it as a systemd
+# credential (LoadCredential=orkey:...): systemd reads it as root and hands the service a private copy under
+# $CREDENTIALS_DIRECTORY, so the service user needs no access to /etc/unfold-news. This script never reads the file.
+CRED_FILE=/etc/unfold-news/orkey.json
 
 caddy_snippet() {
   cat <<'CADDY'
@@ -99,9 +104,12 @@ caddy_snippet() {
 CADDY
 }
 
-# The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max.
+# The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max, $4 = 1 when the credential file exists on questhub
+# (a LoadCredential= line for a missing file would stop the unit from starting, so it is written only when the file is there).
 unit_text() {
-  local s="$1" port="$2" mem="$3" allowed="app.idea2.site"
+  local s="$1" port="$2" mem="$3" cred="${4:-0}" allowed="app.idea2.site" cred_line=""
+  [ "$cred" = 1 ] && cred_line="LoadCredential=orkey:${CRED_FILE}
+"
   cat <<UNIT
 [Unit]
 Description=TrustWeb server${s:+ (staging)}: encrypted backups, hosted recordings, transcription proxy, feedback (see web-of-trust services/trustweb-backup)
@@ -115,9 +123,10 @@ Environment=BACKUP_DIR=/var/lib/trustweb-backup${s}
 Environment=HOSTED_DIR=/var/lib/trustweb-hosted${s}
 Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
 Environment=ALLOWED_HOSTS=${allowed}
-# Transcription key and product id, placed by Jakob with scripts/trustweb_transcribe_switch_on.sh (0600, root).
-# Absent file = transcription answers 503 not_configured.
-EnvironmentFile=-/etc/trustweb-backup${s}.env
+# Transcription: provider openrouter (default), key handed in as a credential, switched on by scripts/trustweb_transcribe_switch_on.sh
+# (it writes TRANSCRIBE_ENABLED=1 into the env file below). Without that switch /transcribe answers 503 not_configured.
+Environment=TRANSCRIBE_PROVIDER=openrouter
+${cred_line}EnvironmentFile=-/etc/trustweb-backup${s}.env
 DynamicUser=yes
 StateDirectory=trustweb-backup${s} trustweb-hosted${s}
 StateDirectoryMode=0700
@@ -177,7 +186,7 @@ echo "feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://idea2.site' -H 'Content-Type: application/json' -d '{"text":"smoke test, please ignore","kind":"feedback"}' $B/feedback)" 204 "POST /feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://evil.example.com' -H 'Content-Type: application/json' -d '{"text":"x"}' $B/feedback)" 403 "POST /feedback foreign Origin"
 expect "$(code -H "$H" -X OPTIONS -H 'Origin: https://app.idea2.site' $B/feedback)" 204 "OPTIONS /feedback"
-echo "transcription (no key placed): not configured"
+echo "transcription (credential loaded or not, but not switched on): not configured"
 expect "$(code -H "$H" -X POST -H "X-Account: $ACC" -H "X-Write-Token: $TOK" -H 'X-Audio-Seconds: 5' -H 'Content-Type: audio/webm' --data-binary @/tmp/tw_smoke.bin $B/transcribe)" 503 "POST /transcribe"
 rm -f /tmp/tw_smoke.bin
 echo "SMOKE OK"
@@ -224,15 +233,17 @@ rollback() {
 }
 
 install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
-  local unit="$1" file="/etc/systemd/system/$1.service"
+  local unit="$1" file="/etc/systemd/system/$1.service" cred=0
   echo "systemd unit $file (written in place with tee, never mv from /tmp)"
   if [ "$DRY" = 1 ]; then
-    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" | sed 's/^/    /'
+    echo "[dry-run] LoadCredential=orkey:$CRED_FILE is written only if 'sudo test -e $CRED_FILE' succeeds on questhub (a missing file would stop the unit); shown here as if present:"
+    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" 1 | sed 's/^/    /'
     echo "[dry-run] then: daemon-reload, enable, restart, health check on 127.0.0.1:$3; on failure the code and unit are rolled back from their .bak.$TS copies"
     return
   fi
+  if rsh "sudo test -e $CRED_FILE"; then cred=1; echo "  credential file present on questhub: LoadCredential line written"; else echo "  $CRED_FILE is missing on questhub: no LoadCredential line, transcription stays off" >&2; fi
   rsh "[ -e $file ] && sudo cp -p $file $file.bak.$TS || true"
-  unit_text "$2" "$3" "$4" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
+  unit_text "$2" "$3" "$4" "$cred" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
   rsh "sudo systemctl daemon-reload && sudo systemctl enable $unit && sudo systemctl reset-failed $unit && sudo systemctl restart $unit" || true
   sleep 2
   if rsh "curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$3/health" >/dev/null 2>&1; then

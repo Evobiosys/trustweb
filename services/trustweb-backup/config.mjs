@@ -18,11 +18,18 @@
 //   UPLOAD_IDLE_MS                   30000        abort an upload that sends nothing for this long
 //   LONG_REQUEST_MS                  900000       request deadline of /hosted and /transcribe (the short routes keep SHORT_REQUEST_MS)
 //   SHORT_REQUEST_MS                 30000
-//   TRANSCRIBE_URL, TRANSCRIBE_KEY   provider endpoint (full POST URL incl. product id) and bearer token (EnvironmentFile 0600)
-//   TRANSCRIBE_MODEL                 whisper
-//   TRANSCRIBE_RESULTS_URL           optional template with {batch_id}; derived from TRANSCRIBE_URL otherwise
-//   TRANSCRIBE_POLL_MS               2000
-//   TRANSCRIBE_TIMEOUT_MS            600000       submit + polling, in total
+//   TRANSCRIBE_PROVIDER              openrouter (default) | infomaniak
+//   TRANSCRIBE_ENABLED               1 switches the openrouter provider on (EnvironmentFile, written by scripts/trustweb_transcribe_switch_on.sh);
+//                                    without it /transcribe answers 503 not_configured even when the key is loaded
+//   OPENROUTER_URL                   https://openrouter.ai/api/v1
+//   CREDENTIALS_DIRECTORY            set by systemd (LoadCredential=orkey:/etc/unfold-news/orkey.json); the openrouter key is read
+//   TRANSCRIBE_CREDENTIAL            orkey        from <CREDENTIALS_DIRECTORY>/<this> = JSON {"key": "sk-or-..."}; anything else = no key
+//   TRANSCRIBE_DATA_COLLECTION       deny         OpenRouter provider data policy sent with every call (deny | allow)
+//   TRANSCRIBE_URL, TRANSCRIBE_KEY   (infomaniak only) provider endpoint (full POST URL incl. product id) and bearer token (EnvironmentFile 0600)
+//   TRANSCRIBE_MODEL                 openai/whisper-large-v3-turbo (openrouter) | whisper (infomaniak)
+//   TRANSCRIBE_RESULTS_URL           (infomaniak) optional template with {batch_id}; derived from TRANSCRIBE_URL otherwise
+//   TRANSCRIBE_POLL_MS               2000         (infomaniak)
+//   TRANSCRIBE_TIMEOUT_MS            180000 (openrouter, one call; upstream cuts at ~60 s) | 600000 (infomaniak: submit + polling, in total)
 //   TRANSCRIBE_DAILY_SECONDS         7200         everyone together, per UTC day
 //   TRANSCRIBE_IP_DAILY_SECONDS      3600         per IP and UTC day
 //   TRANSCRIBE_MAX_CONCURRENT        1            paid provider jobs at once (a job runs to its end even when the phone goes away)
@@ -35,6 +42,31 @@
 //   FEEDBACK_MAX_BYTES               2000000
 //   FEEDBACK_PER_HOUR                5            per IP
 
+import fs from 'node:fs'
+import path from 'node:path'
+
+export const TranscribeProvider = Object.freeze({ OpenRouter: 'openrouter', Infomaniak: 'infomaniak' })
+const flag = (raw) => raw === '1' || raw === 'true'
+/** What an API key may look like. Keeps a malformed credential (spaces, newlines, quotes) out of an Authorization header. */
+const KEY_SHAPE = /^[A-Za-z0-9._~+-]{20,256}$/
+
+/**
+ * The OpenRouter key from the systemd credential: a JSON file {"key": "..."} (the shape unfold-news's /api/orkey served).
+ * Returns '' for a missing, unreadable or malformed credential. Never throws, never logs, never echoes the content.
+ */
+export function readCredentialKey(env = process.env) {
+  const dir = env.CREDENTIALS_DIRECTORY
+  if (dir === undefined || dir === '') return ''
+  const name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey'
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) return ''
+  try {
+    const key = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))?.key
+    return typeof key === 'string' && KEY_SHAPE.test(key) ? key : ''
+  } catch {
+    return ''
+  }
+}
+
 function pick(options, key, envName, fallback, parse = Number) {
   if (options[key] !== undefined) return options[key]
   const raw = process.env[envName]
@@ -44,8 +76,14 @@ function pick(options, key, envName, fallback, parse = Number) {
 const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean)
 
 export function loadConfig(options = {}) {
+  const transcribeProvider = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', TranscribeProvider.OpenRouter, String)
+  const openrouter = transcribeProvider === TranscribeProvider.OpenRouter
   const transcribeUrl = pick(options, 'transcribeUrl', 'TRANSCRIBE_URL', '', String)
-  const transcribeKey = pick(options, 'transcribeKey', 'TRANSCRIBE_KEY', '', String)
+  const transcribeKey = options.transcribeKey ?? (openrouter ? readCredentialKey() : pick(options, 'transcribeKey', 'TRANSCRIBE_KEY', '', String))
+  const transcribeEnabled = pick(options, 'transcribeEnabled', 'TRANSCRIBE_ENABLED', false, flag)
+  const transcribeConfigured =
+    transcribeKey !== '' &&
+    (openrouter ? transcribeEnabled : transcribeProvider === TranscribeProvider.Infomaniak && transcribeUrl !== '')
   const feedbackFile = pick(options, 'feedbackFile', 'FEEDBACK_FILE', '', String)
   return {
     now: options.now ?? Date.now,
@@ -70,13 +108,17 @@ export function loadConfig(options = {}) {
     hostedUploadsPerIp: pick(options, 'hostedUploadsPerIp', 'HOSTED_UPLOADS_PER_IP', 2),
     uploadIdleMs: pick(options, 'uploadIdleMs', 'UPLOAD_IDLE_MS', 30000),
 
+    transcribeProvider,
+    transcribeEnabled,
     transcribeUrl,
     transcribeKey,
-    transcribeConfigured: transcribeUrl !== '' && transcribeKey !== '',
-    transcribeModel: pick(options, 'transcribeModel', 'TRANSCRIBE_MODEL', 'whisper', String),
+    transcribeConfigured,
+    openrouterUrl: pick(options, 'openrouterUrl', 'OPENROUTER_URL', 'https://openrouter.ai/api/v1', String),
+    transcribeDataCollection: pick(options, 'transcribeDataCollection', 'TRANSCRIBE_DATA_COLLECTION', 'deny', (v) => (v === 'allow' ? 'allow' : 'deny')),
+    transcribeModel: pick(options, 'transcribeModel', 'TRANSCRIBE_MODEL', openrouter ? 'openai/whisper-large-v3-turbo' : 'whisper', String),
     transcribeResultsUrl: pick(options, 'transcribeResultsUrl', 'TRANSCRIBE_RESULTS_URL', '', String),
     transcribePollMs: pick(options, 'transcribePollMs', 'TRANSCRIBE_POLL_MS', 2000),
-    transcribeTimeoutMs: pick(options, 'transcribeTimeoutMs', 'TRANSCRIBE_TIMEOUT_MS', 600000),
+    transcribeTimeoutMs: pick(options, 'transcribeTimeoutMs', 'TRANSCRIBE_TIMEOUT_MS', openrouter ? 180000 : 600000),
     transcribeDailySeconds: pick(options, 'transcribeDailySeconds', 'TRANSCRIBE_DAILY_SECONDS', 7200),
     transcribeIpDailySeconds: pick(options, 'transcribeIpDailySeconds', 'TRANSCRIBE_IP_DAILY_SECONDS', 3600),
     transcribeMaxConcurrent: pick(options, 'transcribeMaxConcurrent', 'TRANSCRIBE_MAX_CONCURRENT', 1),
