@@ -4,12 +4,16 @@
  *      web") is one tap from Web, in both query styles, and from Inventory.
  *   4. P22, P26: an inventory item's sheet offers all three tiers and "Only me";
  *      the pill cycles through the same four.
+ *   7. B8: "Search the web instead" below the contact search and below an
+ *      ask's answers: Google, Ecosia, Qwant, Brave as plain links (new tab,
+ *      noopener, no referrer), "outside TrustWeb, untrusted"; nothing is
+ *      requested from those hosts without a tap (the suite never taps one).
  * Ports: Vite 5281, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/wave2_flow.mjs
  */
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { checker, launch, newPhone, startPhone, startRelay, startVite } from './swiss_harness.mjs'
+import { checker, launch, newPhone, record, startPhone, startRelay, startVite } from './swiss_harness.mjs'
 
 const SHOTS = process.env.TW_SHOTS
 const c = checker()
@@ -81,6 +85,64 @@ async function partAudience(a) {
   ok('the pill cycles through the same four', JSON.stringify(seen) === JSON.stringify(['Close friends', 'Only me', 'Acquaintances', 'Friends']), JSON.stringify(seen))
 }
 
+const ENGINE_HOSTS = /google\.|ecosia\.|qwant\.|brave\./
+const until = async (fn, ms = 20_000) => {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ms) { const v = await fn().catch(() => null); if (v) return v; await new Promise((r) => setTimeout(r, 200)) }
+  return null
+}
+const links = (scope) => scope.locator('[data-web-search] a').evaluateAll((as) => as.map((a) => ({
+  engine: a.dataset.engine, text: a.textContent, href: a.getAttribute('href'), target: a.target, rel: a.rel, ref: a.getAttribute('referrerpolicy'),
+})))
+const safeLinks = (ls) => ls.every((l) => l.target === '_blank' && /noopener/.test(l.rel) && /noreferrer/.test(l.rel) && l.ref === 'no-referrer')
+
+/** Item 7: the web search fallback. Never clicks a link (no request may reach a real search engine from this suite). */
+async function partWebSearch(browser, base, a) {
+  const engineRequests = []
+  a.on('request', (r) => { if (ENGINE_HOSTS.test(new URL(r.url()).hostname)) engineRequests.push(r.url()) })
+  // Back to the "Call into your web" style, where the magnifier searches contacts.
+  await tab(a, 'Inventory')
+  await a.getByRole('button', { name: 'Settings' }).click()
+  await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Call into your web$/ }) }).click()
+  await closeSheet(a)
+  await tab(a, 'Web')
+  await a.getByRole('button', { name: 'Search contacts' }).click()
+  ok('no words, no web row', await a.locator('[data-web-search]').isHidden())
+  await a.locator('.search-field').fill('cargo  bike & trailer')
+  const ls = await links(a)
+  ok('below the contact search: Google, Ecosia, Qwant, Brave', JSON.stringify(ls.map((l) => l.text)) === JSON.stringify(['Google', 'Ecosia', 'Qwant', 'Brave']), JSON.stringify(ls))
+  ok('each opens the words in that engine (encoded, spaces collapsed)', ls[0].href === 'https://www.google.com/search?q=cargo%20bike%20%26%20trailer'
+    && ls[1].href === 'https://www.ecosia.org/search?q=cargo%20bike%20%26%20trailer' && ls[2].href === 'https://www.qwant.com/?q=cargo%20bike%20%26%20trailer'
+    && ls[3].href === 'https://search.brave.com/search?q=cargo%20bike%20%26%20trailer', JSON.stringify(ls.map((l) => l.href)))
+  ok('new tab, no opener, no referrer', safeLinks(ls), JSON.stringify(ls))
+  ok('it says: outside TrustWeb, untrusted results', /Search the web instead/.test(await a.locator('[data-web-search]').innerText()) && /Outside TrustWeb, untrusted results/.test(await a.locator('[data-web-search]').innerText()))
+  await shot(a, 'w2-08-web-search-contacts')
+  await a.locator('.search-field').fill('')
+  ok('words cleared: the row hides again', await a.locator('[data-web-search]').isHidden())
+  await a.getByRole('button', { name: 'Close search' }).click()
+
+  // Below an ask's answers: a second phone that has nothing for it.
+  await a.locator('.hdr [aria-label^="Show my code"]').click()
+  await a.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
+  const url = await a.getAttribute('.qrwrap', 'data-payload')
+  const b = await newPhone(browser, errors)
+  await b.goto(url)
+  await b.getByLabel('Your first name').fill('Ben')
+  await b.getByRole('button', { name: 'Connect', exact: true }).click()
+  await until(async () => (await record(a)).peers.length === 1)
+  await a.getByRole('button', { name: 'Back' }).click().catch(() => {})
+  await tab(a, 'Web')
+  await a.locator('[data-open-query="1"]').click()
+  await a.locator('.query-dock textarea').fill('Does anyone have a sailing boat?')
+  await a.getByRole('button', { name: 'Ask my web' }).click()
+  await a.locator('.query-dock [data-web-search]').waitFor({ timeout: 60_000 })
+  const ql = await links(a.locator('.query-dock'))
+  ok('after the answers (here: nothing found), the same row with the asked words', ql.length === 4 && ql[3].href === 'https://search.brave.com/search?q=Does%20anyone%20have%20a%20sailing%20boat%3F' && safeLinks(ql), JSON.stringify(ql))
+  await shot(a, 'w2-09-web-search-after-ask')
+  ok('no request ever went to a search engine (none was tapped)', engineRequests.length === 0, engineRequests.join(' | '))
+  await b.context().close()
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
@@ -92,6 +154,7 @@ async function main() {
     await startPhone(a, vite.base, 'Jakob')
     await partQuery(a)
     await partAudience(a)
+    await partWebSearch(browser, vite.base, a)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++

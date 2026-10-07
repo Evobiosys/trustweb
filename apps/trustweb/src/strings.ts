@@ -4,7 +4,7 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, DefaultRecording, LogOutcome, QueryStyle, Ring, Tag, TranscriptionChoice } from './model'
+import { Audience, Channel, DefaultRecording, LogOutcome, QueryStyle, Ring, SearchEngine, Tag, TranscriptionChoice } from './model'
 
 export const S = {
   appName: 'TrustWeb',
@@ -82,6 +82,15 @@ export const S = {
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
   searchNone: 'Nobody by that name yet.',
+  // "Search the web instead" (wave 2, B8): plain links, nothing sent before a tap.
+  webSearchTitle: 'Search the web instead',
+  webSearchUntrusted: 'Outside TrustWeb, untrusted results. Nothing is sent until you tap one.',
+  webSearchEngine: {
+    [SearchEngine.Google]: 'Google',
+    [SearchEngine.Ecosia]: 'Ecosia',
+    [SearchEngine.Qwant]: 'Qwant',
+    [SearchEngine.Brave]: 'Brave',
+  } as Record<SearchEngine, string>,
   searchCurate: 'Curate your web',
   searchCurateSub: 'Rings, notes and connections',
   moreOpen: 'More',

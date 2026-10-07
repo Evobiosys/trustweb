@@ -22,6 +22,17 @@ export enum Ring {
 
 export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
+/** The web search engines of "Search the web instead" (wave 2, B8; web_search.ts). A fixed set. */
+export enum SearchEngine {
+  Google = 'google',
+  Ecosia = 'ecosia',
+  Qwant = 'qwant',
+  Brave = 'brave',
+}
+
+/** In the order the row shows them (Jakob's list, Max meeting 00:16:53). */
+export const SEARCH_ENGINES: readonly SearchEngine[] = [SearchEngine.Google, SearchEngine.Ecosia, SearchEngine.Qwant, SearchEngine.Brave]
+
 /**
  * Who may ask about one line: the three tiers (acquaintances, friends, close
  * friends) and "Only me" (Jakob, wave 2, P22/P26). Each tier admits itself and

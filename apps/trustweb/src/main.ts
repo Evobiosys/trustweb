@@ -36,6 +36,7 @@ import { clearState, isEphemeral, loadState, saveState, wasUnreadable } from './
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
+import { webSearchRow } from './web_search'
 import { nfcWriteSupported, writeLinkToTag } from './nfc'
 import { TranscriberEngine, TranscriberStatus, createTranscriber, detectEngine } from './meeting_transcriber'
 import type { MeetingTranscriber, Segment } from './meeting_transcriber'
@@ -1115,13 +1116,15 @@ function searchPanel(s: AppState): HTMLElement {
     const hits = s.people.filter((p) => matchesSearch(p, searchText))
     results.replaceChildren(hits.length ? peopleView(s, hits) : el('p', { class: 'empty' }, [S.searchNone]))
   }
-  input.addEventListener('input', () => { searchText = input.value; fill() })
+  // Below the results, always: the same words on the web, as links (wave 2, B8; nothing sent before a tap).
+  const web = webSearchRow(searchText)
+  input.addEventListener('input', () => { searchText = input.value; fill(); web.update(searchText) })
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Escape') toggleSearch() })
   fill()
   const curate = el('button', { class: 'menu-item curate-row', onclick: () => go(Screen.Curate) })
   curate.innerHTML = icon('users')
   curate.append(el('span', {}, [el('b', {}, [S.searchCurate]), el('small', {}, [S.searchCurateSub])]))
-  return el('div', { class: 'scroll pad search' }, [input, curate, results])
+  return el('div', { class: 'scroll pad search' }, [input, curate, results, web.el])
 }
 
 function screenWeb(): Node[] {
@@ -3307,7 +3310,7 @@ function queryDock(s: AppState): HTMLElement {
         el('p', {}, [S.queryAsked(run.asked)]),
         el('p', { class: 'hint' }, [S.queryWindow]),
         run.results
-          ? el('div', {}, resultsView(run.results))
+          ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt))])]),
       ])
     : null

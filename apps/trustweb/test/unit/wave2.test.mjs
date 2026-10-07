@@ -4,9 +4,12 @@
  *     each tier admits itself and everyone closer; an unknown value admits nobody.
  *   item 6 (P29, P32): contact methods: QR code and link now, a moving QR code
  *     soon, NFC / Bluetooth / AirDrop later, never "UWB".
+ *   item 7 (B8): the web search links: encoded, blank = none, https only, capped.
  */
 import { Audience, AUDIENCES, audienceAdmits, LineStatus, Ring, threadsForRing } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
+import { webSearchUrl } from '../../src/web_search.ts'
+import { SEARCH_ENGINES, SearchEngine } from '../../src/model.ts'
 
 const NOW = Date.UTC(2026, 9, 7, 10, 0, 0)
 
@@ -64,5 +67,21 @@ describe('item 6: how people connect, said plainly', () => {
     expect(S.meetWaysSoon).toMatch(/Coming soon: a moving QR code/)
     expect(S.meetWaysLater).toMatch(/Coming later: NFC, Bluetooth and AirDrop/)
     expect(S.hintText.qr).toMatch(/moving QR code is coming soon; NFC, Bluetooth and AirDrop come later/)
+  })
+})
+
+describe('item 7: "Search the web instead"', () => {
+  it('builds each engine\'s https search link with the words encoded', () => {
+    expect(SEARCH_ENGINES).toEqual([SearchEngine.Google, SearchEngine.Ecosia, SearchEngine.Qwant, SearchEngine.Brave])
+    expect(webSearchUrl(SearchEngine.Google, 'cargo bike & <trailer>')).toBe('https://www.google.com/search?q=cargo%20bike%20%26%20%3Ctrailer%3E')
+    expect(webSearchUrl(SearchEngine.Ecosia, 'a/b?c=d#e')).toBe('https://www.ecosia.org/search?q=a%2Fb%3Fc%3Dd%23e')
+    expect(webSearchUrl(SearchEngine.Qwant, 'Wien')).toBe('https://www.qwant.com/?q=Wien')
+    expect(webSearchUrl(SearchEngine.Brave, 'Räder')).toBe('https://search.brave.com/search?q=R%C3%A4der')
+    for (const e of SEARCH_ENGINES) expect(webSearchUrl(e, 'x').startsWith('https://')).toBe(true)
+  })
+  it('no words, no link; spaces collapsed; at most 200 characters go out', () => {
+    for (const e of SEARCH_ENGINES) expect(webSearchUrl(e, '  \n\t ')).toBe(null)
+    expect(webSearchUrl(SearchEngine.Google, '  two   words \n')).toBe('https://www.google.com/search?q=two%20words')
+    expect(decodeURIComponent(webSearchUrl(SearchEngine.Google, 'y'.repeat(500)).split('q=')[1]).length).toBe(200)
   })
 })
