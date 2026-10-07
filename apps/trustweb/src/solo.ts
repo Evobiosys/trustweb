@@ -19,6 +19,7 @@ import { DemoContext, PERSONA_NAMES, Persona } from './seed'
 import { storageKey } from './store'
 import { mountWalkthrough } from './walkthrough'
 import { demoInstallBar } from './demo_install_button'
+import { S } from './strings'
 
 /**
  * One script for four HTML entries (solo.html at the app root, plus demo/,
@@ -73,6 +74,17 @@ iframe{width:390px;max-width:calc(100vw - 32px);height:780px;border:0;border-rad
 .dock .see{background:linear-gradient(135deg,#FF715B,#9A37F0);color:#fff;box-shadow:0 8px 24px rgba(154,55,240,.35)}
 .dock .plus{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#FF715B,#9A37F0);color:#fff;font-size:17px;font-weight:400}
 .dock button:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
+/* the switch sits in the top bar next to Install, which stays in view while scrolling */
+.demo-topbar{position:sticky;top:8px;z-index:20;gap:8px}
+.switch{font:inherit;font-weight:700;font-size:14px;height:38px;border:0;border-radius:999px;padding:0 16px;cursor:pointer;
+  background:var(--ink);color:var(--bg);box-shadow:0 8px 24px rgba(36,27,46,.25)}
+.switch[hidden]{display:none}
+.switch:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
+.col{scroll-margin-top:56px}
+/* the device switch: one step, no finger scrolling; the other phone slides in (wave 2, P24) */
+@keyframes tw-whoosh{from{transform:translateY(55vh);opacity:.35}to{transform:none;opacity:1}}
+.col.whoosh{animation:tw-whoosh .32s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion: reduce){.col.whoosh{animation:none}}
 /* phones: the dock sits in the page flow at the bottom, never over a phone */
 @media (max-width:600px){
   body{padding-bottom:24px}
@@ -161,10 +173,39 @@ function addDevice(): void {
   rememberDevices(shown)
 }
 
+/** The phone in front: the one added last, or the one switched to. */
+let current = 0
+
 /** "Add a device" (a tap): the new phone, scrolled into view. */
 function addDeviceTap(): void {
   addDevice()
+  current = shown - 1
   phones.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  updateSwitch()
+}
+
+/**
+ * "Switch to device N" (wave 2, P24): one tap jumps to the next phone, which
+ * slides in with one "whoosh" (not a finger-scroll); on a phone-width screen
+ * the phones sit one under the other, so this is how to go from one to the other.
+ */
+function switchDevice(): void {
+  const cols = [...phones.children] as HTMLElement[]
+  if (cols.length < 2) return
+  current = (current + 1) % cols.length
+  const col = cols[current]
+  for (const c of cols) c.classList.remove('whoosh')
+  // Land first (measured without the slide's transform), then slide in from below.
+  col.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' })
+  void col.offsetWidth // restart the animation on a second switch to the same phone
+  col.classList.add('whoosh')
+}
+
+function updateSwitch(): void {
+  switchBtn.hidden = shown < 2
+  const next = shown < 2 ? 1 : ((current + 1) % shown) + 1
+  switchBtn.textContent = S.demoSwitch(next)
+  switchBtn.setAttribute('aria-label', S.demoSwitch(next))
 }
 
 function linkFor(p: Persona, url: string): string {
@@ -194,6 +235,10 @@ seeBtn.onclick = () => {
   if (open) actionSlot.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 seeBtn.textContent = 'See it in action'
+const switchBtn = document.createElement('button')
+switchBtn.className = 'switch'
+switchBtn.dataset.switchDevice = '1'
+switchBtn.onclick = () => { switchDevice(); updateSwitch() }
 dock.append(addBtn, seeBtn)
 
 function updateDock(): void {
@@ -228,9 +273,12 @@ const foot = (() => {
 })()
 
 // The one [Install] button, top right (wave 1733, A2): demo to live, then install.
-root.append(demoInstallBar(ctx, BASE), head, actionSlot, phones, foot, dock)
+const topbar = demoInstallBar(ctx, BASE)
+topbar.prepend(switchBtn)
+root.append(topbar, head, actionSlot, phones, foot, dock)
 const reopen = rememberedDevices()
 while (shown < reopen) addDevice()
+updateSwitch()
 
 window.addEventListener('message', (e: MessageEvent) => {
   const holder = phones.querySelector<HTMLIFrameElement>('iframe[title="Device 1"]')

@@ -5,6 +5,8 @@
  *      [Install] button reads "Make it your personal account" and carries the
  *      notes, people and things over (nobody types them again); "Start over"
  *      forgets it all.
+ *   5. P23, P24: the device switch (one tap, one "whoosh" to the other phone)
+ *      and the scripted second-degree query (a yes at each hop, "through Jonas").
  * Ports: Vite 5282, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/demo_wave2.mjs
  */
@@ -99,6 +101,49 @@ async function partComeBack(browser, base) {
   await ctx.close()
 }
 
+/** Item 5: the device switch (one tap, one whoosh) and the scripted second-degree query. */
+async function partSwitchAndSecondDegree(browser, base) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['microphone'] })
+  const page = await ctx.newPage()
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto(base + 'demo/')
+  ok('one device: no switch yet', await page.locator('[data-switch-device]').isHidden())
+  await startHolder(page)
+  await page.locator('.dock .add').click()
+  await device(page, 2).getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
+  await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  const sw = page.locator('[data-switch-device]')
+  ok('two devices on a phone: the switch shows, top right next to Install, and names the other device', await sw.isVisible() && (await sw.innerText()).trim() === 'Switch to device 1')
+  const top = async (n) => Math.round((await page.locator(`iframe[title="Device ${n}"]`).boundingBox()).y)
+  await sw.click()
+  const cls = await page.locator('.col').first().getAttribute('class')
+  await page.waitForTimeout(450)
+  ok('one tap: device 1 slides in (the whoosh) and lands at the top, under the bar', /whoosh/.test(cls) && Math.abs(await top(1) - 56) <= 12, String(await top(1)))
+  ok('the switch now names device 2', (await sw.innerText()).trim() === 'Switch to device 2')
+  await sw.click()
+  await page.waitForTimeout(450)
+  ok('and back: device 2 at the top after one tap, no finger scrolling', Math.abs(await top(2) - 56) <= 12, String(await top(2)))
+  await shot(page, 'w2-06-device-whoosh')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  ok('reduced motion: no animation, still one step', await page.locator('.col.whoosh').evaluate((e) => getComputedStyle(e).animationName) === 'none')
+
+  // The scripted second-degree query (the live phones do one hop): a yes at each hop, the answer "through Jonas".
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.locator('.dock .see').click()
+  await page.getByRole('tab', { name: '3 people' }).click()
+  await page.locator('.wt-tick').nth(2).click()
+  const relay = await page.locator('.wt-screen').nth(1).innerText()
+  ok('hop 1: Jonas\'s yes is his standing setting, shown on his phone', /Sam asks your friends/.test(relay) && /you said yes once/.test(relay), relay)
+  await page.locator('.wt-tick').nth(3).click()
+  ok('hop 2: Maya decides for this ask', /Sam, through Jonas, asks/.test(await page.locator('.wt-screen').nth(2).innerText()))
+  await page.locator('.wt-tick').nth(5).click()
+  const answer = await page.locator('.wt-screen').nth(0).innerText()
+  ok('the answer is labelled "through Jonas", from Maya\'s inventory, not Jonas\'s', /through Jonas/.test(answer) && /Not in Jonas's inventory: in Maya's/.test(answer), answer)
+  ok('honest: scripted, the live phones do one hop', /scripted/.test(await page.locator('.wt-note').innerText()) && /one hop today/.test(await page.locator('.wt-note').innerText()))
+  await shot(page, 'w2-07-second-degree')
+  await ctx.close()
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
@@ -107,6 +152,7 @@ async function main() {
   try {
     browser = await launch()
     await partComeBack(browser, vite.base)
+    await partSwitchAndSecondDegree(browser, vite.base)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++

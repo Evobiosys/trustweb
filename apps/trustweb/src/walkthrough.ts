@@ -54,6 +54,9 @@ const waiting = (s: number): string => `<div class="wt-h">Call into your web</di
 const consent = (who: string, q: string, match: string): string =>
   `<div class="wt-cosmic"><b>${who} asks</b><br>"${q}"<br><small>On this phone, this matches:</small>${card('', match)}<span class="wt-btn">Share these</span><span class="wt-btn ghost">Don't share</span></div>`
 const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb app</b><br>${body}</div>`
+/** The friend in the middle: his yes to this hop, given once in Settings (wave 2, P24: "per default I am happy to be the relay"). */
+const relayYes = (who: string, q: string): string =>
+  `<div class="wt-cosmic"><b>${who} asks your friends</b><br>"${q}"<br><small>Your setting: pass on asks from people you know to your friends. <b>On</b> (you said yes once).</small>${card('ok', 'Passed on. You never see the answer.')}</div>`
 const AISHA_REAL = 'In real life: she just opened an animal welfare fund.'
 
 const MOTORBIKE = 'Motorbike (125cc), can lend it for a weekend'
@@ -133,7 +136,7 @@ const MODES: Mode[] = [
     label: '3 people · Job lead',
     title: 'A job lead, months after meeting',
     intro: 'Example A from our funding application (Manifund): an acquaintance finds an opening through a friend, without the person in the middle lifting a finger. Jonas is the friend in the middle.',
-    note: 'Design preview: asks that pass through a second person are how TrustWeb is designed. The live phones on this page do one hop today.',
+    note: 'Second-degree query, scripted (wave 2): a yes at each hop, Jonas\'s once in Settings, Maya\'s for this ask. The live phones on this page do one hop today.',
     people: [
       { id: 'sam', name: 'Sam', role: 'Jonas\'s acquaintance' },
       { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
@@ -153,12 +156,12 @@ const MODES: Mode[] = [
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
-        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. Jonas set his phone once to pass questions from people he knows on to his friends: he is not asked each time, and he cannot read the answer.',
-        screens: { sam: ask('Who is hiring?', 1), jonas: quiet('Passed on to Jonas\'s friends. Jonas is not involved in the moment.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.') },
+        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. The first yes is Jonas\'s: he said once, in Settings, that asks from people he knows may go on to his friends. He is not asked each time, and he cannot read the answer.',
+        screens: { sam: ask('Who is hiring?', 1), jonas: relayYes('Sam', 'Who is hiring?'), maya: quiet('The ask arrives through Jonas and is checked on this phone.') },
       },
       {
         title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
-        text: 'Maya sees who asks (Sam, an acquaintance of her friend Jonas) and which line matched. She decides whether to answer; her yes is the only way anything leaves.',
+        text: 'The second yes is Maya\'s. She sees who asks (Sam, an acquaintance of her friend Jonas) and which line matched. She decides whether to answer; her yes is the only way anything leaves.',
         screens: { sam: waiting(24), jonas: web(['Sam', 'Maya']), maya: consent('Sam, through Jonas,', 'Who is hiring?', POSITION) },
       },
       {
@@ -168,8 +171,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Sam has a job lead', changed: ['sam'], path: ['jonas', 'sam'],
-        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. Next, Sam can ask Jonas for an introduction to Maya.',
-        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. It was not in Jonas\'s inventory but in Maya\'s, and the answer says so: "through Jonas". Next, Sam can ask Jonas for an introduction to Maya.',
+        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's inventory: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
   },

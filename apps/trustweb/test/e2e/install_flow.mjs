@@ -92,7 +92,8 @@ async function demoToLive(browser, base, shot, errors) {
   pa.on('pageerror', (e) => errors.push(e.message))
   await demoWithOwnPerson(pa, base, 'Jakob', 'Max')
   const install = pa.locator('[data-demo-install]')
-  ok('the demo page has ONE button top right: Install', await pa.locator('.demo-topbar button').count() === 1 && (await install.innerText()).trim() === 'Install')
+  // Wave 2 (P24): the device switch joins it only once there is a second device (hidden here, one device).
+  ok('the demo page has ONE button top right: Install', await pa.locator('.demo-topbar button:visible').count() === 1 && (await install.innerText()).trim() === 'Install')
   const box = await install.boundingBox()
   ok('it sits top right', box.x + box.width > 1280 - 120 && box.y < 80, JSON.stringify(box))
   await shot(pa, '05_demo_install_button')
@@ -284,6 +285,8 @@ async function main() {
     await start(sp, base, 'Sara')
     await sp.getByRole('button', { name: 'More' }).click()
     await sp.locator('.menu-item', { hasText: 'Settings' }).click()
+    // The sheet redraws once the server's status is in; wait for that, so nothing below lands on the old sheet.
+    await sp.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
     const about = await sp.locator('.about-link').evaluateAll((as) => as.map((a) => a.getAttribute('href')))
     ok('Settings > About links FAQ, Feedback, Privacy, Imprint on the website', JSON.stringify(about) === JSON.stringify(['faq', 'feedback', 'privacy', 'imprint'].map((p) => `https://idea2.site/trustweb/${p}.html`)), JSON.stringify(about))
     ok('"TrustWeb, by EvoBioSys" links EvoBioSys', /TrustWeb, by EvoBioSys/.test(await sp.locator('.about-by').innerText()) && await sp.locator('.about-org').getAttribute('href') === 'https://evobiosys.org/')
