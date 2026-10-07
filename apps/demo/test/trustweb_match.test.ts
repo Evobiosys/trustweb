@@ -131,11 +131,11 @@ const CONTEXT_QUERYABLE_ASK: Record<DemoContext, string> = {
 describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
   const T1 = Date.UTC(2026, 8, 27)
 
-  it('every seeded demo context has 5 to 7 people', () => {
+  it('every seeded demo context has 5 to 8 people (the owner\'s public demo person, 2026-10-07, is the one beyond 7)', () => {
     for (const ctx of DEMO_CONTEXTS) {
       const state = seedState(Persona.Holder, T1, ctx)
       expect(state.people.length).toBeGreaterThanOrEqual(5)
-      expect(state.people.length).toBeLessThanOrEqual(7)
+      expect(state.people.length).toBeLessThanOrEqual(8)
     }
   })
 

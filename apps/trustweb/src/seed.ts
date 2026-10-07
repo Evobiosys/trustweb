@@ -49,8 +49,17 @@
  * same Ring.Intending / no-lines / public-role-only pattern as Tyler Cowen
  * above -- see eaPeople() below. Do not add him to generic or emergent, and
  * do not add a third real person anywhere without the owner asking for it.
+ *
+ * Jakob (the owner himself) is in every context since 2026-10-07 13:19 ("include
+ * this as a demo for the inventory in the demo embedded, with my data that I
+ * have chosen to share publicly, the one allowed in advance as dummy data"):
+ * Ring.Friend, carrying exactly the ten lines in demo_inventory_public.ts and
+ * nothing else of his; they are marked dummy like all seeded content (markDemo,
+ * dummyIds). They use no motorbike/Vienna wording, so the acceptance asks stay
+ * unaffected.
  */
 import { randomId } from '../../demo/src/crypto'
+import { JAKOB_DEMO_CONTEXT, JAKOB_DEMO_NAME, JAKOB_PUBLIC_LINES, PUBLIC_LINE_DEFAULT_AUDIENCE } from './demo_inventory_public'
 import { Audience, LineStatus, Ring, Tag } from './model'
 import type { AppState, NoteLine, Person } from './model'
 
@@ -100,6 +109,12 @@ function person(
   return { id: randomId(8), name, context, ring, metAt, lines }
 }
 
+/** The owner's public demo lines as a person (see the module doc): one place, so every context shows the same ten. */
+function jakobPerson(now: number): Person {
+  return person(JAKOB_DEMO_NAME, JAKOB_DEMO_CONTEXT, Ring.Friend, now - 120 * DAY,
+    JAKOB_PUBLIC_LINES.map((l) => line(l.text, l.tag, l.audience ?? PUBLIC_LINE_DEFAULT_AUDIENCE, now - 30 * DAY)))
+}
+
 function genericPeople(now: number): Person[] {
   return [
     person('Lena', 'former colleague', Ring.Friend, now - 400 * DAY, [
@@ -121,6 +136,7 @@ function genericPeople(now: number): Person[] {
     person('Felix Novak', 'grantmaker, occasional coffee chats', Ring.Acquaintance, now - 200 * DAY, [
       line('Knows a strong candidate for a comms role', Tag.Talent, Audience.FriendsOfFriends, now - 5 * DAY),
     ]),
+    jakobPerson(now),
   ]
 }
 
@@ -144,6 +160,7 @@ function emergentPeople(now: number): Person[] {
     // Real public figure. Ring.Intending only, public role as context, no
     // lines: nothing of his is ever queryable (see module doc above).
     person('Tyler Cowen', 'Economist, Emergent Ventures', Ring.Intending, now, []),
+    jakobPerson(now),
   ]
 }
 
@@ -171,6 +188,7 @@ function eaPeople(now: number): Person[] {
     // as Tyler Cowen in emergentPeople(): Ring.Intending, no lines, public
     // role only, nothing about him is ever queryable.
     person('William MacAskill', 'Philosopher, effective altruism', Ring.Intending, now, []),
+    jakobPerson(now),
   ]
 }
 

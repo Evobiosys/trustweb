@@ -40,7 +40,7 @@ early, because its content says so anyway. Without forwarding (no owner, forward
 holds. Before this fix a decline arrived at the owner's tap and phone off at 120 s, so WHEN told them apart.
 
 STATUS 2026-10-06: DEPLOYED on questhub (Swiss server) as trustweb-peer.service, demo instance, fictional inventory
-only, forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
+only (2026-10-07: the file also holds the owner's eight public allowed-in-advance lines; takes effect with the next demo-instance deploy), forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
 in-memory relay with two fake phones) and checked live with the app's e2e test (apps/trustweb/test/e2e/
 demo_account.mjs, step 7 against https://app.idea2.site/trustweb/). The card is published at
 https://app.idea2.site/trustweb/demo-peer.json, so every demo-account code made in the app now names the demo front

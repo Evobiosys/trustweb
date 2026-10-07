@@ -47,8 +47,10 @@ queried if I don't have this laptop on".
      link, a DID or a timestamp finer than a day stays on the Mac too, and the review file says why. Today: zero
      lines marked, nothing sent; the host's inventory file does not exist (it is created empty at first deploy).
    - To his own phone: the import file, every line, audience "Only me" (no Tana ids, no DIDs).
-   - To the Swiss server (demo front door): fictional lines only (demo_inventory.json), presets on the shareable
-     ones.
+   - To the Swiss server (demo front door): fictional lines plus, since 2026-10-07, the owner's ten public lines
+     he ticked "allow in advance" (the eight that fit the 160-character bound; the two longer ones live in the app
+     demo only), all in demo_inventory.json with presets on the shareable ones. Never a line he did not allow in
+     advance: apps/trustweb/test/unit/demo_inventory_public.test.mjs pins the file to an allowlist.
    - To an asker: at most three lines per ask, each either a preset line (marked "Allowed in advance by Jakob
      (date)") or a line Jakob's phone shared live. Never a Tana node id, never a DID, never a timestamp finer
      than "early/mid/late <month>".

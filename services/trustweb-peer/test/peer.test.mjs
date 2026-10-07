@@ -124,8 +124,10 @@ describe('loadInventory', () => {
   })
   it('the shipped demo inventory has presets on its shareable lines and holds the rest', () => {
     const inv = loadInventory(path.join(import.meta.dirname, '..', 'demo_inventory.json'), 1)
-    expect(inv.preset.length).toBe(5)
+    // 5 fictional preset lines + the owner's 8 public lines that fit the 160-character bound (2026-10-07); 2 fictional lines held
+    expect(inv.preset.length).toBe(13)
     expect(inv.held).toBe(2)
+    expect(inv.preset.slice(5).every((l) => l.preset.at === '2026-10-07' && l.preset.by === 'Jakob')).toBe(true)
     expect(inv.preset.every((l) => l.preset.note === 'demo content')).toBe(true)
   })
 })

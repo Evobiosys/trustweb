@@ -44,7 +44,7 @@ describe('dummyIds', () => {
   it('recognises the seeded friends and things by name and context, not the person\'s own', () => {
     const s = demoPhone()
     const d = dummyIds(s, DemoContext.Generic)
-    expect(d.people.size).toBe(6)
+    expect(d.people.size).toBe(7) // six fictional friends plus the owner's public demo person (2026-10-07)
     expect(d.people.has('own-1')).toBe(false)
     expect(d.inventory.size).toBe(2)
     expect(d.inventory.has('own-thing')).toBe(false)
@@ -76,8 +76,8 @@ describe('buildCarryOver', () => {
   })
   it('"Keep them": the dummy content too, still marked dummy', () => {
     const c = buildCarryOver(demoPhone(), DemoContext.Generic, DemoCleanChoice.KeepThem, NOW)
-    expect(c.people).toHaveLength(7)
-    expect(c.demo.people).toHaveLength(6)
+    expect(c.people).toHaveLength(8)
+    expect(c.demo.people).toHaveLength(7)
     expect(c.demo.inventory).toHaveLength(2)
     expect(c.people.some((p) => p.lines.some((l) => l.text === 'Added by me to a dummy'))).toBe(true)
   })

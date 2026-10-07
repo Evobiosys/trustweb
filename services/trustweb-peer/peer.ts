@@ -36,7 +36,8 @@
  *
  * Two instances, same code:
  *   demo      PeerPolicy.Open: anyone who opens its connect link is an asker
- *             (acquaintance ring); fictional lines with presets
+ *             (acquaintance ring); fictional lines plus the owner's public
+ *             allowed-in-advance lines, all with presets
  *             (demo_inventory.json); meant for the Swiss server.
  *   personal  PeerPolicy.Granted: a connect-ack is honoured only for a name
  *             the owner granted beforehand (grants.json); its inventory holds
