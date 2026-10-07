@@ -8,6 +8,7 @@
  *   item 8 (B4, B7): unreviewed / mass-imported / created step by step; "Reviewed"
  *     and "Mark all reviewed"; never in an answer; Undo import is not blocked by it.
  *   item 9 (P10, P20): the allowance in recordings and hours; the version line.
+ *   item 10 (B10): the Start screen leads with what people find.
  */
 import { Audience, AUDIENCES, audienceAdmits, LineStatus, Provenance, ProvenanceState, Ring, sharedItems, threadsForRing } from '../../src/model.ts'
 import { markBatchReviewed, markReviewed, provenanceState } from '../../src/provenance.ts'
@@ -163,5 +164,12 @@ describe('item 9: the allowance in recordings and hours; the version line', () =
     expect(RECORD_FORMAT).toBe(1)
     expect(appVersion()).toBe('dev')
     expect(S.aboutVersion('abc1234', RECORD_FORMAT)).toBe('App version abc1234, data format v1')
+  })
+})
+
+describe('item 10: the Start screen leads with what people find', () => {
+  it('first words: "Find people and things through people you trust", never "another app"', () => {
+    expect(S.startLead.startsWith('Find people and things through people you trust.')).toBe(true)
+    expect(/another app/i.test(S.startLead + S.tagline)).toBe(false)
   })
 })

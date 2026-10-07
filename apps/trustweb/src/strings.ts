@@ -9,7 +9,8 @@ import { Audience, Channel, DefaultRecording, LogOutcome, ProvenanceState, Query
 export const S = {
   appName: 'TrustWeb',
   tagline: 'Amplifying the power of weak ties',
-  startLead: 'Ask the people you have actually met, and the people they trust, without broadcasting to anyone. What you know stays on your phone; a question travels, the data stays.',
+  // Wave 2 (B10): lead with what people find, not with "another app".
+  startLead: 'Find people and things through people you trust. Ask the people you have actually met, and the people they trust, without broadcasting to anyone. What you know stays on your phone; a question travels, the data stays.',
   startSolo: 'Try the demo',
   startSoloSub: 'Start with one phone on this laptop, add more, or watch it in action.',
   startOwn: 'Start on this phone',

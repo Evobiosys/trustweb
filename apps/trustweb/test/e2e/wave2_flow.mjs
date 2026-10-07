@@ -13,6 +13,7 @@
  *      typed lines say "created step by step".
  *   9. P20: Settings > About says "App version <git short sha>, data format v1"
  *      (the recordings-and-hours allowance is checked in hosting_flow).
+ *  10. B10: the Start screen leads with "Find people and things through people you trust".
  * Ports: Vite 5281, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/wave2_flow.mjs
  */
@@ -201,6 +202,9 @@ async function main() {
   try {
     browser = await launch()
     const a = await newPhone(browser, errors)
+    await a.goto(vite.base)
+    ok('item 10 (B10): the Start screen leads with "Find people and things through people you trust"', /^Find people and things through people you trust\./.test((await a.locator('.start .lead').innerText()).trim()))
+    await shot(a, 'w2-00-start')
     await startPhone(a, vite.base, 'Jakob')
     await partQuery(a)
     await partAudience(a)
