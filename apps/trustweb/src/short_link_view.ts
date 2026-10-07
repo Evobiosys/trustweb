@@ -32,6 +32,8 @@ export interface LinkChooser {
   setLink(long: string): void
   /** What the link on show is right now: the short link while chosen and made, else the long one. '' before setLink. */
   current(): string
+  /** The long link always, whatever is chosen: for what must not expire (an NFC tag is written once and kept). '' before setLink. */
+  longLink(): string
 }
 
 /** Long links whose short form the person chose this visit (survives a redraw of the screen, not a reload). */
@@ -112,6 +114,7 @@ export function createLinkChooser(o: LinkChooserOptions): LinkChooser {
   return {
     el: root,
     current: () => shown,
+    longLink: () => long,
     setLink(next: string): void {
       long = next
       longText.textContent = next

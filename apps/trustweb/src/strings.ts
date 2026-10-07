@@ -431,7 +431,7 @@ export const S = {
   meetWaysNow: 'Now: this QR code, or the link (Copy link) for someone you are not meeting in person.',
   meetWaysSoon: 'Coming soon: a moving QR code.',
   meetWaysLater: 'Coming later: NFC, Bluetooth and AirDrop, phone to phone.',
-  meetNfcWrite: 'Write the link to an NFC tag',
+  meetNfcWrite: 'Write the long link to an NFC tag',
   meetNfcWaiting: 'Hold a tag or card to the back of this phone...',
   meetNfcDone: 'Written. Anyone who taps that tag gets your link.',
   meetNfcFailed: 'Could not write the tag.',
@@ -439,7 +439,7 @@ export const S = {
   meetCopied: 'Link copied.',
   // Short connect links (wave 5): an option under the code, never made until tapped; the long link always stays available.
   shortLinkButton: 'Short link',
-  shortLinkNote: `A short link stores this link, with your name in it, on our server for ${SHORT_LINK_DAYS} days, then it expires. Without a short link, nothing about this link is kept on our server.`,
+  shortLinkNote: `A short link stores this link, with your name in it, on our server for ${SHORT_LINK_DAYS} days, then it expires. Without a short link, the link itself is not stored on our server.`,
   shortLinkBusy: 'Making the short link...',
   shortLinkMade: 'Short link ready. The QR code and Copy now use it.',
   shortLinkShowLong: 'Show the long link',

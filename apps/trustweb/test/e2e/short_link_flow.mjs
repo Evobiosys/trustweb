@@ -4,13 +4,14 @@
  *   B  on https://app.trustintheweb.org (the loopback app behind a TLS front, STUBBED /link): nothing is requested on opening
  *      the Meet sheet; one request per tap; the QR, Copy and the long/short views follow the choice; a repeat tap and a switch
  *      back and forth ask the server no second time; the note says "30 days"
+ *   N  an NFC tag always gets the long link, even with the short one chosen (Web NFC stubbed)
  *   C  every failure falls back to the long link: 500, 400, 429 with Retry-After, 503, 507, a broken 200, a refused connection,
  *      offline; a retry afterwards works
  *   D  a demo-account code (Meet > Demo account) offers it too, and its QR follows
  *   E  a code that carries a meeting's key (the pack on the real server) is not shortened (nothing sent), and says why
  *   F  the REAL services/trustweb-backup server (temp state dir, loopback 8992) behind the same origin: POST, the 302 with the
  *      fragment, and a second phone opening the short link lands on the connect screen of the first
- * Parts: PARTS=a,b,c,d,e,f (default all). SHOTS=<dir> saves screenshots.
+ * Parts: PARTS=a,b,n,c,d,e,f (default all). SHOTS=<dir> saves screenshots.
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8980 ../../node_modules/.bin/tsx ../trustweb/test/e2e/short_link_flow.mjs
  */
@@ -28,7 +29,7 @@ const SERVER = path.resolve(HERE, '../../../../services/trustweb-backup/server.m
 const PORT = Number(process.env.TW_PORT || 8980)
 const HTTPS_PORT = Number(process.env.TW_HTTPS_PORT || PORT + 1)
 const SERVICE_PORT = Number(process.env.TW_SERVICE_PORT || 8992)
-const PARTS = (process.env.PARTS || 'a,b,c,d,e,f').split(',')
+const PARTS = (process.env.PARTS || 'a,b,n,c,d,e,f').split(',')
 const HOST = 'app.trustintheweb.org'
 const ID = 'AbCdEf0123'
 const t = tally()
@@ -155,6 +156,25 @@ async function partB(browser, origin) {
   await page.waitForFunction(() => !!document.querySelector('.link-choice [data-short-status]'))
   const afterRedraw = await payload(page)
   t.ok('b: after the screen redraws, the short link is still the one on show, and no new request', afterRedraw === short && calls.length === 1, afterRedraw.slice(0, 60) + ' ' + calls.length)
+  await ctx.close()
+}
+
+/** Web NFC exists only in Chrome on Android: a stub that records what is written, to see which link a tag gets. */
+async function partN(browser, origin) {
+  const { ctx, page } = await newPage(browser, origin)
+  await ctx.addInitScript(() => {
+    window.__nfcWrites = []
+    window.NDEFReader = class { async write(m) { window.__nfcWrites.push(m.records[0].data) } }
+  })
+  await stubLink(ctx, origin, () => ok201)
+  await openMeet(page, origin)
+  const long = await payload(page)
+  await shortBtn(page).click()
+  await page.locator('.link-choice [data-link="short"]').waitFor({ timeout: 5_000 })
+  await page.getByRole('button', { name: 'Write the long link to an NFC tag' }).click()
+  await page.waitForFunction(() => window.__nfcWrites.length === 1)
+  const written = await page.evaluate(() => window.__nfcWrites[0])
+  t.ok('n: with the short link chosen, an NFC tag is still written with the LONG link (a tag is kept; a short link expires)', written === long && (await payload(page)).includes('/l/'), written.slice(0, 60))
   await ctx.close()
 }
 
@@ -360,6 +380,7 @@ async function main() {
     console.log(`short_link_flow: app ${app.base}, https front ${front.origin} -> :${HTTPS_PORT}, service :${SERVICE_PORT}`)
     if (PARTS.includes('a')) await partA(browser, app.base)
     if (PARTS.includes('b')) await partB(browser, front.origin)
+    if (PARTS.includes('n')) await partN(browser, front.origin)
     if (PARTS.includes('c')) await partC(browser, front.origin)
     if (PARTS.includes('d')) await partD(browser, front.origin)
     if (PARTS.includes('e')) await partE(browser, front.origin)

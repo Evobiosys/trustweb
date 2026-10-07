@@ -2463,7 +2463,8 @@ function meetTrustWebPage(): HTMLElement {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
           nfcStatus.textContent = S.meetNfcWaiting
-          writeLinkToTag(chooser.current()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
+          // A tag is written once and kept for good: it always gets the long link (a short link expires after 30 days).
+          writeLinkToTag(chooser.longLink()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
         },
       }, [S.meetNfcWrite])
     : null
