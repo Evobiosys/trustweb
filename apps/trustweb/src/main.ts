@@ -3351,7 +3351,7 @@ function queryDock(s: AppState): HTMLElement {
     : null
   return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
     el('div', { class: 'dock-head' }, [
-      el('h3', {}, [queryStyle() === QueryStyle.Call ? S.webCall : S.queryTitle]),
+      el('h3', {}, [S.queryTitle]),
       el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [

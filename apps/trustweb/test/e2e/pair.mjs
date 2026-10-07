@@ -28,7 +28,7 @@ await b.click('.node:not(.you)'); await b.waitForTimeout(400); await b.screensho
 console.log('B sheet:', (await b.textContent('.sheet')).slice(0, 300))
 // B asks, A has no inventory -> silent -> No match
 await b.click('.sheet-veil', { position: { x: 30, y: 30 } }); await b.getByRole('button', { name: 'Call into your web' }).click()
-await b.fill('textarea', 'Anyone have a ladder?'); await b.click('text=Ask my web')
+await b.fill('textarea', 'Anyone have a ladder?'); await b.click('text=Call into my web')
 await b.waitForSelector('.card.asked .outcome', { timeout: 90000 }); console.log('B result:', await b.textContent('.card.asked .outcome'))
 await a.screenshot({ path: S + '/p3_a_after.png' })
 // check A's DOM contains no did string

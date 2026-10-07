@@ -90,10 +90,10 @@ async function main() {
     // Query lives on the Web screen (bottom right) and opens a dock under the rings.
     await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
     ok('Jonas\'s rings stay visible while querying', await jonas.locator('.rings-wrap').isVisible())
-    const askBtn = jonas.getByRole('button', { name: 'Ask my web' })
+    const askBtn = jonas.getByRole('button', { name: 'Call into my web' })
     await page.waitForFunction(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 2")
-      const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Ask my web')
+      const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Call into my web')
       return b && !b.disabled
     }, null, { timeout: 30_000 })
     ok('Jonas is paired with Maya (Ask enabled)', true)
