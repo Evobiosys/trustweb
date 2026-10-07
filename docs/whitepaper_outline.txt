@@ -1,10 +1,12 @@
-WHITE PAPER OUTLINE (draft v0.1, 2026-10-07). OUTLINE ONLY, not the paper (Jakob 10-07: "don't make it bigger than that at this point").
+WHITE PAPER OUTLINE (draft v0.2, 2026-10-07; v0.2 adds section 2A on weak ties and the research lineage, new register entries in section 10). OUTLINE ONLY, not the paper (Jakob 10-07: "don't make it bigger than that at this point").
 Status: draft for Jakob; he has not reviewed it. Plain text, no em dashes. English; German quotes stay German with a translation.
 
 Marks used in this file
   [A] legal, government, peer-reviewed science, primary documents   [B] journalism, analysis, own repo docs   [C] community, voice memo, own application text
   [source needed]   a claim I could not source. Do not publish it as fact until a source sits here.
   [to confirm]      a claim that rests on Jakob's own say-so and awaits his confirmation.
+  [locator to confirm]  (section 2A) a work I know exists but whose page, volume or figure I have not seen; check before citing. "(recall)" = added from memory, not fetched; "(register)" = from the wave 3 source lists.
+  ⚠️ older than 10 years (historical sources, by design in 2A) or confidence below 0.7.
   Source register with publisher and date: see section 10 at the end.
 
 ======================================================================
@@ -40,7 +42,8 @@ contacts; the next hop is designed and shown in a scripted demo. This paper stat
 1.4 "We lead with the querying, not the recording" (Jakob 10-07 11:44 [C]): recording and notes are how the inventory fills; querying is what is new.
   [Anomaly for the site agent, not for this paper: the live "How it works" section says "Taking notes comes first". Jakob's 10-07 rule is the reverse. Not edited here.]
 1.5 Related work and where this differs
-  - PGP web of trust and the "Rebooting the Web of Trust" workshops worked on versions of this for decades (own site copy [C]). [source needed: cite a primary source for each, for example Zimmermann's PGP documentation and the RWoT workshop papers; the PGP source will be older than 10 years, mark with a warning]
+  - PGP web of trust and the "Rebooting the Web of Trust" workshops worked on versions of this (own site copy [C]); in time: PGP since 1991 (three decades), the workshops since about 2015 (one decade), so "for decades" fits PGP only. Sources and what each means for TrustWeb: section 2A.7. [locators to confirm]
+  - The research lineage (weak ties 1973, small worlds, structural holes, Aardvark): section 2A.
   - Open standards this builds on (planned or partly used, see section 4): W3C DIDs, DIDComm, OpenVTC-compatible trust-graph concepts, WebRTC. [source needed: W3C Recommendation texts and OpenVTC documentation, tier A]
   - "Who else has built something like this" was searched by the research agent of wave 3: link its report here when it exists (W3/research report). Until then: [source needed].
   - Difference in one line: the query itself travels through consenting people, instead of a keyring or a feed.
@@ -79,6 +82,119 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
 2.6 Philosophy of the project itself
   - "The web of trust is not merely a technical framework ... it is also a philosophical project": how can trust be established without central authorities and how do communities decide whom to trust. [C: Tana 7oxUPezZrFpA, 2026-09-03; the node may be AI-composed: check before quoting as Jakob's words.]
   - Turquoise vocabulary (weave, fibre, tissue, recede, restore, commons) belongs to a separate orbit for integral readers, not this paper. Optional appendix. [C: nucleus orbit T]
+
+======================================================================
+2A. THE POWER OF WEAK TIES, AND FIFTY YEARS OF WORK ON THIS  (Jakob 10-07 15:37: "a proper outline also including the power of weak ties, how people have been working on this since the 1970s")
+======================================================================
+Placement: numbered 2A so every cross-reference in this file stays valid; renumber (2A becomes 3, the rest shift) when the outline is promoted to a draft paper. The chimpanzee and bonobo section (2.5) is unchanged.
+Reading rule: this lineage is historical by design. Nearly every source here is older than 10 years, so each such entry carries ⚠️ here and in the register (section 10); the sign marks age, not doubt. Confidence figures (0 to 1) appear only on uncertain claims, and below 0.7 they carry ⚠️ as well.
+Source status in this pass: "(register)" = found by the wave 3 research agents (W3/research-favours and research-prior-art source lists; some read, some seen via search summaries, as each list states). "(recall)" = added by me from memory of the literature, NOT fetched. Every "(recall)" entry and every "[locator to confirm]" needs a page-level check before anything is cited in print or on the site. I invented no DOI, page number or quote; where I am unsure the locator says so.
+One-sentence thesis for the paper: five decades of network research say that new information arrives through acquaintances and bridges, that short paths exist but people rarely pass a request along, and that earlier systems either measured the network, searched it from a central server, or authenticated keys; TrustWeb makes the passing-along cheap and consent-based, and keeps the data on each person's device.
+
+2A.1 The lineage on one line  (candidate figure for the paper; each node one claim; all dates to confirm against the register)
+  1958/1978 Pool and Kochen, contacts and influence  >  1967 Milgram small-world letters, 1969 Travers and Milgram  >  1973 Granovetter weak ties  >  1974 Granovetter, Getting a Job  >  1981 Lin, strength of position
+  >  1983 Granovetter revisited  >  1985 embeddedness and trust  >  1988 Coleman, social capital  >  1991 to 1992 PGP and its web of trust  >  1992 Burt, structural holes  >  1998 Watts and Strogatz, small worlds
+  >  1999 Advogato  >  2000 Putnam, bridging versus bonding; Kleinberg, navigation  >  2001 Lin, social capital theory  >  2003 Dodds et al., email chains; EigenTrust  >  2007 to 2011 Aardvark (paper 2010)
+  >  2012 Bakshy et al., weak ties and novel information  >  2015 Rebooting the Web of Trust workshops  >  2019 KERI  >  2022 Rajkumar et al., causal test of weak ties; W3C DID Core 1.0.
+  Field-building claim, optional: network analysis became an organised field in the 1970s (INSNA founded 1977; the journal Social Networks begun 1978). [source needed; confidence 0.75, locator to confirm]
+  Entry format below: Result / Means for TrustWeb / Claim the paper may make / Evidence the claim needs.
+
+2A.2 Weak ties carry new information  (the core of the section)
+  Granovetter 1973 and 1983
+  - Result: tie strength is a mix of time, emotional intensity, intimacy and reciprocal services. People close to us tend to know the same people, so what they tell us is redundant; acquaintances sit in other clusters, and weak ties are the usual bridges between clusters, so new information reaches us through them. (confidence 0.9; Granovetter 1973, abstract read in wave 3) The 1974 book Getting a Job (Newton, Massachusetts, professional and managerial workers) found that most people who got their job through a contact saw that contact only occasionally or rarely; the figures 16.7, 55.6 and 27.8 percent for "often, occasionally, rarely" are from memory. (recall; confidence 0.75, locator to confirm in the book)
+  - The 1983 revisit keeps the thesis and adds the counterweight: weak ties give access to information and resources outside our circle, but strong ties are more motivated to help and are easier to reach. (confidence 0.85; recall) Late citations of "weak ties" often drop this second half.
+  - Means for TrustWeb: asking only close friends mostly returns what you already know; the acquaintance ring and the second hop are where new leads come from. And because strong ties carry the motivation, TrustWeb routes the second hop through a consenting strong tie: a trusted introducer who vouches, which combines both halves.
+  - Claim for the paper: "Acquaintances are a major source of new opportunities" (already in the abstract); "the people best placed to help are often not the ones closest to you".
+  - Evidence needed: Granovetter 1973, 1983 [A]; a causal modern test (Rajkumar et al., 2A.5); for TrustWeb itself, nothing yet: pilot measure = share of useful answers that came from the acquaintance ring or from hop two versus the close ring. Hypothesis until then.
+  Marsden and Campbell 1984, Krackhardt 1992 (recall)
+  - Result: self-reported closeness is a better measure of tie strength than contact frequency or duration (Marsden and Campbell); strong ties ("philos") matter most under uncertainty and change because they supply trust (Krackhardt). (confidence 0.8 each; locators to confirm)
+  - Means for TrustWeb: the three self-chosen rings (close friend, friend, acquaintance) are a defensible way to measure tie strength; they match the better of the two measures. A ring is not a score (2.2).
+  - Claim: rings are a coarse, person-chosen version of tie strength. Evidence needed: Marsden and Campbell [A]; Jakob's confirmation that rings are meant this way (open question 14).
+  Granovetter 1985, embeddedness (recall)
+  - Result: economic action (hiring, lending, trading) is embedded in networks of personal relations, and trust in transactions comes mostly from those relations, not from rules or markets alone. (confidence 0.85; AJS 91(3), 481 to 510, locator to confirm)
+  - Means for TrustWeb: a question answered through people you know is how trust already operates in exchange; TrustWeb carries the path along. Evidence: Granovetter 1985 [A].
+
+2A.3 Bridges, brokers and social capital
+  Burt 1992 (book), 2004 (article)
+  - Result: gaps between clusters are "structural holes"; people who span them see varied information, get ideas valued more, and gain more from brokering. (confidence 0.8; Burt 2004 AJS 110(2), 349 to 399, register, DOI metadata confirmed, findings from search summary)
+  - Means for TrustWeb: every person with contacts in two circles is a potential bridge; an ask that crosses their circles is exactly the case TrustWeb makes cheap. Tension to name: a broker's advantage comes from being the only link, and an introduction protocol makes that link easier to copy. Hypothesis, no evidence yet: introductions through TrustWeb raise, not lower, the broker's standing because the path shows who made the connection.
+  - Claim: "TrustWeb makes bridging cheap, and shows who bridged." Evidence needed: Burt [A]; pilot: number of introductions that completed, and whether introducers keep or lose standing (ask them).
+  Lin, Ensel and Vaughn 1981; Lin 2001; Coleman 1988; Putnam 2000
+  - Result (Lin): social capital is the resources embedded in a network and reached through ties; weak ties help most when they reach contacts of higher status ("strength of position"). (confidence 0.75; recall; Lin, Ensel, Vaughn, American Sociological Review 46(4), 393 to 405, locator to confirm)
+  - Result (Coleman): networks with closure (people who all know each other) make trust and sanctions work; this is the other side of the Granovetter and Burt argument, strong closure for trust, bridges for novelty. (confidence 0.8; AJS 94 supplement, S95 to S120, locator to confirm)
+  - Result (Putnam): bonding social capital (inward, exclusive) supports mutual support among similar people; bridging social capital (outward, inclusive) links across groups; the book argues American civic life shrank in the late twentieth century. (confidence 0.85; chapter 1, page to confirm) A European or Austrian counterpart is missing here (open question 12).
+  - Means for TrustWeb: TrustWeb is a bridging tool built on bonding trust: first hop = bonding, second hop = bridging, with the introducer's consent as the trust link.
+  - Claim: "trust holds within groups; novelty arrives across them; TrustWeb connects the two on request". Evidence needed: Lin, Coleman, Putnam [A]; a Europe or Austria source for the wording "in Austria, informal contacts find jobs and flats" (not searched yet).
+
+2A.4 Small worlds, six steps, and why requests die  (the section that justifies "one hop further" and "willingness is the scarce resource")
+  Pool and Kochen (written about 1958, published 1978); Milgram 1967; Travers and Milgram 1969
+  - Result: Milgram asked starters in Nebraska and Boston to forward a letter, through personal acquaintances only, to a target in the Boston area. In Travers and Milgram 1969, 64 of 296 chains (about 22 percent) arrived, with a mean of about 5.2 intermediaries. (confidence 0.8; Sociometry 32(4), 425 to 443; counts from memory, locator to confirm.) Most chains stopped because someone did not pass the letter on. The words "six degrees of separation" belong to later popular culture (the 1990 play of that name; confidence 0.85), not to Milgram's papers.
+  - Means for TrustWeb: short paths between strangers exist, but the weak point is a person not passing the request on. That is the design problem TrustWeb is built around: make forwarding and declining cost nothing socially (the indistinguishable no, 3.4) and cost little effort (one tap).
+  - Claim: "In the best-known small-world experiments the limit was willingness to pass a request on, not the absence of a path." Evidence needed: Travers and Milgram [A]; Dodds et al. below; for TrustWeb, pilot measure: answer rate and time to answer per ask per hop.
+  - Caution: Milgram's completion rates and samples are contested (Kleinfeld 2002, Society 39(2), 61 to 66; recall; confidence 0.7; locator to confirm). Do not write "six degrees" as a fact about TrustWeb's reach.
+  Watts and Strogatz 1998 (Nature 393, 440 to 442; recall; confidence 0.9; pages from memory, locator to confirm)
+  - Result: take a tidy ring-shaped network with high clustering and rewire a few links at random; average path length collapses while clustering stays high. Examples in the paper: the neural network of the worm C. elegans, the western US power grid, film-actor collaboration. A few weak, long-range ties make a world small.
+  - Means for TrustWeb: weak ties are the shortcuts; this is why a second hop can matter far more than the first, and why TrustWeb need not plan for a third.
+  - Claim: "a few bridging ties shorten the distance between any two people a great deal". Evidence needed: Watts and Strogatz [A]. NOT claimable for TrustWeb's own early network (hundreds of people): measure, do not extrapolate.
+  Kleinberg 2000 (Nature 406, 845; confidence 0.85, locator to confirm)
+  - Result: short paths existing is one thing, finding them using only local knowledge another; decentralised search works when long ties follow a particular distance pattern.
+  - Means for TrustWeb: nobody holds the whole graph here either (local-first); the protocol asks each ring in turn and lets each person decide, rather than computing a route. Evidence: Kleinberg [A]; design argument, not a result for TrustWeb.
+  Dodds, Muhamad and Watts 2003 (Science 301(5634), 827 to 829; confidence 0.85 for the reference)
+  - Result: a global email version of Milgram's test: tens of thousands of chains toward 18 targets in 13 countries; only a small fraction finished (about 384 of 24,163, from memory, confidence 0.7, locator to confirm). The authors attribute the failures mainly to people not forwarding, not to missing short paths. (confidence 0.75)
+  - Means and evidence as for Milgram: the willingness bottleneck replicates at scale.
+
+2A.5 Weak ties, measured at scale
+  - Onnela et al. 2007 (PNAS 104(18), 7332 to 7336; recall; confidence 0.85): in a mobile phone network, weak ties hold the large-scale structure together; removing them breaks the network apart faster than removing strong ties. Means: weak ties are structural, not decoration. Evidence: Onnela [A].
+  - Bakshy, Rosenn, Marlow, Adamic 2012 (WWW 2012, pp. 519 to 528; recall; confidence 0.85): on Facebook, a person is more likely to share what close friends shared, but weak ties as a group supply more of the novel information because there are so many of them. Means: the information value of acquaintances is large even when each is less active. Evidence: Bakshy [A].
+  - Rajkumar, Saint-Jacques, Bojinov, Brynjolfsson, Aral 2022 (Science 377(6612), 15 Sept 2022; register; DOI 10.1126/science.abl4476, metadata confirmed; pages to confirm): randomised experiments on about 20 million LinkedIn users between 2015 and 2019. Moderately weak ties were the most useful for job mobility (an inverted U), and the best strength differed by industry: weaker ties helped more in digital industries, stronger ties in less digital ones. (confidence 0.8; from search summaries) This is the strongest modern evidence and not older than 10 years.
+  - Means for TrustWeb: the ring design should not assume "weaker is always better"; the acquaintance ring is the new-information ring, the friend ring the best-balance ring, and TrustWeb lets each person choose. Caution: all three studies measure information and job mobility, not favours or borrowing a cargo bike; the step to TrustWeb's use cases is an inference (confidence 0.6, ⚠️).
+  - Willingness, the other half (register): people underestimate how willing others are to help (Zhao and Epley, Psychological Science 33(10), 2022) and overestimate the cost of declining an invitation (Givi and Kirk, J. Personality and Social Psychology, 2024); questions to Facebook friends get useful answers but carry social costs (Gray et al., ACM CSCW 2013; Ellison et al., AAAI ICWSM 2013). Means: asking is worth lowering the cost of; supports 1.3 and 3.4. Evidence: the four papers [A]; findings from search summaries or abstracts only, confidence 0.65 to 0.75 per the wave 3 list.
+
+2A.6 Asking your network: search, introductions, and why they died
+  Aardvark (Horowitz and Kamvar, "The Anatomy of a Large-Scale Social Search Engine", WWW 2010, pp. 431 to 440; register; numbers from a TechCrunch summary only)
+  - Result: a service that took a question and routed it by instant message or email to friends and friends of friends judged likely to know the answer; answerers could decline by typing "pass" and received under about one request a day (Wikipedia, confidence 0.8). Launched about 2007, bought by Google in 2010 (confidence 0.85, recall), closed in 2011 (VentureBeat 2011).
+  - Means for TrustWeb: the nearest historical ancestor of "ask your web". Same shape (a question travels through acquaintances to people who may decline), different locus: Aardvark's servers held the profiles and chose the answerers; in TrustWeb the asker's rings choose, the inventory stays on each phone, and a decline is invisible. Lessons: low-volume, easy-decline asks worked; a standalone product needed a reason beyond question and answer.
+  - Claim: "this has been tried, centrally, and was liked; it closed inside a larger company." Evidence needed: the 2010 paper and the TechCrunch and VentureBeat items [A/B]; do NOT quote response-time or completion numbers until read in the paper (the W3 collectors could not fetch it; HTTP 404 on one URL, PDF locator in the register).
+  - Neighbours (register, tier C and B): SixDegrees.com 1997 to 2000 (an early "contacts of contacts" network), Jelly 2014 to 2017, LinkedIn Introductions; all central services, none local-first.
+  Honest scope: of the 42 systems the wave 3 agent checked, none combined multi-hop asking, per-hop consent and local-first storage; absence of evidence, confidence 0.6 ⚠️. Re-run the search before NLnet.
+
+2A.7 Trust networks and web-of-trust systems since 1991
+  PGP and OpenPGP
+  - Result: Phil Zimmermann released PGP in 1991; its web of trust, in which users sign each other's keys and mark others as trusted introducers, is described in the PGP 2.0 era documentation of 1992 (confidence 0.8; "The Official PGP User's Guide", MIT Press 1995, locator to confirm). GnuPG's default rule needs one fully trusted or three marginally trusted signatures over a path of limited depth (confidence 0.8; GnuPG manual, locator to confirm). Standardised as OpenPGP (IETF RFC 4880, 2007; replaced by RFC 9580, 2024; confidence 0.85, locators to confirm).
+  - Usability evidence: Whitten and Tygar, "Why Johnny Can't Encrypt", USENIX Security 1999, pp. 169 to 184 (recall; confidence 0.85): test users mostly failed to use PGP correctly.
+  - Means: trust levels (none, marginal, full) are an old idea and a ring in disguise; the failure was usability and key management, which argues for TrustWeb's coarse, person-chosen rings. But PGP answers "is this key really theirs", not "who can help me".
+  Advogato (Raph Levien, about 1999; Wikipedia register; shut down 2016, Wikipedia)
+  - Result: members certified each other as Apprentice, Journeyer or Master; an attack-resistant trust metric computed who counted, seeded by trusted accounts (confidence 0.75; recall; locator to confirm Levien's text, for example the chapter in Golbeck, ed., Computing with Social Trust, Springer 2009).
+  - Means: a global trust metric needs a trusted seed and one computed answer; TrustWeb has no global score on purpose (2.2). Advogato is dead; its idea lives on elsewhere.
+  EigenTrust and trust propagation (recall)
+  - Kamvar, Schlosser, Garcia-Molina, "The EigenTrust Algorithm for Reputation Management in P2P Networks", WWW 2003, pp. 640 to 651 (confidence 0.9): global reputation computed by repeating local trust values until they converge. The first author, Sepandar Kamvar, is also the second author of the Aardvark paper (confidence 0.9).
+  - Guha, Kumar, Raghavan, Tomkins, "Propagation of Trust and Distrust", WWW 2004, pp. 403 to 412 (confidence 0.85): trust and distrust can be propagated across a graph; propagation of distrust is the harder part.
+  - Jøsang, Ismail, Boyd, "A survey of trust and reputation systems for online service provision", Decision Support Systems 43(2), 2007, 618 to 644 (confidence 0.85): the standard overview.
+  - Means: the computing line turns trust into a number and a path calculation; TrustWeb's choice (paths and provenance, no scalar score, consent per hop) departs from it deliberately. Claim: "a design choice, justified by usability and by the cost of being wrong about a person, not by a measured result" (⚠️ argument, confidence 0.6).
+  Keybase (Wikipedia and CNBC 2020 in the register; BSD-3-Clause licence per the register)
+  - Result: launched about 2014 (recall, confidence 0.8); proved identity by linking social accounts and devices; acquired by Zoom in May 2020 (CNBC, 2020-05-07), development unclear since. Means: identity proofs, not asking; and a reminder that a company can retire a trust network. Evidence: CNBC [B], Wikipedia [C], repo licence [B].
+  The present field: DIDs, DIDComm, KERI, OpenVTC, Rebooting the Web of Trust
+  - W3C Decentralized Identifiers (DIDs) v1.0 became a W3C Recommendation in July 2022 (confidence 0.9; locator to confirm). KERI, Samuel Smith, "Key Event Receipt Infrastructure (KERI)", arXiv 2019 (confidence 0.75, identifier to confirm). The Rebooting the Web of Trust workshops began about 2015 (confidence 0.75, locator to confirm). OpenVTC (the First Person Project's trust-community tools, Apache-2.0 per the register) is the nearest living project; the register says no multi-hop asking.
+  - Means: TrustWeb's identity and transport layer (DIDs, DIDComm, OpenVTC compatibility) is borrowed and so far partly planned (section 4); its asking layer is the new part. Fixes the existing 1.5 claim "worked on versions of this for decades": PGP since 1991 (three decades), the community around Rebooting the Web of Trust since about 2015 (one decade).
+  - Claim: "identity and key trust were solved piece by piece; the question of who can help me through people I trust has had fewer attempts and no living, local-first one." Evidence: this subsection, plus the W3 prior-art list; confidence 0.6 ⚠️ until the search is re-run.
+
+2A.8 What this means for TrustWeb: the claims this section lets the paper make, and the evidence each still needs
+  C1 Querying your connections works as human behaviour. Support: asking friends is common and useful, with social costs (Gray 2013; Ellison 2013; Zhao and Epley 2022; Givi and Kirk 2024). Needs: nothing more for the motivation; for TrustWeb itself, pilot asks sent and answered.
+  C2 Weak ties carry new information. Support: Granovetter 1973, 1983; Bakshy 2012; Onnela 2007; Rajkumar 2022. Needs: pilot share of useful answers from acquaintance ring and from hop two. Until then, a hypothesis for TrustWeb.
+  C3 Bridging is where the value sits, and introductions are the mechanism. Support: Burt; Putnam; Lin; Watts and Strogatz. Needs: completed introductions; introducer feedback.
+  C4 The binding constraint is willingness to pass a request on. Support: Travers and Milgram 1969; Dodds 2003; the design of the indistinguishable decline. Needs: answer rate and time per hop in the pilot.
+  C5 Rings are a defensible coarse measure of tie strength; no global score. Support: Marsden and Campbell; Whitten and Tygar (usability); Granovetter 1985. Needs: Jakob's confirmation (open question 14); argument, not result.
+  C6 The nearest predecessors were central services that closed (Aardvark 2007 to 2011, Jelly 2014 to 2017, SixDegrees 1997 to 2000). Support: register. Needs: re-run the prior-art search before print; read the Aardvark paper itself.
+  C7 Nobody found combines multi-hop asking, per-hop consent and local-first storage. Support: wave 3 search of 42 systems. Needs: confidence 0.6; "none we found", never "none exist".
+  Not claimable at all today: any reach figure for TrustWeb (hops, people reachable), any statement that TrustWeb users find leads faster, any adoption number. No data exists.
+
+2A.9 Counter-evidence and honest limits  (the paper states them in its own words)
+  - Weak-tie primacy is contested: Granovetter's own 1983 text and Krackhardt stress strong ties; Rajkumar finds an inverted U and industry differences, so "weaker is better" is wrong.
+  - The evidence is mostly about jobs and information, mostly from the United States and online platforms; nothing here measures neighbourly favours (a bike, a spare room). A European or Austrian source is missing (open question 12).
+  - Milgram's numbers are contested (Kleinfeld 2002); the email replication finished few chains; "six degrees" is a slogan.
+  - Embedded trust can exclude: closure (Coleman) and bonding (Putnam) can also close people out; whom TrustWeb leaves out is worth a line in the paper. [to confirm with Jakob]
+  - Network position can be unevenly given (the same few people become the brokers); TrustWeb's second hop could concentrate asks on them. Pilot measure: ask load per person.
+  - All "recall" entries in this section may carry small errors in years, pages and counts until the locator is checked.
 
 ======================================================================
 3. THE MECHANISM: QUERYING FIRST
@@ -160,7 +276,11 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
   7. Abuse and relay policy (a relay may demand an audit; responder decides, not the relay). Default: obvious defaults only. [C: Jakob 10-07 08:36]
   8. Social-cost design: allow choosing whom to ask, and asking without showing that one asks; research to align on is open (Jakob 10-07 asked for it). [C]
   9. Entity and governance after the planned break.
-  10. Which claims about adjacent work (PGP, RWoT, OpenVTC) to cite, pending the research agent.
+  10. Which claims about adjacent work (PGP, RWoT, OpenVTC) to cite. Partly answered by 2A.7; the entries marked [locator to confirm] stay open until a page-level check.
+  11. Placement of the lineage (2A): keep as 2A, or promote to its own numbered section 3 and renumber. Default: keep 2A until the outline becomes a paper.
+  12. A European or Austrian source for weak ties and informal contacts (job or flat search through acquaintances), tier A. Default: say "mostly US and online evidence" in 2A.9 until found.
+  13. Which "(recall)" entries to verify first: those carrying numbers (Travers and Milgram 64 of 296; Dodds 384 of 24,163; Granovetter 16.7/55.6/27.8 percent) before any number is printed. Default: print no number from 2A until read in the source.
+  14. Do the three rings mean tie strength in the paper's wording (Marsden and Campbell: self-reported closeness)? Default: yes, as a coarse person-chosen measure, never a score.
 
 ======================================================================
 9. WHAT THIS DOCUMENT IS NOT
@@ -188,6 +308,50 @@ Frame: his terms, "first person protocol", with one core and several formats (Si
 [C] Signal-orbit nucleus "Web of Trust, signal orbit v0.3", 2026-09-14 (4claude/DEVLOG/wot-signal-orbit). Parts marked INTERNAL ONLY in it are excluded.
 [C] Manifund application "TrustWeb: Amplifying the Power of Weak Ties", created 2026-09-25 (own text; funding status: none raised at last read).
 [C] Tana notes (read only): w7fWTRC7ZWds (concepts), BI_4kdn-iTit, 7oxUPezZrFpA, j7YaUjve2RVb, FcHArIYVp4yZ, HzWPsD_QKYez, lnjIV9IZVPp_, CxY8mkORvM_y, -qlGMZZfzpG0, WSjMYsLyO8EL.
+
+--- Added in v0.2 for section 2A (lineage). Status: (register) = on the wave 3 lists; (recall) = from memory, NOT fetched, locator to confirm. ⚠️ = older than 10 years. ---
+[A] Granovetter MS. The Strength of Weak Ties. American Journal of Sociology 78(6), 1360-1380, May 1973 ⚠️ (register: abstract read on an MIT library mirror; pages from memory)
+[A] Granovetter MS. Getting a Job: A Study of Contacts and Careers. Harvard University Press, 1974 (2nd ed. University of Chicago Press, 1995) ⚠️ (recall)
+[A] Granovetter M. The Strength of Weak Ties: A Network Theory Revisited. Sociological Theory 1, 201-233, 1983 ⚠️ (recall)
+[A] Granovetter M. Economic Action and Social Structure: The Problem of Embeddedness. American Journal of Sociology 91(3), 481-510, 1985 ⚠️ (recall)
+[A] Marsden PV, Campbell KE. Measuring Tie Strength. Social Forces 63(2), 482-501, 1984 ⚠️ (recall)
+[A] Krackhardt D. The Strength of Strong Ties: The Importance of Philos in Organizations. In Nohria N, Eccles RG (eds), Networks and Organizations, Harvard Business School Press, 1992 ⚠️ (recall; pages to confirm)
+[A] Burt RS. Structural Holes: The Social Structure of Competition. Harvard University Press, 1992 ⚠️ (recall)
+[A] Burt RS. Structural Holes and Good Ideas. American Journal of Sociology 110(2), 349-399, September 2004. doi 10.1086/421787 ⚠️ (register; metadata confirmed, findings via summary)
+[A] Coleman JS. Social Capital in the Creation of Human Capital. American Journal of Sociology 94 (supplement), S95-S120, 1988 ⚠️ (recall)
+[A] Lin N, Ensel WM, Vaughn JC. Social Resources and Strength of Ties: Structural Factors in Occupational Status Attainment. American Sociological Review 46(4), 393-405, 1981 ⚠️ (recall)
+[A] Lin N. Social Capital: A Theory of Social Structure and Action. Cambridge University Press, 2001 ⚠️ (recall)
+[A] Putnam RD. Bowling Alone: The Collapse and Revival of American Community. Simon and Schuster, 2000 ⚠️ (recall; scholarly argument from a trade publisher; chapter 1, page to confirm)
+[A] Pool I de S, Kochen M. Contacts and Influence. Social Networks 1(1), 5-51, 1978 (circulated from about 1958) ⚠️ (recall)
+[A] Milgram S. The Small-World Problem. Psychology Today 1(1), May 1967 ⚠️ (recall; pages to confirm)
+[A] Travers J, Milgram S. An Experimental Study of the Small World Problem. Sociometry 32(4), 425-443, 1969 ⚠️ (recall)
+[A] Watts DJ, Strogatz SH. Collective dynamics of "small-world" networks. Nature 393, 440-442, 4 June 1998 ⚠️ (recall)
+[A] Kleinberg JM. Navigation in a small world. Nature 406, 845, 24 August 2000 ⚠️ (recall)
+[A] Dodds PS, Muhamad R, Watts DJ. An Experimental Study of Search in Global Social Networks. Science 301(5634), 827-829, 8 August 2003 ⚠️ (recall)
+[A] Onnela J-P et al. Structure and tie strengths in mobile communication networks. Proceedings of the National Academy of Sciences 104(18), 7332-7336, 2007 ⚠️ (recall)
+[A] Bakshy E, Rosenn I, Marlow C, Adamic L. The Role of Social Networks in Information Diffusion. Proceedings of WWW 2012 (ACM), 519-528 (recall)
+[A] Rajkumar K et al. (see the existing Rajkumar entry above): pages 1304-1310 from memory, to confirm; doi 10.1126/science.abl4476 (register)
+[A] Horowitz D, Kamvar SD. The Anatomy of a Large-Scale Social Search Engine. Proceedings of WWW 2010 (ACM), 431-440. https://archives.iw3c2.org/www2010/proceedings/www/p431.pdf ⚠️ (register; the W3 collectors could not fetch the paper, numbers via TechCrunch; read it before quoting)
+[A] Gray R, Ellison NB, Vitak J, Lampe C. Who wants to know? Question-asking and answering practices among Facebook users. ACM CSCW 2013. doi 10.1145/2441776.2441913 ⚠️ (register; findings via search summary)
+[A] Ellison N, Gray R, Vitak J, Lampe C, Fiore A. Calling All Facebook Friends: Exploring Requests for Help on Facebook. AAAI ICWSM 2013 ⚠️ (register)
+[A] Zhao X, Epley N. Surprisingly Happy to Have Helped. Psychological Science 33(10), 1708-1731, 2022 (register)
+[A] Givi J, Kirk CP. The Negative Ramifications From Invitation Declines Are Overestimated. American Psychological Association, Journal of Personality and Social Psychology, 2024 (register; release PDF unreadable, via summary)
+[A] Whitten A, Tygar JD. Why Johnny Can't Encrypt. USENIX Security Symposium, 169-184, 1999 ⚠️ (recall)
+[A] Zimmermann P. The Official PGP User's Guide. MIT Press, 1995 ⚠️ (recall; primary document by the author; web of trust described in the PGP 2.0 era, 1992, locator to confirm)
+[A] Kamvar SD, Schlosser MT, Garcia-Molina H. The EigenTrust Algorithm for Reputation Management in P2P Networks. Proceedings of WWW 2003 (ACM), 640-651 ⚠️ (recall)
+[A] Guha R, Kumar R, Raghavan P, Tomkins A. Propagation of Trust and Distrust. Proceedings of WWW 2004 (ACM), 403-412 ⚠️ (recall)
+[A] Jøsang A, Ismail R, Boyd C. A survey of trust and reputation systems for online service provision. Decision Support Systems 43(2), 618-644, 2007 ⚠️ (recall)
+[A] Levien R. Attack-Resistant Trust Metrics. In Golbeck J (ed.), Computing with Social Trust, Springer, 2009 ⚠️ (recall; pages to confirm)
+[A] IETF. RFC 4880 OpenPGP Message Format, November 2007 ⚠️ (recall; replaced by RFC 9580 OpenPGP, 2024, locator to confirm)
+[A] W3C. Decentralized Identifiers (DIDs) v1.0, Recommendation, July 2022 (recall; date to confirm)
+[A] Smith SM. Key Event Receipt Infrastructure (KERI). arXiv, 2019 ⚠️ (recall; identifier to confirm)
+[B] TechCrunch. Aardvark Publishes A Research Paper Offering Unprecedented Insights Into Social Search, April 2010 ⚠️ (register)
+[B] VentureBeat. Google closes Aardvark, 2011 ⚠️ (register)
+[B] CNBC. Zoom buys Keybase as part of 90-day plan to fix security flaws, 2020-05-07 (register)
+[B] Kleinfeld JS. Could it be a big world after all? The "six degrees of separation" myth. Society 39(2), 61-66, 2002 ⚠️ (recall; a social-science magazine article, hence B; locator to confirm)
+[B] OpenVTC organisation repositories, GitHub, read 2026-10-07 (register); GnuPG software page, gnupg.org, 2026-10-07 (register)
+[C] Wikipedia: Web of trust; Advogato; Keybase; SixDegrees.com; Aardvark (search engine); Jelly (app), accessed 2026-10-07 ⚠️ (register; secondary pages, used only for dates and status)
+[C] Rebooting the Web of Trust workshop series, community site (weboftrust.info; about 2015 to date) (recall; locator to confirm)
 
 ======================================================================
 11. WEBSITE TEXT FOR whitepaper.html#bonobos  (150 words; heading: "Our closest relatives: chimpanzees and bonobos")
