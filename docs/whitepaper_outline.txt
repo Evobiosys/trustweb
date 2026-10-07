@@ -1,0 +1,196 @@
+WHITE PAPER OUTLINE (draft v0.1, 2026-10-07). OUTLINE ONLY, not the paper (Jakob 10-07: "don't make it bigger than that at this point").
+Status: draft for Jakob; he has not reviewed it. Plain text, no em dashes. English; German quotes stay German with a translation.
+
+Marks used in this file
+  [A] legal, government, peer-reviewed science, primary documents   [B] journalism, analysis, own repo docs   [C] community, voice memo, own application text
+  [source needed]   a claim I could not source. Do not publish it as fact until a source sits here.
+  [to confirm]      a claim that rests on Jakob's own say-so and awaits his confirmation.
+  Source register with publisher and date: see section 10 at the end.
+
+======================================================================
+TITLE
+======================================================================
+TrustInTheWeb: asking the people you trust, one hop further
+Working subtitle: A first-person protocol for finding people and things through people you already trust
+(Product name in prose: TrustWeb. Site name where the site names itself: TrustInTheWeb.org. Written by Jakob Possert-Bienzle, EvoBioSys, Vienna.)
+
+======================================================================
+ABSTRACT (one paragraph, about 120 words)
+======================================================================
+When we look for funding, a flat, a doctor or an introduction, we would rather ask people we trust than a platform. Acquaintances are a large source of new
+opportunities, but a person can only connect people they personally know, and reposting into a group chat reaches few. TrustWeb is an infrastructure that lets a
+question travel through the rings of people you trust, one consent at a time, so the answer comes back with the path it took. Each person keeps their notes and
+their inventory on their own device, chooses per line who may ask, and a decline looks exactly like "nothing found". Today a question reaches a person's direct
+contacts; the next hop is designed and shown in a scripted demo. This paper states the problem, the philosophy behind it, the mechanism, what exists, and the plan.
+
+======================================================================
+1. THE PROBLEM  (lead with the problem, then the philosophy)
+======================================================================
+1.1 Finding people and things through people you trust
+  - We look for a job, a grant, a flat, a cleaner, a doctor, a loan of a cargo bike; we would rather ask friends for leads than strangers. [C: own site copy, idea2.site/trustweb, 2026-10-07]
+  - Acquaintances are a major source of new opportunities, but recalling "who would fit" is memory work with little follow-through, because nobody is paid to do it. [A: Rajkumar et al., Science, 2022-09-15 (job mobility on LinkedIn, weak ties help, with an inverted-U shape and industry differences); the "no one is paid to do it" half is Jakob's own argument [C]]
+  - A superconnector can only connect people they know. Reposting is a poor channel. [A: Goel, Anderson, Hofman, Watts, Management Science 62(1), 2016: only about 1 in 3,000 shared items grew into a large cascade.] The live site says "under 4% of matches": [source needed] (Goel et al. does not state that figure; find its origin or drop it).
+  - Net effect: poor throughput of real information between people who would gladly help each other.
+1.2 Where a platform is the wrong tool (strongest first, from the site's "specifically useful" list, [C])
+  - Only locally relevant (leftover food tonight); trust is the main issue (house-sitting, care work); not publicly possible (subletting without the landlord knowing); only certain rings should see it;
+    below the bar for a public listing (a bike, a spare room); honesty about flaws (a used car); fair pricing between people who trust each other.
+1.3 Trust versus platforms
+  - Platforms broadcast and rank; trust networks route and consent. A no on a platform is visible; in TrustWeb a decline is indistinguishable from no match, so refusing stays socially free. [B: repo DECISIONS.md D22, D27, D28; README Privacy Honesty Box]
+  - Willingness to be asked is the scarce resource; every design rule protects it. (Jakob, signal-orbit nucleus 2026-09-14 [C]; see 2.2)
+1.4 "We lead with the querying, not the recording" (Jakob 10-07 11:44 [C]): recording and notes are how the inventory fills; querying is what is new.
+  [Anomaly for the site agent, not for this paper: the live "How it works" section says "Taking notes comes first". Jakob's 10-07 rule is the reverse. Not edited here.]
+1.5 Related work and where this differs
+  - PGP web of trust and the "Rebooting the Web of Trust" workshops worked on versions of this for decades (own site copy [C]). [source needed: cite a primary source for each, for example Zimmermann's PGP documentation and the RWoT workshop papers; the PGP source will be older than 10 years, mark with a warning]
+  - Open standards this builds on (planned or partly used, see section 4): W3C DIDs, DIDComm, OpenVTC-compatible trust-graph concepts, WebRTC. [source needed: W3C Recommendation texts and OpenVTC documentation, tier A]
+  - "Who else has built something like this" was searched by the research agent of wave 3: link its report here when it exists (W3/research report). Until then: [source needed].
+  - Difference in one line: the query itself travels through consenting people, instead of a keyring or a feed.
+
+======================================================================
+2. THE PHILOSOPHICAL FRAMEWORK  (Jakob 10-07: "our philosophical framework ... should go into the white paper")
+======================================================================
+Frame: his terms, "first person protocol", with one core and several formats (Signal Orbit: a core text plus orbits for each audience; this paper is the mini white paper drawn from the core and from the applications; Jakob 10-07 08:47 [C]).
+2.1 Trust we already carry
+  - His words: "The social contract and trust contract our hearts already carry": the system scales it, lets it work without our brains, and gives each other access beyond what we can convey in words quickly. [C: signal-orbit nucleus v0.3, 2026-09-14]
+  - Site line: "We have always trusted our friends, and now we have a way to represent it digitally." [C: idea2.site/trustweb, 2026-10-07]. The word "always" links to 2.5.
+  - First person: each person's device holds their own record; "the owner's device is the truth"; no server decides. [C: nucleus essential 8; B: repo docs/30-architecture-decisions.md]
+2.2 What this protects
+  - "Trust grows with use; what depletes is willingness to be asked. Every design rule protects that willingness." [C: nucleus]
+  - "Reach cannot be generated, only met." Bots cannot join, because joining costs a meeting. [C: nucleus, ruling 2026-09-14]
+  - The question travels, the data stays: consent chain, not transitive trust computation; a friend of a friend is not automatically a friend. [C: nucleus essential 4]
+  - Paths and provenance, no scalar trust score, ever; three rings (close friend, friend, acquaintance), never a continuous number. [C: nucleus essential 6; site "discreet and discrete"]
+2.3 Trust is not static, and not symmetric  (from Jakob's own TrustWeb "concepts" notes, Tana w7fWTRC7ZWds, 2026 [C])
+  - Concepts he lists: hops; strength of connection; "trustworthiness is not static" ("if it's a friend I also want to show up more trustworthily").
+  - "Three [strength of connection] links/[hops] to a person can be stronger than two weak ones." Candidate design principle for later multi-hop weighting. [to confirm: his notes, no source beyond himself]
+  - Zutrauen and Vertrauen are listed as a concept pair (trust in someone's ability versus trust in their good faith) but the Tana nodes hold no text, and the signal-orbit file marks the moral-versus-competence distinction INTERNAL ONLY. ❗ Jakob decides whether it enters a public paper. [to confirm]
+2.4 Why this can win (Tesla hypothesis, [C: nucleus, Jakob 2026-08-26])
+  - It must outcompete the platforms on something they cannot provide (asking without social cost; resources reachable along trust), not merely be ethical and private.
+  - "In terms of what people query, they query their friends, not other people." (Jakob, Tana BI_4kdn-iTit, 2026-09-24 [C]) : the first product bet. Hypothesis, not finding: [source needed] (no user data yet).
+  - The decline that looks like "no match" is called "receding as grace" in his turquoise orbit: nobody is wounded by a refusal. [C: nucleus orbit T]
+2.5 Our closest relatives (anchor #bonobos on the website: whitepaper.html#bonobos)
+  - What the sources say, plainly (text for the website in the last part of this file):
+    - Chimpanzees trust bonded friends more than non-friends in a non-verbal trust game: Engelmann and Herrmann, Current Biology, 2016 [A]. 15 chimpanzees, one sanctuary.
+    - Wild baboon females with stronger, more stable social bonds live longer: Silk et al., Current Biology, 2010 [A]; bonds raise infant survival: Silk, Alberts, Altmann, Science, 2003 [A].
+    - Bonobos: sanctuary-living bonobos shared food with strangers and, in one test, nine of fourteen chose the stranger first: Tan and Hare, PLoS ONE, 2013 [A for the paper; the "nine of fourteen" figure came from a university press summary, Duke Today, 2013-01 [B], verify in the paper]. Follow-up: young bonobos helped unfamiliar non-group members get food without being asked, plus contagious yawning toward stranger videos: Tan, Ariely, Hare, Scientific Reports 7, 2017 [A].
+    - Bonobo cooperation when food is monopolisable: Hare et al., Current Biology, 2007 [A]; a 2023 conceptual replication (Nolte, Sterck, van Leeuwen, Royal Society Open Science) found the cooperation result replicated but the tolerance (co-feeding) result did not [A, read from a search summary only; full text not fetched].
+    - Wider mammals: friendships lasting years in horses, elephants, hyenas, dolphins, monkeys, chimpanzees: Seyfarth and Cheney, Annual Review of Psychology, 2012 [A]; vampire bats: Carter and Wilkinson, Proc. R. Soc. B, 2013 [A]. Described as convergent evolution, not one inherited trait.
+  - How it grounds "we have always trusted our friends": the chimpanzee and baboon results show selective, durable trust toward bonded partners in our nearest relatives (confidence 0.9 for "older than our species"; Jakob's earlier research note puts it at 0.95). The bonobo results add that bonds can also reach outward to unfamiliar individuals, which supports the weak-tie, one-hop-further thesis.
+  - Honest limits: small samples, mostly sanctuary-living juveniles, no trust measure in the bonobo studies, no claim about wild populations or about humans; the human claim is an inference by analogy, not a result. Do not write "bonobos trust their friends": the direct trust-game evidence is chimpanzee.
+  - ❗ Jakob's lines ("the 'always' ... bonobos") name bonobos, but his own earlier research (research_friendship-deep-time_2026-09-26, Tana j7YaUjve2RVb) rests on chimpanzees, baboons and bats. See report. The section is written to cover both.
+2.6 Philosophy of the project itself
+  - "The web of trust is not merely a technical framework ... it is also a philosophical project": how can trust be established without central authorities and how do communities decide whom to trust. [C: Tana 7oxUPezZrFpA, 2026-09-03; the node may be AI-composed: check before quoting as Jakob's words.]
+  - Turquoise vocabulary (weave, fibre, tissue, recede, restore, commons) belongs to a separate orbit for integral readers, not this paper. Optional appendix. [C: nucleus orbit T]
+
+======================================================================
+3. THE MECHANISM: QUERYING FIRST
+======================================================================
+3.1 The ask
+  - Plain words, "call into your web". The question goes to the people you are connected with, according to the ring each sits in. Each holder decides, live or in advance for a line they marked that way. [B: README, repo DECISIONS.md D22; site "Ask your web"]
+  - Multi-degree asks: a question travels one hop further through a trusted friend, with consent at each hop. DESIGNED AND SCRIPTED IN THE DEMO. LIVE TODAY: direct contacts only. [B: site FAQ; screenshot w2-07 states "scripted ... the live phones do one hop today"; repo FUTURE.md lists "Multi-hop beyond one relay" as not built]
+  - The answer returns with its path ("through Jonas"; "not in his inventory, in hers"), and an introduction can follow. [B: demo walkthrough]
+3.2 Inventory
+  - Short lines: what you could offer, lend, point to. Each line carries its own audience (only me, acquaintances, friends, close friends). Imported lines start as "only me" and are marked unreviewed; three provenance states: unreviewed, mass-imported, created step by step. [B: site FAQ]
+  - Inventory fills one conversation at a time (a recorded meeting or a spoken debrief) or in one set-up import of existing notes. [B: site FAQ]
+3.3 Rings and tiers
+  - close friend, friend, acquaintance, chosen by the person; the ring sets what a contact may ask about. Optional (Advanced settings): restrict asks to direct contacts only. [Jakob 10-07 11:44 [C]; app status: check wave 3 app report]
+3.4 Consent and the indistinguishable No
+  - A decline, a block, a below-threshold result and no match look the same to the asker. [B: README Privacy Honesty Box, DECISIONS.md D22, D25 to D28]
+  - Not claimed: zero-knowledge. The README states that "claiming zero-knowledge for v0 would be false"; the v1 target is real ZK properties. [B: README]
+  - Two places read content today (demo inventory contact; server transcription once switched on). [B: site FAQ]
+3.5 Local-first, no server decides
+  - Notes, inventory, transcripts and recordings stay on the phone. Questions go phone to phone through a relay on a server in Switzerland that sees routing metadata, not content (end-to-end encrypted after the first connect step). Backups and hosted recordings are encrypted on the phone first. [B: site FAQ and privacy page; README]
+  - Habit by pull, not push: you open the app because you are looking for something; push is not relied on. [C: Jakob 10-07; B: site FAQ]
+3.6 Ways in and the first use case
+  - Gatherings first: new trust forms there; record a meeting or a debrief; an event ring. First pilot: EA groups (Manifund application text, 2026-09-25 [C]).
+  - Connecting: QR (met in person) and a link (not met in person) today; moving QR "coming soon"; NFC, Bluetooth, AirDrop "coming later". [C: Jakob 10-07 08:47 and 08:54]
+
+======================================================================
+4. WHAT EXISTS TODAY  (only what the app really does; verify each line against the live app before print)
+======================================================================
+  - Live: web app (web of people in three rings, record a meeting, notes and transcript, inventory, ask your web with consent per ask, demo accounts with imaginary friends and up to four devices side by side, encrypted Swiss backup, connecting by QR or link, send a meeting). [B: idea2.site/trustweb Features, 2026-10-07]
+  - Live demo: https://app.idea2.site/trustweb/demo/ (will move to app.trustintheweb.org). [B]
+  - Scripted, not live: the second hop (three-person walkthrough). [B]
+  - Alpha code and alternative backends in the repo: local-first agent daemon, OpenVTC and DIDComm transport with store-and-forward mediator, browser identity. [B: README]
+  - Planned only, NOT built (do not state as existing): Apertus assistant for flagging sensitive content, written threat model and OWASP ASVS level 1 self-assessment, independent security review, "runs on OpenVTC" with a live exchange, signed trust edges (VRC), web-search fallback with several engines. [C: Manifund text 2026-09-25; B: nucleus layer honesty 2026-09-11; Jakob 10-07]
+  - No adoption numbers exist. Do not write any. [B]
+
+======================================================================
+5. ROADMAP PHASES  (Jakob 10-07 11:44 [C]; dates to confirm each time)
+======================================================================
+  - Now, before Cybernetic Forest (about 31 Oct 2026): NLnet application (due 3 November per his voice note, [to confirm]), website additions, the presentation, a functional app.
+  - First community share (a small group, 2026-10-07).
+  - Mid phase until EAGxBerlin (13 to 15 Nov 2026 per the Manifund text [C]): beta for the first EA community, if funded; otherwise the same scope at reduced pace.
+  - Phase until 17 Dec 2026: wrap-up of the year.
+  - A planned break: by then the app must run without founder oversight.
+  - From February 2027: continued at reduced hours; one maintainer, nobody else holds the pen. Later pilots named in the application: test event April 2027, EA Global London May 2027 (both conditional on funding) [C].
+  - Spine and scenarios: one chosen spine (inventory querying), with named alternatives (events, gatherings); scenarios differ by phase. [C: Jakob 10-07 08:42, P27]
+  - Later, not low-hanging: relay audit with encrypted trail, anonymous usage statistics once two communities exist, storage classes (private European versus any cloud), two editions (one with the fediverse integrated, one at arm's length), querying with an LLM, passive inventory sharing. [C: Jakob 10-06, 10-07]
+
+======================================================================
+6. BUSINESS MODEL
+======================================================================
+  - Free while we test: the app is free; a Swiss server keeps an encrypted copy of recordings, free up to the equivalent of ten recordings of up to one hour per person. [B: site pricing page, 2026-10-07]
+  - Freemium hosting beyond the allowance: "contact us" for a solid agreement; B2B look; prices only ever go down later. Hosted version promises smooth updates and migrations; an offline install is on its own. [B: site pricing page; C: Jakob 10-07 08:20]
+  - Hosting site: TrustInTheWeb.com (pricing lives there; TrustInTheWeb.org stays free of pricing and only links "Do you need hosting?"). [C: Jakob 10-07 11:44]
+  - Marketplace fee: Jakob's latest wording is "80 percent of what others are charging" (not 1 percent), coming soon, nothing built. [to confirm against his recent memo; the memo was not found in Tana by text search; the live pricing page still says 1 percent]
+  - Dual licence: AGPL-3.0-or-later; on request a licence under the Adapted Modular Public License (AMPL 1.0); for well-funded organisations at a cost, starting from a budget of 100k per year. [C: Jakob 10-07 11:44; A: LICENSE, NOTICE and README of the repository]
+  - Earlier model ideas to reconcile or retire: 1 percent on money through a QuestHub flow, USD 940 per year managed instance, consulting, weaver dividend. [C: nucleus Orbit B, 2026-09-14] Never: advertising, data sale, sponsorships, purchasable visibility. [C: nucleus]
+  - Funding path: NLnet / NGI (an EU public-interest fund), Open Internet Freedom Fund, Manifund (application open until 11 Oct 2026; stipend USD 2,500 plus costs for a USD 8,500 minimum) [C: application text]. Whether NLnet applies is to be confirmed.
+  - Revenue is not claimed: no revenue exists today. [B]
+
+======================================================================
+7. GOVERNANCE AND LEGAL
+======================================================================
+  - Legal entity for now: Jakob Possert-Bienzle's Austrian sole proprietorship (Einzelunternehmen, "EPU"); an Austrian GmbH or another entity if that proves easier. [C: Jakob 10-07]
+  - Presented as part of EvoBioSys ("TrustWeb, by EvoBioSys"), not a standalone organisation; the repository README still says it is "waiting on a name" and may move to its own organisation. Reconcile. [A: README; C: Jakob 10-06]
+  - Licensing as in section 6. The GitHub code is older than the live app and is not published further. [C: Jakob 10-06; README pause notice]
+  - Data protection: GDPR/ePrivacy: no analytics, no tracking cookies; newsletter consent must not be pre-ticked (the CJEU Planet49 ruling, case C-673/17, 2019-10-01 [A], is the reference; confirm before citing); recordings need the other person's consent (in the app: the other person's tick). [B: site privacy page; app]
+  - Transcription location: an EU provider (Berget, Sweden) is the default for server transcription where used; the user never pays for a failed transcription. [C: Jakob 10-07; verify with the wave 3 transcribe report]
+  - Contact: connect@trustintheweb.org (default). [C]  Pending: README still names another address for licence requests.
+  - Decision rights: one maintainer today. [C]
+
+======================================================================
+8. OPEN QUESTIONS  (each with the default taken)
+======================================================================
+  1. Bonobo versus chimpanzee wording (2.5). Default: section covers both, claims only what each source supports.
+  2. Whether Zutrauen/Vertrauen enters a public paper (2.3). Default: leave out.
+  3. Marketplace fee 80 percent versus 1 percent (6). Default: write "80 percent of what others charge [to confirm]" nowhere public until confirmed.
+  4. Hop-two consent model for real users (live today: one hop). Default: label as designed.
+  5. Evidence that people query friends first (2.4). Default: state as a hypothesis, collect it in the first community pilot.
+  6. Verification of how contacts met beyond QR (retroactive verification, NFC, moving QR). Default: later.
+  7. Abuse and relay policy (a relay may demand an audit; responder decides, not the relay). Default: obvious defaults only. [C: Jakob 10-07 08:36]
+  8. Social-cost design: allow choosing whom to ask, and asking without showing that one asks; research to align on is open (Jakob 10-07 asked for it). [C]
+  9. Entity and governance after the planned break.
+  10. Which claims about adjacent work (PGP, RWoT, OpenVTC) to cite, pending the research agent.
+
+======================================================================
+9. WHAT THIS DOCUMENT IS NOT
+======================================================================
+  - Not reviewed by Jakob. Not for publication. No numbers beyond those sourced. The outline stays an outline until he asks for more.
+
+======================================================================
+10. SOURCE REGISTER  (publisher, date, tier; warning sign where older than 10 years)
+======================================================================
+[A] Engelmann JM, Herrmann E. Chimpanzees Trust Their Friends. Cell Press, Current Biology 26(2), 2016-01-14. doi 10.1016/j.cub.2015.11.037  (read in full by an earlier research note, 2026-09-26)
+[A] Silk JB et al. Strong and Consistent Social Bonds Enhance the Longevity of Female Baboons. Current Biology 20(15), 2010. doi 10.1016/j.cub.2010.05.067
+[A] Silk JB, Alberts SC, Altmann J. Social Bonds of Female Baboons Enhance Infant Survival. Science 302, 2003. doi 10.1126/science.1088580   (warning: older than 10 years)
+[A] Seyfarth RM, Cheney DL. The Evolutionary Origins of Friendship. Annual Review of Psychology 63, 2012. doi 10.1146/annurev-psych-120710-100337
+[A] Carter GG, Wilkinson GS. Food sharing in vampire bats. Proc. R. Soc. B 280, 2013. doi 10.1098/rspb.2012.2573
+[A] Tan J, Hare B. Bonobos Share with Strangers. PLoS ONE 8(1): e51922, January 2013. PMID 23300956  (abstract and caveats read 2026-10-07; sanctuary Lola ya Bonobo, Kinshasa; 14, 12, 10 and 7 bonobos in experiments 1 to 4)
+[A] Tan J, Ariely D, Hare B. Bonobos respond prosocially toward members of other groups. Scientific Reports 7:14733, 2017-11-07. doi 10.1038/s41598-017-15320-w  (abstract read 2026-10-07; 16, 25, 22 bonobos, ages 4 to 18)
+[A] Hare B, Melis AP, Woods V, Hastings S, Wrangham R. Tolerance allows bonobos to outperform chimpanzees on a cooperative task. Current Biology 17(7), 2007. (abstract only, via search summary)   (warning: older than 10 years)
+[A] Nolte S, Sterck EHM, van Leeuwen EJC. Does tolerance allow bonobos to outperform chimpanzees on a cooperative task? A conceptual replication. Royal Society Open Science, January 2023. doi 10.1098/rsos.220194  (read from a search summary only)
+[A] Rajkumar K, Saint-Jacques G, Bojinov I, Brynjolfsson E, Aral S. A causal test of the strength of weak ties. Science 377(6612), 2022-09-15.
+[A] Goel S, Anderson A, Hofman J, Watts DJ. The Structural Virality of Online Diffusion. Management Science 62(1), 180-196, 2016. (the "1 in 3,000" figure from a search summary; verify in the paper)
+[B] Duke Today, press release on Tan and Hare, January 2013 (nine of fourteen choosing the stranger first); verify in the paper.
+[B] Repository docs: README.md, DECISIONS.md (D22, D25 to D31), FUTURE.md, PRIVACY.md, at tag trustweb-wave2-reviewed-2026-10-07.
+[B] idea2.site/trustweb (front page, why.html, faq.html, pricing.html), read 2026-10-07; to move to TrustInTheWeb.org.
+[C] Jakob Possert-Bienzle: voice and text messages 2026-10-06 17:33, 2026-10-07 (Omi pendant and dictation), quoted with first names of third parties removed.
+[C] Signal-orbit nucleus "Web of Trust, signal orbit v0.3", 2026-09-14 (4claude/DEVLOG/wot-signal-orbit). Parts marked INTERNAL ONLY in it are excluded.
+[C] Manifund application "TrustWeb: Amplifying the Power of Weak Ties", created 2026-09-25 (own text; funding status: none raised at last read).
+[C] Tana notes (read only): w7fWTRC7ZWds (concepts), BI_4kdn-iTit, 7oxUPezZrFpA, j7YaUjve2RVb, FcHArIYVp4yZ, HzWPsD_QKYez, lnjIV9IZVPp_, CxY8mkORvM_y, -qlGMZZfzpG0, WSjMYsLyO8EL.
+
+======================================================================
+11. WEBSITE TEXT FOR whitepaper.html#bonobos  (150 words; heading: "Our closest relatives: chimpanzees and bonobos")
+======================================================================
+We have always trusted our friends, and our closest relatives suggest how old that is. In a rope version of the human trust game, chimpanzees trusted bonded friends significantly more often than non-friends (Engelmann and Herrmann, Current Biology, 2016) [A]. Bonobos show the other half: in sanctuary experiments they shared food with unfamiliar bonobos and gave up their own food for contact with one (Tan and Hare, PLoS ONE, 2013) [A], and they helped unfamiliar non-group members without being asked (Tan, Ariely and Hare, Scientific Reports, 2017) [A]. Read together, trust that begins with friends can also reach outward through new bonds, which is what TrustWeb tries to carry one hop further. What we do not know: these were small samples, mostly young animals at one sanctuary, bonobo trust was not measured as such, and nothing here proves how humans behave. We treat it as a hypothesis worth building on.
+Sources for the footnote: Engelmann and Herrmann, Cell Press, Current Biology 26(2), 2016-01-14; Tan and Hare, PLoS ONE 8(1), January 2013; Tan, Ariely and Hare, Scientific Reports 7, 2017-11-07.
