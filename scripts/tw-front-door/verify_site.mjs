@@ -613,7 +613,7 @@ async function contentChecksOrg(page) {
     /unreviewed until you keep them/.test(faq.text.replace(/\s+/g, ' ')) && /created step by step/.test(faq.text.replace(/\s+/g, ' ')))
   check('faq: web fallback exists (Google, Ecosia, Qwant, Brave; labelled untrusted; nothing sent before a tap; no referrer) and the trusted answer comes first',
     (() => { const t = faq.text.replace(/\s+/g, ' '); return /Search the web instead/.test(t) && /Google, Ecosia, Qwant and Brave/.test(t) && /untrusted/.test(t) && /nothing is sent to any engine until you tap one/.test(t) && /no referrer/.test(t) &&
-    /The trusted answer comes first\. The open web only comes second\./.test(t) && !/not in the app yet|is planned and not/.test(t) })())
+    /The trusted answer comes first\. The open web only comes second\./.test(t) && !/not in the app yet|is planned and not/.test(t) && !/calls no search service/.test(t) && /Show results here/.test(t) && /a Brave based search engine/.test(t) })())
   check('faq: the feed is optional, early and off by default', /optional and early: it is off by default/.test(faq.text.replace(/\s+/g, ' ')))
   await page.goto(BASE + 'why.html')
   const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
