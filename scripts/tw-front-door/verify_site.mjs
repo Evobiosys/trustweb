@@ -4,7 +4,7 @@
 //   node scripts/tw-front-door/verify_site.mjs <built-dir> <screens-dir> <draft|prod> [<live-base-url>]
 //
 // With a live base URL (e.g. https://idea2.site/trustweb/draft/) the same checks run against the
-// deployed pages (<built-dir> then only supplies the page list). Otherwise it serves <built-dir> itself on 127.0.0.1:8981 (loopback only, closed at the end),
+// deployed pages (<built-dir> then only supplies the page list). Otherwise it serves <built-dir> itself on 127.0.0.1:$TW_VERIFY_PORT (default 8981; loopback only, closed at the end),
 // so no server is left behind. Structure is checked by DOM queries, never with a
 // Python HTML parser (see build_tw_front_door.sh). Exit code 1 if any check fails.
 import http from 'node:http'
@@ -18,7 +18,11 @@ if (!dir || !shots || !['draft', 'prod'].includes(mode)) {
   process.exit(2)
 }
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_PACKAGE)
-const PORT = 8981
+const PORT = Number(process.env.TW_VERIFY_PORT ?? 8981)
+if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) {
+  console.error('TW_VERIFY_PORT must be an integer from 1024 to 65535')
+  process.exit(2)
+}
 const BASE = liveBase ?? `http://127.0.0.1:${PORT}/`
 const WIDTHS = [1280, 390]
 const results = []
@@ -192,129 +196,189 @@ async function linkAudit(browser) {
 }
 
 async function formChecks(browser) {
-  // feedback form: success, rate limit, failure keeps text, honeypot travels, query prefill
+  // feedback form: ONE request (POST /feedback), the address only for a ticked box, nothing real is posted (every route mocked)
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
-  let posted = null, mode204 = true, status = 204
+  const posts = []
+  let mode204 = true, status = 204
   await page.route('https://app.idea2.site/feedback', async (route) => {
     const req = route.request()
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'POST, OPTIONS' } })
-    posted = { method: req.method(), type: req.headers()['content-type'], body: JSON.parse(req.postData() ?? '{}') }
+    posts.push({ method: req.method(), type: req.headers()['content-type'], body: JSON.parse(req.postData() ?? '{}') })
     if (!mode204) return route.abort('failed')
     return route.fulfill({ status, headers: { 'access-control-allow-origin': '*' } })
   })
-  // every endpoint the page can reach is mocked: a live-draft run must never really sign anyone up
-  const side = []
-  let sideOk = true
+  // tripwires: the feedback page must never call the newsletter service or the waitlist itself (the server forwards).
+  // The routes also keep a live-draft run from ever really signing anyone up.
+  const trip = []
+  const DIRECT = /subscriber\.questhub\.eco|\/rebiosys\/api\/waitlist/
+  page.on('request', (r) => { if (DIRECT.test(r.url())) trip.push(r.url()) })
   for (const url of ['https://idea2.site/rebiosys/api/waitlist', 'https://subscriber.questhub.eco/subscribe']) {
-    await page.route(url, (route) => {
-      const req = route.request()
-      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'POST, OPTIONS' } })
-      side.push({ url, body: JSON.parse(req.postData() ?? '{}') })
-      return sideOk ? route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{}' }) : route.fulfill({ status: 500, headers: { 'access-control-allow-origin': '*' }, body: '{}' })
-    })
+    await page.route(url, (route) => route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{}' }))
   }
-  const WL = 'https://idea2.site/rebiosys/api/waitlist', SUB = 'https://subscriber.questhub.eco/subscribe'
-  await page.goto(BASE + 'feedback.html?kind=pricing')
+  const last = () => posts[posts.length - 1]?.body
+  const msg = async () => (await page.textContent('#fb-msg')) ?? ''
+  const fresh = async (query = '') => { await page.goto(BASE + 'feedback.html' + query); posts.length = 0; mode204 = true; status = 204 }
+  const press = async (waitFor) => {
+    await page.click('#fb-send')
+    await page.waitForFunction((t) => document.querySelector('#fb-msg').textContent.includes(t), waitFor, { timeout: 8000 })
+  }
+  const ticks = async () => [await page.isChecked('#fb-reply'), await page.isChecked('#fb-notify'), await page.isChecked('#fb-news')]
+
+  await fresh('?kind=pricing')
   check('feedback: ?kind=pricing preselects the kind', (await page.inputValue('#fb-kind')) === 'pricing')
-  check('feedback: both boxes (notify, newsletter) are UNTICKED on load, with an info button',
-    !(await page.isChecked('#fb-notify')) && !(await page.isChecked('#fb-news')) && (await page.locator('#fb-info-btn').count()) === 1)
+  check('feedback: all three boxes (write back, notify, newsletter) are UNTICKED on load, with an info button',
+    (await ticks()).every((t) => !t) && (await page.locator('#fb-info-btn').count()) === 1)
+  const labels = await page.evaluate(() => ({
+    email: document.querySelector('label[for="fb-email"]')?.textContent.replace(/\s+/g, ' ').trim(),
+    reply: document.querySelector('#fb-reply')?.closest('label')?.textContent.replace(/\s+/g, ' ').trim(),
+    notify: document.querySelector('#fb-notify')?.closest('label')?.textContent.replace(/\s+/g, ' ').trim(),
+    news: document.querySelector('#fb-news')?.closest('label')?.textContent.replace(/\s+/g, ' ').trim() }))
+  check('feedback: labels (Your email + hint, Write back to me, Notify me, Stay informed)',
+    labels.email === 'Your email Only needed if you tick a box below. Sent only then.' &&
+    labels.reply === 'Write back to me about this message' &&
+    labels.notify === 'Notify me when it is ready (one email, once)' &&
+    labels.news === 'Stay informed with our newsletter (at most every one or two weeks)', JSON.stringify(labels))
   check('feedback: info text hidden until the info button is pressed', await page.$eval('#fb-info', (e) => e.hidden))
   await page.click('#fb-info-btn')
-  check('feedback: info button opens the note (pre-ticking is not valid consent)', !(await page.$eval('#fb-info', (e) => e.hidden)) && /does not count/.test(await page.textContent('#fb-info')) && (await page.getAttribute('#fb-info-btn', 'aria-expanded')) === 'true')
+  const info = ((await page.textContent('#fb-info')) ?? '').replace(/\s+/g, ' ')
+  check('feedback: info button opens the note (pre-ticking is not valid consent; the newsletter service sends the confirmation)',
+    !(await page.$eval('#fb-info', (e) => e.hidden)) && /does not count/.test(info) && /our newsletter service first sends you a confirmation email/.test(info) &&
+    (await page.getAttribute('#fb-info-btn', 'aria-expanded')) === 'true')
+  const small = (await page.textContent('#form-card')) ?? ''
+  check('feedback: small print says what is stored (message, kind, page; email only with a box; no address, no browser details)',
+    /We store your message, the kind and the page you sent it from\. Your email only if you tick a box\. No network address, no browser details\./.test(small.replace(/\s+/g, ' ')) &&
+    (await page.locator('#form-card a[href="privacy.html"]').count()) === 1)
+
+  // no box ticked, address filled: the address must not travel at all
   await page.fill('#fb-text', 'Ten hours seems fair.')
-  await page.fill('#fb-contact', 'me@example.org')
+  await page.fill('#fb-email', 'me@example.org')
+  await press('Thank you')
+  const b1 = last()
+  check('feedback: no box ticked, email typed: ONE POST with text, kind, page, empty honeypot, notify=false, newsletter=false and neither email nor contact',
+    posts.length === 1 && posts[0].method === 'POST' && /json/.test(posts[0].type) && b1.text === 'Ten hours seems fair.' && b1.kind === 'pricing' &&
+    b1.homepage === '' && /feedback\.html$/.test(b1.page) && b1.notify === false && b1.newsletter === false && !('email' in b1) && !('contact' in b1), JSON.stringify(b1))
+  check('feedback: after a 204 the message is cleared and the three boxes are unticked',
+    (await page.inputValue('#fb-text')) === '' && (await ticks()).every((t) => !t))
+  check('feedback: the thank-you line carries no newsletter or notify promise when no box was ticked',
+    (await msg()).startsWith('Thank you. Your message arrived.') && !/confirmation|once, when/.test(await msg()))
+
+  // junk in the email field never blocks plain feedback
+  await fresh()
+  await page.fill('#fb-text', 'Plain feedback.')
+  await page.fill('#fb-email', 'not-an-email')
+  await press('Thank you')
+  check('feedback: a junk address with no box ticked does not block, and is not sent', posts.length === 1 && !('email' in last()) && !('contact' in last()))
+
+  // newsletter ticked
+  await fresh()
+  await page.fill('#fb-text', 'Looks promising.')
+  await page.fill('#fb-email', 'person@example.org')
+  await page.check('#fb-news')
+  await press('confirmation email')
+  const b2 = last()
+  check('feedback: newsletter ticked: newsletter===true, notify===false, email present, contact absent',
+    posts.length === 1 && b2.newsletter === true && b2.notify === false && b2.email === 'person@example.org' && !('contact' in b2) && b2.text === 'Looks promising.', JSON.stringify(b2))
+  check('feedback: the newsletter thank-you names the confirmation email and the click (no direct signup claim); boxes unticked, text cleared',
+    /^Thank you\. Your message arrived\. A confirmation email will follow; you join the newsletter only after you click the link in it\.$/.test(await msg()) &&
+    (await ticks()).every((t) => !t) && (await page.inputValue('#fb-text')) === '')
+
+  // notify ticked
+  await fresh()
+  await page.fill('#fb-text', 'Tell me.')
+  await page.fill('#fb-email', 'notify@example.org')
+  await page.check('#fb-notify')
+  await press('once, when TrustWeb is ready')
+  const b3 = last()
+  check('feedback: notify ticked: notify===true, newsletter===false, email present, contact absent; the line says one note when ready',
+    b3.notify === true && b3.newsletter === false && b3.email === 'notify@example.org' && !('contact' in b3) && !/confirmation/.test(await msg()), JSON.stringify(b3))
+
+  // an empty message with only the newsletter ticked posts with text ""
+  await fresh()
+  await page.fill('#fb-email', 'only@example.org')
+  await page.check('#fb-news')
+  await press('confirmation email')
+  check('feedback: an empty message with only the newsletter ticked posts with text "" and newsletter===true',
+    posts.length === 1 && last().text === '' && last().newsletter === true && last().email === 'only@example.org', JSON.stringify(last()))
+
+  // write back to me
+  await fresh()
+  await page.fill('#fb-text', 'Please send me the source code.')
+  await page.fill('#fb-email', 'reply@example.org')
+  await page.check('#fb-reply')
+  await press('Thank you')
+  const b4 = last()
+  check('feedback: "Write back to me" ticked: contact present, email absent, notify and newsletter false',
+    b4.contact === 'reply@example.org' && !('email' in b4) && b4.notify === false && b4.newsletter === false, JSON.stringify(b4))
+  await fresh()
+  await page.fill('#fb-text', 'Both please.')
+  await page.fill('#fb-email', 'both@example.org')
+  await page.check('#fb-reply'); await page.check('#fb-news')
+  await press('confirmation email')
+  check('feedback: "Write back to me" and newsletter together send contact and email', last().contact === 'both@example.org' && last().email === 'both@example.org' && last().newsletter === true, JSON.stringify(last()))
+  await fresh()
+  await page.fill('#fb-email', 'reply@example.org')
+  await page.check('#fb-reply')
   await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.startsWith('Thank you'))
-  check('feedback: success posts JSON with text, kind, page, contact and an empty honeypot',
-    posted && posted.method === 'POST' && /json/.test(posted.type) && posted.body.text === 'Ten hours seems fair.' &&
-    posted.body.kind === 'pricing' && posted.body.contact === 'me@example.org' && posted.body.homepage === '' && /feedback\.html$/.test(posted.body.page), JSON.stringify(posted?.body))
-  check('feedback: text cleared after success', (await page.inputValue('#fb-text')) === '')
-  check('feedback: with an email typed but no box ticked, NOTHING goes to the waitlist or the newsletter', side.length === 0, JSON.stringify(side))
+  check('feedback: "Write back to me" with an empty message is refused locally ("Please write the message we should answer."), no request',
+    (await msg()) === 'Please write the message we should answer.' && posts.length === 0)
+  await page.check('#fb-news')
+  await page.click('#fb-send')
+  check('feedback: "Write back to me" plus the newsletter still needs the message', (await msg()) === 'Please write the message we should answer.' && posts.length === 0)
+
+  // refused before any request
+  await fresh()
+  await page.check('#fb-news')
+  const refused = []
+  for (const [label, addr] of [['not an address', 'not-an-email'], ['zero-width space U+200B', 'me​@example.org'], ['bidi override U+202E', 'me@exam‮ple.org'],
+    ['inner space', 'me @example.org'], ['too long', 'a'.repeat(250) + '@example.org'], ['double dot', 'me@exa..mple.org'], ['numeric top-level domain', 'me@example.123']]) {
+    await page.fill('#fb-email', addr)
+    await page.click('#fb-send')
+    if (!(await msg()).includes('real email address') || posts.length !== 0) refused.push(label)
+  }
+  check('feedback: bad addresses (junk, U+200B, U+202E, space, over 254, "..", digits-only domain) are refused before any request', refused.length === 0, refused.join(', '))
+  await page.fill('#fb-email', 'someone@gmial.com')
+  await page.click('#fb-send')
+  check('feedback: a typo domain gets a "did you mean" hint first, nothing sent yet', (await page.textContent('#fb-email-msg')).includes('gmail.com') && posts.length === 0)
+  await press('confirmation email')
+  check('feedback: the second press with the same address goes through', posts.length === 1 && last().email === 'someone@gmial.com')
+
+  // rate limit and network failure keep the text and the ticks
+  await fresh()
   status = 429
   await page.fill('#fb-text', 'again')
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.includes('several messages'))
-  check('feedback: 429 keeps the text and says so', (await page.inputValue('#fb-text')) === 'again')
+  await page.fill('#fb-email', 'keep@example.org')
+  await page.check('#fb-news')
+  await press('several messages')
+  check('feedback: 429 keeps the text and the ticks and says so', (await page.inputValue('#fb-text')) === 'again' && (await page.isChecked('#fb-news')))
   mode204 = false
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.startsWith('Could not send right now'))
+  await press('Could not send right now')
   check('feedback: network failure says "could not send right now" and keeps the text', (await page.inputValue('#fb-text')) === 'again')
   check('feedback: send button usable again', !(await page.$eval('#fb-send', (b) => b.disabled)))
-  await page.fill('#fb-text', '')
+  mode204 = true; status = 204
+  await press('Thank you')
+  check('feedback: the retry sends once more and then clears', posts.filter((p) => p.body.newsletter === true && p.body.email === 'keep@example.org').length >= 1 && (await page.inputValue('#fb-text')) === '')
+
+  // empty message, no box
+  await fresh()
   await page.click('#fb-send')
-  check('feedback: empty message is refused locally', (await page.textContent('#fb-msg')).includes('write a message'))
+  check('feedback: empty message with no box is refused locally ("write a message first")', (await msg()).includes('write a message') && posts.length === 0)
   const hp = await page.$eval('#fb-homepage', (e) => ({ left: e.closest('.hp').getBoundingClientRect().left, tab: e.tabIndex }))
   check('feedback: honeypot is off-screen and not tabbable', hp.left < -1000 && hp.tab === -1)
-  await page.goto(BASE + 'feedback.html?topic=source-code')
-  check('feedback: ?topic=source-code prefills a request to read the code', (await page.inputValue('#fb-text')).includes('source code'))
 
-  // ---- the two boxes ----
-  await page.goto(BASE + 'feedback.html')
-  mode204 = true; status = 204; side.length = 0; posted = null
-  await page.check('#fb-news')
-  await page.fill('#fb-contact', 'not-an-email')
-  await page.click('#fb-send')
-  check('boxes: a bad email is refused locally, no request leaves', (await page.textContent('#fb-msg')).includes('real email address') && side.length === 0 && posted === null)
-  await page.fill('#fb-contact', 'someone@gmial.com')
-  await page.click('#fb-send')
-  check('boxes: a typo domain gets a "did you mean" hint first, nothing sent yet', (await page.textContent('#fb-email-msg')).includes('gmail.com') && side.length === 0)
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.includes('confirmation email'))
-  check('boxes: newsletter only (no message needed) posts exactly the join form request, no feedback post',
-    side.length === 1 && side[0].url === SUB && JSON.stringify(side[0].body) === JSON.stringify({ email: 'someone@gmial.com', project: 'questhub', source: 'trustweb', gdpr: true }) && posted === null, JSON.stringify(side))
-  check('boxes: the newsletter answer mentions the confirmation email (real-address check)', (await page.textContent('#fb-msg')).includes('click the link'))
-  await page.click('#fb-send')
-  check('boxes: pressing Send again for the same address never subscribes twice', side.length === 1 && (await page.textContent('#fb-msg')).includes('nothing more to send'))
-
-  // notify + newsletter + feedback together
-  await page.goto(BASE + 'feedback.html')
-  side.length = 0; posted = null
-  await page.fill('#fb-text', 'Looks promising.')
-  await page.fill('#fb-contact', 'person@example.org')
-  await page.check('#fb-notify'); await page.check('#fb-news')
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.includes('confirmation email'))
-  const wlCall = side.find((c) => c.url === WL), subCall = side.find((c) => c.url === SUB)
-  check('boxes: notify posts {email, note, channel} to the waitlist; newsletter the join-form payload; feedback its own post',
-    JSON.stringify(wlCall?.body) === JSON.stringify({ email: 'person@example.org', note: 'trustweb:notify-ready', channel: 'human' }) &&
-    JSON.stringify(subCall?.body) === JSON.stringify({ email: 'person@example.org', project: 'questhub', source: 'trustweb', gdpr: true }) &&
-    posted?.body.text === 'Looks promising.' && posted.body.contact === 'person@example.org', JSON.stringify(side))
-
-  // a failed feedback post keeps the text and a retry does not sign up twice
-  await page.goto(BASE + 'feedback.html')
-  side.length = 0; mode204 = false
-  await page.fill('#fb-text', 'Keep me.')
-  await page.fill('#fb-contact', 'again@example.org')
-  await page.check('#fb-news')
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.includes('Could not send right now'))
-  mode204 = true
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.startsWith('Thank you'))
-  check('boxes: failed feedback keeps the text; the retry sends it and subscribes the address only once',
-    side.filter((c) => c.url === SUB).length === 1 && (await page.inputValue('#fb-text')) === '')
-
-  // a failing newsletter service is reported on its own
-  await page.goto(BASE + 'feedback.html')
-  side.length = 0; sideOk = false
-  await page.fill('#fb-contact', 'down@example.org')
-  await page.check('#fb-notify')
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.includes('notification list'))
-  check('boxes: a failing waitlist says so and is not reported as done', (await page.$eval('#fb-msg', (e) => e.className)).includes('err'))
-  sideOk = true
-
-  // a filled honeypot sends no side request
-  await page.goto(BASE + 'feedback.html')
-  side.length = 0; posted = null
+  // a filled honeypot still posts exactly once (the server drops it)
+  await fresh()
   await page.evaluate(() => { document.getElementById('fb-homepage').value = 'bot' })
   await page.fill('#fb-text', 'spam')
-  await page.fill('#fb-contact', 'bot@example.org')
-  await page.check('#fb-notify'); await page.check('#fb-news')
-  await page.click('#fb-send')
-  await page.waitForFunction(() => document.querySelector('#fb-msg').textContent.startsWith('Thank you'))
-  check('boxes: a filled honeypot sends no waitlist or newsletter request', side.length === 0)
+  await page.fill('#fb-email', 'bot@example.org')
+  await page.check('#fb-news')
+  await press('Thank you')
+  check('feedback: a filled honeypot still sends exactly one POST (honeypot travels)', posts.length === 1 && last().homepage === 'bot', JSON.stringify(last()))
+
+  await fresh('?topic=source-code')
+  check('feedback: ?topic=source-code prefills a request to read the code and ticks nothing', (await page.inputValue('#fb-text')).includes('source code') && (await ticks()).every((t) => !t))
+
+  check('feedback: no request ever went to subscriber.questhub.eco or /rebiosys/api/waitlist from the feedback page', trip.length === 0, trip.join(', '))
   await ctx.close()
 
   // join form on the index page keeps working (waitlist + newsletter)
@@ -373,6 +437,7 @@ async function contentChecks(browser) {
     check(`${name}: no "github" except the one permitted link`, !/github/i.test(t.split('https://github.com/evobiosys/web-of-trust').join('')))
     check(`${name}: no unresolved <!--IF:...--> marker left in the output`, !/<!--\/?IF/.test(t))
     check(`${name}: no em dash (char or entity)`, !/—|&mdash;|&#8212;|&#x2014;/i.test(t))
+    check(`${name}: no "promise nothing free", no "hop by hop", no "DeepInfra"`, !/promise nothing free|hop by hop|DeepInfra/i.test(t.replace(/\s+/g, ' ')))
     const vis = await page.evaluate(() => document.body.innerText)
     check(`${name}: no "UWB", no names (Max, Kaya, Manuel), no "Infomaniak AI", no "Switzerland ... transcri" claim`,
       !/\bUWB\b|\bMax\b|\bKaya\b|\bManuel\b|Infomaniak AI/.test(t) && !/transcri[^.]{0,200}Infomaniak|Infomaniak[^.]{0,200}transcri/i.test(vis))
@@ -386,17 +451,38 @@ async function contentChecks(browser) {
   check('pricing: allowance in recordings with hours in brackets', /the equivalent of 10 recordings of up to an hour each/.test(pr) && /\(10 hours in total\)/.test(pr))
   check('pricing: smooth updates for hosted, offline installs on their own', /hosted version<\/b>|The hosted version/.test(pr) && /promises smooth updates and migrations/.test(pr) && /offline install/i.test(pr) && /on its own/.test(pr))
   check('pricing: no price list (no currency amounts, no "fair")', !/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i.test(pr), pr.match(/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i)?.[0] ?? '')
-  check('pricing: server transcription via OpenRouter, see privacy, no free promise', /outside providers via OpenRouter, see privacy/i.test(pr) && /promise nothing free/.test(pr))
+  check('pricing: server transcription via OpenRouter, see privacy, with the allowance (10 hours of audio per person, shared daily budget)',
+    /outside providers via OpenRouter, see privacy/i.test(pr) && /free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/i.test(pr) && !/promise nothing free/i.test(pr))
   await page.goto(BASE + 'faq.html')
   const faq = await page.evaluate(() => ({ n: document.querySelectorAll('details.q').length, ids: [...document.querySelectorAll('details.q')].map((d) => d.id),
     text: document.body.innerText + [...document.querySelectorAll('details.q')].map((d) => d.textContent).join(' ') }))
   check('faq: exactly 12 questions', faq.n === 12 && new Set(faq.ids).size === 12, faq.ids.join(','))
   check('faq: Facebook one-liner, revenue "being worked out, see pricing", German brackets', /Facebook lets you repost\. TrustWeb lets you ask/.test(faq.text) && /Being worked out, see pricing/.test(faq.text) && /\(Ist das nicht Facebook/.test(faq.text))
   check('faq: nothing says multi-degree querying works today', !/travels? (further|on) .{0,40}today/i.test(faq.text) && /Today a question reaches the people you are directly connected with/.test(faq.text))
+  check('faq: Q1 and the introductions question keep "a question reaches the people you are directly connected with" and point to the demo walkthrough',
+    (faq.text.replace(/\s+/g, ' ').match(/a question reaches the people you are directly connected with; the demo walkthrough shows a scripted example of the next step/gi) ?? []).length >= 2 && !/Jonas/.test(faq.text))
+  check('faq: audience of a line is acquaintances (everyone in your rings), friends, close friends, or only you',
+    /acquaintances \(everyone in your rings\), friends, close friends, or only you/.test(faq.text.replace(/\s+/g, ' ')))
+  check('faq: import lines are "unreviewed" until kept, typed or recorded lines are "created step by step"',
+    /unreviewed until you keep them/.test(faq.text.replace(/\s+/g, ' ')) && /created step by step/.test(faq.text.replace(/\s+/g, ' ')))
+  check('faq: web fallback exists (Google, Ecosia, Qwant, Brave; labelled untrusted; nothing sent before a tap; no referrer) and the trusted answer comes first',
+    (() => { const t = faq.text.replace(/\s+/g, ' '); return /Search the web instead/.test(t) && /Google, Ecosia, Qwant and Brave/.test(t) && /untrusted/.test(t) && /nothing is sent to any engine until you tap one/.test(t) && /no referrer/.test(t) &&
+    /The trusted answer comes first\. The open web only comes second\./.test(t) && !/not in the app yet|is planned and not/.test(t) })())
+  check('faq: the feed is optional, early and off by default', /optional and early: it is off by default/.test(faq.text.replace(/\s+/g, ' ')))
+  await page.goto(BASE + 'why.html')
+  const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
+  check('why: "scalable" says built for one hop further with today\'s limit, not that it travels hop by hop today', /is built so a question can travel one hop further/.test(why) && /Today a question reaches your direct connections/.test(why))
+  await page.goto(BASE)
+  const hero = await page.evaluate(() => [...document.querySelectorAll('.term .pop')].map((p) => p.textContent.replace(/\s+/g, ' ')).join(' | '))
+  check('index: the "more scalable" popup says built for one hop further, today direct connections', /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
   await page.goto(BASE + 'privacy.html')
+  const fbp = await page.evaluate(() => document.getElementById('site')?.textContent.replace(/\s+/g, ' ') ?? '')
+  check('privacy: feedback form bullets (email only with a box, stored in Switzerland, write back / notify / newsletter via the newsletter service with confirmation)',
+    /your email address only if you tick a box|email address only if you tick a box/.test(fbp) && /stored on our server in Switzerland/.test(fbp) && /Write back to me about this message": we keep your address so we can answer/.test(fbp) &&
+    /Notify me when it is ready": we keep it for one note when TrustWeb is ready/.test(fbp) && /our server passes it on to our newsletter service, which first sends you a confirmation email/.test(fbp) && /only after you click the link in it/.test(fbp) && !/our waitlist/.test(fbp))
   const pv = await page.evaluate(() => document.getElementById('transcription')?.textContent.replace(/\s+/g, ' ') ?? '')
   check('privacy: transcription via OpenRouter to a US provider, data policy "deny", nothing kept by us, approximate times, no Infomaniak/Switzerland claim',
-    /OpenRouter/.test(pv) && /United States/.test(pv) && /DeepInfra, Groq or Together/.test(pv) && /"deny"/.test(pv) && /keeps neither the audio nor the text/.test(pv) && /approximate/.test(pv) && !/Infomaniak|Switzerland/.test(pv), pv.slice(0, 120))
+    /OpenRouter/.test(pv) && /United States/.test(pv) && /OpenRouter picks which one; we cannot/.test(pv) && !/DeepInfra|Groq|Together/.test(pv) && /Free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/.test(pv) && /"deny"/.test(pv) && /keeps neither the audio nor the text/.test(pv) && /approximate/.test(pv) && !/Infomaniak|Switzerland/.test(pv), pv.slice(0, 120))
   await ctx.close()
 }
 

@@ -48,12 +48,12 @@
     <li id="transcription"><b>Server transcription<!--IF:tx-off--> (coming, switched off today)<!--/IF--><!--IF:tx-on--> (experimental)<!--/IF-->.</b>
     <!--IF:tx-off-->It is switched off today, and nothing described here happens. When it is switched on and you choose it,<!--/IF--><!--IF:tx-on-->If you choose it,<!--/IF-->
     the audio of a recording leaves your phone. It goes through our server to OpenRouter, a service that passes it to an
-    inference provider in the United States (DeepInfra, Groq or Together serve this kind of model; we cannot pick which one
-    handles a given request). We set OpenRouter's data policy to "deny", which should limit the choice to providers that do not
+    inference provider in the United States (OpenRouter picks which one; we cannot). We set OpenRouter's data policy to "deny", which should limit the choice to providers that do not
     store the audio or train on it; we rely on that setting and on the providers' own statements, and we cannot check what they do.
     Unlike backups and hosted recordings, this audio is not encrypted for the server, OpenRouter or the provider: they handle it as audio.
     Our server keeps neither the audio nor the text (the audio sits in a temporary file only while it is being transcribed);
-    it counts the minutes used. The text comes back to your phone, and the times of the sentences may be approximate.</li>
+    it counts the minutes used. Free while we test: up to 10 hours of audio per person, within a daily budget
+    shared by everyone. The text comes back to your phone, and the times of the sentences may be approximate.</li>
     <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
     (backup, hosting, transcription, feedback) use them only in memory, to limit abuse; the web
     server writes no access log.</li>
@@ -70,13 +70,15 @@
     <li>As of 2026-10-06 the web server is not configured to write access logs for this site.</li>
     <li><b>The waitlist form</b> sends your email address to our server, only when you press the button. The
     optional newsletter box sends it to our newsletter service.</li>
-    <li><b>The feedback form</b> sends what you type, your optional contact, the kind of message and
-    the page you wrote from to our server, which stores them with the time to the minute. We do not
-    store your network address or browser details. We read the messages by hand.</li>
-    <li><b>The two boxes on the feedback form</b> are both unticked, and nothing is sent for a box you did not tick.
-    "Notify me when it is ready" sends your email address to our waitlist, for one note when TrustWeb is ready.
-    "Stay informed" sends it to our newsletter service, which first sends you a confirmation email; you are on the list
-    only after you click the link in it, and you can ask us at any time to take you off. The newsletter service runs on our own server.</li>
+    <li><b>The feedback form</b> sends what you type, the kind of message and the page you wrote from. It sends your
+    email address only if you tick a box. All of it is stored on our server in Switzerland with the time to the minute, in
+    a file only the server can read. We do not store your network address or browser details. We read the messages by hand.</li>
+    <li><b>The three boxes on the feedback form</b> are all unticked, and your address is not sent unless you tick one.
+    "Write back to me about this message": we keep your address so we can answer.
+    "Notify me when it is ready": we keep it for one note when TrustWeb is ready.
+    "Stay informed with our newsletter": we keep it, and our server passes it on to our newsletter service, which first sends
+    you a confirmation email; you are on the list only after you click the link in it. You can ask us at any time to take you off.
+    The newsletter service runs on our own server.</li>
   </ul>
 </section>
 
