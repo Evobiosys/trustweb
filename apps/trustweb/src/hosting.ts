@@ -67,10 +67,18 @@ export function hoursOf(u: Pick<Usage, 'secondsUsed' | 'secondsLimit'>): { used:
  * the plan allows, and hours used. The server still counts seconds and bytes;
  * everything comes from its numbers.
  */
-export function allowanceOf(u: Pick<Usage, 'secondsUsed' | 'secondsLimit' | 'recordings' | 'maxSecondsPerRecording'>): { recordings: number; recordingsLimit: number; hoursUsed: number; hoursLimit: number } {
+export function allowanceOf(u: Pick<Usage, 'secondsUsed' | 'secondsLimit' | 'recordings' | 'maxSecondsPerRecording'> & Partial<Pick<Usage, 'maxRecordings'>>): { recordings: number; recordingsLimit: number; hoursUsed: number; hoursLimit: number } {
   const { used, limit } = hoursOf(u)
   const perRecording = u.maxSecondsPerRecording > 0 ? u.maxSecondsPerRecording : 3600
-  return { recordings: Math.max(0, Math.floor(u.recordings)), recordingsLimit: Math.round(u.secondsLimit / perRecording), hoursUsed: used, hoursLimit: limit }
+  // The count the server enforces (contract v1.5: maxRecordings = limit); only a server that does not say gets the derived one.
+  const recordingsLimit = typeof u.maxRecordings === 'number' && u.maxRecordings > 0 ? Math.floor(u.maxRecordings) : Math.round(u.secondsLimit / perRecording)
+  return { recordings: Math.max(0, Math.floor(u.recordings)), recordingsLimit, hoursUsed: used, hoursLimit: limit }
+}
+
+/** Is the free allowance used up, by count (the allowance since wave 2) or by hours (the guard beside it)? */
+export function allowanceReached(u: Pick<Usage, 'secondsUsed' | 'secondsLimit' | 'recordings' | 'maxSecondsPerRecording'> & Partial<Pick<Usage, 'maxRecordings'>>): boolean {
+  const a = allowanceOf(u)
+  return (a.recordingsLimit > 0 && a.recordings >= a.recordingsLimit) || (u.secondsLimit > 0 && u.secondsUsed >= u.secondsLimit)
 }
 
 export function recFor(h: HostingState, meetingId: string): HostedRec | null {

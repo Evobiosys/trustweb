@@ -2665,10 +2665,10 @@ function recordFound(text: string, results: AskResult[]): void {
   save()
 }
 
-function foundView(s: AppState): HTMLElement {
+function foundView(s: AppState, title: string = S.foundTitle): HTMLElement {
   const found = s.found ?? []
   return el('div', { class: 'found' }, [
-    el('h4', { class: 'eyebrow' }, [S.foundTitle]),
+    el('h4', { class: 'eyebrow' }, [title]),
     found.length === 0 ? el('p', { class: 'meta' }, [S.foundNone]) : null,
     ...found.map((f) => el('div', { class: 'card found-card' }, [
       el('p', { class: 'q' }, ['"' + f.text + '"']),
@@ -3350,6 +3350,8 @@ function queryDock(s: AppState): HTMLElement {
         onclick: () => void runAsk(queryText),
       }, [S.querySend]),
       inFlight,
+      // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
+      !run && !feedOn(s) && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryEarlier)]) : null,
     ]),
   ])
 }

@@ -147,6 +147,28 @@ async function main() {
     await post.locator('.post-main').click()
     ok('the post opens Ben', await a.locator('.sheet.on h3', { hasText: 'Ben' }).count() === 1)
     await closeSheet(a)
+    // review-wave2: with the Feed off (the default since wave 2) a received answer must not vanish: after a reload (the
+    // ask's own result is gone) the query dock lists the earlier answers; with the Feed on they live in the Feed instead.
+    await openSettings(a)
+    await a.locator('[data-feed-toggle]').click()
+    await closeSheet(a)
+    await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000)
+    await a.reload()
+    await a.locator('nav.tabs button', { hasText: 'Web' }).waitFor({ timeout: 15_000 })
+    await a.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    const earlier = a.locator('.query-dock [data-earlier-answers]')
+    await earlier.waitFor({ timeout: 10_000 })
+    const et = await earlier.innerText()
+    ok('Feed off: after a reload the query dock shows the earlier answer (who, what, the question)', /earlier answers/i.test(et) && /Ben/.test(et) && /Cargo bike to lend on weekends/.test(et) && /Does anyone have a cargo bike\?/.test(et), et)
+    await a.locator('.query-dock .x').click()
+    await openSettings(a)
+    await a.locator('[data-feed-toggle]').click()
+    await closeSheet(a)
+    await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000) // the Settings redraw race (A2): closed for real
+    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await a.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    ok('Feed on: the dock does not repeat them (they are in the Feed)', await a.locator('.query-dock [data-earlier-answers]').count() === 0)
+    await a.locator('.query-dock .x').click()
 
     // 3. a picture on an item
     await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()

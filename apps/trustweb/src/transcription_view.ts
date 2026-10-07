@@ -69,6 +69,12 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     return h.ctx.enabled() && h.ctx.status()?.transcribe === true
   }
 
+  /** The free transcription hours per person from the server's plan, or null when it did not say. */
+  function freeHours(): number | null {
+    const limit = h.ctx.status()?.plan?.transcription.secondsLimit ?? 0
+    return limit > 0 ? Math.round((limit / 3600) * 10) / 10 : null
+  }
+
   function willTranscribe(liveEngine: TranscriberEngine | null): boolean {
     if (!serverOn() || !consented()) return false
     const choice = transcriptionChoice(h.state())
@@ -79,7 +85,7 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
     if (consented()) { then(); return }
     h.openSheet([
       el('h3', {}, [S.consentTitle]),
-      el('p', { class: 'meta' }, [S.consentBody]),
+      el('p', { class: 'meta', 'data-consent-body': '1' }, [S.consentBody(h.ctx.status()?.provider ?? null, freeHours())]),
       el('button', { class: 'btn btn-electric', 'data-consent': 'yes', onclick: () => { h.state().serverTranscriptionConsentAt = Date.now(); h.save(); h.closeSheet(); then() } }, [S.consentYes]),
       el('button', { class: 'btn btn-ghost', 'data-consent': 'no', onclick: h.closeSheet }, [S.consentNo]),
     ])

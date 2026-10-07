@@ -19,6 +19,8 @@
  *
  * DOM-free (fetch and WebCrypto only), so the unit tests run the exact code.
  */
+import { InferenceRegion, ProviderDataPolicy, TranscribeProviderName } from './model'
+import type { TranscribeProviderInfo } from './model'
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -78,6 +80,8 @@ export interface ServerStatus {
   transcribe: boolean
   feedback: boolean
   plan: Usage | null
+  /** Who transcribes and where (wave 2, contract v1.5). Null: the server did not say (an older server). */
+  provider: TranscribeProviderInfo | null
 }
 
 export interface HostedRecordingInfo {
@@ -191,11 +195,31 @@ export function parseUsage(v: unknown): Usage | null {
   }
 }
 
+/** One of a fixed set of string values, else null. */
+function oneOf<T extends string>(values: readonly T[], v: unknown): T | null {
+  return typeof v === 'string' && (values as readonly string[]).includes(v) ? (v as T) : null
+}
+
+/** The `provider.transcribe` block of /hosted/status, read defensively; null when absent or not an object. */
+export function parseProviderInfo(v: unknown): TranscribeProviderInfo | null {
+  const block = typeof v === 'object' && v !== null ? (v as Record<string, unknown>).transcribe : null
+  if (typeof block !== 'object' || block === null) return null
+  const b = block as Record<string, unknown>
+  return {
+    provider: oneOf(Object.values(TranscribeProviderName), b.provider),
+    region: oneOf(Object.values(InferenceRegion), b.region),
+    dataPolicy: oneOf(Object.values(ProviderDataPolicy), b.dataPolicy),
+  }
+}
+
 export function parseStatus(v: unknown): ServerStatus | null {
   if (typeof v !== 'object' || v === null) return null
   const o = v as Record<string, unknown>
   const hosted = o.hosted === true
-  return { hosted, transcribe: hosted && o.transcribe === true, feedback: o.feedback === true, plan: hosted ? parseUsage(o.plan) : null }
+  return {
+    hosted, transcribe: hosted && o.transcribe === true, feedback: o.feedback === true, plan: hosted ? parseUsage(o.plan) : null,
+    provider: parseProviderInfo(o.provider),
+  }
 }
 
 /** The transcription answer, read defensively: segments with finite times and text only, in order. */
@@ -273,7 +297,7 @@ export async function fetchStatus(f: FetchFn = browserFetch): Promise<ServerStat
   } catch {
     return null
   }
-  if (!res.ok) return res.status === 503 || res.status === 404 ? { hosted: false, transcribe: false, feedback: false, plan: null } : null
+  if (!res.ok) return res.status === 503 || res.status === 404 ? { hosted: false, transcribe: false, feedback: false, plan: null, provider: null } : null
   try {
     return parseStatus(await res.json())
   } catch {

@@ -123,15 +123,17 @@ async function main() {
       const r = await api(`/hosted/${account}/rec/${rid}`, { method: 'PUT', headers: { 'X-Write-Token': token, 'X-Seconds': String(seconds), 'Content-Type': 'application/octet-stream' }, body: randomBytes(64) })
       return r.status
     }
-    let left = usage0.secondsLimit - usage0.secondsUsed - 1
+    // review-wave2: since wave 2 the allowance is the COUNT (10 recordings, contract v1.5); hours are the guard beside it. This
+    // step filled seconds before and went red once the merged server counted recordings: fill by count, hour-long ones.
     let fills = 0
-    while (left > 0) { const s = Math.min(3600, left); if (await fill(s) !== 204) break; left -= s; fills++ }
+    for (let i = 0; i < 20; i += 1) { if (await fill(3600) !== 204) break; fills++ }
     const usage1 = await (await api(`/hosted/${account}/usage`, { headers: { 'X-Write-Token': token } })).json()
-    ok(`the account is one second short of the allowance (${fills} long recordings declared through the API)`, usage1.secondsUsed === usage1.secondsLimit - 1, JSON.stringify(usage1))
+    ok(`the account is at the allowance by count (${fills} hour-long recordings declared through the API): used = limit = 10, hours below 10`,
+      usage1.used === 10 && usage1.limit === 10 && usage1.recordings === usage1.maxRecordings && usage1.secondsUsed < usage1.secondsLimit && usage0.recordings + fills === 10, JSON.stringify(usage1))
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     await saveMemo(page, 'Ladder')
-    await page.locator('.toast.on', { hasText: 'free 10 hours' }).waitFor({ timeout: 20_000 })
-    ok('the next recording: "your free 10 hours are used, the rest stays on this phone"', true)
+    await page.locator('.toast.on', { hasText: 'free hosting allowance' }).waitFor({ timeout: 20_000 })
+    ok('the next recording: "your free hosting allowance is used, the rest stays on this phone"', true)
     const ladder = await meetingId(page, 'Ladder')
     ok('it stays on this phone, not hosted', !(await record(page)).hosting.recs.some((r) => r.meetingId === ladder) && await page.evaluate(async (id) => {
       const db = await new Promise((res, rej) => { const r = indexedDB.open('trustweb-audio.me', 1); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error) })
@@ -141,10 +143,11 @@ async function main() {
     await page.locator('[data-hosting-open]').click()
     await page.locator('.sheet.on [data-hosting-allowance]').waitFor({ timeout: 10_000 })
     const msg = await page.locator('.sheet.on [data-hosting-allowance]').innerText()
-    ok('the sheet: the plain allowance message, nothing lost, pricing experimental', /used the free 10 hours/.test(msg) && /nothing is lost/.test(msg) && /experimental/.test(msg), msg)
+    ok('the sheet: the plain allowance message, nothing lost, pricing experimental', /used the free allowance/.test(msg) && /nothing is lost/.test(msg) && /experimental/.test(msg), msg)
     ok('"Tell us what would be fair" goes to the feedback page', /feedback\.html$/.test(await page.locator('.sheet.on [data-hosting-allowance] a').getAttribute('href')))
     await until(async () => (await page.locator(`.sheet.on [data-host-row="${ladder}"]`).count()) === 1, 10_000)
-    ok('the bar is full and the recording reads "on this phone only"', /10\.00 of 10 hours used/.test(await page.locator('.sheet.on .usage').innerText()) && (await page.locator(`.sheet.on [data-host-row="${ladder}"]`).getAttribute('data-host-state')) === 'phone')
+    ok('the bar is full (by count) and the recording reads "on this phone only"', /10 recordings of 10 kept there; 8\.00 of 10 hours used/.test(await page.locator('.sheet.on .usage').innerText())
+      && await page.locator('.sheet.on .usage-bar').getAttribute('aria-valuenow') === '100' && (await page.locator(`.sheet.on [data-host-row="${ladder}"]`).getAttribute('data-host-state')) === 'phone')
     await shot(page, '12-hosting-allowance-reached')
     await until(async () => (await page.locator('.sheet.on [data-host-unknown]').count()) === fills, 10_000)
     ok(`what the server holds that this phone does not know is listed, removable (${fills})`, await page.locator('.sheet.on [data-host-unknown]').count() === fills)

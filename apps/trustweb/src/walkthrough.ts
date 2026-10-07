@@ -138,7 +138,7 @@ const MODES: Mode[] = [
     label: '3 people · Job lead',
     title: 'A job lead, months after meeting',
     intro: 'Example A from our funding application (Manifund): an acquaintance finds an opening through a friend, without the person in the middle lifting a finger. Jonas is the friend in the middle.',
-    note: 'Second-degree query, scripted (wave 2): a yes at each hop, Jonas\'s once in Settings, Maya\'s for this ask. The live phones on this page do one hop today.',
+    note: 'Second-degree query, scripted: a yes at each hop, Jonas\'s once in Settings, Maya\'s for this ask. The live phones on this page do one hop today.',
     people: [
       { id: 'sam', name: 'Sam', role: 'Jonas\'s acquaintance' },
       { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },

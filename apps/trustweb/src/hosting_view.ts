@@ -11,7 +11,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { aboutUrl, AboutPage } from './about'
 import type { AudioStore } from './audio_store'
-import { allowanceOf, fetchBack, hostAll, hostingRows, HostOutcome, hostOne, reconcile, toHost, unhost, unknownOnServer } from './hosting'
+import { allowanceOf, allowanceReached, fetchBack, hostAll, hostingRows, HostOutcome, hostOne, reconcile, toHost, unhost, unknownOnServer } from './hosting'
 import type { HostingDeps } from './hosting'
 import type { AppState, PastMeeting } from './model'
 import { clock } from './recorder'
@@ -60,7 +60,7 @@ export function createHostingView(h: HostingViewHooks): HostingView {
   /** The server answered 402 this visit: the next recording did not fit (cleared when something is removed). */
   let refused = false
   let busy = false
-  const reachedNow = (): boolean => refused || Boolean(usage && usage.secondsUsed >= usage.secondsLimit)
+  const reachedNow = (): boolean => refused || Boolean(usage && allowanceReached(usage))
 
   const deps: HostingDeps = {
     account: h.ctx.account,
@@ -166,8 +166,10 @@ export function createHostingView(h: HostingViewHooks): HostingView {
     const used = a.hoursUsed
     const limit = a.hoursLimit
     const label = S.hostUsage(a.recordings, a.recordingsLimit, used.toFixed(2), String(limit))
-    const pct = Math.min(100, limit ? (used / limit) * 100 : 0)
-    const bar = el('div', { class: 'usage-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(limit), 'aria-valuenow': String(used), 'aria-label': label }, [
+    // Full when either is used up: the count (the allowance) or the hours (the guard beside it).
+    const share = (n: number, of: number): number => (of > 0 ? (n / of) * 100 : 0)
+    const pct = Math.round(Math.min(100, Math.max(share(a.recordings, a.recordingsLimit), share(used, limit))))
+    const bar = el('div', { class: 'usage-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': label }, [
       el('span', {}),
     ])
     ;(bar.firstChild as HTMLElement).style.width = pct + '%'

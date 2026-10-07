@@ -30,6 +30,35 @@ export enum SearchEngine {
   Brave = 'brave',
 }
 
+/**
+ * Who transcribes, where and under which data policy, as GET /hosted/status
+ * reports it in its `provider.transcribe` block (contract v1.5). The consent
+ * copy is built from it, so the app never claims a route the server does not
+ * take. A value this build does not know reads as null (named generically).
+ */
+export enum TranscribeProviderName {
+  OpenRouter = 'openrouter',
+  Infomaniak = 'infomaniak',
+}
+
+/** Where the INFERENCE runs (not where our server is). */
+export enum InferenceRegion {
+  Us = 'us',
+  Ch = 'ch',
+}
+
+/** OpenRouter's data-collection setting sent with every call; Infomaniak has none (null). */
+export enum ProviderDataPolicy {
+  Deny = 'deny',
+  Allow = 'allow',
+}
+
+export interface TranscribeProviderInfo {
+  provider: TranscribeProviderName | null
+  region: InferenceRegion | null
+  dataPolicy: ProviderDataPolicy | null
+}
+
 /** In the order the row shows them (Jakob's list, Max meeting 00:16:53). */
 export const SEARCH_ENGINES: readonly SearchEngine[] = [SearchEngine.Google, SearchEngine.Ecosia, SearchEngine.Qwant, SearchEngine.Brave]
 

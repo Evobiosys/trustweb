@@ -4,8 +4,8 @@
  * transcription provider (never production):
  *   A. Server without transcription: the choice is hidden (wave 2), "not
  *      switched on yet"; a phone that chose it before falls back to the live engines.
- *   A2. With transcription: the one-time consent (asked once; wave 2 copy: our
- *      server, OpenRouter, a US provider, no training, nothing kept by us, rough times).
+ *   A2. With transcription: the one-time consent (asked once; review-wave2: the copy names what the
+ *      server's provider block says, here infomaniak/ch; nothing kept by us, rough times).
  *   B. With transcription: a memo goes to the server when it stops; the
  *      Review fills with the transcript's lines; saved items link to the
  *      line and the moment (the chain of proof for server transcripts).
@@ -124,10 +124,13 @@ async function partConsent(browser, base) {
   await pickTranscription(page, 'server')
   await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
   const consent = await page.locator('.sheet.on').innerText()
-  ok('choosing it asks first, plainly (wave 2 copy): our server, OpenRouter, a US provider, readable while transcribed, no training, nothing kept by us, rough times',
-    /our server/.test(consent) && /OpenRouter/.test(consent) && /United States/.test(consent) && /DeepInfra, Groq or Together/.test(consent)
-      && /can read the audio and the text/.test(consent) && /not end-to-end encrypted/.test(consent) && /not used for training/.test(consent)
-      && /We keep neither the audio nor the text/.test(consent) && /rough/.test(consent) && !/Infomaniak/.test(consent) && !/Switzerland, which/.test(consent), consent)
+  // review-wave2: the copy follows the server's provider block. This harness runs the infomaniak provider (its fake speaks that
+  // path), so the consent must name Infomaniak in Switzerland and NOT OpenRouter, the US or a data policy (unit: the OpenRouter copy).
+  ok('choosing it asks first, plainly, naming what THIS server reports (infomaniak, ch): readable while transcribed, nothing kept by us, rough times, the free hours from its plan',
+    /our server/.test(consent) && /transcription service of Infomaniak in Switzerland/.test(consent)
+      && /can read the audio and the text/.test(consent) && /not end-to-end encrypted/.test(consent)
+      && /We keep neither the audio nor the text/.test(consent) && /rough/.test(consent) && /up to 10 hours of audio per person/.test(consent)
+      && !/OpenRouter|United States|DeepInfra|data policy/.test(consent), consent)
   await shot(page, '01-consent')
   await page.locator('[data-consent="yes"]').click()
   await page.locator('[data-server-transcribe]').waitFor({ timeout: 10_000 })

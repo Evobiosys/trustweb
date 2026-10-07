@@ -46,7 +46,7 @@ function deps(script, saves = []) {
 
 describe('swiss_server parsing', () => {
   it('reads the status, hosting off reads all off', () => {
-    expect(parseStatus({ hosted: false, transcribe: true, feedback: true, plan: null })).toEqual({ hosted: false, transcribe: false, feedback: true, plan: null })
+    expect(parseStatus({ hosted: false, transcribe: true, feedback: true, plan: null })).toEqual({ hosted: false, transcribe: false, feedback: true, plan: null, provider: null })
     const on = parseStatus({ hosted: true, transcribe: false, feedback: false, plan: { secondsLimit: 36000, bytesLimit: 200000000 } })
     expect(on.hosted).toBe(true)
     expect(on.plan.secondsLimit).toBe(36000)
@@ -84,7 +84,7 @@ describe('swiss_server parsing', () => {
   })
   it('a server that cannot be reached is null; one without hosting reads all off', async () => {
     expect(await fetchStatus(async () => { throw new TypeError('offline') })).toBe(null)
-    expect(await fetchStatus(async () => new Response('x', { status: 503 }))).toEqual({ hosted: false, transcribe: false, feedback: false, plan: null })
+    expect(await fetchStatus(async () => new Response('x', { status: 503 }))).toEqual({ hosted: false, transcribe: false, feedback: false, plan: null, provider: null })
   })
   it('sends the declared seconds and the bare content type; never an X-Read-Token', async () => {
     let seen = null

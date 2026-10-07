@@ -4,7 +4,30 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, DefaultRecording, LogOutcome, ProvenanceState, QueryStyle, Ring, SearchEngine, Tag, TranscriptionChoice } from './model'
+import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
+import type { TranscribeProviderInfo } from './model'
+
+/** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
+const PROVIDER_NAME: Readonly<Record<TranscribeProviderName, string>> = {
+  [TranscribeProviderName.OpenRouter]: 'OpenRouter',
+  [TranscribeProviderName.Infomaniak]: 'Infomaniak',
+}
+
+/** Where the inference runs, as a phrase. */
+const REGION_PHRASE: Readonly<Record<InferenceRegion, string>> = {
+  [InferenceRegion.Us]: 'in the United States',
+  [InferenceRegion.Ch]: 'in Switzerland',
+}
+
+/** The consent's first sentence: the route the server reports, or a generic one when it says nothing this build knows. */
+function consentRoute(p: TranscribeProviderInfo | null): string {
+  const where = p?.region ? ` ${REGION_PHRASE[p.region]}` : ''
+  if (p?.provider === TranscribeProviderName.OpenRouter) {
+    return `The audio of a recording goes through our server in Switzerland to ${PROVIDER_NAME[p.provider]}, which passes it to a transcription provider${where} that turns it into text (${PROVIDER_NAME[p.provider]} picks which one).`
+  }
+  if (p?.provider) return `The audio of a recording goes through our server in Switzerland to the transcription service of ${PROVIDER_NAME[p.provider]}${where}, which turns it into text.`
+  return `The audio of a recording goes through our server in Switzerland to an outside transcription service${where}, which turns it into text.`
+}
 
 export const S = {
   appName: 'TrustWeb',
@@ -452,7 +475,7 @@ export const S = {
     [TranscriptionChoice.Auto]: 'TalkWeave where this site reaches it, else speech on this device, else later. Never asks to reach this computer.',
     [TranscriptionChoice.TalkWeave]: 'Live transcripts from TalkWeave running here. Your browser asks once to let this page reach this computer. Without it: as Automatic.',
     [TranscriptionChoice.OnDevice]: 'Only this device listens. Audio never leaves it; where it cannot, the recording is transcribed later.',
-    [TranscriptionChoice.Server]: 'When a recording stops, its audio goes through our server and OpenRouter to a transcription service in the United States and comes back as text. Not used for training; we keep nothing. Nothing live. Asks once first.',
+    [TranscriptionChoice.Server]: 'When a recording stops, its audio goes through our server to an outside transcription service and comes back as text; we keep nothing. Nothing live. Asks once first and says then who transcribes it, and where.',
     [TranscriptionChoice.Later]: 'Nothing live. The recording is transcribed later on your computer.',
   } as Record<TranscriptionChoice, string>,
   setDefaultRecording: 'The Record tab starts with',
@@ -590,6 +613,7 @@ export const S = {
   demoEndedLine: 'This demo account has ended. Its owner can make a new one.',
   // Hand-over: the demo account moves to another phone with what it found (owner 2026-10-06: "try this in a one shot").
   foundTitle: 'What this account found',
+  queryEarlier: 'Earlier answers (the last 20 are kept on this phone)',
   foundNone: 'Nothing found yet. Ask the web and what people share lands here.',
   handTitle: 'Hand over this demo account',
   handLead: 'Packs this account, its connection, what it found and who may ask it, encrypted, on the Swiss server. The other phone opens the link and takes it over. This phone then forgets the account; the key travels only inside the link.',
@@ -734,7 +758,17 @@ export const S = {
   // Server-side transcription (wave 1733 round B, item 5; contract I5, amendment A8 g). Wave 2: the provider is OpenRouter
   // (US inference providers, data policy "deny"), no longer Infomaniak in Switzerland (contract-wave2, transcribe-provider report).
   consentTitle: 'Transcribe through our server?',
-  consentBody: 'The audio of a recording goes through our server in Switzerland to OpenRouter, which hands it to a transcription service in the United States (DeepInfra, Groq or Together) that turns it into text. While it is being transcribed, these services can read the audio and the text: this step is not end-to-end encrypted. We ask for providers that do not collect it (data policy "deny"), so it is not used for training. We keep neither the audio nor the text on our server. The times of the lines may be rough (estimated per sentence). Free while we test, up to 10 hours per person.',
+  // review-wave2: built from the server's own provider block (/hosted/status), so it never names a route the server does not take.
+  consentBody: (p: TranscribeProviderInfo | null, freeHours: number | null): string => [
+    consentRoute(p),
+    'While it is being transcribed, the services on the way can read the audio and the text: this step is not end-to-end encrypted.',
+    p?.dataPolicy === ProviderDataPolicy.Deny ? 'We ask for providers that do not collect it (data policy "deny"), so it is not used for training.' : null,
+    p?.dataPolicy === ProviderDataPolicy.Allow ? 'We do not ask the provider to forgo keeping it: its own terms apply.' : null,
+    'We keep neither the audio nor the text on our server. The times of the lines may be rough (estimated per sentence).',
+    freeHours !== null && freeHours > 0
+      ? `Free while we test: up to ${freeHours} hours of audio per person, within a daily budget shared by everyone.`
+      : 'Free while we test.',
+  ].filter((x): x is string => x !== null).join(' '),
   consentYes: 'Yes, transcribe through our server',
   consentNo: 'No, not now',
   trServer: 'Transcribed through our server when you stop (the audio leaves this phone)',
@@ -809,8 +843,8 @@ export const S = {
   hostFetched: 'It is back on this phone.',
   hostFailed: 'That did not work just now. Nothing was lost; try again later.',
   hostTooLong: 'Longer than 1 hour: the server takes at most 1 hour per recording. It stays on this phone.',
-  hostAllowanceToast: 'Your free 10 hours on the Swiss server are used. The rest stays on this phone.',
-  hostAllowance: 'You have used the free 10 hours. Recordings past that stay on this phone only: nothing is lost here. Beyond the free hours, hosting will cost something; pricing is experimental and still being worked out.',
+  hostAllowanceToast: 'Your free hosting allowance on the Swiss server is used. The rest stays on this phone.',
+  hostAllowance: 'You have used the free allowance (10 recordings, up to 10 hours in all). Recordings past that stay on this phone only: nothing is lost here. Beyond the free allowance, hosting will cost something; pricing is experimental and still being worked out.',
   hostRestore: 'Restore: your backup carries the key to these recordings. Restore it on a new phone and every hosted recording can be fetched back from here. Recordings kept only on the old phone are not in the backup.',
   hostRetention: 'A recording nobody wrote or played for 90 days may be removed from the server.',
   // Switching hosting on asks first and names what goes up (review-app-b).
