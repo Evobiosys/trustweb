@@ -153,7 +153,9 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
       onclick: () => { withdrawConsent(h.state()); h.save(); h.toast(S.serverStopped); back() },
     }, [S.serverStop])
     if (!serverOn()) {
-      h.openSheet([el('h3', {}, [S.serverSheetTitle]), el('p', { class: 'meta' }, [S.serverNotOn]), chosen() ? stop : null])
+      // Not known yet (still asking, or no answer) is not "off": said as such.
+      const known = Boolean(h.ctx.status())
+      h.openSheet([el('h3', {}, [S.serverSheetTitle]), el('p', { class: 'meta', 'data-server-off': known ? 'off' : 'unknown' }, [known ? S.serverNotOn : S.setServerUnknown]), chosen() ? stop : null])
       return
     }
     const fine = chosen() && consented()

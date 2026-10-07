@@ -83,12 +83,15 @@ let picked: string | null = null
 let panel: Panel | null = null
 const rows = new Set<{ el: HTMLElement; draw: () => void }>()
 
+/** Forgets the rows a render replaced (they are off screen for good). */
+function prune(): void {
+  for (const r of [...rows]) if (!r.el.isConnected) rows.delete(r)
+}
+
 /** Redraws every row still on screen; forgets the ones a render replaced. */
 function redrawAll(): void {
-  for (const r of [...rows]) {
-    if (r.el.isConnected) r.draw()
-    else rows.delete(r)
-  }
+  prune()
+  for (const r of rows) r.draw()
 }
 
 function loadEngines(): void {
@@ -212,6 +215,9 @@ export function webSearchRow(query: string, hooks?: WebResultsHooks): WebSearchR
     draw()
   }
   if (hooks?.enabled()) {
+    // Every render makes new rows: drop the replaced ones once this render is on screen (not before: a row made
+    // earlier in the same render is not attached yet), so a long visit without a tap keeps none.
+    queueMicrotask(prune)
     rows.add({ el: row, draw })
     loadEngines()
   }
