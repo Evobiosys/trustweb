@@ -1,8 +1,12 @@
-// Headless check of a built TrustWeb site (real Chromium, desktop 1280 and phone 390).
+// Headless check of a built TrustInTheWeb site (real Chromium, five widths: 390, 768, 1024, 1280, 1440).
 //
 //   PLAYWRIGHT_PACKAGE=/Users/personal/Documents/SingularStructure/code/other/signal-orbit/node_modules/playwright-core/index.js \
+//   [TW_SITE=org|com] [TW_APP_BASE=https://app.idea2.site/trustweb] [TW_SITE_HOST=idea2.site] \
 //   node scripts/tw-front-door/verify_site.mjs <built-dir> <screens-dir> <draft|prod> [<live-base-url>]
 //
+// TW_SITE=org (default) checks the website, TW_SITE=com the hosting site. TW_APP_BASE is the app base the
+// build was given (Demo is <base>/demo/, Install <base>/?install=1); TW_SITE_HOST the host it was built for.
+
 // With a live base URL (e.g. https://idea2.site/trustweb/draft/) the same checks run against the
 // deployed pages (<built-dir> then only supplies the page list). Otherwise it serves <built-dir> itself on 127.0.0.1:$TW_VERIFY_PORT (default 8981; loopback only, closed at the end),
 // so no server is left behind. Structure is checked by DOM queries, never with a
@@ -24,7 +28,13 @@ if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) {
   process.exit(2)
 }
 const BASE = liveBase ?? `http://127.0.0.1:${PORT}/`
-const WIDTHS = [1280, 390]
+const WIDTHS = [390, 768, 1024, 1280, 1440]
+const SITE = process.env.TW_SITE ?? 'org'
+if (!['org', 'com'].includes(SITE)) { console.error('TW_SITE must be org or com'); process.exit(2) }
+const APP = (process.env.TW_APP_BASE ?? 'https://app.idea2.site/trustweb').replace(/\/$/, '')
+const SITE_HOST = process.env.TW_SITE_HOST ?? 'idea2.site'
+const ORG = SITE === 'org'
+const OTHER_HOST = ORG ? 'https://TrustInTheWeb.com' : 'https://TrustInTheWeb.org'
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok })
@@ -94,6 +104,13 @@ const chrome = () => {
     visible: inView(d) && inView(i),
     cols, perRow,
     brandHref: brand?.getAttribute('href'), brandText: brand?.textContent.trim(),
+    siteName: document.querySelector('.sitebar-brand')?.textContent.trim(),
+    brandWeights: [...document.querySelectorAll('.sitebar-brand b')].map((b) => Number(getComputedStyle(b).fontWeight)),
+    brandRegular: Number(getComputedStyle(document.querySelector('.sitebar-brand')).fontWeight),
+    hostHeader: (() => { const a = document.querySelector('.sitebar-sub a.hostlink'); if (!a) return null; const r = a.getBoundingClientRect()
+      return { href: a.getAttribute('href'), title: a.title, text: a.textContent.trim(), inView: r.left >= 0 && r.right <= vw && r.width > 30 } })(),
+    hostFooter: [...document.querySelectorAll('.sitefooter a.hostlink')].map((a) => ({ href: a.getAttribute('href'), title: a.title, text: a.textContent.trim() })),
+    pricingLinks: [...document.querySelectorAll('a[href]')].filter((a) => /pricing/i.test(a.getAttribute('href').replace(/[?&]kind=pricing/, '').replace('#fair-pricing', '')) || /^pricing$/i.test(a.textContent.trim())).map((a) => a.getAttribute('href')),
     terms: !!document.querySelector('.sitefooter a[href="terms.html"]'),
     strip: !!document.querySelector('.draftstrip'),
     divInPOrSpan: document.querySelectorAll('p div, span div, p section').length,
@@ -116,6 +133,36 @@ const popups = () => {
   return { count: document.querySelectorAll('.term').length, bad }
 }
 
+// the two swirls behind the mark and the wordmark itself (index pages only)
+const heroGeometry = () => {
+  const vw = window.innerWidth
+  const rect = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height } }
+  const field = document.querySelector('.knot-field')
+  const swirls = [...document.querySelectorAll('.knot-field svg.knot')].map((el) => ({ cls: el.getAttribute('class'), ...rect(el) }))
+  const h1 = document.querySelector('h1.wot')
+  const lines = h1 ? [...h1.querySelectorAll('.wm-l')].map((l) => ({
+    text: l.textContent.trim(), top: Math.round(l.getBoundingClientRect().top), regular: Number(getComputedStyle(l).fontWeight),
+    bold: [...l.querySelectorAll('b')].map((b) => ({ t: b.textContent, w: Number(getComputedStyle(b).fontWeight) })) })) : []
+  return { vw, field: field ? rect(field) : null, swirls, lines, h1Text: h1?.textContent.replace(/\s+/g, ' ').trim(), h1: h1 ? rect(h1) : null }
+}
+
+const inside = (a, box, tol = 0.5) => a.l >= box.l - tol && a.r <= box.r + tol && a.t >= box.t - tol && a.b <= box.b + tol
+
+async function heroChecks(page, tag) {
+  const g = await page.evaluate(heroGeometry)
+  const vp = { l: 0, r: g.vw, t: -1e6, b: 1e6 }
+  check(`${tag}: two swirls, both with a real size`, g.swirls.length === 2 && g.swirls.every((x) => x.w > 40 && x.h > 40), JSON.stringify(g.swirls.map((x) => Math.round(x.w))))
+  check(`${tag}: BOTH swirls fully inside the viewport (left ${g.swirls[0] ? Math.round(g.swirls[0].l) : '?'}..${g.swirls[0] ? Math.round(g.swirls[0].r) : '?'}, right ${g.swirls[1] ? Math.round(g.swirls[1].l) : '?'}..${g.swirls[1] ? Math.round(g.swirls[1].r) : '?'} of ${g.vw})`,
+    g.swirls.length === 2 && g.swirls.every((x) => inside(x, vp)))
+  check(`${tag}: BOTH swirls fully inside the hero box that crops them (nothing cut off)`, !!g.field && g.swirls.length === 2 && g.swirls.every((x) => inside(x, g.field)),
+    g.field ? JSON.stringify(g.swirls.filter((x) => !inside(x, g.field)).map((x) => [x.cls, Math.round(x.l - g.field.l), Math.round(g.field.r - x.r)])) : 'no .knot-field')
+  check(`${tag}: the swirls do not overlap each other`, g.swirls.length === 2 && g.swirls[0].r <= g.swirls[1].l)
+  check(`${tag}: wordmark: "Trust in" over "the Web", Trust and Web bold, in and the regular, second line below the first`,
+    g.lines.length === 2 && g.lines[0].text === 'Trust in' && g.lines[1].text === 'the Web' && g.lines[1].top > g.lines[0].top &&
+    g.lines.every((l) => l.regular <= 500 && l.bold.length === 1 && l.bold[0].w >= 600) && g.lines[0].bold[0].t === 'Trust' && g.lines[1].bold[0].t === 'Web', JSON.stringify(g.lines))
+  check(`${tag}: wordmark inside the viewport`, !!g.h1 && g.h1.l >= -0.5 && g.h1.r <= g.vw + 0.5)
+}
+
 async function checkPage(browser, name, width) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } })
   const page = await ctx.newPage()
@@ -130,16 +177,27 @@ async function checkPage(browser, name, width) {
   check(`${tag}: nothing clipped inside overflow boxes`, m.clipped.length === 0, m.clipped.join(', '))
   const c = await page.evaluate(chrome)
   check(`${tag}: header has [Demo] then [Install], both in view, Install rightmost`, c.ok && c.order && c.visible && c.installRightmost, JSON.stringify(c).slice(0, 160))
-  check(`${tag}: Demo/Install links`, c.demoHref === 'https://app.idea2.site/trustweb/demo/' && c.installHref === 'https://app.idea2.site/trustweb/?install=1')
-  check(`${tag}: footer columns Features|Resources|Use cases|Legal`, c.cols.join('|') === 'Features|Resources|Use cases|Legal', c.cols.join('|'))
-  check(`${tag}: footer wraps (${width < 600 ? '2' : '5'} per row)`, width < 600 ? c.perRow === 2 : c.perRow === 5, `perRow=${c.perRow}`)
+  check(`${tag}: Demo/Install links (${APP})`, c.demoHref === `${APP}/demo/` && c.installHref === `${APP}/?install=1`, `${c.demoHref} ${c.installHref}`)
+  const wantCols = ORG ? 'Features|Resources|Use cases|Legal' : 'Hosting|The app|Resources|Legal'
+  check(`${tag}: footer columns ${wantCols}`, c.cols.join('|') === wantCols, c.cols.join('|'))
+  check(`${tag}: footer wraps (${width <= 900 ? '2' : '5'} per row)`, width <= 900 ? c.perRow === 2 : c.perRow === 5, `perRow=${c.perRow}`)
+  check(`${tag}: site name ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} in the bar, Trust and Web bold, In and The regular`,
+    c.siteName === (ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com') && c.brandWeights.length === 2 && c.brandWeights.every((w) => w >= 600) && c.brandRegular <= 500, JSON.stringify([c.siteName, c.brandWeights, c.brandRegular]))
+  check(`${tag}: header link to the ${ORG ? 'hosting' : 'app'} site: visible, title exactly ${OTHER_HOST}, href the live site`,
+    !!c.hostHeader && c.hostHeader.inView && c.hostHeader.title === OTHER_HOST && c.hostHeader.href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase() && (!ORG || c.hostHeader.text === 'Do you need hosting?'), JSON.stringify(c.hostHeader))
+  if (ORG) {
+    check(`${tag}: footer carries "Do you need hosting?" with the same title and target`,
+      c.hostFooter.length === 1 && c.hostFooter[0].text === 'Do you need hosting?' && c.hostFooter[0].title === OTHER_HOST && c.hostFooter[0].href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase(), JSON.stringify(c.hostFooter))
+    check(`${tag}: tw.org is free of pricing (no link to a pricing page, no "Pricing" entry)`, c.pricingLinks.length === 0, c.pricingLinks.join(', '))
+  }
   check(`${tag}: brand slot links to evobiosys.org`, c.brandHref === 'https://evobiosys.org' && c.brandText.startsWith('TrustWeb, by EvoBioSys'))
   check(`${tag}: no div in p/span, no stray pop`, c.divInPOrSpan === 0 && c.popsOutside === 0)
-  check(`${tag}: terms link only in draft`, c.terms === (mode === 'draft'))
+  check(`${tag}: terms link only in the website's draft (the hosting site has no terms page yet)`, c.terms === (mode === 'draft' && ORG))
   check(`${tag}: draft strip only in draft`, c.strip === (mode === 'draft'))
   if (mode === 'draft') check(`${tag}: draft is noindex`, /noindex/.test(c.robots ?? ''))
-  if (name === 'index.html' && mode === 'prod') check(`${tag}: canonical is /trustweb/`, c.canonical === 'https://idea2.site/trustweb/', String(c.canonical))
-  if (name === 'index.html') {
+  if (name === 'index.html' && ORG && mode === 'prod') check(`${tag}: canonical is the site's own front page`, c.canonical === (SITE_HOST === 'idea2.site' ? 'https://idea2.site/trustweb/' : `https://${SITE_HOST}/`), String(c.canonical))
+  if (name === 'index.html') await heroChecks(page, tag)
+  if (name === 'index.html' && ORG) {
     const p = await page.evaluate(popups)
     check(`${tag}: ${p.count} term popups stay inside the viewport`, p.count >= 11 && p.bad.length === 0, p.bad.join(', '))
     await page.evaluate(() => { document.querySelector('.term')?.focus() })
@@ -180,7 +238,8 @@ async function linkAudit(browser) {
     const res = await fetch(BASE + (h === './' ? '' : h))
     check(`internal link ${h} resolves`, res.status === 200, String(res.status))
   }
-  const LATER = [/\?install=1$/, /\/feedback$/]
+  // not live yet or not ours to probe: the app's own routes and the two new domains until infra serves them
+  const LATER = [/\?install=1$/, /\/feedback$/, /\/\/(app\.)?trustintheweb\.(org|com)/i]
   const skipped = []
   for (const [h, from] of new Map(external)) {
     if (LATER.some((re) => re.test(h))) { skipped.push(h); continue }
@@ -201,7 +260,7 @@ async function formChecks(browser) {
   const page = await ctx.newPage()
   const posts = []
   let mode204 = true, status = 204
-  await page.route('https://app.idea2.site/feedback', async (route) => {
+  await page.route(`${new URL(APP).origin}/feedback`, async (route) => {
     const req = route.request()
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'POST, OPTIONS' } })
     posts.push({ method: req.method(), type: req.headers()['content-type'], body: JSON.parse(req.postData() ?? '{}') })
@@ -381,35 +440,93 @@ async function formChecks(browser) {
   check('feedback: no request ever went to subscriber.questhub.eco or /rebiosys/api/waitlist from the feedback page', trip.length === 0, trip.join(', '))
   await ctx.close()
 
-  // join form on the index page keeps working (waitlist + newsletter)
-  const ctx2 = await browser.newContext()
-  const p2 = await ctx2.newPage()
-  const calls = []
-  for (const url of ['https://idea2.site/rebiosys/api/waitlist', 'https://subscriber.questhub.eco/subscribe']) {
-    await p2.route(url, (route) => { calls.push({ url, body: JSON.parse(route.request().postData() ?? '{}') }); return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{}' }) })
+  if (ORG) {
+    // join form on the index page keeps working (waitlist + newsletter)
+    const ctx2 = await browser.newContext()
+    const p2 = await ctx2.newPage()
+    const calls = []
+    for (const url of ['https://idea2.site/rebiosys/api/waitlist', 'https://subscriber.questhub.eco/subscribe']) {
+      await p2.route(url, (route) => { calls.push({ url, body: JSON.parse(route.request().postData() ?? '{}') }); return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{}' }) })
+    }
+    await p2.goto(BASE)
+    await p2.fill('#j-email', 'someone@example.org')
+    await p2.check('#j-newsletter')
+    await p2.click('#j-submit')
+    await p2.waitForFunction(() => document.querySelector('#j-nl-status').textContent.includes('Check your inbox'))
+    const wl = calls.find((c) => c.url.includes('waitlist')), nl = calls.find((c) => c.url.includes('subscribe'))
+    check('join form: waitlist POST keeps its payload', wl?.body.email === 'someone@example.org' && wl.body.note === 'web-of-trust:join' && wl.body.channel === 'human')
+    check('join form: newsletter POST keeps its payload', nl?.body.email === 'someone@example.org' && nl.body.project === 'questhub' && nl.body.source === 'trustweb' && nl.body.gdpr === true)
+    await ctx2.close()
   }
-  await p2.goto(BASE)
-  await p2.fill('#j-email', 'someone@example.org')
-  await p2.check('#j-newsletter')
-  await p2.click('#j-submit')
-  await p2.waitForFunction(() => document.querySelector('#j-nl-status').textContent.includes('Check your inbox'))
-  const wl = calls.find((c) => c.url.includes('waitlist')), nl = calls.find((c) => c.url.includes('subscribe'))
-  check('join form: waitlist POST keeps its payload', wl?.body.email === 'someone@example.org' && wl.body.note === 'web-of-trust:join' && wl.body.channel === 'human')
-  check('join form: newsletter POST keeps its payload', nl?.body.email === 'someone@example.org' && nl.body.project === 'questhub' && nl.body.source === 'trustweb' && nl.body.gdpr === true)
-  await ctx2.close()
 }
 
-async function contentChecks(browser) {
-  const ctx = await browser.newContext()
-  const page = await ctx.newPage()
+// every page, both sites: the same hygiene rules
+async function everyPageChecks(page) {
+  for (const name of pageNames) {
+    await page.goto(BASE + (name === 'index.html' ? '' : name))
+    const t = await page.evaluate(() => document.documentElement.outerHTML)
+    // the one permitted link target is removed first; the word must not appear anywhere else
+    check(`${name}: no "github" except the one permitted link`, !/github/i.test(t.split('https://github.com/evobiosys/web-of-trust').join('')))
+    check(`${name}: no unresolved <!--IF:...--> marker and no unresolved {{TOKEN}} left in the output`, !/<!--\/?IF/.test(t) && !/\{\{[A-Z_]+\}\}/.test(t))
+    check(`${name}: no em dash (char or entity)`, !/—|&mdash;|&#8212;|&#x2014;/i.test(t))
+    check(`${name}: no "promise nothing free", no "hop by hop", no "DeepInfra"`, !/promise nothing free|hop by hop|DeepInfra/i.test(t.replace(/\s+/g, ' ')))
+    const vis = await page.evaluate(() => document.body.innerText)
+    check(`${name}: no "UWB", no names (Max, Kaya, Manuel), no "Infomaniak AI", no "Switzerland ... transcri" claim`,
+      !/\bUWB\b|\bMax\b|\bKaya\b|\bManuel\b|Infomaniak AI/.test(t) && !/transcri[^.]{0,200}Infomaniak|Infomaniak[^.]{0,200}transcri/i.test(vis))
+    check(`${name}: no HTML comment carries a meeting or a person`, !/<!--[^>]*(meeting with|transcript of the conversation|max-meeting)/i.test(t))
+    check(`${name}: names itself ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} (title), never idea2.site as its name`,
+      /<title>[^<]*TrustInTheWeb\.(org|com)<\/title>/.test(t) && new RegExp(`<title>[^<]*TrustInTheWeb\\.${SITE}</title>`).test(t) && !/<title>[^<]*idea2\.site/.test(t))
+    check(`${name}: the hosting sentence says "The app is hosted on Infomaniak in Switzerland"`, /The app is hosted on Infomaniak in Switzerland/.test(vis))
+  }
+}
+
+async function contentChecksCom(page) {
   await page.goto(BASE)
-  const ids = await page.evaluate(() => ['source-code', 'features', 'use-cases', 'team', 'ea-groups', 'useful',
+  const text = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
+  check('com index: names the hosted service and what it hosts (encrypted copy of recordings, backups, relay), encrypted before it leaves',
+    /Hosting for TrustWeb/.test(text) && /encrypted copy of your recordings/i.test(text) && /relay/i.test(text) && /ciphertext it cannot read/.test(text))
+  check('com index: free while we test, the allowance as 10 recordings of up to an hour each (10 hours in total)',
+    /free while we test/i.test(text) && /the equivalent of 10 recordings of up to an hour each/.test(text) && /\(10 hours in total\)/.test(text))
+  check('com index: smooth updates and migrations; an offline install is on its own', /smooth updates and migrations/.test(text) && /offline install is on its own/i.test(text))
+  check('com index: "Contact us to make a solid agreement" with a contact button to the feedback form',
+    /Contact us to make a solid agreement/.test(text) && (await page.locator('a[href="feedback.html?kind=pricing"]').count()) >= 2)
+  check('com index: the anchors the footer needs exist (what, free, updates, agreement)', await page.evaluate(() => ['what', 'free', 'updates', 'agreement'].every((i) => document.getElementById(i))))
+  check('com index: links to the website TrustInTheWeb.org', (await page.locator('a[href="https://trustintheweb.org/"]').count()) >= 1)
+  check('com: pages are index, pricing, feedback, imprint, privacy (nothing else)', pageNames.join(',') === 'feedback.html,imprint.html,index.html,pricing.html,privacy.html', pageNames.join(','))
+  await page.goto(BASE + 'pricing.html')
+  const pr = await page.evaluate(() => document.querySelector('main, .wrap')?.innerText ?? document.body.innerText)
+  check('pricing: B2B copy (solid agreement, contact us, prices only go down, recordings stay on the phone, free while we test)',
+    /solid agreement/.test(pr) && /Contact us/.test(pr) && /Prices only ever go down later/.test(pr) && /Recordings stay on your phone/.test(pr) && /Free while we test/.test(pr))
+  check('pricing: allowance in recordings with hours in brackets', /the equivalent of 10 recordings of up to an hour each/.test(pr) && /\(10 hours in total\)/.test(pr))
+  check('pricing: smooth updates for hosted, offline installs on their own', /hosted version<\/b>|The hosted version/.test(pr) && /promises smooth updates and migrations/.test(pr) && /offline install/i.test(pr) && /on its own/.test(pr))
+  check('pricing: no price list (no currency amounts, no "fair")', !/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i.test(pr), pr.match(/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i)?.[0] ?? '')
+  check('pricing: server transcription via OpenRouter, see privacy, with the allowance (10 hours of audio per person, shared daily budget)',
+    /outside providers via OpenRouter, see privacy/i.test(pr) && /free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/i.test(pr) && !/promise nothing free/i.test(pr))
+  check('pricing: marketplace is coming soon, fee 80 percent of what others charge, no 1 %', /Coming soon: fee, 80 percent of what others charge/.test(pr) && /our fee is 80 percent of what others charge/.test(pr) && !/1 %/.test(pr))
+  check('pricing: its own links stay on the hosting site, the marketplace link goes to the website',
+    (await page.locator('a[href="privacy.html#server"]').count()) === 1 && (await page.locator('a[href="https://trustintheweb.org/#uc-marketplace"]').count()) === 1)
+  await page.goto(BASE + 'feedback.html')
+  check('com feedback: the kind list says "Pricing or an agreement for your group", value pricing',
+    await page.evaluate(() => { const o = document.querySelector('#fb-kind option[value="pricing"]'); return o?.textContent === 'Pricing or an agreement for your group' }))
+  await page.goto(BASE + 'imprint.html')
+  const imp = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
+  check('com imprint: the same imprint (name, Einzelunternehmen, Vienna)', /Jakob Possert-Bienzle/.test(imp) && /Einzelunternehmen \(Austrian EPU\)/.test(imp) && /Vienna, Austria/.test(imp))
+}
+
+async function contentChecksOrg(page) {
+  await page.goto(BASE)
+  const ids = await page.evaluate(() => ['source-code', 'licence', 'features', 'use-cases', 'team', 'ea-groups', 'useful',
     'f-web', 'f-record', 'f-notes', 'f-inventory', 'f-ask', 'f-consent', 'f-demo', 'f-backup', 'f-connect', 'f-send',
     'uc-events', 'uc-introductions', 'uc-marketplace', 'uc-housing', 'uc-questhub', 'uc-resources', 'uc-curations'].filter((i) => !document.getElementById(i)))
   check('index: every anchor the footer and use-case cards need exists', ids.length === 0, ids.join(', '))
   const text = await page.evaluate(() => document.body.innerText)
   check('index: Source code statement (will be published as part of EvoBioSys, public copy older)', /published as part of EvoBioSys/.test(text) && /older than the live app/.test(text))
-  check('index: Marketplace says coming soon and 1 %', /Coming soon/i.test(text) && /1 %/.test(text))
+  const lic = (await page.evaluate(() => document.getElementById('licence')?.innerText ?? '')).replace(/\s+/g, ' ')
+  check('index: licence line is AGPL, dual licensing under the Adapted Modular Public License on request, cost for well-funded organisations from a 100k budget',
+    lic === 'Licence: AGPL. Dual licensing under the Adapted Modular Public License on request; for well-funded organisations (budget from 100k per year) at a cost.', lic)
+  check('index: AMPL is no longer called the licence of the open source copy', !/open source\s*\(under the Adapted/i.test(text.replace(/\s+/g, ' ')))
+  const mk = await page.evaluate(() => document.getElementById('uc-marketplace')?.innerText.replace(/\s+/g, ' ') ?? '')
+  check('index: Marketplace says coming soon and "Fee: 80 percent of what others charge" (confirmed by Jakob 11:44 and the intake report), no 1 %', /Coming soon/i.test(mk) && /Fee: 80 percent of what others charge\./.test(mk) && !/1 %|1 percent/.test(mk), mk)
   check('index: join form still at the bottom', await page.evaluate(() => !!document.querySelector('#join #join-form')))
   // wave 2 (B10): the first line under the name leads with finding people and things through people you trust
   const lead = await page.evaluate(() => {
@@ -417,6 +534,33 @@ async function contentChecks(browser) {
     return { text: l?.textContent.trim(), before: !!(l && ex && (l.compareDocumentPosition(ex) & Node.DOCUMENT_POSITION_FOLLOWING)) }
   })
   check('index: first line leads with "Find people and things through people you trust"', lead.text === 'Find people and things through people you trust.' && lead.before, String(lead.text))
+  // wave 3: the hero says what it can do today, asking first, with a link "the vision" to why.html
+  const today = await page.evaluate(() => {
+    const box = document.querySelector('.hero .herotoday')
+    const items = [...(box?.querySelectorAll('li') ?? [])].map((li) => li.querySelector('b')?.textContent.trim())
+    const link = [...(box?.querySelectorAll('a') ?? [])].find((a) => a.textContent.trim() === 'the vision')
+    return { heading: box?.querySelector('.herotoday-h')?.textContent.trim(), items, link: link?.getAttribute('href') }
+  })
+  check('index: hero says what it can do today: ask your direct contacts FIRST, then people you trust, record and keep a meeting, inventory',
+    today.heading === 'What it can do today' && today.items.join('|') === 'Ask your direct contacts|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
+  check('index: the hero links "the vision" to why.html', today.link === 'why.html', String(today.link))
+  const always = await page.evaluate(() => { const a = document.querySelector('.hero a.alwayslink'); return { text: a?.textContent, href: a?.getAttribute('href'), tag: a?.closest('p')?.textContent.replace(/\s+/g, ' ').trim() } })
+  const wantAlways = SITE_HOST === 'trustintheweb.org' ? 'https://trustintheweb.org/whitepaper.html#bonobos' : 'whitepaper.html#bonobos'
+  check(`index: "always" in "We have always trusted our friends" links to the white paper's bonobo section (${wantAlways})`,
+    always.text === 'always' && always.href === wantAlways && /^We have always trusted our friends/.test(always.tag ?? ''), JSON.stringify(always))
+  // order: querying first in the features and use-case lists, the footer, and how it works
+  const order = await page.evaluate(() => ({
+    features: [...document.querySelectorAll('#features .fcard')].map((c) => c.id),
+    useCases: [...document.querySelectorAll('#use-cases .ucard')].map((c) => c.id),
+    footerFeatures: [...document.querySelectorAll('.sitefooter .sf-col:first-child a')].map((a) => a.textContent.trim()),
+    footerUse: [...document.querySelectorAll('.sitefooter .sf-col:nth-child(3) a')].map((a) => a.textContent.trim()),
+    coin: [...document.querySelectorAll('.coin .side h3')].map((h) => h.textContent.trim()) }))
+  check('index: features lead with Ask your web (then Consent per ask) before Record a meeting', order.features[0] === 'f-ask' && order.features[1] === 'f-consent' && order.features.indexOf('f-ask') < order.features.indexOf('f-record'), order.features.join(','))
+  check('index: use cases lead with Introductions (asking) before Events and Marketplace', order.useCases[0] === 'uc-introductions' && order.useCases.indexOf('uc-introductions') < order.useCases.indexOf('uc-events'), order.useCases.join(','))
+  check('index: the footer lists Ask your web before Record a meeting, Introductions first under Use cases',
+    order.footerFeatures[0] === 'Ask your web' && order.footerFeatures.indexOf('Ask your web') < order.footerFeatures.indexOf('Record a meeting') && order.footerUse[0] === 'Introductions', order.footerFeatures.slice(0, 4).join('|') + ' / ' + order.footerUse[0])
+  check('index: how it works puts Querying before Taking notes', order.coin.join('|') === 'Querying|Taking notes', order.coin.join('|'))
+  check('index: Introductions is a use-case card AND a footer entry', order.useCases.includes('uc-introductions') && order.footerUse.includes('Introductions'))
   // wave 2 (P29, P32): contact methods
   check('index: contact methods (QR code and link now, moving QR code soon, NFC/Bluetooth/AirDrop later)',
     /QR code, to show that you met in person/.test(text) && /link, for people you are not meeting in person/.test(text) &&
@@ -430,34 +574,20 @@ async function contentChecks(browser) {
     underlined: getComputedStyle(a).textDecorationLine.includes('underline') })))
   check('index: one link to the public copy, on the underlined words "open source", in Source code, labelled as a paused copy with a pause notice',
     gh.length === 1 && gh[0].href === 'https://github.com/evobiosys/web-of-trust' && gh[0].text === 'open source' && gh[0].inSource && gh[0].underlined && /pause notice/i.test(gh[0].title) && /paused public copy/.test(text), JSON.stringify(gh))
-  for (const name of pageNames) {
-    await page.goto(BASE + (name === 'index.html' ? '' : name))
-    const t = await page.evaluate(() => document.documentElement.outerHTML)
-    // the one permitted link target is removed first; the word must not appear anywhere else
-    check(`${name}: no "github" except the one permitted link`, !/github/i.test(t.split('https://github.com/evobiosys/web-of-trust').join('')))
-    check(`${name}: no unresolved <!--IF:...--> marker left in the output`, !/<!--\/?IF/.test(t))
-    check(`${name}: no em dash (char or entity)`, !/—|&mdash;|&#8212;|&#x2014;/i.test(t))
-    check(`${name}: no "promise nothing free", no "hop by hop", no "DeepInfra"`, !/promise nothing free|hop by hop|DeepInfra/i.test(t.replace(/\s+/g, ' ')))
-    const vis = await page.evaluate(() => document.body.innerText)
-    check(`${name}: no "UWB", no names (Max, Kaya, Manuel), no "Infomaniak AI", no "Switzerland ... transcri" claim`,
-      !/\bUWB\b|\bMax\b|\bKaya\b|\bManuel\b|Infomaniak AI/.test(t) && !/transcri[^.]{0,200}Infomaniak|Infomaniak[^.]{0,200}transcri/i.test(vis))
-    check(`${name}: no HTML comment carries a meeting or a person`, !/<!--[^>]*(meeting with|transcript of the conversation|max-meeting)/i.test(t))
-  }
-  // wave 2: pricing (P17, P10, P20) and FAQ (12 questions) and privacy (OpenRouter)
-  await page.goto(BASE + 'pricing.html')
-  const pr = await page.evaluate(() => document.querySelector('main, .wrap')?.innerText ?? document.body.innerText)
-  check('pricing: B2B copy (solid agreement, contact us, prices only go down, recordings stay on the phone, free while we test)',
-    /solid agreement/.test(pr) && /Contact us/.test(pr) && /Prices only ever go down later/.test(pr) && /Recordings stay on your phone/.test(pr) && /Free while we test/.test(pr))
-  check('pricing: allowance in recordings with hours in brackets', /the equivalent of 10 recordings of up to an hour each/.test(pr) && /\(10 hours in total\)/.test(pr))
-  check('pricing: smooth updates for hosted, offline installs on their own', /hosted version<\/b>|The hosted version/.test(pr) && /promises smooth updates and migrations/.test(pr) && /offline install/i.test(pr) && /on its own/.test(pr))
-  check('pricing: no price list (no currency amounts, no "fair")', !/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i.test(pr), pr.match(/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i)?.[0] ?? '')
-  check('pricing: server transcription via OpenRouter, see privacy, with the allowance (10 hours of audio per person, shared daily budget)',
-    /outside providers via OpenRouter, see privacy/i.test(pr) && /free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/i.test(pr) && !/promise nothing free/i.test(pr))
+  check('index: the lineage "you are here" link and the app links follow the build (self URL, app base)',
+    await page.evaluate(([self, app]) => document.querySelector('a.lineage-here-link')?.getAttribute('href') === self && document.querySelectorAll(`a[href="${app}/demo/"]`).length >= 5,
+      [SITE_HOST === 'idea2.site' ? 'https://idea2.site/trustweb/' : `https://${SITE_HOST}/`, APP]))
+  // pricing is gone from the website
+  check('org: no pricing page is built', !pageNames.includes('pricing.html'), pageNames.join(','))
+  // wave 2: FAQ (10 questions since wave 3) and privacy (OpenRouter)
   await page.goto(BASE + 'faq.html')
   const faq = await page.evaluate(() => ({ n: document.querySelectorAll('details.q').length, ids: [...document.querySelectorAll('details.q')].map((d) => d.id),
     text: document.body.innerText + [...document.querySelectorAll('details.q')].map((d) => d.textContent).join(' ') }))
-  check('faq: exactly 12 questions', faq.n === 12 && new Set(faq.ids).size === 12, faq.ids.join(','))
-  check('faq: Facebook one-liner, revenue "being worked out, see pricing", German brackets', /Facebook lets you repost\. TrustWeb lets you ask/.test(faq.text) && /Being worked out, see pricing/.test(faq.text) && /\(Ist das nicht Facebook/.test(faq.text))
+  check('faq: exactly 10 questions, "what motivates people" and the app-fatigue question are gone',
+    faq.n === 10 && new Set(faq.ids).size === 10 && !faq.ids.includes('q-incentive') && !faq.ids.includes('q-need-it') &&
+    !/Was motiviert die Leute|What makes people put their information in|worn out by apps|Brauche ich das wirklich/.test(faq.text), faq.ids.join(','))
+  check('faq: Facebook one-liner, revenue "being worked out", German brackets, no pricing link', /Facebook lets you repost\. TrustWeb lets you ask/.test(faq.text) && /Being worked out\./.test(faq.text) && /\(Ist das nicht Facebook/.test(faq.text) &&
+    (await page.locator('a[href*="pricing"]').count()) === 0)
   check('faq: nothing says multi-degree querying works today', !/travels? (further|on) .{0,40}today/i.test(faq.text) && /Today a question reaches the people you are directly connected with/.test(faq.text))
   check('faq: Q1 and the introductions question keep "a question reaches the people you are directly connected with" and point to the demo walkthrough',
     (faq.text.replace(/\s+/g, ' ').match(/a question reaches the people you are directly connected with; the demo walkthrough shows a scripted example of the next step/gi) ?? []).length >= 2 && !/Jonas/.test(faq.text))
@@ -472,9 +602,27 @@ async function contentChecks(browser) {
   await page.goto(BASE + 'why.html')
   const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
   check('why: "scalable" says built for one hop further with today\'s limit, not that it travels hop by hop today', /is built so a question can travel one hop further/.test(why) && /Today a question reaches your direct connections/.test(why))
+  check('why: labelled as the vision, keeps the full picture, points to what works today', /The vision/.test(why) && /where TrustWeb is headed/.test(why) && (await page.locator('a[href="./#features"]').count()) === 1)
+  await page.goto(BASE + 'whitepaper.html')
+  const wp = await page.evaluate(() => ({ h2: document.querySelector('#bonobos h2')?.textContent.trim(), line: document.querySelector('#bonobos p:not(.eyebrow)')?.textContent.trim() }))
+  check('whitepaper: a placeholder page whose #bonobos section has a heading and one honest line "Outline in progress."', /Bonobos/.test(wp.h2 ?? '') && wp.line === 'Outline in progress.', JSON.stringify(wp))
+  await page.goto(BASE + 'imprint.html')
+  const imp = await page.evaluate(() => document.querySelector('#operator dd')?.innerText.replace(/\s+/g, ' ').trim())
+  check('imprint: the name with "Einzelunternehmen (Austrian EPU)" under it, nothing else added', imp === 'Jakob Possert-Bienzle Einzelunternehmen (Austrian EPU)', String(imp))
+  await page.goto(BASE + 'feedback.html')
+  check('org feedback: the kind list says "Hosting or an agreement for your group" (no pricing word on the website)',
+    await page.evaluate(() => document.querySelector('#fb-kind option[value="pricing"]')?.textContent === 'Hosting or an agreement for your group'))
   await page.goto(BASE)
   const hero = await page.evaluate(() => [...document.querySelectorAll('.term .pop')].map((p) => p.textContent.replace(/\s+/g, ' ')).join(' | '))
   check('index: the "more scalable" popup says built for one hop further, today direct connections', /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
+}
+
+async function contentChecks(browser) {
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  await everyPageChecks(page)
+  if (ORG) await contentChecksOrg(page)
+  else await contentChecksCom(page)
   await page.goto(BASE + 'privacy.html')
   const fbp = await page.evaluate(() => document.getElementById('site')?.textContent.replace(/\s+/g, ' ') ?? '')
   check('privacy: feedback form bullets (email only with a box, stored in Switzerland, write back / notify / newsletter via the newsletter service with confirmation)',

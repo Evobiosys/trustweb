@@ -1,4 +1,4 @@
-<a class="back" href="./">&larr; back to TrustWeb</a>
+{{BACK}}
 <h1>Feedback</h1>
 <p class="lede">Tell us what works and what does not, ask us for the source code, or ask to be told when TrustWeb is ready. A person reads every message.</p>
 
@@ -7,7 +7,8 @@
     <label for="fb-kind">What kind of message is it?</label>
     <select id="fb-kind" name="kind">
       <option value="feedback">Feedback</option>
-      <option value="pricing">Pricing or an agreement for your group</option>
+      <!--IF:org--><option value="pricing">Hosting or an agreement for your group</option><!--/IF-->
+      <!--IF:com--><option value="pricing">Pricing or an agreement for your group</option><!--/IF-->
       <option value="bug">Bug</option>
     </select>
 
@@ -50,7 +51,7 @@
 <script>
 (function () {
   "use strict";
-  var FEEDBACK_URL = "https://app.idea2.site/feedback";
+  var FEEDBACK_URL = "{{API}}/feedback";
   var TIMEOUT_MS = 15000;
   var EMAIL_MAX = 254;
   var KINDS = ["feedback", "pricing", "bug"];
