@@ -39,6 +39,13 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   so a replay cannot double-subscribe). SUBSCRIBER_URL must be https (plain http to loopback only). The file (read with scripts/trustweb_feedback_read.sh, which shows control and
                   bidi characters as \u{XXXX} so typed-in escapes never reach the terminal).
 
+  /websearch      (wave 3) web results from a real search API through this server, never the person's address: GET /websearch/engines,
+                  POST /websearch {"q","engine"} (GET ?q=&engine= too). Engines with a documented official API: brave, mojeek (websearch.mjs,
+                  websearch_engines.mjs, websearch_clean.mjs); qwant, ecosia, metager, swisscows are listed as link_only. Keys = systemd
+                  credentials websearch-brave / websearch-mojeek ({"key": "..."}); no key = 503 not_configured. Per-client limit, a daily
+                  budget per engine, calls in flight bounded, Sec-Fetch-Site cross-site refused; the query is never logged, cached or stored.
+                  Contract: DEVLOG/trustweb-wave-1733/wave3/websearch-api-contract.txt.
+
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
 One real call against questhub: scripts/trustweb_transcribe_probe.sh staging <audio> <mime> <seconds> (synthetic audio only).

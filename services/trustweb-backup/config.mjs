@@ -69,14 +69,13 @@ const PROVIDER_AUTO = 'auto'
 const FALLBACK_NONE = 'none'
 const flag = (raw) => raw === '1' || raw === 'true'
 /** What an API key may look like. Keeps a malformed credential (spaces, newlines, quotes) out of an Authorization header. */
-const KEY_SHAPE = /^[A-Za-z0-9_.~+-]{20,256}$/ // underscore included: Berget keys look like sk_ber_...
+export const KEY_SHAPE = /^[A-Za-z0-9_.~+-]{20,256}$/ // underscore included: Berget keys look like sk_ber_...
 
 /**
- * A key from a systemd credential: a JSON file {"key": "..."} (the shape unfold-news's /api/orkey served).
- * `name` = the credential name (default: TRANSCRIBE_CREDENTIAL, else orkey = the OpenRouter key; Berget passes its own).
+ * A key from a systemd credential file: JSON {"key": "..."} at <CREDENTIALS_DIRECTORY>/<name> (the shape unfold-news's /api/orkey served).
  * Returns '' for a missing, unreadable or malformed credential. Never throws, never logs, never echoes the content.
  */
-export function readCredentialKey(env = process.env, name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey') {
+export function readCredential(name, env = process.env) {
   const dir = env.CREDENTIALS_DIRECTORY
   if (dir === undefined || dir === '') return ''
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) return ''
@@ -86,6 +85,11 @@ export function readCredentialKey(env = process.env, name = env.TRANSCRIBE_CREDE
   } catch {
     return ''
   }
+}
+
+/** The transcription key: the credential named by TRANSCRIBE_CREDENTIAL (default orkey = OpenRouter; Berget passes its own name). */
+export function readCredentialKey(env = process.env, name = env.TRANSCRIBE_CREDENTIAL ?? 'orkey') {
+  return readCredential(name, env)
 }
 
 function pick(options, key, envName, fallback, parse = Number) {
