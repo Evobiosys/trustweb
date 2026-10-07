@@ -43,6 +43,16 @@
 #                              and solo.html), context chosen by path at runtime
 #                              (src/solo.ts detectContext()). solo.html itself is
 #                              unchanged and stays the generic demo too.
+#   app.trustintheweb.org/     the SAME TrustWeb app at its domain's root (wave 3,
+#                              2026-10-07), built with base "/" and linking to the
+#                              website at https://trustintheweb.org/. Deploy it ALONE
+#                              (never touches app.idea2.site) with
+#                                TW_APP_TARGET=trustintheweb ./scripts/deploy_wot.sh
+#                              Its own directory /srv/questhub-static/app-trustintheweb,
+#                              its own Caddy site block (scripts/trustweb_domains.sh).
+#                              Storage is per origin: a phone's TrustWeb data stays on
+#                              the origin it was made on (app.idea2.site for everyone
+#                              before 2026-10-07); moving = Backup there, Restore here.
 #   idea2.site/trustweb/       NOT the app (reversed 2026-09-25, owner: "/tw should
 #                              redirect to /trustweb and /trustweb should show what /tw
 #                              shows, instead of directing to the app"). A TrustWeb-
@@ -93,6 +103,8 @@ rsh() { "${SSHENV[@]}" ssh questhub "$@"; }
 DEMO20_ADDRESS="${VITE_WOT_ADDRESS:-}"
 unset VITE_WOT_ADDRESS
 unset VITE_WOT_SCENARIO
+# Same reason: the website address is set per build (deploy_trustweb_trustintheweb below), never inherited.
+unset VITE_TW_SITE_URL
 
 # Push one local directory to one remote directory, then repair its context.
 push_dir() {
@@ -131,6 +143,38 @@ deploy_trustweb() {
   "$REPO/scripts/deploy_trustweb_peer.sh" --republish-cards
 }
 
+# app.trustintheweb.org (wave 3): the same app, base "/", linking to https://trustintheweb.org/.
+# Built into its own outDir so apps/trustweb/dist (the app.idea2.site build) is never touched, and
+# pushed to its own directory only. The demo inventory card (demo-peer.json) is copied over from the
+# app.idea2.site directory on the server: one demo peer, one relay (its card names app.idea2.site/relay;
+# both hosts proxy /relay/* to the same relay process, which routes on the recipient DID only).
+REMOTE_TRUSTINTHEWEB=/srv/questhub-static/app-trustintheweb
+TRUSTINTHEWEB_SITE_URL=https://trustintheweb.org/
+deploy_trustweb_trustintheweb() {
+  local out; out="$(mktemp -d /tmp/tw-app-trustintheweb.XXXXXX)"
+  echo "typechecking, building and pushing trustweb for app.trustintheweb.org (base /, site $TRUSTINTHEWEB_SITE_URL)"
+  ( cd "$REPO/apps/trustweb" \
+    && "$REPO/apps/demo/node_modules/.bin/tsc" --noEmit -p tsconfig.json \
+    && TW_BASE=/ VITE_TW_SITE_URL="$TRUSTINTHEWEB_SITE_URL" "$REPO/apps/demo/node_modules/.bin/vite" build --outDir "$out" --emptyOutDir >/dev/null )
+  grep -q "$TRUSTINTHEWEB_SITE_URL" "$out"/assets/*.js || { echo "the build does not link to $TRUSTINTHEWEB_SITE_URL: not pushed" >&2; exit 1; }
+  if grep -q '"/trustweb/assets/' "$out/index.html"; then echo "the build still has base /trustweb/: not pushed" >&2; exit 1; fi
+  push_dir "$out" "$REMOTE_TRUSTINTHEWEB"
+  rm -rf "$out"
+  echo "copying the demo inventory card from $REMOTE_TRUSTWEB (if published)"
+  rsh "if [ -f $REMOTE_TRUSTWEB/demo-peer.json ]; then cp $REMOTE_TRUSTWEB/demo-peer.json $REMOTE_TRUSTINTHEWEB/ && chmod 0644 $REMOTE_TRUSTINTHEWEB/demo-peer.json && sudo chcon --reference=$REF $REMOTE_TRUSTINTHEWEB/demo-peer.json && echo '  demo-peer.json copied'; else echo '  no card published: nothing to copy'; fi"
+}
+
+TRUSTINTHEWEB_URLS=(
+  "https://app.trustintheweb.org/"
+  "https://app.trustintheweb.org/solo.html"
+  "https://app.trustintheweb.org/demo"
+  "https://app.trustintheweb.org/emergent-demo"
+  "https://app.trustintheweb.org/ea-demo"
+  "https://app.trustintheweb.org/manifest.json"
+  "https://app.trustintheweb.org/hosted/status"
+  "https://app.trustintheweb.org/backup/health"
+)
+
 TRUSTWEB_URLS=(
   "https://app.idea2.site/trustweb/"
   "https://app.idea2.site/trustweb"
@@ -152,7 +196,15 @@ TRUSTWEB_URLS=(
 # every other spelling just redirects there. A 200 (or 308) on any of them
 # says nothing about whether THIS deploy, of the app, actually succeeded.
 
-if [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
+case "${TW_APP_TARGET:-}" in
+  ""|idea2) ;;
+  trustintheweb) ;;
+  *) echo "unknown TW_APP_TARGET: ${TW_APP_TARGET} (idea2 or trustintheweb)" >&2; exit 2 ;;
+esac
+
+if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then
+  deploy_trustweb_trustintheweb
+elif [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
   deploy_trustweb
 else
 echo "building and pushing demo1 (base /wot/demo1/, QR only)"
@@ -262,7 +314,9 @@ verify_urls=(
   "https://app.idea2.site/wot/app"
   "https://evobiosys.org/rebiosys/"
 )
-if [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
+if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then
+  verify_urls=("${TRUSTINTHEWEB_URLS[@]}")
+elif [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
   verify_urls=("${TRUSTWEB_URLS[@]}")
 else
   verify_urls+=("${TRUSTWEB_URLS[@]}")
@@ -296,21 +350,23 @@ for u in "${verify_urls[@]}"; do
   [ "$code" = "200" ] || fail=1
 done
 
+relay_host=app.idea2.site
+[ "${TW_APP_TARGET:-}" = "trustintheweb" ] && relay_host=app.trustintheweb.org
 relay=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
-  https://app.idea2.site/relay/send -H 'content-type: application/json' \
+  "https://$relay_host/relay/send" -H 'content-type: application/json' \
   -d '{"to":"did:peer:2.deploycheck"}' 2>/dev/null || true)
 relay=${relay: -3}
 if [ "$relay" != "202" ]; then
-  relay=$(rsh "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -X POST https://app.idea2.site/relay/send -H 'content-type: application/json' -d '{\"to\":\"did:peer:2.deploycheck\"}'" 2>/dev/null || true)
+  relay=$(rsh "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -X POST https://$relay_host/relay/send -H 'content-type: application/json' -d '{\"to\":\"did:peer:2.deploycheck\"}'" 2>/dev/null || true)
   relay=${relay: -3}
 fi
-printf '  %-46s %s\n' "POST app.idea2.site/relay/send" "$relay"
+printf '  %-46s %s\n' "POST $relay_host/relay/send" "$relay"
 [ "$relay" = "202" ] || fail=1
 
 echo "--------"
 if [ "$fail" = "0" ]; then
   echo "all good"
-  echo "live: https://app.idea2.site/wot/demo/"
+  if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then echo "live: https://app.trustintheweb.org/"; else echo "live: https://app.idea2.site/wot/demo/"; fi
 else
   echo "SOMETHING IS NOT 200 -- read the table above before demoing" >&2
   exit 1

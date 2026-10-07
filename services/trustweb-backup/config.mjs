@@ -48,7 +48,9 @@
 //   TRANSCRIBE_UPLOADS_PER_IP        1            audio uploads in flight per client (IPv6: per /64)
 //   TRANSCRIBE_MAX_BYTES             21600000     1 h at 48 kbps
 //   FEEDBACK_FILE                    path of the 0600 JSON-lines file. Unset = feedback off.
-//   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site
+//   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site plus the TrustInTheWeb sites
+//                                    (trustintheweb.org, trustintheweb.com, app.trustintheweb.org; production also sets it in a
+//                                    systemd drop-in, scripts/trustweb_domains.sh backup-env)
 //   FEEDBACK_MAX_BYTES               2000000
 //   FEEDBACK_PER_HOUR                5            per IP
 //   SUBSCRIBER_URL                   (unset = off) where a feedback entry with newsletter:true is forwarded, e.g. https://subscriber.questhub.eco/subscribe
@@ -114,6 +116,8 @@ export function transcribeChain({ setting, fallback, bergetKey, openrouterKey })
 }
 
 const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean)
+/** Where the website feedback form may post from: the idea2 pages and the TrustInTheWeb sites (wave 3). */
+const DEFAULT_FEEDBACK_ORIGINS = 'https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org'
 
 export function loadConfig(options = {}) {
   const setting = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', PROVIDER_AUTO, String) // an unknown name is kept: /transcribe answers 503 for it
@@ -187,7 +191,7 @@ export function loadConfig(options = {}) {
 
     feedbackFile,
     feedbackConfigured: feedbackFile !== '',
-    feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? 'https://idea2.site,https://app.idea2.site'),
+    feedbackOrigins: options.feedbackOrigins ?? list(process.env.FEEDBACK_ORIGINS ?? DEFAULT_FEEDBACK_ORIGINS),
     feedbackMaxBytes: pick(options, 'feedbackMaxBytes', 'FEEDBACK_MAX_BYTES', 2_000_000),
     feedbackPerHour: pick(options, 'feedbackPerHour', 'FEEDBACK_PER_HOUR', 5),
     subscriberUrl: pick(options, 'subscriberUrl', 'SUBSCRIBER_URL', '', String),
