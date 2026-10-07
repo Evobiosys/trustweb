@@ -5,7 +5,7 @@
  * the same carry-over twice changes nothing.
  */
 import { Audience, LineStatus, Ring, Tag, isDemoItem, isDemoPerson } from '../../src/model.ts'
-import { DemoContext, Persona, seedState } from '../../src/seed.ts'
+import { DemoContext, Persona, RETIRED_SEED_ITEM_TEXTS, seedState } from '../../src/seed.ts'
 import { isPublicDemoPerson } from '../../src/demo_inventory_public.ts'
 import {
   CarryPlan, DemoCleanChoice, buildCarryOver, carryPlan, dummyIds, freshFromCarry, mergeCarryOver, parseCarry,
@@ -47,8 +47,22 @@ describe('dummyIds', () => {
     const d = dummyIds(s, DemoContext.Generic)
     expect(d.people.size).toBe(7) // six fictional friends plus the owner's public demo person (2026-10-07)
     expect(d.people.has('own-1')).toBe(false)
-    expect(d.inventory.size).toBe(2)
+    expect(d.inventory.size).toBe(3)
     expect(d.inventory.has('own-thing')).toBe(false)
+  })
+  it('also recognises a thing an EARLIER build seeded and this one does not (the retired motorbike), and still not the person\'s own', () => {
+    const s = demoPhone()
+    s.inventory.push({ id: 'old-seed', text: RETIRED_SEED_ITEM_TEXTS[0], audience: Audience.FriendsOfFriends, included: true, createdAt: NOW })
+    const d = dummyIds(s, DemoContext.Generic)
+    expect(d.inventory.has('old-seed')).toBe(true)
+    expect(d.inventory.has('own-thing')).toBe(false)
+    expect(RETIRED_SEED_ITEM_TEXTS).toContain('Motorbike (125cc), can lend it for a weekend')
+    // "Start clean" drops it with the rest instead of carrying it to the live app unmarked
+    const c = buildCarryOver(s, DemoContext.Generic, DemoCleanChoice.StartClean, NOW)
+    expect(c.inventory.map((i) => i.id)).toEqual(['own-thing'])
+    // and "Keep them" carries it marked dummy
+    const k = buildCarryOver(s, DemoContext.Generic, DemoCleanChoice.KeepThem, NOW)
+    expect(k.demo.inventory).toContain('old-seed')
   })
   it('works for every context (the ea seed included)', () => {
     for (const ctx of [DemoContext.Emergent, DemoContext.Ea]) {
@@ -80,7 +94,7 @@ describe('buildCarryOver', () => {
     expect(c.people).toHaveLength(7) // own-1 plus the six fictional friends; the owner's public demo person stays behind (review-wave4)
     expect(c.demo.people).toHaveLength(6)
     expect(c.people.some((p) => isPublicDemoPerson(p))).toBe(false)
-    expect(c.demo.inventory).toHaveLength(2)
+    expect(c.demo.inventory).toHaveLength(3)
     expect(c.people.some((p) => p.lines.some((l) => l.text === 'Added by me to a dummy'))).toBe(true)
   })
   it('never carries the demo identity, its key, its peers, its log or its id', () => {

@@ -70,23 +70,23 @@ const directHere = (who: string): string =>
   `<div class="wt-cosmic"><b>${who} asks you</b><br><small>${who} asks direct contacts only: checked against your own inventory, not passed on to your friends.</small>${card('', 'Nothing of yours matches. Nothing is passed on.')}</div>`
 const noMatch = `<div class="wt-h">Call into your web</div>${card('', '<b>No match</b>')}<small>Only your direct contacts were asked.</small>`
 const DIRECT_ONLY = 'Ask only my direct contacts: <b>On</b>'
-const AISHA_REAL = 'In real life: she just opened an animal welfare fund.'
+const AISHA_REAL = 'In real life: she just opened a small fund for open-source tools.'
 /** The widest tier, as the app names it (wave 2, P22): acquaintances, and through a friend, friends of friends. */
 const WIDEST = 'Shared with: acquaintances (and friends of friends, through a friend)'
 
-const MOTORBIKE = 'Motorbike (125cc), can lend it for a weekend'
+const LOUDSPEAKERS = 'Loudspeakers'
 const POSITION = 'We have a new position to fill'
-const FUND = 'Aisha just opened an animal welfare fund'
+const FUND = 'Aisha just opened a small fund for open-source tools'
 
 const MODES: Mode[] = [
   {
     id: '2',
     label: '2 people · Ask a friend',
     title: 'Ask a friend',
-    intro: 'Your web is the people you have connected with. Jonas meets Maya, they connect with one scan, and later Jonas asks his web for a motorbike.',
+    intro: 'Your web is the people you have connected with. Jonas meets Maya, they connect with one scan, and later Jonas asks his web for loudspeakers.',
     people: [
       { id: 'jonas', name: 'Jonas', role: 'asks his web' },
-      { id: 'maya', name: 'Maya', role: 'can lend a motorbike' },
+      { id: 'maya', name: 'Maya', role: 'can lend loudspeakers' },
     ],
     links: [{ a: 'jonas', b: 'maya', tie: Tie.Friend, since: 2 }],
     steps: [
@@ -99,7 +99,7 @@ const MODES: Mode[] = [
         title: 'They meet in person', changed: ['jonas'],
         text: 'They talk over coffee. With Maya\'s yes, Jonas records it for his own notes. Nothing is shared with anyone.',
         screens: {
-          jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Maya:</i> I can lend you my motorbike some weekend.')}`,
+          jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Maya:</i> I can lend you my loudspeakers some weekend.')}`,
           maya: quiet('In a conversation with Jonas.'),
         },
       },
@@ -114,17 +114,17 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes what she could lend', changed: ['maya'],
         text: 'One line in her inventory (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
-        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${MOTORBIKE}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
+        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${LOUDSPEAKERS}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
       },
       {
         title: 'Jonas calls into his web', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
         text: 'He asks in his own words. The question goes only to people he is connected with.',
-        screens: { jonas: ask('Does anyone have a motorbike I could borrow?', 1), maya: quiet('The ask arrives and is checked on this phone.') },
+        screens: { jonas: ask('Does anyone have loudspeakers I could borrow?', 1), maya: quiet('The ask arrives and is checked on this phone.') },
       },
       {
         title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
         text: 'Only a person can say yes. Maya sees who asks and exactly which line matched. Every answer comes back after a fixed 30-second window, so a fast or slow reply reveals nothing.',
-        screens: { jonas: waiting(24), maya: consent('Jonas', 'Does anyone have a motorbike...?', MOTORBIKE) },
+        screens: { jonas: waiting(24), maya: consent('Jonas', 'Does anyone have loudspeakers...?', LOUDSPEAKERS) },
       },
       {
         title: 'Maya shares', changed: ['maya'], path: ['maya', 'jonas'],
@@ -134,7 +134,7 @@ const MODES: Mode[] = [
       {
         title: 'Jonas gets his answer', changed: ['jonas'], path: ['maya', 'jonas'],
         text: 'He sees what Maya chose to share, and nothing else from her phone.',
-        screens: { jonas: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b><br>${MOTORBIKE}`)}`, maya: web(['Jonas']) },
+        screens: { jonas: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b><br>${LOUDSPEAKERS}`)}`, maya: web(['Jonas']) },
       },
       {
         title: 'Not sharing looks the same as having nothing', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
@@ -220,7 +220,7 @@ const MODES: Mode[] = [
     intro: 'Example B from our funding application (Manifund): a friend finds a fund through your close friend\'s network, someone neither of you knows. Jonas is the friend in the middle.',
     note: 'Design preview: asks that pass through a second person are how TrustWeb is designed. The live phones on this page do one hop today.',
     people: [
-      { id: 'lena', name: 'Lena', role: 'Jonas\'s friend, animal welfare project' },
+      { id: 'lena', name: 'Lena', role: 'Jonas\'s friend, open-source project' },
       { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
       { id: 'maya', name: 'Maya', role: 'Jonas\'s close friend' },
       { id: 'aisha', name: 'Aisha', role: 'Maya\'s acquaintance, no app' },
@@ -233,7 +233,7 @@ const MODES: Mode[] = [
     steps: [
       {
         title: 'Four people, three apps', changed: [],
-        text: 'Lena works on an animal welfare project. Aisha does not use TrustWeb at all.',
+        text: 'Lena works on an open-source project. Aisha does not use TrustWeb at all.',
         screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
       {
@@ -243,13 +243,13 @@ const MODES: Mode[] = [
       },
       {
         title: 'Lena calls into her web', changed: ['lena', 'jonas', 'maya'], path: ['lena', 'jonas', 'maya'],
-        text: '"Any new animal welfare funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and he cannot read the answer.',
-        screens: { lena: ask('Any new animal welfare funding?', 1), jonas: quiet('Passed on. Jonas is not asked each time.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
+        text: '"Any new open-source funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and he cannot read the answer.',
+        screens: { lena: ask('Any new open-source funding?', 1), jonas: quiet('Passed on. Jonas is not asked each time.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
         title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
         text: 'The match is Maya\'s own note. She sees who asks (Lena, a friend of Jonas) and decides. Aisha is never contacted by anyone\'s phone.',
-        screens: { lena: waiting(24), jonas: web(['Lena', 'Maya']), maya: consent('Lena, through Jonas,', 'Any new animal welfare funding?', FUND), aisha: noApp('Nothing reaches Aisha.') },
+        screens: { lena: waiting(24), jonas: web(['Lena', 'Maya']), maya: consent('Lena, through Jonas,', 'Any new open-source funding?', FUND), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
         title: 'The answer travels back through Jonas', changed: ['maya', 'jonas'], path: ['maya', 'jonas', 'lena'],
@@ -265,7 +265,7 @@ const MODES: Mode[] = [
     direct: [
       {
         title: 'Four people, three apps', changed: [],
-        text: 'Lena works on an animal welfare project. Aisha does not use TrustWeb at all. Lena has switched on "Ask only my direct contacts" (Settings > Advanced).',
+        text: 'Lena works on an open-source project. Aisha does not use TrustWeb at all. Lena has switched on "Ask only my direct contacts" (Settings > Advanced).',
         screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
       {
@@ -275,8 +275,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Lena calls into her web, direct contacts only', changed: ['lena', 'jonas'], path: ['lena', 'jonas'],
-        text: '"Any new animal welfare funding?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on to Maya.',
-        screens: { lena: askDirect('Any new animal welfare funding?'), jonas: directHere('Lena'), maya: quiet('Nothing reaches Maya.'), aisha: noApp('Nothing reaches Aisha.') },
+        text: '"Any new open-source funding?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on to Maya.',
+        screens: { lena: askDirect('Any new open-source funding?'), jonas: directHere('Lena'), maya: quiet('Nothing reaches Maya.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
         title: 'Lena sees "No match"', changed: ['lena'], path: ['jonas', 'lena'],

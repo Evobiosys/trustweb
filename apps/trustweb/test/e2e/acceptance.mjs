@@ -3,8 +3,8 @@
  * split view (solo.html): two personas, two relay identities, paired through
  * the real one-scan connect link, talking over a real relay.
  *
- *   1. English "motorbike" ask -> Maya's consent prompt appears with the
- *      motorbike line -> she shares -> Jonas sees it after the 30 s window.
+ *   1. English "loudspeakers" ask -> Maya's consent prompt appears with the
+ *      Loudspeakers line -> she shares -> Jonas sees it after the 30 s window.
  *   2. An unrelated English ask -> Maya's phone stays silent (no prompt),
  *      Jonas sees "No match", Maya's log records "stayed silent".
  *   3. A matching ask Maya declines -> Jonas sees the same "No match".
@@ -106,15 +106,15 @@ async function main() {
     const waitResult = () => jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
 
     // 1. match + share
-    await ask('Does anyone have a motorbike I could borrow?')
+    await ask('Does anyone have loudspeakers I could borrow?')
     await maya.getByText('Jonas asks').waitFor({ timeout: 20_000 })
     const matched = await maya.locator('.ask-line').allInnerTexts()
-    ok('Maya\'s consent prompt appears for the English motorbike ask', true)
-    ok('the prompt shows the motorbike line', matched.some((t) => /Motorbike/.test(t)), JSON.stringify(matched))
+    ok('Maya\'s consent prompt appears for the English loudspeakers ask', true)
+    ok('the prompt shows the Loudspeakers line (and never the OnlyMe room)', matched.some((t) => /Loudspeakers/.test(t)) && !matched.some((t) => /visiting friends/.test(t)), JSON.stringify(matched))
     await maya.getByRole('button', { name: 'Share these' }).click()
     await waitResult()
     const shared = await jonas.locator('.card.asked').innerText()
-    ok('Jonas receives what Maya shared', /Maya chose to share/.test(shared) && /Motorbike/.test(shared), shared)
+    ok('Jonas receives what Maya shared', /Maya chose to share/.test(shared) && /Loudspeakers/.test(shared), shared)
     const glow = await jonas.locator('.node.shared').allInnerTexts()
     ok('Maya glows on Jonas\'s rings as the one who shared', glow.length === 1 && /Maya/.test(glow[0]), JSON.stringify({ glow, nodes: await jonas.locator('.node').allInnerTexts() }))
     await maya.getByRole('button', { name: 'Back to the app' }).click()
@@ -139,7 +139,7 @@ async function main() {
     ok('Maya\'s log records the silent ask', /piano/.test(log) && /stayed silent/.test(log), log)
 
     // 3. matching ask, declined: indistinguishable from no match
-    await ask('Anyone got a motorcycle?')
+    await ask('Anyone got some speakers?')
     await maya.getByText('Jonas asks').waitFor({ timeout: 20_000 })
     await maya.getByRole('button', { name: 'Don\'t share' }).click()
     await waitResult()

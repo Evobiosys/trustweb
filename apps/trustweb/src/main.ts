@@ -3286,9 +3286,8 @@ function requestsSheet(): void {
 // ---------------------------------------------------------------------------
 
 const SUGGESTIONS = [
-  'Does anyone have a motorbike I could borrow?',
+  'Does anyone have loudspeakers I could borrow?',
   'Who is hiring?',
-  'Any new animal welfare funding?',
   'Who has a spare room in Vienna?',
 ]
 

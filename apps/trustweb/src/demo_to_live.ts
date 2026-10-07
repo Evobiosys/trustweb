@@ -30,7 +30,7 @@
  */
 import type { AppState, InventoryItem, NoteLine, PastMeeting, Person } from './model'
 import { AboutKind, AUDIENCES, isDemoItem, isDemoPerson, LineStatus, RINGS, TAGS } from './model'
-import { DemoContext, Persona, seedState } from './seed'
+import { DemoContext, Persona, RETIRED_SEED_ITEM_TEXTS, seedState } from './seed'
 import { isPublicDemoPerson } from './demo_inventory_public'
 import { markDemo } from './provenance'
 
@@ -93,11 +93,12 @@ export function demoContentForLivePhone(now: number, ctx: DemoContext): { people
  * what the demo phone was seeded with (seed.ts). A seeded phone never recorded
  * which ids came from the seed, so seeded people are recognised by name and
  * context, seeded things by their text (both fixed per context; ids and dates are random).
+ * Things an earlier build seeded and this one does not are listed in seed.ts RETIRED_SEED_ITEM_TEXTS.
  */
 export function dummyIds(s: AppState, ctx: DemoContext): { people: Set<string>; inventory: Set<string> } {
   const seed = seedState(Persona.Holder, 0, ctx)
   const seedPeople = new Set(seed.people.map((p) => `${p.name}\u0000${p.context}`))
-  const seedThings = new Set(seed.inventory.map((i) => i.text))
+  const seedThings = new Set([...seed.inventory.map((i) => i.text), ...RETIRED_SEED_ITEM_TEXTS])
   return {
     people: new Set(s.people.filter((p) => isDemoPerson(s, p.id) || seedPeople.has(`${p.name}\u0000${p.context}`)).map((p) => p.id)),
     inventory: new Set(s.inventory.filter((i) => isDemoItem(s, i.id) || seedThings.has(i.text)).map((i) => i.id)),

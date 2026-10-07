@@ -64,6 +64,7 @@ const SYNONYM_GROUPS: string[][] = [
   ['car', 'cars', 'auto'],
   ['drill', 'bohrmaschine'],
   ['ladder', 'leiter'],
+  ['loudspeaker', 'loudspeakers', 'speaker', 'speakers', 'lautsprecher', 'boxen'],
   ['intro', 'intros', 'introduction', 'introductions'],
 ]
 

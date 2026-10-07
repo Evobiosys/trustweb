@@ -3,7 +3,7 @@
  * trustweb reuses this app's matcher and gate and has no toolchain of its own.
  *
  * The decision-level half of the TrustWeb acceptance test: an English
- * inventory line "motorbike" plus an English free-text ask for it surfaces the
+ * inventory line "Loudspeakers" plus an English free-text ask for it surfaces the
  * holder's consent prompt; an unrelated English ask stays silent. The browser
  * half (the real screens, over a relay) is apps/trustweb/test/e2e/acceptance.mjs.
  */
@@ -29,7 +29,7 @@ function holder(): AppState {
     log: [],
     notificationsOn: false,
     inventory: [
-      { id: 'i1', text: 'Motorbike (125cc), can lend it for a weekend', audience: Audience.FriendsOfFriends, included: true, createdAt: T0 },
+      { id: 'i1', text: 'Loudspeakers', audience: Audience.FriendsOfFriends, included: true, createdAt: T0 },
       { id: 'i2', text: 'Spare room in Vienna', audience: Audience.OnlyMe, included: true, createdAt: T0 },
     ],
     people: [{
@@ -68,9 +68,10 @@ describe('trustweb lexicon', () => {
 })
 
 describe('trustweb acceptance (decision level)', () => {
-  it('an English motorbike ask surfaces the holder consent prompt', () => {
-    expect(surfaces(holder(), Ring.Friend, 'Does anyone have a motorbike I could borrow?')).toBe(true)
-    expect(surfaces(holder(), Ring.Acquaintance, 'anyone got a motorcycle?')).toBe(true)
+  it('an English loudspeakers ask surfaces the holder consent prompt', () => {
+    expect(surfaces(holder(), Ring.Friend, 'Does anyone have loudspeakers I could borrow?')).toBe(true)
+    expect(surfaces(holder(), Ring.Acquaintance, 'anyone got some speakers?')).toBe(true)
+    expect(surfaces(holder(), Ring.Acquaintance, 'Hat jemand Lautsprecher?')).toBe(true)
   })
 
   it('an unrelated English ask leaves the holder silent', () => {
@@ -167,12 +168,38 @@ describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
     }
   })
 
-  it('the motorbike ask surfaces and the Vienna / piano asks stay silent, in every context', () => {
+  it('the loudspeakers and the couch asks surface, the piano ask and the OnlyMe room probe stay silent, in every context', () => {
     for (const ctx of DEMO_CONTEXTS) {
       const state = seedState(Persona.Holder, T1, ctx)
-      expect(surfaces(state, Ring.Friend, 'Does anyone have a motorbike I could borrow?')).toBe(true)
-      expect(surfaces(state, Ring.Friend, 'Who has a spare room in Vienna?')).toBe(false)
+      expect(surfaces(state, Ring.Friend, 'Does anyone have loudspeakers I could borrow?')).toBe(true)
+      // "room" and "couch" are one synonym group (lexicon.ts): a room ask in Vienna now finds Maya's couch (wave 5 item i) ...
+      expect(surfaces(state, Ring.Friend, 'Who has a spare room in Vienna?')).toBe(true)
+      expect(surfaces(state, Ring.Friend, 'Does anyone have a couch I could sleep on in Vienna?')).toBe(true)
+      // ... but never her OnlyMe room: no ring admits it, whatever is asked.
+      for (const ring of [Ring.Close, Ring.Friend, Ring.Acquaintance]) {
+        expect([...threadsForRing(state, ring).refs.values()].map((r) => r.text).join(' | ')).not.toMatch(/visiting friends/)
+      }
+      expect(surfaces(state, Ring.Friend, 'Does anyone have a place for visiting friends?')).toBe(false)
       expect(surfaces(state, Ring.Friend, 'Does anyone know a good piano teacher?')).toBe(false)
+    }
+  })
+
+  it('the room probe really exercises the OnlyMe room: made visible to friends of friends, the same ask surfaces', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      const room = state.inventory.find((i) => i.text.startsWith('Spare room in Vienna'))
+      expect(room?.audience).toBe(Audience.OnlyMe)
+      if (room) room.audience = Audience.FriendsOfFriends
+      expect(surfaces(state, Ring.Friend, 'Does anyone have a place for visiting friends?')).toBe(true)
+    }
+  })
+
+  it('the seeded web mentions neither an animal welfare fund nor the retired motorbike', () => {
+    for (const ctx of DEMO_CONTEXTS) {
+      const state = seedState(Persona.Holder, T1, ctx)
+      const all = JSON.stringify(state)
+      expect(all).not.toMatch(/animal welfare/i)
+      expect(all).not.toMatch(/motorbike/i)
     }
   })
 

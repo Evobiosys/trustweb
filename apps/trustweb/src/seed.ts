@@ -18,24 +18,25 @@
  *                                 personas (researcher, fund manager,
  *                                 community organizer, ...), no real people.
  *
- * Maya (holder) always carries the motorbike (the "Motorrad" demo) plus
- * notes that answer the two illustrated examples: a job lead (Example A) and
- * a new fund (Example B). Her spare room is "Only me", to show that a line
- * shared with nobody reads as "no match". This inventory is the same across
- * every context -- the acceptance script (test/e2e/acceptance.mjs) and the
- * matcher regression test (apps/demo/test/trustweb_match.test.ts) both
- * depend on it and neither reads People, so it is safe to vary People freely
- * per context.
+ * Maya (holder) always carries two things she can lend or offer, Loudspeakers
+ * and "Couch when you are in Vienna" (wave 5, owner 2026-10-07: things beyond
+ * housing; they replaced the motorbike), plus notes that answer the two
+ * illustrated examples: a job lead (Example A) and a new fund (Example B).
+ * Her spare room is "Only me", to show that a line shared with nobody reads
+ * as "no match". This inventory is the same across every context -- the
+ * acceptance script (test/e2e/acceptance.mjs) and the matcher regression test
+ * (apps/demo/test/trustweb_match.test.ts) both depend on it and neither reads
+ * People, so it is safe to vary People freely per context.
  *
- * None of the seeded People lines use the words "motorbike"/"motorcycle" or
- * "Vienna", so they cannot interfere with the acceptance script's existing
- * motorbike ask, or produce a false match against Maya's own "spare room in
- * Vienna" inventory item (Audience.OnlyMe -- it must stay silent to anyone
- * asking). Tomás's second line used to say "flatmate in Vienna" and DID
- * collide with that ask at Ring.Friend; it is gone now, not just renamed --
- * do not add a Vienna-flavoured People line back without re-running the
- * acceptance script's step 4 ("Who has a spare room in Vienna?" must stay
- * silent) against every ring a context uses.
+ * None of the seeded People lines use the words "loudspeaker"/"speaker",
+ * "couch"/"room", "visiting" or "Vienna", so they cannot interfere with the
+ * acceptance script's loudspeakers ask, or produce a false match against
+ * Maya's own OnlyMe spare room. Because "room" and "couch" are one synonym
+ * group (lexicon.ts), a room ask in Vienna now surfaces the couch line, never
+ * the OnlyMe room: the probe that proves the room stays silent is one only
+ * that line answers ("a place for visiting friends"; see trustweb_match.test.ts,
+ * which also proves the probe WOULD match the room if it were not OnlyMe).
+ * Do not add a Vienna/room/visiting People line without re-running both.
  *
  * Tyler Cowen sits at Ring.Intending: someone Maya plans to meet, not yet in
  * her web. Per model.ts, audienceAdmits() returns false for that ring
@@ -100,6 +101,13 @@ export function isDemoContext(v: string | null): v is DemoContext {
 
 const DAY = 86_400_000
 
+/**
+ * Texts of things an EARLIER build seeded into Maya's inventory and this build no longer does (wave 5 item i: the motorbike).
+ * A demo phone seeded before still holds them, and dummyIds recognises seeded things by text, so "Start clean", "Dismiss them" and
+ * the carry-over keep treating them as dummy content. Append here whenever a seeded thing is removed or renamed; never delete an entry.
+ */
+export const RETIRED_SEED_ITEM_TEXTS: readonly string[] = ['Motorbike (125cc), can lend it for a weekend']
+
 function line(text: string, tag: Tag, audience: Audience, notedAt: number): NoteLine {
   return { id: randomId(8), text, tag, audience, status: LineStatus.Current, notedAt, checkedAt: notedAt }
 }
@@ -123,7 +131,7 @@ function genericPeople(now: number): Person[] {
       line('Moving to Lisbon in spring', Tag.Note, Audience.OnlyMe, now - 150 * DAY),
     ]),
     person('Sam', 'EAGx, coffee break', Ring.Acquaintance, now - 90 * DAY, [
-      line('Just opened an animal welfare fund', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
+      line('Just opened a small fund for open-source tools', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
     ]),
     person('Tomás', 'caught up at a meetup', Ring.Close, now - 800 * DAY, [
       line('Looking for funding for his biosecurity project', Tag.Looking, Audience.Friends, now - 150 * DAY),
@@ -153,7 +161,7 @@ function emergentPeople(now: number): Person[] {
       line('Looking for a technical co-founder', Tag.Looking, Audience.Friends, now - 25 * DAY),
     ]),
     person('Sam', 'EAGx, coffee break', Ring.Acquaintance, now - 90 * DAY, [
-      line('Just opened an animal welfare fund', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
+      line('Just opened a small fund for open-source tools', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
     ]),
     person('Aisha Konaté', 'community organizer, met at a workshop', Ring.Friend, now - 300 * DAY, [
       line('Has a spare guest bed in Lisbon for March', Tag.Offer, Audience.FriendsOfFriends, now - 15 * DAY),
@@ -171,7 +179,7 @@ function eaPeople(now: number): Person[] {
       line('Looking for funding for her biosecurity project', Tag.Looking, Audience.Friends, now - 150 * DAY),
     ]),
     person('Marcus Feldman', 'fund manager at an effective-giving fund', Ring.Acquaintance, now - 90 * DAY, [
-      line('Just opened an animal welfare fund', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
+      line('Just opened a small fund for open-source tools', Tag.Resource, Audience.FriendsOfFriends, now - 90 * DAY),
     ]),
     person('Aisha Konaté', 'community organizer, met at a workshop', Ring.Friend, now - 300 * DAY, [
       line('Has a spare guest bed in Lisbon for March', Tag.Offer, Audience.FriendsOfFriends, now - 15 * DAY),
@@ -210,7 +218,8 @@ export function seedState(persona: Persona, now: number, context: DemoContext = 
       log: [],
       notificationsOn: false,
       inventory: [
-        { id: randomId(8), text: 'Motorbike (125cc), can lend it for a weekend', audience: Audience.FriendsOfFriends, included: true, createdAt: now - 20 * DAY },
+        { id: randomId(8), text: 'Loudspeakers', audience: Audience.FriendsOfFriends, included: true, createdAt: now - 20 * DAY },
+        { id: randomId(8), text: 'Couch when you are in Vienna', audience: Audience.FriendsOfFriends, included: true, createdAt: now - 40 * DAY },
         { id: randomId(8), text: 'Spare room in Vienna, for visiting friends', audience: Audience.OnlyMe, included: true, createdAt: now - 60 * DAY },
       ],
       people: peopleFor(context, now),

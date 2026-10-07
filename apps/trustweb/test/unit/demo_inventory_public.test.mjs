@@ -58,10 +58,10 @@ describe('the data module', () => {
 describe('the seed: Jakob in every demo web (allowlist)', () => {
   const EXPECTED_PEOPLE = { [DemoContext.Generic]: 7, [DemoContext.Emergent]: 7, [DemoContext.Ea]: 8 }
   for (const ctx of DEMO_CONTEXTS) {
-    it(`${ctx}: one person Jakob at Ring.Friend with exactly the ten lines, the new people count, inventory unchanged`, () => {
+    it(`${ctx}: one person Jakob at Ring.Friend with exactly the ten lines, the new people count, Maya's three things`, () => {
       const seed = seedState(Persona.Holder, NOW, ctx)
       expect(seed.people).toHaveLength(EXPECTED_PEOPLE[ctx])
-      expect(seed.inventory).toHaveLength(2)
+      expect(seed.inventory.map((i) => i.text)).toEqual(['Loudspeakers', 'Couch when you are in Vienna', 'Spare room in Vienna, for visiting friends'])
       const jakobs = seed.people.filter((p) => p.name === JAKOB_DEMO_NAME)
       expect(jakobs).toHaveLength(1)
       expect(jakobs[0].ring).toBe(Ring.Friend)
@@ -172,7 +172,7 @@ describe('data safety: the owner demo person never reaches a live phone', () => 
     const before = JSON.stringify(s)
     add(s)
     expect(isDemoPerson(s, 'real-1')).toBe(false)
-    expect(s.inventory.filter((i) => isDemoItem(s, i.id))).toHaveLength(2)
+    expect(s.inventory.filter((i) => isDemoItem(s, i.id))).toHaveLength(3)
     expect(s.v).toBe(1)
     remove(s)
     expect(JSON.stringify(s)).toBe(before)
