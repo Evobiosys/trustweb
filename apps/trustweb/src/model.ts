@@ -273,6 +273,19 @@ export interface InventoryItem {
   source?: ItemSource
   /** A picture the person attached (image_store.ts, this phone only; never sent). Absent: none. */
   imageId?: string
+  /**
+   * Notes added to this thing later ("Who or what was this about?" > an existing item, wave 5): context, oldest first, at most
+   * CONTEXT_MAX (note_fields.ts). This phone only: the matcher reads the item's text alone and answers never carry it. Absent: none.
+   */
+  context?: InventoryContext[]
+}
+
+/** One note added as context to an inventory item. */
+export interface InventoryContext {
+  text: string
+  at: number
+  /** The recording it came from, when there was one (chain of proof). */
+  meetingId?: string
 }
 
 export enum LogOutcome {
@@ -386,6 +399,10 @@ export interface PastMeeting {
   fullSentAt?: number
   /** Kept from another phone while its transcript was still arriving: where to look for the full version. Absent: complete. */
   late?: LateLink
+  /** What was typed under "General notes" on Record (wave 5), as typed. Absent: none. */
+  generalNotes?: string
+  /** A plain note, about neither a person nor a thing ("none of these", wave 5): kept here only, with no link. Absent: false. */
+  plain?: boolean
 }
 
 /** Where the Swiss server's transcription of one recording stands. A fixed set. */

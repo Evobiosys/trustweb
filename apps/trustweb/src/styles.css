@@ -674,3 +674,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .feed-empty ul{margin:8px 0 0 18px; text-align:left; font-size:13px; line-height:1.6}
 .share-row{border-top:1px solid var(--line); padding:10px 0}
 .item-extras{margin:10px 0}
+
+/* wave 5: General notes on Record, "none of these", context on a thing, the General notes snippet in the past list */
+.general-notes-sec{margin:14px 0 4px}
+.general-notes-sec .eyebrow{margin-bottom:6px}
+.general-notes{width:100%; resize:vertical; min-height:72px; font:inherit; line-height:1.4}
+.about-none{margin-top:6px}
+.about-ctx-hint{margin:8px 0 4px}
+.about-none-value{font-style:italic}
+.pm-snip{display:block; font-style:normal; font-size:12.5px; color:var(--ink-soft); margin-top:2px; overflow-wrap:anywhere}
+.pm-general{white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0 10px}
+.item-context{margin:10px 0}

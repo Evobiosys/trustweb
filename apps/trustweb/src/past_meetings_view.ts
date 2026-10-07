@@ -19,6 +19,7 @@ import { clock } from './recorder'
 import type { Recording } from './recorder'
 import { isoDateLabels, SearchField } from './search'
 import { S } from './strings'
+import { cleanGeneralNotes } from './note_fields'
 import { withDuration } from './webm_duration'
 
 /** At most this many stored meetings; the audio of any that fall off goes with them. */
@@ -66,10 +67,21 @@ export function whenLabel(at: number): string {
   return new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+/** How much of the General notes the list row shows (characters). */
+const SNIPPET_MAX = 80
+
 export function pastMeta(m: PastMeeting): string {
-  const kind = m.fromName ? S.pastFrom(m.fromName) : m.meeting ? S.pastKindMeeting : m.transcript.length || m.durationMs ? S.pastKindMemo : S.pastKindNotes
+  const kind = m.fromName ? S.pastFrom(m.fromName) : m.plain === true ? S.pastKindPlain : m.meeting ? S.pastKindMeeting : m.transcript.length || m.durationMs ? S.pastKindMemo : S.pastKindNotes
   return [kind, whenLabel(m.startedAt), m.where ? S.pastWhere(m.where) : '', m.durationMs ? clock(m.durationMs) : '', S.pastCounts(m.lines.length, m.transcript.length)]
     .filter(Boolean).join(' · ')
+}
+
+/** The first words of what was typed under "General notes", for the list row (wave 5); null when there is none. */
+export function generalSnippet(m: PastMeeting): HTMLElement | null {
+  const general = cleanGeneralNotes(m.generalNotes)
+  if (!general) return null
+  const flat = general.replace(/\s+/g, ' ')
+  return el('em', { class: 'pm-snip', 'data-pm-snip': '1' }, [flat.length > SNIPPET_MAX ? flat.slice(0, SNIPPET_MAX).trimEnd() + '...' : flat])
 }
 
 export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
@@ -87,7 +99,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     h.openSheet([
       el('h3', {}, [S.pastTitle]),
       list.length === 0 ? el('p', { class: 'meta' }, [S.pastEmpty]) : null,
-      ...list.map((m) => el('button', { class: 'pm-row', onclick: () => open(m) }, [el('b', {}, [m.about, dummyFor(m)]), el('i', {}, [pastMeta(m)])])),
+      ...list.map((m) => el('button', { class: 'pm-row', onclick: () => open(m) }, [el('b', {}, [m.about, dummyFor(m)]), el('i', {}, [pastMeta(m)]), generalSnippet(m)])),
       el('p', { class: 'foot' }, [S.pastFoot]),
     ])
   }
@@ -145,10 +157,13 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
 
   function open(m: PastMeeting, focus?: PastFocus, from?: ItemSource): void {
     const person = m.personId ? h.state().people.find((p) => p.id === m.personId) : undefined
+    const general = cleanGeneralNotes(m.generalNotes)
     h.openSheet([
       el('button', { class: 'back-link', onclick: listSheet }, ['‹ ' + S.pastTitle]),
       el('h3', {}, [m.about, dummyFor(m)]),
       el('p', { class: 'meta' }, [pastMeta(m)]),
+      general ? el('h4', { class: 'eyebrow' }, [S.pastGeneralNotes]) : null,
+      general ? el('p', { class: 'pm-general', 'data-pm-general': '1' }, [general]) : null,
       el('h4', { class: 'eyebrow' }, [S.pastNotes]),
       m.lines.length
         ? el('div', { class: 'sheet-lines' }, m.lines.map((l, i) => el('div', { class: 'sline', 'data-pm-note': String(i) }, [h.tagChip(l.tag), el('span', {}, [l.text])])))

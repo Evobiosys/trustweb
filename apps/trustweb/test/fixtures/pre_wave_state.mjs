@@ -108,6 +108,10 @@ export function roundBState() {
   // wave 2 (B4): an imported line the person opened and kept
   s.inventory.push({ id: 'imp2', text: 'Can lend a cargo bike', audience: 'me', included: true, createdAt: NOW - DAY, source: { kind: 'tana', ref: 'fedcba9876543210', reviewedAt: NOW - 3_600_000 } })
   s.meetings[0].fullSentAt = NOW - 3 * DAY
+  // wave 5: General notes on a meeting, a plain note (no person, no thing), and context on a thing; all optional, record stays v:1
+  s.meetings[0].generalNotes = 'Met at the station. She runs a repair cafe.'
+  s.meetings[1].plain = true
+  s.inventory[0].context = [{ text: 'Lent it to Anna in June', at: NOW - 2 * DAY, meetingId: 'm-anna' }, { text: 'Two of them', at: NOW - DAY }]
   s.meetings[1].serverJob = { state: 'running', at: NOW - DAY, takesDone: 0 }
   s.meetings[1].outbox = [{ keyText: 'TW1R-AAAAA-BBBBB', title: 'Meeting with Cargo bike', notes: ['borrowable'], at: NOW - DAY }]
   s.meetings[2].late = { keyText: 'TW1R-CCCCC-DDDDD', etag: '"0123456789abcdef0123456789abcdef"', since: Date.now() - 1000 }
@@ -141,7 +145,8 @@ export function roundBState() {
 export function roundBFields(s) {
   return JSON.stringify({
     transcription: s.transcription, consent: s.serverTranscriptionConsentAt, hosting: s.hosting, imports: s.imports, feed: s.feed, found: s.found,
-    meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late, roughTimes: m.roughTimes })),
+    meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late, roughTimes: m.roughTimes, generalNotes: m.generalNotes, plain: m.plain })),
+    context: s.inventory.map((i) => i.context ?? null),
     received: (s.received ?? []).map((r) => [r.pending, r.keptAs]),
     fediverse: s.people.map((p) => p.fediverse ?? null),
     images: s.inventory.map((i) => i.imageId ?? null),

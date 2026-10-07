@@ -3,6 +3,9 @@
  *   a  "Dismiss them" under "Got it": the embedded demo drops its seeded web, a live phone only what "Show demo content" added
  *   b  the demo's Install button carries "for yourself" beneath it (outside the button)
  *   f  the installed app (display-mode: standalone, navigator.standalone) hides "Add a device" and "Show demo content"
+ *   d  "General notes" on Record without Advanced, above its fields; it rides on the saved note and the past meeting
+ *   c  "none of these" (a plain note) and "what" adding context to an existing thing
+ *   m  a record whose wave-5 fields are damaged still boots; the damage is dropped, the rest untouched
  *   g  the demo page removes a device (never the first); a removed middle phone's persona is reused, never doubled
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8984 ../../node_modules/.bin/tsx ../trustweb/test/e2e/wave5_flow.mjs
@@ -10,7 +13,7 @@
 import { launch, startApp, startPhone, tally } from '../helpers/e2e_harness.mjs'
 
 const t = tally()
-const PARTS = (process.env.PARTS || 'a,b,f,g').split(',')
+const PARTS = (process.env.PARTS || 'a,b,f,g,d,c,m').split(',')
 const errors = []
 const people = (page) => page.locator('.node:not(.you)')
 
@@ -159,6 +162,151 @@ async function partG(browser, base) {
   await ctx.close()
 }
 
+const stateOf = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
+
+/** Record from Web opens "just me" (from Inventory it would open a meeting: record_origin.ts). */
+async function toRecord(page) {
+  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs .tab-record').click()
+  await page.locator('.rec-circle').waitFor()
+}
+
+async function partD(browser, base) {
+  const { ctx, page } = await newPage(browser, { width: 390, height: 844 })
+  await startPhone(page, base, 'Notes Tester')
+  await toRecord(page)
+  const notes = page.locator('[data-general-notes]')
+  t.ok('d: "General notes" is on Record with Advanced closed', await notes.isVisible() && await page.locator('.adv.open').count() === 0)
+  t.ok('d: it is titled "General notes"', (await page.locator('.general-notes-sec h4').innerText()).trim().toLowerCase() === 'general notes')
+  const order = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('.scroll.memo > *')]
+    const idx = (sel) => all.findIndex((n) => n.matches(sel) || n.querySelector(sel))
+    return { general: idx('[data-general-notes]'), advanced: idx('.adv'), prompts: idx('.rec-prompts') }
+  })
+  t.ok('d: it sits above the Advanced fields', order.general >= 0 && order.general < order.advanced, JSON.stringify(order))
+  t.ok('d: send and discard are off with nothing typed', await page.locator('[data-record-send]').isDisabled() && await page.locator('[data-record-discard]').isDisabled())
+  await notes.click()
+  await page.keyboard.type('Met at the station. ')
+  await page.keyboard.type('She runs a repair cafe.')
+  t.ok('d: typing keeps the caret (no redraw): the field is still focused and holds all of it', await page.evaluate(() => document.activeElement?.matches('[data-general-notes]')) && (await notes.inputValue()) === 'Met at the station. She runs a repair cafe.')
+  t.ok('d: send and discard come on as soon as something is typed', await page.locator('[data-record-send]').isEnabled() && await page.locator('[data-record-discard]').isEnabled())
+  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await toRecord(page)
+  t.ok('d: the typed notes are still there after leaving Record and coming back', (await page.locator('[data-general-notes]').inputValue()) === 'Met at the station. She runs a repair cafe.')
+  await page.locator('[data-record-send]').click()
+  await page.getByPlaceholder('Name').fill('Anna Repair')
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.getByText('Looks right').waitFor({ timeout: 10_000 })
+  const lines = await page.locator('.line-card textarea').evaluateAll((els) => els.map((e) => e.value))
+  t.ok('d: the notes-only memo reaches Review as one note line with the typed text', lines.length === 1 && lines[0] === 'Met at the station. She runs a repair cafe.', JSON.stringify(lines))
+  await page.getByRole('button', { name: 'Looks right' }).click()
+  await page.getByRole('button', { name: 'Save to my web' }).click()
+  await page.locator('.toast.on').waitFor({ timeout: 5_000 })
+  const s = await stateOf(page)
+  const person = s.people.find((p) => p.name === 'Anna Repair')
+  t.ok('d: the saved note is on the person, typed (no recording)', person?.lines.length === 1 && person.lines[0].text === 'Met at the station. She runs a repair cafe.' && person.lines[0].source?.kind === 'typed', JSON.stringify(person))
+  t.ok('d: a notes-only memo is stored as a past meeting that carries the General notes', s.meetings?.length === 1 && s.meetings[0].generalNotes === 'Met at the station. She runs a repair cafe.' && s.meetings[0].meeting === false, JSON.stringify(s.meetings))
+  await toRecord(page)
+  await page.locator('.past-link').click()
+  const row = page.locator('.pm-row').first()
+  t.ok('d: the Past meetings list shows the General notes beside the meeting', /Anna Repair/.test(await row.innerText()) && /Met at the station/.test(await row.locator('[data-pm-snip]').innerText()))
+  await row.click()
+  t.ok('d: its detail has a General notes section', /Met at the station\. She runs a repair cafe\./.test(await page.locator('[data-pm-general]').innerText()))
+  await ctx.close()
+}
+
+async function partC(browser, base) {
+  const { ctx, page } = await newPage(browser, { width: 390, height: 844 })
+  await startPhone(page, base, 'Context Tester')
+  // a thing to add context to
+  await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await page.getByPlaceholder(/Motorbike/).fill('Loudspeakers')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.locator('.inv-text', { hasText: 'Loudspeakers' }).waitFor({ timeout: 5_000 })
+  const before = await stateOf(page)
+  // 1. none of these -> a plain note, no link
+  await toRecord(page)
+  await page.locator('[data-general-notes]').fill('Idea: a map of repair cafes')
+  await page.locator('[data-record-send]').click()
+  await page.locator('[data-about-none]').waitFor()
+  t.ok('c: the sheet offers "X none of these"', /none of these/.test(await page.locator('[data-about-none]').innerText()))
+  await page.locator('[data-about-none]').click()
+  await page.getByText('Looks right').waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Looks right' }).click()
+  await page.locator('.toast.on').waitFor({ timeout: 5_000 })
+  const s1 = await stateOf(page)
+  t.ok('c: a plain note adds no person and no thing', s1.people.length === before.people.length && s1.inventory.length === before.inventory.length, JSON.stringify([s1.people.length, s1.inventory.length]))
+  const plain = s1.meetings?.find((m) => m.plain === true)
+  t.ok('c: it is kept as a past meeting only, marked plain, with its note and no link', plain && plain.lines.some((l) => /map of repair cafes/.test(l.text)) && plain.personId === undefined && plain.kind !== 'none', JSON.stringify(plain))
+  await toRecord(page)
+  await page.locator('.past-link').click()
+  t.ok('c: the Past meetings list says "Plain note"', /Plain note/.test(await page.locator('.pm-row').first().innerText()))
+  await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+  // 2. what -> an existing thing: the note becomes its context
+  await page.locator('.about-kind.what').click()
+  t.ok('c: under "what" the sheet says an existing thing takes the note as context', /add this as context/i.test(await page.locator('.about-ctx-hint').innerText()))
+  await page.locator('.sheet.on .chip', { hasText: 'Loudspeakers' }).click()
+  await page.locator('[data-general-notes]').fill('Lent two of them to Anna in June')
+  await page.locator('[data-record-send]').click()
+  await page.locator('[data-save-context], .btn:has-text("Looks right")').first().waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Looks right' }).click()
+  await page.locator('[data-save-context]').click()
+  await page.locator('.toast.on').waitFor({ timeout: 5_000 })
+  const s2 = await stateOf(page)
+  const thing = s2.inventory.find((i) => i.text === 'Loudspeakers')
+  t.ok('c: no new line in the inventory', s2.inventory.length === before.inventory.length, String(s2.inventory.length))
+  t.ok('c: the note is context on the existing thing, with when and the meeting it came from', thing?.context?.length === 1 && thing.context[0].text === 'Lent two of them to Anna in June' && typeof thing.context[0].at === 'number' && typeof thing.context[0].meetingId === 'string', JSON.stringify(thing))
+  t.ok('c: the thing itself is untouched (text, audience)', thing.text === 'Loudspeakers' && thing.audience === before.inventory.find((i) => i.text === 'Loudspeakers').audience)
+  await page.locator('.inv-text', { hasText: 'Loudspeakers' }).click()
+  t.ok('c: the item sheet shows the context', /Lent two of them to Anna in June/.test(await page.locator('[data-item-context]').innerText()))
+  await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+  // 3. the same note again is not added twice
+  await toRecord(page)
+  await page.locator('.about-kind.what').click()
+  await page.locator('.sheet.on .chip', { hasText: 'Loudspeakers' }).click()
+  await page.locator('[data-general-notes]').fill('  lent TWO of them to anna in june ')
+  await page.locator('[data-record-send]').click()
+  await page.getByRole('button', { name: 'Looks right' }).click()
+  await page.locator('[data-save-context]').click()
+  await page.locator('.toast.on').waitFor({ timeout: 5_000 })
+  t.ok('c: the same note again says nothing new and is not added twice', /Nothing new/.test(await page.locator('.toast').innerText()) && (await stateOf(page)).inventory.find((i) => i.text === 'Loudspeakers').context.length === 1)
+  // 4. a name that is not a thing still makes new lines, as before
+  await toRecord(page)
+  await page.locator('.about-kind.what').click()
+  await page.locator('.sheet.on input.field').fill('Tent for four')
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.locator('[data-general-notes]').fill('Waterproof, from June')
+  await page.locator('[data-record-send]').click()
+  await page.getByRole('button', { name: 'Looks right' }).click()
+  await page.getByRole('button', { name: 'Save to my inventory' }).click()
+  await page.locator('.toast.on').waitFor({ timeout: 5_000 })
+  const s3 = await stateOf(page)
+  t.ok('c: a new thing still becomes a new inventory line', s3.inventory.some((i) => i.text === 'Tent for four: Waterproof, from June'), JSON.stringify(s3.inventory.map((i) => i.text)))
+  await ctx.close()
+}
+
+async function partM(browser, base) {
+  const { ctx, page } = await newPage(browser, { width: 390, height: 844 })
+  await startPhone(page, base, 'Damaged Fields')
+  await page.evaluate(() => {
+    const k = 'trustweb.v1.me'
+    const s = JSON.parse(localStorage.getItem(k))
+    s.inventory = [{ id: 'i1', text: 'Loudspeakers', audience: 'fof', included: true, createdAt: 1, context: 'oops' }, { id: 'i2', text: 'Ladder', audience: 'fof', included: true, createdAt: 1, context: [{ text: 'ok', at: 5 }, 7, { text: 'ok ', at: 6 }] }]
+    s.meetings = [{ id: 'm1', about: 'x', kind: 'who', where: '', startedAt: 1, endedAt: 2, durationMs: 1, meeting: false, lines: [], transcript: [], generalNotes: { not: 'a string' }, plain: 'yes' }]
+    localStorage.setItem(k, JSON.stringify(s))
+  })
+  await page.reload()
+  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  const s = await stateOf(page)
+  t.ok('m: the app boots with damaged wave-5 fields', s.me.displayName === 'Damaged Fields')
+  t.ok('m: a context that is no list is dropped, a list is cleaned and deduplicated', !('context' in s.inventory[0]) && JSON.stringify(s.inventory[1].context) === JSON.stringify([{ text: 'ok', at: 5 }]), JSON.stringify(s.inventory))
+  t.ok('m: damaged General notes and plain are dropped, the meeting itself stays', s.meetings.length === 1 && !('generalNotes' in s.meetings[0]) && !('plain' in s.meetings[0]))
+  await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await page.locator('.inv-text', { hasText: 'Ladder' }).click()
+  t.ok('m: the item sheet shows the clean context only', (await page.locator('[data-item-context]').innerText()).includes('ok'))
+  await ctx.close()
+}
+
 async function main() {
   const app = await startApp(Number(process.env.TW_PORT || 8984))
   const browser = await launch()
@@ -167,6 +315,9 @@ async function main() {
     if (PARTS.includes('a')) await partA(browser, app.base)
     if (PARTS.includes('f')) await partF(browser, app.base)
     if (PARTS.includes('g')) await partG(browser, app.base)
+    if (PARTS.includes('d')) await partD(browser, app.base)
+    if (PARTS.includes('c')) await partC(browser, app.base)
+    if (PARTS.includes('m')) await partM(browser, app.base)
   } finally {
     await browser.close()
     await app.stop()

@@ -52,6 +52,7 @@ import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
+import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
@@ -111,7 +112,10 @@ interface DraftLine {
   atMs?: number
   /** The transcript line it was picked from (index into draft.segments, as stored with the meeting). */
   line?: number
+  /** Typed by hand under "General notes" (not said in the recording): its source is "typed". */
+  typed?: boolean
 }
+
 
 interface Draft {
   personId?: string
@@ -135,6 +139,12 @@ interface Draft {
   pauses: PauseMark[]
   /** The stored past meeting this draft already wrote (at End meeting); completed when its notes are saved. */
   meetingId?: string
+  /** What is typed under "General notes" on Record (wave 5); it becomes one note line and rides on the stored meeting. */
+  generalNotes: string
+  /** "None of these": about neither a person nor a thing; saved as a plain note, no link (wave 5). */
+  plain: boolean
+  /** The inventory item picked under "what": the notes are added to it as context instead of making a new line (wave 5). */
+  itemId?: string
 }
 
 /** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
@@ -213,7 +223,11 @@ if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
 // or, where a stored meeting holds the same note, "recorded" with that meeting. Idempotent.
 // A failure leaves the record exactly as loaded (nothing saved) and the app still starts.
 try {
-  if (state && migrateSources(state)) save()
+  if (state) {
+    const sourced = migrateSources(state)
+    const noted = normaliseNoteFields(state)
+    if (sourced || noted) save()
+  }
 } catch {
   state = loadState(persona, storeCtx)
 }
@@ -278,7 +292,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [],
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false,
   }
 }
 
@@ -493,7 +507,7 @@ function startDraftFor(personId?: string): void {
 function draftInProgress(): boolean {
   // "Where" and the other person's yes count too (review P3): a Meeting draft with only those is not dropped by the next Record tap.
   return recorder.live || takes.length > 0 || draft.consent
-    || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
+    || draft.plain || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.generalNotes.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
 function go(s: Screen): void {
@@ -1312,9 +1326,20 @@ function itemSheet(itemId: string): void {
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
     ...itemAudienceChooser(item),
     sourceFor(item.source, item.text),
+    itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
+  ])
+}
+
+/** The notes added to this thing as context (wave 5), oldest first, each with when; nothing when there are none. */
+function itemContextView(item: InventoryItem): HTMLElement | null {
+  const notes = contextOf(item)
+  if (!notes.length) return null
+  return el('div', { class: 'item-context', 'data-item-context': item.id }, [
+    el('h4', { class: 'eyebrow' }, [S.itemContextTitle]),
+    ...notes.map((c) => el('div', { class: 'sline' }, [el('span', {}, [c.text]), el('em', {}, [whenLabel(c.at)])])),
   ])
 }
 
@@ -1587,8 +1612,8 @@ function saveButtons(cls: string): HTMLElement[] {
   ]))
 }
 
-function roundButton(name: string, label: string, onclick: () => void, opts: { disabled?: boolean; cls?: string } = {}): HTMLElement {
-  const b = el('button', { class: 'round' + (opts.cls ? ' ' + opts.cls : ''), 'aria-label': label, title: label, disabled: Boolean(opts.disabled), onclick })
+function roundButton(name: string, label: string, onclick: () => void, opts: { disabled?: boolean; cls?: string; data?: string } = {}): HTMLElement {
+  const b = el('button', { class: 'round' + (opts.cls ? ' ' + opts.cls : ''), 'aria-label': label, title: label, disabled: Boolean(opts.disabled), onclick, ...(opts.data ? { [opts.data]: '1' } : {}) })
   b.innerHTML = icon(name)
   return b
 }
@@ -1601,7 +1626,7 @@ function roundButton(name: string, label: string, onclick: () => void, opts: { d
 function aboutSheet(next?: () => void, kind: AboutKind = draft.about): void {
   const who = kind === AboutKind.Who
   const title = who ? S.aboutTitle : S.aboutWhatTitle
-  const input = el('input', { class: 'field', placeholder: who ? S.recWhoPh : S.aboutWhatPh, value: draft.name, maxlength: '60', 'aria-label': title })
+  const input = el('input', { class: 'field', placeholder: who ? S.recWhoPh : S.aboutWhatPh, value: draft.plain ? '' : draft.name, maxlength: '60', 'aria-label': title })
   const done = (): void => {
     const v = input.value.trim()
     if (!v) { input.focus(); return }
@@ -1610,7 +1635,19 @@ function aboutSheet(next?: () => void, kind: AboutKind = draft.about): void {
     draft.about = person ? AboutKind.Who : item ? AboutKind.What : kind
     draft.name = person?.name ?? item?.text ?? v
     draft.personId = draft.about === AboutKind.Who ? person?.id : undefined
+    // An existing thing picked under "what": the notes become context on it, not a new line (wave 5).
+    draft.itemId = draft.about === AboutKind.What ? item?.id : undefined
+    draft.plain = false
     if (person) draft.ring = person.ring
+    closeSheet()
+    if (next) next(); else render()
+  }
+  // "None of these" (wave 5): about neither a person nor a thing. Kept as a plain note, no link.
+  const none = (): void => {
+    draft.plain = true
+    draft.name = ''
+    draft.personId = undefined
+    draft.itemId = undefined
     closeSheet()
     if (next) next(); else render()
   }
@@ -1621,10 +1658,12 @@ function aboutSheet(next?: () => void, kind: AboutKind = draft.about): void {
   openSheet([
     el('h3', { class: who ? 'about-who-ink' : 'about-what-ink' }, [title]),
     input,
+    !who && picks.length ? el('p', { class: 'meta about-ctx-hint' }, [S.aboutContextHint]) : null,
     picks.length ? el('div', { class: 'chips' }, picks.map((t) => el('button', {
       class: 'chip', onclick: () => { input.value = t; done() },
     }, [t]))) : null,
     el('button', { class: 'btn btn-electric', onclick: done }, [S.aboutOk]),
+    el('button', { class: 'btn btn-ghost about-none', 'data-about-none': '1', onclick: none }, [S.aboutNone]),
   ])
   setTimeout(() => input.focus(), 320)
 }
@@ -1644,7 +1683,33 @@ function aboutRowView(): HTMLElement {
   return el('div', { class: 'memo-row about-row ' + draft.about }, [
     el('span', { class: 'about-q' }, [withHint(whoBtn, HintId.AboutWho), S.aboutOr, withHint(whatBtn, HintId.AboutWhat), S.aboutTail]),
     name ? el('button', { class: 'about-value', onclick: () => aboutSheet() }, [name]) : null,
+    !name && draft.plain ? el('button', { class: 'about-value about-none-value', onclick: () => aboutSheet() }, [S.aboutNoneValue]) : null,
   ])
+}
+
+/**
+ * "General notes" (wave 5, owner 2026-10-07): a quick place to type at once, on Record and Meeting WITHOUT opening Advanced,
+ * above the Opportunity / Resource / Looking for / Can offer / Talent fields. What is typed lives on the draft as it is typed
+ * (no redraw, so the caret stays), becomes one note line when the notes are made, and rides on the stored meeting.
+ */
+function generalNotesView(): HTMLElement {
+  const input = el('textarea', {
+    class: 'field general-notes', rows: '3', maxlength: String(GENERAL_NOTES_MAX), placeholder: S.generalNotesPh,
+    'aria-label': S.generalNotesTitle, 'data-general-notes': '1',
+  })
+  input.value = draft.generalNotes
+  input.addEventListener('input', () => { draft.generalNotes = input.value; syncRecordControls() })
+  return el('div', { class: 'general-notes-sec' }, [el('h4', { class: 'eyebrow' }, [S.generalNotesTitle]), input])
+}
+
+/** Send and Discard follow what is typed, without redrawing the screen (a redraw would take the caret away). */
+function syncRecordControls(): void {
+  const live = recorder.live
+  const has = takes.length > 0
+  const send = document.querySelector<HTMLButtonElement>('.memo-controls .round[data-record-send]')
+  const discard = document.querySelector<HTMLButtonElement>('.memo-controls .round[data-record-discard]')
+  if (send) send.disabled = !live && !has && !draft.extraLines.length && !draft.generalNotes.trim()
+  if (discard) discard.disabled = !live && !has && !draft.name.trim() && !draft.generalNotes.trim() && !draft.plain
 }
 
 /** Record > Advanced: lines to note by hand, by kind; folded away until asked for. */
@@ -1811,7 +1876,8 @@ function pastSearchView(): HTMLElement {
 
 /** Is there anything of this draft worth keeping as a past meeting (a take, a transcript, or a meeting at all)? */
 function draftIsMeeting(): boolean {
-  return Boolean(draft.meetingId) || takes.length > 0 || draft.segments.length > 0 || draft.mode === RecordMode.Meeting
+  // Typed General notes alone are worth keeping too (a notes-only memo has no take): the stored meeting holds them.
+  return Boolean(draft.meetingId) || takes.length > 0 || draft.segments.length > 0 || draft.mode === RecordMode.Meeting || Boolean(draft.generalNotes.trim())
 }
 
 /** Was this draft a meeting (rather than a memo by yourself)? The stored meeting knows, even after a switch to "Just me". */
@@ -1832,8 +1898,11 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
     id: randomId(8), about: '', kind: draft.about, where: '', startedAt: takes[0]?.startedAt ?? Date.now(), endedAt: Date.now(),
     durationMs: 0, meeting: draft.mode === RecordMode.Meeting, lines: [], transcript: [],
   }
-  m.about = draft.name.trim() || m.about || S.pastUnnamed
+  m.about = draft.name.trim() || (draft.plain ? S.pastPlainAbout : m.about || S.pastUnnamed)
   m.kind = draft.about
+  const general = cleanGeneralNotes(draft.generalNotes)
+  if (general) m.generalNotes = general
+  if (draft.plain) m.plain = true
   m.where = draft.context.trim() || m.where
   m.endedAt = Date.now()
   m.durationMs = Math.max(m.durationMs, totalMs())
@@ -1985,9 +2054,9 @@ async function startSolo(): Promise<void> {
 
 async function sendSolo(): Promise<void> {
   if (recorder.live) await recorder.stop()
-  if (!takes.length && !draft.extraLines.length) return
+  if (!takes.length && !draft.extraLines.length && !draft.generalNotes.trim()) return
   const next = (): void => { serverAfterTake(); void makeNotes() }
-  if (!draft.name.trim()) { aboutSheet(next); return }
+  if (!draft.name.trim() && !draft.plain) { aboutSheet(next); return }
   next()
 }
 
@@ -2015,6 +2084,7 @@ function screenRecord(): Node[] {
       recNotice ? el('p', { class: 'warn' }, [recNotice]) : null,
       aboutRowView(),
       recPromptsView(),
+      generalNotesView(),
       recAdvancedView(),
       draft.segments.length || transcriber
         ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(S.trEmpty))
@@ -2023,8 +2093,8 @@ function screenRecord(): Node[] {
     ]),
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
-      roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() }),
-      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length }),
+      roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() && !draft.generalNotes.trim() && !draft.plain, data: 'data-record-discard' }),
+      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
     ]),
   ]
 }
@@ -2214,7 +2284,7 @@ function screenMeeting(): Node[] {
   const who = el('input', { class: 'field', placeholder: S.recWhoPh, value: draft.name, 'aria-label': S.recWho, maxlength: '40' })
   const where = el('input', { class: 'field', placeholder: S.recWherePh, value: draft.context, 'aria-label': S.recWhere, maxlength: '80' })
   const consentText = el('span', {}, [S.recConsent(name || S.meetingThey)])
-  who.addEventListener('input', () => { draft.name = who.value; consentText.textContent = S.recConsent(draft.name.trim() || S.meetingThey) })
+  who.addEventListener('input', () => { draft.name = who.value; if (who.value.trim()) { draft.plain = false; draft.itemId = undefined } consentText.textContent = S.recConsent(draft.name.trim() || S.meetingThey) })
   where.addEventListener('input', () => { draft.context = where.value })
   const consentBox = el('input', { type: 'checkbox', id: 'consent' })
   consentBox.checked = draft.consent
@@ -2263,6 +2333,7 @@ function screenMeeting(): Node[] {
       speakers,
       recPromptsView(),
       el('div', { class: 'tr-list', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(transcribing ? S.trEmpty : S.trOffHint)),
+      generalNotesView(),
       recAdvancedView(),
       pastMeetingsLink(),
     ]),
@@ -2273,7 +2344,7 @@ function screenMeeting(): Node[] {
 }
 
 async function makeNotes(): Promise<void> {
-  if (!draft.name.trim()) { aboutSheet(() => void makeNotes()); return }
+  if (!draft.name.trim() && !draft.plain) { aboutSheet(() => void makeNotes()); return }
   if (recorder.live) await recorder.stop()
   await transcriber?.stop()
   transcriber = null
@@ -2290,6 +2361,11 @@ async function makeNotes(): Promise<void> {
     }
   }
   for (const l of draft.extraLines) if (!draft.lines.some((x) => x.id === l.id)) draft.lines.push({ ...l })
+  // What was typed under "General notes" is one more note line, first, typed by hand (never stamped with a moment of the recording).
+  const general = cleanGeneralNotes(draft.generalNotes)
+  if (general && !draft.lines.some((x) => x.typed)) {
+    draft.lines.unshift({ id: randomId(8), text: general, tag: Tag.Note, audience: Audience.Friends, typed: true })
+  }
   go(Screen.Review)
 }
 
@@ -2863,6 +2939,8 @@ function screenReview(): Node[] {
       onclick: () => {
         draft.lines = draft.lines.filter((l) => l.text.trim())
         if (!draft.lines.length) { render(); return }
+        // A plain note has no ring to pick and nobody to ask about it: it is saved here, as a past meeting only.
+        if (draft.plain) { saveDraftPlain(); return }
         go(Screen.Place)
       },
     }, [S.reviewOk])]),
@@ -2886,8 +2964,26 @@ function audiencePill(current: Audience, onChange: (a: Audience) => void): HTMLE
   }, [S.audienceLabel[current]])
 }
 
-/** "What" notes: no ring to pick, only who can ask about each line. */
+/** The existing thing this draft's notes are added to as context (wave 5), if the one picked is still there and still the one named. */
+function contextTarget(): InventoryItem | undefined {
+  if (draft.about !== AboutKind.What || !draft.itemId) return undefined
+  const item = st().inventory.find((i) => i.id === draft.itemId)
+  return item && noteKey(item.text) === noteKey(draft.name) ? item : undefined
+}
+
+/** "What" notes: no ring to pick, only who can ask about each line. Notes for an existing thing become its context instead. */
 function screenPlaceWhat(): Node[] {
+  const target = contextTarget()
+  if (target) {
+    return [
+      header(S.placeContextTitle(target.text), { back: () => go(Screen.Review) }),
+      el('div', { class: 'scroll pad' }, [
+        el('p', { class: 'hint' }, [S.placeContextLead]),
+        el('div', { class: 'lines' }, draft.lines.map((l) => el('div', { class: 'aud-row' }, [el('span', {}, [l.text])]))),
+      ]),
+      el('div', { class: 'cta' }, [el('button', { class: 'btn btn-teal', 'data-save-context': '1', onclick: saveDraftWhat }, [S.placeContextSave])]),
+    ]
+  }
   return [
     header(S.placeWhatTitle(draft.name.trim()), { back: () => go(Screen.Review) }),
     el('div', { class: 'scroll pad' }, [
@@ -2902,7 +2998,10 @@ function screenPlaceWhat(): Node[] {
   ]
 }
 
-/** Each line becomes an inventory item, prefixed with what it was about unless it already says so. */
+/**
+ * Each line becomes an inventory item, prefixed with what it was about unless it already says so; or, when an existing
+ * thing was picked, the lines are added to it as context (note_fields.ts), so nothing new appears in the inventory.
+ */
 function saveDraftWhat(): void {
   const s = st()
   const now = Date.now()
@@ -2910,18 +3009,36 @@ function saveDraftWhat(): void {
   const lines = draft.lines.filter((l) => l.text.trim())
   // The meeting is stored first, so every item can point at it (the chain of proof).
   if (draftIsMeeting()) recordPastMeeting()
+  const target = contextTarget()
+  if (target) {
+    const added = addContextLines(target, lines.map((l) => l.text), now, draft.meetingId)
+    save()
+    toast(S.savedContextToast(target.text, added))
+    newDraft()
+    go(Screen.Inventory)
+    return
+  }
   const meeting = draftWasMeeting()
   for (const l of lines) {
     const text = l.text.trim()
     s.inventory.push({
       id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
-      audience: l.audience, included: true, createdAt: now, source: recordedSource(meeting, draft.meetingId, l),
+      audience: l.audience, included: true, createdAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
     })
   }
   save()
   toast(S.savedWhatToast(lines.length))
   newDraft()
   go(Screen.Inventory)
+}
+
+/** "None of these": the notes are kept as a past meeting only, a plain note with no person and no thing behind it. */
+function saveDraftPlain(): void {
+  recordPastMeeting()
+  save()
+  toast(S.savedPlainToast)
+  newDraft()
+  go(Screen.Web)
 }
 
 function saveDraft(): void {
@@ -2943,7 +3060,7 @@ function saveDraft(): void {
   for (const l of draft.lines) {
     p.lines.push({
       id: l.id, text: l.text.trim(), tag: l.tag, customTag: l.customTag, audience: l.audience,
-      status: LineStatus.Current, notedAt: now, checkedAt: now, source: recordedSource(meeting, draft.meetingId, l),
+      status: LineStatus.Current, notedAt: now, checkedAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
     })
   }
   save()

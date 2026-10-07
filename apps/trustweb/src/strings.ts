@@ -273,7 +273,14 @@ export const S = {
   aboutTail: ' was this about?',
   aboutWhatTitle: 'What was this about?',
   aboutWhatPh: 'A thing, a place, a topic',
+  // Wave 5 (owner 2026-10-07): "none of these", and notes that add context to a thing you already have.
+  aboutNone: 'X  none of these',
+  aboutNoneValue: 'none of these',
+  aboutContextHint: 'Tap one of your things to add this as context to it, or type a new one.',
   recAdvanced: 'Advanced',
+  // Wave 5 (owner 2026-10-07): a quick place to type, always visible on Record, above the Advanced fields.
+  generalNotesTitle: 'General notes',
+  generalNotesPh: 'Type anything here, right away',
   recAdvancedAdd: (label: string) => `Add: ${label.toLowerCase()}`,
   // Prompts for what to note or create while recording (owner 2026-10-06: "the recording has hints as to what to write and create").
   promptLabel: 'Listen for',
@@ -296,6 +303,9 @@ export const S = {
   pastKindMeeting: 'Meeting',
   pastKindMemo: 'Memo',
   pastKindNotes: 'Notes',
+  pastKindPlain: 'Plain note',
+  pastPlainAbout: 'A plain note',
+  pastGeneralNotes: 'General notes',
   pastFrom: (name: string) => `Sent by ${name}`,
   pastWhere: (where: string) => `at ${where}`,
   pastCounts: (notes: number, transcript: number) => `${notes === 1 ? '1 note' : `${notes} notes`}${transcript ? ` · ${transcript} transcript lines` : ''}`,
@@ -307,6 +317,12 @@ export const S = {
   pastUnnamed: 'Unnamed meeting',
   placeWhatTitle: (what: string) => `Notes about ${what}`,
   placeWhatSave: 'Save to my inventory',
+  placeContextTitle: (item: string) => `Context for ${item}`,
+  placeContextLead: 'These notes are added to the thing you picked, as context. Nothing new appears in your inventory, and context is never part of an answer.',
+  placeContextSave: 'Add as context',
+  savedContextToast: (item: string, n: number) => (n === 0 ? `Nothing new for ${item}: it already had these notes.` : `Added ${n === 1 ? 'one note' : `${n} notes`} as context to ${item}.`),
+  savedPlainToast: 'Saved as a plain note. You find it under Past meetings.',
+  itemContextTitle: 'Context',
   savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to your inventory.`,
   hintText: {
     meeting: 'Meeting: record a conversation you both agreed to, with a live transcript and who said what.',
@@ -648,7 +664,7 @@ export const S = {
   demoAcctConnected: 'connected',
   demoAcctRemove: 'End now',
   // Ending a demo account (a device of this web) asks first (wave 5, owner 2026-10-07: removing a device is possible, with a confirm).
-  demoAcctRemoveConfirm: (name: string) => `End ${name}? That phone can no longer ask your web.`,
+  demoAcctRemoveConfirm: (name: string) => `End ${name}? That phone can no longer call into your web.`,
   demoAcctExtend: 'Extend a week',
   demoAcctExtended: (name: string, left: string) => `${name} now ends in ${left}.`,
   demoAcctShow: 'Show code',
