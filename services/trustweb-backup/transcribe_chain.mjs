@@ -4,10 +4,12 @@
 //
 // A link is skipped when it cannot take the file type (supports(ext) false): its API is never called. A link that FAILS hands over
 // to the next only when the failure looks like an outage of that provider, not like something wrong with the request or the account:
-//   - the link's own deadline passed, or the call failed without an answer (connection refused, reset, unreadable body): outage
+//   - the link's own deadline passed, or the call failed without ANY answer (connection refused, reset): outage
 //   - the provider answered 5xx: outage
 //   - 4xx (bad request, bad key, no credit, ...) and 429 (busy, come back later): NOT an outage, the job ends there. Falling
 //     through on a 4xx would send the same audio to a second (possibly US, paid) provider for a problem that is ours to fix.
+//   - a 2xx whose body is unusable: NOT an outage either. The provider processed (and probably billed) the audio; a second provider would
+//     bill it again, and if the provider's answer shape ever changed, every job would silently go to the fallback.
 // Each link has its own deadline (AbortSignal.any of the chain's overall deadline and the link's timeoutMs), so a slow first link cannot
 // eat the second one's time. When the overall deadline passes the chain stops at once (nobody is left to try).
 // `onFallback(failure)` runs before the next link starts, so the caller can count a failure that may still have been billed.

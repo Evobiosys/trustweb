@@ -63,9 +63,11 @@ export function createOpenRouterProvider({ cfg, fetchImpl = fetch }) {
     try {
       body = await response.json()
     } catch {
-      throw new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error)
+      // The provider ANSWERED (a 2xx) but the body is unusable: the audio was processed, probably billed. That is not an outage, so no
+      // fallback (a second provider would bill the same audio again); the job ends as a 502. Only a deadline during the read is a timeout.
+      throw new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error, response.status)
     }
-    if (body === null || typeof body !== 'object' || Array.isArray(body) || typeof body.text !== 'string') throw new ProviderError(ProviderFailure.Error)
+    if (body === null || typeof body !== 'object' || Array.isArray(body) || typeof body.text !== 'string') throw new ProviderError(ProviderFailure.Error, response.status)
     return body
   }
 

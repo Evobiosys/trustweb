@@ -161,17 +161,27 @@ test('Berget never answers (its own deadline): OpenRouter takes over inside its 
   })
 })
 
-test('Berget answers garbage (no JSON, no text) or is down (connection refused): that is an outage, OpenRouter takes over', async () => {
-  for (const replies of [[{ status: 200, raw: 'not json' }], [{ status: 200, json: { nope: 1 } }]]) {
-    await withStack({ berget: { replies } }, async ({ port, openrouter }) => {
-      assert.equal((await transcribe(port, hdr())).status, 200)
-      assert.equal(openrouter.seen.calls.length, 1)
-    })
-  }
+test('Berget is down (connection refused): that is an outage, OpenRouter takes over', async () => {
   await withStack({ options: { bergetUrl: 'http://127.0.0.1:1/v1' } }, async ({ port, openrouter }) => {
     assert.equal((await transcribe(port, hdr())).status, 200)
     assert.equal(openrouter.seen.calls.length, 1)
+    assert.equal(await used(port), 60)
   })
+})
+
+test('Berget ANSWERS 200 with garbage (no JSON, no text, not an object): that is not an outage: 502, the person is refunded, OpenRouter is NOT called (no second bill for the same audio)', async () => {
+  for (const reply of [{ status: 200, raw: 'not json RAW PROVIDER BODY MUST NOT LEAK' }, { status: 200, raw: '' }, { status: 200, json: { nope: 1 } }, { status: 200, json: ['text'] }, { status: 200, json: { text: 7 } }]) {
+    await withStack({ berget: { replies: [reply] } }, async ({ port, berget, openrouter, lines }) => {
+      const r = await transcribe(port, hdr())
+      assert.equal(r.status, 502, JSON.stringify(reply))
+      assert.equal(r.json.error, 'provider_error')
+      assert.equal(r.text.includes('RAW PROVIDER'), false)
+      assert.equal(await used(port), 0)
+      assert.equal(berget.seen.calls.length, 1)
+      assert.equal(openrouter.seen.calls.length, 0)
+      assert.equal(lines.some((l) => l.includes('RAW PROVIDER')), false)
+    })
+  }
 })
 
 test('Berget not configured (no key): OpenRouter serves directly and the status says so; Berget is never called', async () => {
@@ -375,6 +385,12 @@ test('config: Berget defaults (model, URL, price, deadline), the status provider
   assert.equal(c.transcribeConfigured, true)
   assert.equal(loadConfig({ bergetKey: BKEY, transcribeKey: OKEY }).transcribeConfigured, false) // not switched on
   assert.equal(loadConfig({ bergetKey: BKEY, transcribeEnabled: true, transcribeFallback: 'none' }).transcribeFallback, null)
+  // TRANSCRIBE_FALLBACK fails closed: only the exact word openrouter enables the paid US route, a typo or any other value means none
+  for (const typo of ['openrouterr', 'OpenRouter', 'yes', '1', 'off', 'nonee']) {
+    const c2 = loadConfig({ bergetKey: BKEY, transcribeKey: OKEY, transcribeEnabled: true, transcribeFallback: typo })
+    assert.equal(c2.transcribeFallback, null, typo)
+    assert.equal(c2.transcribeFallbackSetting, 'none', typo)
+  }
   assert.equal(loadConfig({ bergetKey: BKEY, transcribeKey: OKEY, transcribeEnabled: true, transcribeProvider: 'whisper-at-home' }).transcribeConfigured, false)
 })
 
@@ -395,11 +411,11 @@ test('credential: Berget key from $CREDENTIALS_DIRECTORY/berget, same strict sha
   }
 })
 
-test('outage rule: timeouts, no-answer errors and 5xx are outages; 4xx and busy are not', () => {
+test('outage rule: timeouts, no-answer errors and 5xx are outages; 4xx, busy and an unusable 2xx are not', () => {
   const fail = (kind, status = null) => new ProviderError(kind, status)
   assert.equal(isOutage(fail(ProviderFailure.Timeout)), true)
   assert.equal(isOutage(fail(ProviderFailure.Error)), true)
   for (const s of [500, 502, 503, 504, 524]) assert.equal(isOutage(fail(ProviderFailure.Error, s)), true, String(s))
-  for (const s of [400, 401, 402, 403, 404, 422]) assert.equal(isOutage(fail(ProviderFailure.Error, s)), false, String(s))
+  for (const s of [200, 400, 401, 402, 403, 404, 422]) assert.equal(isOutage(fail(ProviderFailure.Error, s)), false, String(s))
   assert.equal(isOutage(fail(ProviderFailure.Busy, 429)), false)
 })

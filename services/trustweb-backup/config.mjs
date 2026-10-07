@@ -20,7 +20,7 @@
 //   SHORT_REQUEST_MS                 30000
 //   TRANSCRIBE_PROVIDER              auto (default) | berget | openrouter | infomaniak
 //                                    auto = Berget (Sweden) when its key is present, else OpenRouter; berget = Berget first; openrouter = OpenRouter alone
-//   TRANSCRIBE_FALLBACK              openrouter (default) | none. Berget first: may OpenRouter (a PAID, US route) take over when Berget answers 5xx,
+//   TRANSCRIBE_FALLBACK              openrouter (default when unset) | none; fails closed: any other value means none. Berget first: may OpenRouter (a PAID, US route) take over when Berget answers 5xx,
 //                                    times out or is not configured? (never on a 4xx or a 429: those are not a Berget outage)
 //   TRANSCRIBE_ENABLED               1 switches the berget/openrouter providers on (EnvironmentFile, written by scripts/trustweb_transcribe_switch_on.sh);
 //                                    without it /transcribe answers 503 not_configured even when a key is loaded
@@ -119,7 +119,8 @@ export function loadConfig(options = {}) {
   const transcribeKey = options.transcribeKey ?? (infomaniak ? pick(options, 'transcribeKey', 'TRANSCRIBE_KEY', '', String) : readCredentialKey())
   const bergetKey = options.bergetKey ?? readCredentialKey(process.env, process.env.TRANSCRIBE_BERGET_CREDENTIAL ?? 'berget')
   const transcribeEnabled = pick(options, 'transcribeEnabled', 'TRANSCRIBE_ENABLED', false, flag)
-  const transcribeFallbackSetting = pick(options, 'transcribeFallback', 'TRANSCRIBE_FALLBACK', TranscribeProvider.OpenRouter, (v) => (v === FALLBACK_NONE ? FALLBACK_NONE : TranscribeProvider.OpenRouter))
+  // fails closed: only the exact word openrouter allows the paid US fallback, a typo (option or env) means none; unset = openrouter
+  const transcribeFallbackSetting = pick(options, 'transcribeFallback', 'TRANSCRIBE_FALLBACK', TranscribeProvider.OpenRouter, String) === TranscribeProvider.OpenRouter ? TranscribeProvider.OpenRouter : FALLBACK_NONE
   const known = setting === PROVIDER_AUTO || setting === TranscribeProvider.Berget || setting === TranscribeProvider.OpenRouter
   const transcribeChainNames = known ? transcribeChain({ setting, fallback: transcribeFallbackSetting, bergetKey, openrouterKey: transcribeKey }) : []
   // The provider a status answer names: the one that would serve first, else what the setting points at (an honest "would be used").
