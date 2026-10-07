@@ -443,6 +443,7 @@ textarea.field{resize:vertical; line-height:1.5}
 /* query */
 .chips{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:10px 0 0}
 .chips-lbl{font-size:12px; color:var(--ink-soft); margin-right:2px}
+.unreviewed-chip{margin-left:6px; border:1px dashed var(--line); background:transparent; color:var(--ink-soft)}
 /* "Search the web instead" (wave 2, B8) */
 .web-search{margin:14px 0 4px; padding:10px 12px; border:1.5px dashed var(--line); border-radius:14px}
 .web-search[hidden]{display:none}

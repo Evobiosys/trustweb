@@ -8,6 +8,9 @@
  *      ask's answers: Google, Ecosia, Qwant, Brave as plain links (new tab,
  *      noopener, no referrer), "outside TrustWeb, untrusted"; nothing is
  *      requested from those hosts without a tap (the suite never taps one).
+ *   8. B4, B7: imported lines say "unreviewed, from an import" until kept
+ *      ("Reviewed" on the item sheet; "Mark all reviewed" for the import);
+ *      typed lines say "created step by step".
  * Ports: Vite 5281, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/wave2_flow.mjs
  */
@@ -143,6 +146,39 @@ async function partWebSearch(browser, base, a) {
   await b.context().close()
 }
 
+/** Item 8: the three provenance states on screen. */
+async function partProvenance(a) {
+  const file = JSON.stringify({ format: 'trustweb-inventory-import', version: 1, exportedOn: '2026-10-07', items: [
+    { key: '0123456789abcdef', text: 'Knows the Graz housing co-op board' },
+    { key: 'fedcba9876543210', text: 'Can lend a cargo bike on weekends' },
+  ] })
+  await tab(a, 'Inventory')
+  await a.getByRole('button', { name: 'Settings' }).click()
+  await a.locator('[data-import-file]').setInputFiles({ name: 'trustweb-inventory-import.json', mimeType: 'application/json', buffer: Buffer.from(file) })
+  await a.locator('[data-import-apply]').click()
+  await a.locator('.inv-text', { hasText: 'Knows the Graz housing co-op board' }).waitFor({ timeout: 5_000 })
+  ok('imported lines say "unreviewed" in the list', await a.locator('.inv-text:has([data-unreviewed])').count() === 2)
+  await shot(a, 'w2-10-unreviewed-list')
+  await a.locator('.inv-text', { hasText: 'Knows the Graz housing co-op board' }).click()
+  ok('its sheet: "Unreviewed, from an import" and a one-tap "Reviewed"', /Unreviewed, from an import/.test(await a.locator('.sheet.on [data-prov-state]').innerText()) && await a.locator('.sheet.on [data-item-reviewed]').count() === 1)
+  await shot(a, 'w2-11-unreviewed-sheet')
+  await a.locator('.sheet.on [data-item-reviewed]').click()
+  ok('one tap: "From an import, reviewed"; the button goes; the list chip goes', (await a.locator('.sheet.on [data-prov-state]').getAttribute('data-prov-state')) === 'mass-imported'
+    && await a.locator('.sheet.on [data-item-reviewed]').count() === 0 && await a.locator('.inv-text:has([data-unreviewed])').count() === 1)
+  await closeSheet(a)
+  await a.locator('.inv-text', { hasText: 'Spare room in Vienna for visitors' }).click()
+  ok('a typed line: "Created step by step"', /Created step by step/.test(await a.locator('.sheet.on [data-prov-state]').innerText()))
+  await closeSheet(a)
+  await a.getByRole('button', { name: 'Settings' }).click()
+  await a.locator('[data-import-reviewed]').click()
+  const inv = (await record(a)).inventory.filter((i) => i.source?.kind === 'tana')
+  ok('"Mark all reviewed" in the import\'s row: the rest of that import is kept too', inv.length === 2 && inv.every((i) => typeof i.source.reviewedAt === 'number'))
+  await a.getByRole('button', { name: 'Settings' }).click().catch(() => {})
+  ok('then the button is gone (nothing left to review)', await a.locator('[data-import-reviewed]').count() === 0 && await a.locator('[data-import-undo]').count() === 1)
+  await closeSheet(a)
+  ok('no "unreviewed" chip left', await a.locator('.inv-text:has([data-unreviewed])').count() === 0)
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
@@ -155,6 +191,7 @@ async function main() {
     await partQuery(a)
     await partAudience(a)
     await partWebSearch(browser, vite.base, a)
+    await partProvenance(a)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++

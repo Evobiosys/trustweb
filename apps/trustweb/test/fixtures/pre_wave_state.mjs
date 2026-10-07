@@ -84,7 +84,8 @@ export const HOSTED_SECRET = 'ab'.repeat(32)
  * transcript was still arriving (with their keys, A3), a kept pack still
  * arriving, the consent, the hosted account with its recordings, an import
  * batch, the Feed settings, a person's fediverse handle, an item's image.
- * Wave 2 (2026-10-07) adds its optional fields here too: a meeting's roughTimes, the audience "close".
+ * Wave 2 (2026-10-07) adds its optional fields here too: a meeting's roughTimes, the audience "close",
+ * an imported line's reviewedAt.
  * The regression net for rolling round B back: the pre-wave build must open
  * it, and its saves must keep every one of these fields.
  */
@@ -102,6 +103,8 @@ export function roundBState() {
   // wave 2: the server estimated the times per sentence (approx); an item for close friends only (P22)
   s.meetings[0].roughTimes = true
   s.inventory.push({ id: 'close1', text: 'Offers a body-work session', audience: 'close', included: true, createdAt: NOW - DAY, source: { kind: 'typed' } })
+  // wave 2 (B4): an imported line the person opened and kept
+  s.inventory.push({ id: 'imp2', text: 'Can lend a cargo bike', audience: 'me', included: true, createdAt: NOW - DAY, source: { kind: 'tana', ref: 'fedcba9876543210', reviewedAt: NOW - 3_600_000 } })
   s.meetings[0].fullSentAt = NOW - 3 * DAY
   s.meetings[1].serverJob = { state: 'running', at: NOW - DAY, takesDone: 0 }
   s.meetings[1].outbox = [{ keyText: 'TW1R-AAAAA-BBBBB', title: 'Meeting with Cargo bike', notes: ['borrowable'], at: NOW - DAY }]

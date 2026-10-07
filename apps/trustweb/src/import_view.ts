@@ -6,6 +6,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { applyImport, IMPORT_MAX_BYTES, IMPORT_MAX_ITEMS, ImportProblem, lastImport, parseImportFile, planImport, undoImport } from './inventory_import'
+import { markBatchReviewed, provenanceState } from './provenance'
+import { ProvenanceState } from './model'
 import type { ImportPlan } from './inventory_import'
 import type { AppState } from './model'
 import { S } from './strings'
@@ -50,6 +52,7 @@ export function importGroup(h: ImportViewHooks): HTMLElement[] {
     el('p', { class: 'meta' }, [S.impHint]),
     last ? el('div', { class: 'conn-row', 'data-import-last': last.id }, [
       el('span', {}, [S.impLast(new Date(last.at).toLocaleDateString(), last.items.length)]),
+      unreviewedIn(h, last.id) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-import-reviewed': last.id, onclick: () => reviewAll(h, last.id) }, [S.impReviewAll]) : null,
       el('button', { class: 'btn btn-ghost btn-sm', 'data-import-undo': last.id, onclick: () => undo(h, last.id) }, [S.impUndo]),
     ]) : null,
   ]
@@ -84,6 +87,22 @@ function apply(h: ImportViewHooks, plan: ImportPlan): void {
   h.closeSheet()
   h.changed()
   h.toast(S.impDone(plan.add.length, plan.already))
+}
+
+/** How many of an import's lines still say "unreviewed". */
+function unreviewedIn(h: ImportViewHooks, batchId: string): number {
+  const s = h.state()
+  const ids = new Set((s.imports ?? []).find((b) => b?.id === batchId)?.items.map((x) => x.itemId) ?? [])
+  return s.inventory.filter((i) => ids.has(i.id) && provenanceState(i.source) === ProvenanceState.Unreviewed).length
+}
+
+/** "Mark all reviewed" (wave 2, B4): the whole import kept as the person's own. Undo import still removes the unchanged lines. */
+function reviewAll(h: ImportViewHooks, batchId: string): void {
+  const n = markBatchReviewed(h.state(), batchId, Date.now())
+  h.save()
+  h.changed()
+  h.toast(S.impReviewedAll(n))
+  h.settings()
 }
 
 function undo(h: ImportViewHooks, batchId: string): void {

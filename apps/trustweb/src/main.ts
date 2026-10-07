@@ -25,7 +25,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, TRANSCRIPTION_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -49,7 +49,7 @@ import { setUpInstall } from './install'
 import { createInstallSheets } from './install_sheets'
 import { CarryPlan, carryPlan, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
-import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, typedSource } from './provenance'
+import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
@@ -1297,9 +1297,22 @@ function itemSheet(itemId: string): void {
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
     ...itemAudienceChooser(item),
     sourceFor(item.source, item.text),
+    ...provenanceStateView(item),
     feed.itemExtras(item),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
+}
+
+/** The item's state (wave 2, B4): unreviewed / from an import, reviewed / created step by step; one tap keeps an imported line. */
+function provenanceStateView(item: InventoryItem): HTMLElement[] {
+  const state = provenanceState(item.source)
+  if (!state) return []
+  const line: HTMLElement = el('p', { class: 'meta prov-state', 'data-prov-state': state }, [S.provState[state]])
+  if (state !== ProvenanceState.Unreviewed) return [line]
+  return [line, el('button', {
+    class: 'btn btn-ghost btn-sm', 'data-item-reviewed': item.id,
+    onclick: () => { if (markReviewed(item, Date.now())) { save(); render(); toast(S.provReviewedDone) } itemSheet(item.id) },
+  }, [S.provReviewed])]
 }
 
 /** All four choices on the item's sheet (wave 2, P22): the three tiers and "Only me". */
@@ -3199,7 +3212,10 @@ function screenInventory(): Node[] {
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       ...s.inventory.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
+        el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
+          item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+          provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
+        ]),
         el('div', { class: 'inv-actions' }, [
           audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
           el('button', { class: 'mini', onclick: () => { item.included = !item.included; save(); render() } }, [item.included ? S.invOn : S.invOff]),

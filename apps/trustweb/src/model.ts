@@ -123,6 +123,19 @@ export interface ItemSource {
   fromName?: string
   /** Tana: the source node's reference. Local only, NEVER sent to anyone. */
   ref?: string
+  /** Imported: when the person opened it and kept it ("Reviewed", wave 2, B4). Absent: unreviewed. Local only. */
+  reviewedAt?: number
+}
+
+/**
+ * The three provenance states from the Max meeting (wave 2, B4): an imported
+ * line is "unreviewed" until the person keeps it ("mass-imported" then);
+ * recorded and typed lines are "created step by step". Derived, never stored.
+ */
+export enum ProvenanceState {
+  Unreviewed = 'unreviewed',
+  MassImported = 'mass-imported',
+  StepByStep = 'step-by-step',
 }
 
 export interface Person {

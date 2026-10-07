@@ -16,7 +16,7 @@
  * Pure and DOM-free.
  */
 import type { AppState, InventoryItem, ItemSource, PastMeeting, Person, Tag, TranscriptLine } from './model'
-import { Provenance, PROVENANCES } from './model'
+import { Provenance, PROVENANCES, ProvenanceState } from './model'
 import type { Segment } from './meeting_transcriber'
 import { extractLines } from './notes'
 import { meetingToNoteText, settledSegments } from './sensemeet'
@@ -57,6 +57,39 @@ export function recordedSource(meeting: boolean, meetingId: string | undefined, 
     ...(moment.atMs === undefined ? {} : { atMs: Math.max(0, Math.round(moment.atMs)) }),
     ...(moment.line === undefined ? {} : { line: moment.line }),
   }
+}
+
+/**
+ * Which of the three states an item is in (wave 2, B4): imported lines are
+ * unreviewed until kept; recorded and typed ones were created step by step.
+ * Demo content and lines a person shared have none of the three (null).
+ */
+export function provenanceState(source: ItemSource | undefined): ProvenanceState | null {
+  switch (source?.kind) {
+    case Provenance.Tana:
+      return typeof source.reviewedAt === 'number' ? ProvenanceState.MassImported : ProvenanceState.Unreviewed
+    case Provenance.RecordedSolo:
+    case Provenance.RecordedMeeting:
+    case Provenance.Typed:
+      return ProvenanceState.StepByStep
+    default:
+      return null
+  }
+}
+
+/** "Reviewed" on an imported item: kept as the person's own. Idempotent; returns whether anything changed. */
+export function markReviewed(item: InventoryItem, now: number): boolean {
+  if (provenanceState(item.source) !== ProvenanceState.Unreviewed || !item.source) return false
+  item.source.reviewedAt = now
+  return true
+}
+
+/** "Mark all reviewed" for one import: its items still on this phone. Returns how many changed. */
+export function markBatchReviewed(s: Pick<AppState, 'inventory' | 'imports'>, batchId: string, now: number): number {
+  const batch = (s.imports ?? []).find((b) => b?.id === batchId)
+  if (!batch) return 0
+  const ids = new Set(batch.items.map((x) => x.itemId))
+  return s.inventory.filter((item) => ids.has(item.id) && markReviewed(item, now)).length
 }
 
 export function typedSource(): ItemSource {

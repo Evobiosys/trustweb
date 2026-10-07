@@ -4,7 +4,7 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, DefaultRecording, LogOutcome, QueryStyle, Ring, SearchEngine, Tag, TranscriptionChoice } from './model'
+import { Audience, Channel, DefaultRecording, LogOutcome, ProvenanceState, QueryStyle, Ring, SearchEngine, Tag, TranscriptionChoice } from './model'
 
 export const S = {
   appName: 'TrustWeb',
@@ -681,6 +681,15 @@ export const S = {
   provFromMeeting: (about: string, when: string) => `From the meeting with ${about}, ${when}`,
   provFromMemo: (about: string, when: string) => `From your memo about ${about}, ${when}`,
   provMeetingGone: 'The recording it came from is no longer on this phone.',
+  // The three states from the Max meeting (wave 2, B4).
+  provState: {
+    [ProvenanceState.Unreviewed]: 'Unreviewed, from an import',
+    [ProvenanceState.MassImported]: 'From an import, reviewed',
+    [ProvenanceState.StepByStep]: 'Created step by step',
+  } as Record<ProvenanceState, string>,
+  provUnreviewedChip: 'unreviewed',
+  provReviewed: 'Reviewed: keep it as mine',
+  provReviewedDone: 'Marked reviewed.',
   provNoRecording: 'Noted on Record, without a recording.',
   provSharedBy: (name: string) => `Shared by ${name}`,
   itemSheetLead: 'Who can ask about it, and where it came from. Only you see where it came from; an answer never carries it.',
@@ -830,6 +839,8 @@ export const S = {
   impDone: (n: number, already: number) => `${n} added${already ? `, ${already} already there` : ''}.`,
   impLast: (when: string, n: number) => `Last import: ${when}, ${n === 1 ? '1 line' : `${n} lines`}`,
   impUndo: 'Undo import',
+  impReviewAll: 'Mark all reviewed',
+  impReviewedAll: (n: number) => (n === 1 ? '1 line marked reviewed.' : `${n} lines marked reviewed.`),
   impUndoConfirm: 'Take away the lines this import added? Lines you changed since stay.',
   impUndone: (removed: number, kept: number) => `${removed === 1 ? '1 line' : `${removed} lines`} taken away${kept ? `, ${kept} you changed stay` : ''}.`,
   impNotJson: 'This file cannot be read as an inventory file.',
