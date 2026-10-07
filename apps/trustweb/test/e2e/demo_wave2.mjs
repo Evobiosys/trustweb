@@ -30,10 +30,16 @@ async function shot(page, name) {
 }
 
 const device = (page, n) => page.frameLocator(`iframe[title="Device ${n}"]`)
-const holderRecord = (page) => page.evaluate(() => {
-  const k = Object.keys(localStorage).find((x) => x.endsWith('.holder'))
+const recordOf = (page, persona) => page.evaluate((p) => {
+  const k = Object.keys(localStorage).find((x) => x.endsWith('.' + p))
   return k ? JSON.parse(localStorage.getItem(k)) : null
-})
+}, persona)
+const holderRecord = (page) => recordOf(page, 'holder')
+/** Who each of the two phones holds: names of people and peers, to see that a visit adds nobody twice. */
+const webs = async (page) => Object.fromEntries(await Promise.all(['holder', 'seeker'].map(async (p) => {
+  const r = await recordOf(page, p)
+  return [p, { people: (r?.people ?? []).map((x) => x.name).sort(), peers: (r?.peers ?? []).map((x) => x.displayName).sort() }]
+})))
 
 /** Starts the first phone as Jakob, adds Max to his web and a thing to his inventory. */
 async function startHolder(page) {
@@ -65,6 +71,13 @@ async function partComeBack(browser, base) {
   await device(page, 2).getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
   await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
   ok('first visit: two devices, the second one started', await page.locator('iframe').count() === 2)
+  // Settled: both phones hold each other as a peer (the pairing went over the relay).
+  for (let i = 0; i < 100; i++) {
+    const w = await webs(page)
+    if (w.holder.peers.length === 1 && w.seeker.peers.length === 1) break
+    await page.waitForTimeout(200)
+  }
+  const before = await webs(page)
 
   // The second visit: the same browser, the page opened again.
   await page.goto('about:blank')
@@ -76,6 +89,11 @@ async function partComeBack(browser, base) {
   ok('second visit: the thing he noted is still there', await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).count() === 1)
   await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
   ok('second visit: both devices are open again, the second one as it was', await page.locator('iframe').count() === 2)
+  // The second phone is reopened on the first one's connect link: that must not pair them again or add anyone twice.
+  await page.waitForTimeout(4_000)
+  const after = await webs(page)
+  ok('second visit: nobody added twice on either phone (same people, same peers)', JSON.stringify(after) === JSON.stringify(before) && before.holder.peers.length === 1 && before.seeker.peers.length === 1,
+    JSON.stringify({ before, after }))
   await shot(page, 'w2-03-demo-second-visit')
 
   // The one button: "Make it your personal account", then the live app holds the notes.

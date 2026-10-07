@@ -1345,7 +1345,8 @@ function personSheet(personId: string): void {
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
-    feed.personRow(p),
+    // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
+    feedOn(st()) ? feed.personRow(p) : null,
   ])
 }
 

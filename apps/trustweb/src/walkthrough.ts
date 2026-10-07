@@ -58,6 +58,8 @@ const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb ap
 const relayYes = (who: string, q: string): string =>
   `<div class="wt-cosmic"><b>${who} asks your friends</b><br>"${q}"<br><small>Your setting: pass on asks from people you know to your friends. <b>On</b> (you said yes once).</small>${card('ok', 'Passed on. You never see the answer.')}</div>`
 const AISHA_REAL = 'In real life: she just opened an animal welfare fund.'
+/** The widest tier, as the app names it (wave 2, P22): acquaintances, and through a friend, friends of friends. */
+const WIDEST = 'Shared with: acquaintances (and friends of friends, through a friend)'
 
 const MOTORBIKE = 'Motorbike (125cc), can lend it for a weekend'
 const POSITION = 'We have a new position to fill'
@@ -99,7 +101,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes what she could lend', changed: ['maya'],
         text: 'One line in her inventory (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
-        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${MOTORBIKE}<br><small>Shared with: friends of friends</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
+        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${MOTORBIKE}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
       },
       {
         title: 'Jonas calls into his web', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
@@ -151,8 +153,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Maya notes an opening', changed: ['maya'],
-        text: 'She lets friends of friends ask about it. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>Shared with: friends of friends</small>`)}` },
+        text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
@@ -202,7 +204,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes what she heard', changed: ['maya'],
         text: 'After meeting Aisha, Maya notes it, for people she regards as friends. Aisha\'s phone is not involved.',
-        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: `<div class="wt-h">Notes about Aisha</div>${card('', `${FUND}<br><small>Shared with: friends of friends</small>`)}`, aisha: noApp(AISHA_REAL) },
+        screens: { lena: web(['Jonas']), jonas: web(['Lena', 'Maya']), maya: `<div class="wt-h">Notes about Aisha</div>${card('', `${FUND}<br><small>${WIDEST}</small>`)}`, aisha: noApp(AISHA_REAL) },
       },
       {
         title: 'Lena calls into her web', changed: ['lena', 'jonas', 'maya'], path: ['lena', 'jonas', 'maya'],

@@ -911,7 +911,7 @@ export const S = {
   imgAdd: 'Add a picture',
   imgChange: 'Change the picture',
   imgRemove: 'Remove the picture',
-  imgHint: 'The picture stays on this phone: it shows in your Feed and is never sent with an answer, a backup or a meeting.',
+  imgHint: 'The picture stays on this phone: it shows here (and in your Feed, if you switched it on) and is never sent with an answer, a backup or a meeting.',
   imgFailed: 'This picture could not be read.',
   chSignalMolly: 'Signal or Molly',
 } as const
