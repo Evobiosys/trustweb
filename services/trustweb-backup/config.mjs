@@ -48,6 +48,8 @@
 //   NEWSLETTER_PER_DAY               20           forwards per UTC day, all visitors together (attempts). The subscriber limits this
 //                                                 server's one address to 3/min and 50/day; past this cap entries are kept with
 //                                                 deferred:true for a replay instead of burning the subscriber's bucket
+//   NEWSLETTER_PER_MINUTE            2            the same, per sliding minute (the subscriber: 3/min)
+//   NEWSLETTER_PER_30_DAYS           240          the same, per sliding 30 days (the subscriber: 250/30 days; 20 a day would empty it in 12)
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -143,5 +145,7 @@ export function loadConfig(options = {}) {
     subscriberUrl: pick(options, 'subscriberUrl', 'SUBSCRIBER_URL', '', String),
     subscriberTimeoutMs: pick(options, 'subscriberTimeoutMs', 'SUBSCRIBER_TIMEOUT_MS', 4000),
     newsletterPerDay: pick(options, 'newsletterPerDay', 'NEWSLETTER_PER_DAY', 20),
+    newsletterPerMinute: pick(options, 'newsletterPerMinute', 'NEWSLETTER_PER_MINUTE', 2),
+    newsletterPer30Days: pick(options, 'newsletterPer30Days', 'NEWSLETTER_PER_30_DAYS', 240),
   }
 }

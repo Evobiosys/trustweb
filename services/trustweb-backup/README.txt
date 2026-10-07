@@ -25,8 +25,9 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   only when notify or newsletter is true; ONLY newsletter:true forwards it (after the entry is stored) to the
                   subscriber service (SUBSCRIBER_URL; newsletter.mjs; same body as the join form; double opt-in at the subscriber;
                   the answer stays 204 whatever it does; no retry). review-wave2: with a ticked box the message may be empty;
-                  at most NEWSLETTER_PER_DAY (20) forwards per UTC day for all visitors together (the subscriber allows this
-                  server's one address 50 a day), past it the entry is stored with deferred:true and logged "feedback newsletter
+                  at most NEWSLETTER_PER_MINUTE (2), NEWSLETTER_PER_DAY (20) and NEWSLETTER_PER_30_DAYS (240) forwards for all
+                  visitors together (the subscriber allows this server's one address 3/min, 50/day, 250/30 days; the counts live
+                  in memory, a restart forgets them), past any of them the entry is stored with deferred:true and logged "feedback newsletter
                   deferred" for a later replay (the subscriber answers a repeat with already_subscribed/confirmation_pending,
                   so a replay cannot double-subscribe). SUBSCRIBER_URL must be https (plain http to loopback only). The file (read with scripts/trustweb_feedback_read.sh, which shows control and
                   bidi characters as \u{XXXX} so typed-in escapes never reach the terminal).

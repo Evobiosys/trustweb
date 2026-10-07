@@ -473,3 +473,27 @@ test('review: SUBSCRIBER_URL over plain http only to a loopback address; https a
   for (const ok of ['https://subscriber.questhub.eco/subscribe', 'http://127.0.0.1:8979/subscribe', 'http://localhost:8979/x', 'http://[::1]:8979/x']) assert.equal(isForwardUrl(ok), true, ok)
   for (const bad of ['http://subscriber.questhub.eco/subscribe', 'http://10.0.0.1/x', 'ftp://example.org/x', 'not a url', '', 'https://user:pw@example.org/x']) assert.equal(isForwardUrl(bad), false, bad)
 })
+
+test('review: the subscriber\'s minute and 30-day buckets are kept too: past 2 a minute or 240 in 30 days the entry is deferred', async () => {
+  let clock = Date.parse('2026-10-07T10:00:00Z')
+  await withSubscriber(ok, async (seen) => {
+    await withServer(P, subscribed({ newsletterPerMinute: 2, newsletterPer30Days: 4, newsletterPerDay: 100, now: () => clock }), async ({ dir, lines: log }) => {
+      const send = async (who) => assert.equal((await post({ text: who, newsletter: true, email: `${who}@example.org` })).status, 204)
+      await send('a'); await send('b'); await send('c') // the third within the minute
+      assert.equal(seen.length, 2)
+      clock += 61_000
+      await send('d'); await send('e') // a new minute: d and e go (3 and 4 of 4 in 30 days; c was deferred, so not counted)
+      clock += 61_000
+      await send('f') // the 30-day bucket is full
+      clock += 61_000
+      await send('g') // still full
+      assert.equal(seen.length, 4)
+      clock += 30 * 86_400_000
+      await send('h')
+      assert.equal(seen.length, 5)
+      const stored = await lines(path.join(dir, 'feedback.jsonl'))
+      assert.deepEqual(stored.map((e) => [e.text, e.deferred === true]), [['a', false], ['b', false], ['c', true], ['d', false], ['e', false], ['f', true], ['g', true], ['h', false]])
+      assert.equal(log.filter((l) => l === 'feedback newsletter deferred').length, 3)
+    })
+  })
+})

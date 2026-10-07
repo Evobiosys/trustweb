@@ -7,9 +7,10 @@
 // Wave 2 (P14, P15): an entry may carry {notify:true, newsletter:true, email}. The email is validated and stored ONLY when notify or
 // newsletter is true (else it is dropped unread), and ONLY newsletter:true forwards it to the subscriber service (newsletter.mjs),
 // after the entry is safely stored. The answer is 204 whatever the subscriber does. The boxes must arrive as real booleans.
-// review-wave2: with a ticked box the message may be empty (the form allows "just sign me up"); at most NEWSLETTER_PER_DAY forwards
-// per UTC day (attempts, not successes: the subscriber counts requests from this server's one address, 50 a day for ALL of them),
-// past it the entry is stored with deferred:true and the log says "feedback newsletter deferred", for a later replay.
+// review-wave2: with a ticked box the message may be empty (the form allows "just sign me up"); forwards are capped below every
+// bucket the subscriber keeps for this server's one address (attempts, not successes, are what it counts): NEWSLETTER_PER_MINUTE 2,
+// NEWSLETTER_PER_DAY 20, NEWSLETTER_PER_30_DAYS 240; past any of them the entry is stored with deferred:true and the log says
+// "feedback newsletter deferred", for a later replay.
 
 import fsp from 'node:fs/promises'
 import { CapExceeded, jsonError, readSmallBody, refuse, sendJson, tooManyRequests } from './http_util.mjs'
@@ -74,6 +75,13 @@ export function createFeedback({ cfg, clientOf, withLock, fetchImpl = fetch }) {
   const limiter = createWindowLimiter({ limit: cfg.feedbackPerHour, windowMs: 3600000, now: cfg.now })
   // One global count per UTC day, in memory (a restart starts it again: at worst one more day's cap, still below the subscriber's).
   const forwardsToday = createDailyMeter({ limit: cfg.newsletterPerDay, now: cfg.now })
+  // The subscriber's other buckets for this server's one address (spider app.py RATE_LIMITS: 3/min, 20/h, 50/day, 250/30 days):
+  // a sliding minute and a sliding 30 days, kept below them. In memory too (a restart forgets them; see README).
+  const WINDOWS = Object.freeze([
+    { limit: cfg.newsletterPerMinute, ms: 60_000 },
+    { limit: cfg.newsletterPer30Days, ms: 30 * 86_400_000 },
+  ])
+  let forwardTimes = [] // newest last; only the last 30 days are kept
 
   function corsHeaders(origin) {
     return {
@@ -108,8 +116,12 @@ export function createFeedback({ cfg, clientOf, withLock, fetchImpl = fetch }) {
    */
   function takeForward() {
     if (!newsletter.enabled) return true
-    if (!forwardsToday.fits(null, 1)) return false
+    const t = cfg.now()
+    forwardTimes = forwardTimes.filter((x) => t - x < WINDOWS[WINDOWS.length - 1].ms)
+    const windowFull = WINDOWS.some((w) => forwardTimes.filter((x) => t - x < w.ms).length >= w.limit)
+    if (windowFull || !forwardsToday.fits(null, 1)) return false
     forwardsToday.add(null, 1)
+    forwardTimes.push(t)
     return true
   }
 
