@@ -1900,9 +1900,11 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   }
   m.about = draft.name.trim() || (draft.plain ? S.pastPlainAbout : m.about || S.pastUnnamed)
   m.kind = draft.about
+  // Both follow the draft as it is now (a meeting stored at End meeting is completed later): emptied General notes, or a plain
+  // note that was then given a name, must not keep the old value.
   const general = cleanGeneralNotes(draft.generalNotes)
-  if (general) m.generalNotes = general
-  if (draft.plain) m.plain = true
+  if (general) m.generalNotes = general; else delete m.generalNotes
+  if (draft.plain) m.plain = true; else delete m.plain
   m.where = draft.context.trim() || m.where
   m.endedAt = Date.now()
   m.durationMs = Math.max(m.durationMs, totalMs())
@@ -2362,9 +2364,10 @@ async function makeNotes(): Promise<void> {
   }
   for (const l of draft.extraLines) if (!draft.lines.some((x) => x.id === l.id)) draft.lines.push({ ...l })
   // What was typed under "General notes" is one more note line, first, typed by hand (never stamped with a moment of the recording).
+  // "Only me" until the person widens it on the next screen: free text can be long and private, and an answer carries one fixed block of text.
   const general = cleanGeneralNotes(draft.generalNotes)
   if (general && !draft.lines.some((x) => x.typed)) {
-    draft.lines.unshift({ id: randomId(8), text: general, tag: Tag.Note, audience: Audience.Friends, typed: true })
+    draft.lines.unshift({ id: randomId(8), text: general, tag: Tag.Note, audience: Audience.OnlyMe, typed: true })
   }
   go(Screen.Review)
 }

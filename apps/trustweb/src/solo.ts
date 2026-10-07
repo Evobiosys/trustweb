@@ -185,9 +185,10 @@ function addDevice(wanted?: Persona): void {
 }
 
 /**
- * "Remove this device": its phone goes, its stored record with it (a persona's record is its identity and what it holds),
- * and its persona is free again for the next "Add a device". The first device never goes (demo_devices.ts removeVerdict).
- * No confirm here: it is a demo phone; the real app asks before it ends a demo account.
+ * "Remove this device": its phone closes and its persona is free again for the next "Add a device". Its stored record STAYS
+ * (a persona's record is its identity and what it holds), so adding it again brings the same phone back, still connected, and the
+ * first phone's web never shows a second "Jonas" next to a dead one; "Start over" wipes every record. The first device never
+ * goes (demo_devices.ts removeVerdict). No confirm here: it is a demo phone; the real app asks before it ends a demo account.
  */
 function removeDevice(p: Persona): void {
   if (removeVerdict(open, p, ORDER) !== RemoveVerdict.Removable) return
@@ -196,7 +197,6 @@ function removeDevice(p: Persona): void {
   const k = slot ? pending.indexOf(slot) : -1
   if (k >= 0) pending.splice(k, 1)
   col?.remove()
-  try { localStorage.removeItem(storageKey(p, ctx)) } catch { /* nothing stored */ }
   open = withoutDevice(open, p)
   current = Math.min(current, open.length - 1)
   rememberDevices(open)

@@ -10,11 +10,18 @@
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8984 ../../node_modules/.bin/tsx ../trustweb/test/e2e/wave5_flow.mjs
  */
+import path from 'node:path'
 import { launch, startApp, startPhone, tally } from '../helpers/e2e_harness.mjs'
 
 const t = tally()
 const PARTS = (process.env.PARTS || 'a,b,f,g,d,c,m').split(',')
 const errors = []
+/** SHOTS=<dir> saves a screenshot of a page or element under that name (the wave-5 evidence). */
+const shot = async (target, name) => {
+  if (!process.env.SHOTS) return
+  await new Promise((r) => setTimeout(r, 500)) // a sheet slides in over 300 ms
+  await target.screenshot({ path: path.join(process.env.SHOTS, name) })
+}
 const people = (page) => page.locator('.node:not(.you)')
 
 async function newPage(browser, viewport, init) {
@@ -43,6 +50,7 @@ async function partB(browser, base) {
     return { bSize: parseFloat(cb.fontSize), sSize: parseFloat(cs.fontSize), bWeight: Number(cb.fontWeight), sWeight: Number(cs.fontWeight), bColor: cb.color, sColor: cs.color }
   })
   t.ok('b: smaller font, lighter weight, another colour than the button', look.sSize < look.bSize && look.sWeight < look.bWeight && look.sColor !== look.bColor, JSON.stringify(look))
+  await shot(page.locator('.demo-topbar'), 'b_demo_install_for_yourself.png')
   t.ok('b: the topbar still holds ONE visible button (the device switch is hidden with one device)', await page.locator('.demo-topbar button:visible').count() === 1)
   t.ok('b: the button points at its sub-line as its description', (await btn.getAttribute('aria-describedby')) === (await sub.getAttribute('id')))
   await ctx.close()
@@ -59,6 +67,7 @@ async function partA(browser, base) {
     await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     const popup = phone.locator('.demo-friends')
     await popup.waitFor({ timeout: 5_000 })
+    await shot(popup, 'a_popup_dismiss_them.png')
     t.ok('a: the popup carries "Dismiss them" under "Got it"', (await popup.locator('.notice-actions button').allInnerTexts()).map((x) => x.trim()).join('|') === 'Got it|Dismiss them')
     const sizes = await popup.evaluate((p) => { const g = getComputedStyle(p.querySelector('.btn')); const d = getComputedStyle(p.querySelector('.notice-dismiss')); return { gs: parseFloat(g.fontSize), ds: parseFloat(d.fontSize), gc: g.color, dc: d.color } })
     t.ok('a: "Dismiss them" is smaller and another colour than "Got it"', sizes.ds < sizes.gs && sizes.dc !== sizes.gc, JSON.stringify(sizes))
@@ -73,6 +82,7 @@ async function partA(browser, base) {
     else {
       await popup.locator('.notice-dismiss').click()
       await phone.locator('.toast.on').waitFor({ timeout: 3_000 })
+      await shot(page.locator('iframe[title="Device 1"]'), 'a_after_dismiss_demo_phone.png')
       t.ok('a: after "Dismiss them" the seeded friends are gone', await people(phone).count() === 1, String(await people(phone).count()))
       t.ok('a: the person added meanwhile stays', await phone.locator('.node', { hasText: 'Max' }).count() === 1)
       t.ok('a: the popup is closed', await popup.isHidden())
@@ -116,6 +126,7 @@ async function partF(browser, base) {
     const toggleVisible = await page.locator('.demo-toggle').isVisible()
     t.ok(`f: ${label}: "Add a device" is ${installed ? 'hidden' : 'shown'}`, addVisible === !installed)
     t.ok(`f: ${label}: "Show demo content" (dock) is ${installed ? 'hidden' : 'shown'}`, toggleVisible === !installed)
+    await shot(page, `f_dock_${installed ? 'installed' : 'browser'}_${label.replace(/[^a-z]+/gi, '-')}.png`)
     t.ok(`f: ${label}: "See it in action" stays`, await page.locator('.see-action').isVisible())
     await page.locator('nav.tabs button', { hasText: 'Web' }).click()
     await page.getByRole('button', { name: 'More' }).click()
@@ -138,12 +149,21 @@ async function partG(browser, base) {
   await first.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await page.locator('.dock .add').click()
   await page.locator('.dock .add').click()
+  // Connect device 2 before anything is removed: the identity question below needs a real connection.
+  const second = demoDevice(page, 2)
+  await second.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
+  await second.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  const jonasNodes = () => first.locator('.node', { hasText: 'Jonas' }).count()
+  for (let i = 0; i < 60 && (await jonasNodes()) < 1; i++) await page.waitForTimeout(250)
+  t.ok('g: Maya\'s phone shows the connected Jonas once', (await jonasNodes()) === 1, String(await jonasNodes()))
+  await shot(page, 'g_three_devices_with_remove.png')
   t.ok('g: three devices after two "Add a device"', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 2', 'Device 3']), JSON.stringify(await titles()))
   t.ok('g: the first device has no remove, the others have one', await page.locator('.col').nth(0).locator('.remove-device').count() === 0 && await page.locator('.remove-device').count() === 2)
   t.ok('g: while nothing is removed the page still stores the old count', (await devicesKey()) === '3', String(await devicesKey()))
   await page.locator('.col[data-persona="seeker"] .remove-device').click()
+  await shot(page, 'g_after_removing_device_2.png')
   t.ok('g: removing the middle phone leaves Device 1 and Device 3', JSON.stringify(await titles()) === JSON.stringify(['Device 1', 'Device 3']), JSON.stringify(await titles()))
-  t.ok('g: its stored record is gone, the first device keeps its own', await page.evaluate(() => localStorage.getItem('trustweb.v1.generic.seeker') === null && localStorage.getItem('trustweb.v1.generic.holder') !== null))
+  t.ok('g: its stored record stays (adding it again brings the same phone back); Start over is what wipes', await page.evaluate(() => localStorage.getItem('trustweb.v1.generic.holder') !== null))
   t.ok('g: the remembered list follows', (await devicesKey()) === 'holder,third', String(await devicesKey()))
   t.ok('g: Device 3 is in front, so the switch offers Device 1', /Switch to device 1/.test(await page.locator('.switch').innerText()))
   await page.locator('.switch').click()
@@ -151,6 +171,12 @@ async function partG(browser, base) {
   await page.locator('.dock .add').click()
   const after = await titles()
   t.ok('g: "Add a device" reuses the freed persona and never opens one twice', JSON.stringify(after) === JSON.stringify(['Device 1', 'Device 3', 'Device 2']) && new Set(after).size === after.length, JSON.stringify(after))
+  // remove Jonas and add him again: the same phone comes back, still connected, never a second Jonas next to a dead one
+  const again = demoDevice(page, 2)
+  await again.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await page.waitForTimeout(1500)
+  t.ok('g: re-added Device 2 is the same Jonas (it opens on its web, not on a new start screen)', await again.getByLabel('Your first name').count() === 0)
+  t.ok('g: and Maya\'s phone still shows exactly one Jonas', (await jonasNodes()) === 1, String(await jonasNodes()))
   await page.reload()
   await page.locator('iframe').first().waitFor()
   t.ok('g: after a reload the same three devices come back', JSON.stringify((await titles()).sort()) === JSON.stringify(['Device 1', 'Device 2', 'Device 3']), JSON.stringify(await titles()))
@@ -189,6 +215,7 @@ async function partD(browser, base) {
   await page.keyboard.type('Met at the station. ')
   await page.keyboard.type('She runs a repair cafe.')
   t.ok('d: typing keeps the caret (no redraw): the field is still focused and holds all of it', await page.evaluate(() => document.activeElement?.matches('[data-general-notes]')) && (await notes.inputValue()) === 'Met at the station. She runs a repair cafe.')
+  await shot(page, 'd_record_general_notes_typed_390x844.png')
   t.ok('d: send and discard come on as soon as something is typed', await page.locator('[data-record-send]').isEnabled() && await page.locator('[data-record-discard]').isEnabled())
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
   await toRecord(page)
@@ -204,7 +231,7 @@ async function partD(browser, base) {
   await page.locator('.toast.on').waitFor({ timeout: 5_000 })
   const s = await stateOf(page)
   const person = s.people.find((p) => p.name === 'Anna Repair')
-  t.ok('d: the saved note is on the person, typed (no recording)', person?.lines.length === 1 && person.lines[0].text === 'Met at the station. She runs a repair cafe.' && person.lines[0].source?.kind === 'typed', JSON.stringify(person))
+  t.ok('d: the saved note is on the person, typed (no recording), for nobody else until widened', person?.lines.length === 1 && person.lines[0].text === 'Met at the station. She runs a repair cafe.' && person.lines[0].source?.kind === 'typed' && person.lines[0].audience === 'me', JSON.stringify(person))
   t.ok('d: a notes-only memo is stored as a past meeting that carries the General notes', s.meetings?.length === 1 && s.meetings[0].generalNotes === 'Met at the station. She runs a repair cafe.' && s.meetings[0].meeting === false, JSON.stringify(s.meetings))
   await toRecord(page)
   await page.locator('.past-link').click()
@@ -229,6 +256,7 @@ async function partC(browser, base) {
   await page.locator('[data-general-notes]').fill('Idea: a map of repair cafes')
   await page.locator('[data-record-send]').click()
   await page.locator('[data-about-none]').waitFor()
+  await shot(page, 'c_about_sheet_none_of_these.png')
   t.ok('c: the sheet offers "X none of these"', /none of these/.test(await page.locator('[data-about-none]').innerText()))
   await page.locator('[data-about-none]').click()
   await page.getByText('Looks right').waitFor({ timeout: 10_000 })
@@ -244,6 +272,7 @@ async function partC(browser, base) {
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
   // 2. what -> an existing thing: the note becomes its context
   await page.locator('.about-kind.what').click()
+  await shot(page, 'c_what_sheet_context_hint.png')
   t.ok('c: under "what" the sheet says an existing thing takes the note as context', /add this as context/i.test(await page.locator('.about-ctx-hint').innerText()))
   await page.locator('.sheet.on .chip', { hasText: 'Loudspeakers' }).click()
   await page.locator('[data-general-notes]').fill('Lent two of them to Anna in June')
@@ -258,6 +287,7 @@ async function partC(browser, base) {
   t.ok('c: the note is context on the existing thing, with when and the meeting it came from', thing?.context?.length === 1 && thing.context[0].text === 'Lent two of them to Anna in June' && typeof thing.context[0].at === 'number' && typeof thing.context[0].meetingId === 'string', JSON.stringify(thing))
   t.ok('c: the thing itself is untouched (text, audience)', thing.text === 'Loudspeakers' && thing.audience === before.inventory.find((i) => i.text === 'Loudspeakers').audience)
   await page.locator('.inv-text', { hasText: 'Loudspeakers' }).click()
+  await shot(page, 'c_item_sheet_context.png')
   t.ok('c: the item sheet shows the context', /Lent two of them to Anna in June/.test(await page.locator('[data-item-context]').innerText()))
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
   // 3. the same note again is not added twice

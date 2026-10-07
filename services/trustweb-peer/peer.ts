@@ -65,13 +65,13 @@ import type { RelayChannel, RelayStatus } from '../../apps/demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../apps/demo/src/crypto'
 import { decodeFromQr } from '../../apps/demo/src/wire'
 import type { Envelope } from '../../apps/demo/src/wire'
-import { RELAY_DEADLINE_MS, interpret, settleAt } from '../../apps/demo/src/gate'
+import { RELAY_DEADLINE_MS, interpret, settleAt, truncateSharedJson } from '../../apps/demo/src/gate'
 import { sealRelayAnswer } from '../../apps/demo/src/answer_key'
 import { classifyIncomingQuery } from '../../apps/demo/src/incoming_query'
 import { matchTemplate } from '../../apps/demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../apps/demo/src/types'
 import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayload } from '../../apps/demo/src/types'
-import { askTemplate } from '../../apps/trustweb/src/lexicon'
+import { ASK_TEMPLATE_ID, askTemplate } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen, threadsForRing } from '../../apps/trustweb/src/model'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
 
@@ -189,12 +189,27 @@ const DEFAULT_CLAIM_WINDOW_MS = 10 * 60_000
 const HOUR_MS = 3_600_000
 const PRESET_NOTE_MAX_LEN = 120
 /**
- * The longest inventory line (characters) the peer shares. It was 160 and cut a longer line short, which served the owner's
- * ten public lines as eight (two are 171 and 194 characters). 400 is a sane upper bound for one line of a short inventory,
- * still far under the relay's wire limit even for the three lines an answer may carry (MAX_SHARED). A longer line is HELD
- * (counted, never shared) rather than cut: what goes out is exactly the text the owner allowed in advance, never a cut-off of it.
+ * The longest inventory line (characters) the peer holds as shareable. It was 160 and cut a longer line short, which served the
+ * owner's ten public lines as eight (two are 171 and 194 characters). It is NOT 400, as the first draft of wave 5 had it: an answer
+ * is one fixed 512-byte block (ANSWER_BODY_LEN), the line travels with its `when` and `context` inside it, and a line too long for
+ * that block is dropped from the answer whole (the asker gets "no match", the peer's log says "shared"). One line with the
+ * standard preset context fits up to about 324 to 359 characters, so 300 is the sane upper bound; fitsAnswer below enforces the
+ * real limit per line, whatever its preset says. A line over either is HELD (counted, never shared), never cut: what goes out is
+ * exactly the text the owner allowed in advance.
  */
-export const INVENTORY_LINE_MAX = 400
+export const INVENTORY_LINE_MAX = 300
+/** The longest coarse "when" label ("early September") and the widest name a front door is given: the worst case for the answer's size. */
+const ANSWER_WORST_WHEN = 'early September'
+const ANSWER_WORST_NAME_LEN = 40
+
+/** Would this line, alone, still fit the answer block (apps/demo gate.ts truncateSharedJson) under its own preset context? */
+export function fitsAnswer(text: string, preset: PresetPermission): boolean {
+  const body = truncateSharedJson({
+    from: 'x'.repeat(ANSWER_WORST_NAME_LEN), templateId: ASK_TEMPLATE_ID,
+    items: [{ text, when: ANSWER_WORST_WHEN, context: presetContext(preset) }],
+  })
+  return !new TextDecoder().decode(body).includes('"tr":1')
+}
 const CLAIM_FILE = 'claim-open'
 /** apps/demo's prune(): keep the relevance band, at most three lines (net.ts). */
 const RELEVANCE_BAND = 0.5
@@ -226,7 +241,7 @@ export function presetContext(p: PresetPermission): string {
   return `Allowed in advance by ${p.by} (${day})` + (p.note ? `: ${p.note}` : '')
 }
 
-/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset, or over INVENTORY_LINE_MAX, is held. */
+/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset, over INVENTORY_LINE_MAX, or too long for the answer block with its preset, is held. */
 export function loadInventory(file: string, now: number): LoadedInventory {
   const raw: unknown = JSON.parse(readFileSync(file, 'utf8'))
   const items = (raw as { items?: unknown }).items
@@ -237,7 +252,7 @@ export function loadInventory(file: string, now: number): LoadedInventory {
     if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
     const preset = parsePreset(o.preset)
     const text = o.text.trim()
-    if (!preset || text.length > INVENTORY_LINE_MAX) { out.held++; continue }
+    if (!preset || text.length > INVENTORY_LINE_MAX || !fitsAnswer(text, preset)) { out.held++; continue }
     out.preset.push({
       item: { id: randomId(8), text, audience: o.audience, included: true, createdAt: now },
       preset,

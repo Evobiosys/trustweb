@@ -17,7 +17,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { request } from 'node:http'
-import { AskRateLimit, INVENTORY_LINE_MAX, PeerPolicy, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
+import { AskRateLimit, INVENTORY_LINE_MAX, PeerPolicy, fitsAnswer, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
 import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
 import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
@@ -130,11 +130,11 @@ describe('loadInventory', () => {
     // the two lines the old 160-character bound kept out (171 and 194 characters) are served in full
     expect(inv.preset.filter((l) => l.item.text.length > 160).map((l) => l.item.text.length)).toEqual([194, 171])
   })
-  it('the line bound is 400 characters: a line AT the bound loads intact, one character more is held, never cut', () => {
+  it('the line bound is 300 characters: a line AT the bound loads intact, one character more is held, never cut', () => {
     const dir = tmp()
     const f = path.join(dir, 'inv.json')
-    const preset = { by: 'Jakob', at: '2026-10-07' }
-    expect(INVENTORY_LINE_MAX).toBe(400)
+    const preset = { by: 'Jakob', at: '2026-10-07', note: 'demo content' }
+    expect(INVENTORY_LINE_MAX).toBe(300)
     const atBound = 'a'.repeat(INVENTORY_LINE_MAX)
     writeFileSync(f, JSON.stringify({ items: [
       { text: atBound, audience: 'fof', preset },
@@ -142,10 +142,28 @@ describe('loadInventory', () => {
       { text: ' ' + atBound + ' ', audience: 'fof', preset },
     ] }))
     const inv = loadInventory(f, 1)
-    expect(inv.preset.map((l) => l.item.text.length)).toEqual([400, 400])
+    expect(inv.preset.map((l) => l.item.text.length)).toEqual([300, 300])
     expect(inv.preset[0].item.text).toBe(atBound)
     expect(inv.held).toBe(1)
     rmSync(dir, { recursive: true })
+  })
+  it('a line at the bound still fits the one 512-byte answer block, and a line whose own preset context is too long for it is held', () => {
+    const standard = { by: 'Jakob', at: '2026-10-07', note: 'demo content' }
+    expect(fitsAnswer('a'.repeat(INVENTORY_LINE_MAX), standard)).toBe(true)
+    // the same text with a 120-character note in its preset no longer fits: held rather than sent as an empty answer
+    const heavy = { by: 'Jakob', at: '2026-10-07', note: 'n'.repeat(120) }
+    expect(fitsAnswer('a'.repeat(INVENTORY_LINE_MAX), heavy)).toBe(false)
+    expect(fitsAnswer('a'.repeat(150), heavy)).toBe(true)
+    const dir = tmp()
+    const f = path.join(dir, 'inv.json')
+    writeFileSync(f, JSON.stringify({ items: [{ text: 'a'.repeat(INVENTORY_LINE_MAX), audience: 'fof', preset: heavy }, { text: 'short line', audience: 'fof', preset: heavy }] }))
+    const inv = loadInventory(f, 1)
+    expect(inv.preset.map((l) => l.item.text)).toEqual(['short line'])
+    expect(inv.held).toBe(1)
+    rmSync(dir, { recursive: true })
+  })
+  it('a 400-character line would have been dropped from its answer whole (the reason the bound is 300, not 400)', () => {
+    expect(fitsAnswer('a'.repeat(400), { by: 'Jakob', at: '2026-10-07', note: 'demo content' })).toBe(false)
   })
 })
 
@@ -204,6 +222,32 @@ describe('the peer against an in-memory relay', () => {
     return f
   }
   const PRESET = { by: 'Jakob', at: '2026-10-06', note: 'demo content' }
+
+  it('the live rename: a state dir that already has an identity and an owner takes the configured name (Jakob), keeps its DID, card id and owner', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Loudspeakers', audience: 'fof', preset: PRESET }])
+    const stateDir = path.join(dir, 'state')
+    const old = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, name: 'Demo inventory', healthPort: 0, claim: true, answerWindowMs: WINDOW_MS, log: () => {} })
+    const owner = await phone(relayOrigin, 'Jakob', () => [])
+    await owner.connectTo(old.card.did)
+    await until(() => old.status().owner)
+    expect(old.card.name).toBe('Demo inventory')
+    await old.stop()
+    // the redeploy: same state dir, the unit now says TW_PEER_NAME=Jakob (or nothing: the default is Jakob)
+    const renamed = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, name: 'Jakob', healthPort: 0, answerWindowMs: WINDOW_MS, log: () => {} })
+    expect(renamed.card.name).toBe('Jakob')
+    expect(renamed.card.did).toBe(old.card.did)
+    expect(renamed.card.id).toBe(old.card.id)
+    expect(renamed.status().owner).toBe(true)
+    expect(JSON.parse(readFileSync(path.join(stateDir, 'demo-peer.json'), 'utf8')).name).toBe('Jakob')
+    await renamed.stop()
+    const byDefault = await startPeer({ stateDir, inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS, log: () => {} })
+    expect(byDefault.card.name).toBe('Jakob')
+    expect(byDefault.card.did).toBe(old.card.did)
+    await byDefault.stop()
+    owner.close()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
 
   it('comes up, writes its card, keeps its identity across restarts, serves health on loopback only', async () => {
     const dir = tmp()

@@ -573,7 +573,7 @@ export const S = {
   queryTitle: 'Call into your web',
   queryClose: 'Close',
   queryLead: 'Ask in your own words. The question goes to the people you are connected with; each phone checks it privately, and only a person can say yes.',
-  queryPh: 'e.g. Does anyone have a motorbike I could borrow?',
+  queryPh: 'e.g. Does anyone have loudspeakers I could borrow?',
   querySend: 'Call into my web',
   queryTry: 'Try',
   queryNoPeers: 'You are not connected to anyone on TrustWeb yet. Tap the QR button at the top and let them scan your code.',

@@ -49,7 +49,7 @@ queried if I don't have this laptop on".
    - To his own phone: the import file, every line, audience "Only me" (no Tana ids, no DIDs).
    - To the Swiss server (demo front door): exactly the owner's ten public lines (since wave 5, 2026-10-07;
      before that fictional lines plus eight of them) he ticked "allow in advance", all ten served now that the
-     peer's line bound is 400 characters (it was 160); a longer line is held, never cut; all in demo_inventory.json with presets. Never a line he did not allow in
+     peer's line bound is 300 characters (it was 160; 400 would not fit the fixed 512-byte answer block); a longer line, or one too long with its preset context, is held, never cut; all in demo_inventory.json with presets. Never a line he did not allow in
      advance: apps/trustweb/test/unit/demo_inventory_public.test.mjs pins the file to an allowlist.
    - To an asker: at most three lines per ask, each either a preset line (marked "Allowed in advance by Jakob
      (date)") or a line Jakob's phone shared live. Never a Tana node id, never a DID, never a timestamp finer
