@@ -1,0 +1,210 @@
+{{BACK}}
+{{AI_DRAFT}}
+<h1>Data policy</h1>
+<p class="lede">Every kind of data TrustWeb handles, in one list: what it is, where it lives, how long it stays, who can read it, and how to delete it.
+The <a href="privacy.html">privacy policy</a> explains why we may handle it and what your rights are.</p>
+<p class="stamp">Experimental service, 2026-10-07</p>
+
+<section id="how-to-read">
+  <p class="eyebrow">How to read this</p>
+  <h2>Where the data lives</h2>
+  <p>Most of it never leaves your phone. What does leave goes to one server of ours at Infomaniak, in Switzerland. Where something is encrypted
+  on your phone before it leaves, the server holds ciphertext it cannot read. Where this page says <span class="tbc">to confirm</span>, we have not
+  settled the answer yet, and we say so instead of guessing.</p>
+  <p>To delete anything that has no button in the app, write to <a href="mailto:connect@evobiosys.org">connect@evobiosys.org</a>. We answer within one month.</p>
+</section>
+
+<section id="d-phone">
+  <p class="eyebrow">1. On your phone</p>
+  <h2>Everything TrustWeb stores for you</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Your web of people, notes, inventory, transcripts, recordings and settings.</dd>
+    <dt>Where</dt><dd>The browser storage of your own phone. We do not receive it.</dd>
+    <dt>How long</dt><dd>Until you delete it.</dd>
+    <dt>Who can read it</dt><dd>You, and anyone who can use your unlocked phone.</dd>
+    <dt>How to delete it</dt><dd>"Reset this phone" in Settings removes everything TrustWeb stored on it. Clearing the site data in your browser does the same.</dd>
+  </dl>
+</section>
+
+<section id="d-backup">
+  <p class="eyebrow">2. Encrypted backup</p>
+  <h2>A copy of your phone, encrypted before it leaves</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>An encrypted copy of your phone's record. Besides the ciphertext the server sees an identifier derived from your recovery key (it reveals nothing about the key), a fingerprint of a write token, the size and when it was last written.</dd>
+    <dt>Where</dt><dd>Our server in Switzerland.</dd>
+    <dt>How long</dt><dd>Until your next backup replaces it. We found no automatic expiry. Whether we should add one is <span class="tbc">to confirm</span>.</dd>
+    <dt>Who can read it</dt><dd>Nobody without your recovery key. We can see that a backup exists, its size and its time.</dd>
+    <dt>How to delete it</dt><dd>There is no delete button for backups yet. "Stop backing up on this phone" forgets the key on the phone, and the last backup stays on the server, readable only with that key. To have a backup removed, write to us. We never ask for your recovery key; how we then find the right backup is <span class="tbc">to confirm</span>.</dd>
+  </dl>
+</section>
+
+<section id="d-meetings">
+  <p class="eyebrow">3. Sent meetings</p>
+  <h2>Notes and transcript you send to someone</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The notes and transcript of a meeting, encrypted with a fresh key made for that one send.</dd>
+    <dt>Where</dt><dd>The same store on our server as the backups. The key is only in the link you send, and that link travels as an encrypted message.</dd>
+    <dt>How long</dt><dd>No automatic expiry that we found, as for backups (<span class="tbc">to confirm</span>).</dd>
+    <dt>Who can read it</dt><dd>Whoever holds the link with the key. Not us.</dd>
+    <dt>How to delete it</dt><dd>Write to us; as for backups, finding the right one is <span class="tbc">to confirm</span>.</dd>
+  </dl>
+</section>
+
+<section id="d-hosted">
+  <p class="eyebrow">4. Hosted recordings</p>
+  <h2>The free allowance on our server</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Your recordings, encrypted on your phone. For each one the server also keeps its length, its size and when it was last written or opened, and a hosting account with a fingerprint of your account token, its creation time and your running totals. Allowance while we test: 10 recordings of up to 1 hour each (and 30 MB each), 10 hours in total, per person.</dd>
+    <dt>Where</dt><dd>A separate folder on our server in Switzerland.</dd>
+    <dt>How long</dt><dd>Until you delete a recording. A recording that is neither written nor opened for 90 days may be removed by a clean-up that we run by hand today; it is not on a timer yet. An account with nothing left in it may be removed with it.</dd>
+    <dt>Who can read it</dt><dd>Nobody: it is ciphertext. We can see the lengths, sizes and times. A recording can also be read by whoever you give its read link.</dd>
+    <dt>How to delete it</dt><dd>In the app, remove the recording; it is deleted from the server at once. Or write to us.</dd>
+  </dl>
+</section>
+
+<section id="d-transcription">
+  <p class="eyebrow">5. Server transcription</p>
+  <h2>Audio sent to be turned into text</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The audio of a recording you choose to transcribe. It is not encrypted for the server or the provider, because it has to be understood. The text comes back to your phone.</dd>
+    <dt>Where</dt><dd><!--IF:tx-off-->It is switched off today, and nothing here happens. When it is switched on, the audio<!--/IF--><!--IF:tx-on-->The audio<!--/IF--> passes through our server, in a temporary file that exists only while the job runs, to
+    <!--IF:prov-openrouter-->OpenRouter, which passes it to an inference provider in the United States (OpenRouter picks which one; we cannot). We ask for providers that do not store the audio or train on it and cannot check what they do.<!--/IF-->
+    <!--IF:prov-berget-->Berget AI in Sweden, and only if Berget cannot take it, to OpenRouter and an inference provider in the United States (we cannot check what they do with it).<!--/IF-->
+    <!--IF:prov-berget-only-->Berget AI in Sweden. It goes nowhere else.<!--/IF--></dd>
+    <dt>How long</dt><dd>On our server: until the job ends, and the temporary folder is also emptied whenever the server starts. We keep neither the audio nor the text. We keep a running count of the seconds you used, with your hosting account, and a log line with the provider, the seconds and the cost, never audio or text. At the provider: what its own statement says, which we cannot check.</dd>
+    <dt>Who can read it</dt><dd>The provider handles it as audio while it works. We do not keep it.</dd>
+    <dt>How to delete it</dt><dd>There is nothing of it left on our server to delete. The count of seconds goes when you delete your hosting account (write to us).</dd>
+  </dl>
+</section>
+
+<section id="d-relay">
+  <p class="eyebrow">6. The relay</p>
+  <h2>Messages between phones</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Asks, answers and the links to shared meetings, encrypted on one phone and opened on the other. The relay sees which address a message is for and when it arrived. The very first connection step between two phones is not encrypted.</dd>
+    <dt>Where</dt><dd>A small queue on our server in Switzerland.</dd>
+    <dt>How long</dt><dd>Until the receiving phone confirms receipt, and 72 hours at most (older messages are cleared when the relay next handles a message).</dd>
+    <dt>Who can read it</dt><dd>Nobody on the way. We see the routing details only.</dd>
+    <dt>How to delete it</dt><dd>It deletes itself.</dd>
+  </dl>
+</section>
+
+<section id="d-front-doors">
+  <p class="eyebrow">7. The front doors</p>
+  <h2>The demo inventory and the personal front door</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The name and the identifier of each phone that connected, and the asks sent to them while they are handled. The demo inventory holds made-up lines and lines its owner chose to publish in advance; the personal front door answers only from lines its owner allowed in advance. An ask is matched against the front door's lines and also passed on, with the name you use, to the phone of the person who runs it.</dd>
+    <dt>Where</dt><dd>A state file on our server that only the service can read (names and identifiers), and memory (the asks).</dd>
+    <dt>How long</dt><dd>The names and identifiers: until the owner removes the connection. The text of an ask: only in memory while it is handled; it is not written to disk or to the log. The log keeps counts and outcomes.</dd>
+    <dt>Who can read it</dt><dd>The person who runs the front door (see the <a href="imprint.html">imprint</a>), who sees the asks as they arrive on his phone.</dd>
+    <dt>How to delete it</dt><dd>End the connection in the app, or write to us.</dd>
+  </dl>
+</section>
+
+<section id="d-links">
+  <p class="eyebrow">8. Short connect links</p>
+  <h2>The short link next to the long one</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Where the app offers a short link next to the long one: the long connect link, which carries the name you chose and what another phone needs to connect to yours, stored under a random ten-character id. It is not encrypted on the server beyond the connection itself; it is a link you already share openly. Making links is limited to 6 a minute and 30 an hour per network address, counted in memory, and at most 5000 links are stored at once.</dd>
+    <dt>Where</dt><dd>A file on our server in Switzerland that only the service can read. The service writes neither the link nor its id to any log. If our server fails at the moment someone opens a short link, the web server's error log could still name the short link.</dd>
+    <dt>How long</dt><dd>30 days, then the short link stops working (it answers as if it never existed) and the entry is dropped from the file.</dd>
+    <dt>Who can read it</dt><dd>Anyone who has the short link, and we can read the file. We do not look.</dd>
+    <dt>How to delete it</dt><dd>It expires by itself, or write to us with the short link. You can always use the long link instead, which is never stored by us.</dd>
+  </dl>
+</section>
+
+<section id="d-web-results">
+  <p class="eyebrow">9. Web results</p>
+  <h2>Search words sent to Brave through our server</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The words you type after you choose "Show results here". They go in the body of a request, never in an address.</dd>
+    <dt>Where</dt><dd>Through our server to Brave Search in the United States, without your network address.</dd>
+    <dt>How long</dt><dd>We keep no copy of the words or the results; our log notes only the engine and a status. Brave may log the words under its own terms.</dd>
+    <dt>Who can read it</dt><dd>Brave, under its terms. We do not.</dd>
+    <dt>How to delete it</dt><dd>There is nothing of it on our server. For Brave's copy, see Brave's own terms.</dd>
+  </dl>
+</section>
+
+<section id="d-feedback">
+  <p class="eyebrow">10. Feedback and the notify box</p>
+  <h2>What you send us in a form</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The message, its kind, the contact line and the page you wrote from, and the time to the minute. Your email address only if you ticked "Write back to me", "Notify me when it is ready" or the newsletter box, or used the "notify me" form on the main page. No network address and no browser details.</dd>
+    <dt>Where</dt><dd>One file on our server in Switzerland that only the service can read.</dd>
+    <dt>How long</dt><dd>We read the messages by hand and keep them until we delete them. We have not set a schedule (<span class="tbc">to confirm</span>). A "notify me" address is kept for the one note when TrustWeb is stable.</dd>
+    <dt>Who can read it</dt><dd>The operator, by hand. Nobody else.</dd>
+    <dt>How to delete it</dt><dd>Write to us and say what to remove.</dd>
+  </dl>
+</section>
+
+<section id="d-newsletter">
+  <p class="eyebrow">11. The newsletter</p>
+  <h2>If you tick the newsletter box</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Your email address, kept encrypted, with a fingerprint of it and the project it belongs to. You join only after you click the link in the confirmation email.</dd>
+    <dt>Where</dt><dd>Our newsletter service, on our own server in Switzerland. Our server passes your address to it when you tick the box; so the network address that service sees is our server's, not yours. Its system log writes the network address of each request it receives.</dd>
+    <dt>How long</dt><dd>Until you unsubscribe. A nightly snapshot of the newsletter data stays on the same server for 14 days, so a deleted address can linger there up to 14 days.</dd>
+    <dt>Who can read it</dt><dd>The newsletter service, and the operator through it.</dd>
+    <dt>How to delete it</dt><dd>The unsubscribe link in every newsletter email deletes your address from the service. Or write to us.</dd>
+  </dl>
+</section>
+
+<section id="d-old-waitlist">
+  <p class="eyebrow">12. The earlier waitlist</p>
+  <h2>Entries from before 2026-10-07</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Until 2026-10-07 the main page's waitlist form sent its entries to the ReBioSys relay (idea2.site/rebiosys/api): your email address, the time, and a shortened fingerprint of your network address (a hash with a fixed salt: it hides the address from a casual reader, but anyone who wants to can work it back, so it is pseudonymous, not anonymous). That relay tries to send one confirmation email to the address (<span class="tbc">to confirm</span>: its mail sending was failing at the time of writing).</dd>
+    <dt>Where</dt><dd>Files on our server that only the system administrator can read. The relay's system log writes the network address and the request line of every call it gets.</dd>
+    <dt>How long</dt><dd>No automatic deletion. Nothing new is sent there from this website any more.</dd>
+    <dt>Who can read it</dt><dd>The operator.</dd>
+    <dt>How to delete it</dt><dd>Write to us with the address you used.</dd>
+  </dl>
+</section>
+
+<section id="d-counters">
+  <p class="eyebrow">13. Abuse counters</p>
+  <h2>Per network address, in memory, not anonymous</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>How many requests came from one network address (IPv6: from one /64 block) to the backup, hosting, transcription, feedback, web results and short link services, and to the newsletter hand-over.</dd>
+    <dt>Where</dt><dd>In the memory of the service. Never written to disk.</dd>
+    <dt>How long</dt><dd>Minutes to a day, and gone when the service restarts.</dd>
+    <dt>Who can read it</dt><dd>Nobody looks. It is not anonymous: while it is held it is tied to the address.</dd>
+    <dt>How to delete it</dt><dd>It deletes itself.</dd>
+  </dl>
+</section>
+
+<section id="d-logs">
+  <p class="eyebrow">14. Server logs</p>
+  <h2>What the machine writes down</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>The web server (Caddy) keeps no access log. Its error log can note the network address and the page requested when a request fails, for example while a service restarts, never the content of a request; it also lists certificate renewals by host name. TrustWeb's own services log a method and a status, or an outcome, and no address, no path and no content. Two older services on the same server do log the requester's network address: the newsletter service and the ReBioSys relay.</dd>
+    <dt>Where</dt><dd>The server's system journal, in Switzerland.</dd>
+    <dt>How long</dt><dd>The journal is trimmed by size, not by date, with the server's default settings, and still holds lines from July. A shorter limit is <span class="tbc">to confirm</span>.</dd>
+    <dt>Who can read it</dt><dd>The operator.</dd>
+    <dt>How to delete it</dt><dd>Write to us with your network address and the time; we remove what we can find.</dd>
+  </dl>
+</section>
+
+<section id="d-website">
+  <p class="eyebrow">15. This website</p>
+  <h2>What a visit leaves behind</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>No cookies, no analytics, no advertising, nothing stored in your browser. <!--IF:org-->Typefaces load from Google Fonts, so your browser contacts Google and Google receives your network address.<!--/IF--><!--IF:com-->Typefaces come from your own device, so this site contacts no third party.<!--/IF--></dd>
+    <dt>Where</dt><dd>Nowhere: there is nothing to keep.</dd>
+    <dt>How long</dt><dd><!--IF:org-->For Google's copy, see Google's own terms.<!--/IF--><!--IF:com-->Not applicable.<!--/IF--></dd>
+    <dt>Who can read it</dt><dd><!--IF:org-->Google, for the fonts request.<!--/IF--><!--IF:com-->Nobody.<!--/IF--></dd>
+    <dt>How to delete it</dt><dd>Nothing to delete.</dd>
+  </dl>
+</section>
+
+<section id="d-copies">
+  <p class="eyebrow">16. Copies of the server</p>
+  <h2>Backups of our own</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>A nightly snapshot of the newsletter data, kept on the same server for 14 days. TrustWeb's own folders (backups, hosted recordings, feedback) are not part of any scheduled copy job we found on the server.</dd>
+    <dt>Where</dt><dd>The same server. Whether Infomaniak keeps snapshots of the whole machine is <span class="tbc">to confirm</span>.</dd>
+    <dt>How long</dt><dd>14 days for the newsletter snapshot.</dd>
+    <dt>Who can read it</dt><dd>The operator.</dd>
+    <dt>How to delete it</dt><dd>It expires by itself.</dd>
+  </dl>
+</section>

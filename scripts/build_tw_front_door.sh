@@ -49,9 +49,11 @@
 #   (GET /hosted/status, provider.transcribe) in the same step that switches Berget on. Details: tw-front-door/tw_site.py.
 # The orchestrator flips each after the matching service and the app are live
 # (GET https://app.idea2.site/hosted/status: hosted:true / transcribe:true).
-# terms.html is built for --draft only (Jakob has not approved it);
-# --publish-terms (or TW_PUBLISH_TERMS=1) publishes it on production and links
-# it from the footer.
+# terms.html (both sites) is built for --draft, and on production only with
+# --publish-terms (or TW_PUBLISH_TERMS=1), which also links it from the footer. Wave 5 (2026-10-07): Jakob asked for
+# all legal pages written and published (privacy, data policy, terms, imprint, each marked "AI drafted, subject to
+# review"), so the production runs pass TW_PUBLISH_TERMS=1. A production run WITHOUT it drops terms.html and its
+# footer link. The script makes no server backup of its own: copy the live folders to ~/tw-backups/ first.
 #
 # What the fragments do (the lessons that cost real time, kept here):
 #   - hero-explainer.html: the "scalable / discreet / targeted" sentence, as

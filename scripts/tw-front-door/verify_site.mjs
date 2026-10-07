@@ -37,6 +37,8 @@ if (!['org', 'com'].includes(SITE)) { console.error('TW_SITE must be org or com'
 const APP = (process.env.TW_APP_BASE ?? 'https://app.idea2.site/trustweb').replace(/\/$/, '')
 const SITE_HOST = process.env.TW_SITE_HOST ?? 'idea2.site'
 const ORG = SITE === 'org'
+// terms.html is built in a draft, or when production was given --publish-terms (TW_PUBLISH_TERMS=1): set it the same way here
+const TERMS_PUBLISHED = mode === 'draft' || process.env.TW_PUBLISH_TERMS === '1'
 const TX_PROVIDER = process.env.TW_TRANSCRIBE_PROVIDER ?? 'openrouter'
 if (!['openrouter', 'berget', 'berget-only'].includes(TX_PROVIDER)) { console.error('TW_TRANSCRIBE_PROVIDER must be openrouter, berget or berget-only'); process.exit(2) }
 const OTHER_HOST = ORG ? 'https://TrustInTheWeb.com' : 'https://TrustInTheWeb.org'
@@ -109,9 +111,10 @@ const chrome = () => {
     visible: inView(d) && inView(i),
     cols, perRow,
     brandHref: brand?.getAttribute('href'), brandText: brand?.textContent.trim(),
-    siteName: document.querySelector('.sitebar-brand')?.textContent.trim(),
-    brandWeights: [...document.querySelectorAll('.sitebar-brand b')].map((b) => Number(getComputedStyle(b).fontWeight)),
-    brandRegular: Number(getComputedStyle(document.querySelector('.sitebar-brand')).fontWeight),
+    barBrand: document.querySelectorAll('.sitebar-brand').length,
+    barLeft: (() => { const first = document.querySelector('.sitebar-in')?.firstElementChild; return first ? first.className : null })(),
+    legal: [...document.querySelectorAll('.sitefooter .sf-col')].filter((c) => c.querySelector('.sf-h')?.textContent.trim() === 'Legal').flatMap((c) => [...c.querySelectorAll('a')].map((a) => a.textContent.trim())),
+    legalHrefs: [...document.querySelectorAll('.sitefooter .sf-col')].filter((c) => c.querySelector('.sf-h')?.textContent.trim() === 'Legal').flatMap((c) => [...c.querySelectorAll('a')].map((a) => a.getAttribute('href'))),
     hostHeader: (() => { const a = document.querySelector('.sitebar-sub a.hostlink'); if (!a) return null; const r = a.getBoundingClientRect()
       return { href: a.getAttribute('href'), title: a.title, text: a.textContent.trim(), inView: r.left >= 0 && r.right <= vw && r.width > 30 } })(),
     hostFooter: [...document.querySelectorAll('.sitefooter a.hostlink')].map((a) => ({ href: a.getAttribute('href'), title: a.title, text: a.textContent.trim() })),
@@ -189,8 +192,8 @@ async function checkPage(browser, name, width) {
   const wantCols = ORG ? 'Features|Resources|Use cases|Legal' : 'Hosting|The app|Resources|Legal'
   check(`${tag}: footer columns ${wantCols}`, c.cols.join('|') === wantCols, c.cols.join('|'))
   check(`${tag}: footer wraps (${width <= 900 ? '2' : '5'} per row)`, width <= 900 ? c.perRow === 2 : c.perRow === 5, `perRow=${c.perRow}`)
-  check(`${tag}: site name ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} in the bar, Trust and Web bold, In and The regular`,
-    c.siteName === (ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com') && c.brandWeights.length === 2 && c.brandWeights.every((w) => w >= 600) && c.brandRegular <= 500, JSON.stringify([c.siteName, c.brandWeights, c.brandRegular]))
+  check(`${tag}: no site name top left of the bar (wave 5: the small "${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'}" wordmark is gone; the bar starts with the buttons)`,
+    c.barBrand === 0 && c.barLeft === 'sitebar-actions', JSON.stringify([c.barBrand, c.barLeft]))
   check(`${tag}: header link to the ${ORG ? 'hosting' : 'app'} site: visible, title exactly ${OTHER_HOST}, href the live site`,
     !!c.hostHeader && c.hostHeader.inView && c.hostHeader.title === OTHER_HOST && c.hostHeader.href.toLowerCase().replace(/\/$/, '') === OTHER_HOST.toLowerCase() && c.hostHeader.text === (ORG ? 'Do you need hosting?' : 'About the infrastructure'), JSON.stringify(c.hostHeader))
   if (ORG) {
@@ -203,7 +206,10 @@ async function checkPage(browser, name, width) {
   if (!ORG) check(`${tag}: the footer links back to TrustInTheWeb.org`, c.footerOther >= 1, String(c.footerOther))
   check(`${tag}: brand slot links to evobiosys.org`, c.brandHref === 'https://evobiosys.org' && c.brandText.startsWith('TrustWeb, by EvoBioSys'))
   check(`${tag}: no div in p/span, no stray pop`, c.divInPOrSpan === 0 && c.popsOutside === 0)
-  check(`${tag}: terms link only in the website's draft (the hosting site has no terms page yet)`, c.terms === (mode === 'draft' && ORG))
+  check(`${tag}: terms link in the footer exactly when terms are published (both sites)`, c.terms === TERMS_PUBLISHED, String(c.terms))
+  check(`${tag}: footer Legal column: Privacy Policy, Data policy, ${TERMS_PUBLISHED ? 'Terms, ' : ''}Imprint, in that order`,
+    c.legal.join('|') === ['Privacy Policy', 'Data policy', ...(TERMS_PUBLISHED ? ['Terms'] : []), 'Imprint'].join('|') &&
+    c.legalHrefs.join('|') === ['privacy.html', 'data-policy.html', ...(TERMS_PUBLISHED ? ['terms.html'] : []), 'imprint.html'].join('|'), c.legal.join('|'))
   check(`${tag}: draft strip only in draft`, c.strip === (mode === 'draft'))
   if (mode === 'draft') check(`${tag}: draft is noindex`, /noindex/.test(c.robots ?? ''))
   if (name === 'index.html' && ORG && mode === 'prod') check(`${tag}: canonical is the site's own front page`, c.canonical === (SITE_HOST === 'idea2.site' ? 'https://idea2.site/trustweb/' : `https://${SITE_HOST}/`), String(c.canonical))
@@ -452,30 +458,62 @@ async function formChecks(browser) {
   await ctx.close()
 
   if (ORG) {
-    // join form on the index page keeps working (waitlist + newsletter)
+    // wave 5: the notify form on the index page posts ONCE to this site's own feedback route (the old direct calls to the
+    // ReBioSys relay and the subscriber service are refused by those servers for the TrustInTheWeb origins, so a browser could not send them)
     const ctx2 = await browser.newContext()
     const p2 = await ctx2.newPage()
-    const calls = []
-    for (const url of ['https://idea2.site/rebiosys/api/waitlist', 'https://subscriber.questhub.eco/subscribe']) {
-      await p2.route(url, (route) => { calls.push({ url, body: JSON.parse(route.request().postData() ?? '{}') }); return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '{}' }) })
-    }
+    const calls = [], direct = []
+    p2.on('request', (r) => { if (/subscriber\.questhub\.eco|\/rebiosys\/api\/waitlist/.test(r.url())) direct.push(r.url()) })
+    await p2.route(`${new URL(APP).origin}/feedback`, (route) => {
+      const req = route.request()
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'POST, OPTIONS' } })
+      calls.push({ type: req.headers()['content-type'], body: JSON.parse(req.postData() ?? '{}') })
+      return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+    })
     await p2.goto(BASE)
     await p2.fill('#j-email', 'someone@example.org')
+    await p2.click('#j-submit')
+    await p2.waitForFunction(() => document.querySelector('#j-msg').textContent.includes('Thank you'))
+    const one = calls[0]?.body
+    check('join form: ONE POST to the feedback route with notify:true, newsletter:false, the address, an empty text',
+      calls.length === 1 && /application\/json/.test(calls[0].type) && one.notify === true && one.newsletter === false && one.email === 'someone@example.org' && one.text === '' && one.kind === 'feedback', JSON.stringify(calls))
+    check('join form: no word of the old "waitlist" in the success message, and the box is cleared', !/waitlist/i.test(await p2.textContent('#j-msg')) && (await p2.inputValue('#j-email')) === '')
+    calls.length = 0
+    await p2.fill('#j-email', 'other@example.org')
     await p2.check('#j-newsletter')
     await p2.click('#j-submit')
-    await p2.waitForFunction(() => document.querySelector('#j-nl-status').textContent.includes('Check your inbox'))
-    const wl = calls.find((c) => c.url.includes('waitlist')), nl = calls.find((c) => c.url.includes('subscribe'))
-    check('join form: waitlist POST keeps its payload', wl?.body.email === 'someone@example.org' && wl.body.note === 'web-of-trust:join' && wl.body.channel === 'human')
-    check('join form: newsletter POST keeps its payload', nl?.body.email === 'someone@example.org' && nl.body.project === 'questhub' && nl.body.source === 'trustweb' && nl.body.gdpr === true)
+    await p2.waitForFunction(() => document.querySelector('#j-nl-status').textContent.includes('A confirmation email will follow'))
+    check('join form: with the newsletter box ticked the same single POST carries newsletter:true', calls.length === 1 && calls[0].body.newsletter === true && calls[0].body.notify === true && calls[0].body.email === 'other@example.org', JSON.stringify(calls))
+    await p2.fill('#j-email', 'not-an-address')
+    calls.length = 0
+    await p2.click('#j-submit')
+    check('join form: an invalid address sends nothing and shows the hint', calls.length === 0 && await p2.isVisible('#j-err'))
+    check('join form: no request ever went to the subscriber service or the ReBioSys waitlist from the main page', direct.length === 0, direct.join(', '))
     await ctx2.close()
   }
 }
 
 // every page, both sites: the same hygiene rules
+const LEGAL_PAGES = ['privacy.html', 'data-policy.html', 'terms.html', 'imprint.html']
+
 async function everyPageChecks(page) {
+  let reqs = []
+  page.on('request', (r) => { try { reqs.push(new URL(r.url()).host) } catch { /* data: urls and the like */ } })
   for (const name of pageNames) {
+    reqs = []
     await page.goto(BASE + (name === 'index.html' ? '' : name))
     const t = await page.evaluate(() => document.documentElement.outerHTML)
+    const hosts = [...new Set(reqs)], own = new URL(BASE).host
+    const allowedHosts = ORG ? [own, 'fonts.googleapis.com', 'fonts.gstatic.com'] : [own]
+    check(`${name}: the page loads only from ${allowedHosts.join(', ')}${ORG ? ' (Google Fonts, named in the privacy policy)' : ' (nothing from any third party)'}`, hosts.every((h) => allowedHosts.includes(h)), hosts.join(','))
+    check(`${name}: no cookie, nothing in local or session storage (the privacy policy says so)`, await page.evaluate(() => document.cookie === '' && localStorage.length === 0 && sessionStorage.length === 0))
+    const banner = await page.evaluate(() => {
+      const b = document.querySelector('main > aside.ai-draft'), h1 = document.querySelector('main h1')
+      return { n: document.querySelectorAll('aside.ai-draft').length, text: b?.textContent.trim().slice(0, 40), before: !!(b && h1 && (b.compareDocumentPosition(h1) & Node.DOCUMENT_POSITION_FOLLOWING)),
+        prev: b?.previousElementSibling?.className ?? null, top: b ? Math.round(b.getBoundingClientRect().top) : null }
+    })
+    check(`${name}: ${LEGAL_PAGES.includes(name) ? 'opens with the visible banner "AI drafted, subject to review" (right under the back link, before the heading)' : 'carries no AI-draft banner'}`,
+      LEGAL_PAGES.includes(name) ? banner.n === 1 && /^AI drafted, subject to review\./.test(banner.text ?? '') && banner.before && banner.prev === 'back' && banner.top < 200 : banner.n === 0, JSON.stringify(banner))
     // the one permitted link target is removed first; the word must not appear anywhere else
     check(`${name}: no "github" except the one permitted link`, !/github/i.test(t.split('https://github.com/evobiosys/web-of-trust').join('')))
     check(`${name}: no unresolved <!--IF:...--> marker and no unresolved {{TOKEN}} left in the output`, !/<!--\/?IF/.test(t) && !/\{\{[A-Z_]+\}\}/.test(t))
@@ -506,7 +544,8 @@ async function contentChecksCom(page) {
     /Contact us to make a solid agreement/.test(text) && (await page.locator('a[href="feedback.html?kind=pricing"]').count()) >= 2)
   check('com index: the anchors the footer needs exist (what, free, updates, agreement)', await page.evaluate(() => ['what', 'free', 'updates', 'agreement'].every((i) => document.getElementById(i))))
   check('com index: links to the website TrustInTheWeb.org', (await page.locator('a[href="https://trustintheweb.org/"]').count()) >= 1)
-  check('com: pages are index, pricing, feedback, imprint, privacy (nothing else)', pageNames.join(',') === 'feedback.html,imprint.html,index.html,pricing.html,privacy.html', pageNames.join(','))
+  check(`com: pages are index, pricing, feedback, imprint, privacy, data policy${TERMS_PUBLISHED ? ', terms' : ''} (nothing else)`,
+    pageNames.join(',') === `data-policy.html,feedback.html,imprint.html,index.html,pricing.html,privacy.html${TERMS_PUBLISHED ? ',terms.html' : ''}`, pageNames.join(','))
   await page.goto(BASE + 'pricing.html')
   const pr = await page.evaluate(() => document.querySelector('main, .wrap')?.innerText ?? document.body.innerText)
   check('pricing: B2B copy (solid agreement, contact us, prices only go down, recordings stay on the phone, free while we test)',
@@ -532,8 +571,8 @@ async function contentChecksCom(page) {
 async function contentChecksOrg(page) {
   await page.goto(BASE)
   const ids = await page.evaluate(() => ['source-code', 'licence', 'features', 'use-cases', 'team', 'ea-groups', 'useful',
-    'f-web', 'f-record', 'f-notes', 'f-inventory', 'f-ask', 'f-consent', 'f-demo', 'f-backup', 'f-connect', 'f-send',
-    'uc-events', 'uc-introductions', 'uc-marketplace', 'uc-housing', 'uc-questhub', 'uc-resources', 'uc-curations'].filter((i) => !document.getElementById(i)))
+    'f-web', 'f-ask', 'f-record', 'f-notes', 'f-inventory', 'f-backup', 'faq', 'join', 'lineage',
+    'uc-events', 'uc-introductions', 'uc-marketplace', 'uc-housing', 'uc-quests', 'uc-resources', 'uc-curations'].filter((i) => !document.getElementById(i)))
   check('index: every anchor the footer and use-case cards need exists', ids.length === 0, ids.join(', '))
   const text = await page.evaluate(() => document.body.innerText)
   check('index: Source code statement (will be published as part of EvoBioSys, public copy older)', /published as part of EvoBioSys/.test(text) && /older than the live app/.test(text))
@@ -557,8 +596,8 @@ async function contentChecksOrg(page) {
     const link = [...(box?.querySelectorAll('a') ?? [])].find((a) => a.textContent.trim() === 'the vision')
     return { heading: box?.querySelector('.herotoday-h')?.textContent.trim(), items, link: link?.getAttribute('href') }
   })
-  check('index: hero says what it can do today: ask your direct contacts FIRST, then people you trust, record and keep a meeting, inventory',
-    today.heading === 'What it can do today' && today.items.join('|') === 'Ask your direct contacts|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
+  check('index: hero says what it can do today: call into your web FIRST, then people you trust, record and keep a meeting, inventory',
+    today.heading === 'What it can do today' && today.items.join('|') === 'Call into your web|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
   check('index: the hero links "the vision" to why.html', today.link === 'why.html', String(today.link))
   const always = await page.evaluate(() => { const a = document.querySelector('.hero a.alwayslink'); return { text: a?.textContent, href: a?.getAttribute('href'), tag: a?.closest('p')?.textContent.replace(/\s+/g, ' ').trim() } })
   const wantAlways = SITE_HOST === 'trustintheweb.org' && mode === 'prod' ? 'https://trustintheweb.org/whitepaper.html#bonobos' : 'whitepaper.html#bonobos'
@@ -568,18 +607,22 @@ async function contentChecksOrg(page) {
   const order = await page.evaluate(() => ({
     features: [...document.querySelectorAll('#features .fcard')].map((c) => c.id),
     useCases: [...document.querySelectorAll('#use-cases .ucard')].map((c) => c.id),
+    featureTitles: [...document.querySelectorAll('#features .fcard h3')].map((h) => h.textContent.trim()),
     footerFeatures: [...document.querySelectorAll('.sitefooter .sf-col:first-child a')].map((a) => a.textContent.trim()),
-    footerUse: [...document.querySelectorAll('.sitefooter .sf-col:nth-child(3) a')].map((a) => a.textContent.trim()),
+    footerFeatureHrefs: [...document.querySelectorAll('.sitefooter .sf-col:first-child a')].map((a) => a.getAttribute('href')),
+    footerUse: [...document.querySelectorAll('.sitefooter .sf-col:nth-child(3) li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()),
     coin: [...document.querySelectorAll('.coin .side h3')].map((h) => h.textContent.trim()) }))
-  check('index: features lead with Ask your web (then Consent per ask) before Record a meeting', order.features[0] === 'f-ask' && order.features[1] === 'f-consent' && order.features.indexOf('f-ask') < order.features.indexOf('f-record'), order.features.join(','))
+  check('index: the feature grid has exactly six cards in Jakob\'s order: Your web of connections, Call into your web, Record a meeting, Transcribe and send a meeting, Inventory, Encrypted Swiss backup',
+    order.featureTitles.join('|') === 'Your web of connections|Call into your web|Record a meeting|Transcribe and send a meeting|Inventory|Encrypted Swiss backup' && order.features.join(',') === 'f-web,f-ask,f-record,f-notes,f-inventory,f-backup', order.featureTitles.join('|'))
+  check('index: the footer Features list is the same six, in the same order, each linking to its card',
+    order.footerFeatures.join('|') === order.featureTitles.join('|') && order.footerFeatureHrefs.join(',') === './#f-web,./#f-ask,./#f-record,./#f-notes,./#f-inventory,./#f-backup', order.footerFeatures.join('|'))
   check('index: use cases lead with Introductions (asking) before Events and Marketplace', order.useCases[0] === 'uc-introductions' && order.useCases.indexOf('uc-introductions') < order.useCases.indexOf('uc-events'), order.useCases.join(','))
-  check('index: the footer lists Ask your web before Record a meeting, Introductions first under Use cases',
-    order.footerFeatures[0] === 'Ask your web' && order.footerFeatures.indexOf('Ask your web') < order.footerFeatures.indexOf('Record a meeting') && order.footerUse[0] === 'Introductions', order.footerFeatures.slice(0, 4).join('|') + ' / ' + order.footerUse[0])
+  check('index: the footer Use cases list: Introductions first, "Coordinating Quests" in place of QuestHub', order.footerUse.join('|') === 'Introductions|Events|Sharing resources|Finding housing planned|Marketplace coming soon|Coordinating Quests|Info sharing as curations', order.footerUse.join('|'))
   check('index: how it works puts Querying before Taking notes', order.coin.join('|') === 'Querying|Taking notes', order.coin.join('|'))
   check('index: Introductions is a use-case card AND a footer entry', order.useCases.includes('uc-introductions') && order.footerUse.includes('Introductions'))
   // wave 2 (P29, P32): contact methods
   check('index: contact methods (QR code and link now, moving QR code soon, NFC/Bluetooth/AirDrop later)',
-    /QR code, to show that you met in person/.test(text) && /link, for people you are not meeting in person/.test(text) &&
+    /QR code, which shows that you met/.test(text) && /link for people you are not meeting in person/.test(text) &&
     /Coming soon: a moving QR code/.test(text) && /Coming later: NFC, Bluetooth and AirDrop/.test(text))
   check('index: Finding housing is a use case labelled Planned', await page.evaluate(() => {
     const c = document.getElementById('uc-housing'); return !!c && /^Planned$/i.test(c.querySelector('.ucstate')?.textContent.trim() ?? '') && /Finding housing/.test(c.textContent)
@@ -624,7 +667,7 @@ async function contentChecksOrg(page) {
   check('whitepaper: a placeholder page whose #bonobos section has a heading and one honest line "Outline in progress."', /Bonobos/.test(wp.h2 ?? '') && wp.line === 'Outline in progress.', JSON.stringify(wp))
   await page.goto(BASE + 'imprint.html')
   const imp = await page.evaluate(() => document.querySelector('#operator dd')?.innerText.replace(/\s+/g, ' ').trim())
-  check('imprint: the name with "Einzelunternehmen (Austrian EPU)" under it, nothing else added', imp === 'Jakob Possert-Bienzle Einzelunternehmen (Austrian EPU)', String(imp))
+  check('imprint: the name with "Einzelunternehmen (Austrian EPU), part of EvoBioSys" under it', imp === 'Jakob Possert-Bienzle Einzelunternehmen (Austrian EPU), part of EvoBioSys', String(imp))
   await page.goto(BASE + 'feedback.html')
   check('org feedback: the kind list says "Hosting or an agreement for your group" (no pricing word on the website)',
     await page.evaluate(() => document.querySelector('#fb-kind option[value="pricing"]')?.textContent === 'Hosting or an agreement for your group'))
@@ -633,12 +676,132 @@ async function contentChecksOrg(page) {
   check('index: the "more scalable" popup says built for one hop further, today direct connections', /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
 }
 
+// ---- wave 5 (Jakob 2026-10-07 15:37): the main page items, org only ----
+async function wave5OrgChecks(page) {
+  await page.goto(BASE)
+  const w = await page.evaluate(() => {
+    const note = document.querySelector('#join .joinnote')?.textContent.trim()
+    const faq = document.getElementById('faq')
+    const qs = [...document.querySelectorAll('#faq details.q')]
+    const all = [...document.querySelectorAll('#faq a')].find((a) => /All questions/.test(a.textContent))
+    const useText = document.getElementById('use-cases')?.innerText.replace(/\s+/g, ' ') ?? ''
+    const outsideLineage = (() => { const c = document.body.cloneNode(true); for (const s of c.querySelectorAll('#lineage, #team, footer, script, style')) s.remove(); return c.textContent })()
+    return {
+      note, button: document.getElementById('j-submit')?.textContent.trim(), heading: document.querySelector('#join h2')?.textContent.trim(),
+      faqPresent: !!faq, faqIds: qs.map((d) => d.id), faqClosed: qs.every((d) => !d.open), allHref: all?.getAttribute('href'),
+      faqAfterUse: !!(document.getElementById('use-cases') && faq && (document.getElementById('use-cases').compareDocumentPosition(faq) & Node.DOCUMENT_POSITION_FOLLOWING)),
+      questhubCard: !!document.getElementById('uc-questhub'), questsTitle: document.querySelector('#uc-quests h3')?.textContent.trim(), useText,
+      questhubOutside: /QuestHub/i.test(outsideLineage), barBrandText: document.querySelector('.sitebar')?.textContent.replace(/\s+/g, ' ').trim(),
+      heroWordmark: document.querySelector('header.hero h1.wot')?.textContent.replace(/\s+/g, ' ').trim(),
+    }
+  })
+  check('main page: waitlist copy is exactly "You can use it right now. If you want to be notified once it is stable, leave your email here."',
+    w.note === 'You can use it right now. If you want to be notified once it is stable, leave your email here.', String(w.note))
+  check('main page: the notify box reads as the notice for the production build (button "Notify me", heading about being told when it is stable)', w.button === 'Notify me' && /stable/.test(w.heading ?? ''), `${w.button} / ${w.heading}`)
+  check('main page: FAQ is a section (id faq) after the use cases, with the same 10 questions as faq.html, all closed, and an "All questions" link to faq.html',
+    w.faqPresent && w.faqIds.length === 10 && new Set(w.faqIds).size === 10 && w.faqClosed && w.allHref === 'faq.html' && w.faqAfterUse, w.faqIds.join(','))
+  await page.goto(BASE + 'faq.html')
+  const pageIds = await page.evaluate(() => [...document.querySelectorAll('details.q')].map((d) => d.id))
+  check('faq.html still exists with the same question ids as the main page section', pageIds.join(',') === w.faqIds.join(','), pageIds.join(','))
+  check('main page: use case "QuestHub" is now "Coordinating Quests" (no uc-questhub card, QuestHub named nowhere outside the lineage and the team text)',
+    !w.questhubCard && w.questsTitle === 'Coordinating Quests' && !/QuestHub/i.test(w.useText) && !w.questhubOutside, JSON.stringify([w.questhubCard, w.questsTitle, w.questhubOutside]))
+  check('main page: the hero keeps the big wordmark "Trust in the Web", the bar has no site name', w.heroWordmark === 'Trust in the Web' && !/TrustInTheWeb\.org/.test(w.barBrandText), `${w.heroWordmark} / ${w.barBrandText}`)
+}
+
+// ---- lineage: overlapping fields, in both schemes, at the narrowest width ----
+const lineageInPage = () => {
+  const svg = document.querySelector('.lineage-svg')
+  if (!svg) return { ok: false }
+  const vb = svg.viewBox.baseVal
+  const scale = svg.getBoundingClientRect().width / vb.width
+  const parse = (c) => { const m = c.match(/rgba?\(([\d.]+)[, ]+([\d.]+)[, ]+([\d.]+)/); return m ? [+m[1], +m[2], +m[3]] : null }
+  const circles = Object.fromEntries([...svg.querySelectorAll('circle.fld')].map((c) => [c.getAttribute('class').split(/\s+/).find((x) => x.startsWith('fld-')), { x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), r: +c.getAttribute('r'), stroke: parse(getComputedStyle(c).stroke) }]))
+  const texts = [...svg.querySelectorAll('text')].map((el) => {
+    const b = el.getBBox(), cs = getComputedStyle(el)
+    return { text: el.textContent.trim(), px: parseFloat(cs.fontSize) * scale, fill: parse(cs.fill), halo: parse(cs.stroke), inBox: b.x >= -0.5 && b.y >= -0.5 && b.x + b.width <= vb.width + 0.5 && b.y + b.height <= vb.height + 0.5, cx: b.x + b.width / 2, cy: b.y + b.height / 2, w: b.width }
+  })
+  const paper = parse(getComputedStyle(document.body).backgroundColor)
+  return { ok: true, scale, vb: [vb.width, vb.height], circles, texts, paper, caption: svg.parentElement.querySelector('figcaption')?.textContent.trim(), titled: !!svg.querySelector('title') && !!svg.querySelector('desc'), role: svg.getAttribute('role'), svgText: svg.outerHTML }
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
+const overlaps = (a, b) => dist(a, b) < a.r + b.r
+async function lineageChecks(browser) {
+  for (const scheme of ['light', 'dark']) {
+    for (const width of [360, 1280]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: scheme })
+      const page = await ctx.newPage()
+      await page.goto(BASE)
+      await page.locator('#lineage').scrollIntoViewIfNeeded()
+      const L = await page.evaluate(lineageInPage)
+      const tag = `lineage (${scheme} scheme, ${width}px)`
+      if (!L.ok) { check(`${tag}: the SVG exists`, false); await ctx.close(); continue }
+      const c = L.circles
+      check(`${tag}: four overlapping fields: EvoBioSys and the others overlap, QuestHub sits in both, TrustWeb overlaps the lens of the first two`,
+        Object.keys(c).sort().join(',') === 'fld-evo,fld-others,fld-quest,fld-tw' && overlaps(c['fld-evo'], c['fld-others']) && overlaps(c['fld-quest'], c['fld-evo']) && overlaps(c['fld-quest'], c['fld-others']) &&
+        dist(c['fld-quest'], c['fld-evo']) + c['fld-quest'].r <= c['fld-evo'].r && dist(c['fld-quest'], c['fld-others']) + c['fld-quest'].r <= c['fld-others'].r &&
+        (overlaps(c['fld-tw'], c['fld-evo']) && overlaps(c['fld-tw'], c['fld-others'])), JSON.stringify(c))
+      check(`${tag}: caption is "EvoBioSys is Jakob's field; it overlaps with the fields of other people"`, L.caption === "EvoBioSys is Jakob's field; it overlaps with the fields of other people", String(L.caption))
+      check(`${tag}: the labels are EvoBioSys, Other people's fields, QuestHub where they meet, TrustWeb`,
+        L.texts.map((x) => x.text).join(' ') === "EvoBioSys Jakob's field Other people's fields QuestHub where they meet TrustWeb you are here", L.texts.map((x) => x.text).join('|'))
+      check(`${tag}: every label renders at 12px or larger (smallest ${Math.min(...L.texts.map((x) => x.px)).toFixed(1)}px) and sits inside the figure`, L.texts.every((x) => x.px >= 12 && x.inBox), L.texts.filter((x) => x.px < 12 || !x.inBox).map((x) => x.text).join(', '))
+      const lows = L.texts.filter((x) => ratio(x.fill, x.halo) < 4.5 || ratio(x.fill, L.paper) < 4.5)
+      check(`${tag}: label colour on its paper halo and on the page is WCAG AA (worst ${Math.min(...L.texts.map((x) => ratio(x.fill, x.halo))).toFixed(2)})`, lows.length === 0, lows.map((x) => x.text).join(', '))
+      const edge = Object.entries(c).filter(([, v]) => ratio(v.stroke, L.paper) < 3)
+      check(`${tag}: circle edges are at least 3:1 against the page (worst ${Math.min(...Object.values(c).map((v) => ratio(v.stroke, L.paper))).toFixed(2)})`, edge.length === 0, edge.map(([k]) => k).join(', '))
+      check(`${tag}: accessible (role img, title and description) and no em dash`, L.titled && L.role === 'img' && !/—|&mdash;/.test(L.svgText))
+      if (width === 360) {
+        const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+        check(`${tag}: no horizontal scroll`, fits)
+        fs.mkdirSync(shots, { recursive: true })
+        await page.locator('#lineage').screenshot({ path: path.join(shots, `${liveBase ? 'live-' : ''}${mode}_lineage_${scheme}_${width}.png`) })
+      }
+      await ctx.close()
+    }
+  }
+}
+
+// ---- wave 5: the four legal pages say what the code and the servers do ----
+async function legalChecks(page) {
+  const text = async (name) => { await page.goto(BASE + name); return page.evaluate(() => document.querySelector('main').innerText.replace(/\s+/g, ' ')) }
+  const pv = await text('privacy.html')
+  check('privacy: controller named, GDPR rights, complaint to the Austrian Datenschutzbehoerde (link), legal bases in plain words',
+    /Verantwortlicher/.test(pv) && /Jakob Possert-Bienzle/.test(pv) && /erasure|delete it \(erasure\)/.test(pv) && /Datenschutzbehörde/.test(pv) && (await page.locator('a[href="https://www.dsb.gv.at"]').count()) === 1 &&
+    /Legal bases, in plain words/.test(pv) && /Art\. 6\(1\)\(b\)/.test(pv) && /Art\. 6\(1\)\(a\)/.test(pv) && /Art\. 6\(1\)\(f\)/.test(pv))
+  check('privacy: the per-address counters are said to be in memory and NOT anonymous; no "anonymous counters" claim anywhere', /not anonymous/.test(pv) && !/anonymous (in-memory )?counters/i.test(pv))
+  check('privacy: relay hold time (72 hours), front doors (demo and personal), short links (30 days, random id, never logged), newsletter unsubscribe deletes, no cookies and nothing stored in the browser',
+    /72 hours/.test(pv) && /two, both run by the person named in the imprint: the "Demo inventory" \(its name may change\), which holds made-up lines and lines its owner chose to publish in advance/.test(pv) && /personal one/.test(pv) && /under a random ten-character id for up to 30 days/.test(pv) && /does not write the link or its id to any log/.test(pv) &&
+    /unsubscribe link in any newsletter email, which deletes your address/.test(pv) && /nothing stored in your browser/.test(pv))
+  check('privacy: the web server keeps no access log; its error log can note the address; no "the web server writes no access log" overclaim and no "only in memory" claim for addresses without the error-log caveat',
+    /keeps no access log/.test(pv) && /error log, in the server's system journal, can note the network address/.test(pv))
+  check('privacy: server hosting is Infomaniak in Switzerland; US providers flagged "to confirm" for the transfer safeguards', /Infomaniak/.test(pv) && /safeguards for a transfer of personal data out of the EU/.test(pv) && (await page.locator('.tbc').count()) >= 2)
+  const dp = await text('data-policy.html')
+  const sections = await page.evaluate(() => [...document.querySelectorAll('section[id^="d-"]')].map((s) => ({ id: s.id, dts: [...s.querySelectorAll('dt')].map((d) => d.textContent.trim()).join('|') })))
+  check('data policy: sixteen data kinds, each answering What / Where / How long / Who can read it / How to delete it',
+    sections.length === 16 && sections.every((s) => s.dts === 'What|Where|How long|Who can read it|How to delete it'), sections.map((s) => `${s.id}:${s.dts.split('|').length}`).join(' '))
+  check('data policy: says what the code does (90 days by hand not on a timer, 72 hours relay, 30 days short links, per-recording delete in the app, 14-day newsletter snapshot, Caddy keeps no access log, counters not anonymous, no cookies)',
+    /not on a timer yet/.test(dp) && /72 hours at most/.test(dp) && /30 days, then the short link stops working/.test(dp) && /remove the recording; it is deleted from the server at once/.test(dp) && /for 14 days/.test(dp) && /Caddy\) keeps no access log/.test(dp) && /not anonymous/.test(dp) && /No cookies/.test(dp))
+  check('data policy: unsettled facts are marked "to confirm" (backup deletion, retention, journal limit, snapshots by the host)', (await page.locator('.tbc').count()) >= 6, String(await page.locator('.tbc').count()))
+  if (pageNames.includes('terms.html')) {
+    const tm = await text('terms.html')
+    const title = await page.title()
+    check('terms: binding web-results sentence, AGPL-3.0-or-later with dual licence on request, freemium limits (10 recordings, 1 hour, 90 days), no warranty "to the extent the law allows", no "draft, not in force"',
+      /you agree not to scrape, store, cache or redistribute the results\. They come from Brave, and they are shown only to you, for the moment\./.test(tm) && /AGPL-3\.0-or-later/.test(tm) && /dual licence/.test(tm) && /10 recordings of up to 1 hour each/.test(tm) && /90 days/.test(tm) &&
+      /To the extent the law allows, we give no warranty/.test(tm) && !/not in force|Draft, not/i.test(tm) && !/draft\)/i.test(title) && !/draft terms/i.test(await page.evaluate(() => document.querySelector('meta[name=description]').content)), title)
+  }
+  const im = await text('imprint.html')
+  const ph = await page.evaluate(() => [...document.querySelectorAll('.tbc')].filter((e) => /to be completed by the owner/.test(e.textContent)).length)
+  check('imprint: every missing legal field is a visibly flagged "[to be completed by the owner]" (postal address, UID, register, trade, seat, purpose), none invented (no street, postcode, UID or phone number)',
+    ph >= 6 && !/\b\d{4}\s+Wien\b|ATU\s?\d{8}|\+\d{2}[\s\d]{6,}|\bFN\s?\d+|\b\d{1,3}\s?\/\s?\d{1,3}\b|(?:straße|strasse|gasse|platz)\s+\d/i.test(im) && /Einzelunternehmen/.test(im) && /Vienna, Austria/.test(im), `${ph} placeholders`)
+}
+
 async function contentChecks(browser) {
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   await everyPageChecks(page)
   if (ORG) await contentChecksOrg(page)
   else await contentChecksCom(page)
+  if (ORG) await wave5OrgChecks(page)
+  await legalChecks(page)
   await page.goto(BASE + 'privacy.html')
   const fbp = await page.evaluate(() => document.getElementById('site')?.textContent.replace(/\s+/g, ' ') ?? '')
   check('privacy: feedback form bullets (email only with a box, stored in Switzerland, write back / notify / newsletter via the newsletter service with confirmation)',
@@ -661,7 +824,7 @@ async function contentChecks(browser) {
   if (pageNames.includes('terms.html')) {
     await page.goto(BASE + 'terms.html')
     const tm = await page.evaluate(() => document.getElementById('web-results')?.textContent.replace(/\s+/g, ' ') ?? '')
-    check('terms (draft page): the web results section binds users: not scrape, store, cache or redistribute; from Brave; Powered by Brave',
+    check('terms: the web results section binds users: not scrape, store, cache or redistribute; from Brave; Powered by Brave',
       /you agree not to scrape, store, cache or redistribute the results\. They come from Brave, and they are shown only to you, for the moment\./.test(tm) && /Powered by Brave/.test(tm), tm.slice(0, 100))
   }
   await ctx.close()
@@ -675,7 +838,8 @@ const CONTRAST_TARGETS = [
   ['body text', 'main p', 4.5], ['section heading', 'section h2', 4.5], ['page heading', 'h1:not(.wot)', 3], ['wordmark', 'h1.wot .wm-b', 3],
   ['eyebrow', 'section .eyebrow', 4.5], ['link in text', 'main a:not(.btn-primary):not(.btn-ghost):not(.back)', 4.5], ['back link', 'a.back', 4.5],
   ['primary button', '.btn-primary', 4.5], ['ghost button', '.btn-ghost', 4.5], ['bar Demo', '.tw-btn-demo', 4.5], ['bar Install', '.tw-btn-install', 4.5],
-  ['bar brand', '.sitebar-brand', 4.5], ['bar link to the other site', '.hostlink', 4.5], ['stamp', '.stamp', 4.5], ['draft strip', '.draftstrip', 4.5],
+  ['bar link to the other site', '.hostlink', 4.5], ['AI draft banner', '.banner.ai-draft', 4.5], ['AI draft banner label', '.banner.ai-draft b', 4.5], ['to confirm chip', '.tbc', 4.5],
+  ['FAQ question', '#faq details.q summary', 4.5], ['FAQ answer', '#faq details.q p', 4.5], ['lineage caption', '.lineage-wrap figcaption', 4.5], ['notify note', '.joinnote', 4.5], ['stamp', '.stamp', 4.5], ['draft strip', '.draftstrip', 4.5],
   ['fact label', 'dl.facts dt', 4.5], ['table cell', 'table.plain td', 4.5], ['note', 'section p.note', 4.5], ['list item', 'main li', 4.5],
   ['footer heading', '.sitefooter .sf-h', 4.5], ['footer link', '.sitefooter a', 4.5], ['footer brand text', '.sf-brand p', 4.5], ['footer fine print', '.sf-fine', 4.5],
   ['footer love line', '.sf-love', 4.5], ['footer tag', '.sf-soon', 4.5],
@@ -699,7 +863,7 @@ const contrastInPage = (targets) => {
   return { items: out, bodyBg: parse(body.backgroundColor), bodyFont: body.fontFamily, h1Font: h1 ? getComputedStyle(h1).fontFamily : '', btn: (() => { const i = document.querySelector('.tw-btn-install'); return i ? { bg: parse(getComputedStyle(i).backgroundColor), font: getComputedStyle(i).fontFamily } : null })() }
 }
 
-async function comLookChecks(browser) {
+async function contrastChecks(browser) {
   for (const scheme of ['light', 'dark']) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: scheme })
     const page = await ctx.newPage()
@@ -714,7 +878,7 @@ async function comLookChecks(browser) {
         if (cr < it.min) lows.push(`${name} ${it.label} ${it.text} ${cr.toFixed(2)} (${it.fg} on ${it.bg})`)
         seen.add(it.label)
       }
-      if (name === pageNames[0]) {
+      if (name === pageNames[0] && !ORG) {
         const L = lum(r.bodyBg.slice(0, 3))
         check(`com look (system ${scheme}): the page is ${scheme === 'light' ? 'DARK (inverse of the website, which is cream)' : 'LIGHT (inverse of the website, which is navy)'}`, scheme === 'light' ? L < 0.05 : L > 0.5, `body background ${r.bodyBg}`)
         check(`com look (system ${scheme}): own typefaces, not the website's (display ${r.h1Font.slice(0, 40)}; text ${r.bodyFont.slice(0, 40)})`,
@@ -723,7 +887,7 @@ async function comLookChecks(browser) {
           !!r.btn && (scheme === 'light' ? r.btn.bg[0] > r.btn.bg[2] && r.btn.bg[0] > 200 : r.btn.bg[0] > r.btn.bg[2] * 2 && r.btn.bg[0] > 120), JSON.stringify(r.btn))
       }
     }
-    check(`com contrast (system ${scheme}): ${count} text samples on ${pageNames.length} pages, ${seen.size} kinds, all at WCAG AA (worst ${worst.toFixed(2)})`, lows.length === 0, lows.slice(0, 4).join(' | '))
+    check(`${SITE} contrast (system ${scheme}): ${count} text samples on ${pageNames.length} pages, ${seen.size} kinds, all at WCAG AA (worst ${worst.toFixed(2)})`, lows.length === 0, lows.slice(0, 4).join(' | '))
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(BASE)
@@ -739,7 +903,8 @@ const browser = await chromium.launch({ headless: true })
 try {
   for (const name of pageNames) for (const w of WIDTHS) await checkPage(browser, name, w)
   await contentChecks(browser)
-  if (!ORG) await comLookChecks(browser)
+  await contrastChecks(browser)
+  if (ORG) await lineageChecks(browser)
   await formChecks(browser)
   await linkAudit(browser)
 } finally {

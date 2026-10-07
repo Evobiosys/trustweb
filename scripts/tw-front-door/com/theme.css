@@ -49,8 +49,6 @@
   :root[data-site="com"] section .eyebrow, :root[data-site="com"] dl.facts dt, :root[data-site="com"] .fbform fieldset.keepinfo legend,
   :root[data-site="com"] .stamp, :root[data-site="com"] .back, :root[data-site="com"] .draftstrip, :root[data-site="com"] .sf-h{
     font-family:var(--display); font-weight:700; letter-spacing:.12em}
-  :root[data-site="com"] .sitebar-brand{font-family:var(--display); font-weight:400; letter-spacing:-.01em}
-  :root[data-site="com"] .sitebar-brand b{font-weight:800}
   :root[data-site="com"] h1.wot{font-weight:400; letter-spacing:-.045em}
   :root[data-site="com"] h1.wot .wm-b{font-weight:800}
   :root[data-site="com"] .comhero .herolead{font-family:var(--display); font-weight:700; letter-spacing:-.015em}
