@@ -163,6 +163,7 @@ export async function runServerJob(m: PastMeeting, loadTakes: () => Promise<read
       try {
         const r = await transcribeTake(a, take, deps)
         m.transcript = [...m.transcript, ...linesFromResult(take.offsetMs, r)]
+        if (r.approx) m.roughTimes = true
       } catch (e) {
         const code = codeOf(e)
         setJob(m, { state: stateFor(code), at: deps.now(), takesDone: i, error: code }, deps)

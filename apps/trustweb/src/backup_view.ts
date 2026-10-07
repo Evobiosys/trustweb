@@ -1,7 +1,7 @@
 /**
  * The backup card in Inventory and its sheets (moved out of main.ts in wave
  * 1733 round B, unchanged in behaviour): the whole phone record, end-to-end
- * encrypted, to a Swiss server (questhub, Infomaniak). The key is made on this
+ * encrypted, to our server in Switzerland (questhub). The key is made on this
  * phone (or derived from a passphrase the person chooses) and never sent; the
  * server only ever sees ciphertext. backup.ts holds the crypto; this is the UI
  * around it, plus the one probe that says whether the server answers at all

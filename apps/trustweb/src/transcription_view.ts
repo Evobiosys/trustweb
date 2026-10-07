@@ -159,7 +159,7 @@ export function createTranscriptionView(h: TranscriptionViewHooks): Transcriptio
       return serverOn() && !m.transcript.length && !m.fromName ? [tryButton(S.jobStart)] : []
     }
     switch (job.state) {
-      case ServerJobState.Done: return [el('p', { class: 'meta job-state', 'data-job': 'done' }, [S.jobDone])]
+      case ServerJobState.Done: return [el('p', { class: 'meta job-state', 'data-job': 'done' }, [m.roughTimes === true ? S.jobDoneRough : S.jobDone])]
       case ServerJobState.MaybeCharged:
         return [el('p', { class: 'warn job-state', 'data-job': 'maybe-charged' }, [S.jobMaybeCharged]), serverOn() ? tryButton(S.jobTryAgain, S.jobTryAgainCharged) : null]
       case ServerJobState.Failed:

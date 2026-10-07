@@ -84,6 +84,7 @@ export const HOSTED_SECRET = 'ab'.repeat(32)
  * transcript was still arriving (with their keys, A3), a kept pack still
  * arriving, the consent, the hosted account with its recordings, an import
  * batch, the Feed settings, a person's fediverse handle, an item's image.
+ * Wave 2 (2026-10-07) adds its optional fields here too: a meeting's roughTimes.
  * The regression net for rolling round B back: the pre-wave build must open
  * it, and its saves must keep every one of these fields.
  */
@@ -98,6 +99,8 @@ export function roundBState() {
   s.transcription = 'server'
   s.serverTranscriptionConsentAt = NOW - DAY
   s.meetings[0].serverJob = { state: 'done', at: NOW - 3 * DAY, takesDone: 1 }
+  // wave 2: the server estimated the times per sentence (approx)
+  s.meetings[0].roughTimes = true
   s.meetings[0].fullSentAt = NOW - 3 * DAY
   s.meetings[1].serverJob = { state: 'running', at: NOW - DAY, takesDone: 0 }
   s.meetings[1].outbox = [{ keyText: 'TW1R-AAAAA-BBBBB', title: 'Meeting with Cargo bike', notes: ['borrowable'], at: NOW - DAY }]
@@ -127,7 +130,7 @@ export function roundBState() {
 export function roundBFields(s) {
   return JSON.stringify({
     transcription: s.transcription, consent: s.serverTranscriptionConsentAt, hosting: s.hosting, imports: s.imports, feed: s.feed, found: s.found,
-    meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late })),
+    meetings: (s.meetings ?? []).map((m) => ({ id: m.id, serverJob: m.serverJob, outbox: m.outbox, fullSentAt: m.fullSentAt, late: m.late, roughTimes: m.roughTimes })),
     received: (s.received ?? []).map((r) => [r.pending, r.keptAs]),
     fediverse: s.people.map((p) => p.fediverse ?? null),
     images: s.inventory.map((i) => i.imageId ?? null),

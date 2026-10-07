@@ -2,13 +2,15 @@
  * Server-side transcription and the meeting link that fills in later (wave
  * 1733 round B, items 5 and 3), against the LOCAL Swiss server and a fake
  * transcription provider (never production):
- *   A. Server without transcription: the one-time consent (asked once, says
- *      the audio is readable while transcribed and nothing is kept), "not
- *      switched on yet", and the recording falls back to the live engines.
+ *   A. Server without transcription: the choice is hidden (wave 2), "not
+ *      switched on yet"; a phone that chose it before falls back to the live engines.
+ *   A2. With transcription: the one-time consent (asked once; wave 2 copy: our
+ *      server, OpenRouter, a US provider, no training, nothing kept by us, rough times).
  *   B. With transcription: a memo goes to the server when it stops; the
  *      Review fills with the transcript's lines; saved items link to the
  *      line and the moment (the chain of proof for server transcripts).
  *   C. "Transcribe later", then sent to the server afterwards from the past meeting.
+ *      Wave 2: an answer with estimated times (approx) reads "rough times".
  *   D. Two phones: a meeting sent inside TrustWeb while the server still
  *      transcribes goes up "still arriving"; the receiver sees what is there,
  *      checks cheaply, keeps it; when the transcript is done the sender
@@ -76,38 +78,24 @@ async function recordMemo(page, what, ms) {
 }
 
 async function partA(browser, base) {
-  console.log('A. server without transcription')
+  console.log('A. server without transcription (it says transcribe:false, as production does today)')
   const page = await newPhone(browser, errors)
   await startPhone(page, base, 'Nora')
   await openSettings(page)
-  await pickTranscription(page, 'server')
-  await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
-  const consent = await page.locator('.sheet.on').innerText()
-  ok('choosing "The Swiss server" asks first, plainly: Switzerland, Infomaniak, readable while transcribed, nothing kept',
-    /Switzerland/.test(consent) && /Infomaniak/.test(consent) && /can read the audio and the text/.test(consent) && /not end-to-end encrypted/.test(consent) && /Neither the audio nor the text is kept/.test(consent), consent)
-  await shot(page, '01-consent')
-  await page.locator('[data-consent="yes"]').click()
-  await page.locator('[data-server-transcribe]').waitFor({ timeout: 10_000 })
-  const r1 = await record(page)
-  ok('after the yes: the choice is the Swiss server and the yes is kept', r1.transcription === 'server' && typeof r1.serverTranscriptionConsentAt === 'number')
+  ok('wave 2: the server choice stays hidden while the server does not transcribe', await page.locator('.radio[data-transcription="server"]').count() === 0)
   ok('Settings says it is not switched on yet (GET /hosted/status)', await page.locator('[data-server-transcribe="off"]').count() === 1 && /not switched on yet/.test(await page.locator('[data-server-transcribe]').innerText()))
   await shot(page, '02-settings-not-switched-on')
-  await pickTranscription(page, 'later')
-  await pickTranscription(page, 'server')
-  await page.waitForTimeout(400)
-  ok('the consent is asked once: choosing it again asks nothing', await page.locator('[data-consent]').count() === 0 && (await record(page)).transcription === 'server')
-  ok('after the yes, "Automatic" says it may send audio to the Swiss server (review-app-b)', /Swiss server \(you said yes/.test(await page.locator('[data-transcription="auto"]').innerText()))
-  // review-app-b: the yes can be taken back; then nothing goes there, also not under "Automatic", until asked again
-  await page.locator('[data-consent-withdraw]').click()
-  await page.waitForTimeout(300)
-  const rw = await record(page)
-  ok('"Take back my yes": the yes is gone, "The Swiss server" becomes "Automatic", which no longer mentions it', rw.serverTranscriptionConsentAt === undefined && rw.transcription === 'auto'
-    && !/Swiss server/.test(await page.locator('[data-transcription="auto"]').innerText()) && await page.locator('[data-consent-withdraw]').count() === 0)
-  await pickTranscription(page, 'server')
-  await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
-  ok('choosing the Swiss server again asks again', true)
-  await page.locator('[data-consent="yes"]').click()
-  await page.waitForTimeout(300)
+  // A phone that chose it while it was on (then the server switched it off): it still shows as chosen, and falls back.
+  await page.evaluate(() => {
+    const r = JSON.parse(localStorage.getItem('trustweb.v1.me'))
+    r.transcription = 'server'
+    r.serverTranscriptionConsentAt = Date.now()
+    localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
+  })
+  await page.reload()
+  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await openSettings(page)
+  ok('a phone that chose it before still sees its choice (so it can move away)', await page.locator('.radio.on[data-transcription="server"]').count() === 1)
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
   await page.locator('nav.tabs .tab-record').click()
   await page.getByRole('button', { name: 'Start recording' }).click()
@@ -125,15 +113,52 @@ async function partA(browser, base) {
   await page.context().close()
 }
 
+/** The one-time consent, on a server that transcribes (wave 2: the choice is offered only there). */
+async function partConsent(browser, base) {
+  console.log('A2. the one-time consent (server with transcription)')
+  const page = await newPhone(browser, errors)
+  await startPhone(page, base, 'Nora')
+  await openSettings(page)
+  await page.locator('[data-server-transcribe="on"]').waitFor({ timeout: 10_000 })
+  ok('with transcription on, the server choice is offered', await page.locator('.radio[data-transcription="server"]').count() === 1)
+  await pickTranscription(page, 'server')
+  await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
+  const consent = await page.locator('.sheet.on').innerText()
+  ok('choosing it asks first, plainly (wave 2 copy): our server, OpenRouter, a US provider, readable while transcribed, no training, nothing kept by us, rough times',
+    /our server/.test(consent) && /OpenRouter/.test(consent) && /United States/.test(consent) && /DeepInfra, Groq or Together/.test(consent)
+      && /can read the audio and the text/.test(consent) && /not end-to-end encrypted/.test(consent) && /not used for training/.test(consent)
+      && /We keep neither the audio nor the text/.test(consent) && /rough/.test(consent) && !/Infomaniak/.test(consent) && !/Switzerland, which/.test(consent), consent)
+  await shot(page, '01-consent')
+  await page.locator('[data-consent="yes"]').click()
+  await page.locator('[data-server-transcribe]').waitFor({ timeout: 10_000 })
+  const r1 = await record(page)
+  ok('after the yes: the choice is the server and the yes is kept', r1.transcription === 'server' && typeof r1.serverTranscriptionConsentAt === 'number')
+  await pickTranscription(page, 'later')
+  await pickTranscription(page, 'server')
+  await page.waitForTimeout(400)
+  ok('the consent is asked once: choosing it again asks nothing', await page.locator('[data-consent]').count() === 0 && (await record(page)).transcription === 'server')
+  ok('after the yes, "Automatic" says it may send audio through our server (review-app-b)', /our server \(you said yes/.test(await page.locator('[data-transcription="auto"]').innerText()))
+  // review-app-b: the yes can be taken back; then nothing goes there, also not under "Automatic", until asked again
+  await page.locator('[data-consent-withdraw]').click()
+  await page.waitForTimeout(300)
+  const rw = await record(page)
+  ok('"Take back my yes": the yes is gone, the choice becomes "Automatic", which no longer mentions the server', rw.serverTranscriptionConsentAt === undefined && rw.transcription === 'auto'
+    && !/our server/.test(await page.locator('[data-transcription="auto"]').innerText()) && await page.locator('[data-consent-withdraw]').count() === 0)
+  await pickTranscription(page, 'server')
+  await page.locator('[data-consent="yes"]').waitFor({ timeout: 5_000 })
+  ok('choosing it again asks again', true)
+  await page.context().close()
+}
+
 async function partBC(browser, base, provider) {
-  console.log('B. the Swiss server transcribes a memo; C. "transcribe later", sent afterwards')
+  console.log('B. our server transcribes a memo; C. "transcribe later", sent afterwards')
   const page = await newPhone(browser, errors)
   await startPhone(page, base, 'Jakob')
   await openSettings(page)
   await pickTranscription(page, 'server')
   await page.locator('[data-consent="yes"]').click()
   await page.locator('[data-server-transcribe="on"]').waitFor({ timeout: 10_000 })
-  ok('Settings: the Swiss server transcribes, you said yes', /You said yes/.test(await page.locator('[data-server-transcribe]').innerText()))
+  ok('Settings: transcription through our server is on, you said yes', /You said yes/.test(await page.locator('[data-server-transcribe]').innerText()))
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
   const submits0 = provider.state.submits
   await recordMemo(page, 'Cargo bike', 2_500)
@@ -158,7 +183,7 @@ async function partBC(browser, base, provider) {
   await page.locator('.sheet.on .src-link').click()
   await page.locator('.sheet.on .pm-hit').waitFor({ timeout: 5_000 })
   ok('its link opens the memo at exactly that transcript line', /flat in Graz/.test(await page.locator('.sheet.on .pm-hit').innerText()))
-  ok('the memo says it was transcribed on the Swiss server', await page.locator('.sheet.on [data-job="done"]').count() === 1)
+  ok('the memo says it was transcribed through our server, with exact times (no "rough times")', await page.locator('.sheet.on [data-job="done"]').count() === 1 && !/rough times/i.test(await page.locator('.sheet.on [data-job="done"]').innerText()))
   await shot(page, '04-memo-transcribed-on-server')
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
@@ -177,12 +202,40 @@ async function partBC(browser, base, provider) {
   await page.locator('.pm-row', { hasText: 'Ladder' }).click()
   const start = page.locator('.sheet.on [data-job-start]')
   await start.waitFor({ timeout: 10_000 })
-  ok('a memo transcribed later offers "Transcribe on the Swiss server"', /Transcribe on the Swiss server/.test(await start.innerText()))
+  ok('a memo transcribed later offers "Transcribe through our server"', /Transcribe through our server/.test(await start.innerText()))
   await shot(page, '05-transcribe-later-offer')
   await start.click()
   await page.locator('.sheet.on [data-job="done"]').waitFor({ timeout: 30_000 })
   const ladder = (await record(page)).meetings.find((m) => m.about === 'Ladder')
   ok('sent afterwards: transcribed, the sheet shows the transcript', ladder?.serverJob?.state === 'done' && ladder.transcript.length === 2 && await page.locator('.sheet.on .tr-static .tr-row').count() === 2)
+  await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+
+  // Wave 2: an answer whose times the server estimated per sentence (contract v1.4 "approx": true; the server side of it is
+  // covered by the services suite, which this fake Infomaniak path does not reach): the app keeps the lines and says "rough times".
+  await page.route('**/transcribe', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ text: 'The drill is in the shed. Ask me before Friday.', language: 'en', secondsCharged: 2, approx: true,
+      segments: [{ start: 0, end: 1, text: 'The drill is in the shed.' }, { start: 1, end: 1.6, text: 'Ask me before Friday.' }] }),
+  }))
+  await openSettings(page)
+  await pickTranscription(page, 'server')
+  await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
+  await recordMemo(page, 'Drill', 1_500)
+  const rough = await until(async () => {
+    const m = (await record(page)).meetings.find((x) => x.about === 'Drill')
+    return m?.serverJob?.state === 'done' ? m : null
+  })
+  ok('approx answer: lines with estimated times, the meeting marked rough', rough?.transcript?.length === 2 && rough.roughTimes === true, JSON.stringify(rough))
+  await page.locator('.cta .btn').click()
+  await page.getByRole('button', { name: 'Save to my inventory' }).click()
+  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.locator('nav.tabs .tab-record').click()
+  await page.getByRole('button', { name: 'Just me' }).click({ timeout: 2_000 }).catch(() => {})
+  await page.locator('.past-link').click()
+  await page.locator('.pm-row', { hasText: 'Drill' }).click()
+  await page.locator('.sheet.on [data-job="done"]').waitFor({ timeout: 10_000 })
+  ok('its past meeting says "rough times"', /rough times/i.test(await page.locator('.sheet.on [data-job="done"]').innerText()))
+  await shot(page, '05b-rough-times')
   await page.context().close()
 }
 
@@ -308,6 +361,7 @@ async function main() {
   try {
     browser = await launch()
     await partA(browser, vite2.base)
+    await partConsent(browser, vite1.base)
     await partBC(browser, vite1.base, provider)
     await partD(browser, vite1.base, provider)
     await partE(browser, vite1.base, provider)

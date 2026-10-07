@@ -280,6 +280,8 @@ export interface PastMeeting {
   fromName?: string
   /** The Swiss server's transcription of this recording (wave 1733 round B). Absent: never asked. */
   serverJob?: ServerJob
+  /** Wave 2: the server estimated its lines' times per sentence (its answer said approx): shown as "rough times". Absent: exact or not from the server. */
+  roughTimes?: boolean
   /**
    * Sent (Meet code or inside TrustWeb) while its transcript was still arriving:
    * the key of each such pack, kept until the full version replaced it (A3).

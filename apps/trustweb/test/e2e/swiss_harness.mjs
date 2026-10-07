@@ -74,7 +74,8 @@ export async function startSwissServer(port, { providerUrl = '', extraEnv = {} }
     // Every phone in a test comes from 127.0.0.1: the per-address limits would trip on polling alone.
     RATE_LIMIT: '2000', ACCOUNT_CREATES_PER_IP_DAY: '200', HOSTED_WRITES_PER_HOUR_PER_IP: '2000', REC_GETS_PER_HOUR: '2000',
     HOSTED_MIN_FREE_BYTES: '0', TRANSCRIBE_POLL_MS: '150', TRANSCRIBE_IP_DAILY_SECONDS: '36000', TRANSCRIBE_DAILY_SECONDS: '72000',
-    ...(providerUrl ? { TRANSCRIBE_URL: providerUrl, TRANSCRIBE_KEY: 'test-key-not-real' } : {}),
+    // The fake speaks Infomaniak's shape; OpenRouter became the server's default provider in wave 2 (b084c8c).
+    ...(providerUrl ? { TRANSCRIBE_PROVIDER: 'infomaniak', TRANSCRIBE_URL: providerUrl, TRANSCRIBE_KEY: 'test-key-not-real' } : {}),
     ...extraEnv,
   }
   if (!providerUrl) { delete env.TRANSCRIBE_URL; delete env.TRANSCRIBE_KEY }

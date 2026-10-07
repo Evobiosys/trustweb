@@ -65,6 +65,12 @@ describe('swiss_server parsing', () => {
     expect(t.segments).toEqual([{ start: 0, end: 4.2, text: 'One.' }, { start: 4.2, end: 9, text: 'Two.' }])
     expect(parseTranscript({ segments: [] })).toBe(null)
   })
+  it('wave 2: reads "approx" (sentence-level estimated times) only when it is exactly true', () => {
+    expect(parseTranscript({ text: 'A. B.', segments: [], approx: true }).approx).toBe(true)
+    expect(parseTranscript({ text: 'A. B.', segments: [] }).approx).toBe(false)
+    expect(parseTranscript({ text: 'A. B.', segments: [], approx: 'true' }).approx).toBe(false)
+    expect(parseTranscript({ text: 'A. B.', segments: [], approx: 1 }).approx).toBe(false)
+  })
   it('maps error codes, and statuses where the code is unknown', () => {
     expect(errorFor(503, { error: 'not_configured' }, null).code).toBe(SwissError.NotConfigured)
     expect(errorFor(402, { error: 'allowance_reached' }, null).code).toBe(SwissError.AllowanceReached)
@@ -162,6 +168,15 @@ describe('the server job', () => {
     expect(calls.map((c) => c.seconds)).toEqual([2, 62])
     expect(calls.every((c) => c.signalOk)).toBe(true)
     expect(states).toEqual(['running:0', 'running:0', 'running:1', 'done:2'])
+  })
+  it('wave 2: an answer with estimated times marks the meeting "rough times"; exact answers leave it unmarked', async () => {
+    const rough = meeting({ id: 'rough' })
+    const { d } = deps([result([{ start: 0, end: 1, text: 'One.' }]), { ...result([{ start: 0, end: 2, text: 'Two.' }]), approx: true }])
+    expect(await runServerJob(rough, async () => [take(0, 1000), take(1000, 2000)], d)).toBe(ServerJobState.Done)
+    expect(rough.roughTimes).toBe(true)
+    const exact = meeting({ id: 'exact' })
+    expect(await runServerJob(exact, async () => [take(0, 1000)], deps([{ ...result([{ start: 0, end: 1, text: 'One.' }]), approx: false }]).d)).toBe(ServerJobState.Done)
+    expect('roughTimes' in exact).toBe(false)
   })
   it('marks the meeting running BEFORE it awaits anything (a pack sent right after says "still arriving")', () => {
     const m = meeting({ id: 'never-loads' })

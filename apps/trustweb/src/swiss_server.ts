@@ -99,6 +99,8 @@ export interface TranscribeResult {
   segments: TranscriptSegment[]
   language: string | null
   secondsCharged: number
+  /** The server estimated the segment times per sentence (contract v1.4 "approx": true). */
+  approx: boolean
 }
 
 /** Account id and write token of the hosted account, and the key the recordings are sealed with. */
@@ -207,7 +209,7 @@ export function parseTranscript(v: unknown): TranscribeResult | null {
     .map((s) => ({ start: Math.max(0, s.start as number), end: Math.max(0, s.end as number), text: (s.text as string).trim() }))
     .filter((s) => s.text)
     .sort((a, b) => a.start - b.start)
-  return { text: o.text.trim(), segments, language: typeof o.language === 'string' ? o.language : null, secondsCharged: num(o.secondsCharged) }
+  return { text: o.text.trim(), segments, language: typeof o.language === 'string' ? o.language : null, secondsCharged: num(o.secondsCharged), approx: o.approx === true }
 }
 
 /** An error answer's code -> SwissError (unknown codes by status). */

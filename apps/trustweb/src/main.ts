@@ -3006,9 +3006,19 @@ function editNameSheet(): void {
  * Record tab starts as "Just me" or "A meeting". Choosing a transcription
  * replaces the older "Use TalkWeave on this computer" switch for good.
  */
-/** "Automatic" says so when it may send audio to the Swiss server (after the yes, review-app-b). */
+/** "Automatic" says so when it may send audio through our server (after the yes, review-app-b). */
 function autoHint(c: TranscriptionChoice): string {
   return c === TranscriptionChoice.Auto && swiss.enabled() && transcription.consented() ? S.setAutoWithServer : S.setTranscriptionHint[c]
+}
+
+/**
+ * Transcription through our server is offered only while the server says it
+ * transcribes (wave 2: hidden while /hosted/status says transcribe:false, as
+ * production does until Jakob places the key). A phone that chose it before
+ * still sees its choice, so it can move away from it.
+ */
+function serverChoiceOffered(choice: TranscriptionChoice): boolean {
+  return swiss.enabled() && (choice === TranscriptionChoice.Server || swiss.status()?.transcribe === true)
 }
 
 function recordingSettings(s: AppState): (HTMLElement | null)[] {
@@ -3023,7 +3033,7 @@ function recordingSettings(s: AppState): (HTMLElement | null)[] {
     }, [el('b', {}, [S.setDefaultRecordingLabel[d]]), el('small', {}, [S.setDefaultRecordingHint[d]])])),
     el('p', { class: 'meta' }, [S.setDefaultRecordingNote]),
     el('p', { class: 'meta set-sub' }, [S.setTranscription]),
-    ...TRANSCRIPTION_CHOICES.filter((c) => c !== TranscriptionChoice.Server || swiss.enabled()).map((c) => {
+    ...TRANSCRIPTION_CHOICES.filter((c) => c !== TranscriptionChoice.Server || serverChoiceOffered(choice)).map((c) => {
       const pick = (): void => { s.transcription = c; delete s.talkWeaveLocal; engine = null; save(); settingsSheet() }
       return el('button', {
         class: 'radio' + (choice === c ? ' on' : ''), 'aria-pressed': String(choice === c), 'data-transcription': c,
