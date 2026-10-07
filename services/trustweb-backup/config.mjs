@@ -33,6 +33,7 @@
 //   TRANSCRIBE_DAILY_SECONDS         7200         everyone together, per UTC day
 //   TRANSCRIBE_IP_DAILY_SECONDS      3600         per IP and UTC day
 //   TRANSCRIBE_MAX_CONCURRENT        1            paid provider jobs at once (a job runs to its end even when the phone goes away)
+//   TRANSCRIBE_UNCERTAIN_PER_DAY     3            failures that may still have been billed (gateway/timeout statuses) per UTC day before the day's budget closes
 //   TRANSCRIBE_QUEUE                 2            callers that may wait for that slot (more: 429 busy before any audio is read)
 //   TRANSCRIBE_QUEUE_WAIT_MS         240000       longest wait for the slot (then 429 busy): wait + job stay inside Caddy's 15 min
 //   TRANSCRIBE_UPLOADS_PER_IP        1            audio uploads in flight per client (IPv6: per /64)
@@ -122,6 +123,7 @@ export function loadConfig(options = {}) {
     transcribeDailySeconds: pick(options, 'transcribeDailySeconds', 'TRANSCRIBE_DAILY_SECONDS', 7200),
     transcribeIpDailySeconds: pick(options, 'transcribeIpDailySeconds', 'TRANSCRIBE_IP_DAILY_SECONDS', 3600),
     transcribeMaxConcurrent: pick(options, 'transcribeMaxConcurrent', 'TRANSCRIBE_MAX_CONCURRENT', 1),
+    transcribeUncertainPerDay: pick(options, 'transcribeUncertainPerDay', 'TRANSCRIBE_UNCERTAIN_PER_DAY', 3),
     transcribeQueue: pick(options, 'transcribeQueue', 'TRANSCRIBE_QUEUE', 2),
     transcribeQueueWaitMs: pick(options, 'transcribeQueueWaitMs', 'TRANSCRIBE_QUEUE_WAIT_MS', 240000),
     transcribeUploadsPerIp: pick(options, 'transcribeUploadsPerIp', 'TRANSCRIBE_UPLOADS_PER_IP', 1),

@@ -40,6 +40,14 @@ import { TranscribeProvider } from './config.mjs'
 
 const MAX_AUDIO_SECONDS = 3600
 
+/**
+ * Provider answers that can arrive AFTER the audio was processed (gateway and timeout statuses, e.g. the ~60 s upstream cut):
+ * the job may have been billed although it failed. OpenRouter's docs do not say whether a failed transcription is billed
+ * (they only promise "zero-completion insurance" for completions and warn that prompt processing can still be charged),
+ * so such a failure is refunded to the person but COUNTED; the third one in a UTC day closes today's global budget.
+ */
+const UNCERTAIN_STATUSES = new Set([408, 502, 504, 524])
+
 /** Accepted Content-Type (without parameters) -> a file extension the provider accepts. */
 const AUDIO_TYPES = Object.freeze({
   'audio/webm': 'webm',
@@ -64,6 +72,7 @@ function createProvider(cfg, fetchImpl) {
 export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fetch }) {
   const daily = createDailyMeter({ limit: cfg.transcribeDailySeconds, now: cfg.now })
   const perIp = createDailyMeter({ limit: cfg.transcribeIpDailySeconds, now: cfg.now })
+  const uncertain = createDailyMeter({ limit: cfg.transcribeUncertainPerDay, now: cfg.now })
   const providerSlots = createSlots({ slots: cfg.transcribeMaxConcurrent, queue: cfg.transcribeQueue })
   const uploads = createInFlight({ total: cfg.transcribeMaxConcurrent + cfg.transcribeQueue, perKey: cfg.transcribeUploadsPerIp })
 
@@ -231,6 +240,12 @@ export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fe
     return real
   }
 
+  /** A failure that may still have been billed (UNCERTAIN_STATUSES): the Nth in one UTC day closes the global budget. */
+  function countUncertain() {
+    uncertain.add(null, 1)
+    if (!uncertain.fits(null, 1)) daily.close(null)
+  }
+
   /**
    * A job without a transcript. Refused or failed at the provider: the seconds go back. Timed out: the provider may
    * still be running (and billing) it, so the charge stays and today's global budget is closed. The provider asking us
@@ -240,6 +255,7 @@ export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fe
     const timeout = err.kind === ProviderFailure.Timeout
     if (timeout && err.accepted) daily.close(null)
     else await refund(request.account, ip, charge)
+    if (!timeout && err.accepted && UNCERTAIN_STATUSES.has(err.status)) countUncertain()
     cfg.log(`transcribe ${timeout ? `provider_timeout accepted=${err.accepted}` : `provider_${err.kind} status=${err.status ?? 'n/a'}`}`)
     if (res.destroyed) return 499
     if (err.kind === ProviderFailure.Busy) return tooManyRequests(res, 'busy', 30)

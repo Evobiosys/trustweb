@@ -33,9 +33,9 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over nine files (112 tests: the 17
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over nine files (113 tests: the 17
 original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake Infomaniak and a fake
-OpenRouter (22 tests: success, bad model JSON, 400/401/402/403/429/500, timeout, oversized, budgets, hang-up), feedback
+OpenRouter (23 tests: success, bad model JSON, 400/401/402/403/429/500, gateway statuses counted, timeout, oversized, budgets, hang-up), feedback
 and CORS, ETag/late packs, the in-memory limiters). Fixed test ports 8971-8976 and 8978, one per file (8977 is taken by
 another program on the dev machine). Nothing is left running.
 Per-client limits count IPv4 addresses as they are and IPv6 per /64 (limits.mjs ipKey); /backup keeps its old per-address limiter.

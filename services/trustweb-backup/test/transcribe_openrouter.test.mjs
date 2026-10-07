@@ -215,7 +215,9 @@ test('provider 429: the phone gets our own 429 busy with Retry-After, nothing is
       assert.equal(r.text.includes('RAW PROVIDER'), false)
       assert.equal(seen.calls.length, 1)
       assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0)
-      assert.equal((await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '8.8.8.8' })).status, 429) // the daily budget was not eaten
+      const next = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '8.8.8.8' })
+      assert.equal(next.status, 429)
+      assert.equal(next.json.error, 'busy') // the provider's 429 again, NOT busy_today: the daily budget was not eaten
     })
   })
 })
@@ -234,6 +236,34 @@ test('a call that never answers: 504 provider_timeout at the deadline, the charg
       assert.equal(next.json.error, 'busy_today')
       assert.equal(seen.calls.length, 1)
       assert.ok(lines.includes('transcribe provider_timeout accepted=true'))
+    })
+  })
+})
+
+test('gateway and timeout statuses (408, 502, 504, 524) may have been billed: refunded to the person but counted, the third in a day closes the day', async () => {
+  for (const status of [408, 502, 504, 524]) {
+    await withOpenRouter({ replies: [{ status }] }, async () => {
+      await withServer(P, base, async ({ lines }) => {
+        const r = await transcribe(hdr())
+        assert.equal(r.status, 502, String(status))
+        assert.equal((await usage(P, A)).json.transcription.secondsUsed, 0)
+        assert.ok(lines.includes(`transcribe provider_error status=${status}`))
+      })
+    })
+  }
+  await withOpenRouter({ replies: [{ status: 504 }] }, async ({ seen }) => {
+    await withServer(P, { ...base, rateLimit: 1000 }, async () => {
+      for (const ip of ['1.1.1.1', '1.1.1.2']) assert.equal((await transcribe(hdr(), AUDIO, { ip })).status, 502)
+      assert.equal((await transcribe(hdr(), AUDIO, { ip: '1.1.1.3' })).status, 502) // the third one is still answered, then the day closes
+      const next = await transcribe(hdr({ 'X-Account': A2, 'X-Write-Token': T2 }), AUDIO, { ip: '1.1.1.4' })
+      assert.equal(next.status, 429)
+      assert.equal(next.json.error, 'busy_today')
+      assert.equal(seen.calls.length, 3)
+    })
+  })
+  await withOpenRouter({ replies: [{ status: 500 }] }, async () => {
+    await withServer(P, { ...base, rateLimit: 1000 }, async () => {
+      for (let i = 1; i <= 5; i += 1) assert.equal((await transcribe(hdr(), AUDIO, { ip: `2.2.2.${i}` })).status, 502) // a plain 500 never closes the day
     })
   })
 })
