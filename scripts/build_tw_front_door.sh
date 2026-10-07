@@ -43,6 +43,10 @@
 #   TRANSCRIBE_LIVE (TW_TRANSCRIBE_LIVE=1 or --transcribe-live): 0 = pricing,
 #     privacy and FAQ say server transcription is coming and switched off today;
 #     1 = switched on (through OpenRouter, see privacy).
+# TW_TRANSCRIBE_PROVIDER=openrouter|berget|berget-only (default openrouter) says which provider the copy names for
+#   server transcription: openrouter = OpenRouter only (no Berget wording anywhere); berget = Berget AI in Sweden
+#   with OpenRouter in the US as the fallback; berget-only = Berget alone. Flip it to match the server's status
+#   (GET /hosted/status, provider.transcribe) in the same step that switches Berget on. Details: tw-front-door/tw_site.py.
 # The orchestrator flips each after the matching service and the app are live
 # (GET https://app.idea2.site/hosted/status: hosted:true / transcribe:true).
 # terms.html is built for --draft only (Jakob has not approved it);
@@ -107,6 +111,11 @@ SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=f
 
 SERVICES_LIVE="${TW_SERVICES_LIVE:-0}"   # <- hosting flag, see the header
 TRANSCRIBE_LIVE="${TW_TRANSCRIBE_LIVE:-0}"   # <- server transcription flag, see the header
+TRANSCRIBE_PROVIDER="${TW_TRANSCRIBE_PROVIDER:-openrouter}"   # <- which provider the transcription copy names, see the header
+case "$TRANSCRIBE_PROVIDER" in
+  openrouter|berget|berget-only) ;;
+  *) echo "unknown TW_TRANSCRIBE_PROVIDER: $TRANSCRIBE_PROVIDER (openrouter, berget or berget-only)" >&2; exit 2 ;;
+esac
 PUBLISH_TERMS="${TW_PUBLISH_TERMS:-0}"
 DRAFT=0
 for arg in "$@"; do
@@ -134,7 +143,7 @@ http_code() {
   node -e 'fetch(process.argv[1], { redirect: "manual", signal: AbortSignal.timeout(20000) }).then((r) => console.log(r.status), () => console.log("ERR"))' "$1"
 }
 
-ARGS=(--frag "$FRAG" --out "$OUT" --site "$SITE_KIND" --site-host "$SITE_HOST" --app-base "$APP_BASE")
+ARGS=(--frag "$FRAG" --out "$OUT" --site "$SITE_KIND" --site-host "$SITE_HOST" --app-base "$APP_BASE" --transcribe-provider "$TRANSCRIBE_PROVIDER")
 if [ "$SITE_KIND" = org ]; then  # the hosting site is built from fragments alone, no source page
   echo "fetching $SRC"
   "${SSHENV[@]}" scp -q "questhub:$SRC" "$WORK/source_index.html"

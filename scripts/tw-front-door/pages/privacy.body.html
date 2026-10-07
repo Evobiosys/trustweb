@@ -47,13 +47,23 @@
     your allowance. A recording that is neither written nor opened for 90 days may be removed.</li><!--/IF-->
     <li id="transcription"><b>Server transcription<!--IF:tx-off--> (coming, switched off today)<!--/IF--><!--IF:tx-on--> (experimental)<!--/IF-->.</b>
     <!--IF:tx-off-->It is switched off today, and nothing described here happens. When it is switched on and you choose it,<!--/IF--><!--IF:tx-on-->If you choose it,<!--/IF-->
-    the audio of a recording leaves your phone. It goes through our server to OpenRouter, a service that passes it to an
+    the audio of a recording leaves your phone.
+    <!--IF:prov-openrouter-->It goes through our server to OpenRouter, a service that passes it to an
     inference provider in the United States (OpenRouter picks which one; we cannot). We set OpenRouter's data policy to "deny", which should limit the choice to providers that do not
     store the audio or train on it; we rely on that setting and on the providers' own statements, and we cannot check what they do.
-    Unlike backups and hosted recordings, this audio is not encrypted for the server, OpenRouter or the provider: they handle it as audio.
+    Unlike backups and hosted recordings, this audio is not encrypted for the server, OpenRouter or the provider: they handle it as audio.<!--/IF-->
+    <!--IF:prov-berget-->It goes through our server to Berget AI, a company that runs its servers in Sweden. Berget states that no data leaves Sweden
+    and that it keeps nothing; we rely on that statement and cannot check it. If Berget cannot be reached or cannot take the file type, the audio may go
+    through OpenRouter instead, a service that passes it to an inference provider in the United States (OpenRouter picks which one; we cannot). We set
+    OpenRouter's data policy to "deny", which should limit the choice to providers that do not store the audio or train on it; we rely on that setting and on
+    the providers' own statements, and we cannot check what they do.
+    Unlike backups and hosted recordings, this audio is not encrypted for the server, Berget, OpenRouter or the provider: they handle it as audio.<!--/IF-->
+    <!--IF:prov-berget-only-->It goes through our server to Berget AI, a company that runs its servers in Sweden. Berget states that no data leaves Sweden
+    and that it keeps nothing; we rely on that statement and cannot check it. The audio goes nowhere else.
+    Unlike backups and hosted recordings, this audio is not encrypted for the server or Berget: they handle it as audio.<!--/IF-->
     Our server keeps neither the audio nor the text (the audio sits in a temporary file only while it is being transcribed);
     it counts the minutes used. Free while we test: up to 10 hours of audio per person, within a daily budget
-    shared by everyone. The text comes back to your phone, and the times of the sentences may be approximate.</li>
+    shared by everyone. A transcription that fails is not counted against that allowance and is not charged to you. The text comes back to your phone, and the times of the sentences may be approximate.</li>
     <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
     (backup, hosting, transcription, feedback) use them only in memory, to limit abuse; the web
     server writes no access log.</li>
@@ -87,8 +97,12 @@
   <h2>Who else is involved</h2>
   <ul>
     <li><b>Infomaniak</b>, in Switzerland: hosting of our server, which holds the relay, backups and hosted recordings.</li>
-    <li><b>OpenRouter</b> and the inference provider behind it, in the United States: only for server transcription, only if it is
-    switched on and you choose it. See <a href="#transcription">above</a>.</li>
+    <!--IF:prov-openrouter--><li><b>OpenRouter</b> and the inference provider behind it, in the United States: only for server transcription, only if it is
+    switched on and you choose it. See <a href="#transcription">above</a>.</li><!--/IF-->
+    <!--IF:prov-berget--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. <b>OpenRouter</b> and the
+    inference provider behind it, in the United States: only when Berget cannot take a recording. See <a href="#transcription">above</a>.</li><!--/IF-->
+    <!--IF:prov-berget-only--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. See
+    <a href="#transcription">above</a>.</li><!--/IF-->
     <li><b>Google Fonts</b>: typefaces on this site.</li>
     <li>No advertising networks, no analytics providers.</li>
   </ul>

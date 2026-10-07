@@ -144,9 +144,12 @@ async function partConsent(browser, base, provider) {
   await shot(page, '00-settings-server-button')
   await openServerSheet(page)
   const consent = await page.locator('.sheet.on').innerText()
-  ok('the sheet says where first: "Processed by: Infomaniak, Switzerland." and its data policy (no fallback line: this server does not say)',
+  // Since the merge of tw3/transcribe the server's status says fallback: null for infomaniak (one provider, no chain), so the
+  // sheet says so plainly instead of leaving it out (fallback undefined = an older server that does not say).
+  ok('the sheet says where first: "Processed by: Infomaniak, Switzerland.", its data policy and "No fallback" (the server says none)',
     /Processed by: Infomaniak, Switzerland\./.test(await page.locator('.sheet.on [data-server-where]').innerText())
-      && /its own terms apply/.test(await page.locator('.sheet.on [data-server-policy]').innerText()) && await page.locator('.sheet.on [data-server-fallback]').count() === 0, consent)
+      && /its own terms apply/.test(await page.locator('.sheet.on [data-server-policy]').innerText())
+      && /^No fallback: if it cannot transcribe, no other service is tried\.$/.test((await page.locator('.sheet.on [data-server-fallback]').innerText()).trim()), consent)
   // review-wave2: the copy follows the server's provider block. This harness runs the infomaniak provider (its fake speaks that
   // path), so the consent must name Infomaniak in Switzerland and NOT OpenRouter, the US or a data policy (unit: the OpenRouter copy).
   ok('choosing it asks first, plainly, naming what THIS server reports (infomaniak, ch): readable while transcribed, nothing kept by us, rough times, the free hours from its plan',

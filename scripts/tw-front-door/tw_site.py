@@ -6,6 +6,7 @@ network or the server.
 
     tw_site.py --src SOURCE_INDEX --frag FRAGMENT_DIR --out OUT_DIR
                [--draft] [--services-live] [--transcribe-live] [--publish-terms]
+               [--transcribe-provider openrouter|berget|berget-only]
                [--site org|com] [--site-host HOST] [--app-base URL]
 
 --site org (default) builds TrustInTheWeb.org, --site com builds
@@ -32,6 +33,17 @@ is described as "coming, switched off today" until --transcribe-live; it has its
 own flag because it stays off until a provider key is placed, whatever hosting
 does), draft / prod, org / com, terms. Blocks must not nest.
 
+TRANSCRIPTION PROVIDER FLAG (who the copy says transcribes on the server). The words on privacy, pricing
+and the third-party list name the provider that really runs, never one that does not:
+  TW_TRANSCRIBE_PROVIDER=openrouter    (default) OpenRouter, a US inference provider behind it; no Berget wording anywhere
+  TW_TRANSCRIBE_PROVIDER=berget        Berget AI (Sweden) first, OpenRouter (US) as the fallback when Berget is down or cannot
+                                       take the file type (the server's default chain, TRANSCRIBE_PROVIDER=auto)
+  TW_TRANSCRIBE_PROVIDER=berget-only   Berget AI (Sweden) alone, no fallback (TRANSCRIBE_FALLBACK=none)
+Read from the environment here (or --transcribe-provider; the flag wins); scripts/build_tw_front_door.sh passes it on.
+The orchestrator flips it to berget or berget-only in the same step that switches Berget on and the server's status
+(GET /hosted/status, provider.transcribe) reads that provider. Blocks: prov-openrouter / prov-berget / prov-berget-only;
+the token {{TX_ROUTE}} carries the short phrase used in headings and sentences.
+
 Tokens in fragments, replaced in the finished page: {{APP}} app base, {{API}}
 app origin, {{ORG}} / {{COM}} prefix of a link to the other site (empty for the
 own site, so own links stay relative), {{SELF_URL}}, {{WHITEPAPER}},
@@ -44,6 +56,7 @@ under /trustweb/, under /trustweb/draft/ and at the root of a domain.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -52,6 +65,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 BLOCK_RE = re.compile(r"<!--IF:([\w-]+)-->(.*?)<!--/IF-->", re.DOTALL)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 TOKEN_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
 IDEA2_HOST = "idea2.site"
 IDEA2_URL = "https://idea2.site/trustweb/"
@@ -68,6 +82,21 @@ class Site(str, Enum):
     COM = "com"
 
 
+class TranscribeProvider(str, Enum):
+    OPENROUTER = "openrouter"
+    BERGET = "berget"
+    BERGET_ONLY = "berget-only"
+
+
+TRANSCRIBE_PROVIDER_ENV = "TW_TRANSCRIBE_PROVIDER"
+# The short phrase each provider setting puts where a sentence or heading names the transcription route.
+TX_ROUTE: dict[TranscribeProvider, str] = {
+    TranscribeProvider.OPENROUTER: "outside providers via OpenRouter",
+    TranscribeProvider.BERGET: "Berget AI in Sweden, with OpenRouter in the United States as a fallback",
+    TranscribeProvider.BERGET_ONLY: "Berget AI in Sweden",
+}
+
+
 @dataclass(frozen=True)
 class Flags:
     draft: bool
@@ -77,6 +106,7 @@ class Flags:
     site: Site = Site.ORG
     site_host: str = IDEA2_HOST
     app_base: str = DEFAULT_APP_BASE
+    transcribe_provider: TranscribeProvider = TranscribeProvider.OPENROUTER
 
     @property
     def terms_visible(self) -> bool:
@@ -102,6 +132,7 @@ class Flags:
         names = {
             "live" if self.services_live else "soon",
             "tx-on" if self.transcribe_live else "tx-off",
+            f"prov-{self.transcribe_provider.value}",
             "draft" if self.draft else "prod",
             self.site.value,
         }
@@ -128,6 +159,7 @@ class Flags:
             "SELF_URL": self.self_url,
             "WHITEPAPER": whitepaper,
             "SITE_NAME": "TrustInTheWeb.org" if self.is_org else "TrustInTheWeb.com",
+            "TX_ROUTE": TX_ROUTE[self.transcribe_provider],
             "BACK": back,
         }
 
@@ -541,7 +573,8 @@ def build_subpage(page: Page, frag_dir: Path, flags: Flags) -> str:
     sitebar, footer = chrome_pieces(frag_dir, flags)
     shell = fragment(frag_dir, "subpage-shell.html")
     css = fragment(frag_dir, "subpage-base.css") + fragment(frag_dir, "chrome.css")
-    body = resolve_blocks(fragment(frag_dir, page.body), active)
+    # Author notes in a body fragment (e.g. the imprint's list of gaps) stay in the repo: comments are not served.
+    body = HTML_COMMENT_RE.sub("", resolve_blocks(fragment(frag_dir, page.body), active))
     values = {
         "ROBOTS": "noindex, nofollow",
         "TITLE": page.title,
@@ -608,6 +641,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="describe server transcription as switched on (default: coming, off today)",
     )
     ap.add_argument(
+        "--transcribe-provider",
+        default=os.environ.get(TRANSCRIBE_PROVIDER_ENV, TranscribeProvider.OPENROUTER.value),
+        help="who the copy says transcribes on the server: openrouter (default), berget (Berget, OpenRouter fallback) or "
+        f"berget-only; default read from ${TRANSCRIBE_PROVIDER_ENV}",
+    )
+    ap.add_argument(
         "--publish-terms",
         action="store_true",
         help="publish terms.html outside the draft",
@@ -633,6 +672,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    try:
+        provider = TranscribeProvider(args.transcribe_provider)
+    except ValueError:
+        raise SystemExit(
+            f"unknown transcribe provider {args.transcribe_provider!r} "
+            f"(use {', '.join(p.value for p in TranscribeProvider)})"
+        ) from None
     flags = Flags(
         draft=args.draft,
         services_live=args.services_live,
@@ -641,6 +687,7 @@ def main(argv: list[str]) -> int:
         site=Site(args.site),
         site_host=args.site_host,
         app_base=args.app_base,
+        transcribe_provider=provider,
     )
     if flags.is_org and args.src is None:
         raise SystemExit("--src is required for --site org")
@@ -650,7 +697,8 @@ def main(argv: list[str]) -> int:
     print(
         f"flags: draft={flags.draft} services_live={flags.services_live} "
         f"transcribe_live={flags.transcribe_live} terms={flags.terms_visible} "
-        f"site={flags.site.value} host={flags.site_host} app={flags.app_base}"
+        f"site={flags.site.value} host={flags.site_host} app={flags.app_base} "
+        f"transcribe_provider={flags.transcribe_provider.value}"
     )
     return 0
 

@@ -4,6 +4,9 @@
 //   [TW_SITE=org|com] [TW_APP_BASE=https://app.idea2.site/trustweb] [TW_SITE_HOST=idea2.site] \
 //   node scripts/tw-front-door/verify_site.mjs <built-dir> <screens-dir> <draft|prod> [<live-base-url>]
 //
+// TW_TRANSCRIBE_PROVIDER=openrouter|berget|berget-only (default openrouter) is the setting the build was given
+// (see tw_site.py): the transcription copy must name that provider, and Berget must not appear at all unless it is on.
+//
 // TW_SITE=org (default) checks the website, TW_SITE=com the hosting site. TW_APP_BASE is the app base the
 // build was given (Demo is <base>/demo/, Install <base>/?install=1); TW_SITE_HOST the host it was built for.
 
@@ -34,6 +37,8 @@ if (!['org', 'com'].includes(SITE)) { console.error('TW_SITE must be org or com'
 const APP = (process.env.TW_APP_BASE ?? 'https://app.idea2.site/trustweb').replace(/\/$/, '')
 const SITE_HOST = process.env.TW_SITE_HOST ?? 'idea2.site'
 const ORG = SITE === 'org'
+const TX_PROVIDER = process.env.TW_TRANSCRIBE_PROVIDER ?? 'openrouter'
+if (!['openrouter', 'berget', 'berget-only'].includes(TX_PROVIDER)) { console.error('TW_TRANSCRIBE_PROVIDER must be openrouter, berget or berget-only'); process.exit(2) }
 const OTHER_HOST = ORG ? 'https://TrustInTheWeb.com' : 'https://TrustInTheWeb.org'
 const results = []
 const check = (name, ok, detail = '') => {
@@ -471,9 +476,9 @@ async function everyPageChecks(page) {
     check(`${name}: no em dash (char or entity)`, !/—|&mdash;|&#8212;|&#x2014;/i.test(t))
     check(`${name}: no "promise nothing free", no "hop by hop", no "DeepInfra"`, !/promise nothing free|hop by hop|DeepInfra/i.test(t.replace(/\s+/g, ' ')))
     const vis = await page.evaluate(() => document.body.innerText)
-    check(`${name}: no "UWB", no names (Max, Kaya, Manuel), no "Infomaniak AI", no "Switzerland ... transcri" claim`,
-      !/\bUWB\b|\bMax\b|\bKaya\b|\bManuel\b|Infomaniak AI/.test(t) && !/transcri[^.]{0,200}Infomaniak|Infomaniak[^.]{0,200}transcri/i.test(vis))
-    check(`${name}: no HTML comment carries a meeting or a person`, !/<!--[^>]*(meeting with|transcript of the conversation|max-meeting)/i.test(t))
+    check(`${name}: no "UWB", no names (Max, Kaya, Manuel), no "Infomaniak AI", no "Switzerland ... transcri" claim, no Berget unless it is switched on`,
+      !/\bUWB\b|\bMax\b|\bKaya\b|\bManuel\b|Infomaniak AI/.test(t) && !/transcri[^.]{0,200}Infomaniak|Infomaniak[^.]{0,200}transcri/i.test(vis) && (TX_PROVIDER !== 'openrouter' || !/Berget/i.test(t)))
+    check(`${name}: no HTML comment carries a meeting or a person`, !/<!--[^>]*(meeting with|transcript of the conversation|max-meeting)/i.test(t) && !/<!--(?:(?!-->)[\s\S])*(GAPS for|Jakob)/.test(t))
     check(`${name}: names itself ${ORG ? 'TrustInTheWeb.org' : 'TrustInTheWeb.com'} (title), never idea2.site as its name`,
       /<title>[^<]*TrustInTheWeb\.(org|com)<\/title>/.test(t) && new RegExp(`<title>[^<]*TrustInTheWeb\\.${SITE}</title>`).test(t) && !/<title>[^<]*idea2\.site/.test(t))
     check(`${name}: the hosting sentence says "The app is hosted on Infomaniak in Switzerland"`, /The app is hosted on Infomaniak in Switzerland/.test(vis))
@@ -500,8 +505,10 @@ async function contentChecksCom(page) {
   check('pricing: allowance in recordings with hours in brackets', /the equivalent of 10 recordings of up to an hour each/.test(pr) && /\(10 hours in total\)/.test(pr))
   check('pricing: smooth updates for hosted, offline installs on their own', /hosted version<\/b>|The hosted version/.test(pr) && /promises smooth updates and migrations/.test(pr) && /offline install/i.test(pr) && /on its own/.test(pr))
   check('pricing: no price list (no currency amounts, no "fair")', !/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i.test(pr), pr.match(/[€$£]\s?\d|\d\s?(EUR|USD|CHF)\b|\bfair\b/i)?.[0] ?? '')
-  check('pricing: server transcription via OpenRouter, see privacy, with the allowance (10 hours of audio per person, shared daily budget)',
-    /outside providers via OpenRouter, see privacy/i.test(pr) && /free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/i.test(pr) && !/promise nothing free/i.test(pr))
+  const prRoute = { openrouter: /outside providers via OpenRouter, see privacy/i, berget: /Berget AI in Sweden, with OpenRouter in the United States as a fallback, see privacy/i, 'berget-only': /Berget AI in Sweden, see privacy/i }[TX_PROVIDER]
+  check(`pricing: server transcription via ${TX_PROVIDER}, see privacy, with the allowance (10 hours of audio per person, shared daily budget), failures not charged`,
+    prRoute.test(pr) && /free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/i.test(pr) && !/promise nothing free/i.test(pr) &&
+    /A transcription that fails is not counted against that allowance and is not charged to you/.test(pr) && (TX_PROVIDER === 'berget-only' ? !/OpenRouter/.test(pr) : /OpenRouter/.test(pr)))
   check('pricing: marketplace is coming soon, fee 80 percent of what others charge, no 1 %', /Coming soon: fee, 80 percent of what others charge/.test(pr) && /our fee is 80 percent of what others charge/.test(pr) && !/1 %/.test(pr))
   check('pricing: its own links stay on the hosting site, the marketplace link goes to the website',
     (await page.locator('a[href="privacy.html#server"]').count()) === 1 && (await page.locator('a[href="https://trustintheweb.org/#uc-marketplace"]').count()) === 1)
@@ -629,8 +636,11 @@ async function contentChecks(browser) {
     /your email address only if you tick a box|email address only if you tick a box/.test(fbp) && /stored on our server in Switzerland/.test(fbp) && /Write back to me about this message": we keep your address so we can answer/.test(fbp) &&
     /Notify me when it is ready": we keep it for one note when TrustWeb is ready/.test(fbp) && /our server passes it on to our newsletter service, which first sends you a confirmation email/.test(fbp) && /only after you click the link in it/.test(fbp) && !/our waitlist/.test(fbp))
   const pv = await page.evaluate(() => document.getElementById('transcription')?.textContent.replace(/\s+/g, ' ') ?? '')
-  check('privacy: transcription via OpenRouter to a US provider, data policy "deny", nothing kept by us, approximate times, no Infomaniak/Switzerland claim',
-    /OpenRouter/.test(pv) && /United States/.test(pv) && /OpenRouter picks which one; we cannot/.test(pv) && !/DeepInfra|Groq|Together/.test(pv) && /Free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/.test(pv) && /"deny"/.test(pv) && /keeps neither the audio nor the text/.test(pv) && /approximate/.test(pv) && !/Infomaniak|Switzerland/.test(pv), pv.slice(0, 120))
+  const pvCommon = /Free while we test: up to 10 hours of audio per person, within a daily budget shared by everyone/.test(pv) && /not charged to you/.test(pv) && /keeps neither the audio nor the text/.test(pv) && /approximate/.test(pv) && !/Infomaniak|Switzerland/.test(pv)
+  const pvOr = /OpenRouter/.test(pv) && /United States/.test(pv) && /OpenRouter picks which one; we cannot/.test(pv) && !/DeepInfra|Groq|Together/.test(pv) && /"deny"/.test(pv)
+  const pvBerget = /Berget AI/.test(pv) && /Sweden/.test(pv)
+  const pvOk = TX_PROVIDER === 'openrouter' ? pvOr && !/Berget/i.test(pv) : TX_PROVIDER === 'berget' ? pvBerget && pvOr : pvBerget && !/OpenRouter|United States/.test(pv)
+  check(`privacy: transcription route is ${TX_PROVIDER} (names only the provider that runs), nothing kept by us, approximate times, failures not charged, no Infomaniak/Switzerland claim`, pvOk && pvCommon, pv.slice(0, 120))
   await ctx.close()
 }
 

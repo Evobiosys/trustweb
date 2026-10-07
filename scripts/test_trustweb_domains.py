@@ -49,6 +49,21 @@ class CaddyTransforms(unittest.TestCase):
             self.assertIn(route, block)
         self.assertIn("root * /srv/questhub-static/app-trustintheweb", block)
 
+    def test_app_idea2_site_is_never_redirected_or_changed(self) -> None:
+        """Storage is per origin: the live app host (where existing phones keep their data) must stay as it is."""
+        app_block = (
+            "app.idea2.site {\n\thandle /backup/* {\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n"
+            "\thandle_path /trustweb/* {\n\t\troot * /srv/questhub-static/app-idea2-trustweb\n\t\tfile_server\n\t}\n}\n"
+        )
+        fixture = FIXTURE.replace("evobiosys.org, www.evobiosys.org {", app_block + "\nevobiosys.org, www.evobiosys.org {")
+        out = caddy.apply(fixture, list(caddy.Transform))
+        start = out.index("\napp.idea2.site {\n")
+        end = out.index("\n}\n", start) + 3
+        self.assertEqual(out[start + 1:end], app_block)
+        self.assertEqual(out.count("app.idea2.site {"), 1)
+        # no transform emits a redirect whose source is the app host
+        self.assertNotIn("redir https://app.trustintheweb.org", out)
+
     def test_static_sites_switch_powerful_features_off(self) -> None:
         text = caddy.apply(FIXTURE, [caddy.Transform.SITES])
         self.assertIn('Permissions-Policy "camera=(), microphone=(), geolocation=()"', text)
