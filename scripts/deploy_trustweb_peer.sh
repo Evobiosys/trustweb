@@ -18,7 +18,7 @@
 # whole app directory (rm -rf app-idea2-trustweb/*), which also deletes the
 # demo card. deploy_wot.sh runs --republish-cards after every app deploy.
 #
-# demo:     fictional inventory, forwarding ON, policy open (README.txt).
+# demo:     named Jakob, his ten public lines, forwarding ON, policy open (README.txt).
 # personal: Jakob's own front door. Policy granted (grants.json, see
 #           trustweb_peer_grant.sh), forwarding ON, its inventory starts EMPTY
 #           (zero lines) and only ever holds what scripts/trustweb_inventory_export.ts
@@ -79,7 +79,7 @@ render_unit() {
   if [ "$INSTANCE" = demo ]; then
     cat <<'UNIT'
 [Unit]
-Description=TrustWeb demo front-door peer (fictional inventory; forwards asks to its owner; see web-of-trust services/trustweb-peer)
+Description=TrustWeb demo front-door peer (named Jakob, his ten public lines; forwards asks to its owner; see web-of-trust services/trustweb-peer)
 After=network.target
 
 [Service]
@@ -88,7 +88,7 @@ Environment=TW_PEER_STATE=/var/lib/trustweb-peer
 Environment=TW_PEER_INVENTORY=/opt/trustweb-peer/demo_inventory.json
 Environment=TW_PEER_RELAY=https://app.idea2.site
 Environment=TW_PEER_HEALTH_PORT=8961
-Environment="TW_PEER_NAME=Demo inventory"
+Environment="TW_PEER_NAME=Jakob"
 Environment=TW_PEER_FORWARD=1
 # Every answer the owner did not add to goes out at the forward deadline (same moment for decline,
 # no match and phone off). 45 s keeps a demo answer close to the 30 s floor while the owner can still tap.

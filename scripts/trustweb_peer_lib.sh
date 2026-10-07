@@ -2,7 +2,7 @@
 # trustweb_peer_grant.sh: the one table of front-door instances and hosts, and
 # the SSH recipe (control master + askpass, see ~/.claude/CLAUDE.md).
 #
-#   demo      the demo front door: fictional inventory, policy open, card
+#   demo      the demo front door, named Jakob: his ten public lines, policy open, card
 #             published next to the app (app.idea2.site/trustweb/demo-peer.json).
 #             questhub only (the card lives in questhub's static tree).
 #   personal  Jakob's own front door: policy granted (grants.json), inventory
@@ -18,7 +18,7 @@ tw_peer_instance() {
   case "$1" in
     demo)
       UNIT=trustweb-peer; PORT=8961; STATE=/var/lib/trustweb-peer; OPT=/opt/trustweb-peer
-      PEER_NAME="Demo inventory"; POLICY=open; PUBLIC_CARD=1; INV_PATH=/opt/trustweb-peer/demo_inventory.json; INV_ETC= ;;
+      PEER_NAME="Jakob"; POLICY=open; PUBLIC_CARD=1; INV_PATH=/opt/trustweb-peer/demo_inventory.json; INV_ETC= ;;
     personal)
       UNIT=trustweb-peer-personal; PORT=8962; STATE=/var/lib/trustweb-peer-personal; OPT=/opt/trustweb-peer-personal
       PEER_NAME="Jakob"; POLICY=granted; PUBLIC_CARD=0; INV_ETC=/etc/trustweb-peer-personal; INV_PATH=/etc/trustweb-peer-personal/inventory.json ;;

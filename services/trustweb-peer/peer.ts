@@ -36,7 +36,7 @@
  *
  * Two instances, same code:
  *   demo      PeerPolicy.Open: anyone who opens its connect link is an asker
- *             (acquaintance ring); fictional lines plus the owner's public
+ *             (acquaintance ring); named Jakob; exactly the owner's ten public
  *             allowed-in-advance lines, all with presets
  *             (demo_inventory.json); meant for the Swiss server.
  *   personal  PeerPolicy.Granted: a connect-ack is honoured only for a name
@@ -180,13 +180,21 @@ interface PeerState {
   owner?: Owner
 }
 
-const DEFAULT_NAME = 'Demo inventory'
+/** The demo front door is Jakob's (wave 5, owner 2026-10-07: in the demo people connect with him and his actual public lines). */
+const DEFAULT_NAME = 'Jakob'
 const DEFAULT_MAX_PEERS = 500
 const DEFAULT_ASKS_PER_HOUR = 30
 const DEFAULT_FORWARD_WAIT_MS = 120_000
 const DEFAULT_CLAIM_WINDOW_MS = 10 * 60_000
 const HOUR_MS = 3_600_000
 const PRESET_NOTE_MAX_LEN = 120
+/**
+ * The longest inventory line (characters) the peer shares. It was 160 and cut a longer line short, which served the owner's
+ * ten public lines as eight (two are 171 and 194 characters). 400 is a sane upper bound for one line of a short inventory,
+ * still far under the relay's wire limit even for the three lines an answer may carry (MAX_SHARED). A longer line is HELD
+ * (counted, never shared) rather than cut: what goes out is exactly the text the owner allowed in advance, never a cut-off of it.
+ */
+export const INVENTORY_LINE_MAX = 400
 const CLAIM_FILE = 'claim-open'
 /** apps/demo's prune(): keep the relevance band, at most three lines (net.ts). */
 const RELEVANCE_BAND = 0.5
@@ -218,7 +226,7 @@ export function presetContext(p: PresetPermission): string {
   return `Allowed in advance by ${p.by} (${day})` + (p.note ? `: ${p.note}` : '')
 }
 
-/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset is held. */
+/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset, or over INVENTORY_LINE_MAX, is held. */
 export function loadInventory(file: string, now: number): LoadedInventory {
   const raw: unknown = JSON.parse(readFileSync(file, 'utf8'))
   const items = (raw as { items?: unknown }).items
@@ -228,9 +236,10 @@ export function loadInventory(file: string, now: number): LoadedInventory {
     const o = it as Record<string, unknown>
     if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
     const preset = parsePreset(o.preset)
-    if (!preset) { out.held++; continue }
+    const text = o.text.trim()
+    if (!preset || text.length > INVENTORY_LINE_MAX) { out.held++; continue }
     out.preset.push({
-      item: { id: randomId(8), text: o.text.trim().slice(0, 160), audience: o.audience, included: true, createdAt: now },
+      item: { id: randomId(8), text, audience: o.audience, included: true, createdAt: now },
       preset,
     })
   }

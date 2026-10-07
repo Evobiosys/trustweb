@@ -19,7 +19,7 @@
  *      over with what was found and asks on as that account; the old tab is done.
  *   7. With the demo inventory peer published (demo-peer.json next to the app,
  *      services/trustweb-peer), an account is connected to Jakob AND the demo
- *      inventory; the peer answers a motorbike ask by itself after the window
+ *      inventory; the peer (named Jakob since wave 5, his ten public lines) answers a projection ask by itself after the window
  *      and never logs the ask's text.
  *
  * Local (default): RelayServer + Vite (TW_PUBLIC_DIR serves the card, /backup
@@ -394,7 +394,8 @@ async function main() {
     if (LIVE) {
       // The deployed peer (services/trustweb-peer on questhub): its card is already served; its log is the journal.
       const liveCard = await (await fetch(base + 'demo-peer.json', { cache: 'no-store' })).json()
-      ok('the live card names the demo inventory', /^did:peer:/.test(liveCard.did) && liveCard.name === 'Demo inventory', JSON.stringify(liveCard))
+      // The live card says 'Demo inventory' until the wave-5 peer redeploy renames it to 'Jakob'.
+      ok('the live card names the demo front door', /^did:peer:/.test(liveCard.did) && /^(Jakob|Demo inventory)$/.test(liveCard.name), JSON.stringify(liveCard))
     } else {
       peer = await startPeer({
         stateDir: path.join(scratch, 'peer'), inventoryFile: path.join(REPO, 'services/trustweb-peer/demo_inventory.json'),
@@ -409,16 +410,16 @@ async function main() {
     await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     await openDemoTab(a)
     const link2 = await makeAccount(a, 'Carl')
-    ok('with the peer published, the code names it in the fragment too', /&p=did%3Apeer/.test(link2) && /&pn=Demo\+inventory/.test(link2), link2)
-    ok('the card says Jakob and the demo inventory can be asked', /and Demo inventory/.test(await text(a.locator('.qr-facts'))))
+    ok('with the peer published, the code names it in the fragment too', /&p=did%3Apeer/.test(link2) && /&pn=Jakob(&|$)/.test(link2), link2)
+    ok('the card says the demo front door (named Jakob) can be asked too', /, and Jakob/.test(await text(a.locator('.qr-facts'))), await text(a.locator('.qr-facts')))
     await shot(a, '15-jakob-carl-demo-code-with-peer')
     const b2 = await mk()
     await b2.goto(link2)
     await b2.getByRole('button', { name: 'Start as Carl-demo' }).click()
     await b2.locator('.query-dock').waitFor({ timeout: 20_000 })
-    await b2.locator('.node', { hasText: 'Demo inventory' }).waitFor({ timeout: 20_000 })
+    await b2.locator('.node:not(.you)', { hasText: 'Jakob' }).nth(1).waitFor({ timeout: 20_000 })
     const nodes = await b2.locator('.node:not(.you) span').allInnerTexts()
-    ok('Carl-demo is connected to Jakob and to the demo inventory', nodes.includes('Jakob') && nodes.includes('Demo inventory'), JSON.stringify(nodes))
+    ok('Carl-demo is connected to Jakob and to the demo front door, also named Jakob', nodes.filter((n) => n === 'Jakob').length === 2, JSON.stringify(nodes))
     await a.getByRole('button', { name: 'Back' }).click()
     await allowOn(a, 'Carl-demo', 'card')
     await b2.locator('.toast.on', { hasText: 'Jakob allowed it' }).waitFor({ timeout: 20_000 })
@@ -429,14 +430,14 @@ async function main() {
       await new Promise((r) => setTimeout(r, 3000)) // live: the peer's own count is in its journal, not here
     }
     await shot(b2, '16-carl-connected-two-peers')
-    await b2.locator('.query-dock textarea').fill('Does anyone have a motorbike I could borrow?')
+    await b2.locator('.query-dock textarea').fill('Which map projection do you use for global maps?')
     await b2.getByRole('button', { name: 'Call into my web' }).click()
-    // Jakob's phone has no motorbike: it stays silent; the peer answers alone.
+    // Jakob's phone has nothing about map projections: it stays silent; the peer answers alone, from his public lines.
     await b2.locator('.card.asked .outcome').waitFor({ timeout: 90_000 })
     const outcome2 = await b2.locator('.card.asked .outcome').innerText()
-    ok('the demo inventory answers by itself after the window', /Demo inventory chose to share/.test(outcome2) && /Motorbike/.test(outcome2), outcome2)
+    ok('the demo front door answers by itself after the window, with his public line', /Jakob chose to share/.test(outcome2) && /Equal Earth/.test(outcome2), outcome2)
     ok('Jakob was not prompted (nothing of his matched)', (await a.locator('.overlay.on').count()) === 0)
-    if (peer) ok('the peer logged the outcome, never the ask', peerLog.some((l) => /ask shared/.test(l)) && !peerLog.some((l) => /motorbike/i.test(l)))
+    if (peer) ok('the peer logged the outcome, never the ask', peerLog.some((l) => /ask shared/.test(l)) && !peerLog.some((l) => /mercator|projection/i.test(l)))
     else console.log('  NOTE  live: the peer log is the journal on questhub (journalctl -u trustweb-peer); check it by hand')
     await shot(b2, '17-carl-answer-from-peer')
     ok('no page errors', errors.length === 0, JSON.stringify(errors))

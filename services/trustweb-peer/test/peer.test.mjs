@@ -17,7 +17,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { request } from 'node:http'
-import { AskRateLimit, PeerPolicy, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
+import { AskRateLimit, INVENTORY_LINE_MAX, PeerPolicy, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
 import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
 import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
@@ -122,13 +122,30 @@ describe('loadInventory', () => {
     expect(loadInventory(f, 1)).toEqual({ preset: [], held: 0 })
     rmSync(dir, { recursive: true })
   })
-  it('the shipped demo inventory has presets on its shareable lines and holds the rest', () => {
+  it('the shipped demo inventory is exactly the owner\'s ten public lines, every one with its preset and none held (wave 5)', () => {
     const inv = loadInventory(path.join(import.meta.dirname, '..', 'demo_inventory.json'), 1)
-    // 5 fictional preset lines + the owner's 8 public lines that fit the 160-character bound (2026-10-07); 2 fictional lines held
-    expect(inv.preset.length).toBe(13)
-    expect(inv.held).toBe(2)
-    expect(inv.preset.slice(5).every((l) => l.preset.at === '2026-10-07' && l.preset.by === 'Jakob')).toBe(true)
-    expect(inv.preset.every((l) => l.preset.note === 'demo content')).toBe(true)
+    expect(inv.preset.length).toBe(10)
+    expect(inv.held).toBe(0)
+    expect(inv.preset.every((l) => l.preset.at === '2026-10-07' && l.preset.by === 'Jakob' && l.preset.note === 'demo content')).toBe(true)
+    // the two lines the old 160-character bound kept out (171 and 194 characters) are served in full
+    expect(inv.preset.filter((l) => l.item.text.length > 160).map((l) => l.item.text.length)).toEqual([194, 171])
+  })
+  it('the line bound is 400 characters: a line AT the bound loads intact, one character more is held, never cut', () => {
+    const dir = tmp()
+    const f = path.join(dir, 'inv.json')
+    const preset = { by: 'Jakob', at: '2026-10-07' }
+    expect(INVENTORY_LINE_MAX).toBe(400)
+    const atBound = 'a'.repeat(INVENTORY_LINE_MAX)
+    writeFileSync(f, JSON.stringify({ items: [
+      { text: atBound, audience: 'fof', preset },
+      { text: atBound + 'b', audience: 'fof', preset },
+      { text: ' ' + atBound + ' ', audience: 'fof', preset },
+    ] }))
+    const inv = loadInventory(f, 1)
+    expect(inv.preset.map((l) => l.item.text.length)).toEqual([400, 400])
+    expect(inv.preset[0].item.text).toBe(atBound)
+    expect(inv.held).toBe(1)
+    rmSync(dir, { recursive: true })
   })
 })
 
@@ -216,10 +233,28 @@ describe('the peer against an in-memory relay', () => {
     rmSync(dir, { recursive: true })
   }, 30_000)
 
+  it('the shipped demo inventory serves a line beyond the old 160-character bound in full, verbatim, marked as allowed in advance', async () => {
+    const dir = tmp()
+    const shipped = path.join(import.meta.dirname, '..', 'demo_inventory.json')
+    const long = JSON.parse(readFileSync(shipped, 'utf8')).items.find((i) => i.text.length === 194)
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: shipped, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS, log: () => {} })
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const a1 = await anna.ask(peer.card.did, 'which open-source license do you find the perfect one')
+    expect(a1.outcome).toBe('shared')
+    expect(a1.shared.from).toBe('Jakob')
+    expect(a1.shared.items.map((i) => i.text)).toContain(long.text)
+    expect(a1.shared.items.find((i) => i.text === long.text).context).toBe('Allowed in advance by Jakob (2026-10-07): demo content')
+    anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
   it('without an owner: shares only preset lines, visibly marked; a held line never goes out', async () => {
     const dir = tmp()
     const inv = inventoryFile(dir, [
-      { text: 'Motorbike (125cc), can lend it for a weekend', audience: 'fof', preset: PRESET },
+      { text: 'Loudspeakers', audience: 'fof', preset: PRESET },
       { text: 'Projector and screen for a talk', audience: 'fof' },
     ])
     const lines = []
@@ -228,18 +263,18 @@ describe('the peer against an in-memory relay', () => {
     await anna.connectTo(peer.card.did)
     await until(() => peer.peerCount() === 1)
     const t0 = Date.now()
-    const a1 = await anna.ask(peer.card.did, 'can someone lend me a motorbike for the weekend')
+    const a1 = await anna.ask(peer.card.did, 'can someone lend me loudspeakers for the weekend')
     expect(Date.now() - t0).toBeGreaterThanOrEqual(WINDOW_MS)
     expect(a1.outcome).toBe('shared')
-    expect(a1.shared.from).toBe('Demo inventory')
+    expect(a1.shared.from).toBe('Jakob')
     expect(a1.shared.items).toHaveLength(1)
-    expect(a1.shared.items[0].text).toBe('Motorbike (125cc), can lend it for a weekend')
+    expect(a1.shared.items[0].text).toBe('Loudspeakers')
     expect(a1.shared.items[0].context).toBe('Allowed in advance by Jakob (2026-10-06): demo content')
     const a2 = await anna.ask(peer.card.did, 'does anyone have a projector and screen for a talk')
     expect(a2.outcome).toBe('nothing')
     expect(lines.some((l) => /ask shared \(1\): preset=1 owner=not-asked/.test(l))).toBe(true)
     expect(lines.some((l) => /ask no-match \(0\): preset=0 owner=not-asked/.test(l))).toBe(true)
-    expect(lines.join('\n')).not.toMatch(/motorbike|projector|Anna/i)
+    expect(lines.join('\n')).not.toMatch(/loudspeaker|projector|Anna/i)
     anna.close()
     await peer.stop()
     rmSync(dir, { recursive: true })
@@ -293,7 +328,7 @@ describe('the peer against an in-memory relay', () => {
     const a1 = await anna.ask(peer.card.did, 'anyone with a projector for a talk')
     expect(jakob.asks).toHaveLength(1)
     expect(jakob.asks[0]).toMatchObject({ t: 'query', relayed: true, freeText: 'Anna-demo: anyone with a projector for a talk' })
-    expect(jakob.asks[0].from.displayName).toBe('Demo inventory')
+    expect(jakob.asks[0].from.displayName).toBe('Jakob')
     expect(a1.outcome).toBe('shared')
     expect(a1.shared.items).toEqual([{ text: 'Projector and screen, Vienna', when: 'early October', context: 'What I have' }])
     expect(lines.some((l) => /ask shared \(1\): preset=0 owner=shared\(1\)/.test(l))).toBe(true)

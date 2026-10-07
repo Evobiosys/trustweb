@@ -47,9 +47,9 @@ queried if I don't have this laptop on".
      link, a DID or a timestamp finer than a day stays on the Mac too, and the review file says why. Today: zero
      lines marked, nothing sent; the host's inventory file does not exist (it is created empty at first deploy).
    - To his own phone: the import file, every line, audience "Only me" (no Tana ids, no DIDs).
-   - To the Swiss server (demo front door): fictional lines plus, since 2026-10-07, the owner's ten public lines
-     he ticked "allow in advance" (the eight that fit the 160-character bound; the two longer ones live in the app
-     demo only), all in demo_inventory.json with presets on the shareable ones. Never a line he did not allow in
+   - To the Swiss server (demo front door): exactly the owner's ten public lines (since wave 5, 2026-10-07;
+     before that fictional lines plus eight of them) he ticked "allow in advance", all ten served now that the
+     peer's line bound is 400 characters (it was 160); a longer line is held, never cut; all in demo_inventory.json with presets. Never a line he did not allow in
      advance: apps/trustweb/test/unit/demo_inventory_public.test.mjs pins the file to an allowlist.
    - To an asker: at most three lines per ask, each either a preset line (marked "Allowed in advance by Jakob
      (date)") or a line Jakob's phone shared live. Never a Tana node id, never a DID, never a timestamp finer
@@ -67,7 +67,7 @@ queried if I don't have this laptop on".
         limit: identical bytes AND identical timing (review fix 2026-10-06).
    Owner binding: claim window (TW_PEER_CLAIM=1 or the claim-open file), first phone to open the link within
    10 minutes becomes the owner; DID in state.json (0600), never logged. Self-asks from the owner: preset only.
-   Two instances from one bundle: demo (PeerPolicy.Open, Swiss server, fictional presets) and personal
+   Two instances from one bundle: demo (PeerPolicy.Open, Swiss server, named Jakob, his ten public presets) and personal
    (PeerPolicy.Granted + grants.json, sebra, exported presets).
 
 4. THE EXPORTER (BUILT 2026-10-06, wave 1733; the design below, as built: marks = the choices file's

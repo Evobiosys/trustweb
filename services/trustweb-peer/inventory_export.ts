@@ -25,7 +25,7 @@
 import { createHash } from 'node:crypto'
 import { presetContext } from './peer'
 
-/** The peer reads at most this many characters of a line (peer.ts loadInventory). */
+/** The exporter cuts a line at this many characters, well inside what the peer reads (peer.ts INVENTORY_LINE_MAX is 400). */
 export const LINE_MAX = 160
 const NOTE_MAX = 120
 const GROUP_NAME_RE = /^[a-z][a-z ]{0,30}$/

@@ -670,7 +670,7 @@ export const S = {
   demoInviteSub: (account: string) => `You start as ${account}; once the owner allows it, you can ask their web. It lives in this browser only.`,
   demoInviteOwnSub: 'A second identity on this phone. Allow it in your own tab, then call into your web as this account would.',
   demoStart: (account: string) => `Start as ${account}`,
-  demoPeerContext: 'Demo inventory on the Swiss server',
+  demoPeerContext: 'His public demo lines, on the Swiss server',
   demoWaitingToast: (name: string) => `Waiting for ${name} to allow this demo account.`,
   demoWaitingAsk: (name: string) => `${name} has not allowed this demo account yet. The ask opens the moment they do.`,
   demoApprovedToast: (name: string) => `${name} allowed it. Ask away.`,

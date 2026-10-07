@@ -40,12 +40,12 @@ early, because its content says so anyway. Without forwarding (no owner, forward
 holds. Before this fix a decline arrived at the owner's tap and phone off at 120 s, so WHEN told them apart.
 
 STATUS 2026-10-06: DEPLOYED on questhub (Swiss server) as trustweb-peer.service, demo instance, fictional inventory
-only (2026-10-07: the file also holds the owner's eight public allowed-in-advance lines; takes effect with the next demo-instance deploy), forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
+only (2026-10-07, wave 5: the file now holds exactly the owner's ten public allowed-in-advance lines and the front door is named Jakob; the line bound is 400 characters; takes effect with the next demo-instance deploy), forwarding ON, policy open. Built and tested locally (vitest: 14 tests incl. the whole owner flow against an
 in-memory relay with two fake phones) and checked live with the app's e2e test (apps/trustweb/test/e2e/
 demo_account.mjs, step 7 against https://app.idea2.site/trustweb/). The card is published at
 https://app.idea2.site/trustweb/demo-peer.json, so every demo-account code made in the app now names the demo front
 door as a second peer. Owner: bound 2026-10-06 (Jakob ran scripts/trustweb_peer_claim.sh; status owner:true, forward:true, 5 preset, 2
-held). So asks from anyone trying the demo now also reach his phone as "Demo inventory asks: <name>: <text>" for a
+held). So asks from anyone trying the demo now also reach his phone as "Jakob asks: <name>: <text>" (named "Demo inventory" until the wave-5 redeploy) for a
 live yes/no; nothing of his goes out without that tap.
 
 RUN (local)
@@ -57,7 +57,7 @@ RUN (local)
   cat /tmp/twpeer/demo-peer.json          # the card the app reads
 Env: TW_PEER_STATE (dir: state.json with identity, peers and owner; demo-peer.json; grants.json; claim-open),
 TW_PEER_INVENTORY (json: {"items":[{"text","audience": "fof"|"friends"|"me","preset"?: {"by","at","note"?}}]}),
-TW_PEER_RELAY (origin), TW_PEER_NAME (default "Demo inventory"), TW_PEER_POLICY (open|granted),
+TW_PEER_RELAY (origin), TW_PEER_NAME (default "Jakob"), TW_PEER_POLICY (open|granted),
 TW_PEER_HEALTH_PORT (0 = none; loopback only, Host checked, any Origin refused), TW_PEER_ASKS_PER_HOUR (default 30
 per asker), TW_PEER_FORWARD (1|0, default 1), TW_PEER_FORWARD_WAIT_MS (default 120000; the asker's app waits
 180 s), TW_PEER_CLAIM (1 opens a claim window at start), TW_PEER_CLAIM_MINUTES (default 10). SIGHUP reloads the
@@ -83,7 +83,7 @@ DEPLOYMENT (done 2026-10-06; demo instance, Swiss server = questhub, Infomaniak 
   1. scp dist/peer.mjs and demo_inventory.json (both 0644) to /opt/trustweb-peer/ (node on questhub: v22.23.1).
   2. /etc/systemd/system/trustweb-peer.service: ExecStart=/usr/bin/node /opt/trustweb-peer/peer.mjs,
      TW_PEER_STATE=/var/lib/trustweb-peer TW_PEER_INVENTORY=/opt/trustweb-peer/demo_inventory.json
-     TW_PEER_RELAY=https://app.idea2.site TW_PEER_HEALTH_PORT=8961 TW_PEER_NAME="Demo inventory" TW_PEER_FORWARD=1
+     TW_PEER_RELAY=https://app.idea2.site TW_PEER_HEALTH_PORT=8961 TW_PEER_NAME="Jakob" TW_PEER_FORWARD=1
      TW_PEER_POLICY=open, DynamicUser=yes, StateDirectory=trustweb-peer (0700), Restart=on-failure, MemoryMax=256M,
      the same hardening lines as trustweb-backup.service.
   3. Claim (owner binding): scripts/trustweb_peer_claim.sh. The peer reads <state>/claim-open ONLY at start, so the

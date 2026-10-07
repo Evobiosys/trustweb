@@ -1,8 +1,8 @@
 /**
  * The owner's ten public demo lines (src/demo_inventory_public.ts, wave 4,
  * 2026-10-07): the person "Jakob" in every demo seed carries exactly these,
- * marked dummy like all seeded content; the demo peer's inventory serves the
- * ones that fit its 160-character bound; six other ticked lines are PRIVATE
+ * marked dummy like all seeded content; the demo peer's inventory (named Jakob since
+ * wave 5) serves all ten, its line bound being 400 characters; six other ticked lines are PRIVATE
  * and must appear nowhere (allowlist = the real guard, digest denylist =
  * the backup, see test/helpers/private_line_guard.mjs).
  *
@@ -33,16 +33,8 @@ const ALLOWED = [
   'I use the Equal Earth over the Mercator projection for global maps',
   'I can help you clean up your online presence, making sure everywhere you show up on the web links to your current website.',
 ]
-/** The peer keeps 160 characters per line (loadInventory): longer lines stay in the app demo only. */
-const PEER_MAX = 160
 const NOW = 1_760_000_000_000
 const peerItems = () => JSON.parse(readFileSync(path.join(import.meta.dirname, '../../../../services/trustweb-peer/demo_inventory.json'), 'utf8')).items
-/** The seven fictional lines the peer file held before the owner's lines were added (pinned: nothing else may creep in). */
-const FICTIONAL_PEER = [
-  'Motorbike (125cc), can lend it for a weekend', 'Spare desk in a coworking space, Fridays', 'Projector and screen for a talk, Vienna',
-  'Camping tent for four, from June', 'Introductions to people hiring in climate tech', 'Guest bed for a visiting friend, two nights',
-  'Spare room in Vienna, for visiting friends',
-]
 
 describe('the data module', () => {
   it('holds exactly the ten allowed lines, in order, with no em dash and no stray whitespace', () => {
@@ -92,20 +84,25 @@ describe('the seed: Jakob in every demo web (allowlist)', () => {
 })
 
 describe('the demo peer inventory (allowlist)', () => {
-  it('holds only the seven fictional lines and the allowed lines that fit its bound; the longer two stay out', () => {
-    const texts = peerItems().map((i) => i.text)
-    const fitting = ALLOWED.filter((t) => t.length <= PEER_MAX)
-    expect(fitting).toHaveLength(8)
-    expect(ALLOWED.filter((t) => t.length > PEER_MAX)).toHaveLength(2)
-    expect(texts).toEqual([...FICTIONAL_PEER, ...fitting])
+  it('holds exactly the ten allowed lines, in order, and nothing else (the fictional seven are gone, wave 5)', () => {
+    expect(peerItems().map((i) => i.text)).toEqual(ALLOWED)
   })
-  it('serves the owner lines only with his preset (allowed in advance), as friends of friends, verbatim', () => {
-    const owner = peerItems().filter((i) => ALLOWED.includes(i.text))
-    expect(owner).toHaveLength(8)
-    for (const i of owner) {
+  it('serves every line only with his preset (allowed in advance), as friends of friends, verbatim', () => {
+    const items = peerItems()
+    expect(items).toHaveLength(10)
+    for (const i of items) {
       expect(i.audience).toBe('fof')
       expect(i.preset).toEqual({ by: 'Jakob', at: '2026-10-07', note: 'demo content' })
     }
+  })
+  it('the two lines the old 160-character bound kept out are in it, verbatim', () => {
+    const texts = peerItems().map((i) => i.text)
+    expect(ALLOWED.filter((t) => t.length > 160)).toHaveLength(2)
+    for (const t of ALLOWED.filter((t) => t.length > 160)) expect(texts).toContain(t)
+  })
+  it('no line of it is one the retired seed or the owner removed (the motorbike, an animal welfare line)', () => {
+    const all = JSON.stringify(peerItems())
+    expect(all).not.toMatch(/motorbike|animal welfare/i)
   })
 })
 
