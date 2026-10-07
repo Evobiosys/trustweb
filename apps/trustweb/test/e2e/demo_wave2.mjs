@@ -102,6 +102,14 @@ async function partComeBack(browser, base) {
   ok('Install reads "Make it your personal account"; nothing is typed again', /Nothing needs to be typed again/.test(await page.locator('.d2l').innerText())
     && (await page.locator('[data-demo-install]').getAttribute('title')) === 'Make it your personal account, then install TrustWeb')
   await shot(page, 'w2-04-make-it-personal')
+  // Wave 3 (front door = per user): one honest line, a static link to the hosted service, "coming soon".
+  const fd = page.locator('.d2l [data-d2l-front-door]')
+  const fdLink = fd.locator('a')
+  ok('wave 3: "Your own front door ... comes with the hosted service; coming soon" with a link to TrustInTheWeb.com (new tab, no opener, no referrer)',
+    /Your own front door \(an always-on inventory that answers while your phone is off\) comes with the hosted service; coming soon/.test(await fd.innerText())
+      && (await fdLink.innerText()) === 'TrustInTheWeb.com' && (await fdLink.getAttribute('href')) === 'https://trustintheweb.com/'
+      && (await fdLink.getAttribute('target')) === '_blank' && /noopener/.test(await fdLink.getAttribute('rel')) && (await fdLink.getAttribute('referrerpolicy')) === 'no-referrer')
+  await shot(page, 'w3-06-front-door-line')
   await page.locator('[data-d2l="clean"]').click()
   await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   const live = await page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))

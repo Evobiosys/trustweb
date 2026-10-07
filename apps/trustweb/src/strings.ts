@@ -804,6 +804,9 @@ export const S = {
   d2lTitle: 'Make it your personal account',
   d2lLead: (name: string) => `The real TrustWeb opens on this device with everything you added as ${name}: your name, the people and things you added, your notes and past meetings. Nothing needs to be typed again. Then you can install it on your home screen.`,
   d2lQuestion: 'The imaginary friends and things: keep them (marked dummy) or start clean?',
+  // Wave 3 (contract: FRONT DOOR = per user): the person claims THEIR front door with the hosted service; not built yet, said so.
+  d2lFrontDoor: 'Your own front door (an always-on inventory that answers while your phone is off) comes with the hosted service; coming soon:',
+  d2lFrontDoorLink: 'TrustInTheWeb.com',
   // The side-by-side demo's device switch (wave 2, P24): one tap, one "whoosh" to the other phone.
   demoSwitch: (n: number) => `Switch to device ${n}`,
   d2lClean: 'Start clean',

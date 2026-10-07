@@ -37,6 +37,8 @@ const CSS = `
 .d2l h2{font-size:19px; margin:0 0 8px}
 .d2l p{color:var(--soft); margin:0 0 14px}
 .d2l p.q{color:var(--ink); font-weight:600}
+.d2l p.fd{font-size:13px}
+.d2l p.fd a{color:var(--ink); font-weight:600}
 .d2l .row{display:flex; flex-direction:column; gap:8px}
 .d2l button{font:inherit; font-weight:700; border-radius:999px; padding:11px 16px; cursor:pointer; border:1.5px solid #33456b}
 .d2l .clean{background:#33456b; color:#f4f6fa}
@@ -44,6 +46,13 @@ const CSS = `
 .d2l .cancel{background:transparent; border-color:transparent; color:var(--soft); font-weight:600}
 .d2l button:focus-visible{outline:3px solid #12A8E3; outline-offset:2px}
 `
+
+/**
+ * The hosted service, where each person's own front door will come from
+ * (wave 3: TrustInTheWeb.com = the freemium hosting site). A static link,
+ * labelled "coming soon": the site is being made in the same wave.
+ */
+const HOSTED_SERVICE_URL = 'https://trustintheweb.com/'
 
 /** Where the live app sits next to the demo pages (the app root under the same base). */
 function liveUrl(base: string): string {
@@ -68,6 +77,10 @@ function askClean(ctx: DemoContext, base: string, opener: HTMLElement): void {
   const dialog = el('div', { class: 'd2l', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'd2l-title' }, [
     el('h2', { id: 'd2l-title' }, [S.d2lTitle]),
     el('p', {}, [S.d2lLead(demo.me.displayName)]),
+    el('p', { class: 'fd', 'data-d2l-front-door': '1' }, [
+      S.d2lFrontDoor, ' ',
+      el('a', { href: HOSTED_SERVICE_URL, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, [S.d2lFrontDoorLink]),
+    ]),
     el('p', { class: 'q' }, [S.d2lQuestion]),
     el('div', { class: 'row' }, [
       clean,
