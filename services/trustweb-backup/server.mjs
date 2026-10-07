@@ -49,6 +49,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loadConfig } from './config.mjs'
 import { createFeedback } from './feedback.mjs'
+import { statusBody } from './status.mjs'
 import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
@@ -105,7 +106,7 @@ export async function startServer(options = {}) {
   }
   const hosted = store === null ? null : createHosted({ cfg, store, withLock, clientOf })
   const transcriber = hosted === null ? null : createTranscriber({ cfg, hosted, store, clientOf, fetchImpl: options.fetchImpl })
-  const feedback = createFeedback({ cfg, clientOf, withLock })
+  const feedback = createFeedback({ cfg, clientOf, withLock, fetchImpl: options.fetchImpl })
 
   const hits = new Map() // client -> timestamps within the window
   const locks = new Map() // id -> promise chain (serialises writes per id)
@@ -331,7 +332,7 @@ export async function startServer(options = {}) {
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
     if (pathname === '/hosted/status' && hosted === null && req.method === 'GET') {
       // Hosting off: the app still gets a clean answer and hides its hosting card.
-      sendJson(res, 200, { hosted: false, transcribe: false, feedback: cfg.feedbackConfigured, plan: null })
+      sendJson(res, 200, statusBody(cfg, null))
       return 200
     }
     if (pathname.startsWith('/hosted/')) return hosted === null ? jsonError(res, 503, 'not_configured') : hosted.handle(req, res, pathname)

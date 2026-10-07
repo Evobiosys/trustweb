@@ -28,6 +28,7 @@ import {
   tooManyRequests,
 } from './http_util.mjs'
 import { createDailyMeter, createInFlight, createWindowLimiter, ipKey } from './limits.mjs'
+import { statusBody } from './status.mjs'
 import { AllowanceReason, CapReason, checkBeforeWrite, planFromConfig, usageBody, usageOf, writeCap } from './quota.mjs'
 
 const ROUTE = /^\/hosted\/([^/]+)\/(rec|recs|usage)(?:\/([^/]+))?$/
@@ -241,16 +242,14 @@ export function createHosted({ cfg, store, withLock, clientOf }) {
     recordings: recs.map((r) => ({ id: r.id, bytes: r.bytes, seconds: r.seconds, stored: r.stored, hasReadToken: r.readHash !== null })),
   })
 
-  function statusBody() {
-    return { hosted: true, transcribe: cfg.transcribeConfigured, feedback: cfg.feedbackConfigured, plan: usageBody(plan, [], 0) }
-  }
+  const currentStatus = () => statusBody(cfg, usageBody(plan, [], 0))
 
   /** Returns the HTTP status that was sent. pathname has no query string. */
   async function handle(req, res, pathname) {
     if (!cfg.hostedDir) return jsonError(res, 503, 'not_configured')
     if (pathname === '/hosted/status') {
       if (req.method !== 'GET') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'GET' })
-      sendJson(res, 200, statusBody())
+      sendJson(res, 200, currentStatus())
       return 200
     }
     const m = ROUTE.exec(pathname)

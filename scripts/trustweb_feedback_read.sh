@@ -67,6 +67,10 @@ for line in sys.stdin:
         continue
     head = "{}  [{}]  page: {}  contact: {}".format(*(visible(e.get(k) or d) for k, d in (("t", "?"), ("kind", "feedback"), ("page", "-"), ("contact", "-"))))
     print(head)
+    if e.get("email") is not None or e.get("notify") or e.get("newsletter"):
+        # wave 2: the person ticked "alert me" and/or "newsletter"; the address is theirs, shown only with a ticked box
+        print("  stay informed: alert-me {}  newsletter {}  email: {}".format(
+            "yes" if e.get("notify") is True else "no", "yes" if e.get("newsletter") is True else "no", visible(e.get("email") or "-")))
     print(visible(e.get("text", ""), keep_newlines=True))
     print("--------")
 print("{} entries".format(n))

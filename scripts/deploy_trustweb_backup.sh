@@ -23,6 +23,10 @@
 #                 ORCHESTRATOR ONLY, after review.
 #   --dry-run     Print what would be done; change nothing (local or remote).
 #   --keep        (staging) leave the staging unit running after the smoke test.
+#
+# Newsletter opt-ins of the feedback form (wave 2, P14/P15): the unit carries SUBSCRIBER_URL. Production: the real
+# https://subscriber.questhub.eco/subscribe (override: TW_SUBSCRIBER_URL). Staging: NEVER the real one, a throwaway listener
+# on 127.0.0.1:8979 that the smoke test starts and kills (override: TW_STAGING_SUBSCRIBER_URL); the smoke only uses example.org addresses.
 #   --print-caddy Print the Caddy snippet and exit.
 #
 # Same SSH recipe as deploy_wot.sh (questhub needs publickey + password; the askpass helper reads both
@@ -62,6 +66,9 @@ TS="$(date +%Y%m%d_%H%M%S)"
 # credential (LoadCredential=orkey:...): systemd reads it as root and hands the service a private copy under
 # $CREDENTIALS_DIRECTORY, so the service user needs no access to /etc/unfold-news. This script never reads the file.
 CRED_FILE=/etc/unfold-news/orkey.json
+# Where feedback entries with newsletter:true are forwarded (services/trustweb-backup/newsletter.mjs). Staging must never reach the real service.
+SUBSCRIBER_URL_PRODUCTION="${TW_SUBSCRIBER_URL:-https://subscriber.questhub.eco/subscribe}"
+SUBSCRIBER_URL_STAGING="${TW_STAGING_SUBSCRIBER_URL:-http://127.0.0.1:8979/subscribe}"
 
 caddy_snippet() {
   cat <<'CADDY'
@@ -107,7 +114,14 @@ CADDY
 # The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max, $4 = 1 when the credential file exists on questhub
 # (a LoadCredential= line for a missing file would stop the unit from starting, so it is written only when the file is there).
 unit_text() {
-  local s="$1" port="$2" mem="$3" cred="${4:-0}" allowed="app.idea2.site" cred_line=""
+  local s="$1" port="$2" mem="$3" cred="${4:-0}" allowed="app.idea2.site" cred_line="" subscriber="$SUBSCRIBER_URL_PRODUCTION" staging_line=""
+  if [ -n "$s" ]; then
+    subscriber="$SUBSCRIBER_URL_STAGING"
+    # The smoke test makes more than 30 requests and more than 5 feedback posts from one address (loopback): staging only, production keeps the defaults.
+    staging_line="Environment=RATE_LIMIT=300
+Environment=FEEDBACK_PER_HOUR=100
+"
+  fi
   [ "$cred" = 1 ] && cred_line="LoadCredential=orkey:${CRED_FILE}
 "
   cat <<UNIT
@@ -123,7 +137,8 @@ Environment=BACKUP_DIR=/var/lib/trustweb-backup${s}
 Environment=HOSTED_DIR=/var/lib/trustweb-hosted${s}
 Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
 Environment=ALLOWED_HOSTS=${allowed}
-# Transcription: provider openrouter (default), key handed in as a credential, switched on by scripts/trustweb_transcribe_switch_on.sh
+Environment=SUBSCRIBER_URL=${subscriber}
+${staging_line}# Transcription: provider openrouter (default), key handed in as a credential, switched on by scripts/trustweb_transcribe_switch_on.sh
 # (it writes TRANSCRIBE_ENABLED=1 into the env file below). Without that switch /transcribe answers 503 not_configured.
 Environment=TRANSCRIBE_PROVIDER=openrouter
 ${cred_line}EnvironmentFile=-/etc/trustweb-backup${s}.env
@@ -146,11 +161,13 @@ WantedBy=multi-user.target
 UNIT
 }
 
-# Smoke test, run ON questhub through ssh (bash -s). $1 = port. Fails (non-zero) on the first wrong answer.
+# Smoke test, run ON questhub through ssh (bash -s). $1 = port, $2 = the port of the throwaway fake subscriber it starts and kills.
+# Fails (non-zero) on the first wrong answer.
 smoke_script() {
   cat <<'SMOKE'
 set -euo pipefail
 PORT="$1"
+SUBPORT="$2"
 B="http://127.0.0.1:$PORT"
 H='Host: app.idea2.site'
 ACC=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
@@ -161,8 +178,13 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 expect() { [ "$1" = "$2" ] && echo "  ok   $3 -> $1" || { echo "  FAIL $3 -> got $1, expected $2" >&2; exit 1; }; }
 echo "health"
 expect "$(curl -fsS -H "$H" $B/health)" ok "GET /health"
-echo "hosted status"
-curl -fsS -H "$H" $B/hosted/status; echo
+echo "hosted status (wave 2: the provider block for the app's copy; the old booleans stay)"
+STATUS=$(curl -fsS -H "$H" $B/hosted/status); echo "$STATUS"
+case "$STATUS" in
+  *'"provider":{"transcribe":{"enabled":false,"provider":"openrouter","region":"us","dataPolicy":"deny"}}'*) echo "  ok   status.provider.transcribe" ;;
+  *) echo "  FAIL status.provider.transcribe missing or wrong" >&2; exit 1 ;;
+esac
+case "$STATUS" in *'"transcribe":false'*) echo "  ok   old boolean transcribe:false" ;; *) echo "  FAIL old boolean" >&2; exit 1 ;; esac
 echo "hosted recording cycle"
 printf 'smoke-test-ciphertext' > /tmp/tw_smoke.bin
 expect "$(code -H "$H" -X PUT -H "X-Write-Token: $TOK" -H 'X-Seconds: 60' -H "X-Read-Token: $RC" --data-binary @/tmp/tw_smoke.bin $B/hosted/$ACC/rec/$RID)" 204 "PUT recording"
@@ -170,7 +192,8 @@ expect "$(code -H "$H" $B/hosted/$ACC/rec/$RID)" 403 "GET without credential"
 expect "$(code -H "$H" -H "X-Read-Token: $RC" $B/hosted/$ACC/rec/$RID)" 200 "GET with read capability"
 ETAG=$(curl -s -D - -o /dev/null -H "$H" -H "X-Write-Token: $TOK" $B/hosted/$ACC/rec/$RID | tr -d '\r' | awk -F': ' 'tolower($1)=="etag"{print $2}')
 expect "$(code -H "$H" -H "X-Write-Token: $TOK" -H "If-None-Match: $ETAG" $B/hosted/$ACC/rec/$RID)" 304 "GET If-None-Match"
-curl -fsS -H "$H" -H "X-Write-Token: $TOK" $B/hosted/$ACC/usage; echo
+USAGE=$(curl -fsS -H "$H" -H "X-Write-Token: $TOK" $B/hosted/$ACC/usage); echo "$USAGE"
+case "$USAGE" in *'"used":1,"limit":10,'*'"recordings":1,"maxRecordings":10,'*) echo "  ok   usage counts recordings: used 1 of limit 10" ;; *) echo "  FAIL usage is not counted in recordings" >&2; exit 1 ;; esac
 expect "$(code -H "$H" -X DELETE -H "X-Write-Token: $TOK" $B/hosted/$ACC/rec/$RID)" 204 "DELETE recording"
 echo "backup route + late pack validators"
 BID=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
@@ -186,6 +209,29 @@ echo "feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://idea2.site' -H 'Content-Type: application/json' -d '{"text":"smoke test, please ignore","kind":"feedback"}' $B/feedback)" 204 "POST /feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://evil.example.com' -H 'Content-Type: application/json' -d '{"text":"x"}' $B/feedback)" 403 "POST /feedback foreign Origin"
 expect "$(code -H "$H" -X OPTIONS -H 'Origin: https://app.idea2.site' $B/feedback)" 204 "OPTIONS /feedback"
+echo "feedback + newsletter opt-in against a FAKE subscriber on 127.0.0.1:$SUBPORT (never the real service)"
+umask 077
+SUBDIR=$(mktemp -d); SUBLOG="$SUBDIR/received.log"; : > "$SUBLOG"
+node -e 'const h=require("http"),fs=require("fs");h.createServer((q,r)=>{let b="";q.on("data",c=>{b+=c});q.on("end",()=>{fs.appendFileSync(process.argv[1],q.method+" "+q.url+" "+b+"\n");r.writeHead(200);r.end()})}).listen(+process.argv[2],"127.0.0.1")' "$SUBLOG" "$SUBPORT" &
+SUBPID=$!
+trap 'kill $SUBPID 2>/dev/null || true; rm -rf "$SUBDIR"' EXIT
+for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:$SUBPORT/" && break; sleep 0.25; done
+: > "$SUBLOG" # the readiness probe above is not an opt-in
+FB() { code -H "$H" -X POST -H 'Origin: https://idea2.site' -H 'Content-Type: application/json' -d "$1" $B/feedback; }
+expect "$(FB '{"text":"smoke: notify only","email":"smoke-notify@example.org","notify":true}')" 204 "feedback notify only"
+expect "$(FB '{"text":"smoke: unticked boxes","email":"smoke-none@example.org","notify":false,"newsletter":false}')" 204 "feedback email without a ticked box"
+expect "$(FB '{"text":"smoke: bad box","newsletter":"true","email":"smoke-bad@example.org"}')" 400 "feedback newsletter must be a boolean"
+expect "$(FB '{"text":"smoke: no address","newsletter":true}')" 400 "feedback newsletter without email"
+[ ! -s "$SUBLOG" ] && echo "  ok   nothing reached the subscriber so far" || { echo "  FAIL the subscriber received something it should not have" >&2; cat "$SUBLOG" >&2; exit 1; }
+expect "$(FB '{"text":"smoke: newsletter opt-in","email":"smoke-newsletter@example.org","notify":true,"newsletter":true}')" 204 "feedback newsletter:true"
+RECEIVED=$(cat "$SUBLOG")
+echo "  fake subscriber received: $RECEIVED"
+case "$RECEIVED" in
+  'POST /subscribe {"email":"smoke-newsletter@example.org","project":"questhub","source":"trustweb","gdpr":true}') echo "  ok   exactly one forwarded opt-in, join-form body" ;;
+  *) echo "  FAIL unexpected forward" >&2; exit 1 ;;
+esac
+kill $SUBPID 2>/dev/null || true; wait $SUBPID 2>/dev/null || true
+if ss -ltn 2>/dev/null | grep -q ":$SUBPORT "; then echo "  FAIL the fake subscriber is still listening" >&2; exit 1; else echo "  ok   fake subscriber stopped, port $SUBPORT free"; fi
 echo "transcription (credential loaded or not, but not switched on): not configured"
 expect "$(code -H "$H" -X POST -H "X-Account: $ACC" -H "X-Write-Token: $TOK" -H 'X-Audio-Seconds: 5' -H 'Content-Type: audio/webm' --data-binary @/tmp/tw_smoke.bin $B/transcribe)" 503 "POST /transcribe"
 rm -f /tmp/tw_smoke.bin
@@ -282,7 +328,7 @@ do_staging() {
   if [ "$DRY" = 1 ]; then
     echo "[dry-run] smoke script:"; smoke_script | sed 's/^/    /'
   else
-    smoke_script | rsh "bash -s -- 8970"
+    smoke_script | rsh "bash -s -- 8970 8979"
     rsh 'systemctl show trustweb-backup-staging -p MemoryCurrent -p MemoryMax'
   fi
   if [ "$KEEP" = 1 ]; then
