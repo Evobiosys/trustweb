@@ -93,7 +93,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
   <p class="eyebrow">7. The front doors</p>
   <h2>The demo inventory and the personal front door</h2>
   <dl class="facts">
-    <dt>What</dt><dd>The name and the identifier of each phone that connected, and the asks sent to them while they are handled. An ask is matched against the front door's lines and also passed on, with the name you use, to the phone of the person who runs it.</dd>
+    <dt>What</dt><dd>The name and the identifier of each phone that connected, and the asks sent to them while they are handled. The demo inventory holds made-up lines and lines its owner chose to publish in advance; the personal front door answers only from lines its owner allowed in advance. An ask is matched against the front door's lines and also passed on, with the name you use, to the phone of the person who runs it.</dd>
     <dt>Where</dt><dd>A state file on our server that only the service can read (names and identifiers), and memory (the asks).</dd>
     <dt>How long</dt><dd>The names and identifiers: until the owner removes the connection. The text of an ask: only in memory while it is handled; it is not written to disk or to the log. The log keeps counts and outcomes.</dd>
     <dt>Who can read it</dt><dd>The person who runs the front door (see the <a href="imprint.html">imprint</a>), who sees the asks as they arrive on his phone.</dd>
@@ -105,9 +105,9 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
   <p class="eyebrow">8. Short connect links</p>
   <h2>The short link next to the long one</h2>
   <dl class="facts">
-    <dt>What</dt><dd>The long connect link, which carries the name you chose and what another phone needs to connect to yours, stored under a random ten-character id. It is not encrypted on the server beyond the connection itself; it is a link you already share openly.</dd>
-    <dt>Where</dt><dd>A file on our server in Switzerland. The link and its id are never written to any log.</dd>
-    <dt>How long</dt><dd>30 days, then it stops working and is removed.</dd>
+    <dt>What</dt><dd>Where the app offers a short link next to the long one: the long connect link, which carries the name you chose and what another phone needs to connect to yours, stored under a random ten-character id. It is not encrypted on the server beyond the connection itself; it is a link you already share openly. Making links is limited to 6 a minute and 30 an hour per network address, counted in memory, and at most 5000 links are stored at once.</dd>
+    <dt>Where</dt><dd>A file on our server in Switzerland that only the service can read. The service writes neither the link nor its id to any log. If our server fails at the moment someone opens a short link, the web server's error log could still name the short link.</dd>
+    <dt>How long</dt><dd>30 days, then the short link stops working (it answers as if it never existed) and the entry is dropped from the file.</dd>
     <dt>Who can read it</dt><dd>Anyone who has the short link, and we can read the file. We do not look.</dd>
     <dt>How to delete it</dt><dd>It expires by itself, or write to us with the short link. You can always use the long link instead, which is never stored by us.</dd>
   </dl>
@@ -153,7 +153,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
   <p class="eyebrow">12. The earlier waitlist</p>
   <h2>Entries from before 2026-10-07</h2>
   <dl class="facts">
-    <dt>What</dt><dd>Until 2026-10-07 the main page's waitlist form sent its entries to the ReBioSys relay (idea2.site/rebiosys/api): your email address, the time, and a shortened one-way fingerprint of your network address. That relay tries to send one confirmation email to the address (<span class="tbc">to confirm</span>: its mail sending was failing at the time of writing).</dd>
+    <dt>What</dt><dd>Until 2026-10-07 the main page's waitlist form sent its entries to the ReBioSys relay (idea2.site/rebiosys/api): your email address, the time, and a shortened fingerprint of your network address (a hash with a fixed salt: it hides the address from a casual reader, but anyone who wants to can work it back, so it is pseudonymous, not anonymous). That relay tries to send one confirmation email to the address (<span class="tbc">to confirm</span>: its mail sending was failing at the time of writing).</dd>
     <dt>Where</dt><dd>Files on our server that only the system administrator can read. The relay's system log writes the network address and the request line of every call it gets.</dd>
     <dt>How long</dt><dd>No automatic deletion. Nothing new is sent there from this website any more.</dd>
     <dt>Who can read it</dt><dd>The operator.</dd>

@@ -769,7 +769,7 @@ async function legalChecks(page) {
     /Legal bases, in plain words/.test(pv) && /Art\. 6\(1\)\(b\)/.test(pv) && /Art\. 6\(1\)\(a\)/.test(pv) && /Art\. 6\(1\)\(f\)/.test(pv))
   check('privacy: the per-address counters are said to be in memory and NOT anonymous; no "anonymous counters" claim anywhere', /not anonymous/.test(pv) && !/anonymous (in-memory )?counters/i.test(pv))
   check('privacy: relay hold time (72 hours), front doors (demo and personal), short links (30 days, random id, never logged), newsletter unsubscribe deletes, no cookies and nothing stored in the browser',
-    /72 hours/.test(pv) && /two, both run by the person named in the imprint: the "Demo inventory"/.test(pv) && /personal one/.test(pv) && /under a random ten-character id for up to 30 days/.test(pv) && /do not write the link or its id to any log/.test(pv) &&
+    /72 hours/.test(pv) && /two, both run by the person named in the imprint: the "Demo inventory" \(its name may change\), which holds made-up lines and lines its owner chose to publish in advance/.test(pv) && /personal one/.test(pv) && /under a random ten-character id for up to 30 days/.test(pv) && /does not write the link or its id to any log/.test(pv) &&
     /unsubscribe link in any newsletter email, which deletes your address/.test(pv) && /nothing stored in your browser/.test(pv))
   check('privacy: the web server keeps no access log; its error log can note the address; no "the web server writes no access log" overclaim and no "only in memory" claim for addresses without the error-log caveat',
     /keeps no access log/.test(pv) && /error log, in the server's system journal, can note the network address/.test(pv))
@@ -779,7 +779,7 @@ async function legalChecks(page) {
   check('data policy: sixteen data kinds, each answering What / Where / How long / Who can read it / How to delete it',
     sections.length === 16 && sections.every((s) => s.dts === 'What|Where|How long|Who can read it|How to delete it'), sections.map((s) => `${s.id}:${s.dts.split('|').length}`).join(' '))
   check('data policy: says what the code does (90 days by hand not on a timer, 72 hours relay, 30 days short links, per-recording delete in the app, 14-day newsletter snapshot, Caddy keeps no access log, counters not anonymous, no cookies)',
-    /not on a timer yet/.test(dp) && /72 hours at most/.test(dp) && /30 days, then it stops working/.test(dp) && /remove the recording; it is deleted from the server at once/.test(dp) && /for 14 days/.test(dp) && /Caddy\) keeps no access log/.test(dp) && /not anonymous/.test(dp) && /No cookies/.test(dp))
+    /not on a timer yet/.test(dp) && /72 hours at most/.test(dp) && /30 days, then the short link stops working/.test(dp) && /remove the recording; it is deleted from the server at once/.test(dp) && /for 14 days/.test(dp) && /Caddy\) keeps no access log/.test(dp) && /not anonymous/.test(dp) && /No cookies/.test(dp))
   check('data policy: unsettled facts are marked "to confirm" (backup deletion, retention, journal limit, snapshots by the host)', (await page.locator('.tbc').count()) >= 6, String(await page.locator('.tbc').count()))
   if (pageNames.includes('terms.html')) {
     const tm = await text('terms.html')
