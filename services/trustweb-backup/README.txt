@@ -6,8 +6,13 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
   /hosted/*       hosted recordings with a free allowance (the equivalent of 10 recordings of 1 h per person: 36000 s, 200 MB;
                   one recording 3600 s / 30 MB; 50 slots). Opaque ciphertext, own directory (HOSTED_DIR), account token to read
                   or a per-recording read capability. 90 days untouched = removable by the sweeper (sweep_hosted.mjs).
-  POST /transcribe  audio in, {text, segments} out; forwards to Infomaniak AI Tools Whisper (async batch API, polled), stores nothing.
-                  503 not_configured until the key is placed (scripts/trustweb_transcribe_switch_on.sh).
+  POST /transcribe  audio in, {text, segments} out; forwards to OpenRouter's speech-to-text endpoint (Whisper, one synchronous call,
+                  USD 0.012-0.04 per hour of audio), stores nothing. Provider code: transcribe_openrouter.mjs (default),
+                  transcribe_infomaniak.mjs (TRANSCRIBE_PROVIDER=infomaniak, async batch API); shared shape in transcribe_provider.mjs.
+                  The OpenRouter key reaches the unit as a systemd credential (LoadCredential=orkey:/etc/unfold-news/orkey.json, JSON
+                  {"key": "..."}); no secret is read by any script. Segment times are the model's own when they are plausible, else
+                  sentence-level estimates and the answer says "approx": true. Audio goes with data policy "deny" to a US inference provider.
+                  503 not_configured until switched on: scripts/trustweb_transcribe_switch_on.sh production (no prompt; "off" reverses it).
                   Money: ONE paid job at a time (short queue), booked before the call, followed to its end even when the
                   phone leaves, the provider's duration booked afterwards; a job past the deadline closes the day's budget.
                   Bytes do not bound duration (Opus DTX), so the residual is one crafted job per UTC day (see transcribe.mjs).
@@ -17,8 +22,9 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
 
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
+One real call against questhub: scripts/trustweb_transcribe_probe.sh staging <audio> <mime> <seconds> (synthetic audio only).
 Modules: server.mjs (guard, routing, /backup), http_util.mjs, limits.mjs, quota.mjs (the allowance as pure arithmetic),
-hosted_store.mjs + hosted.mjs, transcribe.mjs, feedback.mjs, config.mjs, sweep_hosted.mjs.
+hosted_store.mjs + hosted.mjs, transcribe.mjs (+ transcribe_provider.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs, config.mjs, sweep_hosted.mjs.
 
 RUN (local)
   BACKUP_DIR=/tmp/twbackup HOSTED_DIR=/tmp/twhosted PORT=8960 node server.mjs
@@ -27,9 +33,11 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over eight files (86 tests: the 17
-original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake provider, feedback
-and CORS, ETag/late packs, the in-memory limiters). Fixed test ports 8971-8975, one per file. Nothing is left running.
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over nine files (113 tests: the 17
+original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake Infomaniak and a fake
+OpenRouter (23 tests: success, bad model JSON, 400/401/402/403/429/500, gateway statuses counted, timeout, oversized, budgets, hang-up), feedback
+and CORS, ETag/late packs, the in-memory limiters). Fixed test ports 8971-8976 and 8978, one per file (8977 is taken by
+another program on the dev machine). Nothing is left running.
 Per-client limits count IPv4 addresses as they are and IPv6 per /64 (limits.mjs ipKey); /backup keeps its old per-address limiter.
 
 DEPLOY (questhub)
@@ -38,7 +46,9 @@ DEPLOY (questhub)
   scripts/deploy_trustweb_backup.sh --print-caddy                      the Caddy snippet
 The unit text lives in the script (unit_text). Notes for the production unit:
   - StateDirectory=trustweb-backup trustweb-hosted (hosted data and feedback.jsonl live in /var/lib/trustweb-hosted, never in BACKUP_DIR)
-  - EnvironmentFile=-/etc/trustweb-backup.env (0600 root) holds TRANSCRIBE_URL / TRANSCRIBE_KEY; absent = transcription off
+  - Environment=TRANSCRIBE_PROVIDER=openrouter and LoadCredential=orkey:/etc/unfold-news/orkey.json (the line is written only when that
+    file exists on questhub: a missing credential file would stop the unit). EnvironmentFile=-/etc/trustweb-backup.env (0600 root)
+    holds TRANSCRIBE_ENABLED=1 (written by the switch-on script); absent = transcription off (503 not_configured)
   - SELinux (Enforcing): code dir usr_t, unit written in place with tee, data dirs var_lib_t (checked by the script)
   - Caddy: handle /hosted/*, /transcribe, /feedback (size limits, 15 min timeouts); keep /hosted/ paths out of access logs.
 Behaviour change for /backup (the only one): the 30 s request deadline is now per request (server.requestTimeout is 15 min

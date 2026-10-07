@@ -1,18 +1,29 @@
 #!/bin/bash
-# Switch server-side transcription on for TrustWeb: asks for the Infomaniak AI Tools product id and API token
-# on YOUR terminal (token hidden, never in shell history or an argument list), writes the root-only
-# EnvironmentFile on questhub and restarts the unit.
+# Switch server-side transcription on (or off) for TrustWeb on questhub.
 #
-#   ./scripts/trustweb_transcribe_switch_on.sh production
-#   ./scripts/trustweb_transcribe_switch_on.sh staging
+#   ./scripts/trustweb_transcribe_switch_on.sh production              # = openrouter: no key prompt, only enables the provider
+#   ./scripts/trustweb_transcribe_switch_on.sh staging openrouter
+#   ./scripts/trustweb_transcribe_switch_on.sh production off          # back to 503 not_configured
+#   ./scripts/trustweb_transcribe_switch_on.sh production infomaniak   # the old provider: asks for product id + token on YOUR terminal
 #
-# Needs an interactive terminal (ssh -t). Same SSH recipe as the deploy script (control master or askpass).
+# openrouter (default): the OpenRouter key is already on questhub (/etc/unfold-news/orkey.json) and reaches the unit as a
+#   systemd credential (scripts/deploy_trustweb_backup.sh writes the LoadCredential line). This mode only writes
+#   TRANSCRIBE_PROVIDER=openrouter and TRANSCRIBE_ENABLED=1 into /etc/trustweb-backup[-staging].env and restarts the unit.
+#   It reads no secret, prompts for nothing, and needs no terminal.
+# infomaniak: needs an interactive terminal (ssh -t); the token is read hidden and never touches history or an argument list.
+# Same SSH recipe as the deploy script (control master or askpass).
 set -euo pipefail
 target="${1:-}"
-case "$target" in production|staging) ;; *) echo "usage: $0 production|staging" >&2; exit 2 ;; esac
+mode="${2:-openrouter}"
+case "$target" in production|staging) ;; *) echo "usage: $0 production|staging [openrouter|off|infomaniak]" >&2; exit 2 ;; esac
+case "$mode" in openrouter|off|infomaniak) ;; *) echo "usage: $0 production|staging [openrouter|off|infomaniak]" >&2; exit 2 ;; esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
-[ -t 0 ] || { echo "run this in an interactive terminal (it prompts for the token)" >&2; exit 1; }
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
 ssh-add --apple-load-keychain >/dev/null 2>&1 || true
 REMOTE="$(cat "$HERE/trustweb_transcribe_switch_on_remote.sh")"
-"${SSHENV[@]}" ssh -t questhub "bash -c $(printf '%q' "$REMOTE") _ $target"
+if [ "$mode" = infomaniak ]; then
+  [ -t 0 ] || { echo "the infomaniak mode needs an interactive terminal (it prompts for the token)" >&2; exit 1; }
+  "${SSHENV[@]}" ssh -t questhub "bash -c $(printf '%q' "$REMOTE") _ $target $mode"
+else
+  "${SSHENV[@]}" ssh questhub "bash -c $(printf '%q' "$REMOTE") _ $target $mode"
+fi

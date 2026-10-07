@@ -1,29 +1,24 @@
 // POST /transcribe: audio in, {text, segments} out, nothing stored (see services-api-contract.txt, section 4).
 //
-// Provider: Infomaniak AI Tools, OpenAI-compatible Whisper, an ASYNCHRONOUS batch API:
-//   POST {TRANSCRIBE_URL}                                    multipart (file, model, response_format, timestamp_granularities[], language)
-//        -> {"batch_id": "..."}
-//   GET  .../1/ai/<product_id>/results/<batch_id>            -> {status: pending|processing|success|failed|cancelled, url, data}
-//   (data: the transcript as object, JSON string, or null with a download url)
-// Docs: https://developer.infomaniak.com/docs/api/post/1/ai/{product_id}/openai/audio/transcriptions
-//       https://developer.infomaniak.com/docs/api/get/1/ai/{product_id}/results/{batch_id}
-// The server submits, polls every TRANSCRIBE_POLL_MS up to TRANSCRIBE_TIMEOUT_MS, and answers when done.
+// Providers (TRANSCRIBE_PROVIDER, default openrouter; each in its own module, see transcribe_provider.mjs for the shared shape):
+//   openrouter  transcribe_openrouter.mjs   one synchronous call to OpenRouter's speech-to-text endpoint (Whisper, billed per second)
+//   infomaniak  transcribe_infomaniak.mjs   Infomaniak AI Tools Whisper, an asynchronous batch API (submit, poll, fetch)
+// This module owns everything that is not the provider: validation, the spool file, the budgets, the paid slot, the charging.
 //
 // Money (review 2026-10-06): the provider bills by audio DURATION, and bytes do not bound duration (Opus with
 // DTX encodes hours of near-silence in a few KB), so the byte-based charge alone is not a cost bound. What makes
 // the daily cost bounded:
 //   - one paid job at a time (TRANSCRIBE_MAX_CONCURRENT 1), a short wait queue, one upload per client in flight;
 //   - the charge is booked on the daily budgets BEFORE the provider call;
-//   - once the provider accepted a job, the job is followed to its end even when the phone goes away, and the
-//     provider-reported duration is booked (so a long job pushes today's budget over and nothing more runs today);
+//   - once the provider may have taken a job, the job is followed to its end even when the phone goes away, and the
+//     provider-reported duration (openrouter: usage.seconds, the billed seconds) is booked, so a long job pushes today's
+//     budget over and nothing more runs today;
 //   - a job that outlives the deadline keeps its charge and CLOSES today's global budget (its real cost is unknown).
-// Residual: one crafted job per UTC day can cost what the provider charges for the longest audio it accepts.
+// Residual: one crafted job per UTC day can cost what the provider charges for the longest audio it accepts (with the
+// openrouter default that is cents per hour of audio, see the README).
 //
-// Env: TRANSCRIBE_URL (the full POST URL incl. product id), TRANSCRIBE_KEY (bearer token), TRANSCRIBE_MODEL (default "whisper"),
-//      TRANSCRIBE_RESULTS_URL (optional template with {batch_id}; derived from TRANSCRIBE_URL otherwise).
-// Without a key or URL: 503 not_configured. Logs carry no audio, text, key or provider body.
+// Without a key (or, for openrouter, without TRANSCRIBE_ENABLED=1): 503 not_configured. Logs carry no audio, text, key or provider body.
 
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import {
   CapExceeded,
@@ -38,8 +33,20 @@ import {
 } from './http_util.mjs'
 import { createDailyMeter, createInFlight, createSlots, ipKey } from './limits.mjs'
 import { transcribeCharge } from './quota.mjs'
+import { ProviderError, ProviderFailure } from './transcribe_provider.mjs'
+import { createInfomaniakProvider } from './transcribe_infomaniak.mjs'
+import { createOpenRouterProvider } from './transcribe_openrouter.mjs'
+import { TranscribeProvider } from './config.mjs'
 
 const MAX_AUDIO_SECONDS = 3600
+
+/**
+ * Provider answers that can arrive AFTER the audio was processed (gateway and timeout statuses, e.g. the ~60 s upstream cut):
+ * the job may have been billed although it failed. OpenRouter's docs do not say whether a failed transcription is billed
+ * (they only promise "zero-completion insurance" for completions and warn that prompt processing can still be charged),
+ * so such a failure is refunded to the person but COUNTED; the third one in a UTC day closes today's global budget.
+ */
+const UNCERTAIN_STATUSES = new Set([408, 502, 504, 524])
 
 /** Accepted Content-Type (without parameters) -> a file extension the provider accepts. */
 const AUDIO_TYPES = Object.freeze({
@@ -55,142 +62,36 @@ const AUDIO_TYPES = Object.freeze({
   'audio/flac': 'flac',
 })
 
-/** How a provider call ended when it did not deliver a transcript. */
-const ProviderFailure = Object.freeze({ Error: 'error', Timeout: 'timeout' })
-
-class ProviderError extends Error {
-  constructor(kind, status = null) {
-    super(`provider ${kind}`)
-    this.kind = kind // a ProviderFailure
-    this.status = status
-    this.accepted = false // set once the provider has taken the job (a batch id exists): from then on it may bill
-  }
-}
-
-function sleep(ms, signal) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms)
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(t)
-        reject(signal.reason)
-      },
-      { once: true },
-    )
-  })
-}
-
-/** Provider result data in any of its shapes -> {text, segments, duration, language}. Throws ProviderError('error') when unusable. */
-export function normalizeTranscript(data) {
-  let v = data
-  if (typeof v === 'string') {
-    try {
-      const parsed = JSON.parse(v)
-      if (parsed !== null && typeof parsed === 'object') v = parsed
-    } catch {
-      // plain text transcript
-    }
-  }
-  if (typeof v === 'string') return { text: v.trim(), segments: [], duration: null, language: null }
-  if (v === null || typeof v !== 'object') throw new ProviderError('error')
-  const rawSegments = Array.isArray(v) ? v : Array.isArray(v.segments) ? v.segments : []
-  const segments = rawSegments
-    .filter((s) => s !== null && typeof s === 'object' && Number.isFinite(s.start) && Number.isFinite(s.end) && typeof s.text === 'string')
-    .map((s) => ({ start: Math.round(s.start * 100) / 100, end: Math.round(s.end * 100) / 100, text: s.text.trim() }))
-  const text = !Array.isArray(v) && typeof v.text === 'string' ? v.text.trim() : segments.map((s) => s.text).join(' ').trim()
-  const lastEnd = segments.reduce((max, s) => Math.max(max, s.end), 0)
-  const duration = !Array.isArray(v) && Number.isFinite(v.duration) ? Math.max(v.duration, lastEnd) : lastEnd || null
-  const language = !Array.isArray(v) && typeof v.language === 'string' ? v.language : null
-  return { text, segments, duration, language }
+/** The provider module named in the config, or null when the name is unknown. */
+function createProvider(cfg, fetchImpl) {
+  if (cfg.transcribeProvider === TranscribeProvider.OpenRouter) return createOpenRouterProvider({ cfg, fetchImpl })
+  if (cfg.transcribeProvider === TranscribeProvider.Infomaniak) return createInfomaniakProvider({ cfg, fetchImpl })
+  return null
 }
 
 export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fetch }) {
   const daily = createDailyMeter({ limit: cfg.transcribeDailySeconds, now: cfg.now })
   const perIp = createDailyMeter({ limit: cfg.transcribeIpDailySeconds, now: cfg.now })
+  const uncertain = createDailyMeter({ limit: cfg.transcribeUncertainPerDay, now: cfg.now })
   const providerSlots = createSlots({ slots: cfg.transcribeMaxConcurrent, queue: cfg.transcribeQueue })
   const uploads = createInFlight({ total: cfg.transcribeMaxConcurrent + cfg.transcribeQueue, perKey: cfg.transcribeUploadsPerIp })
 
-  function resultsUrl(batchId) {
-    if (cfg.transcribeResultsUrl) return cfg.transcribeResultsUrl.replace('{batch_id}', encodeURIComponent(batchId))
-    const m = /^(.*\/ai\/[^/]+)\/openai\/audio\/transcriptions\/?$/.exec(cfg.transcribeUrl)
-    if (m === null) throw new ProviderError(ProviderFailure.Error)
-    return `${m[1]}/results/${encodeURIComponent(batchId)}`
-  }
-
-  /** Every provider request goes through here: the key is added, a non-2xx is a ProviderError (its body is never read). */
-  async function providerFetch(url, init, signal) {
-    try {
-      const response = await fetchImpl(url, { ...init, signal, headers: { ...init.headers, Authorization: `Bearer ${cfg.transcribeKey}` } })
-      if (!response.ok) throw new ProviderError(ProviderFailure.Error, response.status)
-      return response
-    } catch (err) {
-      if (err instanceof ProviderError) throw err
-      throw new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error)
-    }
-  }
-
-  async function submit(spool, { mime, ext, language }, signal) {
-    const form = new FormData()
-    form.append('file', await fs.openAsBlob(spool, { type: mime }), `audio.${ext}`)
-    form.append('model', cfg.transcribeModel)
-    form.append('response_format', 'verbose_json')
-    form.append('timestamp_granularities[]', 'segment')
-    if (language !== null) form.append('language', language)
-    const response = await providerFetch(cfg.transcribeUrl, { method: 'POST', body: form }, signal)
-    const body = await response.json().catch(() => null)
-    const batchId = body?.batch_id ?? body?.data?.batch_id
-    if (typeof batchId !== 'string' || batchId === '') throw new ProviderError(ProviderFailure.Error)
-    return batchId
-  }
-
-  async function download(url, signal) {
-    if (new URL(url).origin !== new URL(cfg.transcribeUrl).origin) throw new ProviderError(ProviderFailure.Error) // never send the key elsewhere
-    const response = await providerFetch(url, { method: 'GET' }, signal)
-    const text = await response.text()
-    try {
-      return JSON.parse(text)
-    } catch {
-      return text
-    }
-  }
-
-  async function awaitResult(batchId, signal) {
-    for (;;) {
-      const response = await providerFetch(resultsUrl(batchId), { method: 'GET' }, signal)
-      const raw = await response.json().catch(() => null)
-      const body = raw?.status === undefined && raw?.data?.status !== undefined ? raw.data : raw
-      switch (body?.status) {
-        case 'success':
-          if (body.data !== null && body.data !== undefined) return body.data
-          if (typeof body.url === 'string') return download(body.url, signal)
-          throw new ProviderError(ProviderFailure.Error)
-        case 'pending':
-        case 'processing':
-          await sleep(cfg.transcribePollMs, signal)
-          break
-        default:
-          throw new ProviderError(ProviderFailure.Error) // failed, cancelled or unknown
-      }
-    }
-  }
+  const provider = createProvider(cfg, fetchImpl)
 
   /**
-   * Submit, poll, fetch: one deadline for all of it (TRANSCRIBE_TIMEOUT_MS). Deliberately NOT tied to the phone's
-   * connection: once the provider has the job, it is followed to its end so its real duration gets booked.
-   * Throws a ProviderError whose `accepted` says whether the provider had taken the job.
+   * One deadline for the whole provider call (TRANSCRIBE_TIMEOUT_MS). Deliberately NOT tied to the phone's connection:
+   * once the provider may have the job, it is followed to its end so its real duration gets booked.
+   * Throws a ProviderError whose `accepted` says whether the provider may have taken (and be billing) the job.
    */
   async function transcribeSpool(spool, request) {
     const signal = AbortSignal.timeout(cfg.transcribeTimeoutMs)
-    let accepted = false
+    const job = { accepted: false }
     try {
-      const batchId = await submit(spool, request, signal)
-      accepted = true
-      return normalizeTranscript(await awaitResult(batchId, signal))
+      return await provider.transcribe(spool, request, signal, job)
     } catch (err) {
       const failure = err instanceof ProviderError ? err : new ProviderError(signal.aborted ? ProviderFailure.Timeout : ProviderFailure.Error)
       if (signal.aborted) failure.kind = ProviderFailure.Timeout
-      failure.accepted = accepted
+      failure.accepted = job.accepted
       throw failure
     }
   }
@@ -248,7 +149,7 @@ export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fe
 
   async function handle(req, res) {
     if (req.method !== 'POST') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST' })
-    if (!cfg.transcribeConfigured || !cfg.hostedDir) return refuse(req, res, 503, 'not_configured')
+    if (!cfg.transcribeConfigured || !cfg.hostedDir || provider === null) return refuse(req, res, 503, 'not_configured')
     const request = parseRequest(req)
     if (request.error) return refuse(req, res, request.error[0] === 'unsupported_media' ? 415 : 400, ...request.error)
     const ip = ipKey(clientOf(req))
@@ -314,9 +215,11 @@ export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fe
       const charged = await bookRealDuration(request.account, ip, charge, result.duration)
       if (clientGone(req, res)) return 499 // the job ran and is booked; nobody is left to read the answer
       const used = await hosted.transcriptionUsed(request.account)
+      cfg.log(`transcribe ok provider=${provider.name} seconds=${charged} cost_usd=${result.cost ?? 'n/a'} approx=${result.approx}`)
       sendJson(res, 200, {
         text: result.text,
         segments: result.segments,
+        ...(result.approx ? { approx: true } : {}), // segment times are sentence-level estimates, not the provider's
         language: result.language ?? request.language,
         secondsCharged: charged,
         allowance: { secondsUsed: used, secondsLimit: hosted.plan.secondsLimit },
@@ -337,16 +240,25 @@ export function createTranscriber({ cfg, hosted, store, clientOf, fetchImpl = fe
     return real
   }
 
+  /** A failure that may still have been billed (UNCERTAIN_STATUSES): the Nth in one UTC day closes the global budget. */
+  function countUncertain() {
+    uncertain.add(null, 1)
+    if (!uncertain.fits(null, 1)) daily.close(null)
+  }
+
   /**
    * A job without a transcript. Refused or failed at the provider: the seconds go back. Timed out: the provider may
-   * still be running (and billing) it, so the charge stays and today's global budget is closed.
+   * still be running (and billing) it, so the charge stays and today's global budget is closed. The provider asking us
+   * to wait (its 429): the seconds go back and the phone is told to come back later. The provider's own words never go out.
    */
   async function failJob(res, request, ip, charge, err) {
     const timeout = err.kind === ProviderFailure.Timeout
     if (timeout && err.accepted) daily.close(null)
     else await refund(request.account, ip, charge)
-    cfg.log(`transcribe ${timeout ? `provider_timeout accepted=${err.accepted}` : `provider_error status=${err.status ?? 'n/a'}`}`)
+    if (!timeout && err.accepted && UNCERTAIN_STATUSES.has(err.status)) countUncertain()
+    cfg.log(`transcribe ${timeout ? `provider_timeout accepted=${err.accepted}` : `provider_${err.kind} status=${err.status ?? 'n/a'}`}`)
     if (res.destroyed) return 499
+    if (err.kind === ProviderFailure.Busy) return tooManyRequests(res, 'busy', 30)
     return jsonError(res, timeout ? 504 : 502, timeout ? 'provider_timeout' : 'provider_error')
   }
 

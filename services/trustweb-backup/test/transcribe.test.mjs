@@ -54,11 +54,11 @@ async function withProvider(script, body) {
   }
 }
 
-const base = { transcribeUrl: URL_, transcribeKey: KEY, transcribePollMs: 10, transcribeTimeoutMs: 3000 }
+const base = { transcribeProvider: 'infomaniak', transcribeUrl: URL_, transcribeKey: KEY, transcribePollMs: 10, transcribeTimeoutMs: 3000 }
 const hdr = (extra = {}) => ({ 'X-Account': A, 'X-Write-Token': T, 'X-Audio-Seconds': '60', 'Content-Type': 'audio/webm;codecs=opus', ...extra })
 const transcribe = (headers, body = AUDIO, extra = {}) => call(P, { method: 'POST', url: '/transcribe', headers, body, ...extra })
 
-test('success: text with timed segments, provider gets the key, model, verbose_json and the language hint; polls until done', async () => {
+test('infomaniak: success: text with timed segments, provider gets the key, model, verbose_json and the language hint; polls until done', async () => {
   await withProvider({ results: [{ status: 'pending' }, { status: 'processing' }, { status: 'success', data: VERBOSE }] }, async ({ seen }) => {
     await withServer(P, base, async ({ hostedDir, lines }) => {
       const r = await transcribe(hdr({ 'X-Language': 'de' }))
@@ -282,7 +282,7 @@ test('one client holds at most one audio upload: a second stalled upload from th
 })
 
 test('not configured: no key (or no hosted dir) is 503 not_configured, before any audio is read', async () => {
-  await withServer(P, { transcribeUrl: URL_, transcribeKey: '' }, async () => {
+  await withServer(P, { transcribeProvider: 'infomaniak', transcribeUrl: URL_, transcribeKey: '' }, async () => {
     const r = await transcribe(hdr())
     assert.equal(r.status, 503)
     assert.equal(r.json.error, 'not_configured')
