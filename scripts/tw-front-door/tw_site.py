@@ -5,7 +5,7 @@ the server first and deploys the output afterwards. Nothing here touches the
 network or the server.
 
     tw_site.py --src SOURCE_INDEX --frag FRAGMENT_DIR --out OUT_DIR
-               [--draft] [--services-live] [--publish-terms]
+               [--draft] [--services-live] [--transcribe-live] [--publish-terms]
 
 What it builds (see the fragments next to this file):
   index.html   the fetched idea2 web-of-trust page, edited by exact-text and
@@ -15,9 +15,11 @@ What it builds (see the fragments next to this file):
   terms.html   only with --draft or --publish-terms (Jakob has not approved it)
 
 Conditional blocks in fragments: <!--IF:name-->...<!--/IF--> is kept when the
-name is active and dropped otherwise. Names: soon / live (hosting and server
-transcription are described as "starting soon" until --services-live),
-draft / prod, terms. Blocks must not nest.
+name is active and dropped otherwise. Names: soon / live (hosting is described
+as "starting soon" until --services-live), tx-off / tx-on (server transcription
+is described as "coming, switched off today" until --transcribe-live; it has its
+own flag because it stays off until a provider key is placed, whatever hosting
+does), draft / prod, terms. Blocks must not nest.
 
 Every link between the site's own pages is relative, so the same output works
 under /trustweb/ and under /trustweb/draft/.
@@ -31,7 +33,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-BLOCK_RE = re.compile(r"<!--IF:(\w+)-->(.*?)<!--/IF-->", re.DOTALL)
+BLOCK_RE = re.compile(r"<!--IF:([\w-]+)-->(.*?)<!--/IF-->", re.DOTALL)
 TW_URL = "https://idea2.site/trustweb/"
 
 
@@ -39,6 +41,7 @@ TW_URL = "https://idea2.site/trustweb/"
 class Flags:
     draft: bool
     services_live: bool
+    transcribe_live: bool
     publish_terms: bool
 
     @property
@@ -48,6 +51,7 @@ class Flags:
     def active_blocks(self) -> frozenset[str]:
         names = {
             "live" if self.services_live else "soon",
+            "tx-on" if self.transcribe_live else "tx-off",
             "draft" if self.draft else "prod",
         }
         if self.terms_visible:
@@ -73,19 +77,19 @@ PAGES: tuple[Page, ...] = (
     Page(
         "pricing",
         "Pricing",
-        "TrustWeb is free while we learn. Experimental pricing: tell us what would be fair.",
+        "TrustWeb is free while we test. Hosting beyond the free allowance: contact us to make a solid agreement.",
         "pricing.body.html",
     ),
     Page(
         "feedback",
         "Feedback",
-        "Send feedback, a pricing opinion or a bug report about TrustWeb.",
+        "Send feedback or a bug report, ask to be told when TrustWeb is ready, or join the newsletter.",
         "feedback.body.html",
     ),
     Page(
         "faq",
-        "First questions",
-        "First questions about TrustWeb, answered as it works today.",
+        "FAQ",
+        "Questions people ask about TrustWeb, answered as it works today.",
         "faq.body.html",
     ),
     Page(
@@ -221,8 +225,8 @@ DESCRIPTION_OLD = (
     'in-person-verified communities. Live demos, code, and how it works.">'
 )
 DESCRIPTION_NEW = (
-    '<meta name="description" content="TrustWeb: ask your web of trusted people a question in plain words. '
-    'Each person decides what to share. An experimental app by EvoBioSys.">'
+    '<meta name="description" content="TrustWeb: find people and things through people you trust. '
+    'Ask your web a question in plain words; each person decides what to share. An experimental app by EvoBioSys.">'
 )
 
 
@@ -467,7 +471,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument(
         "--services-live",
         action="store_true",
-        help="describe hosting and server transcription as live (default: starting soon)",
+        help="describe hosting as live (default: starting soon)",
+    )
+    ap.add_argument(
+        "--transcribe-live",
+        action="store_true",
+        help="describe server transcription as switched on (default: coming, off today)",
     )
     ap.add_argument(
         "--publish-terms",
@@ -482,6 +491,7 @@ def main(argv: list[str]) -> int:
     flags = Flags(
         draft=args.draft,
         services_live=args.services_live,
+        transcribe_live=args.transcribe_live,
         publish_terms=args.publish_terms,
     )
     written = build_all(
@@ -489,7 +499,8 @@ def main(argv: list[str]) -> int:
     )
     print("built: " + " ".join(written))
     print(
-        f"flags: draft={flags.draft} services_live={flags.services_live} terms={flags.terms_visible}"
+        f"flags: draft={flags.draft} services_live={flags.services_live} "
+        f"transcribe_live={flags.transcribe_live} terms={flags.terms_visible}"
     )
     return 0
 

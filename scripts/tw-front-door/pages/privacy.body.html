@@ -1,7 +1,7 @@
 <a class="back" href="./">&larr; back to TrustWeb</a>
 <h1>Privacy Policy</h1>
 <p class="lede">In plain words: what stays on your phone, what passes through our server, and what the website does.</p>
-<p class="stamp">Experimental service, first version, 2026-10-06</p>
+<p class="stamp">Experimental service, 2026-10-07</p>
 
 <section id="who">
   <p class="eyebrow">Who is responsible</p>
@@ -41,22 +41,19 @@
     <!--IF:soon--><li><b>Hosted recordings (starting soon, experimental).</b> When this is switched on,
     your recordings will be stored on the server as ciphertext it cannot read, with each one's size,
     length and when it was last written or opened, counted against your allowance. A recording that
-    is neither written nor opened for 90 days may be removed.</li>
-    <li><b>Server transcription (starting soon, experimental).</b> If you choose it, the audio of a
-    recording leaves your phone: it goes through our server to Infomaniak AI Tools in Switzerland,
-    which turns it into text, and the text comes back to your phone. Unlike backups and hosted recordings, this
-    audio is not encrypted for the server: our server and Infomaniak handle it as audio. Our server
-    keeps neither the audio nor the text (the audio sits in a temporary file only while it is being
-    transcribed); it counts the minutes used.</li><!--/IF-->
+    is neither written nor opened for 90 days may be removed.</li><!--/IF-->
     <!--IF:live--><li><b>Hosted recordings.</b> Your recordings are stored on the server as ciphertext it
     cannot read, with each one's size, length and when it was last written or opened, counted against
-    your allowance. A recording that is neither written nor opened for 90 days may be removed.</li>
-    <li><b>Server transcription.</b> If you choose it, the audio of a recording leaves your phone: it
-    goes through our server to Infomaniak AI Tools in Switzerland, which turns it into text, and the
-    text comes back to your phone. Unlike backups and hosted recordings, this audio is not encrypted for the
-    server: our server and Infomaniak handle it as audio. Our server keeps neither the audio nor the
-    text (the audio sits in a temporary file only while it is being transcribed); it counts the
-    minutes used.</li><!--/IF-->
+    your allowance. A recording that is neither written nor opened for 90 days may be removed.</li><!--/IF-->
+    <li id="transcription"><b>Server transcription<!--IF:tx-off--> (coming, switched off today)<!--/IF--><!--IF:tx-on--> (experimental)<!--/IF-->.</b>
+    <!--IF:tx-off-->It is switched off today, and nothing described here happens. When it is switched on and you choose it,<!--/IF--><!--IF:tx-on-->If you choose it,<!--/IF-->
+    the audio of a recording leaves your phone. It goes through our server to OpenRouter, a service that passes it to an
+    inference provider in the United States (DeepInfra, Groq or Together serve this kind of model; we cannot pick which one
+    handles a given request). We set OpenRouter's data policy to "deny", which should limit the choice to providers that do not
+    store the audio or train on it; we rely on that setting and on the providers' own statements, and we cannot check what they do.
+    Unlike backups and hosted recordings, this audio is not encrypted for the server, OpenRouter or the provider: they handle it as audio.
+    Our server keeps neither the audio nor the text (the audio sits in a temporary file only while it is being transcribed);
+    it counts the minutes used. The text comes back to your phone, and the times of the sentences may be approximate.</li>
     <li><b>Network addresses</b> reach the server with every request. TrustWeb's own services
     (backup, hosting, transcription, feedback) use them only in memory, to limit abuse; the web
     server writes no access log.</li>
@@ -76,14 +73,23 @@
     <li><b>The feedback form</b> sends what you type, your optional contact, the kind of message and
     the page you wrote from to our server, which stores them with the time to the minute. We do not
     store your network address or browser details. We read the messages by hand.</li>
+    <li><b>The two boxes on the feedback form</b> are both unticked, and nothing is sent for a box you did not tick.
+    "Notify me when it is ready" sends your email address to our waitlist, for one note when TrustWeb is ready.
+    "Stay informed" sends it to our newsletter service, which first sends you a confirmation email; you are on the list
+    only after you click the link in it, and you can ask us at any time to take you off. The newsletter service runs on our own server.</li>
   </ul>
 </section>
 
 <section id="third-parties">
   <p class="eyebrow">Third parties</p>
   <h2>Who else is involved</h2>
-  <p>Infomaniak (hosting, and server transcription if you choose it), in Switzerland. Google Fonts
-  (typefaces on this site). No advertising networks, no analytics providers.</p>
+  <ul>
+    <li><b>Infomaniak</b>, in Switzerland: hosting of our server, which holds the relay, backups and hosted recordings.</li>
+    <li><b>OpenRouter</b> and the inference provider behind it, in the United States: only for server transcription, only if it is
+    switched on and you choose it. See <a href="#transcription">above</a>.</li>
+    <li><b>Google Fonts</b>: typefaces on this site.</li>
+    <li>No advertising networks, no analytics providers.</li>
+  </ul>
 </section>
 
 <section id="rights">
@@ -98,6 +104,6 @@
 <section id="status">
   <p class="eyebrow">Status</p>
   <h2>An experimental first version</h2>
-  <p>TrustWeb is an experiment. This page describes how it works on 2026-10-06 and will change
+  <p>TrustWeb is an experiment. This page describes how it works on 2026-10-07 and will change
   as it does. The date above shows the version you are reading.</p>
 </section>

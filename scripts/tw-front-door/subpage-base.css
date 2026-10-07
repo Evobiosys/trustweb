@@ -74,7 +74,23 @@
   .fbform textarea, .fbform input[type=text], .fbform select{width:100%; font:inherit; color:var(--ink);
     background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px}
   .fbform textarea{min-height:150px; resize:vertical}
+  .fbform fieldset.keepinfo{margin:18px 0 0; padding:12px 16px 14px; border:1px solid var(--line); border-radius:var(--radius-sm)}
+  .fbform fieldset.keepinfo legend{padding:0 6px; font:600 .72rem/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--indigo)}
+  .fbform fieldset.keepinfo p.hint{margin:0 0 4px; font-size:.84rem; color:var(--ink-soft)}
+  .fbform label.tick{display:flex; gap:10px; align-items:flex-start; margin:10px 0 0; font-weight:600; cursor:pointer}
+  .fbform label.tick input{flex:0 0 auto; width:20px; height:20px; margin:2px 0 0; accent-color:var(--indigo)}
+  .fbform label.tick span{min-width:0; overflow-wrap:anywhere}
+  .fbform .infobtn{display:block; margin:12px 0 0; padding:6px 0; border:0; background:none; font:600 .84rem var(--sans);
+    color:var(--indigo); text-align:left; text-decoration:underline; cursor:pointer}
+  .fbform fieldset.keepinfo p.note{margin:8px 0 0; padding:10px 14px; background:var(--gold-soft); border-radius:var(--radius-sm); color:var(--ink); font-size:.88rem}
   .fbform .hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
   .fbmsg{margin:14px 0 0; padding:10px 14px; border-radius:var(--radius-sm); display:none}
   .fbmsg.ok{display:block; background:var(--indigo-soft); color:var(--ink)}
   .fbmsg.err{display:block; background:var(--cochineal-soft); color:var(--ink)}
+
+  details.q .de{font-weight:400; color:var(--ink-soft)}
+  /* pricing: the three plans */
+  .plans{margin:0 0 4px}
+  section.plan{border-left:4px solid var(--indigo)}
+  /* the "open source" link, underlined on purpose */
+  a.oslink{text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px}

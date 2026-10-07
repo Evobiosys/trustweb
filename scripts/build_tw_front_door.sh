@@ -18,10 +18,15 @@
 #   ./scripts/build_tw_front_door.sh             PRODUCTION: idea2.site/trustweb/ (keeps the draft/ folder)
 #   TW_BUILD_ONLY=<dir> ./scripts/build_tw_front_door.sh [--draft]   build into <dir>, touch nothing on the server
 #
-# THE ONE FLAG: SERVICES_LIVE below (or TW_SERVICES_LIVE=1, or --services-live).
-# 0 = pricing and privacy say hosting and server transcription are "starting
-# soon (experimental)"; 1 = they say it is switched on. The orchestrator flips
-# it after the services and the app are live.
+# TWO FLAGS (wave 2: transcription got its own, because it stays off until a
+# provider key is placed, whatever hosting does):
+#   SERVICES_LIVE (TW_SERVICES_LIVE=1 or --services-live): 0 = pricing and privacy
+#     say hosting is "starting soon (experimental)"; 1 = switched on.
+#   TRANSCRIBE_LIVE (TW_TRANSCRIBE_LIVE=1 or --transcribe-live): 0 = pricing,
+#     privacy and FAQ say server transcription is coming and switched off today;
+#     1 = switched on (through OpenRouter, see privacy).
+# The orchestrator flips each after the matching service and the app are live
+# (GET https://app.idea2.site/hosted/status: hosted:true / transcribe:true).
 # terms.html is built for --draft only (Jakob has not approved it);
 # --publish-terms (or TW_PUBLISH_TERMS=1) publishes it on production and links
 # it from the footer.
@@ -61,15 +66,17 @@ DRAFT_DIR="$PROD_DIR/draft"
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good
 SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0)
 
-SERVICES_LIVE="${TW_SERVICES_LIVE:-0}"   # <- the one flag, see the header
+SERVICES_LIVE="${TW_SERVICES_LIVE:-0}"   # <- hosting flag, see the header
+TRANSCRIBE_LIVE="${TW_TRANSCRIBE_LIVE:-0}"   # <- server transcription flag, see the header
 PUBLISH_TERMS="${TW_PUBLISH_TERMS:-0}"
 DRAFT=0
 for arg in "$@"; do
   case "$arg" in
     --draft) DRAFT=1 ;;
     --services-live) SERVICES_LIVE=1 ;;
+    --transcribe-live) TRANSCRIBE_LIVE=1 ;;
     --publish-terms) PUBLISH_TERMS=1 ;;
-    *) echo "unknown option: $arg (use --draft, --services-live, --publish-terms)" >&2; exit 2 ;;
+    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --publish-terms)" >&2; exit 2 ;;
   esac
 done
 
@@ -94,6 +101,7 @@ echo "fetching $SRC"
 ARGS=(--src "$WORK/source_index.html" --frag "$FRAG" --out "$OUT")
 [ "$DRAFT" = 1 ] && ARGS+=(--draft)
 [ "$SERVICES_LIVE" = 1 ] && ARGS+=(--services-live)
+[ "$TRANSCRIBE_LIVE" = 1 ] && ARGS+=(--transcribe-live)
 [ "$PUBLISH_TERMS" = 1 ] && ARGS+=(--publish-terms)
 python3 -I "$FRAG/tw_site.py" "${ARGS[@]}"
 
