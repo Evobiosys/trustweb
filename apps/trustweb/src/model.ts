@@ -382,8 +382,15 @@ export enum TabOrder {
   InventoryLeft = 'inventory-left',
 }
 
+/**
+ * The record's data format. Every change since the first one has been optional
+ * fields only, so it stays 1 (review-app-a: a different number would make an
+ * older build keep the record aside). Shown in Settings > About (wave 2, P20).
+ */
+export const RECORD_FORMAT = 1
+
 export interface AppState {
-  v: 1
+  v: typeof RECORD_FORMAT
   me: Me
   identity?: SerializedIdentityV1
   people: Person[]

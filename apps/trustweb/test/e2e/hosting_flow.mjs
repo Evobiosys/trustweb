@@ -111,7 +111,7 @@ async function main() {
     const one = Buffer.from(await (await api(`/hosted/${account}/rec/${hosted.recs[0].rid}`, { headers: { 'X-Write-Token': token } })).arrayBuffer())
     ok('what the server stores is sealed (not WebM: no EBML header; version byte 1)', one[0] === 1 && one.indexOf(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])) === -1)
     await page.locator('[data-hosting-usage]').waitFor({ timeout: 10_000 })
-    ok('the bar shows hours used of 10', /0\.00 of 10 hours used/.test(await page.locator('.sheet.on .usage').innerText()))
+    ok('the bar shows recordings AND hours (wave 2, P10): "N recordings of 10 kept there; 0.00 of 10 hours used"', /\d+ recordings? of 10 kept there; 0\.00 of 10 hours used/.test(await page.locator('.sheet.on .usage').innerText()), await page.locator('.sheet.on .usage').innerText())
     const persist = await page.locator('[data-audio-kept]').getAttribute('data-persist')
     ok('Settings says honestly whether the browser keeps the storage (persist asked)', persist === 'granted' || persist === 'not-granted', persist)
     await shot(page, '11-hosting-on-usage')

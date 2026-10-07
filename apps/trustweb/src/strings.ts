@@ -623,6 +623,7 @@ export const S = {
 
   // Settings > About (owner 2026-10-06): TrustWeb as part of EvoBioSys, the website's pages.
   aboutGroup: 'About',
+  aboutVersion: (sha: string, format: number) => `App version ${sha}, data format v${format}`,
   aboutBy: 'TrustWeb, by ',
   aboutEvoBioSys: 'EvoBioSys',
   aboutPage: { faq: 'FAQ', feedback: 'Feedback', privacy: 'Privacy', imprint: 'Imprint' } as Record<string, string>,
@@ -788,10 +789,11 @@ export const S = {
   hostTitle: 'Hosted on the Swiss server',
   hostNotOn: 'Hosting recordings on the Swiss server is not switched on yet.',
   hostToggle: 'Keep my recordings on the Swiss server too',
-  hostToggleHint: 'Sealed on this phone before they go: the server stores bytes it cannot open. Free up to 10 hours, at most 1 hour per recording. They also stay on this phone.',
+  // Wave 2 (P10, P17): counted in recordings and hours; free while we test; recordings also stay on this phone.
+  hostToggleHint: 'Free while we test: up to 10 recordings of up to 1 hour each. Sealed on this phone before they go: the server stores bytes it cannot open. Recordings also stay on this phone.',
   hostOpen: 'Hosted recordings',
   hostLead: 'Each recording: on this phone only, on the Swiss server, or both. Removing one from the server keeps it on this phone.',
-  hostUsage: (used: string, limit: string) => `${used} of ${limit} hours used`,
+  hostUsage: (recs: number, recsLimit: number, used: string, limit: string) => `${recs === 1 ? '1 recording' : `${recs} recordings`} of ${recsLimit} kept there; ${used} of ${limit} hours used`,
   hostListLoading: 'Looking...',
   hostNone: 'No recordings kept yet.',
   hostStatePhoneOnly: 'On this phone only',
@@ -816,7 +818,7 @@ export const S = {
     ? 'No recording is kept on this phone yet, so nothing goes up now.'
     : n === 1 ? 'This recording kept on this phone goes up now:' : `These ${n} recordings kept on this phone go up now:`),
   hostConfirmMore: (n: number) => `and ${n} more`,
-  hostConfirmHow: 'Each one is sealed on this phone first: the server stores bytes it cannot open, under an account made for this phone. From now on, every new recording goes up by itself too, until you switch this off. Free up to 10 hours, at most 1 hour per recording. They also stay on this phone.',
+  hostConfirmHow: 'Each one is sealed on this phone first: the server stores bytes it cannot open, under an account made for this phone. From now on, every new recording goes up by itself too, until you switch this off. Free while we test: up to 10 recordings of up to 1 hour each. Recordings also stay on this phone.',
   hostConfirmYes: (n: number) => (n === 0 ? 'Switch it on' : n === 1 ? 'Seal and store it' : `Seal and store these ${n}`),
   hostConfirmNo: 'Not now',
   hostUnknownTitle: 'On the server, not linked to anything on this phone',

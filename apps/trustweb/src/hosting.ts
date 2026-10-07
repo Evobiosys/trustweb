@@ -61,6 +61,18 @@ export function hoursOf(u: Pick<Usage, 'secondsUsed' | 'secondsLimit'>): { used:
   return { used: Math.round((u.secondsUsed / 3600) * 100) / 100, limit: Math.round((u.secondsLimit / 3600) * 100) / 100 }
 }
 
+/**
+ * The allowance in recordings AND hours (Jakob, wave 2, P10: count recordings,
+ * not gigabytes): recordings kept there of the "10 recordings of up to 1 hour"
+ * the plan allows, and hours used. The server still counts seconds and bytes;
+ * everything comes from its numbers.
+ */
+export function allowanceOf(u: Pick<Usage, 'secondsUsed' | 'secondsLimit' | 'recordings' | 'maxSecondsPerRecording'>): { recordings: number; recordingsLimit: number; hoursUsed: number; hoursLimit: number } {
+  const { used, limit } = hoursOf(u)
+  const perRecording = u.maxSecondsPerRecording > 0 ? u.maxSecondsPerRecording : 3600
+  return { recordings: Math.max(0, Math.floor(u.recordings)), recordingsLimit: Math.round(u.secondsLimit / perRecording), hoursUsed: used, hoursLimit: limit }
+}
+
 export function recFor(h: HostingState, meetingId: string): HostedRec | null {
   return h.recs.find((r) => r.meetingId === meetingId) ?? null
 }

@@ -5,6 +5,7 @@
  * links to them, each opening in a new tab.
  */
 import { el } from '../../demo/src/ui/dom'
+import { RECORD_FORMAT } from './model'
 import { S } from './strings'
 
 export const SITE_URL = 'https://idea2.site/trustweb/'
@@ -20,6 +21,11 @@ export enum AboutPage {
 
 export const ABOUT_PAGES: readonly AboutPage[] = [AboutPage.Faq, AboutPage.Feedback, AboutPage.Privacy, AboutPage.Imprint]
 
+/** The git short sha of this build; "dev" where no build defined it (unit tests). */
+export function appVersion(): string {
+  return typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : 'dev'
+}
+
 export function aboutUrl(page: AboutPage): string {
   return `${SITE_URL}${page}.html`
 }
@@ -34,5 +40,7 @@ export function aboutGroup(): HTMLElement[] {
     el('h4', { class: 'eyebrow' }, [S.aboutGroup]),
     el('p', { class: 'meta about-by' }, [S.aboutBy, outLink(EVOBIOSYS_URL, S.aboutEvoBioSys, 'about-org')]),
     el('div', { class: 'about-links' }, ABOUT_PAGES.map((p) => outLink(aboutUrl(p), S.aboutPage[p], 'about-link'))),
+    // Smooth updates are the hosted version's promise (P20): which build this is, and which data format it keeps.
+    el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), RECORD_FORMAT)]),
   ]
 }

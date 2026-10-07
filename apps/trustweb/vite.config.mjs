@@ -10,6 +10,7 @@
 // 404s every asset when the page is opened without its trailing slash.
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -52,7 +53,20 @@ function pwaFiles() {
   }
 }
 
+// Settings > About shows "App version <git short sha>, data format v1" (wave 2, P20).
+// A tree with uncommitted changes says so ("-dirty"); no git at all: "dev".
+function appVersion() {
+  try {
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim()
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd: here, encoding: 'utf8' }).trim() !== ''
+    return /^[0-9a-f]{4,40}$/.test(sha) ? sha + (dirty ? '-dirty' : '') : 'dev'
+  } catch {
+    return 'dev'
+  }
+}
+
 export default ({ command }) => ({
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   plugins: [pwaFiles()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).

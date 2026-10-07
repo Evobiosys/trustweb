@@ -11,7 +11,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { aboutUrl, AboutPage } from './about'
 import type { AudioStore } from './audio_store'
-import { fetchBack, hostAll, hostingRows, HostOutcome, hostOne, hoursOf, reconcile, toHost, unhost, unknownOnServer } from './hosting'
+import { allowanceOf, fetchBack, hostAll, hostingRows, HostOutcome, hostOne, reconcile, toHost, unhost, unknownOnServer } from './hosting'
 import type { HostingDeps } from './hosting'
 import type { AppState, PastMeeting } from './model'
 import { clock } from './recorder'
@@ -162,13 +162,16 @@ export function createHostingView(h: HostingViewHooks): HostingView {
 
   function usageView(): HTMLElement | null {
     if (!usage) return null
-    const { used, limit } = hoursOf(usage)
+    const a = allowanceOf(usage)
+    const used = a.hoursUsed
+    const limit = a.hoursLimit
+    const label = S.hostUsage(a.recordings, a.recordingsLimit, used.toFixed(2), String(limit))
     const pct = Math.min(100, limit ? (used / limit) * 100 : 0)
-    const bar = el('div', { class: 'usage-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(limit), 'aria-valuenow': String(used), 'aria-label': S.hostUsage(used.toFixed(2), String(limit)) }, [
+    const bar = el('div', { class: 'usage-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(limit), 'aria-valuenow': String(used), 'aria-label': label }, [
       el('span', {}),
     ])
     ;(bar.firstChild as HTMLElement).style.width = pct + '%'
-    return el('div', { class: 'usage', 'data-hosting-usage': used.toFixed(2) }, [bar, el('p', { class: 'meta' }, [S.hostUsage(used.toFixed(2), String(limit))])])
+    return el('div', { class: 'usage', 'data-hosting-usage': used.toFixed(2), 'data-hosting-recordings': String(a.recordings) }, [bar, el('p', { class: 'meta' }, [label])])
   }
 
   function allowanceView(): HTMLElement | null {

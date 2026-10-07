@@ -7,10 +7,14 @@
  *   item 7 (B8): the web search links: encoded, blank = none, https only, capped.
  *   item 8 (B4, B7): unreviewed / mass-imported / created step by step; "Reviewed"
  *     and "Mark all reviewed"; never in an answer; Undo import is not blocked by it.
+ *   item 9 (P10, P20): the allowance in recordings and hours; the version line.
  */
 import { Audience, AUDIENCES, audienceAdmits, LineStatus, Provenance, ProvenanceState, Ring, sharedItems, threadsForRing } from '../../src/model.ts'
 import { markBatchReviewed, markReviewed, provenanceState } from '../../src/provenance.ts'
 import { applyImport, parseImportFile, planImport, undoImport } from '../../src/inventory_import.ts'
+import { allowanceOf } from '../../src/hosting.ts'
+import { appVersion } from '../../src/about.ts'
+import { RECORD_FORMAT } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
 import { webSearchUrl } from '../../src/web_search.ts'
 import { SEARCH_ENGINES, SearchEngine } from '../../src/model.ts'
@@ -138,5 +142,26 @@ describe('item 8: the three provenance states', () => {
     const after = JSON.stringify(sharedItems([...threadsForRing(s, Ring.Friend).refs.values()]))
     expect(after).toBe(before)
     expect(/reviewed|tana|0123456789abcdef/i.test(after)).toBe(false)
+  })
+})
+
+describe('item 9: the allowance in recordings and hours; the version line', () => {
+  const usage = (extra) => ({ secondsUsed: 11700, secondsLimit: 36000, recordings: 4, maxSecondsPerRecording: 3600, ...extra })
+  it('recordings kept of the plan\'s recordings, and hours used, from the server\'s numbers', () => {
+    expect(allowanceOf(usage())).toEqual({ recordings: 4, recordingsLimit: 10, hoursUsed: 3.25, hoursLimit: 10 })
+    expect(allowanceOf(usage({ secondsLimit: 72000, maxSecondsPerRecording: 1800 })).recordingsLimit).toBe(40)
+    expect(allowanceOf(usage({ maxSecondsPerRecording: 0 })).recordingsLimit).toBe(10)
+    expect(allowanceOf(usage({ recordings: -2.5 })).recordings).toBe(0)
+  })
+  it('says both, and "free while we test; recordings also stay on this phone"', () => {
+    expect(S.hostUsage(4, 10, '3.25', '10')).toBe('4 recordings of 10 kept there; 3.25 of 10 hours used')
+    expect(S.hostUsage(1, 10, '0.50', '10')).toBe('1 recording of 10 kept there; 0.50 of 10 hours used')
+    expect(S.hostToggleHint).toMatch(/^Free while we test/)
+    expect(S.hostToggleHint).toMatch(/Recordings also stay on this phone/)
+  })
+  it('the version line: the build\'s sha ("dev" outside a Vite build) and data format v1', () => {
+    expect(RECORD_FORMAT).toBe(1)
+    expect(appVersion()).toBe('dev')
+    expect(S.aboutVersion('abc1234', RECORD_FORMAT)).toBe('App version abc1234, data format v1')
   })
 })

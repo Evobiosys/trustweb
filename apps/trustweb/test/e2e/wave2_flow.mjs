@@ -11,6 +11,8 @@
  *   8. B4, B7: imported lines say "unreviewed, from an import" until kept
  *      ("Reviewed" on the item sheet; "Mark all reviewed" for the import);
  *      typed lines say "created step by step".
+ *   9. P20: Settings > About says "App version <git short sha>, data format v1"
+ *      (the recordings-and-hours allowance is checked in hosting_flow).
  * Ports: Vite 5281, relay on 0. TW_SHOTS=<dir> for screenshots (phone + desktop).
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> npx tsx ../trustweb/test/e2e/wave2_flow.mjs
  */
@@ -179,6 +181,18 @@ async function partProvenance(a) {
   ok('no "unreviewed" chip left', await a.locator('.inv-text:has([data-unreviewed])').count() === 0)
 }
 
+/** Item 9: Settings > About names the build and the data format. */
+async function partAbout(a) {
+  await tab(a, 'Inventory')
+  await a.getByRole('button', { name: 'Settings' }).click()
+  await a.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 }).catch(() => {})
+  const line = a.locator('.sheet.on .about-version')
+  await line.scrollIntoViewIfNeeded()
+  ok('Settings > About: "App version <git short sha>, data format v1"', /^App version [0-9a-f]{7,40}(-dirty)?, data format v1$/.test((await line.innerText()).trim()), await line.innerText())
+  await shot(a, 'w2-12-about-version')
+  await closeSheet(a)
+}
+
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
@@ -192,6 +206,7 @@ async function main() {
     await partAudience(a)
     await partWebSearch(browser, vite.base, a)
     await partProvenance(a)
+    await partAbout(a)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++
