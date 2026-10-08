@@ -7,6 +7,8 @@
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
 import { WebSearchError } from './web_results'
+import { DegreesChoice } from './cascade'
+import { HOP_CAP, ReachChoice } from './hops'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 
 /** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
@@ -31,6 +33,15 @@ const REGION_LABEL: Readonly<Record<InferenceRegion, string>> = {
   [InferenceRegion.Se]: 'Sweden (EU)',
   [InferenceRegion.Eu]: 'EU',
 }
+
+/** "Ben", "Ben and Cleo", "Ben, Cleo and Dana". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]
+}
+
+/** Seconds a reach of `steps` waits at most, for the copy (one 30-second window per step). */
+const STEP_S = 30
 
 /** "Berget, Sweden (EU)", "OpenRouter, USA", "Infomaniak, Switzerland"; what the server did not say stays generic. */
 function routeLabel(r: TranscribeRoute | null): string {
@@ -603,6 +614,56 @@ export const S = {
   queryAsked: (n: number) => (n === 1 ? 'Asked 1 person in your web.' : `Asked ${n} people in your web.`),
   queryWindow: 'Every answer is held for 30 seconds, so a "no" looks exactly like "no match".',
   queryDirectOnly: 'Only your direct contacts are asked; nobody passes your ask on (Settings > Advanced).',
+  // Wave 6: how far an ask travels (hops.ts) and how far a line may travel (cascade.ts).
+  reachTitle: 'How far?',
+  reachLabel: {
+    [ReachChoice.Contacts]: 'My contacts',
+    [ReachChoice.FriendsOfFriends]: 'Friends of friends',
+    [ReachChoice.Three]: '3 steps',
+    [ReachChoice.Custom]: 'Custom',
+    [ReachChoice.NoLimit]: 'No limit',
+  } as Record<ReachChoice, string>,
+  reachHint: (steps: number, noLimit: boolean): string => noLimit
+    ? `As far as it goes through your web, at most ${HOP_CAP} steps; answers can take up to ${HOP_CAP * STEP_S} s.`
+    : steps <= 1
+      ? 'Only the people you are connected with. They answer from their own lines.'
+      : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${steps * STEP_S} s.`,
+  reachCustomAria: `Steps, 1 to ${HOP_CAP}`,
+  queryWindowFar: (s: number) => `Every answer is held until about ${s} s after you asked, so a "no" still looks exactly like "no match", and nobody can tell how far your ask went.`,
+  resultThrough: (names: readonly string[]) => `through ${nameList(names)}`,
+  askThrough: (names: readonly string[]) => `Through ${nameList(names)}`,
+  askThroughDoor: (door: string) => `Through ${door}'s front door`,
+  degreesTitle: 'How far it may travel',
+  degreesLabel: {
+    [DegreesChoice.Contacts]: 'My contacts only',
+    [DegreesChoice.FriendsOfFriends]: 'Friends of friends',
+    [DegreesChoice.Two]: 'Two degrees',
+    [DegreesChoice.Custom]: 'Custom',
+    [DegreesChoice.NoLimit]: 'No limit',
+  } as Record<DegreesChoice, string>,
+  degreesHint: {
+    [DegreesChoice.Contacts]: 'Only the people you are connected with can get it as an answer.',
+    [DegreesChoice.FriendsOfFriends]: 'Also their friends, when one of your contacts passes an ask on to you.',
+    [DegreesChoice.Two]: 'Also friends of their friends.',
+    [DegreesChoice.Custom]: 'As many degrees as you set.',
+    [DegreesChoice.NoLimit]: `As far as any ask travels (at most ${HOP_CAP} steps).`,
+  } as Record<DegreesChoice, string>,
+  degreesCustomAria: `Degrees, 1 to ${HOP_CAP - 1}`,
+  degreesPill: (d: number): string => (d < 0 ? 'any degree' : d === 0 ? 'my contacts' : d === 1 ? '+1 degree' : `+${d} degrees`),
+  degreesNoAudience: 'Nobody can ask about it, so it travels nowhere.',
+  itemSwitchOn: 'Shared',
+  itemSwitchOff: 'Paused',
+  itemSwitchAria: 'Shared or paused',
+  cascadeInfoAria: 'How sharing travels',
+  cascadeInfoTitle: 'How sharing travels',
+  cascadeInfo: [
+    'First choose who may ask about a thing: acquaintances, friends, close friends or only you. Each choice includes everyone closer to you.',
+    'Then choose how far it may travel: to your contacts only, or on to friends of friends when a contact passes an ask on to you.',
+    'Every answer still needs a yes, and a "no" looks exactly like "no match".',
+  ],
+  passOnTitle: 'Pass their asks on',
+  passOnHint: 'When they ask further than their own contacts, their ask may go on through you to yours. Whoever answers still decides with their own yes.',
+  logPassedOn: (n: number, back: number) => (back ? `passed on to ${n}, ${back} came back` : `passed on to ${n}`),
   queryWaiting: (s: number) => (s > 0 ? `Answers in about ${s} s` : 'Waiting for anyone still deciding...'),
   resultShared: (name: string) => `${name} chose to share`,
   resultNothing: 'No match',

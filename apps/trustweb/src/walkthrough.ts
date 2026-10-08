@@ -11,9 +11,12 @@
  *   the path of the current step, and one titled phone per person ("Maya's
  *   device") showing what changed there, including where nothing happens.
  *
- * Static on purpose: no relay, no app data, the same every time. Honest about
- * scope: two-hop asks are TrustWeb's design (the Manifund examples); the live
- * phones on the page answer one hop today, and the 3- and 4-person modes say so.
+ * Static on purpose: no relay, no app data, the same every time. Two-hop asks
+ * are live in the app since wave 6 (2026-10-08: "How far?" in the ask dock,
+ * hops.ts); this page still plays them as a script, and the 3- and 4-person
+ * modes say so. Honest about the middle: the answer travels back through the
+ * middle person's phone, which does not show it to them (it is not sealed
+ * past them yet: roadmap).
  */
 
 enum Tie {
@@ -151,10 +154,10 @@ const MODES: Mode[] = [
     label: '3 people · Job lead',
     title: 'A job lead, months after meeting',
     intro: 'Example A from our funding application (Manifund): an acquaintance finds an opening through a friend, without the person in the middle lifting a finger. Jonas is the friend in the middle.',
-    note: 'Second-degree query, scripted: a yes at each hop, Jonas\'s once in Settings, Maya\'s for this ask. The live phones on this page do one hop today.',
+    note: 'Second-degree query, played as a script: a yes at each hop, Jonas\'s once for asks from Sam, Maya\'s for this ask. In the app this is live: choose "How far?" when you ask.',
     people: [
       { id: 'sam', name: 'Sam', role: 'Jonas\'s acquaintance' },
-      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
+      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along and the answer back' },
       { id: 'maya', name: 'Maya', role: 'Jonas\'s friend' },
     ],
     links: [{ a: 'sam', b: 'jonas', tie: Tie.Acquaintance }, { a: 'jonas', b: 'maya', tie: Tie.Friend }],
@@ -171,7 +174,7 @@ const MODES: Mode[] = [
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
-        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. The first yes is Jonas\'s: he said once, in Settings, that asks from people he knows may go on to his friends. He is not asked each time, and he cannot read the answer.',
+        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. The first yes is Jonas\'s: he said once, in Settings, that asks from people he knows may go on to his friends. He is not asked each time, and the answer is not shown to him.',
         screens: { sam: ask('Who is hiring?', 1), jonas: relayYes('Sam', 'Who is hiring?'), maya: quiet('The ask arrives through Jonas and is checked on this phone.') },
       },
       {
@@ -182,7 +185,7 @@ const MODES: Mode[] = [
       {
         title: 'The answer travels back through Jonas', changed: ['maya', 'jonas'], path: ['maya', 'jonas', 'sam'],
         text: 'Maya shares. Her answer goes back the way the ask came, through Jonas\'s phone, end-to-end encrypted: only Maya and Sam can read it.',
-        screens: { sam: waiting(9), jonas: quiet('Passes on an encrypted answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Sam, through Jonas.') },
+        screens: { sam: waiting(9), jonas: quiet('Carries the answer back to Sam. It is not shown to Jonas.'), maya: card('ok', 'Shared with Sam, through Jonas.') },
       },
       {
         title: 'Sam has a job lead', changed: ['sam'], path: ['jonas', 'sam'],
@@ -218,10 +221,10 @@ const MODES: Mode[] = [
     label: '4 people · Funder',
     title: 'A funder you have never met, through two friends',
     intro: 'Example B from our funding application (Manifund): a friend finds a fund through your close friend\'s network, someone neither of you knows. Jonas is the friend in the middle.',
-    note: 'Design preview: asks that pass through a second person are how TrustWeb is designed. The live phones on this page do one hop today.',
+    note: 'Played as a script: asks that pass through a second person. In the app this is live: choose "How far?" when you ask.',
     people: [
       { id: 'lena', name: 'Lena', role: 'Jonas\'s friend, open-source project' },
-      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along, cannot read it' },
+      { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along and the answer back' },
       { id: 'maya', name: 'Maya', role: 'Jonas\'s close friend' },
       { id: 'aisha', name: 'Aisha', role: 'Maya\'s acquaintance, no app' },
     ],
@@ -243,7 +246,7 @@ const MODES: Mode[] = [
       },
       {
         title: 'Lena calls into her web', changed: ['lena', 'jonas', 'maya'], path: ['lena', 'jonas', 'maya'],
-        text: '"Any new open-source funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and he cannot read the answer.',
+        text: '"Any new open-source funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and the answer is not shown to him.',
         screens: { lena: ask('Any new open-source funding?', 1), jonas: quiet('Passed on. Jonas is not asked each time.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
@@ -254,7 +257,7 @@ const MODES: Mode[] = [
       {
         title: 'The answer travels back through Jonas', changed: ['maya', 'jonas'], path: ['maya', 'jonas', 'lena'],
         text: 'Maya shares only what she herself noted. The answer goes back through Jonas, end-to-end encrypted: only Maya and Lena can read it. Lena learns nothing else about Aisha.',
-        screens: { lena: waiting(9), jonas: quiet('Passes on an encrypted answer. Jonas cannot read it.'), maya: card('ok', 'Shared with Lena, through Jonas.'), aisha: noApp(AISHA_REAL) },
+        screens: { lena: waiting(9), jonas: quiet('Carries the answer back to Lena. It is not shown to Jonas.'), maya: card('ok', 'Shared with Lena, through Jonas.'), aisha: noApp(AISHA_REAL) },
       },
       {
         title: 'Lena finds a funder, through Jonas and Maya', changed: ['lena'], path: ['jonas', 'lena'],

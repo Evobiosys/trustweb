@@ -29,7 +29,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, passesAsksOn, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -78,6 +78,9 @@ import { ICONS } from './icons'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
+import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
+import { cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
+import { joinFrontDoor, mergeOneJakob, personOfPeer } from './one_jakob'
 
 enum Screen {
   Start = 'start',
@@ -230,7 +233,9 @@ try {
   if (state) {
     const sourced = migrateSources(state)
     const noted = normaliseNoteFields(state)
-    if (sourced || noted) save()
+    // Wave 6 (N6): a demo account made before had its inviter and his front door as two people; now one (one_jakob.ts).
+    const merged = mergeOneJakob(state, S.demoPeerContext)
+    if (sourced || noted || merged) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -266,6 +271,8 @@ let pastSearchText = ''
 let queryText = ''
 let askRun: {
   text: string; asked: number; askedPeerIds: string[]; startedAt: number; results: AskResult[] | null
+  /** Wave 6: the reach it went out with (hops.ts), for the countdown. */
+  reach: number
 } | null = null
 const askQueue: IncomingAsk[] = []
 let askShowing: IncomingAsk | null = null
@@ -362,7 +369,22 @@ const net = new Net({
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text) => onSharedText(peer, text),
+  mayPassOnFrom: (peer) => mayPassOnFrom(peer),
 })
+
+/**
+ * Wave 6: may this peer's asks go on through this phone? The person's own
+ * setting wins; then this phone's own front door (demo-peer.json) and the demo
+ * accounts it allowed pass on by default (Jakob 2026-10-08: "most importantly
+ * for the demo, the querying through me should be possible"); everyone else by
+ * ring (model.ts passesAsksOn: close friends and friends yes, acquaintances no).
+ */
+function mayPassOnFrom(peer: Peer): boolean {
+  const person = personOfPeer(st(), peer.id)
+  if (typeof person?.passOn === 'boolean') return person.passOn
+  if (demoPeer?.did === peer.did || demoAccounts().some((t) => t.peerId === peer.id)) return true
+  return passesAsksOn(person ?? { ring: peer.ring })
+}
 
 function notify(body: string): void {
   if (!state?.notificationsOn || !document.hidden || typeof Notification === 'undefined') return
@@ -878,7 +900,7 @@ async function completePendingConnect(): Promise<void> {
   // A demo account: also connect to the demo inventory peer the link names,
   // then open the ask right away (that is what the account is for).
   if (demoLink) {
-    if (demoLink.peer) await connectDemoPeer(demoLink.peer)
+    if (demoLink.peer) await connectDemoPeer(demoLink.peer, person)
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
   } else {
@@ -893,12 +915,16 @@ async function completePendingConnect(): Promise<void> {
   }
 }
 
-/** The demo inventory (services/trustweb-peer) named in a demo-account link: one more acquaintance. */
-async function connectDemoPeer(ref: DemoPeerRef): Promise<void> {
+/**
+ * The demo inventory (services/trustweb-peer) named in a demo-account link: one
+ * more peer. When it carries the inviter's own name it IS the inviter's
+ * inventory (N6, one Jakob): it joins that person instead of a second node.
+ */
+async function connectDemoPeer(ref: DemoPeerRef, inviter?: Person): Promise<void> {
   const s = st()
   if (s.peers.some((p) => p.did === ref.did)) return
   const peer = await net.completeConnect({ did: ref.did, from: { id: ref.id, displayName: ref.name } }, Ring.Acquaintance)
-  if (!s.people.some((p) => p.peerId === peer.id)) {
+  if (!personOfPeer(s, peer.id) && !joinFrontDoor(inviter, peer.id, peer.displayName)) {
     s.people.push({ id: randomId(8), name: peer.displayName, context: S.demoPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
   }
   save()
@@ -1066,7 +1092,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       path.setAttribute('opacity', p.peerId ? '0.85' : '0.35')
       if (!p.peerId) path.setAttribute('stroke-dasharray', '3 4')
       svg.appendChild(path)
-      const mark = p.peerId ? marks.get(p.peerId) : undefined
+      const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
         el('span', {}, [p.name]),
@@ -1324,11 +1350,20 @@ function itemSheet(itemId: string): void {
   const s = st()
   const item = s.inventory.find((i) => i.id === itemId)
   if (!item) return
+  const redraw = (): void => { save(); render(); itemSheet(item.id) }
   openSheet([
-    el('h3', {}, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
+    // Jakob's sketch (10-07, #21/#22): the X top right, the on/off switch below it on the right; then who, then how far.
+    el('div', { class: 'item-head' }, [
+      el('h3', {}, [item.text, isDemoItem(s, item.id) ? dummyChip() : null]),
+      el('div', { class: 'item-head-side' }, [
+        el('button', { class: 'x', 'aria-label': S.close, 'data-item-close': '1', onclick: closeSheet }, ['×']),
+        onOffSwitch(item.included, () => { item.included = !item.included; redraw() }, { 'data-item-switch': item.id }),
+      ]),
+    ]),
     el('p', { class: 'meta' }, [S.itemSheetLead]),
     el('p', { class: 'meta' }, [item.included ? S.itemWho(S.audienceLabel[item.audience] ?? S.audienceLabel[Audience.OnlyMe]) : S.itemPaused]),
     ...itemAudienceChooser(item),
+    ...degreesChooser(item, (d) => { item.degrees = d; redraw() }),
     sourceFor(item.source, item.text),
     itemContextView(item),
     ...provenanceStateView(item),
@@ -1388,6 +1423,7 @@ function personSheet(personId: string): void {
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
+    p.peerId ? passOnRow(p, (next) => { p.passOn = next; save(); personSheet(p.id) }) : null,
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
@@ -2781,7 +2817,10 @@ function recordFound(text: string, results: AskResult[]): void {
       from: r.peerName, peerId: r.peerId,
       items: (Array.isArray(r.decoded?.shared?.items) ? r.decoded.shared.items : [])
         .filter((it) => typeof it?.text === 'string' && it.text.trim())
-        .map((it) => ({ text: str(it.text, 500), context: str(it.context, 200), when: str(it.when, 60) })),
+        .map((it) => {
+          const via = readVia(it.via)
+          return { text: str(it.text, 500), context: str(it.context, 200), when: str(it.when, 60), ...(via.length ? { via } : {}) }
+        }),
     }))
     .filter((sh) => sh.items.length)
   if (!shared.length) return
@@ -2799,7 +2838,7 @@ function foundView(s: AppState, title: string = S.foundTitle): HTMLElement {
       el('p', { class: 'q' }, ['"' + f.text + '"']),
       ...f.shared.map((sh) => el('div', { class: 'outcome shared' }, [
         el('b', {}, [S.resultShared(sh.from)]),
-        ...sh.items.map((it) => el('div', { class: 'shared-item' }, [el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when])])),
+        ...sh.items.map((it) => el('div', { class: 'shared-item' }, [el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when]), throughTag(it.via)])),
       ])),
     ])),
   ])
@@ -3354,8 +3393,10 @@ function screenInventory(): Node[] {
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   // Top right, in the slot ⋮ has on Web, so the QR keeps its place (owner 2026-10-06).
-  const gear = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
-  gear.innerHTML = icon('settings')
+  const gearBtn = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
+  gearBtn.innerHTML = icon('settings')
+  // Wave 6: a small (i) just below Settings explains the cascade (Jakob 2026-10-07).
+  const gear = el('div', { class: 'gear-stack' }, [gearBtn, cascadeInfoButton(() => openSheet(cascadeInfoContent()))])
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
@@ -3370,15 +3411,22 @@ function screenInventory(): Node[] {
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
+      // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
+      // under the text first who can ask, then how far it may travel.
       ...s.inventory.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
-        el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
-          item.text, isDemoItem(s, item.id) ? dummyChip() : null,
-          provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
+        el('div', { class: 'inv-main' }, [
+          el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
+            item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+            provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
+          ]),
+          el('div', { class: 'inv-actions' }, [
+            audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
+            degreesPill(item, () => itemSheet(item.id)),
+          ]),
         ]),
-        el('div', { class: 'inv-actions' }, [
-          audiencePill(item.audience, (a) => { item.audience = a; save(); render() }),
-          el('button', { class: 'mini', onclick: () => { item.included = !item.included; save(); render() } }, [item.included ? S.invOn : S.invOff]),
+        el('div', { class: 'inv-side' }, [
           el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { s.inventory = s.inventory.filter((x) => x !== item); if (item.imageId) feed.dropImage(item.imageId); save(); render() } }, ['×']),
+          onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
       backup.card(),
@@ -3417,6 +3465,7 @@ function requestsSheet(): void {
       e.peerId && demoPeerIds.has(e.peerId) ? el('span', { class: 'tagpill demo-chip' }, [S.demoAcctChip]) : null,
       el('span', {}, ['"' + e.text + '"']),
       el('em', {}, [S.logOutcome[e.outcome]]),
+      e.passedOn ? el('small', { class: 'log-hop', 'data-passed-on': String(e.passedOn) }, [S.logPassedOn(e.passedOn, e.cameBack ?? 0)]) : null,
     ])),
     el('p', { class: 'foot' }, [S.logFoot]),
   ])
@@ -3434,19 +3483,20 @@ const SUGGESTIONS = [
 
 let countdownTimer: ReturnType<typeof setInterval> | undefined
 
-function secondsLeft(startedAt: number): number {
-  return Math.max(0, Math.ceil((startedAt + ANSWER_WINDOW_MS - Date.now()) / 1000))
+/** Seconds until the answers of an ask with this reach are due (one window per step, hops.ts). */
+function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
+  return Math.max(0, Math.ceil((startedAt + askWaitMs(reach, ANSWER_WINDOW_MS) - Date.now()) / 1000))
 }
 
 async function runAsk(text: string): Promise<void> {
   const t = text.trim()
   if (!t) return
   const peers = st().peers
-  askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null }
+  askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: askReachOf(st()) }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
     const w = document.getElementById('tw-wait')
-    if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt))
+    if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
   const results = await net.ask(t)
@@ -3465,6 +3515,7 @@ function resultsView(results: AskResult[]): HTMLElement[] {
     el('b', {}, [S.resultShared(r.decoded?.shared?.from || r.peerName)]),
     ...(r.decoded?.shared?.items ?? []).map((it) => el('div', { class: 'shared-item' }, [
       el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when]),
+      throughTag(it.via),
     ])),
   ]))
 }
@@ -3483,10 +3534,10 @@ function queryDock(s: AppState): HTMLElement {
         el('p', { class: 'q' }, ['"' + run.text + '"']),
         el('p', {}, [S.queryAsked(run.asked)]),
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
-        el('p', { class: 'hint' }, [S.queryWindow]),
+        el('p', { class: 'hint' }, [run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar(Math.round(askWaitMs(run.reach, ANSWER_WINDOW_MS) / 1000))]),
         run.results
           ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text, webResults).el])
-          : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt))])]),
+          : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
   return el('section', { class: 'query-dock', 'aria-label': S.queryTitle }, [
@@ -3497,6 +3548,11 @@ function queryDock(s: AppState): HTMLElement {
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
+      // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
+      reachChooser(askReachOf(s), askDirectOnly(s) || busy, (reach) => {
+        if (reach === HOPS_DEFAULT) delete s.askReach; else s.askReach = reach
+        save(); render()
+      }),
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
@@ -3534,7 +3590,7 @@ function renderAsk(): void {
   overlay.append(
     el('div', { class: 'orb orb1' }), el('div', { class: 'orb orb2' }),
     el('div', { class: 'ask' }, [
-      el('span', { class: 'eyebrow' }, [a.relayed ? S.askRelayed(a.fromName) : S.askEyebrow]),
+      el('span', { class: 'eyebrow' }, [askEyebrow(a)]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       decided === null
@@ -3552,6 +3608,13 @@ function renderAsk(): void {
           ]),
     ]),
   )
+}
+
+/** Who handed this ask over: a front door (older doors name themselves as the asker), the people it came through, or nobody. */
+function askEyebrow(a: IncomingAsk): string {
+  if (a.doorName) return S.askThroughDoor(a.doorName)
+  if (a.relayed) return S.askRelayed(a.fromName)
+  return a.through.length ? S.askThrough(a.through) : S.askEyebrow
 }
 
 function decide(share: boolean): void {
@@ -3594,6 +3657,8 @@ if (state && !state.testOf?.handedOverAt) {
   offerDemoContent()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
+  // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).
+  if (!solo && !state.testOf) void probeDemoPeer()
   // Round B: a cut-off server job reads "may still be charged"; early packs whose transcript is done go out;
   // kept meetings whose transcript was still arriving look for it.
   if (swiss.enabled()) {

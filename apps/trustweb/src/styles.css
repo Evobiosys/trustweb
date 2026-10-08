@@ -691,3 +691,31 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .pm-snip{display:block; font-style:normal; font-size:12.5px; color:var(--ink-soft); margin-top:2px; overflow-wrap:anywhere}
 .pm-general{white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0 10px}
 .item-context{margin:10px 0}
+
+/* Wave 6: how far asks and items travel (hops_view.ts) */
+.inv{flex-direction:row; align-items:flex-start; gap:10px}
+.inv-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:8px}
+.inv-side{display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0}
+.inv-side .x{align-self:flex-end}
+.deg-pill{border:1.5px dashed var(--teal); background:var(--card); color:var(--teal); border-radius:999px; padding:4px 11px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0}
+.deg-pill:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.switch{display:inline-flex; align-items:center; gap:6px; padding:3px 9px 3px 3px; border-radius:999px}
+.switch .knob{width:26px; height:16px; border-radius:999px; background:var(--line); position:relative; transition:background .15s}
+.switch .knob::after{content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; transition:transform .15s}
+.switch.on{border-color:var(--teal); color:var(--teal)}
+.switch.on .knob{background:var(--teal)}
+.switch.on .knob::after{transform:translateX(10px)}
+.switch-lbl{font-size:11.5px}
+.switch:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.item-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+.item-head h3{flex:1; min-width:0}
+.item-head-side{display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0}
+.gear-stack{position:relative; display:inline-flex}
+/* just below Settings, outside the header's flow, never over the gear (its hit area stays below it) */
+.hint-i.cascade-i{top:calc(100% + 9px); right:auto; left:50%; transform:translateX(-50%)}
+.hint-i.cascade-i::before{inset:-4px}
+.reach{display:flex; flex-direction:column; gap:6px; margin:6px 0}
+.reach-chips{display:flex; flex-wrap:wrap; gap:6px}
+.field.steps{width:92px}
+.through{font-style:normal; font-size:11.5px; color:var(--teal); font-weight:700}
+.log-hop{display:block; font-size:11.5px; color:var(--ink-soft)}

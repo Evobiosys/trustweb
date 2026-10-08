@@ -15,6 +15,13 @@
  * that window. A person who takes longer than 30 s to decide is answered the
  * moment they decide; the UI says so.
  *
+ * Wave 6 (hops.ts): an ask may travel further than one step. A phone that may
+ * pass it on (the asker's reach, this person's "pass their asks on", no cycle)
+ * asks its own contacts the moment the ask arrives, without waiting for its
+ * person, and puts what came back ("through <me>") into its ONE sealed answer,
+ * which leaves at a moment fixed by the envelope alone (one window per step
+ * left), whether or not anything was passed on.
+ *
  * DIDs stay in this layer. Nothing here hands a DID string to the UI.
  */
 import { createIdentity, deserializeIdentity, serializeIdentity, ecdhSharedSecret } from '../../demo/src/did'
@@ -31,18 +38,46 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, ChatEnvelope, DecodedAnswer, MatchResult, QueryEnvelope, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, ChatEnvelope, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import { askSources } from './cascade'
 import { directFlag, surfacesHere } from './direct_ask'
+import {
+  askerOf, askFields, askReachOf, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
+  mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
+} from './hops'
+import type { HopInfo } from './hops'
 import { askTemplate } from './lexicon'
-import { askDirectOnly, LogOutcome, sharedItems, threadsForRing } from './model'
-import type { AppState, LineRef, MatchScope, Peer, Ring } from './model'
+import { LogOutcome, RINGS, Ring, sharedItems } from './model'
+import type { AppState, LineRef, LogEntry, MatchScope, Peer } from './model'
 
 export type { RelayStatus }
 
 export const ANSWER_WINDOW_MS = RELAY_DEADLINE_MS
-const ASK_TIMEOUT_MS = 180_000
 const RELEVANCE_BAND = 0.5
 const MAX_SHARED = 3
+/** A passed-on ask stops waiting for the next step this share of a window before this phone's own moment, to seal and send in time. */
+const HOP_COLLECT_LEAD = 0.1
+
+/**
+ * U2's matcher hook (wave 6): the ONE place this file builds a QueryTemplate
+ * from free text, so swapping in the forgiving matcher is one line here.
+ */
+function templateFor(text: string): QueryTemplate {
+  return askTemplate(text)
+}
+
+/** The ONE place this file runs the matcher on an incoming ask (with apps/demo's prune). */
+function matchAsk(tpl: QueryTemplate, threads: ChatThread[]): MatchResult {
+  return prune(matchTemplate(tpl, threads))
+}
+
+/** What came back from the people this phone passed an ask on to. */
+interface HopHarvest {
+  asked: number
+  items: SharedItem[]
+}
+
+const NO_HARVEST: HopHarvest = { asked: 0, items: [] }
 
 export interface IncomingAsk {
   qid: string
@@ -52,6 +87,14 @@ export interface IncomingAsk {
   receivedAt: number
   /** Forwarded by a front-door peer (services/trustweb-peer) on behalf of somebody who asked it. */
   relayed: boolean
+  /**
+   * Wave 6: the people this ask came through on its way here, after its asker
+   * (the sender last): "Ann asks, through Ben". Empty: asked by `fromName`
+   * directly (or by a front door, see `relayed`).
+   */
+  through: string[]
+  /** Wave 6: the front door that forwarded it (a travelling ask; `fromName` is then the person who asked the door). Null: none or an older door. */
+  doorName: string | null
   decide(share: boolean): Promise<void>
 }
 
@@ -85,6 +128,16 @@ export interface NetHooks {
   askScope(peer: Peer): MatchScope | undefined
   /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). */
   onText(peer: Peer, text: string, ts: number): void
+  /** Wave 6: may this peer's asks go on through this phone to its other contacts (models.ts passesAsksOn, per person)? */
+  mayPassOnFrom(peer: Peer): boolean
+}
+
+/** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
+export interface NetOptions {
+  /** A shorter answer window; production always uses ANSWER_WINDOW_MS. */
+  answerWindowMs?: number
+  /** The relay's origin outside a browser; production uses the page's own origin. */
+  relayOrigin?: string
 }
 
 function upsertPeer(s: AppState, p: Peer): Peer {
@@ -110,9 +163,15 @@ export class Net {
   private keys = new Map<string, Promise<CryptoKey>>()
   private awaiting = new Map<string, (env: AnswerEnvelope) => void>()
   private seenQids = new Set<string>()
+  private roots = new RootMemory()
   private starting: Promise<void> | null = null
+  private readonly windowMs: number
+  private readonly relayOrigin: string | undefined
 
-  constructor(private readonly hooks: NetHooks) {}
+  constructor(private readonly hooks: NetHooks, opts: NetOptions = {}) {
+    this.windowMs = opts.answerWindowMs ?? ANSWER_WINDOW_MS
+    this.relayOrigin = opts.relayOrigin
+  }
 
   /** This device's relay identity, minted once and kept in the app's own record. */
   private ensureIdentity(): DidIdentity {
@@ -121,7 +180,7 @@ export class Net {
     if (s.identity) {
       this.identity = deserializeIdentity(s.identity)
     } else {
-      this.identity = createIdentity(location.origin + '/relay')
+      this.identity = createIdentity((this.relayOrigin ?? location.origin) + '/relay')
       s.identity = serializeIdentity(this.identity)
       this.hooks.save()
     }
@@ -146,7 +205,7 @@ export class Net {
     if (this.starting) return this.starting
     this.starting = (async () => {
       const identity = this.ensureIdentity()
-      const channel = createRelayChannel()
+      const channel = createRelayChannel(this.relayOrigin ? { relayOrigin: this.relayOrigin } : {})
       this.channel = channel
       channel.onStatus((status) => this.hooks.onStatus(status))
       channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
@@ -257,10 +316,22 @@ export class Net {
     await this.channel.send(peer.did, env, key)
   }
 
-  private log(peer: Peer, text: string, outcome: LogOutcome): void {
+  /** Logs an ask the moment it is decided (before its answer leaves, as apps/demo's answer_log.ts does). */
+  private log(peer: Peer, text: string, outcome: LogOutcome): LogEntry {
     const s = this.hooks.state()
-    s.log.unshift({ id: randomId(8), at: Date.now(), from: peer.displayName, text, outcome, peerId: peer.id })
+    const entry: LogEntry = { id: randomId(8), at: Date.now(), from: peer.displayName, text, outcome, peerId: peer.id }
+    s.log.unshift(entry)
     s.log = s.log.slice(0, 50)
+    this.hooks.save()
+    this.hooks.onLogChanged()
+    return entry
+  }
+
+  /** Adds to a log entry what passing the ask on did (wave 6), once that is known. */
+  private logHarvest(entry: LogEntry, got: HopHarvest): void {
+    if (!got.asked) return
+    entry.passedOn = got.asked
+    if (got.items.length) entry.cameBack = got.items.length
     this.hooks.save()
     this.hooks.onLogChanged()
   }
@@ -271,23 +342,45 @@ export class Net {
     const receivedAt = Date.now()
     const peer = this.peerByDid(fromDid)
     if (!peer || !this.channel) return
+    const s = this.hooks.state()
+    const info = hopInfo(q)
     const text = q.freeText ?? ''
-    const tpl = askTemplate(text)
-    const { threads, refs } = threadsForRing(this.hooks.state(), peer.ring, this.hooks.askScope(peer))
-    // Passed on although its asker wanted direct contacts only (direct_ask.ts): answered like no match, never shown.
-    const match = text && surfacesHere(q) ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
+    const tpl = templateFor(text)
+    // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
+    const deadline = receivedAt + answerDelayMs(info, this.windowMs)
+    // The same ask again by another path, a cycle back to this phone, or one that went further than
+    // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
+    const repeat = this.roots.repeat(info.root, receivedAt)
+    const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
+    const silent = repeat || cycle || !surfacesHere(q)
+    const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
+    const match = text && !silent ? matchAsk(tpl, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const key = await this.pairKey(peer)
+    // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
+    // in before this phone's own moment, whatever the person does.
+    const harvest = !silent && mayCascade(q) && this.hooks.mayPassOnFrom(peer)
+      ? this.passOn(q, info, peer, deadline)
+      : Promise.resolve(NO_HARVEST)
 
-    const answer = async (payload: SharedPayload | null): Promise<void> => {
-      await settleAt(receivedAt, ANSWER_WINDOW_MS)
+    const answer = async (own: SharedItem[]): Promise<HopHarvest> => {
+      const got = await harvest
+      await settleAt(receivedAt, deadline - receivedAt)
+      const items = dedupeItems([...own, ...markThrough(got.items, s.me.displayName)]).slice(0, MAX_SHARED)
+      const payload: SharedPayload | null = items.length ? { from: s.me.displayName, templateId: tpl.id, items } : null
       const env = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
       try { await this.channel?.send(peer.did, env, key) } catch { /* asker times out and sees "no match" */ }
+      return got
     }
 
+    // A repeat or a cycle is not a new ask: answered (nothing, at the same moment) but not logged a second time.
+    if (repeat || cycle) {
+      await answer([])
+      return
+    }
     if (!surface) {
-      this.log(peer, text, LogOutcome.NoMatch)
-      await answer(null)
+      const entry = this.log(peer, text, LogOutcome.NoMatch)
+      this.logHarvest(entry, await answer([]))
       return
     }
 
@@ -297,54 +390,89 @@ export class Net {
     let decided = false
     this.hooks.onAsk({
       qid: q.qid,
-      fromName: peer.displayName,
+      fromName: askerOf(info, peer.displayName),
       text,
       matches,
       receivedAt,
-      relayed: q.relayed === true,
+      relayed: q.relayed === true && (info.door || !info.travels),
+      doorName: info.door ? peer.displayName : null,
+      through: info.door ? [] : throughOf(info, peer.displayName),
       decide: async (share: boolean) => {
         if (decided) return
         decided = true
-        this.log(peer, text, share ? LogOutcome.Shared : LogOutcome.Declined)
-        const payload: SharedPayload | null = share
-          ? {
-              from: this.hooks.state().me.displayName,
-              templateId: tpl.id,
-              items: sharedItems(matches),
-            }
-          : null
-        await answer(payload)
+        const entry = this.log(peer, text, share ? LogOutcome.Shared : LogOutcome.Declined)
+        this.logHarvest(entry, await answer(share ? sharedItems(matches) : []))
       },
     })
   }
 
   /**
+   * The next step: asks this phone's own contacts (not the sender, nobody in
+   * `seen`, nobody only intended, closest rings first, at most MAX_FANOUT)
+   * and gathers what they shared until shortly before this phone's moment.
+   */
+  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number): Promise<HopHarvest> {
+    const s = this.hooks.state()
+    const root = info.root
+    if (!root) return NO_HARVEST
+    const self = await seenHash(root, s.me.id)
+    const fromSender = await seenHash(root, sender.id)
+    const excluded = new Set([...info.seen, self, fromSender])
+    const targets: Peer[] = []
+    for (const p of [...s.peers].sort((a, b) => RINGS.indexOf(a.ring) - RINGS.indexOf(b.ring))) {
+      if (targets.length >= MAX_FANOUT) break
+      if (p.did === sender.did || p.ring === Ring.Intending) continue
+      if (excluded.has(await seenHash(root, p.id))) continue
+      targets.push(p)
+    }
+    if (!targets.length) return NO_HARVEST
+    const fields = cascadeFields(q, info, [self, fromSender], q.from.displayName || sender.displayName)
+    const waitMs = Math.max(0, deadline - Date.now() - this.windowMs * HOP_COLLECT_LEAD)
+    const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))
+    const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
+    return { asked: targets.length, items }
+  }
+
+  /** One ask to one peer; resolves with the decoded answer, or null when none came within `timeoutMs`. */
+  private async sendAsk(peer: Peer, freeText: string, extra: Partial<QueryEnvelope>, timeoutMs: number): Promise<DecodedAnswer | null> {
+    const s = this.hooks.state()
+    const q: QueryEnvelope = {
+      v: 1, t: 'query', from: s.me,
+      templateId: templateFor(freeText).id, templateVersion: 1,
+      qid: randomId(12), issuedAt: Date.now(), freeText, ...extra,
+    }
+    const key = await this.pairKey(peer)
+    const answered = new Promise<AnswerEnvelope | null>((resolve) => {
+      const timer = setTimeout(() => { this.awaiting.delete(q.qid); resolve(null) }, timeoutMs)
+      this.awaiting.set(q.qid, (env) => { clearTimeout(timer); this.awaiting.delete(q.qid); resolve(env) })
+    })
+    try {
+      if (!this.channel) throw new Error('relay not connected')
+      await this.channel.send(peer.did, q, key)
+    } catch {
+      this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
+    }
+    const env = await answered
+    return env ? interpret(env, key) : null
+  }
+
+  /**
    * Ask every connected peer; resolves once every answer is in or has timed
-   * out. With "Ask only my direct contacts" on, each ask says so (`direct`).
+   * out. With "Ask only my direct contacts" on, each ask says so (`direct`);
+   * otherwise it carries the reach chosen under "How far?" (none for one step).
    */
   async ask(text: string): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
-    const flag = directFlag(askDirectOnly(s))
-    return Promise.all(s.peers.map(async (peer): Promise<AskResult> => {
-      const q: QueryEnvelope = {
-        v: 1, t: 'query', from: s.me,
-        templateId: askTemplate(freeText).id, templateVersion: 1,
-        qid: randomId(12), issuedAt: Date.now(), freeText, ...flag,
-      }
-      const key = await this.pairKey(peer)
-      const answered = new Promise<AnswerEnvelope | null>((resolve) => {
-        const timer = setTimeout(() => { this.awaiting.delete(q.qid); resolve(null) }, ASK_TIMEOUT_MS)
-        this.awaiting.set(q.qid, (env) => { clearTimeout(timer); this.awaiting.delete(q.qid); resolve(env) })
-      })
-      try {
-        await this.channel?.send(peer.did, q, key)
-      } catch {
-        this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
-      }
-      const env = await answered
-      return { peerId: peer.id, peerName: peer.displayName, decoded: env ? await interpret(env, key) : null }
-    }))
+    const reach = askReachOf(s)
+    const root = randomId(12)
+    const extra: Partial<QueryEnvelope> = { ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)) }
+    const timeoutMs = askTimeoutMs(reach, this.windowMs)
+    return Promise.all(s.peers.map(async (peer): Promise<AskResult> => ({
+      peerId: peer.id,
+      peerName: peer.displayName,
+      decoded: await this.sendAsk(peer, freeText, extra, timeoutMs),
+    })))
   }
 }

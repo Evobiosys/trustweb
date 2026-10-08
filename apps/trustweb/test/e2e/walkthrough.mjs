@@ -82,7 +82,7 @@ async function main() {
     await page.locator('.wt-tick').nth(2).click()
     ok('4-person mode: nothing reaches Aisha, who has no app', /No TrustWeb app[\s\S]*Nothing reaches Aisha/.test(await page.locator('.wt-screen').nth(3).innerText()))
     ok('the strip lights the path Lena, Jonas, Maya', await page.locator('.wt-strip .nd.on').count() === 3 && await page.locator('.wt-strip .ln.on').count() === 2)
-    ok('two-hop honesty note shows', /do one hop today/.test(await page.locator('.wt-note').innerText()))
+    ok('two-hop note: played as a script, live in the app (wave 6)', /live: choose "How far\?"/.test(await page.locator('.wt-note').innerText()))
     // Wave 3: "Ask only my direct contacts": the ask stops at Jonas, no "(through Jonas)" answer.
     const direct = page.locator('[data-wt-direct]')
     ok('wave 3: the "Ask only direct contacts" toggle shows in the modes with a second hop, off by default', await direct.isVisible() && !(await direct.isChecked()))
