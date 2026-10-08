@@ -165,7 +165,8 @@ async function partSwitchAndSecondDegree(browser, base) {
   await page.locator('.wt-tick').nth(5).click()
   const answer = await page.locator('.wt-screen').nth(0).innerText()
   ok('the answer is labelled "through Jonas", from Maya\'s inventory, not Jonas\'s', /through Jonas/.test(answer) && /Not in Jonas's inventory: in Maya's/.test(answer), answer)
-  ok('honest: scripted, the live phones do one hop', /scripted/.test(await page.locator('.wt-note').innerText()) && /one hop today/.test(await page.locator('.wt-note').innerText()))
+  // Wave 6 (U1): the app is live now: the script says it is played as a script AND that the real thing is "How far?" when you ask.
+  ok('honest: played as a script, and the real thing is live in the app ("How far?")', /script/.test(await page.locator('.wt-note').innerText()) && /live: choose "How far\?"/.test(await page.locator('.wt-note').innerText()))
   await shot(page, 'w2-07-second-degree')
   await ctx.close()
 }
