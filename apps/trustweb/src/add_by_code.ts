@@ -235,17 +235,23 @@ export async function resolveAddInput(deps: ResolveDeps, input: string): Promise
   if (!parsed.ok) return { ok: false, failure: { type: 'parse', error: parsed.error } }
   switch (parsed.kind) {
     case AddKind.LongLink:
-      return { ok: true, kind: parsed.kind, link: parsed.link }
-    case AddKind.Did: {
-      const ready = didReadiness(parsed.did, deps.origin)
-      return ready.ok
-        ? { ok: true, kind: parsed.kind, link: paramsForDid(parsed.did) }
-        : { ok: false, failure: { type: 'did', problem: ready.problem, ...(ready.relayOrigin ? { relayOrigin: ready.relayOrigin } : {}) } }
-    }
+      return reachable(parsed.kind, parsed.link, deps.origin)
+    case AddKind.Did:
+      return reachable(parsed.kind, paramsForDid(parsed.did), deps.origin)
     case AddKind.Code:
     case AddKind.Name: {
       const out = parsed.kind === AddKind.Code ? await resolveCode(deps, parsed.code) : await resolveName(deps, parsed.name)
-      return out.ok ? { ok: true, kind: parsed.kind, link: out.link } : { ok: false, failure: { type: 'resolve', error: out.error, kind: parsed.kind } }
+      return out.ok ? reachable(parsed.kind, out.link, deps.origin) : { ok: false, failure: { type: 'resolve', error: out.error, kind: parsed.kind } }
     }
   }
+}
+
+/**
+ * Whatever the field turned into, the connection runs over THIS page's relay: a link or DID that names another relay (the other app host)
+ * would give a card that says "connected" and never answers, so it is stopped here with the reason.
+ */
+function reachable(kind: AddKind, link: ConnectLinkParams, origin: string): AddResolved {
+  const ready = didReadiness(link.did, origin)
+  if (ready.ok) return { ok: true, kind, link }
+  return { ok: false, failure: { type: 'did', problem: ready.problem, ...(ready.relayOrigin ? { relayOrigin: ready.relayOrigin } : {}) } }
 }

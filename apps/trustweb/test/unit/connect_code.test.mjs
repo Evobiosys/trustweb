@@ -4,7 +4,7 @@
  * that the secret never leaves in anything but the POST body.
  */
 import {
-  CONNECT_CODE_RE, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
+  CONNECT_CODE_RE, CONNECT_COOLDOWN_MS, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
   connectShortLink, isClaimable,
   createConnectKeeper, readConnectRecord, registerConnect, registrationDue, repairConnectRecord, shortToShow,
 } from '../../src/connect_code.ts'
@@ -253,6 +253,25 @@ describe('createConnectKeeper', () => {
     await k.ensure(longUrl())
     expect(calls).toHaveLength(2 + CONNECT_RETRY_MS.length)
     expect(timers).toHaveLength(CONNECT_RETRY_MS.length + 1)
+  })
+  it('after a 429 nothing is sent for a minute, however often ensure is called, then it asks again', async () => {
+    let now = NOW
+    const { k, calls } = keeper([{ status: 429, body: {} }, minted()], { now: () => now })
+    expect(await k.ensure(longUrl())).toBe(false)
+    expect(calls).toHaveLength(1)
+    now = NOW + 5_000
+    expect(await k.ensure(longUrl())).toBe(false)
+    expect(await k.ensure(longUrl())).toBe(false)
+    expect(calls).toHaveLength(1)
+    now = NOW + CONNECT_COOLDOWN_MS
+    expect(await k.ensure(longUrl())).toBe(true)
+    expect(calls).toHaveLength(2)
+  })
+  it('a failure other than 429 does not start the cooldown (the next Meet visit asks again at once)', async () => {
+    const { k, calls } = keeper([{ status: 500, body: {} }, minted()])
+    await k.ensure(longUrl())
+    expect(await k.ensure(longUrl())).toBe(true)
+    expect(calls).toHaveLength(2)
   })
   it('a success cancels the pending retry', async () => {
     const { k, timers } = keeper(['offline', minted()])

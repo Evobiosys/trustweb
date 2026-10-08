@@ -3,8 +3,9 @@
  * bare DID can reach a phone with no name in it; the cleartext connect-ack only travels scanner -> sharer, so this one short text
  * travels back inside the encrypted chat envelope of the paired peer (the pattern of contact_share.ts and account_keep.ts):
  *     <app url>?hello=1#n=<name>
- * It carries a name and nothing else, so it goes whatever the Advanced choice of the Meet page is. A phone that does not know the
- * text (an older build) shows nothing, because routeText (chat.ts) files it as protocol text. Everything received is untrusted:
+ * It carries a name and nothing else, so it goes whatever the Advanced choice of the Meet page is. A build from before this text
+ * existed (a wave 6 tab left open) shows it as one chat line, because its routeText files an unknown text as chat; the receiver of a
+ * hello is in practice a phone that has just loaded this build. Everything received is untrusted:
  * control and bidi characters are stripped, the name is bounded to 40 characters (what a name field takes), and it only ever
  * replaces a name the receiving phone does not have yet (see wantsHelloName).
  * Pure and DOM-free.

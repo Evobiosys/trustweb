@@ -25,6 +25,8 @@ export const CONNECT_SECRET_RE = /^[A-Za-z0-9_-]{43}$/
 export const CONNECT_REFRESH_MS = 30 * 24 * 60 * 60 * 1000
 /** One request waits this long, then the long link stays. */
 export const CONNECT_TIMEOUT_MS = 10_000
+/** After a 429 nothing is sent for at least this long, however often Meet is drawn (the server's budget is 6 POSTs a minute per address). */
+export const CONNECT_COOLDOWN_MS = 60_000
 /** Pauses before the retries of a failed registration (never under a minute: the server's budget is 6 POSTs a minute per address); after the last one the keeper rests until the next ensure(). */
 export const CONNECT_RETRY_MS: readonly number[] = [60_000, 180_000, 600_000]
 
@@ -258,6 +260,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   let running: Promise<boolean> | null = null
   let retryHandle: unknown = null
   let attempt = 0
+  let cooldownUntil = 0
 
   const held = (): ConnectRecord | null => readConnectRecord(deps.load())
   const stopRetry = (): void => { if (retryHandle !== null) { clearTimer(retryHandle); retryHandle = null } }
@@ -273,6 +276,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   const run = async (longUrl: string): Promise<boolean> => {
     const out = await registerConnect(deps, held(), longUrl)
     if (!out.ok) {
+      if (out.error === ConnectError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS
       if (out.error !== ConnectError.NotHere && out.error !== ConnectError.Refused) scheduleRetry()
       return false
     }
@@ -288,6 +292,8 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
     wanted = longUrl
     if (!canRegister(deps.origin)) return Promise.resolve(false)
     if (!registrationDue(held(), longUrl, deps.now())) return Promise.resolve(true)
+    // A 429 was answered a moment ago: drawing Meet again must not ask again (V1's rule: back off at least a minute).
+    if (deps.now() < cooldownUntil) return Promise.resolve(false)
     if (!retry) attempt = 0
     if (running) return running.then(() => (registrationDue(held(), wanted, deps.now()) ? ensure(wanted, true) : true))
     const call = run(longUrl).finally(() => { running = null })

@@ -1224,7 +1224,7 @@ export const S = {
       switch (f.error) {
         case ResolveError.NotFound: return `Our server does not know that ${what}. Check it, or ask them to show their code again.`
         case ResolveError.RateLimited: return 'Too many lookups just now. Wait a minute and try again.'
-        case ResolveError.Network: return 'No answer from our server. Check your connection and try again, or paste their DID.'
+        case ResolveError.Network: return 'No answer from our server. Check your connection and try again, or paste their DID. A code or name made on the other TrustWeb address (app.idea2.site or app.trustintheweb.org) only opens from that address: open this app there and try again.'
         case ResolveError.Refused: return `Our server answered with something that is not a TrustWeb link, so nothing was added.`
         default: return 'Our server did not answer properly. Try again in a moment.'
       }

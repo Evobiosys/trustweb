@@ -152,6 +152,15 @@ describe('resolveAddInput', () => {
     expect((await resolveAddInput(d, DID)).ok).toBe(true)
     expect(answer.calls).toHaveLength(0)
   })
+  it('a link or a code that resolves to a DID of the OTHER relay is stopped with the reason, never connected', async () => {
+    const other = buildConnectLinkUrl(ORIGIN + '/', OTHER_DID, { id: 'p1p1p1p1p1p1', displayName: 'Zed' })
+    const pasted = await resolveAddInput(deps({ url: LONG }), other)
+    expect(pasted).toEqual({ ok: false, failure: { type: 'did', problem: DidProblem.OtherRelay, relayOrigin: 'https://elsewhere.example' } })
+    const viaCode = await resolveAddInput(deps({ url: other }), CODE)
+    expect(viaCode).toEqual({ ok: false, failure: { type: 'did', problem: DidProblem.OtherRelay, relayOrigin: 'https://elsewhere.example' } })
+    const viaName = await resolveAddInput(deps({ url: other }), '@zed.z')
+    expect(viaName.ok).toBe(false)
+  })
   it('a name asks /who/', async () => {
     const d = deps({ url: LONG })
     const out = await resolveAddInput(d, '@Ada')
