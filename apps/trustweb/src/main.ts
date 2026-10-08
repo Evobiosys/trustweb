@@ -28,6 +28,10 @@ import { createConnectKeeper, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
+import { repairGeneralNotes, setGeneralNote, generalNoteOf } from './general_notes'
+import { createAdvancedMemory, localStorageCell } from './notes_advanced_memory'
+import { createGeneralSection } from './person_general_view'
+import { pendingTranscripts } from './person_notes'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -272,7 +276,9 @@ try {
     const codeFixed = repairConnectRecord(state)
     // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped, never thrown on.
     const modesFixed = repairShareFields(state)
-    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed || modesFixed) save()
+    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired, never thrown on.
+    const notesFixed = repairGeneralNotes(state)
+    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed || modesFixed || notesFixed) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -1549,6 +1555,8 @@ function personSheet(personId: string): void {
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
+    // Wave 6e: the General note, under "Advanced", collapsed unless it was open in the last two minutes (general_notes.ts, person_general_view.ts).
+    generalNoteSection(p),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -1559,6 +1567,28 @@ function personSheet(personId: string): void {
     feedOn(st()) ? feed.personRow(p) : null,
   ])
   cardOpenFor = p.id
+}
+
+/** One memory of "the Advanced disclosure of a card was open" for the whole phone: a timestamp in one storage cell, two minutes (notes_advanced_memory.ts). */
+const personAdvancedMemory = createAdvancedMemory(
+  localStorageCell('trustweb.ui.personAdvancedAt', () => { try { return window.localStorage } catch { return undefined } }),
+  () => Date.now(),
+)
+
+/** The General note of a person: autosaved into the record (Only me), see general_notes.ts. */
+function generalNoteSection(p: Person): HTMLElement {
+  const section = createGeneralSection({
+    name: p.name,
+    note: () => generalNoteOf(p),
+    commit: (text) => {
+      // The record may have been replaced since the card opened: write into the person as the record holds it now.
+      const now = st().people.find((x) => x.id === p.id)
+      if (now && setGeneralNote(now, text)) save()
+    },
+    memory: personAdvancedMemory,
+    pendingVoice: () => pendingTranscripts(st(), p.id),
+  })
+  return section.el
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -1774,7 +1804,7 @@ function applyContact(peer: Peer, person: Person, text: string): void {
   toast(S.contactReceivedToast(peer.displayName))
   render()
   // Their card is open (the scan just landed on it): show the Message button now, unless the person is typing in it.
-  const typing = sheet.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement
+  const typing = sheet.contains(document.activeElement) && (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
   if (cardOpenFor === person.id && sheet.classList.contains('on') && !typing) personSheet(person.id)
 }
 

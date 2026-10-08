@@ -5,7 +5,7 @@
  * words rule as the past-meetings search (search.ts: every word of the query must appear, case and accents ignored).
  * Pure and DOM-free; past_meetings_view.ts draws it.
  */
-import { LineStatus, pastMeetings } from './model'
+import { LineStatus, ServerJobState, pastMeetings } from './model'
 import type { AppState, NoteLine, PastMeeting } from './model'
 import { fold, queryWords, searchMeetings } from './search'
 
@@ -56,6 +56,16 @@ export function personNotes(s: AppState, personId: string, query: string, dateLa
   for (const m of meetings) entry(m.startedAt).meetings.push(m)
   for (const l of lines) entry(l.notedAt).lines.push(l)
   return [...days.values()].sort((a, b) => b.day - a.day)
+}
+
+/** Is the transcript of this meeting still on its way (the server is transcribing it, or the sender's full version has not arrived)? */
+export function transcriptPending(m: Pick<PastMeeting, 'serverJob' | 'late'>): boolean {
+  return m.serverJob?.state === ServerJobState.Running || m.late !== undefined
+}
+
+/** How many past meetings about this person have a transcript still on its way (for "transcribing" next to the typed note). */
+export function pendingTranscripts(s: Pick<AppState, 'meetings' | 'people'>, personId: string): number {
+  return meetingsAbout(s, personId).filter(transcriptPending).length
 }
 
 /** Is this line still true? (LineStatus.Gone: the person said it no longer is; kept so nothing noted is lost.) */

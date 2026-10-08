@@ -114,6 +114,15 @@ export const S = {
   setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
   // Wave 6 (U4 c): the notes on one person, on their card.
+  personAdvanced: 'Advanced',
+  generalNoteTitle: 'General notes',
+  generalNotePh: (name: string) => `Anything about ${name || 'them'}: how you know them, what they care about, what is on your mind...`,
+  generalNoteHint: 'Only me. It stays on this phone (and in your encrypted backup, if you made one): it is never sent in an answer, a share or a search by others.',
+  generalNoteSaving: 'Saving...',
+  generalNoteSaved: 'Saved on this phone.',
+  generalNoteTranscribing: (n: number) => (n === 1 ? 'A voice note of theirs is still being transcribed. Your typed note is already here.' : `${n} voice notes of theirs are still being transcribed. Your typed note is already here.`),
+  personNotesGeneral: 'General note',
+  pastTranscribing: 'Transcribing...',
   personNotesTitle: 'Your notes on them',
   personNotesPh: (name: string) => (name ? `Search your notes on ${name}` : 'Search these notes'),
   personNotesNone: 'No notes or meetings with them yet.',

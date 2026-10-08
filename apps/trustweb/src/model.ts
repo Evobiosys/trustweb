@@ -228,6 +228,12 @@ export interface Person {
    * that instance. This phone only. Absent: none.
    */
   fediverse?: FediverseLink
+  /**
+   * Wave 6e: a free-text note about this person, written under "Advanced" on their card (general_notes.ts), at most 4000 characters.
+   * ONLY ME, always: it is not a note line, so it never answers an ask, passes through a hop, matches a search by others, joins an export,
+   * a provenance entry or any share or contact payload (test/unit/general_notes.test.mjs guards every place that names it). Absent: none.
+   */
+  generalNote?: string
   /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**

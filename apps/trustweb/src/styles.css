@@ -758,3 +758,12 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet-home:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .search-not-ask{margin:2px 0 6px}
 .search-ask-instead{align-self:flex-start; margin-bottom:8px}
+
+.person-advanced{display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin:10px 0}
+.person-advanced-panel{display:flex; flex-direction:column; gap:6px; width:100%}
+.person-advanced-panel[hidden]{display:none}
+.person-advanced-panel .meta{margin:0}
+.general-note{min-height:7em; resize:vertical; width:100%; box-sizing:border-box}
+.pn-general{background:var(--card); border-radius:12px; padding:8px 12px; margin-top:6px}
+.pn-general .pm-general{white-space:pre-wrap; margin:2px 0 0}
+.pm-transcribing{display:inline-block; margin-top:2px; font-size:12px; font-style:italic; color:var(--ink-soft)}
