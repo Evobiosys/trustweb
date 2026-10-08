@@ -144,5 +144,82 @@ class ConnectCaddyEdit(unittest.TestCase):
         self.assertFalse(out.exists())
 
 
+UPSTREAM = "reverse_proxy 127.0.0.1:8960"
+ADMIN_PATHS = ("/admin/name", "/admin/names")
+LINKS_EDIT = HERE / "trustweb_links_caddy_edit.py"
+DEPLOY = HERE / "deploy_trustweb_backup.sh"
+CADDY_TOOLS = sorted(
+    p for p in HERE.iterdir() if "caddy" in p.name and p.suffix in {".py", ".sh", ".diff"} and not p.name.startswith("test_")
+)
+
+
+def handles_to_service(caddyfile: str) -> list[tuple[str, str]]:
+    """[(site block head, handle matcher)] for every handle block of an app site block that proxies to the trustweb-backup service (127.0.0.1:8960).
+    A bare `handle {` is reported as "" (the catch-all). Plain-text reading of the files the edit scripts produce; not a Caddy parser."""
+    found: list[tuple[str, str]] = []
+    block = ""
+    for chunk in caddyfile.split("\n}\n"):
+        lines = chunk.splitlines()
+        head = next((ln for ln in lines if ln.endswith(" {") and not ln.startswith(("\t", "#"))), "")
+        block = head[:-2] if head else block
+        if not block.startswith("app."):
+            continue
+        for i, line in enumerate(lines):
+            if line.startswith("\thandle") and line.endswith("{"):
+                end = next((j for j in range(i + 1, len(lines)) if lines[j] == "\t}"), len(lines))
+                if any(UPSTREAM in ln for ln in lines[i:end]):
+                    found.append((block, line.removeprefix("\thandle").removesuffix("{").strip()))
+    return found
+
+
+def caddy_matches(matcher: str, path: str) -> bool:
+    """Would a `handle <matcher>` take `path`? "" = catch-all; a trailing * = prefix; otherwise exact."""
+    if matcher == "":
+        return True
+    return path.startswith(matcher[:-1]) if matcher.endswith("*") else path == matcher
+
+
+class NoAdminRouteInCaddy(unittest.TestCase):
+    """Wave 6e: /admin/name and /admin/names are loopback-only and must NEVER be reachable through Caddy. These checks read the FIXTURE and the edit/install
+    scripts, not the live Caddyfile; the orchestrator confirms the live file with `grep -n admin /etc/caddy/Caddyfile` after any Caddy edit."""
+
+    def edited_fixture(self) -> str:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out"
+            done = run(FIXTURE, out)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return out.read_text()
+
+    def test_the_fixture_and_the_connect_edit_output_mention_no_admin_route(self) -> None:
+        for text in (FIXTURE.read_text(), self.edited_fixture()):
+            self.assertNotIn("/admin", text)
+            self.assertNotIn("admin/name", text)
+
+    def test_no_handle_that_proxies_to_the_service_can_take_an_admin_path(self) -> None:
+        for name, text in (("fixture", FIXTURE.read_text()), ("edited", self.edited_fixture())):
+            proxied = handles_to_service(text)
+            self.assertGreater(len(proxied), 6, name)  # the reader really found the routes (backup, websearch, link, l, ...)
+            for site, matcher in proxied:
+                for path in ADMIN_PATHS:
+                    self.assertFalse(caddy_matches(matcher, path), f"{name}: {site} handle {matcher!r} would forward {path} to the service")
+            self.assertNotIn("", [m for _, m in proxied], f"{name}: a catch-all handle must not proxy to the service")
+
+    def test_the_links_edit_output_and_the_print_caddy_snippet_mention_no_admin_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "links_out"
+            done = subprocess.run([sys.executable, "-I", str(LINKS_EDIT), str(FIXTURE), str(out)], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertNotIn("/admin", out.read_text())
+        snippet = subprocess.run(["bash", str(DEPLOY), "--print-caddy"], capture_output=True, text=True)
+        self.assertEqual(snippet.returncode, 0, snippet.stderr)
+        self.assertIn("handle /hosted/*", snippet.stdout)
+        self.assertNotIn("/admin", snippet.stdout)
+
+    def test_no_caddy_edit_or_install_script_or_proposal_mentions_an_admin_route(self) -> None:
+        self.assertGreaterEqual(len(CADDY_TOOLS), 6)
+        for tool in CADDY_TOOLS:
+            self.assertNotIn("/admin", tool.read_text(), tool.name)
+
+
 if __name__ == "__main__":
     unittest.main()

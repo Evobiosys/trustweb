@@ -1,6 +1,8 @@
 // Disk layer of the connect codes and usernames (wave 6b; contract: DEVLOG/trustweb-wave-1733/services-api-contract.txt, section 10).
 //
-//   <file>  {"v":1,"codes":{"<code>":{"h":"<sha256 hex of the secret>","url":"<long connect url>","seen":<ms>,"name":"<optional>"}}}
+//   <file>  {"v":1,"codes":{"<code>":{"h":"<sha256 hex of the secret>","url":"<long connect url>","seen":<ms>,"name":"<optional primary>","aliases":["<optional>", ...]}}}
+//           (wave 6e: up to two aliases beside the primary `name`; the rules are in connect_aliases.mjs. `aliases` is absent when empty, so a file
+//           written here still loads in the 6b store, which keeps the primary and ignores the aliases.)
 //   mode 0600, rewritten atomically (temp file, fsync, rename), writes serialised through one promise queue.
 //
 // Everything lives in memory (at most `max` codes). Each mutation (secret check, uniqueness check, change) is ONE synchronous block with no
@@ -14,7 +16,8 @@
 
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import { CODE_RE, isNameShape } from './connect_names.mjs'
+import { answerFor, fieldsFor, MAX_NAMES, namesOf, planClaim, planGrant, planRelease, planRemove } from './connect_aliases.mjs'
+import { CODE_RE, isNameShape, isReserved } from './connect_names.mjs'
 
 export const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
 const HASH_RE = /^[0-9a-f]{64}$/
@@ -31,14 +34,18 @@ const hashSecret = (secret) => crypto.createHash('sha256').update(secret, 'utf8'
 const isEntry = (code, e) =>
   CODE_RE.test(code) && e !== null && typeof e === 'object' && typeof e.h === 'string' && HASH_RE.test(e.h) && typeof e.url === 'string' && Number.isFinite(e.seen)
 
+/** How a planner's refusal reaches the caller (the result `kind`). */
+const REFUSALS = Object.freeze({ locked: 'locked', reserved: 'reserved', taken: 'taken', too_many: 'too_many', not_held: 'not_held' })
+
 /**
  * Opens (or creates) the store. Resolves the store object; its `recovered` is true when the file did not parse and was moved
  * aside to <file>.unreadable (the store then starts empty). Rejects when the file cannot be read or written: the caller treats that as "off".
  * ttlMs counts from the last use; touchMs is how old `seen` must be before an open refreshes it (and rewrites the file).
+ * `reserved` is the reserved-name predicate (built-in list plus the env list): a reserved name that a code holds is LOCKED against the app.
  */
-export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date.now }) {
-  const codes = new Map() // code -> {h, url, seen, name?}
-  const names = new Map() // name -> code
+export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date.now, reserved = isReserved }) {
+  const codes = new Map() // code -> {h, url, seen, name?, aliases?}
+  const names = new Map() // name (primary or alias) -> code
   let recovered = false
   let chain = Promise.resolve()
 
@@ -61,25 +68,37 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       await fs.rename(file, `${file}.unreadable`)
       return
     }
-    for (const [code, e] of Object.entries(parsed.codes)) if (isEntry(code, e) && !expired(e)) index(code, normalise(e))
+    for (const [code, e] of Object.entries(parsed.codes)) if (isEntry(code, e) && !expired(e)) index(code, { h: e.h, url: e.url, seen: e.seen }, loadedNames(e))
   }
 
-  /** A loaded entry without a usable or unique name loses the name, never the code. */
-  function normalise(e) {
-    return { h: e.h, url: e.url, seen: e.seen, ...(typeof e.name === 'string' ? { name: e.name } : {}) }
-  }
+  /** The names a loaded entry claims, in order: the primary, then the aliases (anything that is not a string is dropped here, the rest in index). */
+  const loadedNames = (e) => [e.name, ...(Array.isArray(e.aliases) ? e.aliases : [])].filter((n) => typeof n === 'string')
 
-  function index(code, entry) {
-    if (entry.name !== undefined && (!isNameShape(entry.name) || names.has(entry.name))) delete entry.name
-    codes.set(code, entry)
-    if (entry.name !== undefined) names.set(entry.name, code)
+  /**
+   * Stores `entry` under `code` with the first usable names of `wanted`: a name of the wrong shape, one held by an earlier code (or earlier in the list)
+   * and any past the third loses only itself, never the code. The first survivor is the primary, so a lost primary promotes the first alias.
+   */
+  function index(code, entry, wanted) {
+    const kept = []
+    for (const n of wanted) if (isNameShape(n) && !names.has(n) && !kept.includes(n) && kept.length < MAX_NAMES) kept.push(n)
+    codes.set(code, { ...entry, ...fieldsFor(kept) })
+    for (const n of kept) names.set(n, code)
   }
 
   function unindex(code) {
     const entry = codes.get(code)
     if (entry === undefined) return
     codes.delete(code)
-    if (entry.name !== undefined && names.get(entry.name) === code) names.delete(entry.name)
+    for (const n of namesOf(entry)) if (names.get(n) === code) names.delete(n)
+  }
+
+  /** Makes `entry` (stored under `code`) hold exactly the ordered names `next`, in the entry and in the name map. */
+  function applyNames(code, entry, next) {
+    for (const n of namesOf(entry)) if (names.get(n) === code) names.delete(n)
+    delete entry.name
+    delete entry.aliases
+    Object.assign(entry, fieldsFor(next))
+    for (const n of next) names.set(n, code)
   }
 
   /** Write + fsync + rename of the whole map. Writes run one after the other; each snapshots the map when it starts. */
@@ -143,6 +162,37 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     }
   }
 
+  const named = (entry) => ({ kind: 'named', ...answerFor(namesOf(entry), reserved) })
+
+  /**
+   * Is `name` held by another LIVE code? A holder that expired but has not been swept yet gives its names up with its code (as it always did).
+   * Part of a synchronous block: nothing awaits between this check and the change that follows it.
+   */
+  function takenByOther(code, name) {
+    const holder = names.get(name)
+    if (holder === undefined || holder === code) return false
+    if (live(holder) !== undefined) return true
+    unindex(holder)
+    return false
+  }
+
+  /**
+   * Applies a planner's Outcome to `entry` and persists it. One synchronous change, then the awaited write; a failed write puts the names and the last-use
+   * time back (a name that another request took in the meantime stays with that request) and rethrows. Resolves a result {kind, ...}.
+   */
+  async function change(code, entry, plan) {
+    if (plan.kind === 'noop') return named(entry)
+    if (plan.kind !== 'set') return { kind: REFUSALS[plan.kind] }
+    const before = { names: namesOf(entry), seen: entry.seen }
+    applyNames(code, entry, plan.names)
+    entry.seen = now()
+    await commit(() => {
+      applyNames(code, entry, before.names.filter((n) => names.get(n) === undefined || names.get(n) === code))
+      entry.seen = before.seen
+    })
+    return named(entry)
+  }
+
   await load()
   dropExpired()
   await persist() // proves the file can be written (else the caller turns the feature off) and leaves it at 0600
@@ -159,7 +209,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
         return { kind: 'full' }
       }
       const code = freshCode()
-      index(code, { h: hashSecret(secret).toString('hex'), url, seen: now() })
+      index(code, { h: hashSecret(secret).toString('hex'), url, seen: now() }, [])
       await commit(() => unindex(code))
       return { kind: 'created', code }
     },
@@ -175,37 +225,47 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       return { kind: 'updated' }
     },
 
+    /** The names `code` holds, when `secret` opens it. Changes nothing (no write, no last-use refresh). Resolves {kind: 'named', name, aliases} or {kind: 'forbidden'}. */
+    async read(code, secret) {
+      const entry = live(code)
+      return secretOpens(entry, secret) ? named(entry) : { kind: 'forbidden' }
+    },
+
     /**
-     * Claims `name` for `code` ('' releases). A code holding another name gives it up in the same change. Resolves {kind: 'named'} (also when the code
-     * already owns it), {kind: 'taken'} or {kind: 'forbidden'}. The secret is checked before availability, so nobody without it learns what is taken.
+     * A CLAIM by the holder of `code`: `name` as the primary, or as an alias when `alias` is true (rules: connect_aliases.mjs planClaim).
+     * Resolves {kind: 'named', name, aliases} (also for an idempotent re-claim), {kind: 'locked' | 'reserved' | 'taken' | 'too_many'} or {kind: 'forbidden'}.
+     * The secret is checked first, so nobody without it learns what is taken or reserved.
      */
-    async setName(code, secret, name) {
+    async claim(code, secret, { name, alias = false }) {
       const entry = live(code)
       if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
-      const owner = name === '' ? undefined : names.get(name)
-      if (owner !== undefined && owner !== code) {
-        if (live(owner) !== undefined) return { kind: 'taken' }
-        unindex(owner) // an expired owner that the sweep has not reached yet gives its name up with its code
-      }
-      if ((entry.name ?? '') === name) return { kind: 'named' }
-      const before = { name: entry.name, seen: entry.seen }
-      if (entry.name !== undefined) names.delete(entry.name)
-      if (name === '') delete entry.name
-      else {
-        entry.name = name
-        names.set(name, code)
-      }
-      entry.seen = now()
-      await commit(() => {
-        if (entry.name !== undefined && names.get(entry.name) === code) names.delete(entry.name)
-        if (before.name === undefined) delete entry.name
-        else {
-          entry.name = before.name
-          names.set(before.name, code)
-        }
-        entry.seen = before.seen
-      })
-      return { kind: 'named' }
+      return change(code, entry, planClaim({ held: namesOf(entry), name, alias, reserved, takenByOther: takenByOther(code, name) }))
+    },
+
+    /** A RELEASE by the holder: the held name `name`, or the primary when `name` is null (the legacy {"name": ""}). Same result kinds as claim. */
+    async release(code, secret, name) {
+      const entry = live(code)
+      if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
+      return change(code, entry, planRelease({ held: namesOf(entry), name, reserved }))
+    },
+
+    /** An ADMIN grant (no secret; reserved names allowed). Resolves {kind: 'named', name, aliases}, {kind: 'taken' | 'too_many'} or {kind: 'unknown'} (no such live code). */
+    async grant(code, name, alias = false) {
+      const entry = live(code)
+      if (entry === undefined) return { kind: 'unknown' }
+      return change(code, entry, planGrant({ held: namesOf(entry), name, alias, takenByOther: takenByOther(code, name) }))
+    },
+
+    /** An ADMIN removal of `name` from `code` (a locked name too). Resolves {kind: 'named', name, aliases}, {kind: 'not_held'} or {kind: 'unknown'}. */
+    async remove(code, name) {
+      const entry = live(code)
+      if (entry === undefined) return { kind: 'unknown' }
+      return change(code, entry, planRemove({ held: namesOf(entry), name }))
+    },
+
+    /** Every held name of a live code that satisfies `match`, as [{name, code}] in name order. For the operator's list of reserved names; never exposed to the app. */
+    holders(match) {
+      return [...names].filter(([n, c]) => match(n) && live(c) !== undefined).map(([name, code]) => ({ name, code })).sort((a, b) => (a.name < b.name ? -1 : 1))
     },
 
     /** The stored url of a live code, or null. An open refreshes `seen` only when it is older than touchMs (a rewrite per open would be a write amplifier). */

@@ -18,6 +18,10 @@
 // Added 2026-10-08 (wave 6b): POST /connect + GET /c/<code> (a permanent short address for a phone's connect link), POST /name + GET /who/<name>
 //   (an optional username for the code)  (connect.mjs, connect_store.mjs, connect_names.mjs; CONNECT_* settings, store <BACKUP_DIR>/connect.json).
 //   Also never logged at all.
+// Added 2026-10-08 (wave 6e): up to two aliases per code, RESERVED_NAMES, admin-granted (locked) names, a READ intent on POST /name, and the operator-only
+//   POST|DELETE /admin/name + GET /admin/names (admin.mjs; loopback, a loopback Host, no proxy headers, X-Admin-Token; NEVER in Caddy). The admin routes are
+//   dispatched BEFORE the Host gate below (production ALLOWED_HOSTS has no 127.0.0.1); a request that fails the guard falls through and looks like any
+//   unknown path. A successful change logs the single line "admin grant".
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -61,6 +65,8 @@ import { createHosted } from './hosted.mjs'
 import { createHostedStore } from './hosted_store.mjs'
 import { createConnect } from './connect.mjs'
 import { createConnectStore } from './connect_store.mjs'
+import { reservedChecker } from './connect_names.mjs'
+import { createAdmin, isAdminPath, permits as adminPermits } from './admin.mjs'
 import { createLinkStore } from './link_store.mjs'
 import { createLinks, notFoundPage } from './links.mjs'
 import { etagMatches, jsonError, sendJson, sha256Hex, tooManyRequests } from './http_util.mjs'
@@ -148,6 +154,7 @@ export async function startServer(options = {}) {
       touchMs: cfg.connectTouchMs,
       max: cfg.connectMax,
       now: cfg.now,
+      reserved: reservedChecker(cfg.reservedNames),
     })
     connectStore = opened
     if (opened.recovered) cfg.log('connect store unreadable: moved aside, connect codes start empty')
@@ -157,6 +164,8 @@ export async function startServer(options = {}) {
   const connect = connectStore === null ? null : createConnect({ cfg, store: connectStore, clientOf, now: cfg.now })
   const connectSweep = connectStore === null ? null : setInterval(() => connectStore.prune().catch(() => undefined), cfg.connectSweepMs)
   connectSweep?.unref()
+  const admin = createAdmin({ cfg, store: connectStore, clientOf, now: cfg.now })
+  let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
 
   const hits = new Map() // client -> timestamps within the window
   const locks = new Map() // id -> promise chain (serialises writes per id)
@@ -334,6 +343,15 @@ export async function startServer(options = {}) {
     req.once('end', clear)
   }
 
+  /** An admin request that passed guard steps 1 to 3 (admin.mjs). The general per-address limiter counts it; a successful change logs one fixed line. */
+  async function adminRoute(req, res, pathname) {
+    armDeadline(req, res, cfg.shortRequestMs)
+    if (limited(clientOf(req))) return tooManyRequests(res, 'rate_limited', Math.ceil(cfg.rateWindowMs / 1000))
+    const status = await admin.handle(req, res, pathname)
+    if (status === 200 && (req.method === 'POST' || req.method === 'DELETE')) cfg.log('admin grant')
+    return status
+  }
+
   async function route(req, res) {
     const host = req.headers.host
     if (typeof host !== 'string' || !cfg.allowedHosts.includes(hostOnly(host))) {
@@ -411,6 +429,14 @@ export async function startServer(options = {}) {
   }
 
   const server = http.createServer((req, res) => {
+    // BEFORE route() and so before its Host gate: the operator reaches the admin routes with Host 127.0.0.1:<port>, which production ALLOWED_HOSTS does not list.
+    // Admin requests never write the "METHOD status" line (adminRoute logs the one fixed line itself). A request that fails the guard goes on to route() as usual.
+    if (isAdminPath((req.url ?? '').split('?')[0]) && adminPermits(req, boundPort)) {
+      adminRoute(req, res, (req.url ?? '').split('?')[0]).catch(() => {
+        if (!res.headersSent) send(res, 500, 'server error')
+      })
+      return
+    }
     const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0])
     route(req, res)
       .then((status) => {
@@ -428,9 +454,10 @@ export async function startServer(options = {}) {
     server.listen(cfg.port, cfg.host, resolve)
   })
   const address = server.address()
+  boundPort = typeof address === 'object' && address !== null ? address.port : cfg.port
   return {
     server,
-    port: typeof address === 'object' && address !== null ? address.port : cfg.port,
+    port: boundPort,
     close: () =>
       new Promise((resolve) => {
         clearInterval(linkSweep)

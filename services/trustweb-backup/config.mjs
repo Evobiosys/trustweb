@@ -77,9 +77,16 @@
 //   CONNECT_PER_MINUTE, CONNECT_PER_HOUR          6, 30     POST /connect and POST /name together, per network address (IPv6: /64), in memory, NOT anonymous
 //   CONNECT_GET_PER_MINUTE, CONNECT_GET_PER_HOUR  20, 300   GET /c/ and GET /who/ together, per network address (plain-text 429)
 //   CONNECT_SWEEP_MS                 3600000      how often expired codes are dropped (they also act as unknown when read)
+//   RESERVED_NAMES                   (empty)      wave 6e: comma list of usernames reserved IN ADDITION to the built-in list (production: japossert,jakob). Trimmed, lowercased,
+//                                                 compared after "." "_" "-" are removed. A reserved name can only be granted through the admin route; held, it is locked.
+//   ADMIN_TOKEN_FILE                 (unset)      wave 6e: JSON {"token": "<64 hex>"} of the admin routes (/admin/name, /admin/names; loopback only, never in Caddy). Unset: the
+//                                                 token comes from <CREDENTIALS_DIRECTORY>/admin (systemd LoadCredential=admin:/etc/trustweb/admin.json). No token: the admin
+//                                                 routes answer 503 not_configured. Read once at start; never logged.
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { parseReservedList } from './connect_names.mjs'
+import { HEX64 } from './http_util.mjs'
 
 export const TranscribeProvider = Object.freeze({ Berget: 'berget', OpenRouter: 'openrouter', Infomaniak: 'infomaniak' })
 /** The TRANSCRIBE_PROVIDER setting: the three providers plus "auto" (Berget when its key exists, else OpenRouter). */
@@ -100,6 +107,22 @@ export function readCredential(name, env = process.env) {
   try {
     const key = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))?.key
     return typeof key === 'string' && KEY_SHAPE.test(key) ? key : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The admin token (wave 6e): JSON {"token": "<64 hex>"} in ADMIN_TOKEN_FILE, else in <CREDENTIALS_DIRECTORY>/admin.
+ * Returns '' for a missing, unreadable or malformed file. Never throws, never logs, never echoes the content.
+ */
+export function readAdminToken(env = process.env) {
+  const dir = env.CREDENTIALS_DIRECTORY
+  const file = env.ADMIN_TOKEN_FILE || (dir === undefined || dir === '' ? '' : path.join(dir, 'admin'))
+  if (file === '') return ''
+  try {
+    const token = JSON.parse(fs.readFileSync(file, 'utf8'))?.token
+    return typeof token === 'string' && HEX64.test(token) ? token : ''
   } catch {
     return ''
   }
@@ -238,5 +261,8 @@ export function loadConfig(options = {}) {
     connectGetPerMinute: pick(options, 'connectGetPerMinute', 'CONNECT_GET_PER_MINUTE', 20),
     connectGetPerHour: pick(options, 'connectGetPerHour', 'CONNECT_GET_PER_HOUR', 300),
     connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
+
+    reservedNames: options.reservedNames ?? parseReservedList(process.env.RESERVED_NAMES),
+    adminToken: options.adminToken ?? readAdminToken(),
   }
 }
