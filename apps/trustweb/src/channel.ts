@@ -31,6 +31,25 @@ function linkOn(input: string, hosts: readonly string[]): URL | null {
   }
 }
 
+/** What signal.me accepts after the "#": a username code (#eu/...) or a phone number (#p/+...). */
+const SIGNAL_FRAGMENT = /^#(?:eu\/[A-Za-z0-9_\-+/=]{4,200}|p\/\+[1-9]\d{6,14})$/
+
+/** A pasted signal.me link in https or sgnl form -> the https form; null for any other fragment (Signal could not open it). */
+function signalLink(input: string): string | null {
+  try {
+    const u = new URL(input.trim())
+    const ok = (u.protocol === 'https:' || u.protocol === 'sgnl:') && u.hostname.toLowerCase() === 'signal.me'
+    return ok && SIGNAL_FRAGMENT.test(u.hash) ? `https://signal.me/${u.hash}` : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeSignal(raw: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return signalLink(raw)
+  return toE164(raw)
+}
+
 /**
  * The canonical value to store, or null if the input is not a valid way to
  * reach someone on this channel.
@@ -39,11 +58,8 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
   const raw = input.trim()
   if (!raw) return null
   switch (channel) {
-    case Channel.Signal: {
-      const link = linkOn(raw, ['signal.me'])
-      if (link) return link.href
-      return toE164(raw)
-    }
+    case Channel.Signal:
+      return normalizeSignal(raw)
     case Channel.WhatsApp: {
       const link = linkOn(raw, ['wa.me'])
       const digits = link ? link.pathname.replace(/\D/g, '') : null
@@ -91,4 +107,84 @@ export function channelLink(channel: Channel, value: string): string {
     case Channel.Messenger:
       return `https://m.me/${value}`
   }
+}
+
+// ---------------------------------------------------------------------------
+// Signal and Molly (wave 6, U3). Both open signal.me links, so the choice
+// between them is a LABEL and a hint only. What the QR holds decides where it
+// can be scanned: Signal's and Molly's in-app scanner reads username codes
+// (#eu/...) only; a phone-number link (#p/...) opens from the camera app or a
+// link opener (see DEVLOG wave6/u3_signal_finding.txt).
+// ---------------------------------------------------------------------------
+
+/** Which app the owner names for a Signal entry. */
+export enum SignalProvider {
+  Signal = 'signal',
+  Molly = 'molly',
+}
+
+export const SIGNAL_PROVIDERS: readonly SignalProvider[] = [SignalProvider.Signal, SignalProvider.Molly]
+
+export function isSignalProvider(v: unknown): v is SignalProvider {
+  return v === SignalProvider.Signal || v === SignalProvider.Molly
+}
+
+/** What a stored Signal value is. Also reads values stored as an https href (a pasted link) and bare numbers. */
+export enum SignalHandleKind {
+  UsernameLink = 'username-link',
+  PhoneLink = 'phone-link',
+  PhoneNumber = 'phone-number',
+  Other = 'other',
+}
+
+export function signalHandleKind(value: string): SignalHandleKind {
+  const v = value.trim()
+  if (/^https:\/\/signal\.me\/#eu\//i.test(v)) return SignalHandleKind.UsernameLink
+  if (/^https:\/\/signal\.me\/#p\/\+/i.test(v)) return SignalHandleKind.PhoneLink
+  if (/^\+[1-9]\d{6,14}$/.test(v)) return SignalHandleKind.PhoneNumber
+  return SignalHandleKind.Other
+}
+
+/** True when the value carries a phone number (a bare number or a #p/ link). */
+export function revealsPhoneNumber(value: string): boolean {
+  const kind = signalHandleKind(value)
+  return kind === SignalHandleKind.PhoneNumber || kind === SignalHandleKind.PhoneLink
+}
+
+/**
+ * The text to put into the QR of a Signal entry, or null when the entry is not
+ * a Signal handle. Always https, never sgnl://: the in-app scanners read the
+ * https form, and sgnl:// fails silently where no Signal app is installed.
+ * `provider` never changes the payload (both apps use signal.me links).
+ */
+export function qrPayload(handle: string, provider?: SignalProvider): string | null {
+  void provider
+  return signalHandleKind(handle) === SignalHandleKind.Other ? null : channelLink(Channel.Signal, handle.trim())
+}
+
+/** Where a Signal QR can be scanned. */
+export enum ScanAdvice {
+  /** Username code: the in-app scanner and the camera app both work. */
+  AnyScanner = 'any-scanner',
+  /** Phone-number code: the camera app (or a link opener) only; Signal's and Molly's in-app scanner calls it invalid. */
+  CameraAppOnly = 'camera-app-only',
+}
+
+export function scanAdvice(handle: string): ScanAdvice {
+  return revealsPhoneNumber(handle) ? ScanAdvice.CameraAppOnly : ScanAdvice.AnyScanner
+}
+
+/** Keys of the app's strings for the Signal row; the module holds no copy itself. */
+export enum SignalLabelKey {
+  Signal = 'signal',
+  Molly = 'molly',
+  /** No provider chosen on Android: Signal's link may open Molly instead, so both are named. */
+  SignalOrMolly = 'signal-or-molly',
+}
+
+/** Unset provider: exactly what main.ts chName does today (Android names both apps, elsewhere Signal). */
+export function signalLabelKey(provider: SignalProvider | undefined, isAndroid: boolean): SignalLabelKey {
+  if (provider === SignalProvider.Molly) return SignalLabelKey.Molly
+  if (provider === SignalProvider.Signal) return SignalLabelKey.Signal
+  return isAndroid ? SignalLabelKey.SignalOrMolly : SignalLabelKey.Signal
 }
