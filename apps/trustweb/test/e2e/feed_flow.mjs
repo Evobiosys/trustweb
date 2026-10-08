@@ -279,7 +279,7 @@ async function main() {
     await d.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await d.getByRole('button', { name: 'Settings' }).click()
     await d.getByRole('button', { name: /Add ways to reach you/ }).click()
-    ok('Android: "Signal or Molly"', /Signal or Molly/.test(await d.locator('.sheet.on .channels').innerText()))
+    ok('Android: "Signal" only (wave 6e: the Signal/Molly choice is gone, one Signal link)', !/Molly/.test(await d.locator('.sheet.on .channels').innerText()) && /Signal/.test(await d.locator('.sheet.on .channels').innerText()))
     await android.close()
     await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()
     await a.getByRole('button', { name: 'Settings' }).click()
