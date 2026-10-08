@@ -34,7 +34,7 @@ export async function withServer(port, options, body) {
     await body({ srv, dir, cfg, lines, hostedDir: cfg.hostedDir, backupDir: cfg.dir })
   } finally {
     await srv.close()
-    await fs.rm(dir, { recursive: true, force: true })
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 30 }) // a background rewrite may still be finishing
   }
 }
 
