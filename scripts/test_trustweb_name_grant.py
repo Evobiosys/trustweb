@@ -145,21 +145,21 @@ class NameGrantScript(unittest.TestCase):
         self.assertEqual(declined.returncode, 0, declined.stderr)
         self.assertIn("nothing changed.", declined.stdout)
         self.assertIn("Proceed? ENTER or y or n", declined.stdout)
-        self.assertEqual(self.names_of(minted), {"name": "", "aliases": []})
+        self.assertEqual(self.names_of(minted), {"name": "", "aliases": [], "locked": []})
         self.assertNotIn(code, declined.stdout, "the code is shown masked in the plan")
 
         granted = self.run_script("--host", "questhub", "--code", code, "--name", "japossert", stdin="\n")
         self.assertEqual(granted.returncode, 0, granted.stderr)
-        self.assertIn('{"name":"japossert","aliases":[]}', granted.stdout)
-        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": []})
+        self.assertIn('{"name":"japossert","aliases":[],"locked":["japossert"]}', granted.stdout)
+        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": [], "locked": ["japossert"]})
 
         aliased = self.run_script("--host", "questhub", "--code", code, "--alias", "jakob", stdin="y\n")
         self.assertEqual(aliased.returncode, 0, aliased.stderr)
-        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": ["jakob"]})
+        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": ["jakob"], "locked": ["japossert", "jakob"]})
 
         removed = self.run_script("--host", "questhub", "--code", code, "--remove", "jakob", "--yes")
         self.assertEqual(removed.returncode, 0, removed.stderr)
-        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": []})
+        self.assertEqual(self.names_of(minted), {"name": "japossert", "aliases": [], "locked": ["japossert"]})
         listing = self.run_script("--host", "questhub", "--list")
         self.assertIn(code, listing.stdout, "the operator's list shows who holds japossert")
         for done in (declined, granted, aliased, removed, listing):
@@ -169,8 +169,8 @@ class NameGrantScript(unittest.TestCase):
         minted = self.mint()
         done = self.run_script("--host", "questhub", "--code", minted["code"], "--name", "grace.k", "--alias", "gk.two", "--yes")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.names_of(minted), {"name": "grace.k", "aliases": ["gk.two"]})
-        self.assertLess(done.stdout.index('{"name":"grace.k","aliases":[]}'), done.stdout.index('{"name":"grace.k","aliases":["gk.two"]}'))
+        self.assertEqual(self.names_of(minted), {"name": "grace.k", "aliases": ["gk.two"], "locked": []})
+        self.assertLess(done.stdout.index('{"name":"grace.k","aliases":[],"locked":[]}'), done.stdout.index('{"name":"grace.k","aliases":["gk.two"],"locked":[]}'))
 
     def test_a_refusal_of_the_server_stops_the_script_with_1_and_prints_the_answer(self) -> None:
         minted = self.mint()
@@ -181,7 +181,7 @@ class NameGrantScript(unittest.TestCase):
         self.assertEqual(full.returncode, 1)
         self.assertIn('"error":"too_many_names"', full.stdout)
         self.assertIn("refused: HTTP 409", full.stderr)
-        self.assertEqual(self.names_of(minted), {"name": "kx.three", "aliases": ["kx.one", "kx.two"]})
+        self.assertEqual(self.names_of(minted), {"name": "kx.three", "aliases": ["kx.one", "kx.two"], "locked": []})
         unknown = self.run_script("--host", "questhub", "--code", "Z" * 22, "--name", "kx.five", "--yes")
         self.assertEqual(unknown.returncode, 1)
         self.assertIn('"error":"unknown_code"', unknown.stdout)
@@ -197,7 +197,7 @@ class NameGrantScript(unittest.TestCase):
         closed = self.run_script("--host", "questhub", "--code", minted["code"], "--name", "jakob", stdin="")
         self.assertEqual(closed.returncode, 0)
         self.assertIn("nothing changed.", closed.stdout)
-        self.assertEqual(self.names_of(minted), {"name": "", "aliases": []})
+        self.assertEqual(self.names_of(minted), {"name": "", "aliases": [], "locked": []})
 
     def test_a_wrong_token_is_refused_by_the_server_and_never_printed(self) -> None:
         wrong = self.tmp / "wrong.json"

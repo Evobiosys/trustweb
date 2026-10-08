@@ -210,7 +210,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
       const [status, error] = NAME_REFUSALS[result.kind]
       return jsonError(res, status, error, { field: 'name' })
     }
-    sendJson(res, 200, { name: result.name, aliases: result.aliases })
+    sendJson(res, 200, { name: result.name, aliases: result.aliases, locked: result.locked })
     return 200
   }
 

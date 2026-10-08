@@ -25,9 +25,12 @@ export function fieldsFor(names) {
   return { ...(names.length > 0 ? { name: names[0] } : {}), ...(names.length > 1 ? { aliases: names.slice(1) } : {}) }
 }
 
-/** The answer body of POST /name and the admin routes. */
-export function answerFor(names) {
-  return { name: names[0] ?? '', aliases: names.slice(1) }
+/**
+ * The answer body of POST /name and the admin routes: the primary (or ""), the aliases, and `locked`, the held names that are reserved (so granted by the admin and
+ * beyond the app's reach: the app shows them with a lock and no Release button), in held order. `reserved`: (name) => boolean.
+ */
+export function answerFor(names, reserved = () => false) {
+  return { name: names[0] ?? '', aliases: names.slice(1), locked: names.filter(reserved) }
 }
 
 /**

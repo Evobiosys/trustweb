@@ -10,7 +10,7 @@ import { nameIntent } from '../connect.mjs'
 import { createConnectStore } from '../connect_store.mjs'
 import { createConnectStore as createStore6b } from './fixtures/connect_store_6b.mjs'
 import { call, withServer } from './helpers.mjs'
-import { APP, BASE, DAY, ENV_RESERVED, LONG, LONG2, OTHER_SECRET, T0, claim, connect, grant, inTempDir, mint, readStore, who } from './connect_helpers.mjs'
+import { APP, BASE, DAY, ENV_RESERVED, LONG, LONG2, OTHER_SECRET, T0, admin, claim, connect, grant, inTempDir, mint, readStore, who } from './connect_helpers.mjs'
 
 const S = 's'.repeat(43)
 const CODE = (c) => c.repeat(22)
@@ -105,8 +105,9 @@ test('entry helpers: namesOf / fieldsFor / answerFor (aliases are omitted when e
   assert.deepEqual(fieldsFor([]), {})
   assert.deepEqual(fieldsFor(['a']), { name: 'a' })
   assert.deepEqual(fieldsFor(['a', 'b']), { name: 'a', aliases: ['b'] })
-  assert.deepEqual(answerFor([]), { name: '', aliases: [] })
-  assert.deepEqual(answerFor(['a', 'b']), { name: 'a', aliases: ['b'] })
+  assert.deepEqual(answerFor([]), { name: '', aliases: [], locked: [] })
+  assert.deepEqual(answerFor(['a', 'b']), { name: 'a', aliases: ['b'], locked: [] })
+  assert.deepEqual(answerFor(['a', 'jakob', 'b', 'admin'], reserved), { name: 'a', aliases: ['jakob', 'b', 'admin'], locked: ['jakob', 'admin'] }, 'locked = the held names that are reserved, in held order')
 })
 
 // ---------------------------------------------------------------- reserved names
@@ -153,13 +154,13 @@ test('nameIntent: exactly one intent; every mix is a 400 naming the field', () =
 test('aliases: add up to two, READ shows them, /who/ resolves every name, a third alias is 409 too_many_names, the file keeps `name` + `aliases`', async () => {
   await withServer(0, BASE, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
-    assert.deepEqual((await claim(srv.port, { name: 'ada', ...a })).json, { name: 'ada', aliases: [] })
-    assert.deepEqual((await claim(srv.port, { name: 'ada.two', alias: true, ...a })).json, { name: 'ada', aliases: ['ada.two'] })
-    assert.deepEqual((await claim(srv.port, { name: 'ada.three', alias: true, ...a })).json, { name: 'ada', aliases: ['ada.two', 'ada.three'] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada', ...a })).json, { name: 'ada', aliases: [], locked: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada.two', alias: true, ...a })).json, { name: 'ada', aliases: ['ada.two'], locked: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada.three', alias: true, ...a })).json, { name: 'ada', aliases: ['ada.two', 'ada.three'], locked: [] })
     const over = await claim(srv.port, { name: 'ada.four', alias: true, ...a })
     assert.equal(over.status, 409)
     assert.deepEqual(over.json, { error: 'too_many_names', message: 'A code can hold up to 3 names.', field: 'name' })
-    assert.deepEqual((await claim(srv.port, a)).json, { name: 'ada', aliases: ['ada.two', 'ada.three'] }, 'READ')
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'ada', aliases: ['ada.two', 'ada.three'], locked: [] }, 'READ')
     for (const name of ['ada', 'ada.two', 'ada.three']) assert.equal((await who(srv.port, name)).headers.location, `https://${APP}/c/${a.code}`, name)
     assert.equal((await who(srv.port, 'ada.four')).status, 404)
     const stored = (await readStore(backupDir)).codes[a.code]
@@ -172,8 +173,8 @@ test('aliases: an alias with no primary becomes the primary; re-claiming a held 
   let t = T0
   await withServer(0, { ...BASE, now: () => t }, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
-    assert.deepEqual((await claim(srv.port, { name: 'solo', alias: true, ...a })).json, { name: 'solo', aliases: [] })
-    assert.deepEqual((await claim(srv.port, { name: 'two2', alias: true, ...a })).json, { name: 'solo', aliases: ['two2'] })
+    assert.deepEqual((await claim(srv.port, { name: 'solo', alias: true, ...a })).json, { name: 'solo', aliases: [], locked: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'two2', alias: true, ...a })).json, { name: 'solo', aliases: ['two2'], locked: [] })
     const before = (await readStore(backupDir)).codes[a.code]
     t += DAY / 2
     assert.equal((await claim(srv.port, { name: 'solo', ...a })).status, 200)
@@ -189,12 +190,12 @@ test('aliases: a different primary REPLACES the old one and frees it (6b); the a
     const b = await mint(srv.port, LONG2)
     await claim(srv.port, { name: 'ada', ...a })
     await claim(srv.port, { name: 'ada.two', alias: true, ...a })
-    assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: ['ada.two'] })
+    assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: ['ada.two'], locked: [] })
     assert.equal((await who(srv.port, 'ada')).status, 404, 'the replaced primary is free at once')
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
-    assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...a })).json, { name: 'ada.two', aliases: ['grace'] }, 'PROMOTE: the alias becomes the primary, the old primary an alias')
+    assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...a })).json, { name: 'ada.two', aliases: ['grace'], locked: [] }, 'PROMOTE: the alias becomes the primary, the old primary an alias')
     await claim(srv.port, { name: 'ada.three', alias: true, ...a })
-    assert.deepEqual((await claim(srv.port, { name: 'ada.three', ...a })).json, { name: 'ada.three', aliases: ['ada.two', 'grace'] }, 'a full code can still promote (the count stays 3)')
+    assert.deepEqual((await claim(srv.port, { name: 'ada.three', ...a })).json, { name: 'ada.three', aliases: ['ada.two', 'grace'], locked: [] }, 'a full code can still promote (the count stays 3)')
   })
 })
 
@@ -202,17 +203,17 @@ test('aliases: release frees one name; the primary release promotes the first al
   await withServer(0, BASE, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
     for (const [name, alias] of [['ada', false], ['ada.two', true], ['ada.three', true]]) await claim(srv.port, { name, alias, ...a })
-    assert.deepEqual((await claim(srv.port, { release: 'ada.three', ...a })).json, { name: 'ada', aliases: ['ada.two'] })
+    assert.deepEqual((await claim(srv.port, { release: 'ada.three', ...a })).json, { name: 'ada', aliases: ['ada.two'], locked: [] })
     assert.equal((await who(srv.port, 'ada.three')).status, 404)
-    assert.deepEqual((await claim(srv.port, { release: 'ada', ...a })).json, { name: 'ada.two', aliases: [] }, 'the first alias is promoted')
+    assert.deepEqual((await claim(srv.port, { release: 'ada', ...a })).json, { name: 'ada.two', aliases: [], locked: [] }, 'the first alias is promoted')
     assert.equal((await who(srv.port, 'ada')).status, 404)
     assert.equal((await who(srv.port, 'ada.two')).status, 302)
-    assert.deepEqual((await claim(srv.port, { release: 'nobody', ...a })).json, { name: 'ada.two', aliases: [] }, 'not held: 200, unchanged')
+    assert.deepEqual((await claim(srv.port, { release: 'nobody', ...a })).json, { name: 'ada.two', aliases: [], locked: [] }, 'not held: 200, unchanged')
     await claim(srv.port, { name: 'bak.up', alias: true, ...a })
-    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: 'bak.up', aliases: [] }, 'legacy release of the primary promotes')
+    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: 'bak.up', aliases: [], locked: [] }, 'legacy release of the primary promotes')
     assert.deepEqual((await readStore(backupDir)).codes[a.code].aliases, undefined, 'an empty alias list is not written')
-    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: '', aliases: [] })
-    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: '', aliases: [] }, 'idempotent')
+    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: '', aliases: [], locked: [] })
+    assert.deepEqual((await claim(srv.port, { name: '', ...a })).json, { name: '', aliases: [], locked: [] }, 'idempotent')
     assert.equal((await readStore(backupDir)).codes[a.code].name, undefined)
   })
 })
@@ -226,7 +227,7 @@ test('aliases: a name held by another code is name_taken as primary and as alias
     for (const alias of [false, true]) for (const name of ['ada', 'ada.two']) assert.equal((await claim(srv.port, { name, alias, ...b })).status, 409, `${name} alias=${alias}`)
     assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...b })).json.error, 'name_taken')
     await claim(srv.port, { release: 'ada.two', ...a })
-    assert.deepEqual((await claim(srv.port, { name: 'ada.two', alias: true, ...b })).json, { name: 'ada.two', aliases: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada.two', alias: true, ...b })).json, { name: 'ada.two', aliases: [], locked: [] })
   })
 })
 
@@ -263,7 +264,7 @@ test('READ: returns the names and changes nothing (no write, no last-use refresh
     const mtime = (await fs.stat(file)).mtimeMs
     t += 300 * DAY
     const read = await claim(srv.port, a)
-    assert.deepEqual(read.json, { name: 'ada', aliases: [] })
+    assert.deepEqual(read.json, { name: 'ada', aliases: [], locked: [] })
     assert.equal(await fs.readFile(file, 'utf8'), before)
     assert.equal((await fs.stat(file)).mtimeMs, mtime)
     const wrong = await claim(srv.port, { code: a.code, secret: OTHER_SECRET })
@@ -307,7 +308,7 @@ test('NO ORACLE: for a wrong secret a reserved name, a taken name and a free nam
 test('LOCKED: a granted reserved name cannot be released or replaced by the app; re-claiming it is 200; an alias beside it is allowed and removable', async () => {
   await withServer(0, BASE, async ({ srv }) => {
     const a = await mint(srv.port)
-    assert.deepEqual((await grant(srv, a.code, 'japossert')).json, { name: 'japossert', aliases: [] })
+    assert.deepEqual((await grant(srv, a.code, 'japossert')).json, { name: 'japossert', aliases: [], locked: ['japossert'] })
     assert.equal((await who(srv.port, 'japossert')).status, 302)
     const locked = { error: 'name_locked', message: 'That name is reserved for you; ask to change it.', field: 'name' }
     const refusal = async (body) => {
@@ -318,15 +319,35 @@ test('LOCKED: a granted reserved name cannot be released or replaced by the app;
     await refusal({ name: 'grace' })
     await refusal({ release: 'japossert' })
     await refusal({ name: '' })
-    assert.deepEqual((await claim(srv.port, { name: 'japossert', ...a })).json, { name: 'japossert', aliases: [] }, 'idempotent re-claim of a held reserved name')
-    assert.deepEqual((await claim(srv.port, { name: 'grace', alias: true, ...a })).json, { name: 'japossert', aliases: ['grace'] })
+    assert.deepEqual((await claim(srv.port, { name: 'japossert', ...a })).json, { name: 'japossert', aliases: [], locked: ['japossert'] }, 'idempotent re-claim of a held reserved name')
+    assert.deepEqual((await claim(srv.port, { name: 'grace', alias: true, ...a })).json, { name: 'japossert', aliases: ['grace'], locked: ['japossert'] })
     await refusal({ name: 'grace' }) // promoting past the locked primary
-    assert.deepEqual((await claim(srv.port, { release: 'grace', ...a })).json, { name: 'japossert', aliases: [] })
-    assert.deepEqual((await grant(srv, a.code, 'jakob', true)).json, { name: 'japossert', aliases: ['jakob'] })
+    assert.deepEqual((await claim(srv.port, { release: 'grace', ...a })).json, { name: 'japossert', aliases: [], locked: ['japossert'] })
+    assert.deepEqual((await grant(srv, a.code, 'jakob', true)).json, { name: 'japossert', aliases: ['jakob'], locked: ['japossert', 'jakob'] })
     await refusal({ release: 'jakob' })
     assert.equal((await claim(srv.port, { name: 'jakob', alias: true, ...a })).status, 200)
     await refusal({ name: 'jakob' })
-    assert.deepEqual((await claim(srv.port, a)).json, { name: 'japossert', aliases: ['jakob'] })
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'japossert', aliases: ['jakob'], locked: ['japossert', 'jakob'] })
+  })
+})
+
+test('LOCKED is told to the app: every 200 of POST /name and of the admin routes carries `locked`, the held names that are reserved (this is how the app draws a lock and hides Release)', async () => {
+  await withServer(0, BASE, async ({ srv }) => {
+    const a = await mint(srv.port)
+    assert.deepEqual((await claim(srv.port, a)).json, { name: '', aliases: [], locked: [] })
+    await claim(srv.port, { name: 'ada', ...a })
+    await claim(srv.port, { name: 'ada.two', alias: true, ...a })
+    assert.deepEqual((await claim(srv.port, a)).json.locked, [], 'nothing granted: nothing locked')
+    assert.deepEqual((await grant(srv, a.code, 'japossert')).json, { name: 'japossert', aliases: ['ada', 'ada.two'], locked: ['japossert'] }, 'the answer of the grant itself')
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'japossert', aliases: ['ada', 'ada.two'], locked: ['japossert'] }, 'READ: the unlocked aliases are absent')
+    assert.deepEqual((await claim(srv.port, { release: 'ada.two', ...a })).json.locked, ['japossert'], 'the 200 of a release carries it too')
+    await grant(srv, a.code, 'jakob', true)
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'japossert', aliases: ['ada', 'jakob'], locked: ['japossert', 'jakob'] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada', alias: true, ...a })).json.locked, ['japossert', 'jakob'], 'a no-op answer too')
+    const del = await admin(srv, { method: 'DELETE', body: { code: a.code, name: 'japossert' } })
+    assert.deepEqual(del.json, { name: 'ada', aliases: ['jakob'], locked: ['jakob'] })
+    await admin(srv, { method: 'DELETE', body: { code: a.code, name: 'jakob' } })
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'ada', aliases: [], locked: [] }, 'after the admin removed the grants nothing is locked')
   })
 })
 
@@ -335,9 +356,9 @@ test('LOCKED: a locked ALIAS beside an unlocked primary can be promoted (nothing
     const b = await mint(srv.port)
     await claim(srv.port, { name: 'bob', ...b })
     await grant(srv, b.code, 'jakob', true)
-    assert.deepEqual((await claim(srv.port, { name: 'jakob', ...b })).json, { name: 'jakob', aliases: ['bob'] })
+    assert.deepEqual((await claim(srv.port, { name: 'jakob', ...b })).json, { name: 'jakob', aliases: ['bob'], locked: ['jakob'] })
     assert.equal((await claim(srv.port, { name: 'bob', ...b })).status, 409, 'jakob is the primary now and locked')
-    assert.deepEqual((await claim(srv.port, { release: 'bob', ...b })).json, { name: 'jakob', aliases: [] })
+    assert.deepEqual((await claim(srv.port, { release: 'bob', ...b })).json, { name: 'jakob', aliases: [], locked: ['jakob'] })
   })
 })
 
@@ -380,7 +401,7 @@ test('an expired code takes its aliases with it: /who/ is 404 for all, and anoth
     t += 2 * DAY // a is past 365 days, b is not
     assert.equal((await who(srv.port, 'ada')).status, 404)
     assert.equal((await who(srv.port, 'ada.two')).status, 404)
-    assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...b })).json, { name: 'ada.two', aliases: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...b })).json, { name: 'ada.two', aliases: [], locked: [] })
     assert.equal((await claim(srv.port, { name: 'ada', alias: true, ...b })).status, 200)
   })
 })
@@ -461,17 +482,17 @@ test('STORE: claim / release / grant / remove results, the locked check uses the
     const store = await openAt(file, () => T0, { reserved })
     const made = await store.mint('https://x.test/?connect=1', S)
     const code = made.code
-    assert.deepEqual(await store.claim(code, S, { name: 'ada' }), { kind: 'named', name: 'ada', aliases: [] })
-    assert.deepEqual(await store.claim(code, S, { name: 'ada.two', alias: true }), { kind: 'named', name: 'ada', aliases: ['ada.two'] })
+    assert.deepEqual(await store.claim(code, S, { name: 'ada' }), { kind: 'named', name: 'ada', aliases: [], locked: [] })
+    assert.deepEqual(await store.claim(code, S, { name: 'ada.two', alias: true }), { kind: 'named', name: 'ada', aliases: ['ada.two'], locked: [] })
     assert.deepEqual(await store.claim(code, S, { name: 'jakob' }), { kind: 'reserved' })
     assert.deepEqual(await store.claim(code, 'x'.repeat(43), { name: 'jakob' }), { kind: 'forbidden' })
-    assert.deepEqual(await store.grant(code, 'jakob'), { kind: 'named', name: 'jakob', aliases: ['ada', 'ada.two'] })
+    assert.deepEqual(await store.grant(code, 'jakob'), { kind: 'named', name: 'jakob', aliases: ['ada', 'ada.two'], locked: ['jakob'] })
     assert.deepEqual(await store.claim(code, S, { name: 'ada' }), { kind: 'locked' })
     assert.deepEqual(await store.release(code, S, null), { kind: 'locked' })
     assert.deepEqual(await store.grant(code, 'more.names'), { kind: 'too_many' })
     assert.deepEqual(await store.grant('z'.repeat(22), 'x1x'), { kind: 'unknown' })
     assert.deepEqual(await store.remove(code, 'zzz'), { kind: 'not_held' })
-    assert.deepEqual(await store.remove(code, 'jakob'), { kind: 'named', name: 'ada', aliases: ['ada.two'] })
+    assert.deepEqual(await store.remove(code, 'jakob'), { kind: 'named', name: 'ada', aliases: ['ada.two'], locked: [] })
     assert.deepEqual(await store.remove('z'.repeat(22), 'ada'), { kind: 'unknown' })
     assert.deepEqual(store.holders((n) => n.startsWith('ada')), [{ name: 'ada', code }, { name: 'ada.two', code }])
     const saved = JSON.parse(await fs.readFile(file, 'utf8')).codes[code]
@@ -494,7 +515,7 @@ test('ROLLBACK: a failed write restores the names (primary, aliases and the name
       assert.equal(r.json.error, 'server_error')
     }
     assert.equal((await grant(srv, a.code, 'japossert')).status, 500)
-    assert.deepEqual((await claim(srv.port, a)).json, { name: 'ada', aliases: ['ada.two'] }, 'READ needs no write and sees the old names')
+    assert.deepEqual((await claim(srv.port, a)).json, { name: 'ada', aliases: ['ada.two'], locked: [] }, 'READ needs no write and sees the old names')
     assert.equal((await who(srv.port, 'ada')).status, 302)
     assert.equal((await who(srv.port, 'ada.two')).status, 302)
     for (const name of ['ada.three', 'grace', 'japossert']) assert.equal((await who(srv.port, name)).status, 404, name)
@@ -542,7 +563,7 @@ test('the old reserved-name behaviour stays where it must: a code-shaped or malf
   await withServer(0, BASE, async ({ srv }) => {
     const a = await mint(srv.port)
     assert.equal((await claim(srv.port, { name: 'a'.repeat(22), ...a })).status, 400)
-    assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: [] })
+    assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: [], locked: [] })
     const r = await call(srv.port, { url: '/who/grace', host: 'app.example.test' })
     assert.equal(r.status, 302)
   })

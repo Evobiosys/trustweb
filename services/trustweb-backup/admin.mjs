@@ -65,7 +65,7 @@ function createFailureGate({ limit, now }) {
 export function createAdmin({ cfg, store, clientOf, now = Date.now }) {
   const gate = createFailureGate({ limit: FAILED_TOKENS_PER_MINUTE, now })
 
-  const bodyOf = (result) => ({ name: result.name, aliases: result.aliases })
+  const bodyOf = (result) => ({ name: result.name, aliases: result.aliases, locked: result.locked })
 
   /** The status an admin store result answers with (a `named` result is answered by the caller). */
   function refusal(res, result) {

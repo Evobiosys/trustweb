@@ -61,7 +61,7 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   the last use, at most 20000 codes, store <BACKUP_DIR>/connect.json (0600). Never logged. CONNECT_* settings (config.mjs). Caddy:
                   scripts/trustweb_connect_caddy_install.sh. connect.mjs, connect_store.mjs, connect_names.mjs. Contract: services-api-contract.txt section 10.
   usernames, wave 6e (contract section 10.9): a code holds up to 3 names (a primary + 2 aliases; POST /name {"name","alias":true} / {"release":"<name>"} / code+secret
-                  alone = READ the names; answers {"name","aliases"}). RESERVED_NAMES (env, production japossert,jakob) + the built-in list answer 409 reserved;
+                  alone = READ the names; answers {"name","aliases","locked"}: locked = the held names that are reserved). RESERVED_NAMES (env, production japossert,jakob) + the built-in list answer 409 reserved;
                   a reserved name a code holds was granted by the admin and is LOCKED against the app (409 name_locked). The admin routes POST|DELETE /admin/name and
                   GET /admin/names are loopback-only (loopback peer, Host 127.0.0.1[:port] or localhost[:port], no Forwarded / X-Forwarded-* / X-Real-IP / Origin header,
                   X-Admin-Token from the systemd credential admin = /etc/trustweb/admin.json), dispatched before the Host gate, NEVER in Caddy. Operator:
@@ -80,7 +80,7 @@ Requires Node 20+ (fs.openAsBlob, AbortSignal.any, fs.statfs; questhub has Node 
 
 TEST
   sh services/trustweb-backup/test/run_tests.sh      (TSC=/path/to/tsc if this worktree has no node_modules)
-Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over fifteen files (289 tests after wave 6e: 235 before it plus 54 for aliases, reserved and locked names, the READ intent and the admin routes, aliases.test.mjs and admin.test.mjs, with the 6b connect tests updated; 232 tests after wave 6b: 190 before it plus 42 for the connect codes and usernames, connect.test.mjs; 190 after wave 5: 166 before it plus 24 for the short links, links.test.mjs; earlier, 151 since wave 3: 130 before it plus 21 for Berget, the chain and the person-never-pays rule; the 17
+Typechecks backup.ts with apps/demo's tsc, compiles it to a temp dir, runs node --test over fifteen files (290 tests after wave 6e: 235 before it plus 55 for aliases, reserved and locked names, the READ intent and the admin routes, aliases.test.mjs and admin.test.mjs, with the 6b connect tests updated; 232 tests after wave 6b: 190 before it plus 42 for the connect codes and usernames, connect.test.mjs; 190 after wave 5: 166 before it plus 24 for the short links, links.test.mjs; earlier, 151 since wave 3: 130 before it plus 21 for Berget, the chain and the person-never-pays rule; the 17
 original backup tests untouched, then allowance arithmetic, hosted routes, transcription against a fake Infomaniak and a fake
 OpenRouter (23 tests: success, bad model JSON, 400/401/402/403/429/500, gateway statuses counted, timeout, oversized, budgets, hang-up), feedback
 and CORS, ETag/late packs, the in-memory limiters; transcribe_berget.test.mjs: a fake Berget and a fake OpenRouter). Fixed test ports 8971-8976

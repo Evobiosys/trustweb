@@ -162,7 +162,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     }
   }
 
-  const named = (entry) => ({ kind: 'named', ...answerFor(namesOf(entry)) })
+  const named = (entry) => ({ kind: 'named', ...answerFor(namesOf(entry), reserved) })
 
   /**
    * Is `name` held by another LIVE code? A holder that expired but has not been swept yet gives its names up with its code (as it always did).
