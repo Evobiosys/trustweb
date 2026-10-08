@@ -120,6 +120,9 @@ SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=f
 SERVICES_LIVE="${TW_SERVICES_LIVE:-0}"   # <- hosting flag, see the header
 TRANSCRIBE_LIVE="${TW_TRANSCRIBE_LIVE:-0}"   # <- server transcription flag, see the header
 HOPS_LIVE="${TW_HOPS_LIVE:-0}"   # <- passing a question on through friends flag, see the header
+INPERSON_LIVE="${TW_INPERSON_LIVE:-0}"   # <- meeting in person flag, see the header
+INPERSON_LOOKUP="${TW_INPERSON_LOOKUP:-0}"   # <- typing code/name/DID flag, see the header
+INPERSON_ADVANCED="${TW_INPERSON_ADVANCED:-0}"   # <- advanced sharing choices flag, see the header
 TRANSCRIBE_PROVIDER="${TW_TRANSCRIBE_PROVIDER:-openrouter}"   # <- which provider the transcription copy names, see the header
 case "$TRANSCRIBE_PROVIDER" in
   openrouter|berget|berget-only) ;;
@@ -133,8 +136,11 @@ for arg in "$@"; do
     --services-live) SERVICES_LIVE=1 ;;
     --transcribe-live) TRANSCRIBE_LIVE=1 ;;
     --hops-live) HOPS_LIVE=1 ;;
+    --inperson-live) INPERSON_LIVE=1 ;;
+    --inperson-lookup) INPERSON_LOOKUP=1 ;;
+    --inperson-advanced) INPERSON_ADVANCED=1 ;;
     --publish-terms) PUBLISH_TERMS=1 ;;
-    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --hops-live, --publish-terms)" >&2; exit 2 ;;
+    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --hops-live, --inperson-live, --inperson-lookup, --inperson-advanced, --publish-terms)" >&2; exit 2 ;;
   esac
 done
 
@@ -163,6 +169,9 @@ fi
 [ "$SERVICES_LIVE" = 1 ] && ARGS+=(--services-live)
 [ "$TRANSCRIBE_LIVE" = 1 ] && ARGS+=(--transcribe-live)
 [ "$HOPS_LIVE" = 1 ] && ARGS+=(--hops-live)
+[ "$INPERSON_LIVE" = 1 ] && ARGS+=(--inperson-live)
+[ "$INPERSON_LOOKUP" = 1 ] && ARGS+=(--inperson-lookup)
+[ "$INPERSON_ADVANCED" = 1 ] && ARGS+=(--inperson-advanced)
 [ "$PUBLISH_TERMS" = 1 ] && ARGS+=(--publish-terms)
 python3 -I "$FRAG/tw_site.py" "${ARGS[@]}"
 if [ "$SITE_HOST" != idea2.site ]; then
