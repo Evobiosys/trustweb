@@ -681,8 +681,8 @@ async function contentChecksOrg(page) {
   await page.goto(BASE + 'faq.html')
   const faq = await page.evaluate(() => ({ n: document.querySelectorAll('details.q').length, ids: [...document.querySelectorAll('details.q')].map((d) => d.id),
     text: document.body.innerText + [...document.querySelectorAll('details.q')].map((d) => d.textContent).join(' ') }))
-  check('faq: exactly 10 questions, "what motivates people" and the app-fatigue question are gone',
-    faq.n === 10 && new Set(faq.ids).size === 10 && !faq.ids.includes('q-incentive') && !faq.ids.includes('q-need-it') &&
+  check('faq: exactly 11 questions (wave 6b added q-meet-in-person), "what motivates people" and the app-fatigue question are gone',
+    faq.n === 11 && new Set(faq.ids).size === 11 && faq.ids.includes('q-meet-in-person') && !faq.ids.includes('q-incentive') && !faq.ids.includes('q-need-it') &&
     !/Was motiviert die Leute|What makes people put their information in|worn out by apps|Brauche ich das wirklich/.test(faq.text), faq.ids.join(','))
   check('faq: Facebook one-liner, revenue "being worked out", German brackets, no pricing link', /Facebook lets you repost\. TrustWeb lets you ask/.test(faq.text) && /Being worked out\./.test(faq.text) && /\(Ist das nicht Facebook/.test(faq.text) &&
     (await page.locator('a[href*="pricing"]').count()) === 0)
