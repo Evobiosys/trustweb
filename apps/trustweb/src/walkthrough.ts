@@ -70,7 +70,7 @@ const relayYes = (who: string, q: string): string =>
 const askDirect = (q: string): string => `${ask(q, 1)}<br><small>${DIRECT_ONLY}</small>`
 /** The friend in the middle, with an ask that says "direct contacts only": checked on his phone, never passed on. */
 const directHere = (who: string): string =>
-  `<div class="wt-cosmic"><b>${who} asks you</b><br><small>${who} asks direct contacts only: checked against your own inventory, not passed on to your friends.</small>${card('', 'Nothing of yours matches. Nothing is passed on.')}</div>`
+  `<div class="wt-cosmic"><b>${who} asks you</b><br><small>${who} asks direct contacts only: checked against your own resources, not passed on to your friends.</small>${card('', 'Nothing of yours matches. Nothing is passed on.')}</div>`
 const noMatch = `<div class="wt-h">Call into your web</div>${card('', '<b>No match</b>')}<small>Only your direct contacts were asked.</small>`
 const DIRECT_ONLY = 'Ask only my direct contacts: <b>On</b>'
 const AISHA_REAL = 'In real life: she just opened a small fund for open-source tools.'
@@ -116,8 +116,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Maya notes what she could lend', changed: ['maya'],
-        text: 'One line in her inventory (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
-        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${LOUDSPEAKERS}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
+        text: 'One line in her resources (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
+        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${LOUDSPEAKERS}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
       },
       {
         title: 'Jonas calls into his web', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
@@ -170,7 +170,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes an opening', changed: ['maya'],
         text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
@@ -189,8 +189,8 @@ const MODES: Mode[] = [
       },
       {
         title: 'Sam has a job lead', changed: ['sam'], path: ['jonas', 'sam'],
-        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. It was not in Jonas\'s inventory but in Maya\'s, and the answer says so: "through Jonas". Next, Sam can ask Jonas for an introduction to Maya.',
-        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's inventory: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+        text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. It was not in Jonas\'s resources but in Maya\'s, and the answer says so: "through Jonas". Next, Sam can ask Jonas for an introduction to Maya.',
+        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's resources: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
     direct: [
@@ -202,16 +202,16 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes an opening', changed: ['maya'],
         text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My inventory</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
       },
       {
         title: 'Sam calls into his web, direct contacts only', changed: ['sam', 'jonas'], path: ['sam', 'jonas'],
-        text: '"Who is hiring?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on, whatever his own setting says.',
+        text: '"Who is hiring?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own resources and does not pass it on, whatever his own setting says.',
         screens: { sam: askDirect('Who is hiring?'), jonas: directHere('Sam'), maya: quiet('Nothing reaches Maya.') },
       },
       {
         title: 'Sam sees "No match"', changed: ['sam'], path: ['jonas', 'sam'],
-        text: 'Nothing in Jonas\'s own inventory matched, so Sam sees "No match". Maya\'s opening stays where it is: an answer "through Jonas" comes only when Sam lets his asks go further.',
+        text: 'Nothing in Jonas\'s own resources matched, so Sam sees "No match". Maya\'s opening stays where it is: an answer "through Jonas" comes only when Sam lets his asks go further.',
         screens: { sam: noMatch, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
@@ -278,12 +278,12 @@ const MODES: Mode[] = [
       },
       {
         title: 'Lena calls into her web, direct contacts only', changed: ['lena', 'jonas'], path: ['lena', 'jonas'],
-        text: '"Any new open-source funding?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own inventory and does not pass it on to Maya.',
+        text: '"Any new open-source funding?" It reaches Jonas and stops there: the ask says "direct contacts only", so Jonas\'s phone checks his own resources and does not pass it on to Maya.',
         screens: { lena: askDirect('Any new open-source funding?'), jonas: directHere('Lena'), maya: quiet('Nothing reaches Maya.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {
         title: 'Lena sees "No match"', changed: ['lena'], path: ['jonas', 'lena'],
-        text: 'Nothing in Jonas\'s own inventory matched, so Lena sees "No match". Maya\'s note about the fund stays where it is: an answer "through Jonas" comes only when Lena lets her asks go further.',
+        text: 'Nothing in Jonas\'s own resources matched, so Lena sees "No match". Maya\'s note about the fund stays where it is: an answer "through Jonas" comes only when Lena lets her asks go further.',
         screens: { lena: noMatch, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
     ],

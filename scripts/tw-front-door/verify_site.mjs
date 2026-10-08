@@ -630,8 +630,8 @@ async function contentChecksOrg(page) {
     const link = [...(box?.querySelectorAll('a') ?? [])].find((a) => a.textContent.trim() === 'the vision')
     return { heading: box?.querySelector('.herotoday-h')?.textContent.trim(), items, link: link?.getAttribute('href') }
   })
-  check('index: hero says what it can do today: call into your web FIRST, then people you trust, record and keep a meeting, inventory',
-    today.heading === 'What it can do today' && today.items.join('|') === 'Call into your web|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
+  check('index: hero says what it can do today: call into your web FIRST, then people you trust, record and keep a meeting, resources',
+    today.heading === 'What it can do today' && today.items.join('|') === 'Call into your web|Keep the people you trust|Record and keep a meeting|Keep your resources', JSON.stringify(today))
   check(HOPS_LIVE ? 'index: the hero no longer links "the vision" (hops are live)' : 'index: the hero links "the vision" to why.html',
     HOPS_LIVE ? today.link === undefined : today.link === 'why.html', String(today.link))
   const heroMore = await page.evaluate(() => document.querySelector('.hero .herotoday-more')?.textContent.replace(/\s+/g, ' ').trim())
@@ -651,8 +651,8 @@ async function contentChecksOrg(page) {
     footerFeatureHrefs: [...document.querySelectorAll('.sitefooter .sf-col:first-child a')].map((a) => a.getAttribute('href')),
     footerUse: [...document.querySelectorAll('.sitefooter .sf-col:nth-child(3) li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()),
     coin: [...document.querySelectorAll('.coin .side h3')].map((h) => h.textContent.trim()) }))
-  check('index: the feature grid has exactly six cards in Jakob\'s order: Your web of connections, Call into your web, Record a meeting, Transcribe and send a meeting, Inventory, Encrypted Swiss backup',
-    order.featureTitles.join('|') === 'Your web of connections|Call into your web|Record a meeting|Transcribe and send a meeting|Inventory|Encrypted Swiss backup' && order.features.join(',') === 'f-web,f-ask,f-record,f-notes,f-inventory,f-backup', order.featureTitles.join('|'))
+  check('index: the feature grid has exactly six cards in Jakob\'s order: Your web of connections, Call into your web, Record a meeting, Transcribe and send a meeting, My Resources, Encrypted Swiss backup',
+    order.featureTitles.join('|') === 'Your web of connections|Call into your web|Record a meeting|Transcribe and send a meeting|My Resources|Encrypted Swiss backup' && order.features.join(',') === 'f-web,f-ask,f-record,f-notes,f-inventory,f-backup', order.featureTitles.join('|'))
   check('index: the footer Features list is the same six, in the same order, each linking to its card',
     order.footerFeatures.join('|') === order.featureTitles.join('|') && order.footerFeatureHrefs.join(',') === './#f-web,./#f-ask,./#f-record,./#f-notes,./#f-inventory,./#f-backup', order.footerFeatures.join('|'))
   check('index: use cases lead with Introductions (asking) before Events and Marketplace', order.useCases[0] === 'uc-introductions' && order.useCases.indexOf('uc-introductions') < order.useCases.indexOf('uc-events'), order.useCases.join(','))

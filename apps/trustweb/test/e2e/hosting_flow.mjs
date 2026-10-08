@@ -60,8 +60,8 @@ async function saveMemo(page, what) {
   await page.getByRole('button', { name: 'Send' }).click()
   await page.locator('.line-card').first().waitFor({ timeout: 10_000 })
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
 }
 const meetingId = async (page, about) => (await record(page)).meetings.find((m) => m.about === about)?.id
 

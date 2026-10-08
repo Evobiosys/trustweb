@@ -146,7 +146,7 @@ async function main() {
         ok(`Jakob sees "${name} asks to connect" in his own view`, new RegExp(`${name} asks to connect`).test(await card.innerText()))
         await card.getByRole('button', { name: 'Allow', exact: true }).click()
       } else {
-        await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+        await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
         await page.getByRole('button', { name: 'Review requests' }).click()
         const sheet = page.locator('.sheet')
         await sheet.getByRole('button', { name: `Allow ${name}` }).waitFor({ timeout: 20_000 })
@@ -165,7 +165,7 @@ async function main() {
     await a.getByRole('button', { name: 'Start on this phone' }).click()
     await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     await a.locator('.demo-friends').getByRole('button', { name: 'No thanks' }).click()
-    await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await a.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Ladder, can lend it for a weekend')
     await a.getByRole('button', { name: 'Add', exact: true }).click()
     ok('Jakob has one inventory line', (await a.locator('.inv').count()) === 1)
@@ -297,7 +297,7 @@ async function main() {
     await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     ok('Jakob\'s past meeting survives a reload', (await stored(a)).meetings?.length === 1 && (await a.locator('.status-pill.qr').count()) === 1)
     // Back where step 4 left him (Inventory), so step 5's tab clicks behave as before.
-    await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
 
     // 5. Countdown, extend, end
     await a.getByRole('button', { name: 'More' }).click().catch(() => {})
@@ -354,7 +354,7 @@ async function main() {
     await c.locator('.card.asked .outcome').waitFor({ timeout: 90_000 })
     ok('the account on this phone asks and gets Jakob\'s share', /Jakob chose to share/.test(await c.locator('.card.asked .outcome').innerText()))
     await a.getByRole('button', { name: 'Back to the app' }).click()
-    await c.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await c.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     ok('its Inventory shows "What this account found" with the ladder', /What this account found/i.test(await text(c.locator('.found'))) && /Ladder/.test(await text(c.locator('.found'))), await text(c.locator('.found')))
     await shot(c, '11-ben-found')
     await c.getByRole('button', { name: 'Settings' }).click()

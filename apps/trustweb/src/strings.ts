@@ -145,7 +145,7 @@ export const S = {
   setNotesMatch: 'Let asks match my notes too',
   setNotesMatchHint: 'When somebody asks through you, the notes you took in meetings can match too (never a note that is "Only me"). You still say yes or no to every ask, and only the one line goes out, never the whole note or the meeting. Off for a demo phone.',
   setDirectOnly: 'Ask only my direct contacts',
-  setDirectOnlyHint: 'Your asks go to the people you are connected with and stop there: each one answers from their own inventory and never passes your ask on to their friends or to a front door. Off: they may pass it on where they allowed it.',
+  setDirectOnlyHint: 'Your asks go to the people you are connected with and stop there: each one answers from their own resources and never passes your ask on to their friends or to a front door. Off: they may pass it on where they allowed it.',
   addDeviceShort: 'Add a device',
   // Your own name, editable any time: tap yourself in the web, or Settings (owner 2026-10-05).
   meNameTitle: 'Your name',
@@ -167,7 +167,7 @@ export const S = {
   recordKeptAside: 'TrustWeb on this device holds a saved web this version cannot read. It is kept aside, untouched: starting again here does not replace it. Tell us at idea2.site/trustweb/feedback.html and we help you get it back.',
 
   navWeb: 'Web',
-  navInventory: 'Inventory',
+  navInventory: 'My Resources',
   navRecord: 'Record',
 
   // The top-right pill: no "Online" text any more (owner, 2026-10-05). It is a
@@ -345,7 +345,7 @@ export const S = {
     [Tag.Note]: 'a note',
     [Tag.Custom]: 'your own label',
   } as Record<Tag, string>,
-  promptHint: 'Tap one to note it right away. The notes go to them, or to your inventory, when you save.',
+  promptHint: 'Tap one to note it right away. The notes go to them, or to My Resources, when you save.',
   // Past meetings (owner 2026-10-06: "I had a meeting and took notes, incl. where we met").
   pastTitle: 'Past meetings',
   pastLink: (n: number) => (n ? `Past meetings (${n})` : 'Past meetings'),
@@ -367,21 +367,21 @@ export const S = {
   pastOpenPerson: (name: string) => `Open ${name} in your web`,
   pastUnnamed: 'Unnamed meeting',
   placeWhatTitle: (what: string) => `Notes about ${what}`,
-  placeWhatSave: 'Save to my inventory',
+  placeWhatSave: 'Save to My Resources',
   placeContextTitle: (item: string) => `Context for ${item}`,
-  placeContextLead: 'These notes are added to the thing you picked, as context. Nothing new appears in your inventory, and context is never part of an answer.',
+  placeContextLead: 'These notes are added to the thing you picked, as context. Nothing new appears in My Resources, and context is never part of an answer.',
   placeContextSave: 'Add as context',
   savedContextToast: (item: string, n: number) => (n === 0 ? `Nothing new for ${item}: it already had these notes.` : `Added ${n === 1 ? 'one note' : `${n} notes`} as context to ${item}.`),
   savedPlainToast: 'Saved as a plain note. You find it under Past meetings.',
   itemContextTitle: 'Context',
-  savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to your inventory.`,
+  savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to My Resources.`,
   hintText: {
     meeting: 'Meeting: record a conversation you both agreed to, with a live transcript and who said what.',
     qr: 'Your code: someone scans it, or you send them the link, to connect with you. It is one short link that stays the same when your name changes; our server keeps it for you, and the long link works without the server. Under the arrow you can pin the modes you use most (TrustWeb with Signal, WhatsApp or Matrix), or show only your Signal or WhatsApp link, or only TrustWeb. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
     'call-web': 'Checking for resonance: call into your web and feel the vibrations come back.',
     'web-tap': 'Tap empty space in the web to add someone. Tap a person to see your notes.',
     'about-who': 'Who: the recording is about a person. The notes go to them in your web.',
-    'about-what': 'What: the recording is about a thing, a place or a topic. The notes go to your inventory.',
+    'about-what': 'What: the recording is about a thing, a place or a topic. The notes go to My Resources.',
     'rec-advanced': 'Note opportunities, resources, what someone looks for or offers, and talent right away.',
   } as Record<string, string>,
   hintLabel: {
@@ -539,7 +539,7 @@ export const S = {
   stillUpdate: 'Update notes',
   stillToast: 'Notes updated.',
 
-  invTitle: 'My inventory',
+  invTitle: 'My Resources',
   invSettings: 'Settings',
   invLead: 'Things you would lend, give or share. Each line says who can ask about it.',
   invAddPh: 'e.g. Motorbike, can lend it for a weekend',
@@ -552,7 +552,7 @@ export const S = {
   reqTop: 'Review',
   reqBottom: 'requests',
   reqAria: 'Review requests',
-  reqTitle: 'Requests to your inventory',
+  reqTitle: 'Requests to My Resources',
   reqWaiting: (n: number) => `${n === 1 ? 'One ask is' : `${n} asks are`} waiting for your yes or no.`,
   reqOpen: 'Answer now',
   logEmpty: 'None yet.',
@@ -601,8 +601,8 @@ export const S = {
 
   setTitle: 'Settings',
   setTabs: 'Bottom bar',
-  setTabsWebLeft: 'Web on the left, Inventory on the right',
-  setTabsInvLeft: 'Inventory on the left, Web on the right',
+  setTabsWebLeft: 'Web on the left, My Resources on the right',
+  setTabsInvLeft: 'My Resources on the left, Web on the right',
   setTabsHint: 'Record always stays in the middle.',
   setQuery: 'Calling into your web',
   setQueryLabel: {
@@ -633,7 +633,7 @@ export const S = {
   } as Record<TranscriptionChoice, string>,
   setDefaultRecording: 'The Record tab starts with',
   // Record default by origin (owner 2026-10-06): Settings only decides where the origin does not.
-  setDefaultRecordingNote: 'From Inventory or the QR code, Record opens a meeting; from Web, just you. Everywhere else, this choice.',
+  setDefaultRecordingNote: 'From My Resources or the QR code, Record opens a meeting; from Web, just you. Everywhere else, this choice.',
   setDefaultRecordingLabel: {
     [DefaultRecording.Solo]: 'Just me',
     [DefaultRecording.Meeting]: 'A meeting',
@@ -962,7 +962,7 @@ export const S = {
   d2lLead: (name: string) => `The real TrustWeb opens on this device with everything you added as ${name}: your name, the people and things you added, your notes and past meetings. Nothing needs to be typed again. Then you can install it on your home screen.`,
   d2lQuestion: 'The imaginary friends and things: keep them (marked dummy) or start clean?',
   // Wave 3 (contract: FRONT DOOR = per user): the person claims THEIR front door with the hosted service; not built yet, said so.
-  d2lFrontDoor: 'Your own front door (an always-on inventory that answers while your phone is off) comes with the hosted service; coming soon:',
+  d2lFrontDoor: 'Your own front door (your resources, always on, answering while your phone is off) comes with the hosted service; coming soon:',
   d2lFrontDoorLink: 'TrustInTheWeb.com',
   // The side-by-side demo's device switch (wave 2, P24): one tap, one "whoosh" to the other phone.
   demoSwitch: (n: number) => `Switch to device ${n}`,
@@ -1105,10 +1105,10 @@ export const S = {
   persistNotGranted: 'This browser may still clear them when it runs short of space: a backup and hosting keep you safe.',
 
   // Import inventory file (wave 1733 round B, amendment A4).
-  impGroup: 'Inventory',
-  impButton: 'Import inventory file',
-  impHint: 'A trustweb-inventory-import.json made on your computer (from Tana). Its lines land as "Only me": nobody can ask about them until you change that. Nothing is sent anywhere.',
-  impTitle: 'Import inventory file',
+  impGroup: 'My Resources',
+  impButton: 'Import resources file',
+  impHint: 'A resources file (trustweb-inventory-import.json) made on your computer (from Tana). Its lines land as "Only me": nobody can ask about them until you change that. Nothing is sent anywhere.',
+  impTitle: 'Import resources file',
   impSummary: (n: number, already: number, on: string) => `${n === 1 ? '1 new line' : `${n} new lines`}${already ? `, ${already} already here (skipped)` : ''}${on ? ` (exported ${on})` : ''}.`,
   impLeftOut: (n: number, max: number) => `${n === 1 ? '1 more new line waits' : `${n} more new lines wait`}: one import adds at most ${max}. Import the same file again to add the next ones.`,
   impUnreadable: (n: number) => `${n === 1 ? '1 entry' : `${n} entries`} in the file could not be read and are left out.`,
@@ -1123,10 +1123,10 @@ export const S = {
   impReviewedAll: (n: number) => (n === 1 ? '1 line marked reviewed.' : `${n} lines marked reviewed.`),
   impUndoConfirm: 'Take away the lines this import added? Lines you changed since stay.',
   impUndone: (removed: number, kept: number) => `${removed === 1 ? '1 line' : `${removed} lines`} taken away${kept ? `, ${kept} you changed stay` : ''}.`,
-  impNotJson: 'This file cannot be read as an inventory file.',
-  impWrongFormat: 'This is not a TrustWeb inventory file.',
-  impWrongVersion: 'This inventory file is from a newer version of TrustWeb. Update the app, then import it again.',
-  impTooBig: 'This file is too big for an inventory file (more than 1 MB).',
+  impNotJson: 'This file cannot be read as a resources file.',
+  impWrongFormat: 'This is not a TrustWeb resources file.',
+  impWrongVersion: 'This resources file is from a newer version of TrustWeb. Update the app, then import it again.',
+  impTooBig: 'This file is too big for a resources file (more than 1 MB).',
   impEmpty: 'There are no lines in this file to import.',
 
   // The Feed (wave 1733 round B, item 1).
@@ -1151,7 +1151,7 @@ export const S = {
   ],
   feedFoot: 'Only what this phone already holds. Opening the Feed sends nothing anywhere (public posts from Mastodon or Pixelfed only where you switched them on).',
   feedToggle: 'Show the Feed (optional, early)',
-  feedToggleHint: 'An early, optional view: its own tab in the bottom bar. Off (the default): the bar is Web, Record and Inventory.',
+  feedToggleHint: 'An early, optional view: its own tab in the bottom bar. Off (the default): the bar is Web, Record and My Resources.',
 
   // Mastodon and Pixelfed as services (wave 1733 round B, item 2; no code of theirs in the app).
   fedTitle: 'Mastodon or Pixelfed',

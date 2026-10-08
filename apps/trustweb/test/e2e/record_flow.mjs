@@ -301,17 +301,17 @@ async function main() {
     await page.getByRole('button', { name: 'Back' }).click()
 
     // Inventory: cog settings, backup question
-    await page.getByRole('button', { name: 'Inventory' }).click()
+    await page.getByRole('button', { name: 'My Resources' }).click()
     ok('Inventory settings sit behind a cog (Lucide settings path)', await page.locator('.hdr-btn.icon-only svg path[d^="M12.22 2h"]').count() === 1)
     await page.waitForTimeout(500)
     ok('without a backup service the backup card stays hidden (backup_flow covers it live)', await page.getByText('Do you want to back it up on a Swiss server?').count() === 0)
     await shot(page, 'inventory')
     await page.getByRole('button', { name: 'Settings' }).click()
-    await page.getByRole('button', { name: 'Inventory on the left, Web on the right' }).click()
+    await page.getByRole('button', { name: 'My Resources on the left, Web on the right' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
     // Wave 2 (P9): the Feed is off by default, so the bar is the old three.
-    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['Inventory', 'Record', 'Web']), JSON.stringify(tabs))
+    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['My Resources', 'Record', 'Web']), JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     await page.getByRole('button', { name: 'More' }).click()

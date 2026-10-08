@@ -93,7 +93,7 @@ async function answerAsk(page, share, ms = 90_000) {
 const logCount = async (page, text) => ((await record(page)).log ?? []).filter((e) => e.text === text).length
 
 async function itemSheetChecks(cleo) {
-  await tab(cleo, 'Inventory')
+  await tab(cleo, 'My Resources')
   await cleo.getByPlaceholder(/Motorbike/).fill(LADDER)
   await cleo.getByRole('button', { name: 'Add', exact: true }).click()
   const row = cleo.locator('.inv', { hasText: LADDER })
@@ -218,7 +218,7 @@ async function main() {
     ok('cycle: Ann gets the ladder once', (r4.text.match(/Ladder, 3 m, to lend/g) ?? []).length === 1, r4.text)
 
     // 5. "Ask only my direct contacts" wins over any reach
-    await tab(ann, 'Inventory')
+    await tab(ann, 'My Resources')
     await ann.getByRole('button', { name: 'Settings' }).click()
     await ann.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
     // The sheet redraws once the server's status is in (wave3_flow does the same): wait for it, so no click lands on the old sheet.

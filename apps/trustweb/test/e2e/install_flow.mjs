@@ -68,6 +68,9 @@ const records = (page) => page.evaluate(() => {
   return out
 })
 
+/** A record without the once-per-record repair stamp (peerCardsUnmergedAt, review 6f): the app writes it on its first run, not as an answer to the sheet. */
+const withoutRepairStamp = (rec) => { const { peerCardsUnmergedAt, ...rest } = rec ?? {}; return rest }
+
 /** Opens the demo page, starts its first phone as `name` and adds one person of their own. */
 async function demoWithOwnPerson(page, base, name, own) {
   await page.goto(base + 'demo/')
@@ -148,7 +151,7 @@ async function demoToLive(browser, base, shot, errors) {
   await pc.locator('[data-d2l="clean"]').click()
   await pc.getByRole('heading', { name: 'Bring your demo along?' }).waitFor({ timeout: 15_000 })
   ok('live app with people: it says so and asks merge or cancel', /already has 1 person/.test(await pc.locator('.sheet').innerText()) && await pc.locator('[data-carry="merge"]').isVisible() && await pc.locator('[data-carry="cancel"]').isVisible())
-  ok('nothing is written before the answer', JSON.stringify((await records(pc))['trustweb.v1.me']) === JSON.stringify(before))
+  ok('nothing is written before the answer', JSON.stringify(withoutRepairStamp((await records(pc))['trustweb.v1.me'])) === JSON.stringify(withoutRepairStamp(before)))
   await shot(pc, '09_live_merge_question')
   await pc.setViewportSize({ width: 390, height: 844 })
   await pc.locator('[data-carry="merge"]').click()
@@ -265,7 +268,7 @@ async function main() {
     await shot(ip, '03_install_ios_move')
     await ip.setViewportSize({ width: 390, height: 844 })
     await ip.getByRole('button', { name: 'Back up first' }).click()
-    await ip.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 5_000 })
+    await ip.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 5_000 })
     ok('"Back up first" leads to the backup card in Inventory', await ip.getByText('Do you want to back it up on a Swiss server?').isVisible())
     await ios.close()
 

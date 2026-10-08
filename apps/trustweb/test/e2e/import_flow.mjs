@@ -27,7 +27,7 @@ async function shot(page, name) {
   await page.setViewportSize({ width: 430, height: 900 })
 }
 const openSettings = async (page) => {
-  await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.locator('[data-import-open]').waitFor({ timeout: 5_000 })
 }
@@ -69,7 +69,7 @@ async function main() {
     const r1 = await record(page)
     ok('the lines land as "Only me", from Tana, with the file\'s key', r1.inventory.length === 3 && r1.inventory.every((i) => i.audience === 'me' && i.source?.kind === 'tana' && /^[0-9a-f]{16}$/.test(i.source.ref)))
     ok('nothing was sent anywhere while importing', sent.length === 0, sent.join(' | '))
-    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await page.locator('.inv-text', { hasText: 'Graz housing' }).click()
     ok('the item says where it came from: Tana', await page.locator('.sheet.on [data-provenance="tana"]').count() === 1)
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
@@ -83,7 +83,7 @@ async function main() {
 
     // the person shares one of them with friends: Undo leaves that one
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
-    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await page.locator('.inv', { hasText: 'cargo bike' }).locator('.aud').click()
     await openSettings(page)
     await page.locator('[data-import-undo]').click()
@@ -93,7 +93,7 @@ async function main() {
 
     await page.locator('[data-import-file]').setInputFiles(wrong)
     await page.locator('[data-import-problem]').waitFor({ timeout: 5_000 })
-    ok('a wrong file is refused plainly, nothing written', /not a TrustWeb inventory file/.test(await page.locator('[data-import-problem]').innerText()) && (await record(page)).inventory.length === 1)
+    ok('a wrong file is refused plainly, nothing written', /not a TrustWeb resources file/.test(await page.locator('[data-import-problem]').innerText()) && (await record(page)).inventory.length === 1)
     ok('no page errors', errors.length === 0, errors.join(' | '))
   } catch (e) {
     c.failures++

@@ -186,8 +186,8 @@ async function partConsent(browser, base, provider) {
   ok('"Automatic" with a yes on this phone: the memo is NOT sent to the server (no job, no provider call)', !(rAuto.meetings ?? []).some((m) => m.serverJob) && provider.state.submits === submits0)
   ok('it waits to be transcribed later instead', /to transcribe later/.test(await page.locator('.line-card textarea').first().inputValue()))
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
 
   // The route changes (the server moved to another provider): the yes does not cover it, nothing is sent, it asks again.
   await page.evaluate(() => {
@@ -213,8 +213,8 @@ async function partConsent(browser, base, provider) {
   await page.waitForTimeout(1_000)
   ok('nothing was sent to the server under a yes for another route', provider.state.submits === submits1 && !((await record(page)).meetings ?? []).some((m) => m.serverJob))
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
   await openSettings(page)
   await openServerSheet(page)
   ok('the sheet names the earlier route and asks again', /Your earlier yes was for OpenRouter, USA/.test(await page.locator('.sheet.on [data-server-ask-again]').innerText())
@@ -258,8 +258,8 @@ async function partBC(browser, base, provider) {
   ok('its transcript: the segments as lines, speaker 1, on the recording timeline', JSON.stringify(memo?.transcript) === JSON.stringify([{ speaker: 1, atMs: 0, text: 'I can lend my cargo bike on weekends.' }, { speaker: 1, atMs: 2100, text: 'We are looking for a flat in Graz.' }]), JSON.stringify(memo?.transcript))
   ok('one take, one call to the provider', provider.state.submits - submits0 === 1)
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
   const r2 = await record(page)
   const flat = r2.inventory.find((i) => /flat in Graz/.test(i.text))
   ok('a saved item keeps the transcript line and the moment it came from (chain of proof)', flat?.source?.kind === 'recorded-solo' && flat.source.meetingId === memo.id && flat.source.line === 1 && flat.source.atMs === 2100, JSON.stringify(flat?.source))
@@ -278,8 +278,8 @@ async function partBC(browser, base, provider) {
   await recordMemo(page, 'Ladder', 1_500)
   ok('"Transcribe later": nothing goes to the server when it stops', (await record(page)).meetings.length === 1)
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
   await page.locator('nav.tabs .tab-record').click()
   await page.getByRole('button', { name: 'Just me' }).click({ timeout: 2_000 }).catch(() => {})
   await page.locator('.past-link').click()
@@ -311,8 +311,8 @@ async function partBC(browser, base, provider) {
   })
   ok('approx answer: lines with estimated times, the meeting marked rough', rough?.transcript?.length === 2 && rough.roughTimes === true, JSON.stringify(rough))
   await page.locator('.cta .btn').click()
-  await page.getByRole('button', { name: 'Save to my inventory' }).click()
-  await page.getByRole('heading', { name: 'My inventory' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Save to My Resources' }).click()
+  await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
   await page.locator('nav.tabs .tab-record').click()
   await page.getByRole('button', { name: 'Just me' }).click({ timeout: 2_000 }).catch(() => {})
   await page.locator('.past-link').click()
@@ -344,7 +344,7 @@ async function partD(browser, base, provider) {
   ok('Anna is connected to Jakob', (await record(a)).peers.length === 1)
 
   provider.state.hold = true
-  await a.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
   await a.locator('nav.tabs .tab-record').click()
   // Connecting on Meet named the draft after Anna (existing rule), so Record keeps that draft: switch it to a meeting.
   if (!(await a.getByRole('heading', { name: 'Meeting', exact: true }).isVisible())) await a.getByRole('button', { name: 'Meeting', exact: true }).click()

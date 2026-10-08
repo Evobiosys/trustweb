@@ -79,7 +79,7 @@ async function w1(jakob) {
   await tab(jakob, 'Record')
   const pastBtn = jakob.locator('.hdr .past-search-btn')
   ok('W1 Record keeps the magnifier for past meetings', /m21 21/.test(await pastBtn.innerHTML()))
-  await tab(jakob, 'Inventory')
+  await tab(jakob, 'My Resources')
   await jakob.getByRole('button', { name: 'Settings' }).click()
   await jakob.locator('.sheet.on [data-notes-match]').waitFor({ timeout: 10_000 })
   await jakob.waitForTimeout(400)
@@ -96,7 +96,7 @@ async function w1(jakob) {
   await patch(jakob, 's.demo = { people: [], inventory: [] }', {})
   await jakob.reload()
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-  await tab(jakob, 'Inventory')
+  await tab(jakob, 'My Resources')
   await jakob.getByRole('button', { name: 'Settings' }).click()
   await jakob.locator('.sheet.on [data-notes-match]').waitFor({ timeout: 10_000 })
   ok('W1 with demo content on, the switch is still ON for a personal account', (await jakob.locator('.sheet.on [data-notes-match]').getAttribute('aria-pressed')) === 'true')
@@ -236,7 +236,7 @@ async function w4(jakob, browser) {
   await admit(jakob, hugo, linkB, 'Hugo')
 
   // Gina's phone: Settings > Make it your personal account
-  await tab(gina, 'Inventory')
+  await tab(gina, 'My Resources')
   await gina.getByRole('button', { name: 'Settings' }).click()
   const ask = gina.locator('.sheet.on [data-keep-ask]')
   await ask.waitFor({ timeout: 10_000 })
@@ -255,14 +255,14 @@ async function w4(jakob, browser) {
   ok('W4 the guest\'s record: kept, no end, no pending ask', g.kept === true && g.expiresAt === undefined && g.keepAsked === undefined, JSON.stringify(g))
   await gina.reload()
   await gina.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-  await tab(gina, 'Inventory')
+  await tab(gina, 'My Resources')
   await gina.getByRole('button', { name: 'Settings' }).click()
   await gina.locator('.sheet.on').waitFor({ timeout: 5_000 })
   const gtext = await gina.locator('.sheet.on').innerText()
   ok('W4 the guest\'s Settings: "personal account, kept by Jakob", "stays until you leave", no more asking', /personal account, kept by Jakob/.test(gtext) && /Your account stays until you leave/.test(gtext) && (await gina.locator('.sheet.on [data-keep-ask]').count()) === 0, gtext)
 
   // Jakob's Settings
-  await tab(jakob, 'Inventory')
+  await tab(jakob, 'My Resources')
   await jakob.getByRole('button', { name: 'Settings' }).click()
   const sheet = jakob.locator('.sheet.on')
   await sheet.getByRole('button', { name: 'Keep this account Hugo-demo' }).waitFor({ timeout: 10_000 })

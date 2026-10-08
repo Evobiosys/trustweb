@@ -53,7 +53,7 @@ async function startHolder(page) {
   await phone.getByPlaceholder('Name').first().fill('Max')
   await phone.getByRole('button', { name: 'Add to my web' }).click()
   await phone.locator('.node', { hasText: 'Max' }).waitFor({ timeout: 5_000 })
-  await phone.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
   await phone.getByPlaceholder(/Motorbike/).fill('Ladder, 3 m, to lend')
   await phone.getByRole('button', { name: 'Add', exact: true }).click()
   await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).waitFor({ timeout: 5_000 })
@@ -85,7 +85,7 @@ async function partComeBack(browser, base) {
   const phone = device(page, 1)
   await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   ok('second visit: the first phone opens on Jakob\'s web, not the start screen', await phone.locator('.node', { hasText: 'Max' }).count() === 1)
-  await phone.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+  await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
   ok('second visit: the thing he noted is still there', await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).count() === 1)
   await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
   ok('second visit: both devices are open again, the second one as it was', await page.locator('iframe').count() === 2)
@@ -106,7 +106,7 @@ async function partComeBack(browser, base) {
   const fd = page.locator('.d2l [data-d2l-front-door]')
   const fdLink = fd.locator('a')
   ok('wave 3: "Your own front door ... comes with the hosted service; coming soon" with a link to TrustInTheWeb.com (new tab, no opener, no referrer)',
-    /Your own front door \(an always-on inventory that answers while your phone is off\) comes with the hosted service; coming soon/.test(await fd.innerText())
+    /Your own front door \(your resources, always on, answering while your phone is off\) comes with the hosted service; coming soon/.test(await fd.innerText())
       && (await fdLink.innerText()) === 'TrustInTheWeb.com' && (await fdLink.getAttribute('href')) === 'https://trustintheweb.com/'
       && (await fdLink.getAttribute('target')) === '_blank' && /noopener/.test(await fdLink.getAttribute('rel')) && (await fdLink.getAttribute('referrerpolicy')) === 'no-referrer')
   await shot(page, 'w3-06-front-door-line')
@@ -164,7 +164,7 @@ async function partSwitchAndSecondDegree(browser, base) {
   ok('hop 2: Maya decides for this ask', /Sam, through Jonas, asks/.test(await page.locator('.wt-screen').nth(2).innerText()))
   await page.locator('.wt-tick').nth(5).click()
   const answer = await page.locator('.wt-screen').nth(0).innerText()
-  ok('the answer is labelled "through Jonas", from Maya\'s inventory, not Jonas\'s', /through Jonas/.test(answer) && /Not in Jonas's inventory: in Maya's/.test(answer), answer)
+  ok('the answer is labelled "through Jonas", from Maya\'s resources, not Jonas\'s', /through Jonas/.test(answer) && /Not in Jonas's resources: in Maya's/.test(answer), answer)
   // Wave 6 (U1): the app is live now: the script says it is played as a script AND that the real thing is "How far?" when you ask.
   ok('honest: played as a script, and the real thing is live in the app ("How far?")', /script/.test(await page.locator('.wt-note').innerText()) && /live: choose "How far\?"/.test(await page.locator('.wt-note').innerText()))
   await shot(page, 'w2-07-second-degree')

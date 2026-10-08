@@ -132,7 +132,7 @@ async function main() {
     await waitResult()
     const nothing = await jonas.locator('.card.asked').innerText()
     ok('Jonas sees "No match"', /No match/.test(nothing), nothing)
-    await maya.getByRole('button', { name: 'Inventory' }).click()
+    await maya.getByRole('button', { name: 'My Resources' }).click()
     await maya.getByRole('button', { name: 'Review requests' }).click()
     const log = await maya.locator('.log').first().innerText()
     await maya.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })

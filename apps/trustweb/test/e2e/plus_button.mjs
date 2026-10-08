@@ -1,7 +1,7 @@
 /**
  * Web -> search -> Curate your web -> "Add someone" and a tap on empty space in the web open the
  * same "Add someone to your web?" sheet, and saving puts the person on the
- * rings. Also pins the 2026-10-05 nav: exactly Web | Record | Inventory, Query
+ * rings. Also pins the 2026-10-05 nav: exactly Web | Record | My Resources, Query
  * on the Web screen, a QR button in the header instead of "Online".
  *
  * Local only (spins up a real RelayServer + Vite dev server), single phone.
@@ -68,7 +68,7 @@ async function main() {
     ok('the QR button carries no status dot', await page.locator('.hdr .relay-dot').count() === 0)
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
     // Wave 2 (P9): the Feed is optional and off by default, so the bar is the old one; feed_flow switches it on.
-    ok('nav is exactly Web | Record | Inventory', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Inventory']), JSON.stringify(tabs))
+    ok('nav is exactly Web | Record | My Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'My Resources']), JSON.stringify(tabs))
     ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
     const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
     ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
@@ -117,7 +117,7 @@ async function main() {
     await page.locator('.node:not(.you)', { has: page.locator('.dummy-chip') }).first().click()
     ok('the person sheet says dummy too', await page.locator('.sheet h3 .dummy-chip').count() === 1)
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
-    await page.getByRole('button', { name: 'Inventory' }).click()
+    await page.getByRole('button', { name: 'My Resources' }).click()
     ok('the demo things in the inventory say dummy', await page.locator('.inv .dummy-chip').count() > 0)
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     await page.getByRole('button', { name: 'More' }).click()
@@ -133,7 +133,7 @@ async function main() {
     ok('Settings > Advanced shows them again', await page.locator('.node .lvl').count() > 0)
 
     // Record: who (orange) or what (blue), picked from where you came; Advanced folds the extra notes away
-    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await page.locator('nav.tabs .tab-record').click()
     await page.getByRole('heading', { name: 'Meeting', exact: true }).waitFor({ timeout: 5_000 })
     ok('from Inventory, the Record tab opens a meeting (owner 2026-10-06, origin rule)', true)
@@ -164,18 +164,18 @@ async function main() {
     await page.getByRole('button', { name: 'Web', exact: true }).click()
     const moreOnWeb = await page.getByRole('button', { name: 'More' }).boundingBox()
     const callOnWeb = await page.getByRole('button', { name: 'Call into your web' }).boundingBox()
-    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     const cog = await page.locator('.hdr-right .hdr-btn.icon-only').last().boundingBox()
     ok('Inventory: the cog sits top right, where ⋮ sits on Web', Math.abs(cog.x - moreOnWeb.x) < 1 && Math.abs(cog.y - moreOnWeb.y) < 1, JSON.stringify([moreOnWeb, cog]))
     const req = page.getByRole('button', { name: 'Review requests' })
     const rb = await req.boundingBox()
     ok('Inventory: "Review / requests" (two lines) sits where "Call into your web" sits', Math.abs(rb.x + rb.width - callOnWeb.x - callOnWeb.width) < 2 && Math.abs(rb.y + rb.height - callOnWeb.y - callOnWeb.height) < 2 && /Review\s*\n\s*requests/.test(await req.innerText()))
     await req.click()
-    ok('it opens the asks people sent you', await page.getByRole('heading', { name: 'Requests to your inventory' }).isVisible())
+    ok('it opens the asks people sent you', await page.getByRole('heading', { name: 'Requests to My Resources' }).isVisible())
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // "what": the notes go to the inventory, with who may ask about each line
-    await page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await page.locator('nav.tabs .tab-record').click()
     await page.getByRole('button', { name: 'Just me', exact: true }).click()
     await page.locator('.about-kind.what').click()
@@ -189,7 +189,7 @@ async function main() {
     await page.getByRole('button', { name: 'Send' }).click()
     await page.locator('.line-card').first().waitFor({ timeout: 10_000 })
     await page.locator('.cta .btn').click()
-    await page.getByRole('button', { name: 'Save to my inventory' }).click()
+    await page.getByRole('button', { name: 'Save to My Resources' }).click()
     await page.waitForTimeout(400)
     ok('"what" notes land in the inventory', /Cargo bike: can lend it on weekends/.test(await page.locator('.screen').innerText()))
 

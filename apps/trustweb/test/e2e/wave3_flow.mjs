@@ -39,7 +39,7 @@ const until = async (fn, ms = 20_000) => {
   return null
 }
 const openSettings = async (page) => {
-  await tab(page, 'Inventory')
+  await tab(page, 'My Resources')
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
   // The sheet redraws once the server's status is in (app-wave2 A2): wait for it, so no click lands on the old sheet.
@@ -60,7 +60,7 @@ async function connectBen(browser, a) {
   await acceptAdd(b)
   await until(async () => (await record(a)).peers.length === 1)
   await a.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await tab(b, 'Inventory')
+  await tab(b, 'My Resources')
   await b.getByPlaceholder(/Motorbike/).fill('Cargo bike, can lend it on weekends')
   await b.getByRole('button', { name: 'Add', exact: true }).click()
   return b
