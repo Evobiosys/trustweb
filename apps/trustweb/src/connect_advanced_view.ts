@@ -111,6 +111,7 @@ export interface AdvancedView {
 }
 
 export function createAdvanced(o: AdvancedOptions): AdvancedView {
+  const linksTitle = el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle])
   const panel = el('div', { class: 'advanced-panel', role: 'group', 'aria-label': S.advancedLabel, hidden: true, 'data-advanced-panel': '' })
   const root = el('div', { class: 'advanced' }, [panel])
 
@@ -141,7 +142,8 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
     // The contact box and the names block are built once and only moved here, so a redraw never clears what is being typed.
     panel.replaceChildren(
       el('p', { class: 'meta' }, [S.pinLead]),
-      ...SHARE_MODES.map(modeRow), pinNote, ...notes, o.contactBox, ...(o.names.available() ? [o.names.el] : []),
+      // Wave 6h, S3: the settings that are always there come first: your Signal, WhatsApp and Matrix links (Jakob 2026-10-08).
+      linksTitle, o.contactBox, ...SHARE_MODES.map(modeRow), pinNote, ...notes, ...(o.names.available() ? [o.names.el] : []),
     )
   }
   refresh()

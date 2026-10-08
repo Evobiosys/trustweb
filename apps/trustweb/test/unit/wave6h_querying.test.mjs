@@ -447,3 +447,29 @@ async function rawAsker(name, target) {
     ask: async (fields) => channel.send(target.did, { v: 1, t: 'query', from: me, templateId: 'trustweb.ask', templateVersion: 1, qid: randomId(12), ...fields }, await key),
   }
 }
+
+describe('S2 and S3: the (i) copy and the Signal glyph', () => {
+  it('the (i) explains who can ask and how far, with the tech-setup example', async () => {
+    const { S } = await import('../../src/strings.ts')
+    const text = S.cascadeInfo.join(' ')
+    expect(S.cascadeInfoTitle).toBe('Who can ask, and how far')
+    expect(text).toMatch(/Who can ask: which of your rings/)
+    expect(text).toMatch(/How far: whether it may travel on/)
+    expect(text).toMatch(/tech setup/)
+    expect(text).toMatch(/home-office setup/)
+    expect(text).not.toMatch(/—/)
+  })
+  it('signalReachable: a Signal link the owner typed wins over a shared one; only https links', async () => {
+    const { signalReachable } = await import('../../src/contact_share.ts')
+    const { Channel } = await import('../../src/model.ts')
+    expect(signalReachable({})).toBeNull()
+    expect(signalReachable({ theirChannels: { [Channel.Signal]: 'https://signal.me/#eu/abc' } })?.link).toBe('https://signal.me/#eu/abc')
+    expect(signalReachable({ channels: { [Channel.Signal]: '+43123456789' }, theirChannels: { [Channel.Signal]: 'https://signal.me/#eu/abc' } })?.source).toBe('own')
+    expect(signalReachable({ theirChannels: { [Channel.WhatsApp]: '+43123456789' } })).toBeNull()
+  })
+  it('the glyph is plain SVG markup: no script, no external reference, no colour of its own', async () => {
+    const { ICONS } = await import('../../src/icons.ts')
+    expect(ICONS.signal).toMatch(/^<svg viewBox="0 0 24 24">/)
+    expect(ICONS.signal).not.toMatch(/script|href|url\(|on[a-z]+=|fill="#|stroke="#/i)
+  })
+})

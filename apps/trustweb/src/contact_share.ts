@@ -309,6 +309,12 @@ export function sharedReachables(person: ContactCarrier): Reachable[] {
   return reachableChannels(person).filter((r) => r.source === 'theirs')
 }
 
+/** Wave 6h, S3: their Signal link, when one is known (typed by the owner or shared by them), for the icon next to their name. Only https. */
+export function signalReachable(person: ContactCarrier): Reachable | null {
+  const r = reachableChannels(person).find((x) => x.channel === Channel.Signal)
+  return r && r.link.startsWith('https://') ? r : null
+}
+
 /** The one link the chat's "Message on ..." points at: Signal first, then the owner's channel order. */
 export function primaryReachable(person: ContactCarrier): Reachable | null {
   return reachableChannels(person)[0] ?? null

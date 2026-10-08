@@ -57,7 +57,7 @@ import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -1648,8 +1648,14 @@ function provenanceStateView(item: InventoryItem): HTMLElement[] {
 
 /** All four choices on the item's sheet (wave 2, P22): the three tiers and "Only me". */
 function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
+  // Wave 6h, S2: the (i) next to "Who can ask" explains both choices in place, with Jakob's example (hops_view.ts cascadeInfoContent).
+  const explain = el('div', { class: 'info-hint', hidden: true, 'data-item-info-text': '1' }, cascadeInfoContent().slice(1))
+  const info = cascadeInfoButton(() => { explain.hidden = !explain.hidden })
+  info.setAttribute('data-item-info', '1')
+  info.removeAttribute('data-cascade-info')
   return [
-    el('h4', { class: 'eyebrow' }, [S.itemAudienceTitle]),
+    el('div', { class: 'eyebrow-row' }, [el('h4', { class: 'eyebrow' }, [S.itemAudienceTitle]), info]),
+    explain,
     ...AUDIENCES.map((a) => el('button', {
       class: 'radio' + (item.audience === a ? ' on' : ''), 'aria-pressed': String(item.audience === a), 'data-item-audience': a,
       onclick: () => { item.audience = a; save(); render(); itemSheet(item.id) },
@@ -1673,7 +1679,7 @@ function personSheet(personId: string): void {
   const current = p.lines.filter((l) => l.status === LineStatus.Current)
   const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
   openSheet([
-    el('h3', {}, [p.name, isDemoPerson(st(), p.id) ? dummyChip() : null]),
+    el('h3', { class: 'sheet-name' }, [p.name, isDemoPerson(st(), p.id) ? dummyChip() : null, signalTop(p)]),
     el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     current.length
@@ -1737,6 +1743,15 @@ function passOnRowFor(p: Person): HTMLElement | null {
 }
 
 /** One "Message on ..." button for each link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
+/** Wave 6h, S3: the Signal glyph next to a person's name when their Signal link is known; a tap opens it. */
+function signalTop(p: Person): HTMLElement | null {
+  const r = signalReachable(p)
+  if (!r) return null
+  const a = el('a', { class: 'signal-top', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'aria-label': S.signalTopAria(p.name), title: S.signalTopAria(p.name), 'data-signal-top': '1' })
+  a.innerHTML = ICONS.signal
+  return a
+}
+
 function sharedReachRow(p: Person): HTMLElement | null {
   const shared = sharedReachables(p)
   if (!shared.length) return null

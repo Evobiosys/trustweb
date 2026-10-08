@@ -100,11 +100,11 @@ async function itemSheetChecks(cleo) {
   await row.waitFor({ timeout: 5_000 })
   ok('inventory row: the X and the on/off switch sit on the right, the degrees pill next to the audience', await row.locator('.inv-side .x').count() === 1
     && await row.locator('.inv-side [role="switch"][aria-checked="true"]').count() === 1 && /\+1 degree/.test(await row.locator('.inv-actions').innerText()))
-  ok('the (i) just below Settings opens the cascade in three sentences', await (async () => {
+  ok('the (i) just below Settings explains who can ask and how far, with the tech-setup example', await (async () => {
     await cleo.locator('[data-cascade-info]').click()
     const t = await cleo.locator('.sheet.on').innerText()
     await closeSheet(cleo)
-    return /How sharing travels/.test(t) && /friends of friends/.test(t) && /"no" looks exactly like "no match"/.test(t)
+    return /Who can ask, and how far/.test(t) && /friends of friends/i.test(t) && /tech setup/.test(t) && /"no" looks exactly like "no match"/.test(t)
   })())
   await shot(cleo, 'u1-01-inventory-row')
   await row.locator('.inv-text').click()

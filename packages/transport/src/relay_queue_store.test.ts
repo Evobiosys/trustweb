@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  queueHoldMs,
   InMemoryRelayQueueStore,
   SqliteRelayQueueStore,
   MAX_HOLD_HORIZON_MS,
@@ -121,4 +122,14 @@ it("SqliteRelayQueueStore: an ack survives a process restart (acked row stays go
   const second = new SqliteRelayQueueStore(dbPath);
   expect(second.drain("did:peer:2.ben")).toEqual([]);
   second.close();
+});
+
+describe("queueHoldMs (TrustWeb wave 6h: RELAY_QUEUE_HOLD_MS)", () => {
+  it("absent, blank, malformed or not positive: the shared 72 h horizon", () => {
+    for (const raw of [undefined, "", "  ", "soon", "0", "-5", "NaN", "Infinity"]) expect(queueHoldMs(raw)).toBe(MAX_HOLD_HORIZON_MS);
+  });
+  it("a positive number of ms: that hold (3650 days for a relay that keeps wires until they are drained)", () => {
+    expect(queueHoldMs("315360000000")).toBe(3650 * 24 * 60 * 60 * 1000);
+    expect(queueHoldMs("1000")).toBe(1000);
+  });
 });

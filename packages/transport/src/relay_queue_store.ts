@@ -39,6 +39,21 @@ const { DatabaseSync } = requireCjs("node:sqlite") as typeof import("node:sqlite
 
 export { MAX_HOLD_HORIZON_MS };
 
+/**
+ * How long a queued wire waits for its recipient. TrustWeb wave 6h (2026-10-08, the owner: "the relay should store messages
+ * indefinitely for now, but keep the code with a timer"): RELAY_QUEUE_HOLD_MS overrides the hold for the QUEUE only, so a deployment
+ * can keep wires for years (the TrustWeb apps have no freshness bound on what they drain). The dedup/freshness horizon of
+ * DidCommTransport stays MAX_HOLD_HORIZON_MS; a DIDComm recipient simply rejects a wire older than that. Absent, malformed or not
+ * positive: MAX_HOLD_HORIZON_MS (72 h), the behaviour before. The per-DID bound of relay_server.ts (MAX_QUEUE_PER_DID) still holds.
+ */
+export function queueHoldMs(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return MAX_HOLD_HORIZON_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : MAX_HOLD_HORIZON_MS;
+}
+
+const QUEUE_HOLD_MS = queueHoldMs(typeof process !== "undefined" ? process.env.RELAY_QUEUE_HOLD_MS : undefined);
+
 /** One persisted, not-yet-acked wire for a recipient DID. */
 export interface QueuedWire {
   /** Queue-row id, assigned at enqueue(); the handle ackDelivered() removes by. */
@@ -54,7 +69,7 @@ export interface RelayQueueStore {
   drain(toDid: string): QueuedWire[];
   /** Remove the given ids from `toDid`'s queue — the only operation that actually dequeues. */
   ackDelivered(toDid: string, ids: string[]): void;
-  /** Drop rows older than `now - MAX_HOLD_HORIZON_MS` (caller-driven, mirrors DedupStore.prune). */
+  /** Drop rows older than `now - QUEUE_HOLD_MS` (RELAY_QUEUE_HOLD_MS, default MAX_HOLD_HORIZON_MS; caller-driven, mirrors DedupStore.prune). */
   prune(now: number): void;
   /** Current number of queued (unacked) rows for `toDid` — backs relay_server.ts's per-DID queue-depth cap. */
   count(toDid: string): number;
@@ -93,7 +108,7 @@ export class InMemoryRelayQueueStore implements RelayQueueStore {
   }
 
   prune(now: number): void {
-    const cutoff = now - MAX_HOLD_HORIZON_MS;
+    const cutoff = now - QUEUE_HOLD_MS;
     for (const [id, row] of this.rows) {
       if (row.enqueuedAt < cutoff) this.rows.delete(id);
     }
@@ -156,7 +171,7 @@ export class SqliteRelayQueueStore implements RelayQueueStore {
   }
 
   prune(now: number): void {
-    const cutoff = now - MAX_HOLD_HORIZON_MS;
+    const cutoff = now - QUEUE_HOLD_MS;
     this.db.prepare("DELETE FROM relay_queue WHERE enqueued_at < ?").run(cutoff);
   }
 

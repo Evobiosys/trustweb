@@ -700,12 +700,14 @@ export const S = {
   itemSwitchOn: 'Shared',
   itemSwitchOff: 'Paused',
   itemSwitchAria: 'Shared or paused',
-  cascadeInfoAria: 'How sharing travels',
-  cascadeInfoTitle: 'How sharing travels',
+  cascadeInfoAria: 'Who can ask, and how far: an explanation',
+  cascadeInfoTitle: 'Who can ask, and how far',
+  // Wave 6h, S2 (Jakob 2026-10-08: "make an info button ... but nicer, and give an example with me ... my tech setup").
   cascadeInfo: [
-    'First choose who may ask about a thing: acquaintances, friends, close friends or only you. Each choice includes everyone closer to you.',
-    'Then choose how far it may travel: to your contacts only, or on to friends of friends when a contact passes an ask on to you.',
-    'Every answer still needs a yes, and a "no" looks exactly like "no match".',
+    'Who can ask: which of your rings may ask about this line. Close friends only, friends too, or acquaintances as well. Each choice includes everyone closer to you; "Only me" keeps it to yourself.',
+    'How far: whether it may travel on. "My contacts only" keeps it with the people you are connected with. "Friends of friends" lets their friends ask about it too, through them, and more degrees reach their friends as well.',
+    'Example: Jakob is happy to share his tech setup with friends, and even with friends of friends. He sets Who can ask to Friends and How far to Friends of friends. A friend of a friend who asks for a home-office setup then hears about it through that friend (if that friend passes asks on), and only once Jakob says yes.',
+    'Every answer still needs your yes, and a "no" looks exactly like "no match".',
   ],
   passOnTitle: 'Pass their asks on',
   passOnHint: 'Off unless you switch it on. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
@@ -1285,6 +1287,8 @@ export const S = {
   },
   // Wave 6b (c): Advanced under the one QR, and the sharing line (connect_advanced_view.ts)
   advancedLabel: 'Advanced',
+  advLinksTitle: 'Your links: Signal, WhatsApp, Matrix',
+  signalTopAria: (name: string) => `Message ${name} on Signal`,
   shareRowLabel: 'How to share your code',
   shareMode: {
     [ShareMode.TrustWebSignal]: 'TrustWeb + Signal',

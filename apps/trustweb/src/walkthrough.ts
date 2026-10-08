@@ -126,13 +126,13 @@ const MODES: Mode[] = [
       },
       {
         title: 'Maya\'s phone finds a match and asks her', changed: ['maya'], path: ['jonas', 'maya'],
-        text: 'Only a person can say yes. Maya sees who asks and exactly which line matched. Every answer comes back after a fixed 30-second window, so a fast or slow reply reveals nothing.',
+        text: 'Only a person can say yes. Maya sees who asks and exactly which line matched. Every answer comes back at one fixed moment, about two minutes after the ask, so a fast or slow reply reveals nothing.',
         screens: { jonas: waiting(24), maya: consent('Jonas', 'Does anyone have loudspeakers...?', LOUDSPEAKERS) },
       },
       {
         title: 'Maya shares', changed: ['maya'], path: ['maya', 'jonas'],
-        text: 'Her answer waits for the 30-second window to close, like every answer, so timing gives nothing away.',
-        screens: { jonas: waiting(9), maya: card('ok', 'Shared. It leaves when the 30-second window closes.') },
+        text: 'Her answer waits for that moment, like every answer, so timing gives nothing away.',
+        screens: { jonas: waiting(9), maya: card('ok', 'Shared. It leaves at the fixed moment.') },
       },
       {
         title: 'Jonas gets his answer', changed: ['jonas'], path: ['maya', 'jonas'],
