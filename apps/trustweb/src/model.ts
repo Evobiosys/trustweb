@@ -353,6 +353,11 @@ export interface DemoAccount {
   name: string
   createdAt: number
   expiresAt?: number
+  /**
+   * Wave 6 (N5): kept until the person leaves, never taken down by the clock (account_keep.ts). Absent: a demo account that ends at
+   * `expiresAt`, exactly as before. Its `expiresAt` is moved far out when kept, so a build that ignores this field still keeps it.
+   */
+  keep?: boolean
   peerId?: string
   pending?: Peer
 }
@@ -370,6 +375,10 @@ export interface DemoOf {
   own?: boolean
   /** Handed over to another phone: this record is finished, the relay identity moved. */
   handedOverAt?: number
+  /** Wave 6 (N5): this phone asked its owner to keep the account ("Make it your personal account"); waiting for his yes. Absent: not asked. */
+  keepAsked?: boolean
+  /** Wave 6 (N5): the owner keeps this account until the person leaves; `expiresAt` is gone. Absent: a demo account. */
+  kept?: boolean
 }
 
 /** What a demo account found: one entry per ask that got a share, kept so a hand-over carries it. */
