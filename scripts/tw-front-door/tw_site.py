@@ -150,8 +150,9 @@ class Flags:
             "tx-on" if self.transcribe_live else "tx-off",
             "hops-on" if self.hops_live else "hops-off",
             "inperson-on" if self.inperson_live else "inperson-off",
-            "inperson-lookup-on" if self.inperson_lookup else "inperson-lookup-off",
-            "inperson-advanced-on" if self.inperson_advanced else "inperson-advanced-off",
+            # The two sub-flags describe parts of the live in-person flow: alone they render nothing (review 6b).
+            "inperson-lookup-on" if self.inperson_live and self.inperson_lookup else "inperson-lookup-off",
+            "inperson-advanced-on" if self.inperson_live and self.inperson_advanced else "inperson-advanced-off",
             f"prov-{self.transcribe_provider.value}",
             "draft" if self.draft else "prod",
             self.site.value,

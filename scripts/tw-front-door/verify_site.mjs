@@ -790,11 +790,15 @@ async function wave5OrgChecks(page) {
     check('faq: q-meet-in-person shows "in the works" message when inperson-live is off',
       faqContent.ok && faqContent.hasInWorks && !faqContent.hasQRCode, JSON.stringify(faqContent))
   }
-  if (INPERSON_LOOKUP) {
+  if (!INPERSON_LIVE) {
+    check('faq: without inperson-live neither the typing option nor the advanced choices show (the sub-flags alone render nothing)',
+      faqContent.ok && !faqContent.hasTyping && !faqContent.hasAdvanced, JSON.stringify(faqContent))
+  }
+  if (INPERSON_LIVE && INPERSON_LOOKUP) {
     check('faq: meet in person shows typing option with DID when inperson-lookup is on',
       faqContent.ok && faqContent.hasTyping && faqContent.hasDID, 'typing option with DID')
   }
-  if (INPERSON_ADVANCED) {
+  if (INPERSON_LIVE && INPERSON_ADVANCED) {
     check('faq: meet in person shows advanced choices when inperson-advanced is on',
       faqContent.ok && faqContent.hasAdvanced, 'advanced choices')
   }

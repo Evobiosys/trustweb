@@ -133,7 +133,7 @@ class Subpages(unittest.TestCase):
     def test_the_faq_section_comes_from_the_one_faq_fragment(self) -> None:
         f = flags(site.Site.ORG)
         section = site.faq_section(FRAG, f)
-        self.assertEqual(section.count('<details class="q"'), 10)
+        self.assertEqual(section.count('<details class="q"'), 11)  # wave 6b added q-meet-in-person
         self.assertIn('<a href="faq.html">All questions', section)
         self.assertNotIn("<!--", section.replace("<!-- ===", "").replace("=== -->", ""))
 
@@ -203,6 +203,31 @@ class Subpages(unittest.TestCase):
         self.assertGreaterEqual(
             com.count('href="https://trustintheweb.org/"'), 2
         )  # header and footer
+
+
+class InPersonFlags(unittest.TestCase):
+    """Wave 6b (review): inperson-lookup and inperson-advanced describe parts of the live flow, so alone they turn nothing on."""
+
+    def blocks(self, live: bool, lookup: bool, advanced: bool) -> frozenset[str]:
+        base = flags(site.Site.ORG)
+        return site.Flags(**{**base.__dict__, "inperson_live": live, "inperson_lookup": lookup, "inperson_advanced": advanced}).active_blocks()
+
+    def test_sub_flags_alone_render_nothing(self) -> None:
+        active = self.blocks(False, True, True)
+        self.assertIn("inperson-off", active)
+        self.assertIn("inperson-lookup-off", active)
+        self.assertIn("inperson-advanced-off", active)
+
+    def test_sub_flags_with_live_turn_their_part_on(self) -> None:
+        active = self.blocks(True, True, True)
+        self.assertTrue({"inperson-on", "inperson-lookup-on", "inperson-advanced-on"} <= active)
+        self.assertIn("inperson-lookup-off", self.blocks(True, False, True))
+
+    def test_every_inperson_block_name_in_the_sources_is_one_the_flags_can_turn_on(self) -> None:
+        names = {"inperson-on", "inperson-off", "inperson-lookup-on", "inperson-lookup-off", "inperson-advanced-on", "inperson-advanced-off"}
+        for path in (FRAG / "how-it-works.html", FRAG / "pages" / "faq.body.html"):
+            used = set(re.findall(r"<!--IF:(inperson[\w-]*)-->", path.read_text()))
+            self.assertTrue(used <= names, (path.name, used - names))
 
 
 if __name__ == "__main__":
