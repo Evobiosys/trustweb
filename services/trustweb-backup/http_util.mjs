@@ -43,6 +43,8 @@ export function utcDay(nowMs) {
 const MESSAGES = {
   bad_request: 'The request is malformed.',
   forbidden_token: 'The token does not match.',
+  forbidden: 'Not allowed.',
+  name_taken: 'That name is taken.',
   forbidden_origin: 'This origin is not allowed.',
   not_found: 'Not found.',
   method_not_allowed: 'Method not allowed.',

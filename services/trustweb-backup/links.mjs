@@ -55,7 +55,7 @@ function carriesPrivateKey(u) {
 }
 
 /** Is `origin` (the Origin header) one of the app hosts? Anything unparsable, including the string "null", is not. */
-function originAllowed(origin, hosts) {
+export function originAllowed(origin, hosts) {
   try {
     const u = new URL(origin)
     return u.protocol === 'https:' && u.port === '' && hosts.includes(u.hostname)
@@ -76,8 +76,8 @@ export function notFoundPage(res) {
   return 404
 }
 
-/** Reads {url} from a JSON body of at most cfg.linkMaxBytes. Returns {url} or {status, error} (the 413 is answered by the caller). */
-async function readUrl(req, maxBytes) {
+/** Reads a JSON object from a body of at most `maxBytes`. Returns {body} or {status, error} (the 413 is answered by the caller). */
+export async function readJsonObject(req, maxBytes) {
   let body
   try {
     body = JSON.parse((await readSmallBody(req, maxBytes)).toString('utf8'))
@@ -85,7 +85,13 @@ async function readUrl(req, maxBytes) {
     return err instanceof CapExceeded ? { status: 413, error: 'too_large' } : { status: 400, error: 'bad_request' }
   }
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return { status: 400, error: 'bad_request' }
-  return { url: body.url }
+  return { body }
+}
+
+/** Reads {url} from a JSON body of at most cfg.linkMaxBytes. Returns {url} or {status, error} (the 413 is answered by the caller). */
+async function readUrl(req, maxBytes) {
+  const read = await readJsonObject(req, maxBytes)
+  return read.body === undefined ? read : { url: read.body.url }
 }
 
 export function createLinks({ cfg, store, clientOf, now = Date.now }) {

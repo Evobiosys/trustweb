@@ -1,0 +1,91 @@
+questhub.eco {
+	handle {
+		reverse_proxy localhost:3000
+	}
+}
+
+app.idea2.site {
+	encode zstd gzip
+	handle /backup/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /websearch* {
+		@ws_query expression {http.request.uri.query} != ''
+		respond @ws_query 400
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	# --- TrustWeb short connect links (wave 5, services-api-contract "Short links") ---
+	# POST /link stores a long connect url, GET /l/<id> answers 302 to it. The id and the url are capabilities:
+	# log_skip keeps these requests out of Caddy's access log. It does NOT silence the error log, which can still name
+	# the request URI when the upstream fails (accepted risk, see the wave 5 services report).
+	handle /link {
+		log_skip
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /l/* {
+		log_skip
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /relay/* {
+		reverse_proxy 127.0.0.1:8961
+	}
+	handle {
+		root * /srv/questhub-static/trustweb
+		file_server
+	}
+}
+
+app.trustintheweb.org {
+	encode zstd gzip
+	handle /backup/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /websearch* {
+		@ws_query expression {http.request.uri.query} != ''
+		respond @ws_query 400
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	# --- TrustWeb short connect links (wave 5, services-api-contract "Short links") ---
+	# POST /link stores a long connect url, GET /l/<id> answers 302 to it. The id and the url are capabilities:
+	# log_skip keeps these requests out of Caddy's access log. It does NOT silence the error log, which can still name
+	# the request URI when the upstream fails (accepted risk, see the wave 5 services report).
+	handle /link {
+		log_skip
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /l/* {
+		log_skip
+		reverse_proxy 127.0.0.1:8960
+	}
+	# The one relay process: a phone on app.idea2.site and one on app.trustintheweb.org reach each
+	# other (the relay routes on the recipient DID only, and each app posts to its own origin).
+	handle /relay/* {
+		reverse_proxy 127.0.0.1:8961
+	}
+	handle {
+		root * /srv/questhub-static/trustintheweb
+		file_server
+	}
+}
+
+trustintheweb.org {
+	redir https://app.trustintheweb.org{uri} permanent
+}

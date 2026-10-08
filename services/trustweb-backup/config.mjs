@@ -69,6 +69,14 @@
 //   LINK_MAX_BYTES                   2048         body cap of POST /link (413 above)
 //   LINK_PER_MINUTE, LINK_PER_HOUR   6, 30        POST /link per network address (IPv6: /64), kept in memory, NOT anonymous
 //   LINK_SWEEP_MS                    3600000      how often expired links are dropped (they are also dropped when read)
+//   CONNECT_FILE                     the connect-code store (JSON, 0600, atomic rewrite). Default <BACKUP_DIR>/connect.json (wave 6b).
+//   CONNECT_TTL_DAYS                 365          a connect code (and its username) expires this long after its last use
+//   CONNECT_TOUCH_HOURS              24           an open refreshes the last use only when it is older than this (no file rewrite per open)
+//   CONNECT_MAX                      20000        stored codes; beyond it a MINT answers 507 storage_full
+//   CONNECT_MAX_BYTES                2048         body cap of POST /connect and POST /name (413 above)
+//   CONNECT_PER_MINUTE, CONNECT_PER_HOUR          6, 30     POST /connect and POST /name together, per network address (IPv6: /64), in memory, NOT anonymous
+//   CONNECT_GET_PER_MINUTE, CONNECT_GET_PER_HOUR  20, 300   GET /c/ and GET /who/ together, per network address (plain-text 429)
+//   CONNECT_SWEEP_MS                 3600000      how often expired codes are dropped (they also act as unknown when read)
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -219,5 +227,16 @@ export function loadConfig(options = {}) {
     linkPerMinute: pick(options, 'linkPerMinute', 'LINK_PER_MINUTE', 6),
     linkPerHour: pick(options, 'linkPerHour', 'LINK_PER_HOUR', 30),
     linkSweepMs: pick(options, 'linkSweepMs', 'LINK_SWEEP_MS', 3_600_000),
+
+    connectFile: pick(options, 'connectFile', 'CONNECT_FILE', '', String),
+    connectTtlMs: pick(options, 'connectTtlDays', 'CONNECT_TTL_DAYS', 365) * 86_400_000,
+    connectTouchMs: pick(options, 'connectTouchHours', 'CONNECT_TOUCH_HOURS', 24) * 3_600_000,
+    connectMax: pick(options, 'connectMax', 'CONNECT_MAX', 20000),
+    connectMaxBytes: pick(options, 'connectMaxBytes', 'CONNECT_MAX_BYTES', 2048),
+    connectPerMinute: pick(options, 'connectPerMinute', 'CONNECT_PER_MINUTE', 6),
+    connectPerHour: pick(options, 'connectPerHour', 'CONNECT_PER_HOUR', 30),
+    connectGetPerMinute: pick(options, 'connectGetPerMinute', 'CONNECT_GET_PER_MINUTE', 20),
+    connectGetPerHour: pick(options, 'connectGetPerHour', 'CONNECT_GET_PER_HOUR', 300),
+    connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
   }
 }
