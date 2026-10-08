@@ -171,7 +171,7 @@ async function main() {
     const seen1 = await cleoSaw
     // (the overlay's text was read before the tap; a picture of it for the evidence comes from the next ask in step 4)
     ok('Cleo is asked "Ann asks", through Ben', Boolean(seen1) && /Ann asks/.test(seen1) && /Through Ben/i.test(seen1) && seen1.includes(LADDER), seen1 ?? 'no overlay')
-    ok('Ann gets Cleo\'s ladder, from Ben, marked "through Ben"', /Ben chose to share/.test(r1.text) && r1.text.includes(LADDER) && /through Ben/.test(r1.text), r1.text)
+    ok('Ann gets Cleo\'s ladder, from Ben, marked "through Ben", on a card that says Ben passed it on (not that he chose to share)', /Ben passed this on/.test(r1.text) && !/Ben chose to share/.test(r1.text) && r1.text.includes(LADDER) && /through Ben/.test(r1.text), r1.text)
     ok('it comes at Ben\'s fixed moment: two windows (about 60 s), not before', r1.ms >= 58_000, String(r1.ms))
     await ann.locator('.card.asked .outcome').scrollIntoViewIfNeeded()
     await shot(ann, 'u1-04-ann-through-ben')

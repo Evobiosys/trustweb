@@ -90,6 +90,14 @@ export function throughTag(via: unknown): HTMLElement | null {
   return names.length ? el('em', { class: 'through', 'data-through': names.join('|') }, [S.resultThrough(names)]) : null
 }
 
+/**
+ * The title of one answer card (U1 hand-over item): "Ben chose to share" when the answering person shared a line of their own, but
+ * "Ben passed this on" when every line came back through them (they chose nothing of their own to share).
+ */
+export function answerTitle(from: string, items: readonly { via?: unknown }[]): string {
+  return items.length > 0 && items.every((it) => readVia(it.via).length > 0) ? S.resultPassedOn(from) : S.resultShared(from)
+}
+
 /** On a person's card: may their asks go on through me ("Pass their asks on"). */
 export function passOnRow(p: Person, onToggle: (next: boolean) => void): HTMLElement {
   const on = passesAsksOn(p)

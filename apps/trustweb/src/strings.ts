@@ -162,10 +162,14 @@ export const S = {
   addDevice: 'Add another device to see how it works side by side',
   webCallTop: 'Call into',
   webCallBottom: 'your web',
-  searchOpen: 'Search contacts',
+  // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
+  searchOpen: 'Manage and search contacts',
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
+  searchNotAsk: 'This looks through the people already in your web. To ask your web for something, use Call into your web.',
+  searchAskInstead: 'Ask your web instead',
   searchNone: 'Nobody by that name yet.',
+  sheetHome: 'Home',
   // "Search the web instead" (wave 2, B8): plain links, nothing sent before a tap.
   webSearchTitle: 'Search the web instead',
   webSearchUntrusted: 'Outside TrustWeb, untrusted results. Nothing is sent until you tap one.',
@@ -614,7 +618,7 @@ export const S = {
 
   queryTitle: 'Call into your web',
   queryClose: 'Close',
-  queryLead: 'Ask in your own words. The question goes to the people you are connected with; each phone checks it privately, and only a person can say yes.',
+  queryLead: 'Ask in your own words. TrustWeb works like a neighbourhood, just online and much faster: ask for opportunities, resources and wants (questions about knowledge come later). The question goes to the people you are connected with; each phone checks it privately, and only a person can say yes.',
   queryPh: 'e.g. Does anyone have loudspeakers I could borrow?',
   querySend: 'Call into my web',
   queryTry: 'Try',
@@ -638,6 +642,7 @@ export const S = {
       : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${steps * STEP_S} s.`,
   reachCustomAria: `Steps, 1 to ${HOP_CAP}`,
   queryWindowFar: (s: number) => `Every answer is held until about ${s} s after you asked, so a "no" still looks exactly like "no match", and nobody can tell how far your ask went.`,
+  resultPassedOn: (name: string) => `${name} passed this on`,
   resultThrough: (names: readonly string[]) => `through ${nameList(names)}`,
   askThrough: (names: readonly string[]) => `Through ${nameList(names)}`,
   askThroughDoor: (door: string) => `Through ${door}'s front door`,

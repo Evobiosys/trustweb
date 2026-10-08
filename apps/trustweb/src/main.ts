@@ -80,7 +80,7 @@ import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
-import { cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
+import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 
 enum Screen {
@@ -716,13 +716,18 @@ function render(): void {
 // sheet, toast
 // ---------------------------------------------------------------------------
 
+/** Wave 6 (N8c): a visible way back to the app on every sheet, so nobody has to know the veil closes it. */
+function sheetHomeBar(): HTMLElement {
+  return el('div', { class: 'sheet-bar' }, [el('button', { class: 'sheet-home', 'data-sheet-home': '1', 'aria-label': S.sheetHome, onclick: closeSheet }, [el('span', { 'aria-hidden': 'true' }, ['×']), ' ' + S.sheetHome])])
+}
+
 function openSheet(children: (Node | null)[]): void {
   // A past meeting's player stops whenever the sheet changes (past_meetings_view.ts).
   past.stopPlayer()
   delete sheet.dataset.kind
   delete sheet.dataset.meeting
   delete sheet.dataset.pack
-  sheet.replaceChildren(el('div', { class: 'grab' }), ...children.filter((c): c is Node => c !== null))
+  sheet.replaceChildren(el('div', { class: 'grab' }), sheetHomeBar(), ...children.filter((c): c is Node => c !== null))
   sheet.classList.add('on')
   sheet.inert = false
   veil.classList.add('on')
@@ -1180,7 +1185,9 @@ function searchPanel(s: AppState): HTMLElement {
   const curate = el('button', { class: 'menu-item curate-row', onclick: () => go(Screen.Curate) })
   curate.innerHTML = icon('users')
   curate.append(el('span', {}, [el('b', {}, [S.searchCurate]), el('small', {}, [S.searchCurateSub])]))
-  return el('div', { class: 'scroll pad search' }, [input, curate, results, web.el])
+  // Wave 6 (N8a): this field looks through the people already held; an ask lives in the dock, one tap away.
+  const askInstead = el('button', { class: 'btn btn-ghost btn-sm search-ask-instead', 'data-search-ask-instead': '1', onclick: openQuery }, [S.searchAskInstead])
+  return el('div', { class: 'scroll pad search' }, [input, el('p', { class: 'meta search-not-ask', 'data-search-not-ask': '1' }, [S.searchNotAsk]), askInstead, curate, results, web.el])
 }
 
 function screenWeb(): Node[] {
@@ -1188,7 +1195,7 @@ function screenWeb(): Node[] {
   // Call style: a contact search top right (the magnifier is free). Query
   // style: the magnifier means querying, so the top shows the Curate list.
   const search = queryStyle() === QueryStyle.Call
-    ? iconButton(searchOpen ? 'x' : 'search', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
+    ? iconButton(searchOpen ? 'x' : 'list', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
     : ((): HTMLElement => {
         // "the list item like you had with Manage": icon plus label
         const b = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Curate) })
@@ -2836,7 +2843,7 @@ function foundView(s: AppState, title: string = S.foundTitle): HTMLElement {
     ...found.map((f) => el('div', { class: 'card found-card' }, [
       el('p', { class: 'q' }, ['"' + f.text + '"']),
       ...f.shared.map((sh) => el('div', { class: 'outcome shared' }, [
-        el('b', {}, [S.resultShared(sh.from)]),
+        el('b', {}, [answerTitle(sh.from, sh.items)]),
         ...sh.items.map((it) => el('div', { class: 'shared-item' }, [el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when]), throughTag(it.via)])),
       ])),
     ])),
@@ -3516,7 +3523,7 @@ function resultsView(results: AskResult[]): HTMLElement[] {
     return [el('div', { class: 'outcome nothing' }, [el('b', {}, [S.resultNothing]), el('span', {}, [S.resultNothingSub])])]
   }
   return shared.map((r) => el('div', { class: 'outcome shared' }, [
-    el('b', {}, [S.resultShared(r.decoded?.shared?.from || r.peerName)]),
+    el('b', {}, [answerTitle(r.decoded?.shared?.from || r.peerName, r.decoded?.shared?.items ?? [])]),
     ...(r.decoded?.shared?.items ?? []).map((it) => el('div', { class: 'shared-item' }, [
       el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when]),
       throughTag(it.via),
