@@ -11,6 +11,9 @@
  *   G  A on the Meet page while two people connect one after the other: two people in A's web, not one merged card
  *   H  (review 6f) two tabs; a card's sheet stays open in the tab that does not drain while a new person lands in the other tab: the
  *      switch flipped in that open sheet afterwards is saved AND the new person stays (the take-over keeps the sheet's objects live)
+ *   I  (review 6f) a FIRST visit from the link (no record at page load) whose ack POST fails: the network comes back in the same
+ *      visit, the laptop "sleeps" and wakes (fresh socket); the ack is re-sent without a reload and Ada gets Bo (about 2.5 min:
+ *      the per-visit attempt gap of ack_retry.ts is 2 min)
  * Ports: Vite TW_PORT (8970), TLS fronts TW_PORT+1 and TW_PORT+2. TW_SHOTS=<dir> for screenshots. PARTS=a,b,... to run a subset.
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8970 ../../node_modules/.bin/tsx ../trustweb/test/e2e/offline_connect_flow.mjs
  */
@@ -332,6 +335,44 @@ async function partH(browser) {
   await a.ctx.close(); await b.ctx.close(); await c.ctx.close()
 }
 
+/** Simulates a laptop lid: the page reads hidden, then visible again after `ms` (main.ts opens a fresh socket after 60 s hidden). */
+async function sleepAndWake(page, ms) {
+  await page.evaluate(() => {
+    window.__hidden = true
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (window.__hidden ? 'hidden' : 'visible') })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(ms)
+  await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event('visibilitychange')) })
+}
+
+async function partI(browser) {
+  const server = fakeConnectServer(ORIGIN)
+  const a = await newPhone(browser, server)
+  await startPhone(a.page, 'Ada Steady')
+  const code = await showCode(a.page, server)
+  await backHome(a.page)
+
+  const b = await newPhone(browser, server)
+  let blocked = true
+  await b.ctx.route('**/relay/send', (route) => (blocked ? route.abort('internetdisconnected') : route.continue()))
+  // His first visit: the link opens the Start screen (no record yet); he types his name there.
+  await b.page.goto(`${ORIGIN}/c/${code}`)
+  await b.page.getByLabel('Your first name').fill('Bo Firstvisit')
+  await b.page.getByRole('button', { name: 'Connect', exact: true }).click()
+  await b.page.locator('.sheet.on [data-connect-add]').waitFor({ timeout: 25_000 })
+  await b.page.locator('.sheet.on [data-connect-add]').click()
+  const t0 = Date.now()
+  await a.page.waitForTimeout(3000)
+  t.ok('i: his first POST failed: Ada does not have him yet', !(await inWeb(a.page, 'Bo Firstvisit')))
+  blocked = false
+  // Same visit, no reload: past the attempt gap his laptop sleeps for a minute and wakes with a fresh socket.
+  const gap = 2 * 60 * 1000 + 2000 - (Date.now() - t0)
+  await sleepAndWake(b.page, Math.max(gap, 61_000))
+  t.ok('i: without a reload Ada gets him', !!(await until(() => inWeb(a.page, 'Bo Firstvisit'), 20_000)), JSON.stringify(await webNames(a.page)))
+  await a.ctx.close(); await b.ctx.close()
+}
+
 async function main() {
   const app = await startApp(PORT)
   let front = null
@@ -342,8 +383,8 @@ async function main() {
     front2 = await startHttpsOrigin({ port: PORT + 2, appPort: PORT, host: HOST2 })
     browser = await launch([`--host-resolver-rules=MAP ${HOST} 127.0.0.1:${PORT + 1}, MAP ${HOST2} 127.0.0.1:${PORT + 2}`])
     console.log(`offline_connect_flow: app ${app.base}, https fronts ${front.origin} ${front2.origin}`)
-    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g,h').split(',')
-    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG, h: partH }
+    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g,h,i').split(',')
+    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG, h: partH, i: partI }
     for (const p of parts) {
       try { await run[p](browser) } catch (e) { t.ok(`${p}: ran to the end`, false, String(e?.message ?? e).split('\n')[0]) }
     }
