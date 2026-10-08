@@ -5,8 +5,6 @@
  *   - the Advanced panel: EVERY mode with a pin toggle, the notes of the mode on show, the contact box, then the names block
  */
 import { el } from '../../demo/src/ui/dom'
-import { cleanUsername } from './connect_code'
-import type { ClaimOutcome } from './connect_code'
 import { ShareMode, SHARE_MODES, ModeSharing, channelOf } from './share_modes'
 import { Channel } from './model'
 import { S } from './strings'
@@ -101,8 +99,8 @@ export interface AdvancedOptions {
   cameraOnly: () => boolean
   /** The contact box (one for Meet > Advanced and Settings). */
   contactBox: HTMLElement
-  /** The optional username on our server (V1 POST /name). `available` is false until this phone holds a code there. */
-  username: { available: () => boolean; current: () => string; claim: (name: string) => Promise<ClaimOutcome> }
+  /** The names block (names_view.ts). `available` is false until this phone holds a code on the server. */
+  names: { available: () => boolean; el: HTMLElement }
 }
 
 export interface AdvancedView {
@@ -116,31 +114,6 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
   const panel = el('div', { class: 'advanced-panel', role: 'group', 'aria-label': S.advancedLabel, hidden: true, 'data-advanced-panel': '' })
   const root = el('div', { class: 'advanced' }, [panel])
 
-  const usernameRow = (): HTMLElement => {
-    const input = el('input', {
-      class: 'field', maxlength: '30', placeholder: S.usernamePh, 'aria-label': S.usernameLabel, 'data-username': '',
-      autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: o.username.current(),
-    })
-    const status = el('p', { class: 'meta', role: 'status', 'data-username-status': '' }, [o.username.current() ? S.usernameHeld(o.username.current()) : ''])
-    const go = async (raw: string): Promise<void> => {
-      const out = await o.username.claim(cleanUsername(raw))
-      if (out.ok) {
-        input.value = out.name
-        status.textContent = out.name ? S.usernameHeld(out.name) : S.usernameReleased
-      } else status.textContent = S.usernameFailed[out.error]
-    }
-    return el('div', { class: 'username-row', 'data-username-row': '' }, [
-      el('h4', { class: 'eyebrow' }, [S.usernameLabel]),
-      input,
-      el('div', { class: 'row-actions' }, [
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'claim-name', onclick: () => void go(input.value) }, [S.usernameClaim]),
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'release-name', onclick: () => void go('') }, [S.usernameRelease]),
-      ]),
-      status,
-      el('p', { class: 'meta' }, [S.usernameHint]),
-    ])
-  }
-  let username: HTMLElement | null = null
   const pinNote = el('p', { class: 'meta', role: 'status', 'data-pin-note': '' })
 
   const modeRow = (m: ShareMode): HTMLElement => {
@@ -165,11 +138,10 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
     if (o.cameraOnly()) notes.push(el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]))
     else if (cur === ShareMode.OnlySignal || cur === ShareMode.OnlyWhatsApp) notes.push(el('p', { class: 'meta', 'data-adv-note': 'camera' }, [S.advancedOnlyNote]))
     notes.push(el('p', { class: 'meta' }, [S.advancedFollow]))
-    // Built once, so a redraw of the choices never clears what is being typed.
-    if (o.username.available()) { username ??= usernameRow() } else username = null
+    // The contact box and the names block are built once and only moved here, so a redraw never clears what is being typed.
     panel.replaceChildren(
       el('p', { class: 'meta' }, [S.pinLead]),
-      ...SHARE_MODES.map(modeRow), pinNote, ...notes, o.contactBox, ...(username ? [username] : []),
+      ...SHARE_MODES.map(modeRow), pinNote, ...notes, o.contactBox, ...(o.names.available() ? [o.names.el] : []),
     )
   }
   refresh()

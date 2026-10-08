@@ -28,6 +28,8 @@ const USERNAME_LINK = 'https://signal.me/#eu/adaUsernameCode0123456789'
 const t = tally()
 const errors = []
 
+/** The registrations only: since wave 6e Meet also READs the names with a POST /name (the names block), which these counts are not about. */
+const connectPosts = (srv) => srv.posts.filter((p) => p.path === '/connect')
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name) }) }
 const until = async (fn, ms = 20_000) => {
   const t0 = Date.now()
@@ -88,7 +90,7 @@ async function partA(browser) {
   const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
   t.ok('a: then the QR carries the code link https://<host>/c/<22 chars>', !!code && /^[A-Za-z0-9_-]{22}$/.test(code), String(code))
   t.ok('a: shown as a line too, and the status line is gone', (await page.locator('[data-link="code"]').innerText()) === `${ORIGIN}/c/${code}` && (await page.locator('[data-code-status]').innerText()) === '')
-  t.ok('a: exactly one POST, holding only the long link (no code, no secret)', server.posts.length === 1 && JSON.stringify(Object.keys(server.posts[0].body)) === '["url"]' && server.posts[0].body.url === first.split('#')[0])
+  t.ok('a: exactly one POST, holding only the long link (no code, no secret)', connectPosts(server).length === 1 && JSON.stringify(Object.keys(connectPosts(server)[0].body)) === '["url"]' && connectPosts(server)[0].body.url === first.split('#')[0])
   t.ok('a: the QR is short now (well under a third of the long link)', (await payload(page)).length < first.length / 3)
   await page.locator('.meet-page > .btn', { hasText: 'Copy link' }).click()
   t.ok('a: Copy link copies the code link', (await page.evaluate(() => navigator.clipboard.readText())) === `${ORIGIN}/c/${code}`)
@@ -105,7 +107,7 @@ async function partA(browser) {
   await page.getByRole('button', { name: 'Ada Lovelace' }).click()
   await page.locator('.sheet input[aria-label="Your name"]').fill('Ada Byron')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  const updated = await until(async () => server.posts.length === 2 && server.posts[1].body)
+  const updated = await until(async () => connectPosts(server).length === 2 && connectPosts(server)[1].body)
   t.ok('a: a new name sends an UPDATE (url, the same code and its secret)', !!updated && updated.code === code && updated.secret === rec.secret && updated.url.includes('name=Ada+Byron'), JSON.stringify(updated).slice(0, 120))
   t.ok('a: the record keeps the same code, with the new url', (await until(async () => (await record(page)).connectCode.url.includes('name=Ada+Byron'))) && (await record(page)).connectCode.code === code)
   await ctx.close()
@@ -116,7 +118,7 @@ async function partA(browser) {
   const b = await newPhone(browser, broken)
   await startPhone(b.page, 'Bo Broken')
   await openMeet(b.page)
-  await until(async () => broken.posts.length >= 1)
+  await until(async () => connectPosts(broken).length >= 1)
   await b.page.waitForTimeout(500)
   const long = await payload(b.page)
   t.ok('a: a 500 from the server: the long link stays in the QR, and no error page', /\?connect=did%3Apeer%3A2/.test(long) && (await b.page.locator('.meet-page').isVisible()))
@@ -126,7 +128,7 @@ async function partA(browser) {
   await b.page.getByRole('button', { name: 'Back' }).click()
   await b.page.locator('.hdr [aria-label^="Show my code"]').click()
   const code2 = await until(async () => { const c = [...broken.codes.keys()][0]; return c && (await payload(b.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
-  t.ok('a: opening Meet again asks again and the code arrives', !!code2 && broken.posts.length === 2)
+  t.ok('a: opening Meet again asks again and the code arrives', !!code2 && connectPosts(broken).length === 2)
   await b.ctx.close()
 }
 

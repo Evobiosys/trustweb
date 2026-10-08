@@ -40,8 +40,31 @@ export interface ConnectRecord {
   url: string
   /** Epoch ms of the last successful mint or update. */
   updatedAt: number
-  /** The username this code holds on the server (/who/<name>), when the person claimed one. */
+  /** The username this code holds on the server (/who/<name>), when the person claimed one: the PRIMARY name. */
   name?: string
+  /** Wave 6e: up to two more names this code holds (aliases); /who/<alias> reaches the same code. Absent: none. */
+  aliases?: string[]
+  /**
+   * Wave 6e: names the app learned are LOCKED (granted by the operator: the server refuses to release or replace them, 409 name_locked).
+   * Only names this code still holds are kept. Absent: none known.
+   */
+  lockedNames?: string[]
+}
+
+/** A code holds at most this many names: one primary plus up to MAX_ALIASES aliases (services contract 10.9). */
+export const MAX_NAMES = 3
+export const MAX_ALIASES = MAX_NAMES - 1
+
+function isHeldName(v: unknown): v is string {
+  return typeof v === 'string' && NAME_RE.test(v) && !CONNECT_CODE_RE.test(v)
+}
+
+/** A stored list of names, checked: valid names only, no duplicates, none of `except`, at most `max`. Never throws. */
+export function readNameList(raw: unknown, max: number, except: readonly string[] = []): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const v of raw) if (isHeldName(v) && !out.includes(v) && !except.includes(v)) out.push(v)
+  return out.slice(0, max)
 }
 
 /** Why a registration did not happen; the long link always stays. */
@@ -69,8 +92,15 @@ export function readConnectRecord(raw: unknown): ConnectRecord | null {
   if (typeof code !== 'string' || !CONNECT_CODE_RE.test(code)) return null
   if (typeof secret !== 'string' || !CONNECT_SECRET_RE.test(secret)) return null
   if (typeof url !== 'string' || typeof updatedAt !== 'number' || !Number.isFinite(updatedAt)) return null
-  const name = (raw as Record<string, unknown>).name
-  return typeof name === 'string' && NAME_RE.test(name) && !CONNECT_CODE_RE.test(name) ? { code, secret, url, updatedAt, name } : { code, secret, url, updatedAt }
+  const o = raw as Record<string, unknown>
+  const name = isHeldName(o.name) ? o.name : undefined
+  const aliases = readNameList(o.aliases, MAX_ALIASES, name ? [name] : [])
+  const held = [...(name ? [name] : []), ...aliases]
+  const lockedNames = readNameList(o.lockedNames, MAX_NAMES).filter((n) => held.includes(n))
+  return {
+    code, secret, url, updatedAt,
+    ...(name ? { name } : {}), ...(aliases.length ? { aliases } : {}), ...(lockedNames.length ? { lockedNames } : {}),
+  }
 }
 
 /** Boot migration: a connectCode value that is not a good record is dropped. True when the state changed. Never throws. */
@@ -132,9 +162,7 @@ function bodyFor(url: string, record: ConnectRecord | null): string {
   return JSON.stringify(record ? { url, code: record.code, secret: record.secret } : { url })
 }
 
-type ClientDepsForClaim = ConnectClientDeps
-
-async function postTo(deps: ConnectClientDeps, path: string, body: string): Promise<{ status: number; json: unknown } | ConnectError.Network> {
+export async function postTo(deps: ConnectClientDeps, path: string, body: string): Promise<{ status: number; json: unknown } | ConnectError.Network> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? CONNECT_TIMEOUT_MS)
   try {
@@ -158,7 +186,7 @@ async function postTo(deps: ConnectClientDeps, path: string, body: string): Prom
 
 const post = (deps: ConnectClientDeps, body: string): ReturnType<typeof postTo> => postTo(deps, '/connect', body)
 
-function field(json: unknown, key: string): unknown {
+export function field(json: unknown, key: string): unknown {
   return typeof json === 'object' && json !== null ? (json as Record<string, unknown>)[key] : undefined
 }
 
@@ -198,8 +226,14 @@ export enum ClaimError {
   NoCode = 'no-code',
   /** Not 3 to 30 letters, digits, dots, dashes or underscores (checked here, before any request). */
   BadName = 'bad-name',
-  /** 409: somebody else holds it. */
+  /** 409 name_taken: somebody else holds it. */
   Taken = 'taken',
+  /** 409 reserved: the name stays with the service. */
+  Reserved = 'reserved',
+  /** 409 name_locked: this code holds the name because the operator granted it; the app can neither release nor replace it. */
+  NameLocked = 'name-locked',
+  /** 409 too_many_names: the code already holds all three. */
+  TooManyNames = 'too-many-names',
   /** 403: the server no longer knows this code (it expired); the next registration makes a new one. */
   Forgotten = 'forgotten',
   RateLimited = 'rate-limited',
@@ -207,8 +241,6 @@ export enum ClaimError {
   /** 503, 507 or another 5xx. */
   Server = 'server',
 }
-
-export type ClaimOutcome = { ok: true; name: string } | { ok: false; error: ClaimError }
 
 /** What the person typed, as the server wants it: no leading "@", lowercase, trimmed. */
 export function cleanUsername(raw: string): string {
@@ -220,18 +252,14 @@ export function isClaimable(name: string): boolean {
   return name === '' || (NAME_RE.test(name) && !CONNECT_CODE_RE.test(name))
 }
 
-/** POST /name {name, code, secret}: claims a username for the code, or releases it with "". Never throws. */
-export async function claimName(deps: ClientDepsForClaim, record: ConnectRecord, name: string): Promise<ClaimOutcome> {
-  if (!canRegister(deps.origin)) return { ok: false, error: ClaimError.Network }
-  if (!isClaimable(name)) return { ok: false, error: ClaimError.BadName }
-  const res = await postTo(deps, '/name', JSON.stringify({ name, code: record.code, secret: record.secret }))
-  if (res === ConnectError.Network) return { ok: false, error: ClaimError.Network }
-  if (res.status === 200) return field(res.json, 'name') === name ? { ok: true, name } : { ok: false, error: ClaimError.Server }
-  if (res.status === 409) return { ok: false, error: ClaimError.Taken }
-  if (res.status === 403) return { ok: false, error: ClaimError.Forgotten }
-  if (res.status === 429) return { ok: false, error: ClaimError.RateLimited }
-  if (res.status === 400) return { ok: false, error: ClaimError.BadName }
-  return { ok: false, error: ClaimError.Server }
+/** A registration answer replaces the stored record, but the names changed while it ran (names_sync.ts) are the fresh ones, not the captured copy. */
+function keepNames(next: ConnectRecord, fresh: ConnectRecord | null): ConnectRecord {
+  const { name: _n, aliases: _a, lockedNames: _l, ...rest } = next
+  if (!fresh || fresh.code !== next.code) return rest
+  return {
+    ...rest,
+    ...(fresh.name ? { name: fresh.name } : {}), ...(fresh.aliases ? { aliases: fresh.aliases } : {}), ...(fresh.lockedNames ? { lockedNames: fresh.lockedNames } : {}),
+  }
 }
 
 export interface ConnectKeeperDeps extends ConnectClientDeps {
@@ -249,10 +277,10 @@ export interface ConnectKeeper {
   shortFor(longUrl: string): string | null
   /** Called whenever a registration succeeded. Returns the way to stop listening. */
   onChange(listener: () => void): () => void
-  /** The username this phone's code holds, or ''. */
-  name(): string
-  /** Claims a username for this phone's code ('' releases it); the record keeps it on success. */
-  claim(name: string): Promise<ClaimOutcome>
+  /** Is the cooldown after a 429 still running (names_sync.ts shares the one budget of POST /connect and POST /name)? */
+  coolingDown(): boolean
+  /** A 429 came back from POST /name: registration pauses too. */
+  noteRateLimited(): void
 }
 
 /** The per-visit keeper: one request in flight, a bounded retry after a failure, the record kept through deps.store. */
@@ -286,7 +314,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
       if (out.error !== ConnectError.NotHere && out.error !== ConnectError.Refused) scheduleRetry()
       return false
     }
-    deps.store(out.record)
+    deps.store(keepNames(out.record, held()))
     attempt = 0
     stopRetry()
     for (const l of [...listeners]) l()
@@ -316,18 +344,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    name: (): string => held()?.name ?? '',
-    async claim(name: string): Promise<ClaimOutcome> {
-      const record = held()
-      if (!record) return { ok: false, error: ClaimError.NoCode }
-      const out = await claimName(deps, record, name)
-      // POST /name shares the per-address budget of POST /connect: a 429 here also pauses the registration.
-      if (!out.ok && out.error === ClaimError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS
-      if (!out.ok) return out
-      const { name: _old, ...rest } = record
-      deps.store(out.name ? { ...rest, name: out.name } : rest)
-      for (const l of [...listeners]) l()
-      return out
-    },
+    coolingDown: (): boolean => deps.now() < cooldownUntil,
+    noteRateLimited: (): void => { cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS },
   }
 }

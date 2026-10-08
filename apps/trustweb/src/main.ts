@@ -25,6 +25,9 @@ import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
 import { createConnectKeeper, repairConnectRecord } from './connect_code'
+import { createNamesSync } from './names_sync'
+import type { NamesSync } from './names_sync'
+import { createNamesView } from './names_view'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -2826,6 +2829,22 @@ function codeKeeper(): ConnectKeeper {
   return connectKeeper
 }
 
+/** One names client per visit (names_sync.ts): the names a code holds on the server, read when Meet opens, claimed and released from Advanced. */
+let namesSyncer: NamesSync | null = null
+
+function namesSync(): NamesSync {
+  namesSyncer ??= createNamesSync({
+    origin: location.origin,
+    fetch: (input, init) => fetch(input, init),
+    now: () => Date.now(),
+    load: () => state?.connectCode,
+    store: (record) => { st().connectCode = record; save() },
+    keeper: codeKeeper(),
+    offer: connectEligible(),
+  })
+  return namesSyncer
+}
+
 /** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
 function connectEligible(): boolean {
   return !solo && persona === 'me' && !!state && !state.testOf && window.top === window
@@ -2908,6 +2927,11 @@ function meetTrustWebPage(): HTMLElement {
     isOpen: () => meetAdvancedOpen,
     toggleAdvanced: () => { meetAdvancedOpen = !meetAdvancedOpen; apply(true) },
   })
+  const namesView = createNamesView({
+    names: () => namesSync().names(),
+    claim: (name, isAlias) => namesSync().claim(name, isAlias),
+    release: (name) => namesSync().release(name),
+  })
   const advanced = createAdvanced({
     current: shareModeNow,
     pins: () => readPins(st().sharePins),
@@ -2923,11 +2947,16 @@ function meetTrustWebPage(): HTMLElement {
     available: (m) => modeAvailable(m, st().myChannels),
     cameraOnly: () => needsCameraApp(shareModeNow(), st().myChannels),
     contactBox: box.el,
-    username: { available: () => connectEligible() && st().connectCode !== undefined, current: () => codeKeeper().name(), claim: (name) => codeKeeper().claim(name) },
+    names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })
-  // The username field appears once the code is on the server.
+  // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
   let shown = false
-  const stopListening = codeKeeper().onChange(() => { if (qr.isConnected) { shown = true; advanced.refresh() } else if (shown) stopListening() })
+  const stopListening = codeKeeper().onChange(() => {
+    if (qr.isConnected) { shown = true; advanced.refresh(); void namesSync().refresh() } else if (shown) stopListening()
+  })
+  const stopNames = namesSync().onChange(() => { if (qr.isConnected) namesView.update(); else stopNames() })
+  // Meet was opened by the person: ask now (names the operator granted show at once); the registration's own answer asks again, throttled.
+  if (st().connectCode) void namesSync().refresh(true)
   void (async () => {
     await net.start()
     const link = net.connectLink(APP_URL)
