@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { request } from 'node:http'
 import { AskRateLimit, INVENTORY_LINE_MAX, PeerPolicy, fitsAnswer, forwardedText, loadGrants, loadInventory, parsePreset, presetContext, startPeer } from '../peer.ts'
+import { seenHash } from '../../../apps/trustweb/src/hops.ts'
 import { createIdentity, ecdhSharedSecret } from '../../../apps/demo/src/did.ts'
 import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
@@ -488,6 +489,69 @@ describe('the peer against an in-memory relay', () => {
     await anna.connectTo(peer.card.did)
     await until(() => peer.peerCount() === 1)
     jakob.close(); ben.close(); anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  // ----- wave 6 (U1): hops at the front door (apps/trustweb/src/hops.ts) -----
+  it('wave 6: a travelling ask goes to the owner at the same step (door), the asker named in via; what came back through the owner keeps its "through"', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Camping tent for four', audience: 'fof', preset: PRESET }])
+    const lines = []
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, answerWindowMs: WINDOW_MS, forwardWaitMs: 600, log: (l) => lines.push(l) })
+    let decision = () => [{ text: 'Ladder, 3 m', when: 'early October', context: 'What I have', via: ['Jakob'] }]
+    const jakob = await phone(relayOrigin, 'Jakob', (q) => decision(q))
+    await jakob.connectTo(peer.card.did)
+    await until(() => peer.status().owner)
+    const anna = await phone(relayOrigin, 'Anna-demo', null)
+    await anna.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const root = 'rootABC123'
+    const t0 = Date.now()
+    const a = await anna.ask(peer.card.did, 'who has a ladder', 6000, { maxHops: 2, hop: 0, root, seen: [await seenHash(root, 'anna')] })
+    // the owner shared live, so the door answers early (as before: the content says so anyway), never before one window
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(WINDOW_MS - 30)
+    const fwd = jakob.asks.at(-1)
+    expect(fwd).toMatchObject({ door: true, relayed: true, hop: 0, maxHops: 2, root, via: ['Anna-demo'], freeText: 'who has a ladder' })
+    expect(fwd.seen.length).toBe(3)
+    expect(a.outcome).toBe('shared')
+    expect(a.shared.items).toEqual([{ text: 'Ladder, 3 m', when: 'early October', context: 'What I have', via: ['Jakob'] }])
+    // the owner has nothing: the door answers at its fixed moment, its wait for the owner plus one window for the further step
+    decision = () => null
+    const t1 = Date.now()
+    const b = await anna.ask(peer.card.did, 'who has a ladder, again', 6000, { maxHops: 2, hop: 0, root: 'rootDEF456', seen: [] })
+    expect(b.outcome).toBe('nothing')
+    expect(Date.now() - t1).toBeGreaterThanOrEqual(600 + WINDOW_MS - 30)
+    expect(lines.join('\n')).not.toMatch(/ladder|Anna/i)
+    jakob.close(); anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('wave 6: further out (hop 1) a preset line answers only within its degrees; the same ask by a second path is nothing; a direct ask still never forwards', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [
+      { text: 'Loudspeakers, one degree (default)', audience: 'fof', preset: PRESET },
+      { text: 'Loudspeakers, contacts only', audience: 'fof', degrees: 0, preset: PRESET },
+    ])
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS })
+    const ben = await phone(relayOrigin, 'Ben', null)
+    await ben.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const root = 'rootXYZ789'
+    const hop1 = { relayed: true, maxHops: 2, hop: 1, root, seen: [await seenHash(root, 'ann'), await seenHash(root, 'ben')], via: ['Ann'] }
+    const t0 = Date.now()
+    const a1 = await ben.ask(peer.card.did, 'loudspeakers', 4000, hop1)
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(WINDOW_MS - 30)
+    expect(a1.outcome).toBe('shared')
+    expect(a1.shared.items.map((i) => i.text)).toEqual(['Loudspeakers, one degree (default)'])
+    const again = await ben.ask(peer.card.did, 'loudspeakers', 4000, hop1)
+    expect(again.outcome).toBe('nothing')
+    const atHop0 = await ben.ask(peer.card.did, 'loudspeakers')
+    expect(atHop0.shared.items.map((i) => i.text).sort()).toEqual(['Loudspeakers, contacts only', 'Loudspeakers, one degree (default)'])
+    const tooFar = await ben.ask(peer.card.did, 'loudspeakers', 4000, { ...hop1, root: 'rootTooFar1', hop: 2 })
+    expect(tooFar.outcome).toBe('nothing')
+    ben.close()
     await peer.stop()
     rmSync(dir, { recursive: true })
   }, 30_000)

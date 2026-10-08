@@ -45,6 +45,13 @@
  *             Host (questhub or sebra) is the owner's decision; not deployed
  *             yet; see README.txt.
  *
+ * Hops (wave 6, apps/trustweb/src/hops.ts): an ask may carry how far it may
+ * travel. The front door and its owner's phone are ONE person: an ask is
+ * forwarded to the owner at the same step (`door: true`), and the owner's
+ * phone passes it on to its own contacts where the asker allowed it. A preset
+ * line answers a further-out ask only within its degrees (cascade.ts). The
+ * answer moment stays fixed by the envelope alone (hops.ts doorAnswerDelayMs).
+ *
  * Privacy on this host: no ask text is ever logged; the log has counts and
  * outcomes only. The inventory file is read once at start and on SIGHUP.
  *
@@ -71,8 +78,13 @@ import { classifyIncomingQuery } from '../../apps/demo/src/incoming_query'
 import { matchTemplate } from '../../apps/demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../apps/demo/src/types'
 import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayload } from '../../apps/demo/src/types'
+import type { QueryTemplate } from '../../apps/demo/src/types'
+import type { ChatThread } from '../../apps/demo/src/types'
+import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
+import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash } from '../../apps/trustweb/src/hops'
+import type { HopInfo } from '../../apps/trustweb/src/hops'
 import { ASK_TEMPLATE_ID, askTemplate } from '../../apps/trustweb/src/lexicon'
-import { Audience, AUDIENCES, Ring, coarseWhen, threadsForRing } from '../../apps/trustweb/src/model'
+import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
 
 export enum PeerPolicy {
@@ -221,6 +233,19 @@ function prune(m: MatchResult): MatchResult {
   return { ...m, hits: m.hits.filter((h) => h.score >= top * RELEVANCE_BAND).slice(0, MAX_SHARED) }
 }
 
+/**
+ * U2's matcher hook (wave 6): the ONE place this file builds a QueryTemplate
+ * from free text, so swapping in the forgiving matcher is one line here.
+ */
+function templateFor(text: string): QueryTemplate {
+  return askTemplate(text)
+}
+
+/** The ONE place this file runs the matcher on an ask (with apps/demo's prune). */
+function matchAsk(tpl: QueryTemplate, threads: ChatThread[]): MatchResult {
+  return prune(matchTemplate(tpl, threads))
+}
+
 function isAudience(v: unknown): v is Audience {
   return typeof v === 'string' && (AUDIENCES as readonly string[]).includes(v)
 }
@@ -253,8 +278,10 @@ export function loadInventory(file: string, now: number): LoadedInventory {
     const preset = parsePreset(o.preset)
     const text = o.text.trim()
     if (!preset || text.length > INVENTORY_LINE_MAX || !fitsAnswer(text, preset)) { out.held++; continue }
+    // Wave 6: optional degrees (cascade.ts); absent or malformed = the default for its audience.
+    const degrees = isDegrees(o.degrees) ? { degrees: o.degrees } : {}
     out.preset.push({
-      item: { id: randomId(8), text, audience: o.audience, included: true, createdAt: now },
+      item: { id: randomId(8), text, audience: o.audience, included: true, createdAt: now, ...degrees },
       preset,
     })
   }
@@ -361,6 +388,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   const limiter = new AskRateLimit(opts.asksPerHour ?? DEFAULT_ASKS_PER_HOUR)
   const keys = new Map<string, Promise<CryptoKey>>()
   const seenQids = new Set<string>()
+  const roots = new RootMemory()
   /** Forwarded asks waiting for the owner's phone, by the forwarded qid. */
   const awaitingOwner = new Map<string, (env: AnswerEnvelope) => void>()
   let relayStatus: RelayStatus = 'connecting'
@@ -491,17 +519,27 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
    * preset lines and never passes such an ask on).
    */
   const forwards = (self: boolean, q: QueryEnvelope): boolean =>
-    forward && Boolean(state.owner) && !self && Boolean(q.freeText) && q.direct !== true
+    forward && Boolean(state.owner) && !self && Boolean(q.freeText) && mayForwardToOwner(q)
+
+  /**
+   * The ask that goes to the owner's phone: as before for an ask that does not
+   * travel ("Name: text", relayed), and for a travelling one the same step with
+   * `door: true`, the asker's name in `via` and the asker and this door in `seen`
+   * (hops.ts doorFields), so the owner's phone may pass it on per the asker's reach.
+   */
+  async function ownerAsk(q: QueryEnvelope, info: HopInfo, asker: Peer, text: string, templateId: string): Promise<QueryEnvelope> {
+    const base: QueryEnvelope = { v: 1, t: 'query', from: state.me, templateId, templateVersion: 1, qid: randomId(12), issuedAt: Date.now(), freeText: forwardedText(asker.displayName, text), relayed: true }
+    if (!info.travels || !info.root) return base
+    const seen = [await seenHash(info.root, asker.id), await seenHash(info.root, state.me.id)]
+    return { ...base, freeText: text.slice(0, FREE_TEXT_MAX_LEN), ...doorFields(q, info, seen, asker.displayName) }
+  }
 
   /** Puts the ask in front of the owner, as the ask it is; resolves with what the owner's phone shared by `deadline`. */
-  async function forwardToOwner(askerName: string, text: string, templateId: string, deadline: number): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
+  async function forwardToOwner(asked: QueryEnvelope, info: HopInfo, asker: Peer, text: string, templateId: string, deadline: number): Promise<{ outcome: OwnerOutcome; items: SharedItem[] }> {
     const owner = state.owner
     if (!forward || !owner || !text) return { outcome: OwnerOutcome.NotAsked, items: [] }
     const key = await pairKey(owner.did)
-    const q: QueryEnvelope = {
-      v: 1, t: 'query', from: state.me, templateId, templateVersion: 1,
-      qid: randomId(12), issuedAt: Date.now(), freeText: forwardedText(askerName, text), relayed: true,
-    }
+    const q = await ownerAsk(asked, info, asker, text, templateId)
     const answered = new Promise<AnswerEnvelope | null>((resolve) => {
       const timer = setTimeout(() => { awaitingOwner.delete(q.qid); resolve(null) }, Math.max(0, deadline - Date.now()))
       awaitingOwner.set(q.qid, (env) => { clearTimeout(timer); awaitingOwner.delete(q.qid); resolve(env) })
@@ -515,7 +553,9 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     if (!env) return { outcome: OwnerOutcome.Timeout, items: [] }
     const decoded = await interpret(env, key)
     if (decoded.outcome !== 'shared' || !decoded.shared) return { outcome: OwnerOutcome.Nothing, items: [] }
-    return { outcome: OwnerOutcome.Shared, items: decoded.shared.items }
+    // Untrusted bytes even from the owner's phone: well-formed items only (their `via` kept: "through <owner>").
+    const items = sanitizeHopItems(decoded.shared.items)
+    return items.length ? { outcome: OwnerOutcome.Shared, items } : { outcome: OwnerOutcome.Nothing, items: [] }
   }
 
   async function handleQuery(q: QueryEnvelope, fromDid: string): Promise<void> {
@@ -531,16 +571,21 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     if (!peer || (!self && !stillGranted(peer))) return
     const key = await pairKey(peer.did)
     const text = q.freeText ?? ''
-    const tpl = askTemplate(text)
+    const tpl = templateFor(text)
+    const info = hopInfo(q)
+    // The same ask by another path, or a cycle back to this door (hops.ts): answered like no match, same moment.
+    const repeat = roots.repeat(info.root, receivedAt)
+    const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, state.me.id))
+    const silent = repeat || cycle
     // ONE answer instant per ask, fixed before anything is decided: while the
     // ask goes to the owner's phone, every answer the owner did not add to is
     // sent at the forward deadline, so a decline, no match, the phone off and
     // the rate limit cannot be told apart by WHEN they arrive (gate.ts I3,
     // RELAY_DEADLINE_MS). Only the owner's live share goes early: its content
-    // says so anyway.
-    const ownerDeadline = receivedAt + Math.max(answerWindowMs, forwardWaitMs)
-    const passOn = forwards(self, q)
-    const settleMs = passOn ? Math.max(answerWindowMs, forwardWaitMs) : answerWindowMs
+    // says so anyway. A travelling ask adds one window per further step (hops.ts).
+    const passOn = !silent && forwards(self, q)
+    const settleMs = passOn ? doorAnswerDelayMs(info, answerWindowMs, forwardWaitMs) : answerDelayMs({ ...info, door: false }, answerWindowMs)
+    const ownerDeadline = receivedAt + settleMs
     const answer = async (payload: SharedPayload | null, early = false): Promise<void> => {
       await settleAt(receivedAt, early ? answerWindowMs : settleMs)
       const out = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
@@ -553,8 +598,8 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     }
 
     // 2. Lines the owner allowed in advance, visibly marked as such.
-    const { threads, refs } = threadsForRing(asAppState(), peer.ring)
-    const match = text ? prune(matchTemplate(tpl, threads)) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
+    const { threads, refs } = askSources(asAppState(), peer.ring, info.hop)
+    const match = text && !silent ? matchAsk(tpl, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const presets = presetById()
     const presetItems: SharedItem[] = surface
@@ -568,7 +613,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       : []
 
     // 1. The owner's live decision, in parallel with the answer window.
-    const owner = passOn ? await forwardToOwner(peer.displayName, text, tpl.id, ownerDeadline) : { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] }
+    const owner = passOn ? await forwardToOwner(q, info, peer, text, tpl.id, ownerDeadline) : { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] }
 
     const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
     // Shape kept stable for apps/trustweb/test/e2e/demo_account.mjs ("ask shared"): outcome first, then the parts.
