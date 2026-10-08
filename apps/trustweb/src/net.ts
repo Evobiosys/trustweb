@@ -246,9 +246,11 @@ export class Net {
   async completeConnect(params: ConnectLinkParams, ring: Ring): Promise<Peer> {
     const s = this.hooks.state()
     const identity = this.ensureIdentity()
+    // A connection this phone already holds under that DID keeps its id and name (a bare-DID add made it up, a scan may bring the real ones).
+    const known = s.peers.find((x) => x.did === params.did)
     const peer = upsertPeer(s, {
-      id: params.from.id,
-      displayName: params.from.displayName || NAMELESS_PEER,
+      id: known?.id ?? params.from.id,
+      displayName: params.from.displayName || known?.displayName || NAMELESS_PEER,
       did: params.did,
       ring,
       connectedAt: Date.now(),

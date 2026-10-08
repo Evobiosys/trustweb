@@ -1,7 +1,7 @@
 /**
  * An in-browser stand-in for the connect service (services/trustweb-backup connect.mjs, contract section 10 of
  * DEVLOG/trustweb-wave-1733/services-api-contract.txt) for the e2e files of wave 6b: Playwright routes on a browser context answer
- * POST /connect, GET /c/<code> (302 to the stored link), POST /name and GET /who/<name> (302 to /c/<code>), with the same status
+ * POST /connect, GET /c/<code> (302 to the stored link), POST /name and GET /who/<name> (302 to the stored link, see who()), with the same status
  * codes and shapes as the contract. Shared by every context it is installed on, so a second phone resolves what the first registered.
  * Nothing here listens on a port.
  */
@@ -78,7 +78,10 @@ export function fakeConnectServer(origin) {
     s.opens.push({ path: url.pathname })
     await wait()
     const code = s.names.get(wanted)
-    return code ? route.fulfill({ status: 302, headers: { Location: `${origin}/c/${code}`, 'Cache-Control': 'no-store' } }) : notFound(route)
+    // The real server answers /who/<name> with a 302 to /c/<code> and that with a 302 to the link. Playwright does not route the second hop of a
+    // redirect again (the app's catch-all would answer /c/<code> with the page), so the stub collapses the two into one redirect to the link.
+    const stored = code ? s.codes.get(code) : undefined
+    return stored ? route.fulfill({ status: 302, headers: { Location: stored.url, 'Cache-Control': 'no-store' } }) : notFound(route)
   }
 
   s.install = async (ctx) => {

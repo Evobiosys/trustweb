@@ -4,7 +4,8 @@
  * that the secret never leaves in anything but the POST body.
  */
 import {
-  CONNECT_CODE_RE, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ConnectError, canRegister, codeOfShortLink, connectShortLink,
+  CONNECT_CODE_RE, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
+  connectShortLink, isClaimable,
   createConnectKeeper, readConnectRecord, registerConnect, registrationDue, repairConnectRecord, shortToShow,
 } from '../../src/connect_code.ts'
 import { buildConnectLinkUrl } from '../../../demo/src/connect_link.ts'
@@ -282,5 +283,60 @@ describe('createConnectKeeper', () => {
     off()
     await k.ensure(longUrl('Ada B'))
     expect(heard).toBe(1)
+  })
+})
+
+describe('usernames: claimName and the keeper', () => {
+  it('cleans what is typed: no @, lowercase, trimmed', () => {
+    expect(cleanUsername('  @Ada.L ')).toBe('ada.l')
+    expect(cleanUsername('ADA')).toBe('ada')
+  })
+  it('claimable: empty (release) or a valid name that does not look like a code', () => {
+    expect(isClaimable('')).toBe(true)
+    expect(isClaimable('ada')).toBe(true)
+    expect(isClaimable('a.b-c_d')).toBe(true)
+    for (const bad of ['ab', 'Ada', '-ada', 'ada-', 'a'.repeat(31), 'ada lovelace', 'ada!', 'abcdefghijklmnopqrstuv', '@ada']) expect(isClaimable(bad)).toBe(false)
+  })
+  it('POSTs {name, code, secret} to /name and answers the name', async () => {
+    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }])
+    expect(await claimName(deps(f), record(), 'ada')).toEqual({ ok: true, name: 'ada' })
+    expect(calls[0].url).toBe(`${ORIGIN}/name`)
+    expect(calls[0].body).toEqual({ name: 'ada', code: CODE, secret: SECRET })
+    expect(calls[0].init.referrerPolicy).toBe('no-referrer')
+  })
+  it('"" releases', async () => {
+    expect(await claimName(deps(fake([{ status: 200, body: { name: '' } }]).f), record(), '')).toEqual({ ok: true, name: '' })
+  })
+  it.each([[409, ClaimError.Taken], [403, ClaimError.Forgotten], [429, ClaimError.RateLimited], [400, ClaimError.BadName], [500, ClaimError.Server], [503, ClaimError.Server]])('status %i is %s', async (status, error) => {
+    expect(await claimName(deps(fake([{ status, body: {} }]).f), record(), 'ada')).toEqual({ ok: false, error })
+  })
+  it('a bad name never reaches the network; offline is Network; a 200 for another name is Server', async () => {
+    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }])
+    expect(await claimName(deps(f), record(), 'Ada')).toEqual({ ok: false, error: ClaimError.BadName })
+    expect(calls).toHaveLength(0)
+    expect(await claimName(deps(fake(['offline']).f), record(), 'ada')).toEqual({ ok: false, error: ClaimError.Network })
+    expect(await claimName(deps(fake([{ status: 200, body: { name: 'bob' } }]).f), record(), 'ada')).toEqual({ ok: false, error: ClaimError.Server })
+  })
+  it('a stored record keeps a valid name and drops an invalid one without dropping the record', () => {
+    expect(readConnectRecord(record({ name: 'ada' })).name).toBe('ada')
+    const bad = readConnectRecord(record({ name: 'A!' }))
+    expect(bad).toEqual(record())
+    expect('name' in bad).toBe(false)
+  })
+  it('the keeper stores the claimed name, an update keeps it, a release removes it, and with no code nothing is sent', async () => {
+    const box = { value: record() }
+    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }, updated(), { status: 200, body: { name: '' } }])
+    const k = createConnectKeeper({ ...deps(f), load: () => box.value, store: (r) => { box.value = r } })
+    expect(k.name()).toBe('')
+    expect(await k.claim('ada')).toEqual({ ok: true, name: 'ada' })
+    expect(box.value.name).toBe('ada')
+    expect(k.name()).toBe('ada')
+    await k.ensure(longUrl('Ada B'))
+    expect(box.value.name).toBe('ada')
+    expect(await k.claim('')).toEqual({ ok: true, name: '' })
+    expect('name' in box.value).toBe(false)
+    expect(calls).toHaveLength(3)
+    const none = createConnectKeeper({ ...deps(fake([minted()]).f), load: () => undefined, store: () => {} })
+    expect(await none.claim('ada')).toEqual({ ok: false, error: ClaimError.NoCode })
   })
 })

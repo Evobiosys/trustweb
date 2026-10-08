@@ -29,6 +29,8 @@ import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
+import { resolveAddInput, ParseError } from './add_by_code'
+import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
@@ -953,6 +955,25 @@ function openPendingShare(): boolean {
   return true
 }
 
+/** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
+async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean }> {
+  const out = await resolveAddInput({ origin: location.origin, fetch: (i, init) => fetch(i, init) }, input)
+  if (!out.ok) return out.failure
+  if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
+  const peer = await net.completeConnect(out.link, ring)
+  const s = st()
+  let person = s.people.find((p) => p.peerId === peer.id)
+  const existed = person !== undefined
+  if (!person) {
+    person = { id: randomId(8), name: name || peer.displayName, context: where, ring, metAt: Date.now(), lines: [], peerId: peer.id }
+    s.people.push(person)
+  }
+  save()
+  sendContactTo(peer)
+  applyHeldContact(peer, person)
+  return { person, existed }
+}
+
 /** The sheet after a scan (connect_add_view.ts): the person is connected; pick the ring, correct the name, then their card opens. */
 let connectAdd: { peerId: string; handle: ConnectAddHandle } | null = null
 
@@ -1300,8 +1321,12 @@ const RIPPLE_LEAD_MS = 360
 
 function addPersonSheet(ring: Ring): void {
   let picked = ring
+  let busy = false
   const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
   const where = el('input', { class: 'field', placeholder: S.recWherePh, maxlength: '80', 'aria-label': S.addWhere })
+  // Wave 6b: their code, @name, DID or pasted link; nothing is looked up until "Add to my web" is pressed.
+  const code = el('input', { class: 'field', placeholder: S.addCodePh, maxlength: '2048', 'aria-label': S.addCodeLabel, 'data-add-code': '', id: 'add-code', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' })
+  const codeStatus = el('p', { class: 'meta', role: 'status', 'data-add-code-status': '' })
   const radios = el('div', { class: 'add-rings' })
   const drawRadios = (): void => {
     radios.replaceChildren(...RINGS.map((r) => el('button', {
@@ -1310,7 +1335,22 @@ function addPersonSheet(ring: Ring): void {
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
+  const addByCode = async (): Promise<void> => {
+    busy = true
+    addBtn.setAttribute('disabled', '')
+    codeStatus.textContent = S.addCodeBusy
+    const out = await connectByCode(code.value, picked, name.value.trim().slice(0, 40), where.value.trim().slice(0, 80))
+    busy = false
+    addBtn.removeAttribute('disabled')
+    if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
+    closeSheet()
+    toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
+    render()
+    personSheet(out.person.id)
+  }
   const add = (): void => {
+    if (busy) return
+    if (code.value.trim()) { void addByCode(); return }
     const n = name.value.trim()
     if (!n) { name.focus(); return }
     const s = st()
@@ -1320,14 +1360,20 @@ function addPersonSheet(ring: Ring): void {
     toast(S.savedToast(n, S.ringLabel[picked]))
     render()
   }
+  const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  code.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   openSheet([
     el('h3', {}, [S.addTitle]),
     el('p', { class: 'meta' }, [S.addLead]),
     name,
     where,
+    el('label', { class: 'meta', for: 'add-code' }, [S.addCodeLabel]),
+    code,
+    codeStatus,
+    el('p', { class: 'meta' }, [S.addCodeHint]),
     radios,
-    el('button', { class: 'btn btn-electric', onclick: add }, [S.addSave]),
+    addBtn,
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.addCancel]),
   ])
   setTimeout(() => name.focus(), 320)

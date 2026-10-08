@@ -11,6 +11,8 @@ import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
+import { AddKind, DidProblem, ParseError, ResolveError } from './add_by_code'
+import type { AddFailure } from './add_by_code'
 
 /** Names of the transcription services the server may report (contract v1.5 `provider.transcribe.provider`). */
 const PROVIDER_NAME: Readonly<Record<TranscribeProviderName, string>> = {
@@ -1204,5 +1206,38 @@ export const S = {
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
   connectAddedToast: (name: string) => `${name} is in your web.`,
+  // Wave 6b: "Their TrustWeb code, name or DID" on the add-someone sheet (add_by_code.ts)
+  addCodeLabel: 'Their TrustWeb code, name or DID (optional)',
+  addCodePh: 'A code or link, @name, or a did:peer:...',
+  addCodeHint: 'Paste what they sent you. A code or a name is looked up on our server when you press Add; a DID connects over the relay only, with no server.',
+  addCodeBusy: 'Looking them up...',
+  addCodeAlready: (name: string) => `${name} is already in your web.`,
+  addCodeFailed: (f: AddFailure): string => {
+    if (f.type === 'did') {
+      return f.problem === DidProblem.OtherRelay
+        ? `That DID uses the relay at ${f.relayOrigin ?? 'another address'}. This app can only reach the relay it is opened from, so open TrustWeb at that address to connect, or ask for their code.`
+        : 'That does not look like a DID this app can read (a did:peer:2 address).'
+    }
+    if (f.type === 'resolve') {
+      const what = f.kind === AddKind.Code ? 'code' : 'name'
+      switch (f.error) {
+        case ResolveError.NotFound: return `Our server does not know that ${what}. Check it, or ask them to show their code again.`
+        case ResolveError.RateLimited: return 'Too many lookups just now. Wait a minute and try again.'
+        case ResolveError.Network: return 'No answer from our server. Check your connection and try again, or paste their DID.'
+        case ResolveError.Refused: return `Our server answered with something that is not a TrustWeb link, so nothing was added.`
+        default: return 'Our server did not answer properly. Try again in a moment.'
+      }
+    }
+    switch (f.error) {
+      case ParseError.Empty: return 'Type or paste a code, a name or a DID.'
+      case ParseError.TooLong: return 'That is too long to be a code, a name or a DID.'
+      case ParseError.OtherHost: return 'That link is not from TrustWeb, so it was not opened. Paste their TrustWeb code, @name or DID.'
+      case ParseError.NotAConnectLink: return 'That TrustWeb link holds no connection. Paste the code link they showed you.'
+      case ParseError.BadName: return 'Expected a name of 3 to 30 letters, digits, dots, dashes or underscores (like @ada), a 22 character code, or a DID.'
+      case ParseError.Own: return 'That is your own code. Ask the other person for theirs.'
+      case ParseError.BadDid: return 'That does not look like a DID this app can read (a did:peer:2 address).'
+      default: return 'Expected a TrustWeb code or link, a name like @ada, or a did:peer: address.'
+    }
+  },
   cardNoMessenger: (name: string) => `No Signal or Molly link from ${name} yet. If they share one, it shows here.`,
 } as const

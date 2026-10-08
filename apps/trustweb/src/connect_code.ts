@@ -14,6 +14,9 @@
  */
 import { canShorten, shareBlock } from './short_link'
 
+/** Names: 3 to 30 characters of [a-z0-9._-], first and last [a-z0-9] (contract 10.0 with the V1 narrowing); the client lowercases what is typed. */
+export const NAME_RE = /^[a-z0-9](?:[a-z0-9._-]{1,28})[a-z0-9]$/
+
 /** Exactly what the server mints: 16 random bytes as base64url. */
 export const CONNECT_CODE_RE = /^[A-Za-z0-9_-]{22}$/
 /** 32 random bytes as base64url (contract 10.0). */
@@ -33,6 +36,8 @@ export interface ConnectRecord {
   url: string
   /** Epoch ms of the last successful mint or update. */
   updatedAt: number
+  /** The username this code holds on the server (/who/<name>), when the person claimed one. */
+  name?: string
 }
 
 /** Why a registration did not happen; the long link always stays. */
@@ -60,7 +65,8 @@ export function readConnectRecord(raw: unknown): ConnectRecord | null {
   if (typeof code !== 'string' || !CONNECT_CODE_RE.test(code)) return null
   if (typeof secret !== 'string' || !CONNECT_SECRET_RE.test(secret)) return null
   if (typeof url !== 'string' || typeof updatedAt !== 'number' || !Number.isFinite(updatedAt)) return null
-  return { code, secret, url, updatedAt }
+  const name = (raw as Record<string, unknown>).name
+  return typeof name === 'string' && NAME_RE.test(name) && !CONNECT_CODE_RE.test(name) ? { code, secret, url, updatedAt, name } : { code, secret, url, updatedAt }
 }
 
 /** Boot migration: a connectCode value that is not a good record is dropped. True when the state changed. Never throws. */
@@ -122,11 +128,13 @@ function bodyFor(url: string, record: ConnectRecord | null): string {
   return JSON.stringify(record ? { url, code: record.code, secret: record.secret } : { url })
 }
 
-async function post(deps: ConnectClientDeps, body: string): Promise<{ status: number; json: unknown } | ConnectError.Network> {
+type ClientDepsForClaim = ConnectClientDeps
+
+async function postTo(deps: ConnectClientDeps, path: string, body: string): Promise<{ status: number; json: unknown } | ConnectError.Network> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? CONNECT_TIMEOUT_MS)
   try {
-    const res = await deps.fetch(`${deps.origin}/connect`, {
+    const res = await deps.fetch(`${deps.origin}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -143,6 +151,8 @@ async function post(deps: ConnectClientDeps, body: string): Promise<{ status: nu
     clearTimeout(timer)
   }
 }
+
+const post = (deps: ConnectClientDeps, body: string): ReturnType<typeof postTo> => postTo(deps, '/connect', body)
 
 function field(json: unknown, key: string): unknown {
   return typeof json === 'object' && json !== null ? (json as Record<string, unknown>)[key] : undefined
@@ -176,6 +186,48 @@ export async function registerConnect(deps: ConnectClientDeps, record: ConnectRe
   return minted ? { ok: true, record: minted } : { ok: false, error: ConnectError.Server }
 }
 
+/** Why a username was not claimed (or released). */
+export enum ClaimError {
+  /** This phone holds no code on the server yet: nothing to attach a name to. */
+  NoCode = 'no-code',
+  /** Not 3 to 30 letters, digits, dots, dashes or underscores (checked here, before any request). */
+  BadName = 'bad-name',
+  /** 409: somebody else holds it. */
+  Taken = 'taken',
+  /** 403: the server no longer knows this code (it expired); the next registration makes a new one. */
+  Forgotten = 'forgotten',
+  RateLimited = 'rate-limited',
+  Network = 'network',
+  /** 503, 507 or another 5xx. */
+  Server = 'server',
+}
+
+export type ClaimOutcome = { ok: true; name: string } | { ok: false; error: ClaimError }
+
+/** What the person typed, as the server wants it: no leading "@", lowercase, trimmed. */
+export function cleanUsername(raw: string): string {
+  return raw.trim().replace(/^@/, '').toLowerCase()
+}
+
+/** True for a name this client will send: empty (release) or a valid name that does not look like a code. */
+export function isClaimable(name: string): boolean {
+  return name === '' || (NAME_RE.test(name) && !CONNECT_CODE_RE.test(name))
+}
+
+/** POST /name {name, code, secret}: claims a username for the code, or releases it with "". Never throws. */
+export async function claimName(deps: ClientDepsForClaim, record: ConnectRecord, name: string): Promise<ClaimOutcome> {
+  if (!canRegister(deps.origin)) return { ok: false, error: ClaimError.Network }
+  if (!isClaimable(name)) return { ok: false, error: ClaimError.BadName }
+  const res = await postTo(deps, '/name', JSON.stringify({ name, code: record.code, secret: record.secret }))
+  if (res === ConnectError.Network) return { ok: false, error: ClaimError.Network }
+  if (res.status === 200) return field(res.json, 'name') === name ? { ok: true, name } : { ok: false, error: ClaimError.Server }
+  if (res.status === 409) return { ok: false, error: ClaimError.Taken }
+  if (res.status === 403) return { ok: false, error: ClaimError.Forgotten }
+  if (res.status === 429) return { ok: false, error: ClaimError.RateLimited }
+  if (res.status === 400) return { ok: false, error: ClaimError.BadName }
+  return { ok: false, error: ClaimError.Server }
+}
+
 export interface ConnectKeeperDeps extends ConnectClientDeps {
   /** Where the phone keeps the record (AppState.connectCode). */
   load: () => unknown
@@ -191,6 +243,10 @@ export interface ConnectKeeper {
   shortFor(longUrl: string): string | null
   /** Called whenever a registration succeeded. Returns the way to stop listening. */
   onChange(listener: () => void): () => void
+  /** The username this phone's code holds, or ''. */
+  name(): string
+  /** Claims a username for this phone's code ('' releases it); the record keeps it on success. */
+  claim(name: string): Promise<ClaimOutcome>
 }
 
 /** The per-visit keeper: one request in flight, a bounded retry after a failure, the record kept through deps.store. */
@@ -245,6 +301,17 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
     onChange(listener: () => void): () => void {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
+    },
+    name: (): string => held()?.name ?? '',
+    async claim(name: string): Promise<ClaimOutcome> {
+      const record = held()
+      if (!record) return { ok: false, error: ClaimError.NoCode }
+      const out = await claimName(deps, record, name)
+      if (!out.ok) return out
+      const { name: _old, ...rest } = record
+      deps.store(out.name ? { ...rest, name: out.name } : rest)
+      for (const l of [...listeners]) l()
+      return out
     },
   }
 }
