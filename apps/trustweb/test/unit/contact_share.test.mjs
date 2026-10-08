@@ -6,7 +6,7 @@
 import {
   CONTACT_TEXT_MAX, CONTACT_VALUE_MAX, buildContactPayload, contactFingerprint, contactText, defaultShareTick, isContactText,
   contactToSend, holdContact, mergeContact, takeContact, parseContactText, receiveContactText, settleDefaultTick, primaryReachable, reachableChannels, shouldSendContact, sharesPhoneNumber, ticked,
-  validateContactPayload, withTick, sharedReachables, isNarrower, sentChannelsBefore,
+  validateContactPayload, withTick, sharedReachables, isNarrower,
 } from '../../src/contact_share.ts'
 import { SignalProvider } from '../../src/channel.ts'
 import { Channel } from '../../src/model.ts'
@@ -367,25 +367,5 @@ describe('held contacts (the text beats the card)', () => {
     expect(held.size).toBe(20)
     expect(held.has('p0')).toBe(false)
     expect(held.has('p24')).toBe(true)
-  })
-})
-
-describe('a peer served before wave 6e (fingerprint, no channel list)', () => {
-  const ticks = { shareOnConnect: { [Channel.Signal]: true, [Channel.Matrix]: true } }
-  const full = buildContactPayload(APP, MINE, ticks).payload
-  const fp = contactFingerprint(full)
-  it('counts as having got everything ticked now, so a narrowed send that only takes channels away is skipped', () => {
-    const before = sentChannelsBefore(APP, MINE, ticks, fp, undefined)
-    expect(before).toEqual(full.channels)
-    expect(contactToSend(APP, { [Channel.Signal]: USER }, ticks, fp, before)).toBeNull()
-  })
-  it('a changed link still goes', () => {
-    const before = sentChannelsBefore(APP, MINE, ticks, fp, undefined)
-    expect(contactToSend(APP, { [Channel.Signal]: 'https://signal.me/#eu/zzzZZZ999_-new' }, ticks, fp, before)).not.toBeNull()
-  })
-  it('a known channel list is used as it is; no fingerprint means nothing went', () => {
-    const known = { [Channel.Signal]: USER }
-    expect(sentChannelsBefore(APP, MINE, ticks, fp, known)).toBe(known)
-    expect(sentChannelsBefore(APP, MINE, ticks, undefined, undefined)).toBeUndefined()
   })
 })

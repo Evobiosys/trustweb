@@ -236,18 +236,6 @@ export function contactToSend(
   return { text: contactText(appUrl, built.payload), fingerprint: contactFingerprint(built.payload), omitted: built.omitted, channels: built.payload.channels }
 }
 
-/**
- * What went to a peer before, for contactToSend. A peer served before wave 6e has a fingerprint but no channel list: it got everything that
- * was ticked then, approximated by everything ticked now (`mine` unnarrowed), so a narrowed send that would only take channels away (an
- * older receiver replaces the whole set) is skipped for it too (review 6e). No fingerprint: nothing went, undefined.
- */
-export function sentChannelsBefore(
-  appUrl: string, mine: ChannelMap | undefined, settings: ShareSettings | undefined, sentFingerprint: string | undefined, sentChannels: ChannelMap | undefined,
-): ChannelMap | undefined {
-  if (sentChannels !== undefined || sentFingerprint === undefined) return sentChannels
-  return buildContactPayload(appUrl, mine, settings)?.payload.channels
-}
-
 /** True when `next` offers fewer channels than `sent` and every one of them is unchanged: sending it would only take something away. */
 export function isNarrower(next: ChannelMap, sent: ChannelMap): boolean {
   const kept = (Object.keys(next) as Channel[])

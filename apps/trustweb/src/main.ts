@@ -57,7 +57,7 @@ import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, sentChannelsBefore, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -1763,7 +1763,7 @@ function sendContactTo(peer: Peer): void {
   const mode = shareModeNow()
   if (!mayShareContact(mode)) return
   const s = st()
-  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], sentChannelsBefore(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id]))
+  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id])
   if (!out) return
   net.sendText(peer, out.text).then(() => {
     s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }
