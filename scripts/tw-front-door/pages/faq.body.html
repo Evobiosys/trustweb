@@ -102,9 +102,9 @@
     <summary>How do you meet someone you have not connected with yet? <span class="de">(Kennenlernen offline?)</span></summary>
     <!--IF:inperson-off--><p>Meeting in person and sharing your contact on the spot is in the works.</p><!--/IF--><!--IF:inperson-on--><p><b>One person shares their connect code.</b>
     When you meet someone, they can share a QR code or a link; you scan it with your camera and the app opens with that person already selected. You choose your ring
-    (close friend, friend, acquaintance) and press "Add to my web". If they share a Signal or Molly link, one press opens your direct channel to them.</p>
+    (close friend, friend, acquaintance) and press "Add to my web". If they share a Signal or WhatsApp link, one press opens your direct channel to them.</p>
     <p><b>About the server.</b> Our server keeps your connect code (the one the QR holds) and, if you want, a username you choose, so people can find you by name. That is the freemium offer. Your phone registers the code the first time you show your QR; without our server, people can still connect through the long link and your address (DID).
-    The server does not know your contacts or your messages; it holds the connect code, the link it points to (your TrustWeb address and the name you chose), a fingerprint of a secret only your phone knows, and the username if you claimed one.</p><!--/IF--><!--IF:inperson-lookup-on--><p><b>Or type instead of scanning.</b> If you have their TrustWeb code, their name on TrustWeb, or their address (a DID: a unique identifier that works without a server), you can type it instead of scanning.</p><!--/IF--><!--IF:inperson-advanced-on--><p><b>Advanced.</b> You can choose to share only your TrustWeb code (the QR), only a Molly or Signal link, or both.</p><!--/IF-->
+    The server does not know your contacts or your messages; it holds the connect code, the link it points to (your TrustWeb address and the name you chose), a fingerprint of a secret only your phone knows, and the username if you claimed one.</p><!--/IF--><!--IF:inperson-lookup-on--><p><b>Or type instead of scanning.</b> If you have their TrustWeb code, their name on TrustWeb, or their address (a DID: a unique identifier that works without a server), you can type it instead of scanning.</p><!--/IF--><!--IF:inperson-advanced-on--><p><b>Advanced.</b> You can choose to share only your TrustWeb code (the QR), only a Signal or WhatsApp link, or both.</p><!--/IF-->
   </details>
 
   <details class="q" id="q-money">
@@ -118,6 +118,16 @@
     <p>That is why the recording is kept next to the transcript, not only the text. Where the audio was kept
     on your phone, you tap a transcript line, or a line you noted, and the recording plays from that moment, so
     you can hear how it was said. Recording a meeting needs a tick that the other person agreed.</p>
+  </details>
+
+  <details class="q" id="q-is-this-safe">
+    <summary>Is this safe? <span class="de">(Ist das sicher?)</span></summary>
+    <p>TrustWeb is a web app. It runs in your browser or from your home screen, and you can remove it any time in Settings.</p>
+    <p>Your contacts and notes stay on this phone. Nothing about them leaves the phone without your yes.</p>
+    <p>Showing your own code to others registers a short address for it on our server (your name and the contact links you chose to share). Nothing else is sent unless you share it.</p>
+    <p>The person who shared this code with you shared only their contact links, for example Signal or WhatsApp. You can also use those links outside this app.</p>
+    <p>If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.</p>
+    <!--IF:code-public--><p>You can read the open source code on GitHub.</p><!--/IF-->
   </details>
 </section>
 
