@@ -19,7 +19,7 @@
  *      over with what was found and asks on as that account; the old tab is done.
  *   7. With the demo inventory peer published (demo-peer.json next to the app,
  *      services/trustweb-peer), an account is connected to Jakob AND the demo
- *      inventory; the peer (named Jakob since wave 5, his ten public lines) answers a projection ask by itself after the window
+ *      inventory, shown as ONE Jakob (wave 6, N6: the front door is his inventory); the peer (named Jakob since wave 5, his ten public lines) answers a projection ask by itself after the window
  *      and never logs the ask's text.
  *
  * Local (default): RelayServer + Vite (TW_PUBLIC_DIR serves the card, /backup
@@ -423,9 +423,14 @@ async function main() {
     await b2.goto(link2)
     await b2.getByRole('button', { name: 'Start as Carl-demo' }).click()
     await b2.locator('.query-dock').waitFor({ timeout: 20_000 })
-    await b2.locator('.node:not(.you)', { hasText: 'Jakob' }).nth(1).waitFor({ timeout: 20_000 })
+    await b2.locator('.node:not(.you)', { hasText: 'Jakob' }).first().waitFor({ timeout: 20_000 })
+    for (let i = 0; i < 100 && (await stored(b2)).peers.length < 2; i++) await b2.waitForTimeout(100)
     const nodes = await b2.locator('.node:not(.you) span').allInnerTexts()
-    ok('Carl-demo is connected to Jakob and to the demo front door, also named Jakob', nodes.filter((n) => n === 'Jakob').length === 2, JSON.stringify(nodes))
+    const carl = await stored(b2)
+    const jakobs = carl.people.filter((p) => p.name === 'Jakob')
+    // Wave 6 (N6, one Jakob): his phone and his front door are both connected, shown as ONE person (the front door is his inventory).
+    ok('Carl-demo is connected to Jakob and to his front door, shown as ONE Jakob', carl.peers.length === 2 && nodes.filter((n) => n === 'Jakob').length === 1
+      && jakobs.length === 1 && Boolean(jakobs[0].peerId) && Boolean(jakobs[0].doorPeerId) && jakobs[0].peerId !== jakobs[0].doorPeerId, JSON.stringify(nodes))
     await a.getByRole('button', { name: 'Back' }).click()
     await allowOn(a, 'Carl-demo', 'card')
     await b2.locator('.toast.on', { hasText: 'Jakob allowed it' }).waitFor({ timeout: 20_000 })

@@ -198,7 +198,7 @@ async function partWebResults(browser, base, a) {
 async function main() {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true })
   const relay = await startRelay()
-  const vite = await startVite(5283, { relayPort: relay.port })
+  const vite = await startVite(Number(process.env.TW_PORT || 5283), { relayPort: relay.port })
   let browser = null
   try {
     browser = await launch()

@@ -48,7 +48,7 @@ async function main() {
   const wrong = path.join(dir, 'other.json')
   writeFileSync(wrong, JSON.stringify({ format: 'something-else', version: 1, items: [] }))
   const relay = await startRelay()
-  const vite = await startVite(5298, { relayPort: relay.port })
+  const vite = await startVite(Number(process.env.TW_PORT || 5298), { relayPort: relay.port })
   let browser = null
   try {
     browser = await launch()
