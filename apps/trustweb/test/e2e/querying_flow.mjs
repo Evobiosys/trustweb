@@ -15,6 +15,8 @@
  *      next ask still reaches her
  *   H  a lone tab LOADED while behind another window (never in front) still drains and receives the ask
  *   G  window: a direct ask waits for the 120 s window (the asker's ask carries it; the answer leaves at that moment)
+ *   I  (review 6h) late yes while the ASKER'S app is closed: Bo asks and closes TrustWeb at once; Ada says yes after her moment; the
+ *      late answer waits on the relay; Bo's very next open shows "Ada answered later" (before the fix: only the open after that)
  * Ports: Vite TW_PORT (8970), TLS front TW_PORT+1. TW_SHOTS=<dir> for screenshots. PARTS=a,b,... to run a subset.
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8970 ../../node_modules/.bin/tsx ../trustweb/test/e2e/querying_flow.mjs
  */
@@ -247,6 +249,24 @@ async function partG(browser) {
   await a.ctx.close(); await b.ctx.close()
 }
 
+async function partI(browser) {
+  const { a, b } = await pair(browser, 'Closed', [{ text: 'Bread maker to lend', audience: 'fof' }])
+  await ask(b.page, 'bread maker')
+  t.ok('i: the prompt waits in her hidden tab', !!(await until(() => promptShown(a.page), 20_000)))
+  await b.page.close() // Bo closes TrustWeb right after asking (his record stays in the browser profile)
+  await a.page.waitForTimeout(125_000) // past her answer moment (120 s): her yes is a late one now
+  await a.page.evaluate(() => window.__twFront(true))
+  await a.page.getByRole('button', { name: 'Share these' }).click()
+  await a.page.waitForTimeout(5000) // the relay keeps it for Bo
+  const page = await newTab(b.ctx)
+  await page.goto(ORIGIN + '/')
+  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  const late = await until(async () => { const x = await bodyText(page); return /Ada Closed answered later/.test(x) && /Bread maker/.test(x) }, 20_000)
+  t.ok('i: on his very next open: "Ada Closed answered later" with her line', !!late, (await bodyText(page)).slice(0, 400))
+  await shot(page, 'q6h_i_late_answer_after_close.png')
+  await a.ctx.close(); await b.ctx.close()
+}
+
 async function main() {
   const app = await startApp(PORT)
   let front = null
@@ -255,8 +275,8 @@ async function main() {
     front = await startHttpsOrigin({ port: PORT + 1, appPort: PORT, host: HOST })
     browser = await launch([`--host-resolver-rules=MAP ${HOST} 127.0.0.1:${PORT + 1}`])
     console.log(`querying_flow: app ${app.base}, https front ${front.origin}`)
-    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g,h').split(',')
-    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG, h: partH }
+    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g,h,i').split(',')
+    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG, h: partH, i: partI }
     for (const p of parts) {
       try { await run[p](browser) } catch (e) { t.ok(`${p}: ran to the end`, false, String(e?.message ?? e).split('\n')[0]) }
     }

@@ -363,12 +363,28 @@ export interface LogEntry {
   away?: boolean
 }
 
-/** Wave 6h (late_answers.ts): an ask this phone sent to one connection, remembered so a yes after its answer moment still counts. This phone only. */
-export interface SentAsk {
-  /** The ask's qid toward that connection (each connection gets its own). */
-  qid: string
+/** Wave 6h (late_answers.ts): one connection an ask went to, with the qid it carried there (each connection gets its own). */
+export interface SentTo {
   peerId: string
+  qid: string
+}
+
+/**
+ * Wave 6h (late_answers.ts): an ask this phone sent, remembered so a yes after its answer moment still counts. ONE entry per ask (review
+ * 6h: one per connection let a web of 50 people remember only the last 8 asks, and repeated the text for every connection). This phone only.
+ */
+export interface SentAsk {
+  /** This phone's own id of the ask. */
+  id: string
   /** What was asked, bounded (late_answers.ts LATE_TEXT_MAX). */
+  text: string
+  at: number
+  /** Every connection it went to that may still answer it late. */
+  to: SentTo[]
+}
+
+/** Wave 6h: one connection's view of a remembered ask (late_answers.ts sentAskFor). */
+export interface SentAskTo extends SentTo {
   text: string
   at: number
 }

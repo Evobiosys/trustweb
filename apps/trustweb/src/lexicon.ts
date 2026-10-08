@@ -76,6 +76,14 @@ export function foldForMatch(text: string): string {
   return normalize(umlauts.normalize('NFD').replace(/\p{M}+/gu, ''))
 }
 
+/**
+ * The lines the matcher reads, folded the same way as the ask (foldForMatch), so both sides meet ("Café" asked, "café" written).
+ * Every matcher of an ask uses it: the phone (net.ts matchAsk) and the front door (services/trustweb-peer matchAsk; review 6h).
+ */
+export function foldThreadsForMatch(threads: readonly ChatThread[]): ChatThread[] {
+  return threads.map((t) => ({ ...t, messages: t.messages.map((m) => ({ ...m, text: foldForMatch(m.text) })) }))
+}
+
 /** The content words of an ask: folded, function words and the ask's frame dropped. */
 function contentWords(text: string): string[] {
   return tokenize(foldForMatch(text)).filter((w) => w.length >= 2 && !STOPWORDS.has(w))

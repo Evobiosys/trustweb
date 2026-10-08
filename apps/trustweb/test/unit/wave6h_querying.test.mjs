@@ -17,7 +17,7 @@ import { interpret } from '../../../demo/src/gate.ts'
 import { sealRelayAnswer } from '../../../demo/src/answer_key.ts'
 import { Net } from '../../src/net.ts'
 import { ANSWER_WINDOW_MS, LEGACY_WINDOW_MS, carriesWindow, passOnWindowFields, receivedWindowMs, windowFields } from '../../src/ask_window.ts'
-import { LATE_ANSWERS_MAX, LATE_KEEP_MS, addLateAnswer, addSentAsks, dismissShownLateAnswers, liveLateAnswers, releaseLateAnswers, sentAskFor, shownLateAnswers } from '../../src/late_answers.ts'
+import { LATE_ANSWERS_MAX, LATE_KEEP_MS, addLateAnswer, addSentAsk, dismissShownLateAnswers, liveLateAnswers, releaseLateAnswers, sentAskFor, shownLateAnswers } from '../../src/late_answers.ts'
 import { HELD_ASKS_MAX, addHeldAsk, dropHeldAsk, liveHeldAsks } from '../../src/held_asks.ts'
 import { addUnmatchedAsk, dismissUnmatchedAsk, liveUnmatchedAsks, showsUnmatched, unmatchedReason, withOnlyMeOpened } from '../../src/unmatched_asks.ts'
 import { AskCardKind, nextAskCard } from '../../src/ask_cards.ts'
@@ -78,11 +78,13 @@ describe('the wire (apps/demo wire.ts parseQuery)', () => {
 describe('late answers, the asker\'s side (late_answers.ts)', () => {
   const sent = { qid: 'q1', peerId: 'p1', text: 'tech setup', at: NOW }
   it('belong to the ask AND the connection it was sent to', () => {
-    const list = addSentAsks([], [sent, { ...sent, qid: 'q2', peerId: 'p2' }], NOW)
+    // review 6h: one entry per ask, with the qid it carried to each connection
+    const ask = { id: 'r1', text: sent.text, at: NOW, to: [{ peerId: 'p1', qid: 'q1' }, { peerId: 'p2', qid: 'q2' }] }
+    const list = addSentAsk([], ask, NOW)
     expect(sentAskFor(list, 'q1', 'p1', NOW)).toEqual(sent)
     expect(sentAskFor(list, 'q1', 'p2', NOW)).toBeUndefined()
     expect(sentAskFor(list, 'q1', 'p1', NOW + LATE_KEEP_MS + 1)).toBeUndefined()
-    expect(addSentAsks(list, [sent], NOW).length).toBe(2) // no double
+    expect(addSentAsk(list, ask, NOW).length).toBe(1) // no double
   })
   it('are held until the next open, then released all at once; a held one never shows; one per ask', () => {
     let late = addLateAnswer([], sent, 'Ada', [{ text: 'Tech setup', when: 'this week', context: 'My Resources' }], NOW + 1000)
@@ -313,7 +315,7 @@ describe('a direct ask, the prompt undecided at the moment, a yes later', () => 
     await bo.net.ask('tent')
     const eve = await rawAsker('Eve', bo) // Eve is connected to Bo too
     const adaId = bo.state.peers.find((p) => p.did === ada.did).id
-    const qidToAda = bo.state.sentAsks.find((x) => x.peerId === adaId).qid
+    const qidToAda = bo.state.sentAsks[0].to.find((x) => x.peerId === adaId).qid
     // Eve seals a "share" under her own pair key, with the qid of Bo's ask to Ada
     const env = await sealRelayAnswer(qidToAda, 'trustweb.ask', { from: 'Eve', templateId: 'trustweb.ask', items: [{ text: 'fake', when: '', context: '' }] }, { key: await eve.key, blocked: false })
     await eve.send(bo.did, env)

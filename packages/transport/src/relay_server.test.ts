@@ -4,7 +4,7 @@
 // exercised with real did:peer:2 identities and real packMessage() wires —
 // mirrors didcomm_transport.integration.test.ts's "real listeners,
 // poll-don't-assert-immediately" discipline.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { WebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { parseEnvelope } from "@resource-web/protocol";
@@ -13,7 +13,7 @@ import { packMessage, unpackMessage } from "./didcomm_crypto.js";
 import { ENVELOPE_TYPE } from "./didcomm_transport.js";
 import { ENVELOPE_FIXTURES } from "./test_support/envelope_fixtures.js";
 import { RelayServer, type RelayServerOptions } from "./relay_server.js";
-import { InMemoryRelayQueueStore, SqliteRelayQueueStore } from "./relay_queue_store.js";
+import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, SqliteRelayQueueStore, type RelayQueueStore } from "./relay_queue_store.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -297,6 +297,42 @@ describe("RelayServer — finding 3: per-DID and global queue caps", () => {
     const over = relay.submit(buildWire(anna, createIdentity("http://dave.example/didcomm"), "g-3"));
     expect(over.routed).toBe("rejected");
     expect(store.total()).toBe(2);
+  });
+
+  it("TrustWeb review 6h: a full relay first lets go of wires older than the shared horizon (a long RELAY_QUEUE_HOLD_MS never shuts it for good); recent mail is never dropped", async () => {
+    const anna = createIdentity("http://anna.example/didcomm");
+    const ben = createIdentity("http://ben.example/didcomm");
+    const carol = createIdentity("http://carol.example/didcomm");
+    // A store with a very long hold (RELAY_QUEUE_HOLD_MS = years): its own prune keeps everything; only an explicit horizon drops rows.
+    const inner = new InMemoryRelayQueueStore();
+    const store: RelayQueueStore = {
+      enqueue: (to, wire) => inner.enqueue(to, wire),
+      drain: (to) => inner.drain(to),
+      ackDelivered: (to, ids) => inner.ackDelivered(to, ids),
+      prune: (now, holdMs) => { if (holdMs !== undefined) inner.prune(now, holdMs); },
+      count: (to) => inner.count(to),
+      total: () => inner.total(),
+    };
+    const { relay } = await bootRelay({ maxQueueGlobal: 2, queueStore: store });
+    const t0 = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(t0);
+      // A wire for a recipient that never came back, queued long ago (kept by a long hold, prune() alone would keep it).
+      store.enqueue(ben.did, buildWire(anna, ben, "old-1"));
+      vi.setSystemTime(t0 + MAX_HOLD_HORIZON_MS + 60_000);
+      expect(relay.submit(buildWire(anna, carol, "new-1")).routed).toBe("accepted");
+      expect(store.total()).toBe(2);
+      // Full: the old one goes, the new one is taken.
+      expect(relay.submit(buildWire(anna, carol, "new-2")).routed).toBe("accepted");
+      expect(store.count(ben.did)).toBe(0);
+      expect(store.count(carol.did)).toBe(2);
+      // Full of recent mail only: rejected as before, nothing dropped.
+      expect(relay.submit(buildWire(anna, ben, "new-3")).routed).toBe("rejected");
+      expect(store.count(carol.did)).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

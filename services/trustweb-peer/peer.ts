@@ -92,7 +92,7 @@ import type { ChatThread } from '../../apps/demo/src/types'
 import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
 import { answerDelayMs, dedupeItems, doorAnswerDelayMs, doorFields, hopInfo, mayCascade, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
 import type { HopInfo } from '../../apps/trustweb/src/hops'
-import { ASK_TEMPLATE_ID, askTemplate, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
+import { ASK_TEMPLATE_ID, askTemplate, foldForMatch, foldThreadsForMatch, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
 import { stripUnsafe } from '../../apps/trustweb/src/safe_text'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
@@ -284,7 +284,9 @@ function templateFor(text: string): QueryTemplate {
  * of that widening ever travels.
  */
 export function matchAsk(text: string, threads: ChatThread[]): MatchResult {
-  return prune(matchTemplate(forgivingAskTemplate(text, lineTextsOf(threads)), threads))
+  // Review 6h: the ask's words are folded since 6h (lexicon.ts foldForMatch), so the lines are too, as on the phone (net.ts matchAsk).
+  const folded = foldThreadsForMatch(threads)
+  return prune(matchTemplate(forgivingAskTemplate(foldForMatch(text), lineTextsOf(folded)), folded))
 }
 
 function isAudience(v: unknown): v is Audience {

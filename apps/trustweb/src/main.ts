@@ -74,7 +74,7 @@ import { addAwayAsk, dismissAwayAsk } from './away_asks'
 import { AskCardKind, nextAskCard } from './ask_cards'
 import type { AskCard } from './ask_cards'
 import { LEGACY_WINDOW_MS } from './ask_window'
-import { dismissShownLateAnswers, releaseLateAnswers } from './late_answers'
+import { dismissShownLateAnswers, releaseLateAnswers, shownLateAnswers } from './late_answers'
 import { dismissUnmatchedAsk, showsUnmatched } from './unmatched_asks'
 import { watchWake } from './wake_watch'
 import { StoredChange, adoptInPlace, storedChange } from './tab_sync'
@@ -463,6 +463,8 @@ const net = new Net({
   // Wave 6h (unmatched_asks.ts): "<name> asked about X; nothing matched", for the asked person only; never for a demo account's asks.
   keepsUnmatched: (peer) => !solo && showsUnmatched(st(), demoPhone()) && !demoAccounts().some((t) => t.peerId === peer.id),
   onUnmatchedAsk: () => showAskCards(),
+  // Review 6h: late answers that waited on the relay while the app was closed, handed over right after this open (late_answers.ts).
+  onLateAnswersReleased: () => showAskCards(),
 }, solo ? { answerWindowMs: LEGACY_WINDOW_MS } : {})
 
 /** A phone that shows TrustWeb to someone (the side-by-side demo, a demo persona, a demo account's own view): some defaults differ. */
@@ -488,7 +490,20 @@ function onAckAgain(peer: Peer): void {
   sendHelloTo(peer)
 }
 
-/** Wave 6f (away_asks.ts): "<name> asked while you were away", the newest first, one card at a time under the header. */
+/**
+ * Review 6h (late_answers.ts): the app was opened (started, or back in front after a long time away). Late answers kept until now are
+ * released, all together, and those the relay hands over right after this open count as part of it (net.ts markOpened). Returns
+ * whether any is now there to show.
+ */
+function appOpened(): boolean {
+  const s = st()
+  const now = Date.now()
+  s.lateAnswers = releaseLateAnswers(s.lateAnswers, now)
+  save()
+  net.markOpened(now)
+  return shownLateAnswers(s.lateAnswers, now).length > 0
+}
+
 /**
  * Wave 6h (ask_cards.ts): the quiet cards about asks, one at a time: late answers to this phone's asks (all together), asks of direct
  * contacts that matched nothing, asks that came while away (6f). Each card's buttons dismiss it and show the next.
@@ -4418,7 +4433,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
-  if (state && !state.testOf?.handedOverAt) net.activate(slept)
+  if (!state || state.testOf?.handedOverAt) return
+  // Review 6h: back in front after a long time away is an open too (an installed app on a phone is rarely started afresh).
+  if (slept && appOpened()) showAskCards()
+  net.activate(slept)
 })
 window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
 // Wave 6h (wake_watch.ts): a laptop that slept with this tab behind another window, a network that came back, a page restored from the
@@ -4444,13 +4462,13 @@ else {
   afterCarry()
 }
 if (state && !state.testOf?.handedOverAt) {
-  // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable.
+  // Wave 6h: late answers to this phone's asks that came since the last open are released now, all together, and those the relay
+  // still holds for it arrive with the drain and are released with them (review 6h, appOpened).
+  appOpened()
+  // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable (in the tab that drains, review 6h).
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
   void completePendingConnect()
   maybeOpenPendingShare()
-  // Wave 6h: late answers to this phone's asks that came since the last open are released now, all together (late_answers.ts).
-  state.lateAnswers = releaseLateAnswers(state.lateAnswers, Date.now())
-  save()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
