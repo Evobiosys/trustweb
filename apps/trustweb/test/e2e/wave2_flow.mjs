@@ -143,7 +143,7 @@ async function partWebSearch(browser, base, a) {
   await a.locator('[data-open-query="1"]').click()
   await a.locator('.query-dock textarea').fill('Does anyone have a sailing boat?')
   await a.getByRole('button', { name: 'Call into my web' }).click()
-  await a.locator('.query-dock [data-web-search]').waitFor({ timeout: 60_000 })
+  await a.locator('.query-dock [data-web-search]').waitFor({ timeout: 200_000 })
   const ql = await links(a.locator('.query-dock'))
   ok('after the answers (here: nothing found), the same row with the asked words', ql.length === 4 && ql[3].href === 'https://search.brave.com/search?q=Does%20anyone%20have%20a%20sailing%20boat%3F' && safeLinks(ql), JSON.stringify(ql))
   await shot(a, 'w2-09-web-search-after-ask')

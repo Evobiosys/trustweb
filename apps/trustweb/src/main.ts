@@ -496,15 +496,44 @@ function onAckAgain(peer: Peer): void {
 function showAskCards(): void {
   // A phone waiting for its Allow (a demo account) keeps the card under the header; the asks show once that is decided.
   if (!state || demoAccounts().some((t) => t.pending)) return
+  // The card floats over the top of the screen: only on the Web screen and never over an open ask dock (it would cover its controls).
+  if (screen !== Screen.Web || queryOpen) return
   const card = nextAskCard(state, Date.now(), demoPhone())
-  if (card) drawAskCard(card)
+  if (!card) return
+  askCardShownKeys.add(askCardKey(card))
+  drawAskCard(card)
+  askCardOn = true
+}
+
+/** Wave 6h: an ask card hides by itself after this long (it stays kept: the next app open, a new one, or the Web screen shows it again). */
+const ASK_CARD_MS = 20_000
+/** An ask card is on screen (so leaving the Web screen or opening the dock hides it, and nothing else's notice). */
+let askCardOn = false
+/** Cards already shown in this visit: coming back to the Web screen shows only one not seen yet. */
+const askCardShownKeys = new Set<string>()
+
+function askCardKey(card: AskCard): string {
+  return card.kind === AskCardKind.Late ? card.kind + ':' + card.answers.map((a) => a.id).join(',') : card.kind + ':' + card.ask.id
+}
+
+function hideAskCard(): void {
+  if (!askCardOn) return
+  askCardOn = false
+  hideNotice()
+}
+
+/** Coming to the Web screen: a kept card not shown in this visit yet. */
+function showUnseenAskCard(): void {
+  if (!state || screen !== Screen.Web || queryOpen) return
+  const card = nextAskCard(state, Date.now(), demoPhone())
+  if (card && !askCardShownKeys.has(askCardKey(card))) showAskCards()
 }
 
 function drawAskCard(card: AskCard): void {
   const next = (change: (s: AppState, now: number) => void) => (): void => {
     change(st(), Date.now())
     save()
-    hideNotice()
+    hideAskCard()
     showAskCards()
   }
   const message = (peerId: string, label: string, done: () => void): HTMLElement | null => {
@@ -516,7 +545,7 @@ function drawAskCard(card: AskCard): void {
     const names = [...new Set(card.answers.map((a) => a.from))]
     const body = S.lateBody(card.answers.map((a) => ({ ask: a.ask, lines: a.items.map((it) => it.text) })))
     const one = card.answers.length === 1 ? message(card.answers[0].peerId, S.lateMessage(card.answers[0].from), done) : null
-    showNotice(S.lateTitle(names), body, [one, el('button', { class: 'btn btn-ghost btn-sm', 'data-late-dismiss': '1', onclick: done }, [S.lateDismiss])].filter((x): x is HTMLElement => x !== null))
+    showNotice(S.lateTitle(names), body, [one, el('button', { class: 'btn btn-ghost btn-sm', 'data-late-dismiss': '1', onclick: done }, [S.lateDismiss])].filter((x): x is HTMLElement => x !== null), ASK_CARD_MS)
     return
   }
   if (card.kind === AskCardKind.Unmatched) {
@@ -527,13 +556,13 @@ function drawAskCard(card: AskCard): void {
       message(a.peerId, S.unmatchedMessage(a.from), done),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-unmatched-dismiss': '1', onclick: done }, [S.unmatchedDismiss]),
     ].filter((x): x is HTMLElement => x !== null)
-    showNotice(S.unmatchedTitle(a.from), S.unmatchedBody(a.from, a.text, a.reason, S.ringLabel[a.ring ?? Ring.Acquaintance], card.more), actions)
+    showNotice(S.unmatchedTitle(a.from), S.unmatchedBody(a.from, a.text, a.reason, S.ringLabel[a.ring ?? Ring.Acquaintance], card.more), actions, ASK_CARD_MS)
     return
   }
   const a = card.ask
   const done = next((s, now) => { s.awayAsks = dismissAwayAsk(s.awayAsks, a.id, now) })
   const away = [message(a.peerId, S.awayAskMessage(a.from), done), el('button', { class: 'btn btn-ghost btn-sm', 'data-away-dismiss': '1', onclick: done }, [S.awayAskDismiss])]
-  showNotice(S.awayAskTitle(a.from), S.awayAskBody(a.text, card.more), away.filter((x): x is HTMLElement => x !== null))
+  showNotice(S.awayAskTitle(a.from), S.awayAskBody(a.text, card.more), away.filter((x): x is HTMLElement => x !== null), ASK_CARD_MS)
 }
 
 /** The did of this site's front door when it is this phone's own (one_jakob.ts ownFrontDoor); null: none known. */
@@ -702,8 +731,11 @@ function go(s: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   screen = s
+  // Wave 6h: the ask cards belong to the Web screen (they would cover the top of any other).
+  if (s !== Screen.Web) hideAskCard()
   closeSheet()
   render()
+  if (s === Screen.Web) showUnseenAskCard()
 }
 
 /**
@@ -923,6 +955,7 @@ let friendsTimer: ReturnType<typeof setTimeout> | undefined
 function hideNotice(): void { clearTimeout(friendsTimer); friendsEl.hidden = true }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
+  askCardOn = false // whatever was there, an ask card is no longer it (showAskCards sets it again after drawing one)
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -1544,6 +1577,7 @@ window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() 
 /** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
 function openQuery(): void {
   queryOpen = true
+  hideAskCard()
   searchOpen = false
   if (screen === Screen.Web) render()
   else go(Screen.Web)
@@ -4055,7 +4089,7 @@ function settingsSheet(): void {
         const next = !showsUnmatched(s, demoPhone())
         if (next === !demoPhone()) delete s.showUnmatchedAsks
         else s.showUnmatchedAsks = next
-        save(); settingsSheet(); if (next) showAskCards(); else hideNotice()
+        save(); settingsSheet(); if (next) showAskCards(); else hideAskCard()
       },
     }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
     ...HINTS.map((id) => el('button', {
@@ -4449,8 +4483,7 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   // Wave 6h: late answers to this phone's asks that came since the last open are released now, all together (late_answers.ts).
-  state.lateAnswers = releaseLateAnswers(state.lateAnswers, Date.now())
-  save()
+  if (Array.isArray(state.lateAnswers) && state.lateAnswers.length) { state.lateAnswers = releaseLateAnswers(state.lateAnswers, Date.now()); save() }
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.

@@ -139,7 +139,7 @@ async function main() {
     await a.locator('.query-dock textarea').fill('Does anyone have a cargo bike?')
     await a.getByRole('button', { name: 'Call into my web' }).click()
     await b.getByRole('button', { name: 'Share these' }).click({ timeout: 30_000 })
-    await until(async () => (await record(a)).found?.length === 1, 90_000)
+    await until(async () => (await record(a)).found?.length === 1, 200_000)
     await a.locator('nav.tabs button', { hasText: 'Feed' }).click()
     const post = a.locator('[data-post-kind="answer"]').first()
     await post.waitFor({ timeout: 10_000 })

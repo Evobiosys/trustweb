@@ -164,7 +164,7 @@ async function w3(jakob, anna) {
   ok('W3 the prompt names no meeting, place or person', !/Lake|Someone/.test(prompt.replace(/Anna asks/g, '')))
   await shot(jakob, 'u4-w3-notes-prompt')
   await jakob.getByRole('button', { name: 'Share these' }).click()
-  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   const got = await anna.locator('.card.asked').first().innerText()
   ok('W3 Anna gets the one line, with the generic context', /Cold-water sauna raft/.test(got) && /A note I took in a meeting/.test(got) && !/Private sauna/.test(got), got)
   await jakob.getByRole('button', { name: 'Back to the app' }).click({ timeout: 10_000 }).catch(() => {})
@@ -185,7 +185,7 @@ async function w3(jakob, anna) {
   await anna.getByRole('button', { name: 'Call into your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a pickleball court at the lake?')
   await anna.getByRole('button', { name: 'Call into my web' }).click()
-  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   ok('W3 the Only me General note never answers: Jakob is not asked, Anna sees no match', (await jakob.locator('.overlay.on').count()) === 0 && /No match/.test(await anna.locator('.card.asked').first().innerText()))
   // the setting off: nothing reaches him
   await patch(jakob, 's.asksMatchNotes = false', {})
@@ -195,7 +195,7 @@ async function w3(jakob, anna) {
   await anna.getByRole('button', { name: 'Call into your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a sauna raft anywhere?')
   await anna.getByRole('button', { name: 'Call into my web' }).click()
-  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+  await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   ok('W3 with the setting off Jakob is not asked and Anna sees no match', (await jakob.locator('.overlay.on').count()) === 0 && /No match/.test(await anna.locator('.card.asked').first().innerText()))
 }
 

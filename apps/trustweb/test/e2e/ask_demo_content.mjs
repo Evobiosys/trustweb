@@ -44,7 +44,7 @@ async function soloAsk(page, maya, jonas, text, expect, label) {
   ok(`${label}: Maya is asked and her prompt shows the line`, prompted && lines.some((t) => expect.test(t)), JSON.stringify(lines))
   if (!prompted) return
   await maya.getByRole('button', { name: 'Share these' }).click()
-  await jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+  await jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   const got = await jonas.locator('.card.asked').first().innerText()
   ok(`${label}: Jonas gets it after the window`, /Maya chose to share/.test(got) && expect.test(got), got)
   await maya.getByRole('button', { name: 'Back to the app' }).click({ timeout: 10_000 }).catch(() => {})
@@ -137,7 +137,7 @@ async function sectionFrontDoor(browser, scratch, publicDir, relay) {
       if (await carl.locator('.query-dock').count() === 0) await carl.getByRole('button', { name: /Call into your web/ }).first().click()
       await carl.locator('.query-dock textarea').fill(text)
       await carl.getByRole('button', { name: 'Call into my web' }).click()
-      await carl.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+      await carl.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
       const out = await carl.locator('.card.asked').first().innerText()
       ok(`Carl-demo asks about the ${label}: the front door answers with Jakob's public line`, /Jakob chose to share/.test(out) && expect.test(out), out)
       ok(`  and it reads as allowed in advance (${label})`, /Allowed in advance by Jakob/.test(out), out)

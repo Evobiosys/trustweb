@@ -6,7 +6,7 @@
  *   B  two tabs of the same app (one browser profile, the same identity): B adds; the tab A looks at shows B, and B survives the other tab's next save
  *   C  B's first ack never left (its relay POST failed): B re-sends it on its next start, A sees B without B doing anything
  *   D  a connection A already holds without a card (an older build, a lost card): the next ack makes the card
- *   E  an ask that arrived while A was away: no consent prompt for a long gone asker, but "<B> asked while you were away"
+ *   E  an ask that arrived while A was away (wave 6h: it carries its window): the prompt shows, marked away, a yes reaches B as a late answer
  *   F  cross-host: A on app.trustweb.one, B on app.trustintheweb.org adds A by its code; A closed meanwhile; both orders
  *   G  A on the Meet page while two people connect one after the other: two people in A's web, not one merged card
  *   H  (review 6f) two tabs; a card's sheet stays open in the tab that does not drain while a new person lands in the other tab: the
@@ -237,19 +237,21 @@ async function partE(browser) {
   await back.addInitScript(() => { const real = Date.now.bind(Date); Date.now = () => real() + 20 * 60_000 })
   await back.goto(ORIGIN + '/')
   await back.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-  const notice = await until(async () => /Bo Asker asked while you were away/.test(await back.locator('body').innerText()), 15_000)
-  t.ok('e: "Bo Asker asked while you were away" is there for her, with his words', !!notice && /does anyone have a ladder/.test(await back.locator('body').innerText()))
-  t.ok('e: no consent prompt for an asker who stopped waiting long ago', (await back.locator('.overlay.on').count()) === 0)
-  const r = await record(back)
-  t.ok('e: logged as an ask that came while away (no answer sent)', (r.log ?? []).some((e) => e.text === 'does anyone have a ladder' && e.away === true && e.outcome === 'no-match'))
+  // Wave 6h: Bo's ask carried its window, so his app takes a late yes: the prompt shows, marked as asked while she was away (the 6f
+  // "asked while you were away" card stays for asks from an older build, which cannot take one).
+  const prompt = await until(async () => { const x = await back.locator('.overlay.on').innerText(); return /Asked while you were away/.test(x) && /Bo Asker asks/.test(x) && /Ladder/.test(x) ? x : null }, 15_000)
+  t.ok('e: the ask that came while she was away still reaches her, marked so, with the matching line', !!prompt)
+  t.ok('e: it says her yes reaches him as "answered later"', !!prompt && /answered later/.test(prompt))
   await shot(back, 'f6_e_away.png')
-  await back.locator('[data-away-message]').click()
-  t.ok('e: "Message Bo Asker" opens the chat with him', await back.getByPlaceholder('Write a message').waitFor({ timeout: 5000 }).then(() => true, () => false))
-  t.ok('e: and the notice is gone (dismissed)', (liveAway(await record(back))).length === 0)
+  await back.getByRole('button', { name: 'Share these' }).click()
+  const r = await until(async () => { const x = await record(back); return (x.log ?? []).some((e) => e.text === 'does anyone have a ladder' && e.away === true && e.outcome === 'shared') ? x : null })
+  t.ok('e: logged as shared, marked away', !!r)
+  // Her clock runs twenty minutes ahead in this test, but Bo's real clock does not: his dock may still be waiting (180 s) and take the yes
+  // as its answer; on a real late open it lands as a late answer. Either way the yes reaches him.
+  const reached = await until(async () => ((await record(b.page)).lateAnswers ?? []).length === 1 || /Ladder, three metres/.test(await b.page.locator('.query-dock').innerText()), 200_000)
+  t.ok('e: her yes reaches Bo (in his dock, or as a late answer for his next open)', !!reached)
   await a.ctx.close(); await b.ctx.close()
 }
-
-const liveAway = (r) => r.awayAsks ?? []
 
 async function partF(browser) {
   for (const [aOrigin, bOrigin] of [[ORIGIN, ORIGIN2], [ORIGIN2, ORIGIN]]) {

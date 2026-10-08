@@ -92,7 +92,7 @@ async function partDirect(browser, a) {
   ok('the direct ask reaches Ben and his phone shows it (the new build reads the flag)', await share.isVisible())
   await shot(a, 'w3-02-direct-only-asked')
   await share.click()
-  const got = await until(async () => /Ben chose to share/.test(await a.locator('.query-dock').innerText()), 60_000)
+  const got = await until(async () => /Ben chose to share/.test(await a.locator('.query-dock').innerText()), 200_000)
   ok('Ben shares: Jakob gets the answer as before', Boolean(got))
   ok('the dock still says only direct contacts were asked', await a.locator('.query-dock [data-direct-note]').count() === 1)
   await a.locator('.query-dock .x').click()

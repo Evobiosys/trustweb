@@ -103,7 +103,7 @@ async function main() {
       await jonas.locator('textarea').fill(text)
       await askBtn.click()
     }
-    const waitResult = () => jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 90_000 })
+    const waitResult = () => jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
 
     // 1. match + share
     await ask('Does anyone have loudspeakers I could borrow?')
