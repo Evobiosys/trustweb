@@ -314,10 +314,13 @@ export class Net {
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
-  /** A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). */
-  async sendText(peer: Peer, text: string): Promise<void> {
+  /**
+   * A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). `ts` defaults to now;
+   * a retry of a waiting chat message passes its ORIGINAL ts so the receiver can drop a duplicate (chat.ts).
+   */
+  async sendText(peer: Peer, text: string, ts: number = Date.now()): Promise<void> {
     await this.start()
-    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts: Date.now() }
+    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts }
     const key = await this.pairKey(peer)
     if (!this.channel) throw new Error('relay not connected')
     await this.channel.send(peer.did, env, key)

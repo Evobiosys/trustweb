@@ -6,6 +6,7 @@
  */
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
+import { SignalProvider } from './channel'
 import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
@@ -166,8 +167,8 @@ export const S = {
   searchOpen: 'Manage and search contacts',
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
-  searchNotAsk: 'This looks through the people already in your web. To ask your web for something, use Call into your web.',
-  searchAskInstead: 'Ask your web instead',
+  searchNotAsk: 'This looks through the people already in your web. To ask for something, call into your web.',
+  searchAskInstead: 'Call into your web instead',
   searchNone: 'Nobody by that name yet.',
   sheetHome: 'Home',
   // "Search the web instead" (wave 2, B8): plain links, nothing sent before a tap.
@@ -708,7 +709,7 @@ export const S = {
     [Channel.Messenger]: 'Messenger',
   } as Record<Channel, string>,
   chPh: {
-    [Channel.Signal]: 'Phone number (+43...) or signal.me link',
+    [Channel.Signal]: 'Signal username link (best) or phone number (+43...)',
     [Channel.WhatsApp]: 'Phone number (+43...)',
     [Channel.Matrix]: '@name:server.org',
     [Channel.Delta]: 'Delta Chat invite link or email address',
@@ -716,7 +717,7 @@ export const S = {
     [Channel.Messenger]: 'Username (m.me/...)',
   } as Record<Channel, string>,
   chInvalid: {
-    [Channel.Signal]: 'Use an international number like +43 660 1234567, or paste their signal.me link.',
+    [Channel.Signal]: 'Paste a signal.me username link, or use an international number like +43 660 1234567.',
     [Channel.WhatsApp]: 'Use an international number like +43 660 1234567.',
     [Channel.Matrix]: 'A Matrix address looks like @name:server.org.',
     [Channel.Delta]: 'Paste their i.delta.chat invite link, or an email address.',
@@ -763,6 +764,20 @@ export const S = {
   // Ending a demo account (a device of this web) asks first (wave 5, owner 2026-10-07: removing a device is possible, with a confirm).
   demoAcctRemoveConfirm: (name: string) => `End ${name}? That phone can no longer call into your web.`,
   demoAcctExtend: 'Extend a week',
+  // Wave 6 (N5): a guest account stays until the person leaves.
+  demoAcctKeep: 'Keep this account',
+  demoAcctKept: 'kept, stays until they leave',
+  demoAcctKeptEnds: 'Stays until they leave, unless you end it',
+  demoAcctUnkeep: 'End it after a week',
+  demoAcctKeptToast: (name: string) => `${name} is a personal account now and stays until they leave.`,
+  demoAcctUnkeptToast: (name: string) => `${name} ends in a week again.`,
+  demoKeepAsk: 'Make it your personal account',
+  demoKeepAskHint: (owner: string) => `Ask ${owner} to keep your account, so it does not end after a week. It then stays until you leave.`,
+  demoKeepAsked: (owner: string) => `Asked ${owner} to keep it. Until the answer comes, your account still ends as shown above.`,
+  demoKeepAskedToast: (owner: string) => `Asked ${owner} to keep your account.`,
+  demoKeptLine: 'Your account stays until you leave.',
+  demoKeptByOwner: (owner: string) => `${owner} keeps your account. It stays until you leave.`,
+  setDemoKeptOf: (name: string) => `This is your personal account, kept by ${name}. It lives in this browser only.`,
   demoAcctExtended: (name: string, left: string) => `${name} now ends in ${left}.`,
   demoAcctShow: 'Show code',
   demoAcctRemoved: (name: string) => `${name} ended. That phone can no longer call into your web.`,
@@ -814,15 +829,14 @@ export const S = {
   meetSwipe: 'Swipe for your Signal code.',
   meetAddMine: (app: string) => `Add your ${app} link once, and it shows here next to your TrustWeb code.`,
   meetYour: (app: string) => `Your ${app}`,
-  meetMineHint: 'A signal.me username link keeps your phone number private. Kept on this phone.',
+  meetMineHint: 'Best: your Signal username link. It keeps your phone number private and works in the scanner of Signal and Molly. In Signal or Molly: Settings > Profile > Username > QR code or link > Copy link, then paste it here. Kept on this phone.',
   meetMineLead: (app: string) => `Let them scan this to reach you on ${app} too.`,
   meetChangeMine: (app: string) => `Change your ${app}`,
-  meetSignalNumberNote: 'This code contains your phone number. A Signal username link (signal.me) would keep it private.',
   chEditShort: 'Edit',
   chEdit: (app: string) => `Edit ${app}`,
   chSave: 'Save',
   chCancel: 'Cancel',
-  chHint: 'Kept on this phone only: never shared, never matched. Opens the app if it is installed. Delta Chat opens directly from an invite link; an email address opens your mail app.',
+  chHint: 'Kept on this phone. A link of yours is sent to a new connection only if you tick it on the Meet page. Opens the app if it is installed. Delta Chat opens directly from an invite link; an email address opens your mail app.',
   back: 'Back',
   close: 'Close',
 
@@ -1153,4 +1167,31 @@ export const S = {
   imgHint: 'The picture stays on this phone: it shows here (and in your Feed, if you switched it on) and is never sent with an answer, a backup or a meeting.',
   imgFailed: 'This picture could not be read.',
   chSignalMolly: 'Signal or Molly',
+  // Signal / Molly (wave 6, U3)
+  chProviderLabel: { signal: 'Signal', molly: 'Molly', 'signal-or-molly': 'Signal or Molly' } as Record<string, string>,
+  meetScanCameraNote: 'This code holds your phone number. Scan it with the phone\'s camera app, not inside Signal or Molly: their scanner only reads username codes.',
+  providerLabel: 'Which app is this?',
+  providerNames: { [SignalProvider.Signal]: 'Signal', [SignalProvider.Molly]: 'Molly' } as Record<SignalProvider, string>,
+  providerHint: 'Only a label. Signal and Molly use the same signal.me link, and the phone that opens it decides which app answers; where Signal is installed it usually opens first.',
+  shareTick: 'Share this link with people when we connect on TrustWeb',
+  shareTickPhone: 'This link holds your phone number. Tick it only if every new connection may have it.',
+  shareTickHint: 'Links already sent stay with the people who got them.',
+  // Contact received / chat
+  contactReceivedToast: (name: string) => `${name} shared how to reach them`,
+  chatOpen: 'Chat',
+  chatTitle: (name: string) => `Chat with ${name}`,
+  chatMessageOn: (app: string) => `Message on ${app}`,
+  chatNotConnected: (name: string) => `${name} is not connected on TrustWeb yet. Connect first to chat here.`,
+  chatEmpty: (name: string) => `Nothing written yet. Say hello to ${name}.`,
+  chatOffline: 'No connection right now. Your message waits here and goes out when you are back online.',
+  chatPlaceholder: 'Write a message',
+  chatSend: 'Send',
+  chatSendAgain: 'Send again',
+  chatPending: 'Waiting',
+  chatSent: 'Sent',
+  chatCharsLeft: (n: number) => `${n} characters left`,
+  chatYou: 'You',
+  chatNewToast: (name: string) => `New message from ${name}`,
+  chatNotifBody: (name: string) => `${name} wrote to you`,
+  chSharedBy: (name: string) => `Shared by ${name} when you connected`,
 } as const

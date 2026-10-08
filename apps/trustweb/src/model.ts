@@ -11,6 +11,9 @@
  */
 import type { ChatThread } from '../../demo/src/types'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
+import type { SignalProvider } from './channel'
+import type { ChatBook } from './chat'
+import type { ShareSettings } from './contact_share'
 
 export enum Ring {
   Close = 'close',
@@ -224,6 +227,16 @@ export interface Person {
    * that instance. This phone only. Absent: none.
    */
   fediverse?: FediverseLink
+  /** Which app the owner names for HIS Signal entry on this card (label and hint only). Absent: unlabelled (today's behaviour). */
+  signalProvider?: SignalProvider
+  /**
+   * What this person shared with me when we connected (contact_share.ts): ticked by them, validated on receipt. SEPARATE from `channels`,
+   * which stays the owner's own typed list and is never written from the wire. Absent: nothing shared.
+   */
+  theirChannels?: Partial<Record<Channel, string>>
+  /** The app they named for their Signal entry. */
+  theirSignalProvider?: SignalProvider
+  theirChannelsAt?: number
   /**
    * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
    * they ask further than one step. Absent: the default (passesAsksOn).
@@ -523,6 +536,12 @@ export interface AppState {
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). This phone only. */
   myChannels?: Partial<Record<Channel, string>>
+  /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
+  contactShare?: ShareSettings
+  /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
+  contactSent?: Record<string, string>
+  /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. */
+  chats?: ChatBook
   /**
    * Superseded by `transcription` (2026-10-06); still read from records saved
    * before it: true there means TranscriptionChoice.TalkWeave. Settings drops

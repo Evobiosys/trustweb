@@ -30,7 +30,14 @@ import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { channelLink, normalizeHandle } from './channel'
+import { ScanAdvice, qrPayload, scanAdvice, signalLabelKey, channelLink, normalizeHandle } from './channel'
+import type { SignalProvider } from './channel'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact } from './contact_share'
+import type { HeldContacts, Reachable } from './contact_share'
+import { TextKind, migrateChats, peersWithPending, receiveText, routeText } from './chat'
+import type { ChatBook } from './chat'
+import { flushPending, renderChat, renderShareControls } from './chat_view'
+import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
@@ -59,6 +66,7 @@ import { canEndDemoAccount } from './demo_devices'
 import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields, travelsInPack } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
+import { KeepNotice, dueForTakeDown, guestAsk, guestAsked, guestEnded, guestGranted, guestKept, isKept, keepAccount, keepText, parseKeepText, unkeepAccount } from './account_keep'
 import { asksMatchNotes, notesMatchDefault } from './notes_source'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
@@ -239,7 +247,9 @@ try {
     // Wave 6 (notes_source.ts): the side-by-side demo phones do not let asks match notes (their content is imaginary); stored once, so it also holds after "Add demo content" changes the default.
     const soloOff = solo && state.asksMatchNotes === undefined
     if (soloOff) state.asksMatchNotes = false
-    if (sourced || noted || merged || soloOff) save()
+    // Wave 6 (chat.ts): a corrupted `chats` value is repaired, never thrown on.
+    const chatsFixed = migrateChats(state)
+    if (sourced || noted || merged || soloOff || chatsFixed) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -324,7 +334,7 @@ function newDraft(personId?: string): void {
 const net = new Net({
   state: st,
   save,
-  onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow() },
+  onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onAsk: (ask) => {
     askQueue.push(ask)
     notify(S.notifBodyAsk(ask.fromName))
@@ -342,6 +352,8 @@ const net = new Net({
     }
     person.peerId = peer.id
     save()
+    sendContactTo(peer)
+    applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
     render()
@@ -372,7 +384,7 @@ const net = new Net({
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
-  onText: (peer, text) => onSharedText(peer, text),
+  onText: (peer, text, ts) => onIncomingText(peer, text, ts),
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -722,6 +734,7 @@ function sheetHomeBar(): HTMLElement {
 }
 
 function openSheet(children: (Node | null)[]): void {
+  openChat = null
   // A past meeting's player stops whenever the sheet changes (past_meetings_view.ts).
   past.stopPlayer()
   delete sheet.dataset.kind
@@ -734,6 +747,7 @@ function openSheet(children: (Node | null)[]): void {
 }
 
 function closeSheet(): void {
+  openChat = null
   // A closed sheet keeps its last content off-screen; inert takes it out of
   // the tab order and the accessibility tree.
   past.stopPlayer()
@@ -899,6 +913,9 @@ async function completePendingConnect(): Promise<void> {
     }
   }
   save()
+  // Both phones exchange what each ticked on the Meet page (the inviter's side is onPeerConnected); never to a demo account.
+  if (!demoLink) sendContactTo(peer)
+  applyHeldContact(peer, person)
   // A demo account: also connect to the demo inventory peer the link names,
   // then open the ask right away (that is what the account is for).
   if (demoLink) {
@@ -1430,9 +1447,21 @@ function personSheet(personId: string): void {
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     p.peerId ? passOnRow(p, (next) => { p.passOn = next; save(); personSheet(p.id) }) : null,
+    p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
+    sharedReachRow(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
+  ])
+}
+
+/** "Message on Signal / Molly" for a link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
+function sharedReachRow(p: Person): HTMLElement | null {
+  const r = primaryReachable(p)
+  if (!r || r.source !== 'theirs') return null
+  return el('div', { class: 'ch-row shared' }, [
+    el('a', { class: 'btn btn-ghost', href: r.link, target: '_blank', rel: 'noopener noreferrer' }, [S.chatMessageOn(reachLabel(r))]),
+    el('p', { class: 'meta' }, [S.chSharedBy(p.name)]),
   ])
 }
 
@@ -1440,6 +1469,8 @@ function personSheet(personId: string): void {
 interface ChannelOwner {
   get(): Partial<Record<Channel, string>>
   set(ch: Channel, value: string | null): void
+  /** The app named for the Signal entry of this owner (label only). */
+  provider?(): SignalProvider | undefined
 }
 
 function personChannels(p: Person): ChannelOwner {
@@ -1451,6 +1482,7 @@ function personChannels(p: Person): ChannelOwner {
       p.channels = next
       save()
     },
+    provider: () => p.signalProvider,
   }
 }
 
@@ -1459,11 +1491,16 @@ function myChannels(): ChannelOwner {
     get: () => st().myChannels ?? {},
     set: (ch, value) => {
       const s = st()
+      const previous = s.myChannels?.[ch]
       const next = { ...(s.myChannels ?? {}) }
       if (value) next[ch] = value; else delete next[ch]
       s.myChannels = next
+      // Records the visible default tick once (a username link only); a username-link tick is RESET when the value becomes a phone number.
+      if (value) s.contactShare = settleDefaultTick(s.contactShare, ch, value, previous)
+      else if (s.contactShare?.shareOnConnect) delete s.contactShare.shareOnConnect[ch] // a removed link is no longer shared
       save()
     },
+    provider: () => st().contactShare?.signalProvider,
   }
 }
 
@@ -1491,11 +1528,124 @@ function channelsView(owner: ChannelOwner, labels: { title: string; add: string;
 }
 
 /** Signal's link opens Molly where it is installed instead; Molly exists on Android only (A2), so only there it is named. */
-const chName = (ch: Channel): string => (ch === Channel.Signal && /Android/i.test(navigator.userAgent) ? S.chSignalMolly : S.chLabel[ch])
+/** Unset provider = exactly the old behaviour: Android names both apps (Signal's link may open Molly), elsewhere Signal. A chosen provider names that app. */
+const chName = (ch: Channel, provider?: SignalProvider): string =>
+  ch === Channel.Signal ? S.chProviderLabel[signalLabelKey(provider, /Android/i.test(navigator.userAgent))] : S.chLabel[ch]
+const reachLabel = (r: Reachable): string => chName(r.channel, r.provider)
+
+const NO_CHATS: ChatBook = {}
+
+const chatStrings = (): ChatStrings => ({
+  title: S.chatTitle, messageOn: (r) => S.chatMessageOn(reachLabel(r)), notConnected: S.chatNotConnected, empty: S.chatEmpty,
+  offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
+  sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
+})
+
+const shareStrings = (): ShareStrings => ({
+  tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint,
+  providerLabel: S.providerLabel, providerNames: S.providerNames, providerHint: S.providerHint,
+})
+
+/** The provider + "share when we connect" controls under my saved Signal link (Meet page and the "Your Signal" sheet). */
+function shareControlsFor(ch: Channel): HTMLElement {
+  return renderShareControls({
+    doc: document, channel: ch,
+    getHandle: () => st().myChannels?.[ch],
+    getSettings: () => st().contactShare,
+    setSettings: (next) => { st().contactShare = next; save() },
+    S: shareStrings(),
+  })
+}
+
+/** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
+function chatIo(): ChatIo {
+  return {
+    getBook: () => st().chats ?? NO_CHATS,
+    setBook: (b) => { const s = st(); if (b !== NO_CHATS && b !== s.chats) { s.chats = b; save() } },
+    send: async (peerId, text, sentAt) => {
+      const peer = st().peers.find((p) => p.id === peerId)
+      if (!peer) throw new Error('not connected')
+      await net.sendText(peer, text, sentAt)
+    },
+    now: Date.now,
+  }
+}
+
+/** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
+function sendContactTo(peer: Peer): void {
+  if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  const s = st()
+  const out = contactToSend(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id])
+  if (!out) return
+  net.sendText(peer, out.text).then(() => {
+    s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }
+    save()
+  }).catch(() => { /* the relay was down: it is tried again at the next connect */ })
+}
+
+let openChat: { peerId: string; refresh(): void } | null = null
+
+function chatSheet(personId: string): void {
+  const p = st().people.find((x) => x.id === personId)
+  if (!p) return
+  const handle = renderChat({ ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p) }, S: chatStrings(), isOnline: () => relayStatus === 'connected' })
+  openSheet([handle.el])
+  if (p.peerId) openChat = { peerId: p.peerId, refresh: handle.refresh }
+}
+
+/** Relay back up: send everything that waited. */
+async function flushAllChats(): Promise<void> {
+  if (!state) return
+  for (const id of peersWithPending(st().chats ?? NO_CHATS)) await flushPending(chatIo(), id)
+}
+
+/** A contact text can beat the card on the scanning phone (the card is made after completeConnect returns): hold it, apply it when the card exists. */
+const heldContacts: HeldContacts = new Map()
+
+function applyContact(peer: Peer, person: Person, text: string): void {
+  if (!receiveContactText(APP_URL, person, text, Date.now())) return
+  save()
+  toast(S.contactReceivedToast(peer.displayName))
+  render()
+}
+
+/** Call right after a card for `peer` exists (onPeerConnected, completePendingConnect). */
+function applyHeldContact(peer: Peer, person: Person): void {
+  const text = takeContact(heldContacts, peer.id)
+  if (text) applyContact(peer, person, text)
+}
+
+function onContactText(peer: Peer, text: string): void {
+  const person = st().people.find((p) => p.peerId === peer.id)
+  if (person) applyContact(peer, person, text)
+  else holdContact(heldContacts, peer.id, text)
+}
+
+function onChatText(peer: Peer, text: string, ts: number): void {
+  const s = st()
+  const r = receiveText(s.chats ?? NO_CHATS, peer.id, text, ts, Date.now())
+  if (!r.message) return
+  s.chats = r.book
+  save()
+  if (openChat?.peerId === peer.id) { openChat.refresh(); return }
+  notify(S.chatNotifBody(peer.displayName))
+  toast(S.chatNewToast(peer.displayName))
+}
+
+/** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
+function onIncomingText(peer: Peer, text: string, ts: number): void {
+  switch (routeText(APP_URL, text)) {
+    case TextKind.Share: onSharedText(peer, text); return
+    case TextKind.Contact: onContactText(peer, text); return
+    case TextKind.Keep: onKeepText(peer, text); return
+    case TextKind.Chat: onChatText(peer, text, ts); return
+    case TextKind.Ignore: return
+  }
+}
 
 function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
   const value = owner.get()[ch]
-  const label = el('span', { class: 'ch-name ch-' + ch }, [chName(ch)])
+  const label = el('span', { class: 'ch-name ch-' + ch }, [chName(ch, owner.provider?.())])
   if (edit) {
     const input = el('input', { class: 'field', placeholder: S.chPh[ch], value: value ?? '', 'aria-label': S.chPh[ch], autocomplete: 'off' })
     const msg = el('p', { class: 'meta ch-msg' })
@@ -1521,7 +1671,7 @@ function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (ed
   }
   return el('div', { class: 'ch-row' }, [
     label,
-    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
+    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch, owner.provider?.()))]),
     el('button', { class: 'mini', 'aria-label': S.chEdit(S.chLabel[ch]), onclick: () => redraw(ch) }, [S.chEditShort]),
   ])
 }
@@ -2559,14 +2709,19 @@ function meetMessengerPage(ch: Channel): HTMLElement {
     ])
   }
   const link = channelLink(ch, value)
-  const qr = el('div', { class: 'qrwrap', 'data-payload': link })
-  void renderQr(qr, link)
+  // Signal: the payload comes from channel.ts (always https; the in-app scanner of Signal/Molly reads username codes only, see wave6/u3_signal_finding.txt).
+  const payload = (ch === Channel.Signal && qrPayload(value)) || link
+  const provider = ch === Channel.Signal ? st().contactShare?.signalProvider : undefined
+  const qr = el('div', { class: 'qrwrap', 'data-payload': payload })
+  void renderQr(qr, payload)
   return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetMineLead(S.chLabel[ch])]),
+    el('p', { class: 'hint' }, [S.meetMineLead(chName(ch, provider))]),
     qr,
-    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
+    // phone-number code: a plain note first (a username code scans anywhere, so no note)
+    ch === Channel.Signal && scanAdvice(value) === ScanAdvice.CameraAppOnly ? el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]) : null,
+    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch, provider))]),
     el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
-    ch === Channel.Signal && /^\+/.test(value) ? el('p', { class: 'meta' }, [S.meetSignalNumberNote]) : null,
+    ch === Channel.Signal ? shareControlsFor(ch) : null,
   ])
 }
 
@@ -2617,6 +2772,53 @@ function leftLabel(expiresAt: number): string {
   return S.demoAcctMinutes(t.minutes)
 }
 
+/** "7 days left" for a demo account, "kept, stays until they leave" for a kept one. */
+function accountLeft(acct: DemoAccount): string {
+  return isKept(acct) ? S.demoAcctKept : S.demoAcctLeft(leftLabel(demoExpiresAt(acct)))
+}
+
+/** Owner: keep the account until the person leaves (the button, or the guest's own "Make it your personal account"); tells the guest's phone. */
+function keepDemoAccount(acct: DemoAccount): void {
+  const changed = keepAccount(acct, Date.now())
+  if (changed) { save(); toast(S.demoAcctKeptToast(acct.name)); render() }
+  const peer = acct.peerId ? st().peers.find((p) => p.id === acct.peerId) : undefined
+  if (peer) void net.sendText(peer, keepText(APP_URL, KeepNotice.Yes)).catch(() => { /* the guest asks again, or sees it at the next ask */ })
+}
+
+function unkeepDemoAccount(acct: DemoAccount): void {
+  if (!unkeepAccount(acct, Date.now(), DEMO_LIFETIME_MS)) return
+  save()
+  toast(S.demoAcctUnkeptToast(acct.name))
+  render()
+}
+
+/** Net: a keep notice. The guest asked (owner side) or the owner said yes (guest side); anyone else's is ignored. */
+function onKeepText(peer: Peer, text: string): void {
+  const notice = parseKeepText(APP_URL, text)
+  const s = st()
+  if (notice === KeepNotice.Ask) {
+    const acct = demoAccounts().find((t) => t.peerId === peer.id)
+    if (acct) keepDemoAccount(acct)
+  } else if (notice === KeepNotice.Yes && s.testOf && s.testOf.name === peer.displayName && guestGranted(s.testOf)) {
+    save()
+    toast(S.demoKeptByOwner(peer.displayName))
+    render()
+  }
+}
+
+/** Guest: "Make it your personal account" asks the owner to keep this account; its own end stays until he says yes. */
+function askOwnerToKeep(): void {
+  const s = st()
+  const t = s.testOf
+  if (!t || !guestAsk(t)) return
+  const owner = s.people.find((p) => p.peerId && p.name === t.name)
+  const peer = owner ? s.peers.find((p) => p.id === owner.peerId) : undefined
+  save()
+  if (peer) void net.sendText(peer, keepText(APP_URL, KeepNotice.Ask)).catch(() => { /* the button reads "asked"; Jakob can also keep it himself */ })
+  toast(S.demoKeepAskedToast(t.name))
+  render()
+}
+
 function createDemoAccount(raw: string): DemoAccount | null {
   const name = demoAccountName(raw)
   if (!name) return null
@@ -2650,7 +2852,7 @@ function removeDemoAccount(id: string, why: 'ended' | 'expired' = 'ended'): void
 
 function extendDemoAccount(id: string): void {
   const acct = demoAccounts().find((t) => t.id === id)
-  if (!acct) return
+  if (!acct || isKept(acct)) return
   acct.expiresAt = Math.max(demoExpiresAt(acct), Date.now()) + DEMO_LIFETIME_MS
   save()
   toast(S.demoAcctExtended(acct.name, leftLabel(acct.expiresAt)))
@@ -2660,7 +2862,7 @@ function extendDemoAccount(id: string): void {
 /** Taken down after its week (owner 2026-10-06), checked at boot and once a minute. */
 function sweepDemoAccounts(): void {
   const now = Date.now()
-  for (const acct of demoAccounts().filter((t) => demoExpiresAt(t) <= now)) removeDemoAccount(acct.id, 'expired')
+  for (const acct of dueForTakeDown(demoAccounts(), now, demoExpiresAt)) removeDemoAccount(acct.id, 'expired')
 }
 
 /** The owner allows (or not) a phone that opened one of his demo accounts. */
@@ -2703,17 +2905,19 @@ function demoStatus(acct: DemoAccount): string {
 
 /** One account: name, state, the countdown, End now, Extend (and Allow / Not now while a phone waits). */
 function demoAccountRow(acct: DemoAccount, after: () => void): HTMLElement {
-  const expiresAt = demoExpiresAt(acct)
   return el('div', { class: 'test-card' }, [
     el('div', { class: 'conn-row test-row' }, [
       el('b', {}, [acct.name]),
-      el('span', {}, [demoStatus(acct) + ' · ' + S.demoAcctLeft(leftLabel(expiresAt))]),
+      el('span', {}, [demoStatus(acct) + ' · ' + accountLeft(acct)]),
     ]),
     el('div', { class: 'test-actions' }, [
       // The yes travels over the relay first; the sheet refreshes only if it is still open by then.
       acct.pending ? el('button', { class: 'btn btn-electric btn-sm', 'aria-label': `${S.demoAcctAllow} ${acct.name}`, onclick: () => { void allowDemoAccount(acct.id, true).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctAllow]) : null,
       acct.pending ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { void allowDemoAccount(acct.id, false).then(() => { if (!sheet.inert) after() }) } }, [S.demoAcctDeny]) : null,
-      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctExtend} ${acct.name}`, onclick: () => { extendDemoAccount(acct.id); after() } }, [S.demoAcctExtend]),
+      isKept(acct)
+        ? el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctUnkeep} ${acct.name}`, onclick: () => { unkeepDemoAccount(acct); after() } }, [S.demoAcctUnkeep])
+        : el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctKeep} ${acct.name}`, onclick: () => { keepDemoAccount(acct); after() } }, [S.demoAcctKeep]),
+      isKept(acct) ? null : el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctExtend} ${acct.name}`, onclick: () => { extendDemoAccount(acct.id); after() } }, [S.demoAcctExtend]),
       el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': `${S.demoAcctRemove} ${acct.name}`, onclick: () => { if (!confirm(S.demoAcctRemoveConfirm(acct.name))) return; removeDemoAccount(acct.id); after() } }, [S.demoAcctRemove]),
     ]),
   ])
@@ -2743,7 +2947,7 @@ function meetDemoPage(): HTMLElement {
     el('h4', { class: 'eyebrow' }, [S.demoAcctList]),
     list.length ? el('div', { class: 'test-list' }, list.map((t) => el('button', {
       class: 'conn-row name-row test-row', onclick: () => { demoShowing = t.id; render() },
-    }, [el('b', {}, [t.name]), el('span', {}, [demoStatus(t) + ' · ' + S.demoAcctLeft(leftLabel(demoExpiresAt(t)))]), el('em', {}, [S.demoAcctShow])])))
+    }, [el('b', {}, [t.name]), el('span', {}, [demoStatus(t) + ' · ' + accountLeft(t)]), el('em', {}, [S.demoAcctShow])])))
       : el('p', { class: 'meta' }, [S.demoAcctNone]),
     el('p', { class: 'meta' }, [S.demoAcctHint]),
   ])
@@ -2765,10 +2969,12 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
   const here = el('a', { class: 'btn btn-ghost open-here', href: '#', target: '_blank', rel: 'noopener', 'aria-disabled': 'true' }, [S.demoAcctOpenHere])
   const asks = el('dd', {}, [S.demoAcctAsksYou])
   const expiresAt = demoExpiresAt(acct)
+  // A kept account's link carries no end: the guest's phone never counts it down.
+  const linkExpiresAt = isKept(acct) ? undefined : expiresAt
   void (async () => {
     const [peer] = await Promise.all([probeDemoPeer(), net.start()])
     const base = net.connectLink(APP_URL)
-    const frag = { account: acct.name, accountId: acct.id, expiresAt, peer: peer ?? undefined }
+    const frag = { account: acct.name, accountId: acct.id, expiresAt: linkExpiresAt, peer: peer ?? undefined }
     const link = base + '#' + demoFragment(frag)
     const ownUrl = new URL(base)
     ownUrl.searchParams.set('persona', demoPersona(acct.id))
@@ -2786,7 +2992,7 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.demoAcctAccount]), el('dd', {}, [acct.name]),
       el('dt', {}, [S.demoAcctAsks]), asks,
-      el('dt', {}, [S.demoAcctEnds]), el('dd', {}, [S.demoAcctEndsIn(leftLabel(expiresAt))]),
+      el('dt', {}, [S.demoAcctEnds]), el('dd', {}, [isKept(acct) ? S.demoAcctKeptEnds : S.demoAcctEndsIn(leftLabel(expiresAt))]),
     ]),
     copy,
     send,
@@ -2853,9 +3059,21 @@ function foundView(s: AppState, title: string = S.foundTitle): HTMLElement {
 /** "Ends in 6 days" / "has ended", from what the link carried; the owner's phone is the authority. */
 function demoOfLine(s: AppState): string | null {
   const t = s.testOf
+  if (t && guestKept(t)) return S.demoKeptLine
   if (!t?.expiresAt) return null
   const left = timeLeft(t.expiresAt, Date.now())
   return left.ended ? S.demoEndedLine : S.demoEndsLine('in ' + leftLabel(t.expiresAt))
+}
+
+/** Guest: "Make it your personal account" (not on the owner's own second tab, not once handed over, not once kept). */
+function keepAskRow(s: AppState): HTMLElement | null {
+  const t = s.testOf
+  if (!t || t.own || t.handedOverAt || guestKept(t)) return null
+  if (guestAsked(t)) return el('p', { class: 'meta', 'data-keep-asked': '1' }, [S.demoKeepAsked(t.name)])
+  return el('div', { class: 'keep-ask' }, [
+    el('button', { class: 'btn btn-electric', 'data-keep-ask': '1', onclick: askOwnerToKeep }, [S.demoKeepAsk]),
+    el('p', { class: 'meta' }, [S.demoKeepAskHint(t.name)]),
+  ])
 }
 
 function handoverSheet(): void {
@@ -2916,6 +3134,7 @@ function editMineSheet(ch: Channel): void {
   openSheet([
     el('h3', {}, [S.meetYour(S.chLabel[ch])]),
     singleChannelEditor(ch, () => { closeSheet(); render() }),
+    ch === Channel.Signal ? shareControlsFor(ch) : null,
     el('p', { class: 'meta' }, [S.meetMineHint]),
   ])
 }
@@ -3302,8 +3521,9 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
-    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : S.setDemoOf(s.testOf.name)]) : null,
+    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
+    keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
     el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
       el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
@@ -3537,7 +3757,7 @@ function queryDock(s: AppState): HTMLElement {
   box.addEventListener('input', () => { queryText = box.value })
   const busy = Boolean(askRun && !askRun.results)
   // A demo account asks only once its owner allowed it, and not after its end.
-  const demoEnded = Boolean(s.testOf?.expiresAt && timeLeft(s.testOf.expiresAt, Date.now()).ended)
+  const demoEnded = Boolean(s.testOf && guestEnded(s.testOf, Date.now()))
   const demoWaiting = Boolean(s.testOf && !s.testOf.approvedAt)
   const run = askRun
   const inFlight = run
