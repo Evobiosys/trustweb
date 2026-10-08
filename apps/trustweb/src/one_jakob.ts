@@ -12,7 +12,8 @@
  * own name: a demo account made by somebody else on the same site also names
  * Jakob's front door, and there the two stay two people. Pure and DOM-free.
  */
-import type { AppState, Person } from './model'
+import { passesAsksOn } from './model'
+import type { AppState, Peer, Person } from './model'
 
 /** Names compare like the front door's grant list does: NFC, trimmed, spaces collapsed, lower case. */
 export function sameName(a: string, b: string): boolean {
@@ -55,4 +56,42 @@ export function mergeOneJakob(s: AppState, doorContext: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Wave 6: may this peer's asks go on through this phone? The person's own
+ * setting wins; then this phone's own front door (its published card's did)
+ * and the demo accounts this phone allowed pass on by default (Jakob
+ * 2026-10-08: "most importantly for the demo, the querying through me should
+ * be possible"); everyone else by ring (model.ts passesAsksOn).
+ */
+export function passOnAllowed(s: Pick<AppState, 'people' | 'testAccounts'>, peer: Peer, ownDoorDid: string | null): boolean {
+  const person = personOfPeer(s, peer.id)
+  if (typeof person?.passOn === 'boolean') return person.passOn
+  if (ownDoorDid !== null && peer.did === ownDoorDid) return true
+  if ((s.testAccounts ?? []).some((t) => t.peerId === peer.id)) return true
+  return passesAsksOn(person ?? { ring: peer.ring })
+}
+
+/**
+ * Wave 6: never pass an ask on to the same person twice: this phone's own
+ * front door (it would answer with this phone's public lines "through" this
+ * phone), or the sender's other peer (their phone and their front door are one
+ * person, who was asked already).
+ */
+export function samePersonTarget(s: Pick<AppState, 'people'>, target: Peer, sender: Peer, ownDoorDid: string | null): boolean {
+  if (ownDoorDid !== null && target.did === ownDoorDid) return true
+  const of = personOfPeer(s, sender.id)
+  return Boolean(of) && personOfPeer(s, target.id) === of
+}
+
+/**
+ * This phone's own front door, if the site publishes one: the card's did when
+ * the card carries this phone's own name and the phone is not a demo account
+ * (Jakob's phone and his front door "Jakob"); null otherwise. Anyone else
+ * connected to that front door treats it as the separate peer it is for them.
+ */
+export function ownFrontDoor(s: Pick<AppState, 'me' | 'testOf'>, card: { did: string; name: string } | null | undefined): string | null {
+  if (!card || s.testOf) return null
+  return sameName(card.name, s.me.displayName) ? card.did : null
 }

@@ -128,8 +128,14 @@ export interface NetHooks {
   askScope(peer: Peer): MatchScope | undefined
   /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). */
   onText(peer: Peer, text: string, ts: number): void
-  /** Wave 6: may this peer's asks go on through this phone to its other contacts (models.ts passesAsksOn, per person)? */
+  /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
+  /**
+   * Wave 6: is `target` the same person as this phone (its own front door) or
+   * as `sender` (their phone and their front door)? Never asked again: they
+   * answer once already (one_jakob.ts samePersonTarget).
+   */
+  samePerson(target: Peer, sender: Peer): boolean
 }
 
 /** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
@@ -364,7 +370,8 @@ export class Net {
       : Promise.resolve(NO_HARVEST)
 
     const answer = async (own: SharedItem[]): Promise<HopHarvest> => {
-      const got = await harvest
+      // Belt and braces: whatever the next step does, this phone answers at its moment.
+      const got = await Promise.race([harvest, settleAt(receivedAt, deadline - receivedAt).then(() => NO_HARVEST)])
       await settleAt(receivedAt, deadline - receivedAt)
       const items = dedupeItems([...own, ...markThrough(got.items, s.me.displayName)]).slice(0, MAX_SHARED)
       const payload: SharedPayload | null = items.length ? { from: s.me.displayName, templateId: tpl.id, items } : null
@@ -421,13 +428,14 @@ export class Net {
     const targets: Peer[] = []
     for (const p of [...s.peers].sort((a, b) => RINGS.indexOf(a.ring) - RINGS.indexOf(b.ring))) {
       if (targets.length >= MAX_FANOUT) break
-      if (p.did === sender.did || p.ring === Ring.Intending) continue
+      if (p.did === sender.did || p.ring === Ring.Intending || this.hooks.samePerson(p, sender)) continue
       if (excluded.has(await seenHash(root, p.id))) continue
       targets.push(p)
     }
     if (!targets.length) return NO_HARVEST
     const fields = cascadeFields(q, info, [self, fromSender], q.from.displayName || sender.displayName)
     const waitMs = Math.max(0, deadline - Date.now() - this.windowMs * HOP_COLLECT_LEAD)
+    // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
     const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))
     const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
     return { asked: targets.length, items }
@@ -446,12 +454,16 @@ export class Net {
       const timer = setTimeout(() => { this.awaiting.delete(q.qid); resolve(null) }, timeoutMs)
       this.awaiting.set(q.qid, (env) => { clearTimeout(timer); this.awaiting.delete(q.qid); resolve(env) })
     })
-    try {
-      if (!this.channel) throw new Error('relay not connected')
-      await this.channel.send(peer.did, q, key)
-    } catch {
-      this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
-    }
+    // The send is never awaited ahead of the reply's own timer: a relay POST that hangs must not hold the answer past timeoutMs.
+    const channel = this.channel
+    void (async () => {
+      try {
+        if (!channel) throw new Error('relay not connected')
+        await channel.send(peer.did, q, key)
+      } catch {
+        this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
+      }
+    })()
     const env = await answered
     return env ? interpret(env, key) : null
   }

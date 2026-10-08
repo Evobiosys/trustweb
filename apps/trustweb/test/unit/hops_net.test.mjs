@@ -15,8 +15,13 @@ import { deriveEcdhPairKey, randomId } from '../../../demo/src/crypto.ts'
 import { encodeForQr } from '../../../demo/src/wire.ts'
 import { buildConnectAck } from '../../../demo/src/connect_link.ts'
 import { interpret } from '../../../demo/src/gate.ts'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { Net } from '../../src/net.ts'
 import { Audience, LogOutcome, Ring } from '../../src/model.ts'
+import { passOnAllowed, samePersonTarget } from '../../src/one_jakob.ts'
+import { startPeer } from '../../../../services/trustweb-peer/peer.ts'
 
 const W = 600
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -55,7 +60,7 @@ async function phone(name, items = [], opts = {}) {
     ...opts.state,
   }
   const asks = []
-  const p = { name, state, asks, passOn: opts.passOn ?? (() => true), share: opts.share ?? (() => true) }
+  const p = { name, state, asks, passOn: opts.passOn ?? (() => true), share: opts.share ?? (() => true), samePerson: opts.samePerson ?? (() => false) }
   p.net = new Net({
     state: () => state,
     save: () => {},
@@ -69,6 +74,7 @@ async function phone(name, items = [], opts = {}) {
     askScope: () => undefined,
     onText: () => {},
     mayPassOnFrom: (peer) => p.passOn(peer),
+    samePerson: (target, sender) => p.samePerson(target, sender),
   }, { answerWindowMs: W, relayOrigin })
   await p.net.start()
   nets.push(p.net)
@@ -206,4 +212,71 @@ describe('older builds', () => {
     expect((await interpret(answers[0].env, await key)).outcome).toBe('nothing')
     expect(C.asks.length).toBe(0)
   })
+})
+
+describe('liveness: one contact that never answers (a send that hangs) costs only its line', () => {
+  it('B still answers at its moment with what the others shared', async () => {
+    const A = await phone('Ann')
+    const B = await phone('Ben')
+    const C = await phone('Cleo', [{ text: 'Ladder, 3 m, to lend' }])
+    const D = await phone('Dora')
+    await connect(A, B)
+    await connect(B, C)
+    await connect(B, D)
+    // Every send from B to Dora hangs forever (relay ingress has no timeout of its own).
+    const channel = B.net.channel
+    const send = channel.send.bind(channel)
+    channel.send = (did, env, key) => (did === D.did ? new Promise(() => {}) : send(did, env, key))
+    A.state.askReach = 2
+    const t0 = Date.now()
+    const results = await A.net.ask('Who has a ladder?')
+    const ms = Date.now() - t0
+    expect(sharedOf(results).map((i) => i.text)).toEqual(['Ladder, 3 m, to lend'])
+    expect(ms).toBeGreaterThanOrEqual(2 * W - 50)
+    expect(ms).toBeLessThan(3 * W)
+    channel.send = send
+  })
+})
+
+describe('through Jakob: a demo account asks his front door, his phone passes it on to his friend (real peer, real Nets)', () => {
+  it('the friend sees "Anna-demo asks, through Jakob"; Anna gets the line marked "through Jakob"; his own door is never asked again', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-hops-door-'))
+    const inv = path.join(dir, 'inv.json')
+    writeFileSync(inv, JSON.stringify({ items: [{ text: 'Equal Earth map projection for global maps', audience: 'fof', preset: { by: 'Jakob', at: '2026-10-07' } }] }))
+    const doorLog = []
+    const door = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, claim: true, answerWindowMs: W, forwardWaitMs: 900, log: (l) => doorLog.push(l) })
+    let J
+    J = await phone('Jakob', [], {
+      passOn: (peer) => passOnAllowed(J.state, peer, door.card.did),
+      samePerson: (target, sender) => samePersonTarget(J.state, target, sender, door.card.did),
+    })
+    await J.net.completeConnect({ did: door.card.did, from: { id: door.card.id, displayName: door.card.name } }, Ring.Acquaintance)
+    for (let i = 0; i < 100 && !door.status().owner; i++) await sleep(20)
+    expect(door.status().owner).toBe(true)
+    const F = await phone('Fritz', [{ text: 'Ladder, 3 m, to lend' }])
+    await connect(J, F)
+    const anna = await phone('Anna-demo')
+    await anna.net.completeConnect({ did: door.card.did, from: { id: door.card.id, displayName: door.card.name } }, Ring.Acquaintance)
+    await until(() => door.peerCount() === 1)
+    anna.state.askReach = 2
+
+    const results = await anna.net.ask('Who has a ladder?')
+    const items = sharedOf(results)
+    expect(items.map((i) => i.text)).toEqual(['Ladder, 3 m, to lend'])
+    expect(items[0].via).toEqual(['Jakob'])
+    const atF = F.asks.at(-1)
+    expect(atF.fromName).toBe('Anna-demo')
+    expect(atF.through).toEqual(['Jakob'])
+    expect(atF.relayed).toBe(false)
+    expect(J.asks.length).toBe(0)
+
+    // Fritz asks through Jakob: Jakob's phone never passes it to his own front door (it would answer with his public lines "through Jakob").
+    const asksAtDoor = doorLog.filter((l) => /^ask /.test(l)).length
+    F.state.askReach = 2
+    await F.net.ask('Which map projection do you use?')
+    await sleep(W)
+    expect(doorLog.filter((l) => /^ask /.test(l)).length).toBe(asksAtDoor)
+    await door.stop()
+    rmSync(dir, { recursive: true, force: true })
+  }, 30_000)
 })

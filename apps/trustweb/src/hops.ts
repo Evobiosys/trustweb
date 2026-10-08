@@ -183,8 +183,10 @@ function clipName(s: string): string {
 /**
  * The hop fields of the ask a PHONE passes on: one step further, the same
  * reach and root, itself and its sender added to `seen`, the sender's name
- * added to `via`. `relayed: true` keeps its meaning for an older build (it
- * never passes such an ask on). Never `direct`, never `door`.
+ * added to `via` (not for an ask its own front door handed it: the door and
+ * this phone are one person, who is `from` on the next step anyway).
+ * `relayed: true` keeps its meaning for an older build (it never passes such
+ * an ask on). Never `direct`, never `door`.
  */
 export function cascadeFields(q: Pick<QueryEnvelope, 'maxHops'>, info: HopInfo, seen: readonly string[], senderName: string): Pick<QueryEnvelope, 'relayed' | 'maxHops' | 'hop' | 'root' | 'seen' | 'via'> {
   return {
@@ -193,7 +195,7 @@ export function cascadeFields(q: Pick<QueryEnvelope, 'maxHops'>, info: HopInfo, 
     hop: info.hop + 1,
     root: info.root ?? undefined,
     seen: uniq([...info.seen, ...seen]).slice(0, SEEN_MAX),
-    via: cappedNames([...info.via, senderName]),
+    via: cappedNames(info.door ? [...info.via] : [...info.via, senderName]),
   }
 }
 

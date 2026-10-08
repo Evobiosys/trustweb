@@ -10,7 +10,7 @@ import {
   admitsAtHop, askSources, DEGREES_CHOICES, DEGREES_MAX, DEGREES_UNBOUNDED, DegreesChoice, defaultDegrees, degreesChoice, degreesFor, isDegrees,
   itemDegrees, lineDegrees,
 } from '../../src/cascade.ts'
-import { joinFrontDoor, mergeOneJakob, personOfPeer, sameName } from '../../src/one_jakob.ts'
+import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, sameName, samePersonTarget } from '../../src/one_jakob.ts'
 import { Audience, LineStatus, passesAsksOn, Ring, Tag } from '../../src/model.ts'
 
 const A = Audience
@@ -157,5 +157,40 @@ describe('one Jakob (N6)', () => {
     expect(mergeOneJakob(other, DOOR)).toBe(false)
     expect(mergeOneJakob({ testOf: { name: 'Jakob' }, people: 'broken' }, DOOR)).toBe(false)
     expect(mergeOneJakob({ testOf: { name: 'Jakob' } }, DOOR)).toBe(false)
+  })
+})
+
+describe('passing on through this phone (one_jakob.ts): who, and never the same person twice', () => {
+  const peer = (id, did, ring) => ({ id, did, ring, displayName: id, connectedAt: 1 })
+  const person = (id, extra) => ({ id, name: id, context: '', ring: R.Acquaintance, metAt: 1, lines: [], ...extra })
+  const s = {
+    people: [
+      person('Ann', { peerId: 'ann', ring: R.Acquaintance }),
+      person('Cleo', { peerId: 'cleo', ring: R.Close, passOn: false }),
+      person('Jakob', { peerId: 'jp', doorPeerId: 'door2' }),
+    ],
+    testAccounts: [{ id: 'acct1', name: 'Anna-demo', createdAt: 1, peerId: 'anna' }],
+  }
+  it.each([
+    ['an acquaintance: no (by ring)', peer('ann', 'd-ann', R.Acquaintance), null, false],
+    ['a close friend who was switched off: no (the setting wins)', peer('cleo', 'd-cleo', R.Close), null, false],
+    ['a friend without a person card: yes (by ring)', peer('x', 'd-x', R.Friend), null, true],
+    ['this phone\'s own front door: yes', peer('door', 'd-door', R.Acquaintance), 'd-door', true],
+    ['someone else\'s front door: by ring', peer('door', 'd-door', R.Acquaintance), null, false],
+    ['a demo account this phone allowed: yes', peer('anna', 'd-anna', R.Acquaintance), null, true],
+  ])('%s', (_n, p, own, want) => expect(passOnAllowed(s, p, own)).toBe(want))
+  it('samePersonTarget: this phone\'s own door, and the sender\'s other peer, are never asked again; anyone else is', () => {
+    const sender = peer('jp', 'd-jp', R.Friend)
+    expect(samePersonTarget(s, peer('door', 'd-door', R.Acquaintance), peer('ann', 'd-ann', R.Friend), 'd-door')).toBe(true)
+    expect(samePersonTarget(s, peer('door2', 'd-door2', R.Acquaintance), sender, null)).toBe(true)
+    expect(samePersonTarget(s, peer('cleo', 'd-cleo', R.Close), sender, null)).toBe(false)
+    expect(samePersonTarget(s, peer('x', 'd-x', R.Friend), peer('y', 'd-y', R.Friend), null)).toBe(false)
+  })
+  it('ownFrontDoor: the site\'s card is this phone\'s own only when it carries this phone\'s name and the phone is no demo account', () => {
+    const card = { did: 'd-door', name: 'Jakob' }
+    expect(ownFrontDoor({ me: { id: 'j', displayName: 'Jakob' } }, card)).toBe('d-door')
+    expect(ownFrontDoor({ me: { id: 'a', displayName: 'Anna' } }, card)).toBeNull()
+    expect(ownFrontDoor({ me: { id: 'j', displayName: 'Jakob' }, testOf: { name: 'Jakob', createdAt: 1 } }, card)).toBeNull()
+    expect(ownFrontDoor({ me: { id: 'j', displayName: 'Jakob' } }, null)).toBeNull()
   })
 })

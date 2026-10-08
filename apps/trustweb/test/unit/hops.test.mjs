@@ -146,6 +146,10 @@ describe('the ask a phone passes on, and the one a front door hands its owner', 
     expect(out).toEqual({ relayed: true, maxHops: 2, hop: 1, root: 'rootABC123', seen: ['0123456789abcdef', '1111111111111111'], via: ['Ann'] })
     expect('direct' in out || 'door' in out).toBe(false)
   })
+  it('cascadeFields after a front door handed the ask to its owner: the door is not named again (the owner is `from` next)', () => {
+    const q = travelling({ door: true, via: ['Anna-demo'] })
+    expect(cascadeFields(q, hopInfo(q), ['1111111111111111'], 'Jakob').via).toEqual(['Anna-demo'])
+  })
   it('the passed-on ask parses on the wire and keeps its fields (and an old build would ignore them)', () => {
     const q = travelling()
     const next = { ...BASE, qid: 'q2', from: { id: 'ben', displayName: 'Ben' }, ...cascadeFields(q, hopInfo(q), ['1111111111111111'], 'Ann') }

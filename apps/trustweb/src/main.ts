@@ -29,7 +29,7 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, passesAsksOn, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -80,7 +80,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
-import { joinFrontDoor, mergeOneJakob, personOfPeer } from './one_jakob'
+import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 
 enum Screen {
   Start = 'start',
@@ -369,21 +369,14 @@ const net = new Net({
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text) => onSharedText(peer, text),
-  mayPassOnFrom: (peer) => mayPassOnFrom(peer),
+  // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
+  mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
+  samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
 })
 
-/**
- * Wave 6: may this peer's asks go on through this phone? The person's own
- * setting wins; then this phone's own front door (demo-peer.json) and the demo
- * accounts it allowed pass on by default (Jakob 2026-10-08: "most importantly
- * for the demo, the querying through me should be possible"); everyone else by
- * ring (model.ts passesAsksOn: close friends and friends yes, acquaintances no).
- */
-function mayPassOnFrom(peer: Peer): boolean {
-  const person = personOfPeer(st(), peer.id)
-  if (typeof person?.passOn === 'boolean') return person.passOn
-  if (demoPeer?.did === peer.did || demoAccounts().some((t) => t.peerId === peer.id)) return true
-  return passesAsksOn(person ?? { ring: peer.ring })
+/** The did of this site's front door when it is this phone's own (one_jakob.ts ownFrontDoor); null: none known. */
+function ownDoorDid(): string | null {
+  return solo || !state ? null : ownFrontDoor(state, demoPeer)
 }
 
 function notify(body: string): void {

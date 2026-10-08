@@ -544,11 +544,14 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
       const timer = setTimeout(() => { awaitingOwner.delete(q.qid); resolve(null) }, Math.max(0, deadline - Date.now()))
       awaitingOwner.set(q.qid, (env) => { clearTimeout(timer); awaitingOwner.delete(q.qid); resolve(env) })
     })
-    try {
-      await channel.send(owner.did, q, key)
-    } catch {
-      awaitingOwner.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
-    }
+    // Never awaited ahead of the deadline timer (wave 6): a relay POST that hangs must not hold the asker's answer past it.
+    void (async () => {
+      try {
+        await channel.send(owner.did, q, key)
+      } catch {
+        awaitingOwner.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
+      }
+    })()
     const env = await answered
     if (!env) return { outcome: OwnerOutcome.Timeout, items: [] }
     const decoded = await interpret(env, key)
