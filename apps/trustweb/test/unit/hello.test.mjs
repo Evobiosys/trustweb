@@ -1,5 +1,5 @@
 /** "Hello" (src/hello.ts, wave 6b): the name a connected phone tells, the way it is read back, and that nothing else rides along. */
-import { cleanHelloName, helloText, isHelloText, parseHelloText, wantsHelloName, NAMELESS_PEER, HELLO_NAME_MAX } from '../../src/hello.ts'
+import { cleanHelloName, helloText, isHelloText, parseHelloText, wantsHelloName, NAMELESS_PEER, HELLO_NAME_MAX, HELLO_TEXT_MAX } from '../../src/hello.ts'
 import { routeText, TextKind } from '../../src/chat.ts'
 
 const APP = 'https://app.trustintheweb.org/'
@@ -54,5 +54,31 @@ describe('wantsHelloName', () => {
     expect(wantsHelloName('')).toBe(true)
     expect(wantsHelloName(NAMELESS_PEER)).toBe(true)
     expect(wantsHelloName('Ada')).toBe(false)
+  })
+})
+
+describe('review 6b: invisible names, long encoded names, names from links and acks', () => {
+  const APP = 'https://app.example.test/'
+  it('a name of only zero-width or joiner characters is no name', () => {
+    expect(cleanHelloName('​')).toBe('')
+    expect(cleanHelloName('‍‌ ﻿')).toBe('')
+    expect(parseHelloText(APP, `${APP}?hello=1#n=%E2%80%8B`)).toBeNull()
+  })
+  it('emoji joiners inside a visible name stay; invisible separators go', () => {
+    expect(cleanHelloName('Ada \u{1F469}‍\u{1F4BB}')).toBe('Ada \u{1F469}‍\u{1F4BB}')
+    expect(cleanHelloName('A​da ')).toBe('Ada')
+  })
+  it('a 40-emoji name still makes a hello the other side reads (cut to fit the text cap)', () => {
+    const name = '\u{1F600}'.repeat(40)
+    const text = helloText(APP, name)
+    expect(text).not.toBeNull()
+    expect(text.length).toBeLessThanOrEqual(HELLO_TEXT_MAX)
+    const back = parseHelloText(APP, text)
+    expect(back && back.length > 0 && name.startsWith(back)).toBe(true)
+  })
+  it('the bound counts characters, not UTF-16 units (an emoji is never cut in half)', () => {
+    const out = cleanHelloName('x'.repeat(39) + '\u{1F600}\u{1F600}')
+    expect([...out]).toHaveLength(40)
+    expect(out.endsWith('\u{1F600}')).toBe(true)
   })
 })

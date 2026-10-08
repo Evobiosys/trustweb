@@ -46,7 +46,7 @@ import {
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
 } from './hops'
 import type { HopInfo } from './hops'
-import { NAMELESS_PEER } from './hello'
+import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { askTemplate, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, LineRef, LogEntry, MatchScope, Peer } from './model'
@@ -250,7 +250,7 @@ export class Net {
     const known = s.peers.find((x) => x.did === params.did)
     const peer = upsertPeer(s, {
       id: known?.id ?? params.from.id,
-      displayName: params.from.displayName || known?.displayName || NAMELESS_PEER,
+      displayName: cleanHelloName(params.from.displayName) || known?.displayName || NAMELESS_PEER,
       did: params.did,
       ring,
       connectedAt: Date.now(),
@@ -273,7 +273,7 @@ export class Net {
     const known = this.peerByDid(env.did)
     const incoming: Peer = {
       id: env.from.id,
-      displayName: env.from.displayName || NAMELESS_PEER,
+      displayName: cleanHelloName(env.from.displayName) || NAMELESS_PEER,
       did: env.did,
       ring: known?.ring ?? this.hooks.ringForNewPeer(),
       connectedAt: Date.now(),

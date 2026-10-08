@@ -27,6 +27,8 @@ export const CONNECT_REFRESH_MS = 30 * 24 * 60 * 60 * 1000
 export const CONNECT_TIMEOUT_MS = 10_000
 /** After a 429 nothing is sent for at least this long, however often Meet is drawn (the server's budget is 6 POSTs a minute per address). */
 export const CONNECT_COOLDOWN_MS = 60_000
+/** After any failed registration, a new ensure() (not a retry) waits at least this long: no burst of requests while the server is down. */
+export const CONNECT_MIN_GAP_MS = 3_000
 /** Pauses before the retries of a failed registration (never under a minute: the server's budget is 6 POSTs a minute per address); after the last one the keeper rests until the next ensure(). */
 export const CONNECT_RETRY_MS: readonly number[] = [60_000, 180_000, 600_000]
 
@@ -178,7 +180,9 @@ export async function registerConnect(deps: ConnectClientDeps, record: ConnectRe
   if (shareBlock(longUrl, deps.origin) !== null) return { ok: false, error: ConnectError.Refused }
   const res = await post(deps, bodyFor(longUrl, record))
   if (res === ConnectError.Network) return { ok: false, error: ConnectError.Network }
-  if (record && res.status === 403) return registerConnect(deps, null, longUrl)
+  // Only the server's "forbidden" (unknown, expired, wrong secret) means the code is gone; a 403 forbidden_origin (a proxy or origin
+  // problem) must not throw away a code that still works, and with it a printed QR and a username.
+  if (record && res.status === 403 && field(res.json, 'error') === 'forbidden') return registerConnect(deps, null, longUrl)
   if (res.status !== 200 && res.status !== 201) return { ok: false, error: errorForStatus(res.status) }
   if (record && res.status === 200) {
     if (field(res.json, 'code') !== record.code) return { ok: false, error: ConnectError.Server }
@@ -261,6 +265,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   let retryHandle: unknown = null
   let attempt = 0
   let cooldownUntil = 0
+  let lastFailAt = Number.NEGATIVE_INFINITY
 
   const held = (): ConnectRecord | null => readConnectRecord(deps.load())
   const stopRetry = (): void => { if (retryHandle !== null) { clearTimer(retryHandle); retryHandle = null } }
@@ -276,6 +281,7 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   const run = async (longUrl: string): Promise<boolean> => {
     const out = await registerConnect(deps, held(), longUrl)
     if (!out.ok) {
+      lastFailAt = deps.now()
       if (out.error === ConnectError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS
       if (out.error !== ConnectError.NotHere && out.error !== ConnectError.Refused) scheduleRetry()
       return false
@@ -294,6 +300,8 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
     if (!registrationDue(held(), longUrl, deps.now())) return Promise.resolve(true)
     // A 429 was answered a moment ago: drawing Meet again must not ask again (V1's rule: back off at least a minute).
     if (deps.now() < cooldownUntil) return Promise.resolve(false)
+    // A failure a moment ago (server down, offline): redrawing Meet or saving a name does not ask again at once; the retry timer does.
+    if (!retry && deps.now() - lastFailAt < CONNECT_MIN_GAP_MS) return Promise.resolve(false)
     if (!retry) attempt = 0
     if (running) return running.then(() => (registrationDue(held(), wanted, deps.now()) ? ensure(wanted, true) : true))
     const call = run(longUrl).finally(() => { running = null })
@@ -313,6 +321,8 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
       const record = held()
       if (!record) return { ok: false, error: ClaimError.NoCode }
       const out = await claimName(deps, record, name)
+      // POST /name shares the per-address budget of POST /connect: a 429 here also pauses the registration.
+      if (!out.ok && out.error === ClaimError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS
       if (!out.ok) return out
       const { name: _old, ...rest } = record
       deps.store(out.name ? { ...rest, name: out.name } : rest)

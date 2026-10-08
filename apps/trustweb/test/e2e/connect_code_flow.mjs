@@ -121,6 +121,7 @@ async function partA(browser) {
   t.ok('a: a 500 from the server: the long link stays in the QR, and no error page', /\?connect=did%3Apeer%3A2/.test(long) && (await b.page.locator('.meet-page').isVisible()))
   t.ok('a: Copy link still works and copies the long link', (await b.page.locator('.meet-page > .btn', { hasText: 'Copy link' }).click(), (await b.page.evaluate(() => navigator.clipboard.readText())) === long))
   t.ok('a: no record was kept', (await record(b.page)).connectCode === undefined)
+  await b.page.waitForTimeout(3200) // review 6b: right after a failure a redraw does not ask again (CONNECT_MIN_GAP_MS)
   await b.page.getByRole('button', { name: 'Back' }).click()
   await b.page.locator('.hdr [aria-label^="Show my code"]').click()
   const code2 = await until(async () => { const c = [...broken.codes.keys()][0]; return c && (await payload(b.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)

@@ -10,6 +10,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { RINGS, Ring } from './model'
 import { S } from './strings'
+import { cleanHelloName } from './hello'
 
 export interface ConnectAddOptions {
   /** The name the link or the handshake gave; '' when none is known yet. */
@@ -31,7 +32,7 @@ export interface ConnectAddHandle {
 
 export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
   let picked = o.ring
-  let given = o.name
+  let given = cleanHelloName(o.name)
   let dirty = false
   const title = el('h3', { 'data-connect-add-title': '' }, [S.connectAddTitle(given)])
   const hint = el('p', { class: 'meta', 'data-connect-add-waiting': '', hidden: given !== '' }, [S.connectAddWaitingHint])
@@ -61,7 +62,7 @@ export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
     nodes,
     typed: () => name.value,
     setTheirName(next: string): void {
-      const clean = next.trim().slice(0, 40)
+      const clean = cleanHelloName(next)
       if (!clean || clean === given) return
       given = clean
       title.textContent = S.connectAddTitle(given)

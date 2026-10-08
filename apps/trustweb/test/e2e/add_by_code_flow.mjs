@@ -226,7 +226,7 @@ async function main() {
     await bo.page.locator('.sheet.on [data-add-code]').fill(far)
     await bo.page.locator('.sheet.on [data-add-person]').click()
     const said = await until(async () => { const x = await bo.page.locator('.sheet.on [data-add-code-status]').innerText(); return /relay at https:\/\/elsewhere\.example/.test(x) ? x : null }, 10_000)
-    t.ok('5: a DID naming another relay says which relay, and that this app only reaches its own', !!said && /only reach the relay it is opened from/.test(said))
+    t.ok('5: a DID naming another relay says which relay, and that this app cannot reach it', !!said && /which this app cannot reach/.test(said))
     t.ok('5: nothing was sent and nobody was added', farReqs.length === 0 && (await record(bo.page)).peers.length === peersBefore)
     await shot(bo.page, 'ab_5_other_relay.png')
 

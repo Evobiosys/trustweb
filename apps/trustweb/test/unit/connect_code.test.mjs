@@ -4,7 +4,7 @@
  * that the secret never leaves in anything but the POST body.
  */
 import {
-  CONNECT_CODE_RE, CONNECT_COOLDOWN_MS, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
+  CONNECT_CODE_RE, CONNECT_COOLDOWN_MS, CONNECT_MIN_GAP_MS, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
   connectShortLink, isClaimable,
   createConnectKeeper, readConnectRecord, registerConnect, registrationDue, repairConnectRecord, shortToShow,
 } from '../../src/connect_code.ts'
@@ -240,7 +240,8 @@ describe('createConnectKeeper', () => {
     expect(k.shortFor(longUrl())).toBe(`${ORIGIN}/c/${CODE}`)
   })
   it('retries wait longer each time and stop after the last pause', async () => {
-    const { k, calls, timers } = keeper([{ status: 500, body: {} }])
+    let now = NOW
+    const { k, calls, timers } = keeper([{ status: 500, body: {} }], { now: () => now })
     await k.ensure(longUrl())
     for (let i = 0; i < CONNECT_RETRY_MS.length; i++) {
       expect(timers[i].ms).toBe(CONNECT_RETRY_MS[i])
@@ -249,7 +250,8 @@ describe('createConnectKeeper', () => {
     }
     expect(calls).toHaveLength(1 + CONNECT_RETRY_MS.length)
     expect(timers).toHaveLength(CONNECT_RETRY_MS.length)
-    // the next ensure (the person opens Meet) starts over
+    // the next ensure (the person opens Meet) starts over, once the short gap after a failure is over
+    now = NOW + CONNECT_MIN_GAP_MS
     await k.ensure(longUrl())
     expect(calls).toHaveLength(2 + CONNECT_RETRY_MS.length)
     expect(timers).toHaveLength(CONNECT_RETRY_MS.length + 1)
@@ -267,16 +269,42 @@ describe('createConnectKeeper', () => {
     expect(await k.ensure(longUrl())).toBe(true)
     expect(calls).toHaveLength(2)
   })
-  it('a failure other than 429 does not start the cooldown (the next Meet visit asks again at once)', async () => {
-    const { k, calls } = keeper([{ status: 500, body: {} }, minted()])
+  it('a failure other than 429 does not start the minute cooldown, only a short gap (review 6b): the next Meet visit after it asks again', async () => {
+    let now = NOW
+    const { k, calls } = keeper([{ status: 500, body: {} }, minted()], { now: () => now })
     await k.ensure(longUrl())
+    expect(await k.ensure(longUrl())).toBe(false) // a redraw right after the failure sends nothing
+    expect(calls).toHaveLength(1)
+    now = NOW + CONNECT_MIN_GAP_MS
     expect(await k.ensure(longUrl())).toBe(true)
     expect(calls).toHaveLength(2)
   })
+  it('a 429 on a username claim pauses the registration too (one budget on the server)', async () => {
+    let now = NOW
+    const { k, calls } = keeper([minted(), { status: 429, body: {} }, updated()], { now: () => now })
+    await k.ensure(longUrl())
+    const claimed = await k.claim('ada')
+    expect(claimed.ok).toBe(false)
+    expect(await k.ensure(longUrl('Ada Other'))).toBe(false)
+    expect(calls).toHaveLength(2)
+    now = NOW + CONNECT_COOLDOWN_MS
+    expect(await k.ensure(longUrl('Ada Other'))).toBe(true)
+    expect(calls).toHaveLength(3)
+  })
+  it('a 403 that is not "forbidden" (forbidden_origin) never throws the code away', async () => {
+    const { k, box, calls } = keeper([minted(), { status: 403, body: { error: 'forbidden_origin' } }], {})
+    await k.ensure(longUrl())
+    const kept = box.value
+    await k.ensure(longUrl('Ada Other'))
+    expect(calls).toHaveLength(2)
+    expect(box.value).toEqual(kept)
+  })
   it('a success cancels the pending retry', async () => {
-    const { k, timers } = keeper(['offline', minted()])
+    let now = NOW
+    const { k, timers } = keeper(['offline', minted()], { now: () => now })
     await k.ensure(longUrl())
     expect(timers[0].cleared).toBeUndefined()
+    now = NOW + CONNECT_MIN_GAP_MS
     await k.ensure(longUrl())
     expect(timers[0].cleared).toBe(true)
   })

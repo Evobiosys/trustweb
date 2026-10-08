@@ -30,7 +30,7 @@ import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
 import { createAdvanced, createSharingLine } from './connect_advanced_view'
-import { ConnectMode, effectiveMode, mayShareContact, modePayload, needsCameraApp, signalSharing } from './connect_modes'
+import { ConnectMode, mayShareContact, modePayload, needsCameraApp, signalSharing } from './connect_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
@@ -1684,8 +1684,9 @@ function chatIo(): ChatIo {
 /** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
 function sendContactTo(peer: Peer): void {
   if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
-  // Wave 6b: "Only TrustWeb" on the open Meet page shares no messenger link with this scan; the tick and the sent record stay untouched.
-  if (!mayShareContact(effectiveMode(meetMode, screen === Screen.Meet))) return
+  // Wave 6b: "Only TrustWeb" shares no messenger link with this scan; the tick and the sent record stay untouched. The choice of the code
+  // shown last counts even after Meet was left (a scan can arrive late over the relay); opening Meet again resets it to the default.
+  if (!mayShareContact(meetMode)) return
   const s = st()
   const out = contactToSend(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id])
   if (!out) return
@@ -2725,7 +2726,7 @@ enum MeetPage {
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
-/** The Advanced choice of the code on screen (connect_modes.ts): memory only, the default whenever Meet is opened. */
+/** The Advanced choice of the code shown last (connect_modes.ts): memory only, the default whenever Meet is opened. */
 let meetMode: ConnectMode = ConnectMode.Both
 
 function meetPages(): MeetPage[] {

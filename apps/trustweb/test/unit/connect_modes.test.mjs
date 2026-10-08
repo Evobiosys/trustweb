@@ -1,6 +1,6 @@
 /** The Advanced choice (src/connect_modes.ts, wave 6b): what the QR carries per mode, and that Only TrustWeb shares nothing. */
 import {
-  ConnectMode, CONNECT_MODES, SignalSharing, effectiveMode, isConnectMode, mayShareContact, modePayload, needsCameraApp, signalSharing,
+  ConnectMode, CONNECT_MODES, SignalSharing, isConnectMode, mayShareContact, modePayload, needsCameraApp, signalSharing,
 } from '../../src/connect_modes.ts'
 import { SignalProvider, revealsPhoneNumber } from '../../src/channel.ts'
 import { Channel } from '../../src/model.ts'
@@ -17,11 +17,6 @@ describe('modes', () => {
     expect(isConnectMode('both')).toBe(true)
     expect(isConnectMode('nope')).toBe(false)
     expect(isConnectMode(undefined)).toBe(false)
-  })
-  it('only an open Meet page counts; otherwise the default', () => {
-    expect(effectiveMode(ConnectMode.OnlyTrustWeb, true)).toBe(ConnectMode.OnlyTrustWeb)
-    expect(effectiveMode(ConnectMode.OnlyTrustWeb, false)).toBe(ConnectMode.Both)
-    expect(effectiveMode(ConnectMode.OnlyMolly, false)).toBe(ConnectMode.Both)
   })
 })
 

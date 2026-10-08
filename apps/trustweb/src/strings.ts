@@ -1199,7 +1199,7 @@ export const S = {
   chatNotifBody: (name: string) => `${name} wrote to you`,
   chSharedBy: (name: string) => `Shared by ${name} when you connected`,
   // Wave 6b: one connect code (connect_code.ts, connect_view.ts) and the add sheet after a scan (connect_add_view.ts)
-  connectCodePending: 'Long link, until the server answers. The short code follows by itself.',
+  connectCodePending: 'Long link, until the server answers. The short code follows by itself: showing this page registers it on our server, which then keeps your connect link (your name and TrustWeb address).',
   connectCodeNote: 'This short link is your connect code: it stays the same when your name changes. Our server keeps your connect link for it (your name, your TrustWeb address, no notes and no messenger links). The long link below works without our server.',
   connectAddTitle: (name: string) => (name ? `Add ${name} to your web?` : 'Add this person to your web?'),
   connectAddLead: 'You are connected. Choose how close you are; you can change it any time on their card.',
@@ -1216,7 +1216,7 @@ export const S = {
   addCodeFailed: (f: AddFailure): string => {
     if (f.type === 'did') {
       return f.problem === DidProblem.OtherRelay
-        ? `That DID uses the relay at ${f.relayOrigin ?? 'another address'}. This app can only reach the relay it is opened from, so open TrustWeb at that address to connect, or ask for their code.`
+        ? `That DID uses the relay at ${f.relayOrigin ?? 'another address'}, which this app cannot reach. It can only reach the relay of the TrustWeb addresses, so ask for their code instead.`
         : 'That does not look like a DID this app can read (a did:peer:2 address).'
     }
     if (f.type === 'resolve') {
@@ -1224,7 +1224,7 @@ export const S = {
       switch (f.error) {
         case ResolveError.NotFound: return `Our server does not know that ${what}. Check it, or ask them to show their code again.`
         case ResolveError.RateLimited: return 'Too many lookups just now. Wait a minute and try again.'
-        case ResolveError.Network: return 'No answer from our server. Check your connection and try again, or paste their DID. A code or name made on the other TrustWeb address (app.idea2.site or app.trustintheweb.org) only opens from that address: open this app there and try again.'
+        case ResolveError.Network: return 'No answer from our server. Check your connection and try again, or paste their DID.'
         case ResolveError.Refused: return `Our server answered with something that is not a TrustWeb link, so nothing was added.`
         default: return 'Our server did not answer properly. Try again in a moment.'
       }

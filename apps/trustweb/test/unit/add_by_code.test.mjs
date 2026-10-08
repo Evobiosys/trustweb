@@ -181,6 +181,17 @@ describe('the DID path: the relay only', () => {
     expect(didReadiness(OTHER_DID, ORIGIN)).toEqual({ ok: false, problem: DidProblem.OtherRelay, relayOrigin: 'https://elsewhere.example' })
   })
   it('a broken DID cannot', () => expect(didReadiness('did:peer:2.Vz', ORIGIN)).toEqual({ ok: false, problem: DidProblem.BadDid }))
+  it('a DID on another APP host can: the app hosts share one relay (review 6b, wave 6c)', () => {
+    const idea2Did = createIdentity('https://app.idea2.site/relay').did
+    const orgDid = createIdentity('https://app.trustintheweb.org/relay').did
+    expect(didReadiness(idea2Did, 'https://app.trustweb.one')).toEqual({ ok: true, relayOrigin: 'https://app.idea2.site' })
+    expect(didReadiness(orgDid, 'https://app.trustweb.one')).toEqual({ ok: true, relayOrigin: 'https://app.trustintheweb.org' })
+    expect(didReadiness(DID, 'https://app.idea2.site')).toEqual({ ok: true, relayOrigin: ORIGIN })
+  })
+  it('a local or preview build reaches its own relay only, even for an app-host DID', () => {
+    expect(didReadiness(DID, 'http://127.0.0.1:8983')).toEqual({ ok: false, problem: DidProblem.OtherRelay, relayOrigin: ORIGIN })
+    expect(didReadiness(OTHER_DID, 'https://app.trustweb.one')).toEqual({ ok: false, problem: DidProblem.OtherRelay, relayOrigin: 'https://elsewhere.example' })
+  })
   it('connect params for a bare DID: a stable local id, no name', () => {
     const a = paramsForDid(DID)
     expect(a).toEqual(paramsForDid(DID))

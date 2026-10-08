@@ -28,11 +28,6 @@ export function isConnectMode(v: unknown): v is ConnectMode {
   return CONNECT_MODES.includes(v as ConnectMode)
 }
 
-/** The mode in force for what leaves the phone when somebody connects: only the open Meet page's choice counts, otherwise the default. */
-export function effectiveMode(mode: ConnectMode, meetOnScreen: boolean): ConnectMode {
-  return meetOnScreen ? mode : ConnectMode.Both
-}
-
 /** May this phone send its ticked messenger links to a newly connected phone, in this mode? Only TrustWeb says no. */
 export function mayShareContact(mode: ConnectMode): boolean {
   return mode !== ConnectMode.OnlyTrustWeb

@@ -17,20 +17,35 @@ export const HELLO_PARAM = 'hello'
 export const NAMELESS_PEER = 'Someone'
 /** The longest name a name field takes. */
 export const HELLO_NAME_MAX = 40
+/** The longest hello text: a chat text's cap (chat.ts CHAT_TEXT_MAX; not imported, chat.ts imports this module). */
+export const HELLO_TEXT_MAX = 500
+/**
+ * Invisible characters that stripUnsafe keeps (it must keep the zero-width joiners of emoji): zero-width space, word joiner, BOM,
+ * Arabic letter mark, line and paragraph separators, Mongolian vowel separator. A name is never only joiners either.
+ */
+const INVISIBLE_RE = /[\u200B\u2060\uFEFF\u061C\u2028\u2029\u180E]/g
+const VISIBLE_RE = /[^\s\u200C\u200D]/u
 
 function prefix(appUrl: string): string {
   return `${appUrl}?${HELLO_PARAM}=1#`
 }
 
-/** A name fit to show: no hidden characters, trimmed, bounded; '' when nothing is left. */
+/** A name fit to show: no hidden characters, trimmed, bounded; '' when nothing visible is left. Also for names from links and acks (net.ts). */
 export function cleanHelloName(raw: string): string {
-  return stripUnsafe(raw).replace(/\s+/g, ' ').trim().slice(0, HELLO_NAME_MAX)
+  const name = stripUnsafe(String(raw ?? '')).replace(INVISIBLE_RE, '').replace(/\s+/g, ' ').trim()
+  const bounded = [...name].slice(0, HELLO_NAME_MAX).join('')
+  return VISIBLE_RE.test(bounded) ? bounded : ''
 }
 
-/** The text that tells a new connection who I am, or null when I have no name to tell. */
+/** The text that tells a new connection who I am, or null when I have no name to tell. A name too long once encoded is cut to fit. */
 export function helloText(appUrl: string, myName: string): string | null {
-  const name = cleanHelloName(myName)
-  return name ? `${prefix(appUrl)}n=${encodeURIComponent(name)}` : null
+  let chars = [...cleanHelloName(myName)]
+  while (chars.length > 0) {
+    const text = `${prefix(appUrl)}n=${encodeURIComponent(chars.join(''))}`
+    if (text.length <= HELLO_TEXT_MAX) return text
+    chars = chars.slice(0, -1)
+  }
+  return null
 }
 
 /** Does this text claim to be a hello (whether or not it is well formed)? */
@@ -40,7 +55,7 @@ export function isHelloText(appUrl: string, text: string): boolean {
 
 /** The name in a hello text; null for anything else or a text with no usable name. Never throws. */
 export function parseHelloText(appUrl: string, text: string): string | null {
-  if (typeof text !== 'string' || !text.startsWith(prefix(appUrl)) || text.length > 400) return null
+  if (typeof text !== 'string' || !text.startsWith(prefix(appUrl)) || text.length > HELLO_TEXT_MAX) return null
   try {
     const raw = new URLSearchParams(text.slice(prefix(appUrl).length)).get('n')
     const name = raw === null ? '' : cleanHelloName(raw)

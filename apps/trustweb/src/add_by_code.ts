@@ -186,21 +186,26 @@ export function resolveName(deps: ResolveDeps, name: string): Promise<ResolveOut
 
 /** Why a DID alone cannot be connected from this page. */
 export enum DidProblem {
-  /** The DID names a relay other than the one this app is served from; the app can only reach its own. */
+  /** The DID names a relay this app cannot reach: neither its own nor the one relay shared by the app hosts. */
   OtherRelay = 'other-relay',
   BadDid = 'bad-did',
 }
 
 export type DidReadiness = { ok: true; relayOrigin: string } | { ok: false; problem: DidProblem; relayOrigin?: string }
 
+/** Is `origin` one of the app hosts? They all proxy /relay/* to ONE relay process, which routes on the recipient DID only. */
+const isAppHost = (origin: string): boolean => SHORT_LINK_ORIGINS.includes(origin)
+
 /**
- * Can this page connect to this DID? The relay of a page is its own origin (relay.ts resolveRelayOrigin), whatever a DID's service
- * block says, so a DID is reachable only when that block names this same origin.
+ * Can this page connect to this DID? A page always posts to the relay of its own origin (relay.ts resolveRelayOrigin), whatever a DID's
+ * service block says. That reaches the DID when the block names this same origin, or when both are app hosts: the app hosts share one
+ * relay process (wave 6c verified app.trustweb.one <-> app.idea2.site live). A local or preview build reaches its own relay only.
  */
 export function didReadiness(did: string, origin: string): DidReadiness {
   try {
     const endpoint = new URL(resolveDidPeer(did).serviceEndpoint)
-    return endpoint.origin === origin ? { ok: true, relayOrigin: endpoint.origin } : { ok: false, problem: DidProblem.OtherRelay, relayOrigin: endpoint.origin }
+    const reachable = endpoint.origin === origin || (isAppHost(endpoint.origin) && isAppHost(origin))
+    return reachable ? { ok: true, relayOrigin: endpoint.origin } : { ok: false, problem: DidProblem.OtherRelay, relayOrigin: endpoint.origin }
   } catch {
     return { ok: false, problem: DidProblem.BadDid }
   }
@@ -247,8 +252,8 @@ export async function resolveAddInput(deps: ResolveDeps, input: string): Promise
 }
 
 /**
- * Whatever the field turned into, the connection runs over THIS page's relay: a link or DID that names another relay (the other app host)
- * would give a card that says "connected" and never answers, so it is stopped here with the reason.
+ * Whatever the field turned into, the connection runs over THIS page's relay: a link or DID that names a relay this page cannot reach
+ * (didReadiness) would give a card that says "connected" and never answers, so it is stopped here with the reason.
  */
 function reachable(kind: AddKind, link: ConnectLinkParams, origin: string): AddResolved {
   const ready = didReadiness(link.did, origin)
