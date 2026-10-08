@@ -29,6 +29,14 @@
 # on 127.0.0.1:8979 that the smoke test starts and kills (override: TW_STAGING_SUBSCRIBER_URL); the smoke only uses example.org addresses.
 #   --print-caddy Print the Caddy snippet and exit.
 #
+# Wave 6e (usernames): the unit carries RESERVED_NAMES=japossert,jakob (names only the admin route can grant) and, when
+# /etc/trustweb/admin.json exists on questhub, LoadCredential=admin:/etc/trustweb/admin.json (the token of the loopback-only
+# /admin/name and /admin/names routes; they are NEVER in Caddy). --production creates that file ON questhub when it is absent
+# (openssl rand -hex 32, directory 0700 if it had to be made, file 0600 root, written inside /etc/trustweb) and prints nothing
+# of it; --staging never creates it (the staging admin routes answer 503 unless the file is already there). Before the unit is
+# rewritten, the unit, its drop-ins (*.service.d/*.conf) and /etc/trustweb-backup*.env each get a .bak.<ts> copy.
+# The operator grants names with scripts/trustweb_name_grant.sh.
+#
 # Same SSH recipe as deploy_wot.sh (questhub needs publickey + password; the askpass helper reads both
 # from the login Keychain). questhub runs SELinux Enforcing: code dirs get usr_t, units are written in
 # place with `sudo tee` (never mv from /tmp), data dirs are created by systemd (StateDirectory) and
@@ -47,7 +55,7 @@ for arg in "$@"; do
     --print-caddy) set_mode print-caddy ;;
     --dry-run) DRY=1 ;;
     --keep) KEEP=1 ;;
-    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -68,6 +76,9 @@ TS="$(date +%Y%m%d_%H%M%S)"
 # $CREDENTIALS_DIRECTORY, so the service user needs no access to /etc/trustweb. This script never reads the files.
 CRED_FILE=/etc/trustweb/orkey.json          # OpenRouter (the fallback provider)
 BERGET_CRED_FILE=/etc/trustweb/berget.json  # Berget AI (the default provider once this file exists; Jakob creates it, see the README)
+ADMIN_CRED_FILE=/etc/trustweb/admin.json    # wave 6e: {"token": "<64 hex>"} of the loopback-only admin routes; created by ensure_admin_token (production)
+# Usernames only the admin route may grant (wave 6e, comma list; the built-in reserved list is always on).
+RESERVED_NAMES_ALL="japossert,jakob"
 # Web results (wave 3, websearch.mjs): one key file per engine, placed by Jakob only (a key in place switches that engine on for every
 # phone: place it only after the terms and privacy lines, wave3/websearch-api-contract.txt section 7 step 0).
 BRAVE_CRED_FILE=/etc/trustweb/websearch-brave.json
@@ -145,10 +156,10 @@ CADDY
 }
 
 # The systemd unit. $1 = suffix ("" or "-staging"), $2 = port, $3 = memory max, $4 = 1 when the OpenRouter credential file exists on
-# questhub, $5 = 1 when the Berget one does, $6 / $7 = 1 when the Brave / Mojeek web-search key files do (a LoadCredential= line for a
-# missing file would stop the unit from starting, so each line is written only when its file is there).
+# questhub, $5 = 1 when the Berget one does, $6 / $7 = 1 when the Brave / Mojeek web-search key files do, $8 = 1 when the admin token file does
+# (a LoadCredential= line for a missing file would stop the unit from starting, so each line is written only when its file is there).
 unit_text() {
-  local s="$1" port="$2" mem="$3" cred="${4:-0}" berget="${5:-0}" brave="${6:-0}" mojeek="${7:-0}" allowed="$ALLOWED_HOSTS_PRODUCTION" cred_line="" subscriber="$SUBSCRIBER_URL_PRODUCTION" staging_line=""
+  local s="$1" port="$2" mem="$3" cred="${4:-0}" berget="${5:-0}" brave="${6:-0}" mojeek="${7:-0}" admin="${8:-0}" allowed="$ALLOWED_HOSTS_PRODUCTION" cred_line="" subscriber="$SUBSCRIBER_URL_PRODUCTION" staging_line=""
   if [ -n "$s" ]; then
     subscriber="$SUBSCRIBER_URL_STAGING"
     # The smoke test makes more than 30 requests and more than 5 feedback posts from one address (loopback): staging only, production keeps the defaults.
@@ -163,6 +174,8 @@ Environment=FEEDBACK_PER_HOUR=100
   [ "$brave" = 1 ] && cred_line="${cred_line}LoadCredential=websearch-brave:${BRAVE_CRED_FILE}
 "
   [ "$mojeek" = 1 ] && cred_line="${cred_line}LoadCredential=websearch-mojeek:${MOJEEK_CRED_FILE}
+"
+  [ "$admin" = 1 ] && cred_line="${cred_line}LoadCredential=admin:${ADMIN_CRED_FILE}
 "
   cat <<UNIT
 [Unit]
@@ -179,6 +192,7 @@ Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
 Environment=ALLOWED_HOSTS=${allowed}
 Environment=FEEDBACK_ORIGINS=${FEEDBACK_ORIGINS_ALL}
 Environment=LINK_HOSTS=${LINK_HOSTS_ALL}
+Environment=RESERVED_NAMES=${RESERVED_NAMES_ALL}
 Environment=SUBSCRIBER_URL=${subscriber}
 ${staging_line}# Transcription: the provider is NOT pinned here (TRANSCRIBE_PROVIDER default auto = Berget when its key exists, else OpenRouter);
 # keys handed in as credentials, everything switched on by scripts/trustweb_transcribe_switch_on.sh (it writes TRANSCRIBE_ENABLED=1,
@@ -249,6 +263,11 @@ expect "$(code -H "$H" -H "If-None-Match: $BETAG" $B/backup/$BID)" 200 "GET pack
 echo "origin guard"
 expect "$(code -H "$H" -H 'Origin: https://idea2.site' $B/backup/$BID)" 403 "/backup with Origin idea2.site"
 expect "$(code -H "$H" -H 'Origin: https://idea2.site' $B/hosted/status)" 403 "/hosted with Origin idea2.site"
+echo "admin routes (wave 6e): reachable only with a loopback Host and no forwarding header; never with a public Host"
+ADM=$(code -H "Host: 127.0.0.1:$PORT" $B/admin/names)
+case "$ADM" in 401|503) echo "  ok   GET /admin/names (Host 127.0.0.1:$PORT, no token) -> $ADM (401 token set, 503 not configured)" ;; *) echo "  FAIL GET /admin/names -> got $ADM, expected 401 or 503" >&2; exit 1 ;; esac
+expect "$(code -H "$H" $B/admin/names)" 400 "GET /admin/names with the public Host (looks like any unknown path)"
+expect "$(code -H "Host: 127.0.0.1:$PORT" -H 'X-Forwarded-For: 203.0.113.9' $B/admin/names)" 421 "GET /admin/names with a forwarding header (falls through to the Host gate)"
 echo "feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://idea2.site' -H 'Content-Type: application/json' -d '{"text":"smoke test, please ignore","kind":"feedback"}' $B/feedback)" 204 "POST /feedback"
 expect "$(code -H "$H" -X POST -H 'Origin: https://evil.example.com' -H 'Content-Type: application/json' -d '{"text":"x"}' $B/feedback)" 403 "POST /feedback foreign Origin"
@@ -322,21 +341,69 @@ rollback() {
        curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$port/health && echo '  <- health after rollback'" >&2 || echo "ROLLBACK FAILED: restore by hand (see the report recipe)" >&2
 }
 
+# .bak.<ts> copies of everything this deploy could touch around the unit, BEFORE the unit is rewritten: the unit itself, its drop-ins
+# (*.service.d/*.conf; systemd ignores a *.conf.bak.<ts>) and the EnvironmentFile. $1 = unit name, $2 = suffix. A file that is not there is skipped.
+backup_unit_files() {
+  local unit="$1" s="$2" file="/etc/systemd/system/$1.service"
+  echo "backup copies (.bak.$TS) of the unit, its drop-ins and /etc/trustweb-backup${s}.env, whichever exist"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] ssh questhub: for f in $file /etc/systemd/system/${unit}.service.d/*.conf /etc/trustweb-backup${s}.env; do [ -e \"\$f\" ] && sudo cp -p \"\$f\" \"\$f.bak.$TS\"; done"
+    return
+  fi
+  rsh "sudo sh -c 'for f in $file /etc/systemd/system/${unit}.service.d/*.conf /etc/trustweb-backup${s}.env; do if [ -e \"\$f\" ]; then cp -p \"\$f\" \"\$f.bak.$TS\" && echo \"  backed up \$f\"; fi; done'"
+}
+
+# Wave 6e: the admin token file of the loopback-only admin routes, created ON questhub when absent (production only). The token is made
+# there (openssl rand -hex 32), held in a shell variable, written with the printf BUILTIN (never in an argument list) into a temp file inside
+# /etc/trustweb (not /tmp: SELinux labels follow the directory), set to 0600 root, then renamed into place. Nothing of it is printed or
+# read back, and a file that is already there is left exactly as it is.
+ensure_admin_token() {
+  echo "admin token file $ADMIN_CRED_FILE (created on questhub only when absent; nothing of it is printed)"
+  if [ "$DRY" = 1 ]; then
+    echo "[dry-run] ssh questhub: [ -d /etc/trustweb ] || sudo install -d -m 0700 /etc/trustweb"
+    echo "[dry-run] ssh questhub: if 'sudo test -e $ADMIN_CRED_FILE' is false: umask 077, openssl rand -hex 32 into a shell variable, printf '{\"token\":\"...\"}' into a mktemp file inside /etc/trustweb, chmod 0600, chown root:root, mv to $ADMIN_CRED_FILE, restorecon; else leave it alone"
+    return
+  fi
+  rsh "bash -s" <<'REMOTE'
+set -euo pipefail
+D=/etc/trustweb
+F=/etc/trustweb/admin.json
+sudo test -d "$D" || sudo install -d -m 0700 -o root -g root "$D"
+if sudo test -e "$F"; then echo "  $F present: left as it is"; exit 0; fi
+umask 077
+T=$(sudo mktemp "$D/.admin.XXXXXX")
+trap 'sudo rm -f "$T"' EXIT
+tok=$(openssl rand -hex 32)
+printf '{"token":"%s"}\n' "$tok" | sudo tee "$T" >/dev/null
+unset tok
+sudo chmod 0600 "$T"
+sudo chown root:root "$T"
+sudo mv "$T" "$F"
+trap - EXIT
+sudo restorecon "$F" 2>/dev/null || true
+echo "  $F created (0600 root); the token was not printed"
+REMOTE
+}
+
 install_unit() { # $1 = unit name, $2 = suffix, $3 = port, $4 = mem
-  local unit="$1" file="/etc/systemd/system/$1.service" cred=0 berget=0 brave=0 mojeek=0
+  local unit="$1" file="/etc/systemd/system/$1.service" cred=0 berget=0 brave=0 mojeek=0 admin=0
   echo "systemd unit $file (written in place with tee, never mv from /tmp)"
   if [ "$DRY" = 1 ]; then
-    echo "[dry-run] LoadCredential=orkey:$CRED_FILE, berget:$BERGET_CRED_FILE, websearch-brave:$BRAVE_CRED_FILE and websearch-mojeek:$MOJEEK_CRED_FILE are each written only if 'sudo test -e <file>' succeeds on questhub (a missing file would stop the unit); all shown here as if present:"
-    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" 1 1 1 1 | sed 's/^/    /'
+    echo "[dry-run] LoadCredential=orkey:$CRED_FILE, berget:$BERGET_CRED_FILE, websearch-brave:$BRAVE_CRED_FILE, websearch-mojeek:$MOJEEK_CRED_FILE and admin:$ADMIN_CRED_FILE are each written only if 'sudo test -e <file>' succeeds on questhub (a missing file would stop the unit); all shown here as if present:"
+    backup_unit_files "$unit" "$2"
+    [ "$MODE" = production ] && ensure_admin_token
+    echo "[dry-run] unit text:"; unit_text "$2" "$3" "$4" 1 1 1 1 1 | sed 's/^/    /'
     echo "[dry-run] then: daemon-reload, enable, restart, health check on 127.0.0.1:$3; on failure the code and unit are rolled back from their .bak.$TS copies"
     return
   fi
+  backup_unit_files "$unit" "$2"
+  if [ "$MODE" = production ]; then ensure_admin_token; fi
   if rsh "sudo test -e $CRED_FILE"; then cred=1; echo "  OpenRouter credential file present on questhub: LoadCredential=orkey line written"; else echo "  $CRED_FILE is missing on questhub: no LoadCredential=orkey line (no OpenRouter fallback)" >&2; fi
   if rsh "sudo test -e $BERGET_CRED_FILE"; then berget=1; echo "  Berget credential file present on questhub: LoadCredential=berget line written"; else echo "  $BERGET_CRED_FILE is missing on questhub: no LoadCredential=berget line (Berget not available yet, see the README)" >&2; fi
   if rsh "sudo test -e $BRAVE_CRED_FILE"; then brave=1; echo "  Brave web-search key file present on questhub: LoadCredential=websearch-brave line written (web results via Brave ON)"; else echo "  no $BRAVE_CRED_FILE: no websearch-brave line (Brave results off)"; fi
   if rsh "sudo test -e $MOJEEK_CRED_FILE"; then mojeek=1; echo "  Mojeek web-search key file present on questhub: LoadCredential=websearch-mojeek line written (web results via Mojeek ON)"; else echo "  no $MOJEEK_CRED_FILE: no websearch-mojeek line (Mojeek results off)"; fi
-  rsh "[ -e $file ] && sudo cp -p $file $file.bak.$TS || true"
-  unit_text "$2" "$3" "$4" "$cred" "$berget" "$brave" "$mojeek" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
+  if rsh "sudo test -e $ADMIN_CRED_FILE"; then admin=1; echo "  admin token file present on questhub: LoadCredential=admin line written (admin routes ON, loopback only)"; else echo "  no $ADMIN_CRED_FILE: no LoadCredential=admin line (the admin routes answer 503 not_configured)"; fi
+  unit_text "$2" "$3" "$4" "$cred" "$berget" "$brave" "$mojeek" "$admin" | rsh "sudo tee $file >/dev/null && sudo chcon -t systemd_unit_file_t $file"
   rsh "sudo systemctl daemon-reload && sudo systemctl enable $unit && sudo systemctl reset-failed $unit && sudo systemctl restart $unit" || true
   sleep 2
   if rsh "curl -fsS -H 'Host: app.idea2.site' http://127.0.0.1:$3/health" >/dev/null 2>&1; then
