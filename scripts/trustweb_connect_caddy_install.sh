@@ -1,6 +1,6 @@
 #!/bin/bash
-# Wave 6b (services): put the connect-code routes /connect, /c/*, /name and /who/* (with log_skip) into the app.idea2.site and app.trustintheweb.org
-# blocks of the live Caddyfile on questhub. Same shape as trustweb_links_caddy_install.sh (wave 5). RUN BY THE ORCHESTRATOR, after the unit has the new code
+# Wave 6b (services): put the connect-code routes /connect, /c/*, /name and /who/* (with log_skip) into the app.idea2.site, app.trustintheweb.org and
+# app.trustweb.one (wave 6c) blocks of the live Caddyfile on questhub. Same shape as trustweb_links_caddy_install.sh (wave 5). RUN BY THE ORCHESTRATOR, after the unit has the new code
 # (the unit answers 404/405 for these paths before that, so the order is: services deploy, then this script).
 #
 #   EXPECT_SHA=<sha256 of the live Caddyfile> trustweb_connect_caddy_install.sh            validate only: fetch the live file, edit a COPY, validate the copy
@@ -41,7 +41,7 @@ if [ "$(changed "$LOCAL/diff")" = "$(changed "$HERE/trustweb_connect_caddy_propo
 cat "$LOCAL/diff"
 echo "--------"
 [ "${REQUIRE:-0}" = 0 ] || exit 3
-cmp -s "$LOCAL/live" "$LOCAL/edited" && { echo "nothing to change (both blocks already have the connect routes)"; exit 0; }
+cmp -s "$LOCAL/live" "$LOCAL/edited" && { echo "nothing to change (all three blocks already have the connect routes)"; exit 0; }
 B64="$(base64 < "$LOCAL/edited" | tr -d '\n')"
 rsh "set -euo pipefail
   D=\$(mktemp -d /tmp/twcaddyval.XXXXXX); trap 'rm -rf \"\$D\"' EXIT; chmod 755 \$D
@@ -66,5 +66,5 @@ out="$(rsh "set -euo pipefail
 printf '%s\n' "$out"
 BAK="$(printf '%s\n' "$out" | sed -n 's/^  backup: //p')"
 [ -n "$BAK" ] && echo "backup on the server: $BAK"
-echo "rollback check, run it before any restore (expect only '>' lines, 62 of them for the two blocks, and the hunk-header lines starting with a digit): ssh -o BatchMode=yes questhub \"sudo diff $BAK /etc/caddy/Caddyfile\" | cut -c1 | sort | uniq -c"
+echo "rollback check, run it before any restore (expect only '>' lines, 93 of them for the three blocks, and the hunk-header lines starting with a digit): ssh -o BatchMode=yes questhub \"sudo diff $BAK /etc/caddy/Caddyfile\" | cut -c1 | sort | uniq -c"
 echo "installed. Next: smoke  curl -s -o /dev/null -w '%{http_code}\\n' https://app.trustintheweb.org/c/AAAAAAAAAAAAAAAAAAAAAA  (404), GET /connect (405), GET /connect?x=1 (400), GET /who/nobody (404); see the services report."

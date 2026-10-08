@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Adds the connect-code routes (/connect, /c/*, /name, /who/*) to the app.idea2.site and app.trustintheweb.org site blocks of a Caddyfile.
+"""Adds the connect-code routes (/connect, /c/*, /name, /who/*) to the three app site blocks of a Caddyfile: app.idea2.site,
+app.trustintheweb.org and app.trustweb.one (wave 6c; its block is a generated copy of the .org one, so it has the same wave-5 anchor).
 
   trustweb_connect_caddy_edit.py <in Caddyfile> <out Caddyfile>
 
-Wave 6b (services-api-contract section 10). Anchored and idempotent: each of the two site blocks must contain exactly one wave-5 "handle /l/*"
+Wave 6b (services-api-contract section 10). Anchored and idempotent: each of the three site blocks must contain exactly one wave-5 "handle /l/*"
 block, exactly as wave 5 installed it (the new routes go right after it); a block that already has ALL FOUR new handles is left alone; a block
 with some but not all of them, a missing or duplicated anchor, or any other number of site blocks aborts with exit 1 and writes NOTHING (the
-output file is created only after both blocks were transformed). LF endings are kept.
+output file is created only after all three blocks were transformed). LF endings are kept. The new handles have path matchers, so Caddy
+runs them before a block's matcher-less page catch-all, including the wave 6c redirect catch-all of app.trustintheweb.org.
 
 POST routes (/connect, /name) get the query-string guard of wave 5 (a query on them is a 400) and request_body max_size 4KB. /c/* and /who/*
 accept a query string on purpose: messengers append tracking parameters to a tapped link. All four routes are log_skip.
@@ -54,7 +56,7 @@ ANCHOR = (
     "\t}\n"
 )
 MARKERS = ("\thandle /connect {\n", "\thandle /c/* {\n", "\thandle /name {\n", "\thandle /who/* {\n")
-BLOCKS = ("app.idea2.site {\n", "app.trustintheweb.org {\n")
+BLOCKS = ("app.idea2.site {\n", "app.trustintheweb.org {\n", "app.trustweb.one {\n")
 
 
 def block_span(text: str, head: str) -> tuple[int, int]:

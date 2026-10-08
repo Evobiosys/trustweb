@@ -80,12 +80,64 @@ app.trustintheweb.org {
 	handle /relay/* {
 		reverse_proxy 127.0.0.1:8961
 	}
+	# app.trustintheweb.org (wave 6c, Jakob 2026-10-08 12:53): page loads go to the canonical app host. The URI (path, query) is kept, so an old QR
+	# or connect link lands on the new host. The handles above keep serving (old DID documents name this host's /relay).
+	# Nothing is deleted: /srv/questhub-static/app-trustintheweb stays on disk. Lift the redirect: restore the Caddyfile.bak.<ts> that
+	# scripts/trustweb_domains.sh org-redirect wrote. no-store: browsers must not store this 301, so lifting it brings the pages back.
 	handle {
-		root * /srv/questhub-static/trustintheweb
-		file_server
+		header Cache-Control "no-store"
+		redir https://app.trustweb.one{uri} permanent
 	}
 }
 
 trustintheweb.org {
 	redir https://app.trustintheweb.org{uri} permanent
+}
+
+app.trustweb.one {
+	# app.trustweb.one (wave 6c): generated from the app.trustintheweb.org block by scripts/trustweb_domains_caddy.py app-trustweb-one.
+	encode zstd gzip
+	handle /backup/* {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /websearch* {
+		@ws_query expression {http.request.uri.query} != ''
+		respond @ws_query 400
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	# --- TrustWeb short connect links (wave 5, services-api-contract "Short links") ---
+	# POST /link stores a long connect url, GET /l/<id> answers 302 to it. The id and the url are capabilities:
+	# log_skip keeps these requests out of Caddy's access log. It does NOT silence the error log, which can still name
+	# the request URI when the upstream fails (accepted risk, see the wave 5 services report).
+	handle /link {
+		log_skip
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8960
+	}
+	handle /l/* {
+		log_skip
+		reverse_proxy 127.0.0.1:8960
+	}
+	# The one relay process: a phone on app.idea2.site and one on app.trustintheweb.org reach each
+	# other (the relay routes on the recipient DID only, and each app posts to its own origin).
+	handle /relay/* {
+		reverse_proxy 127.0.0.1:8961
+	}
+	# The app, built with base "/" (scripts/deploy_wot.sh, TW_APP_TARGET=trustweb-one).
+	handle {
+		root * /srv/questhub-static/app-trustweb-one
+		@tw_app_assets path /assets/*
+		header @tw_app_assets Cache-Control "public, max-age=31536000, immutable"
+		@tw_app_html not path /assets/*
+		header @tw_app_html Cache-Control "no-cache"
+		file_server
+	}
 }

@@ -76,3 +76,41 @@
  	# The one relay process: a phone on app.idea2.site and one on app.trustintheweb.org reach each
  	# other (the relay routes on the recipient DID only, and each app posts to its own origin).
  	handle /relay/* {
+@@ -126,6 +188,37 @@
+ 		log_skip
+ 		reverse_proxy 127.0.0.1:8960
+ 	}
++	# --- TrustWeb connect codes and usernames (wave 6b, services-api-contract section 10) ---
++	# POST /connect stores a person's long connect url under a stable code, GET /c/<code> answers 302 to it; POST /name claims a username
++	# for the code, GET /who/<name> answers 302 to /c/<code>. Codes, secrets, names and urls are capabilities: log_skip keeps these requests
++	# out of Caddy's access log. It does NOT silence the error log, which can still name the request URI of /c/* and /who/* when the upstream
++	# fails (accepted risk, as for /l/*); a secret and a url travel in POST bodies, never in a URI.
++	handle /connect {
++		log_skip
++		@connect_query expression {http.request.uri.query} != ''
++		respond @connect_query 400
++		request_body {
++			max_size 4KB
++		}
++		reverse_proxy 127.0.0.1:8960
++	}
++	handle /c/* {
++		log_skip
++		reverse_proxy 127.0.0.1:8960
++	}
++	handle /name {
++		log_skip
++		@name_query expression {http.request.uri.query} != ''
++		respond @name_query 400
++		request_body {
++			max_size 4KB
++		}
++		reverse_proxy 127.0.0.1:8960
++	}
++	handle /who/* {
++		log_skip
++		reverse_proxy 127.0.0.1:8960
++	}
+ 	# The one relay process: a phone on app.idea2.site and one on app.trustintheweb.org reach each
+ 	# other (the relay routes on the recipient DID only, and each app posts to its own origin).
+ 	handle /relay/* {
