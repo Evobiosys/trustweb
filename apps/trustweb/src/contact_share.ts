@@ -309,10 +309,14 @@ export function sharedReachables(person: ContactCarrier): Reachable[] {
   return reachableChannels(person).filter((r) => r.source === 'theirs')
 }
 
-/** Wave 6h, S3: their Signal link, when one is known (typed by the owner or shared by them), for the icon next to their name. Only https. */
+/**
+ * Wave 6h, S3: their Signal link, when one is known (typed by the owner or shared by them), for the icon next to their name. Review 6h:
+ * only a signal.me link (what channel.ts stores today); a value an older build kept that points anywhere else draws no icon, so the
+ * "Message on Signal" glyph can never open another site.
+ */
 export function signalReachable(person: ContactCarrier): Reachable | null {
   const r = reachableChannels(person).find((x) => x.channel === Channel.Signal)
-  return r && r.link.startsWith('https://') ? r : null
+  return r && r.link.startsWith('https://signal.me/') ? r : null
 }
 
 /** The one link the chat's "Message on ..." points at: Signal first, then the owner's channel order. */

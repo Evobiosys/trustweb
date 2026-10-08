@@ -43,7 +43,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { resolveDidPeer } from "./did_identity.js";
-import { InMemoryRelayQueueStore, type RelayQueueStore } from "./relay_queue_store.js";
+import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, type RelayQueueStore } from "./relay_queue_store.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -241,7 +241,13 @@ export class RelayServer {
       return { routed: "rejected", reason: "recipient queue is full" };
     }
     if (this.queueStore.total() >= this.maxQueueGlobal) {
-      return { routed: "rejected", reason: "relay queue is full" };
+      // TrustWeb review 6h: with a long hold (RELAY_QUEUE_HOLD_MS), wires for recipients that never come back (a reset phone, a demo
+      // persona) would fill the relay for good, and an unauthenticated flood would shut it for everyone, for good. Under that pressure
+      // the wires older than the shared horizon go first, as they always did before the long hold; recent mail is never dropped.
+      this.queueStore.prune(Date.now(), MAX_HOLD_HORIZON_MS);
+      if (this.queueStore.total() >= this.maxQueueGlobal) {
+        return { routed: "rejected", reason: "relay queue is full" };
+      }
     }
 
     this.queueStore.enqueue(to, rawWire);

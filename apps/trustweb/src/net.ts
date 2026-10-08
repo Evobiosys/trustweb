@@ -64,8 +64,8 @@ import {
 import type { HopInfo } from './hops'
 import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
-import { addLateAnswer, addSentAsks, forgetSentAsk, LATE_KEEP_MS, sentAskFor } from './late_answers'
-import { askTemplate, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
+import { addLateAnswer, addSentAsk, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
+import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
 import { addUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
@@ -92,12 +92,8 @@ export function templateFor(text: string): QueryTemplate {
  */
 export function matchAsk(text: string, threads: ChatThread[]): MatchResult {
   // Wave 6h: the same folding on BOTH sides (case, accents, umlauts, hyphens) before the matcher sees either.
-  const folded = threads.map(foldThread)
+  const folded = foldThreadsForMatch(threads)
   return prune(matchTemplate(forgivingAskTemplate(foldForMatch(text), lineTextsOf(folded)), folded))
-}
-
-function foldThread(t: ChatThread): ChatThread {
-  return { ...t, messages: t.messages.map((m) => ({ ...m, text: foldForMatch(m.text) })) }
 }
 
 /** Would this ask put a prompt in front of the person, matched against `threads`? */
@@ -190,6 +186,8 @@ export interface NetHooks {
   keepsUnmatched?(peer: Peer): boolean
   /** Wave 6h: such a card was just kept (state.unmatchedAsks). */
   onUnmatchedAsk?(): void
+  /** Review 6h (late_answers.ts openWindowUntil): late answers the drain brought right after an open were released; show them. */
+  onLateAnswersReleased?(): void
 }
 
 /** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
@@ -242,6 +240,12 @@ export class Net {
   private seenQids = new Set<string>()
   private roots = new RootMemory()
   private starting: Promise<void> | null = null
+  /** Review 6h: when the app was last opened (markOpened), until the drain's next connect; null: no open waiting for one. */
+  private openedAt: number | null = null
+  /** Review 6h: late answers that land before this moment belong to the open that just happened (late_answers.ts openWindowUntil). */
+  private releaseUntil = 0
+  /** Review 6h: the restoreHeldAsks run in progress, if any. */
+  private restoring: Promise<void> | null = null
   private readonly windowMs: number
   private readonly relayOrigin: string | undefined
 
@@ -294,7 +298,8 @@ export class Net {
       let granted: () => void = () => {}
       const firstGrant = new Promise<void>((resolve) => { granted = resolve })
       this.lock = createDrainLock(drainLockName(identity.did), pageLocks(), {
-        onGranted: () => { this.openDrain(identity).then(granted, granted) },
+        // Review 6h: the held prompts show in the tab that drains (the one that can answer them), once it does.
+        onGranted: () => { this.openDrain(identity).then(granted, granted).then(() => this.restoreHeldAsks()) },
         onLost: () => this.closeDrain(),
       })
       this.lock.request(inFront())
@@ -311,7 +316,7 @@ export class Net {
     channel.onStatus((status) => {
       if (this.channel !== channel) return // a channel this tab already closed
       this.hooks.onStatus(status)
-      if (status === 'connected') { void this.resendAcks(); void this.flushLateYes() }
+      if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes() }
     })
     channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
     channel.onEnvelope(async (fromDid) => {
@@ -506,13 +511,14 @@ export class Net {
 
   private async handleQuery(q: QueryEnvelope, fromDid: string): Promise<void> {
     if (this.seenQids.has(q.qid)) return
-    this.seenQids.add(q.qid)
     const receivedAt = Date.now()
+    const s = this.hooks.state()
+    // Wave 6h: a prompt this phone already holds for it (the relay delivered it again after a reload) is not asked twice. Review 6h:
+    // checked BEFORE the qid is marked seen, so a redelivery that comes in ahead of restoreHeldAsks does not hide the held prompt.
+    if (liveHeldAsks(s.heldAsks, receivedAt).some((h) => h.qid === q.qid)) return
+    this.seenQids.add(q.qid)
     const peer = this.peerByDid(fromDid)
     if (!peer || !this.channel) return
-    const s = this.hooks.state()
-    // Wave 6h: a prompt this phone already holds for it (the relay delivered it again after a reload) is not asked twice.
-    if (liveHeldAsks(s.heldAsks, receivedAt).some((h) => h.qid === q.qid)) return
     const info = hopInfo(q)
     const text = q.freeText ?? ''
     // Wave 6h (ask_window.ts): the window the asker sent (120 s), or 30 s for an ask without one (an older asker, a front door).
@@ -553,7 +559,7 @@ export class Net {
     if (!surface) {
       const entry = this.log(peer, text, LogOutcome.NoMatch)
       if (!silent) this.noteUnmatched(q, peer, info, text, receivedAt)
-      this.logHarvest(entry, await reply.atMoment([]))
+      this.logHarvest(entry, (await reply.atMoment([])).got)
       return
     }
 
@@ -577,13 +583,15 @@ export class Net {
   private present(held: HeldAsk, peer: Peer, reply: Replier): void {
     this.hold(held)
     let decided = false
-    let atMoment: Promise<HopHarvest> | null = null
-    const sendMoment = (own: SharedItem[]): Promise<HopHarvest> => {
+    let atMoment: Promise<MomentResult> | null = null
+    const sendMoment = (own: SharedItem[]): Promise<MomentResult> => {
       atMoment ??= reply.atMoment(own)
       return atMoment
     }
+    // Review 6h: the moment leaves whatever happens before it (sendMoment is once only): a decision after the moment that came before
+    // a timer a background tab delayed must not skip the moment's "nothing" (a decline would then read as a phone that was off).
     const momentDue = held.lateMode && !held.arrivedLate && Date.now() < held.deadline
-    if (momentDue) void settleAt(Date.now(), held.deadline - Date.now()).then(() => { if (!decided) void sendMoment([]) })
+    if (momentDue) void settleAt(Date.now(), held.deadline - Date.now()).then(() => { void sendMoment([]) })
     this.hooks.onAsk({
       qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
       relayed: held.relayed, through: held.through, doorName: held.doorName,
@@ -596,15 +604,22 @@ export class Net {
         const own = share ? sharedItems(held.matches) : []
         const late = held.lateMode && (held.arrivedLate === true || atMoment !== null || Date.now() >= held.deadline)
         if (!late) {
-          this.unhold(held.qid)
-          this.logHarvest(entry, await sendMoment(own))
+          // Review 6h: a yes before the moment stays in the record until it has left (a tab closed right after the yes, a reload, the
+          // drain in another tab): restoreHeldAsks sends it at its moment, or flushLateYes afterwards. A no has nothing to keep.
+          if (share) this.hold({ ...held, yesAt: Date.now() })
+          else this.unhold(held.qid)
+          const moment = await sendMoment(own)
+          if (share && moment.sent) this.unhold(held.qid)
+          this.logHarvest(entry, moment.got)
           return
         }
-        if (atMoment) this.logHarvest(entry, await atMoment)
+        // Review 6h: the moment's "nothing" leaves FIRST (its timer may not have run yet), so the asker never takes the late yes for an
+        // answer at the moment. An ask that arrived late has no moment.
+        if (!held.arrivedLate) this.logHarvest(entry, (await sendMoment([])).got)
         if (!share) { this.unhold(held.qid); return }
         // Kept as decided until the relay took it (a tab without the drain, a phone offline): flushLateYes sends it on the next connect.
         this.hold({ ...held, yesAt: Date.now() })
-        await this.sendLateYes(held, reply)
+        await this.sendLateYes(held, reply, false)
       },
     })
   }
@@ -613,13 +628,12 @@ export class Net {
   private replier(qid: string, templateId: string, peer: Peer, key: CryptoKey, receivedAt: number, deadline: number, harvest: Promise<HopHarvest>): Replier {
     const myName = this.hooks.state().me.displayName
     return {
-      atMoment: async (own: SharedItem[]): Promise<HopHarvest> => {
+      atMoment: async (own: SharedItem[]): Promise<MomentResult> => {
         // Belt and braces: whatever the next step does, this phone answers at its moment.
         const got = await Promise.race([harvest, settleAt(receivedAt, deadline - receivedAt).then(() => NO_HARVEST)])
         await settleAt(receivedAt, deadline - receivedAt)
         const items = dedupeItems([...own, ...markThrough(got.items, myName)]).slice(0, MAX_SHARED)
-        await this.sendAnswer(qid, templateId, peer, key, items)
-        return got
+        return { got, sent: await this.sendAnswer(qid, templateId, peer, key, items, true) }
       },
       late: async (own: SharedItem[]): Promise<boolean> => this.sendAnswer(qid, templateId, peer, key, dedupeItems(own).slice(0, MAX_SHARED), true),
     }
@@ -634,24 +648,34 @@ export class Net {
       await this.channel.send(peer.did, env, key)
       return true
     } catch {
-      /* the asker times out and sees "no match"; a late yes is tried again (flushLateYes) */
+      /* the asker times out and sees "no match"; a yes that did not leave is kept and tried again (flushLateYes) */
       return !strict
     }
   }
 
-  /** A late yes: sent now; on success the held prompt goes, on failure it stays decided for the next connect. */
-  private async sendLateYes(held: HeldAsk, reply: Pick<Replier, 'late'>): Promise<void> {
+  /**
+   * A late yes: sent now; on success the held prompt goes, on failure it stays decided for the next connect. `momentFirst` (review 6h):
+   * this phone may have sent nothing at the moment (closed, offline, the drain in another tab), so the moment's "nothing" goes first and
+   * an asker still waiting never takes the yes as an answer at the moment (it lands as "answered later", shown on the asker's next open).
+   */
+  private async sendLateYes(held: HeldAsk, reply: Replier, momentFirst: boolean): Promise<void> {
+    if (momentFirst && !(await reply.atMoment([])).sent) return
     if (await reply.late(sharedItems(held.matches))) this.unhold(held.qid)
   }
 
-  /** Wave 6h: late yeses the relay did not take yet (decided, kept with yesAt) leave now. Called whenever the drain connects. */
+  /**
+   * Wave 6h: late yeses the relay did not take yet (decided, kept with yesAt) leave now. Called whenever the drain connects. Review 6h:
+   * only those past their moment; a yes before it leaves AT the moment (present, or restoreHeldAsks after a reload), never earlier.
+   */
   async flushLateYes(): Promise<void> {
     if (!this.channel) return
-    for (const held of liveHeldAsks(this.hooks.state().heldAsks, Date.now()).filter((h) => h.yesAt !== undefined)) {
+    const now = Date.now()
+    for (const held of liveHeldAsks(this.hooks.state().heldAsks, now).filter((h) => h.yesAt !== undefined && now >= h.deadline)) {
       const peer = this.hooks.state().peers.find((p) => p.id === held.peerId)
       if (!peer) { this.unhold(held.qid); continue }
       const key = await this.pairKey(peer)
-      await this.sendLateYes(held, this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST)))
+      const reply = this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST))
+      await this.sendLateYes(held, reply, held.lateMode && held.arrivedLate !== true)
     }
   }
 
@@ -660,15 +684,30 @@ export class Net {
    * moment as usual (nothing came back from the next step: that harvest is gone with the reload), after it as a late answer (late mode)
    * or at once (an older asker). Call once the drain is started. Prompts of connections that are gone are dropped.
    */
-  async restoreHeldAsks(): Promise<void> {
+  restoreHeldAsks(): Promise<void> {
+    // Review 6h: start() calls this on the drain's grant and main.ts once started: a second call while one runs waits for that one.
+    this.restoring ??= this.restoreNow().finally(() => { this.restoring = null })
+    return this.restoring
+  }
+
+  private async restoreNow(): Promise<void> {
+    // Review 6h: only the tab that drains shows them (the others would show the same prompts again).
+    if (this.lock && !this.lock.held()) return
     const now = Date.now()
     for (const held of liveHeldAsks(this.hooks.state().heldAsks, now)) {
-      if (held.yesAt !== undefined || this.seenQids.has(held.qid)) continue
+      // seenQids: shown (or answered) in this visit already. A relay redelivery of a held ask never marks it (handleQuery).
+      if (this.seenQids.has(held.qid)) continue
       const peer = this.hooks.state().peers.find((p) => p.id === held.peerId)
       if (!peer) { this.unhold(held.qid); continue }
       this.seenQids.add(held.qid)
       const key = await this.pairKey(peer)
-      this.present(held, peer, this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST)))
+      const reply = this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST))
+      // Review 6h: a yes given before the moment that had not left yet leaves at the moment; past it, flushLateYes sends it below.
+      if (held.yesAt !== undefined) {
+        if (now < held.deadline) void reply.atMoment(sharedItems(held.matches)).then((m) => { if (m.sent) this.unhold(held.qid) })
+        continue
+      }
+      this.present(held, peer, reply)
     }
     await this.flushLateYes()
   }
@@ -764,7 +803,26 @@ export class Net {
     if (!items.length) return
     s.lateAnswers = addLateAnswer(s.lateAnswers, sent, peer.displayName, items, now)
     s.sentAsks = forgetSentAsk(s.sentAsks, env.qid, now)
+    // Review 6h: one the relay handed over right after an open (it waited there while the app was closed) belongs to that open.
+    const release = now <= this.releaseUntil
+    if (release) s.lateAnswers = releaseLateAnswers(s.lateAnswers, now)
     this.hooks.save()
+    if (release) this.hooks.onLateAnswersReleased?.()
+  }
+
+  /**
+   * Review 6h: the app was just opened (started, or back in front after a long time away): late answers the relay hands over within
+   * OPEN_DRAIN_GRACE_MS of the drain's next connect are part of this open (late_answers.ts openWindowUntil). The caller releases the
+   * ones already kept itself.
+   */
+  markOpened(now: number = Date.now()): void {
+    this.openedAt = now
+  }
+
+  private noteConnected(now: number): void {
+    if (this.openedAt === null) return
+    this.releaseUntil = Math.max(this.releaseUntil, openWindowUntil(this.openedAt, now))
+    this.openedAt = null
   }
 
   /**
@@ -842,13 +900,21 @@ export class Net {
     const timeoutMs = askTimeoutMs(reach, this.windowMs)
     const now = Date.now()
     const outgoing = s.peers.map((peer) => ({ peer, qid: randomId(12) }))
-    s.sentAsks = addSentAsks(s.sentAsks, outgoing.map(({ peer, qid }) => ({ qid, peerId: peer.id, text: freeText, at: now })), now)
+    s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
-    return Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
+    const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
       peerId: peer.id,
       peerName: peer.displayName,
       decoded: await this.sendAsk(peer, freeText, extra, timeoutMs, qid),
     })))
+    // Review 6h: who shared at the moment has answered; a second answer of theirs for this ask is not a late one.
+    const answered = outgoing.filter((_, i) => results[i].decoded?.outcome === 'shared')
+    if (answered.length) {
+      const st = this.hooks.state()
+      for (const { qid } of answered) st.sentAsks = forgetSentAsk(st.sentAsks, qid, Date.now())
+      this.hooks.save()
+    }
+    return results
   }
 
   /**
@@ -862,10 +928,16 @@ export class Net {
   }
 }
 
+/** What the answer at an ask's moment did: what came back from the next step, and whether the relay took the answer. */
+interface MomentResult {
+  got: HopHarvest
+  sent: boolean
+}
+
 /** The two ways one ask is answered (net.ts present). */
 interface Replier {
-  /** At the ask's moment, with what came back from the next step; resolves with that harvest. */
-  atMoment(own: SharedItem[]): Promise<HopHarvest>
+  /** At the ask's moment, with what came back from the next step. */
+  atMoment(own: SharedItem[]): Promise<MomentResult>
   /** A late yes: now, own items only. Resolves false when the relay did not take it. */
   late(own: SharedItem[]): Promise<boolean>
 }
