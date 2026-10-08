@@ -9,7 +9,7 @@
  * line matched at all (apps/demo's gate.ts / answer_key.ts). There is no
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
-import type { ChatThread } from '../../demo/src/types'
+import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
@@ -363,6 +363,81 @@ export interface LogEntry {
   away?: boolean
 }
 
+/** Wave 6h (late_answers.ts): an ask this phone sent to one connection, remembered so a yes after its answer moment still counts. This phone only. */
+export interface SentAsk {
+  /** The ask's qid toward that connection (each connection gets its own). */
+  qid: string
+  peerId: string
+  /** What was asked, bounded (late_answers.ts LATE_TEXT_MAX). */
+  text: string
+  at: number
+}
+
+/** Wave 6h (late_answers.ts): a yes that came after the answer moment. Kept silently; shown as "<name> answered later" on the next app open. */
+export interface LateAnswer {
+  /** The ask's qid (one late answer per ask and connection). */
+  id: string
+  /** When it reached this phone. */
+  at: number
+  peerId: string
+  /** Who answered, as this phone knows them (or as the answer names itself). */
+  from: string
+  /** What this phone had asked. */
+  ask: string
+  /** What they shared (sanitised, bounded). */
+  items: SharedItem[]
+  /** When it was first shown (released on an app open). Absent: held, not shown yet. */
+  releasedAt?: number
+}
+
+/** Wave 6h (held_asks.ts): a consent prompt not decided yet, kept so a reload or a long time away does not lose it. This phone only. */
+export interface HeldAsk {
+  /** The ask's qid. */
+  qid: string
+  /** The connection that handed it over (who the answer goes to). */
+  peerId: string
+  text: string
+  /** Who asks, as the prompt names them. */
+  fromName: string
+  through: string[]
+  doorName: string | null
+  relayed: boolean
+  /** The lines it matched when it arrived (this phone's own lines; never sent unless shared). */
+  matches: LineRef[]
+  receivedAt: number
+  /** The answer moment on this phone's clock. */
+  deadline: number
+  /** The ask carried its window (ask_window.ts): a yes after the moment goes as a late answer. False: an older asker or a front door. */
+  lateMode: boolean
+  /** It reached this phone after its asker had stopped waiting: no answer at the moment, a yes goes as a late answer. */
+  arrivedLate?: boolean
+  /** The person said yes after the moment, but the relay has not taken the late answer yet (offline, another tab drains). */
+  yesAt?: number
+}
+
+/** Wave 6h (unmatched_asks.ts): why an ask from a direct contact found nothing here. */
+export enum UnmatchedReason {
+  /** No line matched at all. */
+  Nothing = 'nothing',
+  /** A line matched, but its "Who can ask" leaves this contact's ring out. */
+  WhoCanAsk = 'who-can-ask',
+  /** A line matched, but it is set to "Only me". */
+  OnlyMe = 'only-me',
+}
+
+/** Wave 6h (unmatched_asks.ts): "<name> asked about X; nothing matched". Shown to the asked person only; the asker sees a plain no match. */
+export interface UnmatchedAsk {
+  /** The ask's qid. */
+  id: string
+  at: number
+  peerId: string
+  from: string
+  text: string
+  reason: UnmatchedReason
+  /** The asker's ring here, for "Who can ask leaves out <name> (acquaintance)". */
+  ring?: Ring
+}
+
 /** Wave 6f: an ask that matched this web while this phone was away (away_asks.ts). This phone only; never sent. */
 export interface AwayAsk {
   /** The ask's qid (dedupe: a relay redelivery is the same ask). */
@@ -597,6 +672,16 @@ export interface AppState {
    * you were away"), newest first, at most AWAY_ASKS_MAX, each kept AWAY_ASK_KEEP_MS or until dismissed. Absent: none. Older builds ignore it.
    */
   awayAsks?: AwayAsk[]
+  /** Wave 6h (late_answers.ts): this phone's asks of the last LATE_KEEP_MS, per connection, so a later yes can land. Absent: none. Older builds ignore it. */
+  sentAsks?: SentAsk[]
+  /** Wave 6h (late_answers.ts): yeses that came after their moment, newest first, kept LATE_KEEP_MS or until dismissed. Absent: none. */
+  lateAnswers?: LateAnswer[]
+  /** Wave 6h (held_asks.ts): consent prompts not decided yet. Absent: none. */
+  heldAsks?: HeldAsk[]
+  /** Wave 6h (unmatched_asks.ts): asks from direct contacts that matched nothing here. Absent: none. */
+  unmatchedAsks?: UnmatchedAsk[]
+  /** Wave 6h, Settings > Advanced "Show me asks that matched nothing". Absent: on for a personal account, off on a demo phone. */
+  showUnmatchedAsks?: boolean
   /**
    * Wave 6f, review (peer_cards.ts): when this record's merged cards were mended, once. The Meet-draft merge cannot happen since 6f, so the
    * unmerge-by-name step only mends records made before; later it never runs, and a card its owner renames is never moved by it. Absent:
@@ -953,9 +1038,10 @@ export interface LineRef {
 export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { threads: ChatThread[]; refs: Map<string, LineRef> } {
   const refs = new Map<string, LineRef>()
   const threads: ChatThread[] = []
-  const push = (threadId: string, text: string, context: string, at: number): void => {
+  // `matchText` (wave 6h): what the matcher reads, when it is more than the line (its category's words); the line itself is what is shared.
+  const push = (threadId: string, text: string, context: string, at: number, matchText: string = text): void => {
     refs.set(threadId, { threadId, text, context, at })
-    threads.push(lineThread(s.me.displayName, threadId, text, context, at))
+    threads.push(lineThread(s.me.displayName, threadId, matchText, context, at))
   }
   for (const item of s.inventory) {
     if (!item.included || !audienceAdmits(item.audience, ring)) continue
@@ -966,10 +1052,26 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { t
     if (scope?.people && !scope.people.has(person.id)) continue
     for (const line of person.lines) {
       if (line.status !== LineStatus.Current || !audienceAdmits(line.audience, ring)) continue
-      push(`note:${person.id}:${line.id}`, line.text, notesContext(person), line.notedAt)
+      push(`note:${person.id}:${line.id}`, line.text, notesContext(person), line.notedAt, withTagTerms(line.text, line.tag))
     }
   }
   return { threads, refs }
+}
+
+/**
+ * Wave 6h, a line's category as match words ("any other ways to make it easier before using an LLM"): a note line tagged as an
+ * opportunity or a talent also answers an ask for "opportunity", "job" or "talent". Only categories whose word says WHAT is asked
+ * for; looking / offer / meet / resource / note are how something is offered or noted (and "offer" is part of an ask's frame).
+ */
+export const TAG_MATCH_TERMS: Readonly<Partial<Record<Tag, readonly string[]>>> = {
+  [Tag.Opportunity]: ['opportunity', 'opportunities', 'job'],
+  [Tag.Talent]: ['talent', 'talents'],
+}
+
+/** The text the matcher reads for a tagged line: the line, then its category's words. */
+export function withTagTerms(text: string, tag: Tag | undefined): string {
+  const extra = tag ? TAG_MATCH_TERMS[tag] : undefined
+  return extra?.length ? `${text} ${extra.join(' ')}` : text
 }
 
 /** One line as the matcher reads it: a single-message thread, source 'self' (owner-declared), like apps/demo's inventoryThreads(). */

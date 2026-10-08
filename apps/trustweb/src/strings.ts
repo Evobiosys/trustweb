@@ -4,11 +4,12 @@
  * application where it overlaps: "the three rings", "close friends, friends,
  * acquaintances", "a decline looks exactly like no match".
  */
-import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
+import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, UnmatchedReason, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
 import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
+import { ANSWER_WINDOW_MS } from './ask_window'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 import { ModeSharing, ShareMode } from './share_modes'
 import { ClaimError } from './connect_code'
@@ -44,8 +45,13 @@ function nameList(names: readonly string[]): string {
   return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]
 }
 
-/** Seconds a reach of `steps` waits at most, for the copy (one 30-second window per step). */
-const STEP_S = 30
+/** Seconds a reach of `steps` waits at most, for the copy (one answer window per step, ask_window.ts). */
+const STEP_S = ANSWER_WINDOW_MS / 1000
+
+/** "90 s", "about 2 min", "about 12 min". */
+export function waitLabel(seconds: number): string {
+  return seconds < 120 ? `${Math.round(seconds)} s` : `about ${Math.round(seconds / 60)} min`
+}
 
 /** "Berget, Sweden (EU)", "OpenRouter, USA", "Infomaniak, Switzerland"; what the server did not say stays generic. */
 function routeLabel(r: TranscribeRoute | null): string {
@@ -651,7 +657,7 @@ export const S = {
   queryTry: 'Try',
   queryNoPeers: 'You are not connected to anyone on TrustWeb yet. Tap the QR button at the top and let them scan your code.',
   queryAsked: (n: number) => (n === 1 ? 'Asked 1 person in your web.' : `Asked ${n} people in your web.`),
-  queryWindow: 'Every answer is held for 30 seconds, so a "no" looks exactly like "no match".',
+  queryWindow: (s: number) => `Every answer arrives at the same moment, ${waitLabel(s)} after you asked, so a "no" looks exactly like "no match". A yes that comes later shows up the next time you open TrustWeb.`,
   queryDirectOnly: 'Only your direct contacts are asked; nobody passes your ask on (Settings > Advanced).',
   // Wave 6: how far an ask travels (hops.ts) and how far a line may travel (cascade.ts).
   reachTitle: 'How far?',
@@ -663,12 +669,12 @@ export const S = {
     [ReachChoice.NoLimit]: 'No limit',
   } as Record<ReachChoice, string>,
   reachHint: (steps: number, noLimit: boolean): string => noLimit
-    ? `As far as it goes through your web, at most ${HOP_CAP} steps; answers can take up to ${HOP_CAP * STEP_S} s. People you do not know see your name and your question.`
+    ? `As far as it goes through your web, at most ${HOP_CAP} steps; answers can take up to ${waitLabel(HOP_CAP * STEP_S)}. People you do not know see your name and your question.`
     : steps <= 1
       ? 'Only the people you are connected with. They answer from their own lines.'
-      : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${steps * STEP_S} s. People you do not know see your name and your question.`,
+      : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${waitLabel(steps * STEP_S)}. People you do not know see your name and your question.`,
   reachCustomAria: `Steps, 1 to ${HOP_CAP}`,
-  queryWindowFar: (s: number) => `Every answer is held until about ${s} s after you asked, so a "no" still looks exactly like "no match", and nobody can tell how far your ask went.`,
+  queryWindowFar: (s: number) => `Every answer arrives at the same moment, ${waitLabel(s)} after you asked (one window per step), so a "no" still looks exactly like "no match", and nobody can tell how far your ask went. A yes that comes later shows up the next time you open TrustWeb.`,
   resultPassedOn: (name: string) => `${name} passed this on`,
   resultThrough: (names: readonly string[]) => `through ${nameList(names)}`,
   askThrough: (names: readonly string[]) => `Through ${nameList(names)}`,
@@ -704,7 +710,7 @@ export const S = {
   passOnTitle: 'Pass their asks on',
   passOnHint: 'Off unless you switch it on. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
   logPassedOn: (n: number, back: number) => (back ? `passed on to ${n}, ${back} came back` : `passed on to ${n}`),
-  queryWaiting: (s: number) => (s > 0 ? `Answers in about ${s} s` : 'Waiting for anyone still deciding...'),
+  queryWaiting: (s: number) => (s > 0 ? `Answers in ${s < 120 ? `about ${s} s` : waitLabel(s)}` : 'Waiting for anyone still deciding...'),
   resultShared: (name: string) => `${name} chose to share`,
   resultNothing: 'No match',
   resultNothingSub: 'You do not learn why. Whether nobody had anything or somebody chose not to share looks identical from here.',
@@ -719,7 +725,29 @@ export const S = {
   askFoot: (name: string) => `You are asked each time; nothing leaves without this yes. If you don't share, ${name} sees exactly what they would see if nothing matched.`,
   askSent: 'Shared',
   askNotSent: 'Not shared',
-  askSentSub: 'The answer leaves when the 30-second window closes, the same as every other answer.',
+  askSentSub: 'The answer leaves when the window closes, the same moment as every other answer.',
+  askSentLateSub: (name: string) => `${name} stopped waiting, so this goes to them as "answered later": they see it the next time they open TrustWeb.`,
+  askLateEyebrow: 'Asked while you were away',
+  askLateFoot: (name: string) => `${name} has stopped waiting. If you share, they see it the next time they open TrustWeb, as "answered later". If you don't, nothing is sent.`,
+  // Wave 6h: late answers (the asker's side) and asks that matched nothing (the asked side), quiet cards under the header.
+  lateTitle: (names: readonly string[]) => (names.length === 1 ? `${names[0]} answered later` : `${nameList(names)} answered later`),
+  lateBody: (items: readonly { ask: string; lines: readonly string[] }[]) => items.map((x) => `To “${x.ask}”: ${x.lines.join('; ')}`).join(' · '),
+  lateMessage: (name: string) => `Message ${name}`,
+  lateDismiss: 'Got it',
+  unmatchedTitle: (name: string) => `${name} asked about something`,
+  unmatchedBody: (name: string, text: string, why: UnmatchedReason, ring: string, more: number): string => {
+    const reason = why === UnmatchedReason.WhoCanAsk
+      ? `A line of yours matched, but its "Who can ask" leaves out ${name} (${ring.toLowerCase()} in your web).`
+      : why === UnmatchedReason.OnlyMe
+        ? 'A line of yours matched, but it is set to "Only me".'
+        : 'Nothing in your resources matched.'
+    return `“${text}” ${reason} ${name} saw no match, as always. Add a line, or message them.${more > 0 ? ` (${more} more)` : ''}`
+  },
+  unmatchedAddLine: 'My Resources',
+  unmatchedMessage: (name: string) => `Message ${name}`,
+  unmatchedDismiss: 'Dismiss',
+  setUnmatched: 'Show me asks that matched nothing',
+  setUnmatchedHint: 'When someone you are connected with asks for something and nothing of yours matches, you see a quiet card here, with why (nothing matched, or a line whose "Who can ask" leaves them out). They still see a plain "No match". Off for a demo phone.',
   askClose: 'Back to the app',
   notifBodyAsk: (name: string) => `${name} asked something that matches your notes.`,
 

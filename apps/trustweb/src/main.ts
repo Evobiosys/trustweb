@@ -52,7 +52,7 @@ import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
-import { ANSWER_WINDOW_MS, Net } from './net'
+import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
@@ -70,7 +70,13 @@ import { extractLines } from './notes'
 import { S } from './strings'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
-import { addAwayAsk, dismissAwayAsk, liveAwayAsks } from './away_asks'
+import { addAwayAsk, dismissAwayAsk } from './away_asks'
+import { AskCardKind, nextAskCard } from './ask_cards'
+import type { AskCard } from './ask_cards'
+import { LEGACY_WINDOW_MS } from './ask_window'
+import { dismissShownLateAnswers, releaseLateAnswers } from './late_answers'
+import { dismissUnmatchedAsk, showsUnmatched } from './unmatched_asks'
+import { watchWake } from './wake_watch'
 import { StoredChange, adoptInPlace, storedChange } from './tab_sync'
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
@@ -343,6 +349,8 @@ let askRun: {
 const askQueue: IncomingAsk[] = []
 let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
+/** Wave 6h: the decision on the prompt went as a late answer. */
+let askDecidedLate = false
 // Where Meet's back arrow returns to (Manage, Record, or Web).
 let meetFrom: Screen = Screen.Web
 // The recording belongs to the current draft; it is dropped with it, or kept with its stored meeting.
@@ -383,6 +391,7 @@ function newDraft(personId?: string): void {
 // network
 // ---------------------------------------------------------------------------
 
+// Wave 6h (ask_window.ts): real phones ask with the 120 s window; the side-by-side demo keeps the 30 s one (two phones on one screen).
 const net = new Net({
   state: st,
   save,
@@ -450,8 +459,16 @@ const net = new Net({
   // probes it at boot): it is asked for here, and resendAcks runs again once it is known.
   mayResendAck: (peer) => !solo && !isDemoPersona(persona) && !st().testOf && !demoAccounts().some((t) => t.peerId === peer.id)
     && demoPeerKnown() && peer.did !== demoPeer?.did,
-  onAwayAsk: (ask) => { const s = st(); s.awayAsks = addAwayAsk(s.awayAsks, ask, Date.now()); save(); showAwayAsks() },
-})
+  onAwayAsk: (ask) => { const s = st(); s.awayAsks = addAwayAsk(s.awayAsks, ask, Date.now()); save(); showAskCards() },
+  // Wave 6h (unmatched_asks.ts): "<name> asked about X; nothing matched", for the asked person only; never for a demo account's asks.
+  keepsUnmatched: (peer) => !solo && showsUnmatched(st(), demoPhone()) && !demoAccounts().some((t) => t.peerId === peer.id),
+  onUnmatchedAsk: () => showAskCards(),
+}, solo ? { answerWindowMs: LEGACY_WINDOW_MS } : {})
+
+/** A phone that shows TrustWeb to someone (the side-by-side demo, a demo persona, a demo account's own view): some defaults differ. */
+function demoPhone(): boolean {
+  return solo || isDemoPersona(persona) || Boolean(state?.testOf)
+}
 
 /** Peers this visit already answered with a hello after a repeated ack (one hello per peer per visit stops their re-sends). */
 const helloAgainSent = new Set<string>()
@@ -472,25 +489,51 @@ function onAckAgain(peer: Peer): void {
 }
 
 /** Wave 6f (away_asks.ts): "<name> asked while you were away", the newest first, one card at a time under the header. */
-function showAwayAsks(): void {
+/**
+ * Wave 6h (ask_cards.ts): the quiet cards about asks, one at a time: late answers to this phone's asks (all together), asks of direct
+ * contacts that matched nothing, asks that came while away (6f). Each card's buttons dismiss it and show the next.
+ */
+function showAskCards(): void {
   // A phone waiting for its Allow (a demo account) keeps the card under the header; the asks show once that is decided.
   if (!state || demoAccounts().some((t) => t.pending)) return
-  const live = liveAwayAsks(state.awayAsks, Date.now())
-  const first = live[0]
-  if (!first) return
-  const peer = state.peers.find((p) => p.id === first.peerId)
-  const person = peer ? personOf(state.people, peer.id) : undefined
-  const done = (): void => {
-    const s = st()
-    s.awayAsks = dismissAwayAsk(s.awayAsks, first.id, Date.now())
+  const card = nextAskCard(state, Date.now(), demoPhone())
+  if (card) drawAskCard(card)
+}
+
+function drawAskCard(card: AskCard): void {
+  const next = (change: (s: AppState, now: number) => void) => (): void => {
+    change(st(), Date.now())
     save()
     hideNotice()
-    showAwayAsks()
+    showAskCards()
   }
-  const actions: HTMLElement[] = []
-  if (person) actions.push(el('button', { class: 'btn btn-electric btn-sm', 'data-away-message': '1', onclick: () => { done(); chatSheet(person.id) } }, [S.awayAskMessage(first.from)]))
-  actions.push(el('button', { class: 'btn btn-ghost btn-sm', 'data-away-dismiss': '1', onclick: done }, [S.awayAskDismiss]))
-  showNotice(S.awayAskTitle(first.from), S.awayAskBody(first.text, live.length - 1), actions)
+  const message = (peerId: string, label: string, done: () => void): HTMLElement | null => {
+    const person = personOf(st().people, peerId)
+    return person ? el('button', { class: 'btn btn-electric btn-sm', 'data-card-message': '1', onclick: () => { done(); chatSheet(person.id) } }, [label]) : null
+  }
+  if (card.kind === AskCardKind.Late) {
+    const done = next((s, now) => { s.lateAnswers = dismissShownLateAnswers(s.lateAnswers, now) })
+    const names = [...new Set(card.answers.map((a) => a.from))]
+    const body = S.lateBody(card.answers.map((a) => ({ ask: a.ask, lines: a.items.map((it) => it.text) })))
+    const one = card.answers.length === 1 ? message(card.answers[0].peerId, S.lateMessage(card.answers[0].from), done) : null
+    showNotice(S.lateTitle(names), body, [one, el('button', { class: 'btn btn-ghost btn-sm', 'data-late-dismiss': '1', onclick: done }, [S.lateDismiss])].filter((x): x is HTMLElement => x !== null))
+    return
+  }
+  if (card.kind === AskCardKind.Unmatched) {
+    const a = card.ask
+    const done = next((s, now) => { s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, a.id, now) })
+    const actions = [
+      el('button', { class: 'btn btn-electric btn-sm', 'data-unmatched-add': '1', onclick: () => { done(); go(Screen.Inventory) } }, [S.unmatchedAddLine]),
+      message(a.peerId, S.unmatchedMessage(a.from), done),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-unmatched-dismiss': '1', onclick: done }, [S.unmatchedDismiss]),
+    ].filter((x): x is HTMLElement => x !== null)
+    showNotice(S.unmatchedTitle(a.from), S.unmatchedBody(a.from, a.text, a.reason, S.ringLabel[a.ring ?? Ring.Acquaintance], card.more), actions)
+    return
+  }
+  const a = card.ask
+  const done = next((s, now) => { s.awayAsks = dismissAwayAsk(s.awayAsks, a.id, now) })
+  const away = [message(a.peerId, S.awayAskMessage(a.from), done), el('button', { class: 'btn btn-ghost btn-sm', 'data-away-dismiss': '1', onclick: done }, [S.awayAskDismiss])]
+  showNotice(S.awayAskTitle(a.from), S.awayAskBody(a.text, card.more), away.filter((x): x is HTMLElement => x !== null))
 }
 
 /** The did of this site's front door when it is this phone's own (one_jakob.ts ownFrontDoor); null: none known. */
@@ -3284,7 +3327,7 @@ async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
   const held = acct?.pending
   if (!acct || !held) return
   delete acct.pending
-  if (!yes) { save(); hideNotice(); toast(S.demoAcctDenied(acct.name)); render(); showAwayAsks(); return }
+  if (!yes) { save(); hideNotice(); toast(S.demoAcctDenied(acct.name)); render(); showAskCards(); return }
   // A second phone on the same code replaces the first.
   if (acct.peerId && acct.peerId !== held.id) {
     s.peers = s.peers.filter((p) => p.id !== acct.peerId)
@@ -3304,7 +3347,7 @@ async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
   hideNotice()
   toast(S.demoAcctAllowed(acct.name))
   render()
-  showAwayAsks()
+  showAskCards()
 }
 
 /** The approve step, in the owner's own view: a card under the header, wherever he is. */
@@ -3990,6 +4033,16 @@ function settingsSheet(): void {
       // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
       onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
     }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
+    solo ? null : el('button', {
+      class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
+      // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
+      onclick: () => {
+        const next = !showsUnmatched(s, demoPhone())
+        if (next === !demoPhone()) delete s.showUnmatchedAsks
+        else s.showUnmatchedAsks = next
+        save(); settingsSheet(); if (next) showAskCards(); else hideNotice()
+      },
+    }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
     ...HINTS.map((id) => el('button', {
       class: 'radio' + (hintHidden(id) ? '' : ' on'),
       'aria-pressed': String(!hintHidden(id)),
@@ -4130,7 +4183,7 @@ let countdownTimer: ReturnType<typeof setInterval> | undefined
 
 /** Seconds until the answers of an ask with this reach are due (one window per step, hops.ts). */
 function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
-  return Math.max(0, Math.ceil((startedAt + askWaitMs(reach, ANSWER_WINDOW_MS) - Date.now()) / 1000))
+  return Math.max(0, Math.ceil((startedAt + askWaitMs(reach, net.answerWindowMs) - Date.now()) / 1000))
 }
 
 async function runAsk(text: string): Promise<void> {
@@ -4179,7 +4232,7 @@ function queryDock(s: AppState): HTMLElement {
         el('p', { class: 'q' }, ['"' + run.text + '"']),
         el('p', {}, [S.queryAsked(run.asked)]),
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
-        el('p', { class: 'hint' }, [run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar(Math.round(askWaitMs(run.reach, ANSWER_WINDOW_MS) / 1000))]),
+        el('p', { class: 'hint' }, [(run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar)(Math.round(askWaitMs(run.reach, net.answerWindowMs) / 1000))]),
         run.results
           ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text, webResults).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
@@ -4235,7 +4288,7 @@ function renderAsk(): void {
   overlay.append(
     el('div', { class: 'orb orb1' }), el('div', { class: 'orb orb2' }),
     el('div', { class: 'ask' }, [
-      el('span', { class: 'eyebrow' }, [askEyebrow(a)]),
+      el('span', { class: 'eyebrow' }, [a.arrivedLate ? S.askLateEyebrow : askEyebrow(a)]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       decided === null
@@ -4244,11 +4297,11 @@ function renderAsk(): void {
             ...a.matches.map((m) => el('div', { class: 'ask-line' }, [el('span', {}, [m.text, threadIsDemo(st(), m.threadId) ? dummyChip() : null]), el('small', {}, [m.context])])),
             el('button', { class: 'btn btn-mint', onclick: () => decide(true) }, [S.askShare]),
             el('button', { class: 'btn btn-ghost', onclick: () => decide(false) }, [S.askDecline]),
-            el('p', { class: 'ask-foot' }, [S.askFoot(a.fromName)]),
+            el('p', { class: 'ask-foot' }, [yesIsLate(a) ? S.askLateFoot(a.fromName) : S.askFoot(a.fromName)]),
           ])
         : el('div', {}, [
             el('p', { class: 'ask-done' }, [decided ? S.askSent : S.askNotSent]),
-            el('p', { class: 'ask-foot' }, [S.askSentSub]),
+            el('p', { class: 'ask-foot' }, [decided && askDecidedLate ? S.askSentLateSub(a.fromName) : S.askSentSub]),
             el('button', { class: 'btn btn-ghost', onclick: showNextAsk }, [S.askClose]),
           ]),
     ]),
@@ -4262,9 +4315,15 @@ function askEyebrow(a: IncomingAsk): string {
   return a.through.length ? S.askThrough(a.through) : S.askEyebrow
 }
 
+/** Wave 6h: would a yes now reach the asker as "answered later" (after the moment of an ask that carried its window)? */
+function yesIsLate(a: IncomingAsk): boolean {
+  return a.lateMode && (a.arrivedLate || Date.now() >= a.deadline)
+}
+
 function decide(share: boolean): void {
   const a = askShowing
   if (!a || askDecision !== null) return
+  askDecidedLate = yesIsLate(a)
   askDecision = share
   renderAsk()
   void a.decide(share)
@@ -4347,6 +4406,12 @@ document.addEventListener('visibilitychange', () => {
   if (state && !state.testOf?.handedOverAt) net.activate(slept)
 })
 window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
+// Wave 6h (wake_watch.ts): a laptop that slept with this tab behind another window, a network that came back, a page restored from the
+// back-forward cache: the socket may be dead without knowing it. A fresh one, without taking the drain from a tab in front.
+const refreshDrain = (): void => { if (state && !state.testOf?.handedOverAt) net.refresh() }
+watchWake(refreshDrain, { now: () => Date.now(), every: (fn, ms) => setInterval(fn, ms), stop: (h) => clearInterval(h as ReturnType<typeof setInterval>) })
+window.addEventListener('online', refreshDrain)
+window.addEventListener('pageshow', (e) => { if (e.persisted) refreshDrain() })
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
 // drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).
 window.addEventListener('storage', (e) => {
@@ -4364,11 +4429,15 @@ else {
   afterCarry()
 }
 if (state && !state.testOf?.handedOverAt) {
-  void net.start().then(announceLink)
+  // Wave 6h (held_asks.ts): prompts not decided before a reload show again, still answerable.
+  void net.start().then(announceLink).then(() => net.restoreHeldAsks())
   void completePendingConnect()
   maybeOpenPendingShare()
-  // Wave 6f: asks that matched while this phone was closed (they arrive with the drain; kept ones show at once).
-  setTimeout(showAwayAsks, 1500)
+  // Wave 6h: late answers to this phone's asks that came since the last open are released now, all together (late_answers.ts).
+  state.lateAnswers = releaseLateAnswers(state.lateAnswers, Date.now())
+  save()
+  // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
+  setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
   offerDemoContent()

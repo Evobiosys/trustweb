@@ -335,6 +335,16 @@ export interface QueryEnvelope {
   /** Set by a front door (services/trustweb-peer) on an ask it forwards to its OWNER's phone: the same person, so not a hop. */
   door?: true
   // ----- END TrustWeb wave 6 (U1) -----
+  // ----- BEGIN TrustWeb wave 6h: the asker's answer window -----
+  /**
+   * The asker's answer window in ms (apps/trustweb/src/ask_window.ts): every answer to this ask leaves the
+   * receiver one window per step after it arrived, a yes after that moment travels as a separate LATE answer
+   * (same qid, fresh IV). Absent: the 30 s window and the answer-when-decided rule of the builds before (an
+   * older asker, a front door, an older phone passing the ask on). Older builds' parseQuery drop it.
+   * Bounded by ANSWER_WINDOW_MS_MAX; present-and-malformed rejects the envelope like the hop fields.
+   */
+  answerWindowMs?: number
+  // ----- END TrustWeb wave 6h -----
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
@@ -351,6 +361,11 @@ export const SEEN_ID_RE = /^[0-9a-f]{16}$/
 /** QueryEnvelope.root: a random id like a qid. */
 export const ROOT_RE = /^[A-Za-z0-9_-]{6,40}$/
 // ----- END TrustWeb wave 6 (U1) -----
+
+// ----- BEGIN TrustWeb wave 6h -----
+/** The longest answer window an ask may carry (QueryEnvelope.answerWindowMs): ten minutes. */
+export const ANSWER_WINDOW_MS_MAX = 600_000
+// ----- END TrustWeb wave 6h -----
 
 /** Bound for QueryEnvelope.freeText, same reasoning as wire.ts's CHAT_MAX_LEN
  *  for ChatEnvelope.text: the boundary must reject an oversized value rather

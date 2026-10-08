@@ -12,7 +12,7 @@
  */
 
 import type { AnswerEnvelope, ChatEnvelope, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope } from './types'
-import { FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -103,7 +103,7 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
 }
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
-type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door'>
+type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>
 
 function isIntIn(v: unknown, lo: number, hi: number): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi
@@ -144,6 +144,11 @@ function parseHopFields(o: Record<string, unknown>): HopFields | null {
   if ('door' in o) {
     if (o.door !== true) return null
     out.door = true
+  }
+  // TrustWeb wave 6h: the asker's answer window (types.ts QueryEnvelope.answerWindowMs), the same strictness.
+  if ('answerWindowMs' in o) {
+    if (!isIntIn(o.answerWindowMs, 1, ANSWER_WINDOW_MS_MAX)) return null
+    out.answerWindowMs = o.answerWindowMs
   }
   return out
 }

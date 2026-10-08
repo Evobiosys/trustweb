@@ -84,6 +84,20 @@ export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ['loudspeaker', 'loudspeakers', 'speaker', 'speakers', 'lautsprecher', 'boxen'],
   ['intro', 'intros', 'introduction', 'introductions'],
   ['accountant', 'accountants', 'tax advisor', 'tax adviser', 'tax consultant', 'steuerberater', 'steuerberaterin', 'steuerberatung'],
+  // wave 6h: grown with the things people ask their web for (tools, places, skills), English and German
+  ['laptop', 'laptops', 'notebook', 'computer', 'computers', 'pc', 'rechner'],
+  ['projector', 'projectors', 'beamer'],
+  ['tent', 'tents', 'zelt', 'zelte'],
+  ['equipment', 'gear', 'setup', 'set up', 'kit', 'ausruestung'],
+  ['camera', 'cameras', 'kamera'],
+  ['lawyer', 'lawyers', 'attorney', 'anwalt', 'anwaeltin', 'rechtsanwalt'],
+  ['doctor', 'physician', 'arzt', 'aerztin'],
+  ['babysitter', 'babysitting', 'childcare', 'kinderbetreuung'],
+  ['website', 'websites', 'web site', 'homepage', 'webseite'],
+  ['developer', 'developers', 'programmer', 'coder', 'entwickler', 'entwicklerin'],
+  ['photographer', 'photography', 'fotograf', 'fotografin', 'fotografie'],
+  ['translator', 'translation', 'uebersetzer', 'uebersetzerin', 'uebersetzung'],
+  ['van', 'transporter', 'kleinbus'],
 ]
 
 const GROUPS: readonly (readonly string[])[] = SYNONYM_GROUPS.map((g) => g.map((w) => normalize(w)))
@@ -295,6 +309,8 @@ export function termSimilarity(a: string, b: string): number {
   if (na === nb) return SIM_EXACT
   const spaced = na.includes(' ') || nb.includes(' ')
   if (spaced && squash(na) === squash(nb)) return SIM_JOINED
+  // Wave 6h: written together or apart AND a plural ("techsetups" / "tech setup").
+  if (spaced && baseForm(squash(na)) === baseForm(squash(nb))) return SIM_FORM
   if (!spaced && baseForm(na) === baseForm(nb)) return SIM_FORM
   const parts = [synonymSimilarity(na, nb)]
   if (!spaced) {

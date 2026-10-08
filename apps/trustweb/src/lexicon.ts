@@ -18,7 +18,7 @@
  * bypass in match/lexical.ts, the same way apps/demo's inventory does.
  */
 import { DEFAULT_K } from '../../../packages/network-access/src/anonymity'
-import { tokenize } from '../../demo/src/match/normalize'
+import { normalize, tokenize } from '../../demo/src/match/normalize'
 import { expandAskTerms, lineNeighbours } from './fuzzy'
 import type { ChatThread, QueryTemplate } from '../../demo/src/types'
 
@@ -51,11 +51,39 @@ const STOPWORDS_DE = [
   'brauche', 'suche', 'leihen', 'borgen', 'kann', 'koennte', 'bitte', 'danke',
 ]
 
-const STOPWORDS = new Set([...STOPWORDS_EN, ...STOPWORDS_DE])
+/**
+ * Wave 6h, the ask's frame ("does anyone know", "I'm looking for", "can anyone recommend", "kennt jemand"): words that say HOW
+ * someone asks, never WHAT. Dropped like the function words above, so only the thing asked for is matched.
+ */
+const ASK_FRAME = [
+  'looking', 'look', 'seeking', 'searching', 'search', 'find', 'finding', 'recommend', 'recommends', 'recommendation',
+  'recommendations', 'suggest', 'suggestion', 'suggestions', 'tip', 'tips', 'hey', 'hi', 'hello', 'folks', 'guys', 'happen',
+  'happens', 'hat', 'habt', 'hast', 'sucht', 'suchen', 'gesucht', 'empfehlen', 'empfehlung', 'tipp', 'irgendwer', 'irgendjemand',
+  'weiss', 'jemandem',
+]
 
-/** The content words of an ask: normalized, function words dropped. */
+const STOPWORDS = new Set([...STOPWORDS_EN, ...STOPWORDS_DE, ...ASK_FRAME])
+
+const UMLAUT_FOLD: Readonly<Record<string, string>> = { ä: 'ae', ö: 'oe', ü: 'ue', Ä: 'Ae', Ö: 'Oe', Ü: 'Ue', ß: 'ss', ẞ: 'SS' }
+
+/**
+ * Wave 6h: the one folding both sides get before the matcher (the ask, and every line it is matched against): case, umlauts the
+ * German way (ä to ae, so "Bücher" and "Buecher" meet), every other accent dropped ("Café" to "cafe"), hyphens and punctuation to
+ * spaces (apps/demo normalize). Written together or apart ("techsetup" / "tech setup") is fuzzy.ts's part.
+ */
+export function foldForMatch(text: string): string {
+  const umlauts = text.normalize('NFC').replace(/[äöüÄÖÜßẞ]/g, (c) => UMLAUT_FOLD[c] ?? c)
+  return normalize(umlauts.normalize('NFD').replace(/\p{M}+/gu, ''))
+}
+
+/** The content words of an ask: folded, function words and the ask's frame dropped. */
 function contentWords(text: string): string[] {
-  return tokenize(text).filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+  return tokenize(foldForMatch(text)).filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+}
+
+/** What an ask asks for, without its frame: "I'm looking for a drill" reads "drill". */
+export function stripAskFrame(text: string): string {
+  return contentWords(text).join(' ')
 }
 
 /**

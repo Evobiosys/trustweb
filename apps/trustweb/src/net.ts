@@ -27,6 +27,11 @@
  * in front for the relay drain (drain_lock.ts); an ask that arrives after its asker stopped waiting is kept as "asked while you were
  * away" instead of a consent prompt for nobody (away_asks.ts).
  *
+ * Wave 6h (THE ONE THING: a connected person's ask reaches me and I can answer): the answer window is 120 s and travels on the ask
+ * (ask_window.ts); an undecided prompt answers "nothing" at its moment and a later yes goes as a LATE answer, which the asker's app keeps
+ * silently and shows on its next open (late_answers.ts); a prompt survives a reload (held_asks.ts); a direct contact's ask that matched
+ * nothing leaves a quiet card for the ASKED person only (unmatched_asks.ts); refresh() reopens the drain after a sleep (wake_watch.ts).
+ *
  * DIDs stay in this layer. Nothing here hands a DID string to the UI.
  */
 import { createIdentity, deserializeIdentity, serializeIdentity, ecdhSharedSecret } from '../../demo/src/did'
@@ -38,7 +43,7 @@ import { decodeFromQr, encodeForQr } from '../../demo/src/wire'
 import type { Envelope } from '../../demo/src/wire'
 import { buildConnectAck, buildConnectLinkUrl } from '../../demo/src/connect_link'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
-import { interpret, RELAY_DEADLINE_MS, settleAt } from '../../demo/src/gate'
+import { interpret, settleAt } from '../../demo/src/gate'
 import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
@@ -46,6 +51,7 @@ import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, ChatEnvelope, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
 import type { AckAttempts } from './ack_retry'
+import { ANSWER_WINDOW_MS, carriesWindow, passOnWindowFields, receivedWindowMs, windowFields } from './ask_window'
 import { AWAY_TEXT_MAX, isAwayAsk } from './away_asks'
 import { askSources } from './cascade'
 import { createDrainLock, drainLockName } from './drain_lock'
@@ -57,13 +63,16 @@ import {
 } from './hops'
 import type { HopInfo } from './hops'
 import { NAMELESS_PEER, cleanHelloName } from './hello'
-import { askTemplate, forgivingAskTemplate, lineTextsOf } from './lexicon'
+import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
+import { addLateAnswer, addSentAsks, forgetSentAsk, LATE_KEEP_MS, sentAskFor } from './late_answers'
+import { askTemplate, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
-import type { AppState, AwayAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
+import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
+import { addUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
 
 export type { RelayStatus }
 
-export const ANSWER_WINDOW_MS = RELAY_DEADLINE_MS
+export { ANSWER_WINDOW_MS }
 const RELEVANCE_BAND = 0.5
 const MAX_SHARED = 3
 /** A passed-on ask stops waiting for the next step this share of a window before this phone's own moment, to seal and send in time. */
@@ -82,7 +91,18 @@ export function templateFor(text: string): QueryTemplate {
  * for "Communityhof": lexicon.forgivingAskTemplate); nothing of that widening ever travels.
  */
 export function matchAsk(text: string, threads: ChatThread[]): MatchResult {
-  return prune(matchTemplate(forgivingAskTemplate(text, lineTextsOf(threads)), threads))
+  // Wave 6h: the same folding on BOTH sides (case, accents, umlauts, hyphens) before the matcher sees either.
+  const folded = threads.map(foldThread)
+  return prune(matchTemplate(forgivingAskTemplate(foldForMatch(text), lineTextsOf(folded)), folded))
+}
+
+function foldThread(t: ChatThread): ChatThread {
+  return { ...t, messages: t.messages.map((m) => ({ ...m, text: foldForMatch(m.text) })) }
+}
+
+/** Would this ask put a prompt in front of the person, matched against `threads`? */
+function surfacesFor(text: string, threads: ChatThread[]): boolean {
+  return classifyIncomingQuery(matchAsk(text, threads), false, true).surface
 }
 
 /** What came back from the people this phone passed an ask on to. */
@@ -109,6 +129,12 @@ export interface IncomingAsk {
   through: string[]
   /** Wave 6: the front door that forwarded it (a travelling ask; `fromName` is then the person who asked the door). Null: none or an older door. */
   doorName: string | null
+  /** Wave 6h: the answer moment on this phone's clock. */
+  deadline: number
+  /** Wave 6h: a yes after the moment reaches the asker as "answered later" (the ask carried its window, ask_window.ts). */
+  lateMode: boolean
+  /** Wave 6h: it reached this phone after its asker had stopped waiting; a yes goes as a late answer. */
+  arrivedLate: boolean
   decide(share: boolean): Promise<void>
 }
 
@@ -157,6 +183,13 @@ export interface NetHooks {
   mayResendAck?(peer: Peer): boolean
   /** Wave 6f (away_asks.ts): an ask that matched this web arrived after its asker had stopped waiting; nothing was answered. */
   onAwayAsk?(ask: AwayAsk, peer: Peer): void
+  /**
+   * Wave 6h (unmatched_asks.ts): may this phone keep a "<name> asked about X; nothing matched" card for this asker (Settings > Advanced
+   * "Show me asks that matched nothing"; never a demo account)? Absent: never.
+   */
+  keepsUnmatched?(peer: Peer): boolean
+  /** Wave 6h: such a card was just kept (state.unmatchedAsks). */
+  onUnmatchedAsk?(): void
 }
 
 /** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
@@ -211,6 +244,11 @@ export class Net {
   private starting: Promise<void> | null = null
   private readonly windowMs: number
   private readonly relayOrigin: string | undefined
+
+  /** This phone's answer window (ask_window.ts): what its asks carry and what the dock counts down. */
+  get answerWindowMs(): number {
+    return this.windowMs
+  }
 
   constructor(private readonly hooks: NetHooks, opts: NetOptions = {}) {
     this.windowMs = opts.answerWindowMs ?? ANSWER_WINDOW_MS
@@ -273,7 +311,7 @@ export class Net {
     channel.onStatus((status) => {
       if (this.channel !== channel) return // a channel this tab already closed
       this.hooks.onStatus(status)
-      if (status === 'connected') void this.resendAcks()
+      if (status === 'connected') { void this.resendAcks(); void this.flushLateYes() }
     })
     channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
     channel.onEnvelope(async (fromDid) => {
@@ -421,7 +459,9 @@ export class Net {
     const from = this.peerByDid(fromDid)
     if (from) this.heard(from)
     if (env.t === 'answer') {
-      this.awaiting.get(env.qid)?.(env)
+      const waiting = this.awaiting.get(env.qid)
+      if (waiting) waiting(env)
+      else if (from) await this.lateAnswer(env, from)
       return
     }
     if (env.t === 'query') await this.handleQuery(env, fromDid)
@@ -471,21 +511,28 @@ export class Net {
     const peer = this.peerByDid(fromDid)
     if (!peer || !this.channel) return
     const s = this.hooks.state()
+    // Wave 6h: a prompt this phone already holds for it (the relay delivered it again after a reload) is not asked twice.
+    if (liveHeldAsks(s.heldAsks, receivedAt).some((h) => h.qid === q.qid)) return
     const info = hopInfo(q)
     const text = q.freeText ?? ''
+    // Wave 6h (ask_window.ts): the window the asker sent (120 s), or 30 s for an ask without one (an older asker, a front door).
+    const windowMs = receivedWindowMs(q, this.windowMs)
+    const lateMode = carriesWindow(q)
     // The same ask again by another path, a cycle back to this phone, or one that went further than
     // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
     const repeat = this.roots.repeat(info.root, receivedAt)
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
-    // Wave 6f: its asker stopped waiting long ago (this phone was closed): no prompt, no answer, never passed on (away_asks.ts).
-    // A repeat or a cycle (this phone's own ask coming back) stays as silent as it is live: not logged, not kept (review 6f).
-    if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, this.windowMs))) {
-      if (!repeat && !cycle) this.handleAwayAsk(q, peer, info, text)
+    // Its asker stopped waiting long ago (this phone was closed or asleep). A repeat or a cycle stays as silent as it is live (review 6f).
+    if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, windowMs))) {
+      if (repeat || cycle) return
+      // Wave 6h: the asker's build takes a late yes: the prompt still shows. Wave 6f for an older asker: no prompt (away_asks.ts).
+      if (lateMode && receivedAt - q.issuedAt <= LATE_KEEP_MS) await this.handleLateArrival(q, peer, info, text, receivedAt)
+      else this.handleAwayAsk(q, peer, info, text)
       return
     }
     const tpl = templateFor(text)
     // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
-    const deadline = receivedAt + answerDelayMs(info, this.windowMs)
+    const deadline = receivedAt + answerDelayMs(info, windowMs)
     const silent = repeat || cycle || !surfacesHere(q)
     const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
@@ -494,68 +541,230 @@ export class Net {
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are
     // in before this phone's own moment, whatever the person does.
     const harvest = !silent && mayCascade(q) && this.hooks.mayPassOnFrom(peer)
-      ? this.passOn(q, info, peer, deadline)
+      ? this.passOn(q, info, peer, deadline, windowMs)
       : Promise.resolve(NO_HARVEST)
-
-    const answer = async (own: SharedItem[]): Promise<HopHarvest> => {
-      // Belt and braces: whatever the next step does, this phone answers at its moment.
-      const got = await Promise.race([harvest, settleAt(receivedAt, deadline - receivedAt).then(() => NO_HARVEST)])
-      await settleAt(receivedAt, deadline - receivedAt)
-      const items = dedupeItems([...own, ...markThrough(got.items, s.me.displayName)]).slice(0, MAX_SHARED)
-      const payload: SharedPayload | null = items.length ? { from: s.me.displayName, templateId: tpl.id, items } : null
-      const env = await sealRelayAnswer(q.qid, tpl.id, payload, { key, blocked: false })
-      try { await this.channel?.send(peer.did, env, key) } catch { /* asker times out and sees "no match" */ }
-      return got
-    }
+    const reply = this.replier(q.qid, tpl.id, peer, key, receivedAt, deadline, harvest)
 
     // A repeat or a cycle is not a new ask: answered (nothing, at the same moment) but not logged a second time.
     if (repeat || cycle) {
-      await answer([])
+      await reply.atMoment([])
       return
     }
     if (!surface) {
       const entry = this.log(peer, text, LogOutcome.NoMatch)
-      this.logHarvest(entry, await answer([]))
+      if (!silent) this.noteUnmatched(q, peer, info, text, receivedAt)
+      this.logHarvest(entry, await reply.atMoment([]))
       return
     }
 
     const matches = match.hits
       .map((h) => refs.get(h.threadId))
       .filter((r): r is LineRef => Boolean(r))
-    let decided = false
-    this.hooks.onAsk({
-      qid: q.qid,
-      fromName: askerOf(info, peer.displayName),
-      text,
-      matches,
-      receivedAt,
-      relayed: q.relayed === true && (info.door || !info.travels),
-      doorName: info.door ? peer.displayName : null,
+    this.present({
+      qid: q.qid, peerId: peer.id, text, fromName: askerOf(info, peer.displayName),
       through: info.door ? [] : throughOf(info, peer.displayName),
+      doorName: info.door ? peer.displayName : null,
+      relayed: q.relayed === true && (info.door || !info.travels),
+      matches, receivedAt, deadline, lateMode,
+    }, peer, reply)
+  }
+
+  /**
+   * Shows one prompt (and keeps it in the record until it is decided, held_asks.ts). In late mode an undecided prompt answers "nothing"
+   * at its moment, together with whatever came back from the next step, and a yes after that leaves as a late answer; a no after it
+   * sends nothing more. Without late mode (an older asker or a front door) the answer leaves at the moment or when decided, as before.
+   */
+  private present(held: HeldAsk, peer: Peer, reply: Replier): void {
+    this.hold(held)
+    let decided = false
+    let atMoment: Promise<HopHarvest> | null = null
+    const sendMoment = (own: SharedItem[]): Promise<HopHarvest> => {
+      atMoment ??= reply.atMoment(own)
+      return atMoment
+    }
+    const momentDue = held.lateMode && !held.arrivedLate && Date.now() < held.deadline
+    if (momentDue) void settleAt(Date.now(), held.deadline - Date.now()).then(() => { if (!decided) void sendMoment([]) })
+    this.hooks.onAsk({
+      qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
+      relayed: held.relayed, through: held.through, doorName: held.doorName,
+      deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true,
       decide: async (share: boolean) => {
         if (decided) return
         decided = true
-        const entry = this.log(peer, text, share ? LogOutcome.Shared : LogOutcome.Declined)
-        this.logHarvest(entry, await answer(share ? sharedItems(matches) : []))
+        const entry = this.log(peer, held.text, share ? LogOutcome.Shared : LogOutcome.Declined)
+        if (held.arrivedLate) entry.away = true
+        const own = share ? sharedItems(held.matches) : []
+        const late = held.lateMode && (held.arrivedLate === true || atMoment !== null || Date.now() >= held.deadline)
+        if (!late) {
+          this.unhold(held.qid)
+          this.logHarvest(entry, await sendMoment(own))
+          return
+        }
+        if (atMoment) this.logHarvest(entry, await atMoment)
+        if (!share) { this.unhold(held.qid); return }
+        // Kept as decided until the relay took it (a tab without the drain, a phone offline): flushLateYes sends it on the next connect.
+        this.hold({ ...held, yesAt: Date.now() })
+        await this.sendLateYes(held, reply)
       },
     })
+  }
+
+  /** The answer of one ask: at its moment (with what the next step sent back), or later as a late answer. */
+  private replier(qid: string, templateId: string, peer: Peer, key: CryptoKey, receivedAt: number, deadline: number, harvest: Promise<HopHarvest>): Replier {
+    const myName = this.hooks.state().me.displayName
+    return {
+      atMoment: async (own: SharedItem[]): Promise<HopHarvest> => {
+        // Belt and braces: whatever the next step does, this phone answers at its moment.
+        const got = await Promise.race([harvest, settleAt(receivedAt, deadline - receivedAt).then(() => NO_HARVEST)])
+        await settleAt(receivedAt, deadline - receivedAt)
+        const items = dedupeItems([...own, ...markThrough(got.items, myName)]).slice(0, MAX_SHARED)
+        await this.sendAnswer(qid, templateId, peer, key, items)
+        return got
+      },
+      late: async (own: SharedItem[]): Promise<boolean> => this.sendAnswer(qid, templateId, peer, key, dedupeItems(own).slice(0, MAX_SHARED), true),
+    }
+  }
+
+  /** Seals and sends one answer (a fresh IV every time, gate.ts sealAnswerEnvelope). Resolves false when the relay did not take it. */
+  private async sendAnswer(qid: string, templateId: string, peer: Peer, key: CryptoKey, items: SharedItem[], strict = false): Promise<boolean> {
+    const payload: SharedPayload | null = items.length ? { from: this.hooks.state().me.displayName, templateId, items } : null
+    const env = await sealRelayAnswer(qid, templateId, payload, { key, blocked: false })
+    try {
+      if (!this.channel) throw new Error('relay not connected')
+      await this.channel.send(peer.did, env, key)
+      return true
+    } catch {
+      /* the asker times out and sees "no match"; a late yes is tried again (flushLateYes) */
+      return !strict
+    }
+  }
+
+  /** A late yes: sent now; on success the held prompt goes, on failure it stays decided for the next connect. */
+  private async sendLateYes(held: HeldAsk, reply: Pick<Replier, 'late'>): Promise<void> {
+    if (await reply.late(sharedItems(held.matches))) this.unhold(held.qid)
+  }
+
+  /** Wave 6h: late yeses the relay did not take yet (decided, kept with yesAt) leave now. Called whenever the drain connects. */
+  async flushLateYes(): Promise<void> {
+    if (!this.channel) return
+    for (const held of liveHeldAsks(this.hooks.state().heldAsks, Date.now()).filter((h) => h.yesAt !== undefined)) {
+      const peer = this.hooks.state().peers.find((p) => p.id === held.peerId)
+      if (!peer) { this.unhold(held.qid); continue }
+      const key = await this.pairKey(peer)
+      await this.sendLateYes(held, this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST)))
+    }
+  }
+
+  /**
+   * Wave 6h (Q5): the prompts kept in the record show again after a reload, a new build or a long sleep, still answerable: before their
+   * moment as usual (nothing came back from the next step: that harvest is gone with the reload), after it as a late answer (late mode)
+   * or at once (an older asker). Call once the drain is started. Prompts of connections that are gone are dropped.
+   */
+  async restoreHeldAsks(): Promise<void> {
+    const now = Date.now()
+    for (const held of liveHeldAsks(this.hooks.state().heldAsks, now)) {
+      if (held.yesAt !== undefined || this.seenQids.has(held.qid)) continue
+      const peer = this.hooks.state().peers.find((p) => p.id === held.peerId)
+      if (!peer) { this.unhold(held.qid); continue }
+      this.seenQids.add(held.qid)
+      const key = await this.pairKey(peer)
+      this.present(held, peer, this.replier(held.qid, templateFor(held.text).id, peer, key, held.receivedAt, held.deadline, Promise.resolve(NO_HARVEST)))
+    }
+    await this.flushLateYes()
+  }
+
+  private hold(held: HeldAsk): void {
+    const s = this.hooks.state()
+    const now = Date.now()
+    s.heldAsks = addHeldAsk(dropHeldAsk(s.heldAsks, held.qid, now), held, now)
+    this.hooks.save()
+  }
+
+  private unhold(qid: string): void {
+    const s = this.hooks.state()
+    s.heldAsks = dropHeldAsk(s.heldAsks, qid, Date.now())
+    this.hooks.save()
+  }
+
+  /** Straight from its asker: not through a front door, not passed on by a friend (so "Message <name>" reaches the person who asked). */
+  private straightFromAsker(q: QueryEnvelope, info: HopInfo, peer: Peer): boolean {
+    return !info.door && q.relayed !== true && askerOf(info, peer.displayName) === peer.displayName && throughOf(info, peer.displayName).length === 0
+  }
+
+  /**
+   * Wave 6h: the ask of a direct contact matched nothing here. The asker hears the same "nothing" as ever; the ASKED person gets a quiet
+   * card with the reason (unmatched_asks.ts), worked out on this phone from two wider matches that never answer anybody.
+   */
+  private noteUnmatched(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string, now: number): void {
+    if (!text.trim() || !this.straightFromAsker(q, info, peer) || this.hooks.keepsUnmatched?.(peer) !== true) return
+    const s = this.hooks.state()
+    const scope = this.hooks.askScope(peer)
+    const anyRing = surfacesFor(text, askSources(s, Ring.Close, 0, scope).threads)
+    const onlyMe = !anyRing && surfacesFor(text, askSources(withOnlyMeOpened(s), Ring.Close, 0, scope).threads)
+    s.unmatchedAsks = addUnmatchedAsk(s.unmatchedAsks, {
+      id: q.qid, at: now, peerId: peer.id, from: peer.displayName, text, reason: unmatchedReason(anyRing, onlyMe), ring: peer.ring,
+    }, now)
+    this.hooks.save()
+    this.hooks.onUnmatchedAsk?.()
+  }
+
+  /**
+   * Wave 6h: an ask that carried its window reached this phone after its asker stopped waiting (a laptop asleep, a phone off). Its
+   * asker's app takes a late yes, so it is shown like a live one, marked as late; nothing leaves at a moment and it is never passed on.
+   * Only straight from its asker (a late yes to a friend in between would reach nobody); otherwise it is logged like the 6f away ask.
+   */
+  private async handleLateArrival(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string, receivedAt: number): Promise<void> {
+    if (!text || !surfacesHere(q)) return
+    if (!this.straightFromAsker(q, info, peer)) { this.handleAwayAsk(q, peer, info, text); return }
+    const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
+    const match = matchAsk(text, threads)
+    if (!classifyIncomingQuery(match, false, true).surface) {
+      const entry = this.log(peer, text, LogOutcome.NoMatch)
+      entry.away = true
+      this.hooks.save()
+      this.noteUnmatched(q, peer, info, text, receivedAt)
+      return
+    }
+    const matches = match.hits.map((h) => refs.get(h.threadId)).filter((r): r is LineRef => Boolean(r))
+    const key = await this.pairKey(peer)
+    const tplId = templateFor(text).id
+    this.present({
+      qid: q.qid, peerId: peer.id, text, fromName: peer.displayName, through: [], doorName: null, relayed: false,
+      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true,
+    }, peer, this.replier(q.qid, tplId, peer, key, receivedAt, receivedAt, Promise.resolve(NO_HARVEST)))
   }
 
   /**
    * An ask that arrived after its asker stopped waiting: logged (as no match, marked away), and kept for the person when it matched this
    * web AND came straight from its asker (so "Message <name>" reaches the person who asked, not a front door or a friend in between).
-   * Nothing is sent, nothing is passed on.
+   * Nothing is sent, nothing is passed on. Wave 6h: one from a direct contact that matched nothing leaves the quiet card instead.
    */
   private handleAwayAsk(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string): void {
     if (!text || !surfacesHere(q)) return
     const entry = this.log(peer, text, LogOutcome.NoMatch)
     entry.away = true
     this.hooks.save()
-    const direct = !info.door && q.relayed !== true && askerOf(info, peer.displayName) === peer.displayName && throughOf(info, peer.displayName).length === 0
-    if (!direct) return
+    if (!this.straightFromAsker(q, info, peer)) return
     const { threads } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
-    if (!classifyIncomingQuery(matchAsk(text, threads), false, true).surface) return
+    if (!surfacesFor(text, threads)) { this.noteUnmatched(q, peer, info, text, Date.now()); return }
     this.hooks.onAwayAsk?.({ id: q.qid, at: Date.now(), peerId: peer.id, from: peer.displayName, text: [...text].slice(0, AWAY_TEXT_MAX).join('') }, peer)
+  }
+
+  /**
+   * Wave 6h, the asker's side: an answer this visit no longer waits for. When it answers an ask this phone sent to exactly that
+   * connection (late_answers.ts) and opens to a share, it is kept as a late answer, silently: it shows on the next app open, never live.
+   */
+  private async lateAnswer(env: AnswerEnvelope, peer: Peer): Promise<void> {
+    const s = this.hooks.state()
+    const now = Date.now()
+    const sent = sentAskFor(s.sentAsks, env.qid, peer.id, now)
+    if (!sent) return
+    const decoded = await interpret(env, await this.pairKey(peer))
+    const items = decoded.outcome === 'shared' && decoded.shared ? sanitizeHopItems(decoded.shared.items) : []
+    if (!items.length) return
+    s.lateAnswers = addLateAnswer(s.lateAnswers, sent, peer.displayName, items, now)
+    s.sentAsks = forgetSentAsk(s.sentAsks, env.qid, now)
+    this.hooks.save()
   }
 
   /**
@@ -563,7 +772,7 @@ export class Net {
    * `seen`, nobody only intended, closest rings first, at most MAX_FANOUT)
    * and gathers what they shared until shortly before this phone's moment.
    */
-  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number): Promise<HopHarvest> {
+  private async passOn(q: QueryEnvelope, info: HopInfo, sender: Peer, deadline: number, windowMs: number): Promise<HopHarvest> {
     const s = this.hooks.state()
     const root = info.root
     if (!root) return NO_HARVEST
@@ -579,8 +788,9 @@ export class Net {
     }
     if (!targets.length) return NO_HARVEST
     // The sender's name as this phone knows it (from the connect, as on its own prompt), never the per-ask claim in `from`.
-    const fields = cascadeFields(q, info, [self, fromSender], sender.displayName)
-    const waitMs = Math.max(0, deadline - Date.now() - this.windowMs * HOP_COLLECT_LEAD)
+    // Wave 6h: the asker's window goes on with it, so the next step answers on the asker's schedule.
+    const fields = { ...cascadeFields(q, info, [self, fromSender], sender.displayName), ...passOnWindowFields(q, windowMs) }
+    const waitMs = Math.max(0, deadline - Date.now() - windowMs * HOP_COLLECT_LEAD)
     // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
     const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))
     const items = answers.flatMap((d) => (d?.outcome === 'shared' && d.shared ? sanitizeHopItems(d.shared.items) : []))
@@ -588,12 +798,12 @@ export class Net {
   }
 
   /** One ask to one peer; resolves with the decoded answer, or null when none came within `timeoutMs`. */
-  private async sendAsk(peer: Peer, freeText: string, extra: Partial<QueryEnvelope>, timeoutMs: number): Promise<DecodedAnswer | null> {
+  private async sendAsk(peer: Peer, freeText: string, extra: Partial<QueryEnvelope>, timeoutMs: number, qid: string = randomId(12)): Promise<DecodedAnswer | null> {
     const s = this.hooks.state()
     const q: QueryEnvelope = {
       v: 1, t: 'query', from: s.me,
       templateId: templateFor(freeText).id, templateVersion: 1,
-      qid: randomId(12), issuedAt: Date.now(), freeText, ...extra,
+      qid, issuedAt: Date.now(), freeText, ...extra,
     }
     const key = await this.pairKey(peer)
     const answered = new Promise<AnswerEnvelope | null>((resolve) => {
@@ -618,6 +828,7 @@ export class Net {
    * Ask every connected peer; resolves once every answer is in or has timed
    * out. With "Ask only my direct contacts" on, each ask says so (`direct`);
    * otherwise it carries the reach chosen under "How far?" (none for one step).
+   * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
   async ask(text: string): Promise<AskResult[]> {
     await this.start()
@@ -625,12 +836,36 @@ export class Net {
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
     const reach = askReachOf(s)
     const root = randomId(12)
-    const extra: Partial<QueryEnvelope> = { ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)) }
+    const extra: Partial<QueryEnvelope> = {
+      ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs),
+    }
     const timeoutMs = askTimeoutMs(reach, this.windowMs)
-    return Promise.all(s.peers.map(async (peer): Promise<AskResult> => ({
+    const now = Date.now()
+    const outgoing = s.peers.map((peer) => ({ peer, qid: randomId(12) }))
+    s.sentAsks = addSentAsks(s.sentAsks, outgoing.map(({ peer, qid }) => ({ qid, peerId: peer.id, text: freeText, at: now })), now)
+    this.hooks.save()
+    return Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
       peerId: peer.id,
       peerName: peer.displayName,
-      decoded: await this.sendAsk(peer, freeText, extra, timeoutMs),
+      decoded: await this.sendAsk(peer, freeText, extra, timeoutMs, qid),
     })))
   }
+
+  /**
+   * Wave 6h (wake_watch.ts, Q1/Q2): the machine woke from a sleep or came back online. The socket this tab holds may be dead without
+   * knowing it: open a fresh one when this tab drains; else queue for the drain without taking it from a tab in front of the person.
+   */
+  refresh(): void {
+    if (!this.lock || !this.identity) return
+    if (this.lock.held()) void this.openDrain(this.identity)
+    else this.lock.request(false)
+  }
+}
+
+/** The two ways one ask is answered (net.ts present). */
+interface Replier {
+  /** At the ask's moment, with what came back from the next step; resolves with that harvest. */
+  atMoment(own: SharedItem[]): Promise<HopHarvest>
+  /** A late yes: now, own items only. Resolves false when the relay did not take it. */
+  late(own: SharedItem[]): Promise<boolean>
 }
