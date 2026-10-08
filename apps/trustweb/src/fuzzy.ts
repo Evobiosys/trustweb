@@ -16,8 +16,12 @@
  *        "Steuerberater" / "Steuer Berater"), either direction
  *   0.90 plural or feminine form ("bicycles" / "bicycle", "Steuerberaterin")
  *   0.75 synonym ("bicycles" / "bike", "accountant" / "tax advisor")
- *   0.65 to 0.90 typo: edit distance 1 from 5 letters (5 letters: omission,
- *        doubling or swap only, never a substitution), 2 from 9 letters (then
+ *   0.65 to 0.90 typo: edit distance 1 from 5 letters when it is a swap of two
+ *        neighbours or a doubled letter dropped or added ("acount"); any other
+ *        omission or addition only from 8 letters, ONE letter replaced by
+ *        another only from 9 letters, because below that it is mostly another
+ *        word (sneakers/speakers, grand/grant, hiking/hiring, founder/funder);
+ *        2 edits from 9 letters (then
  *        the first two and the last two letters must agree, so "accountant" is
  *        not "accounting"), or two vowel-for-vowel slips from 7 letters
  *        ("bycicle" / "bicycle"); the first letter must agree; tokens with
@@ -45,6 +49,8 @@ const TYPO_SLOPE = 1.4
 
 const MIN_TYPO_LEN = 5
 const LONG_TYPO_LEN = 9
+const SUBSTITUTION_MIN_LEN = 9
+const OMISSION_MIN_LEN = 8
 const VOWEL_PAIR_LEN = 7
 const NGRAM_MIN_LEN = 10
 const NGRAM_MIN_DICE = 0.85
@@ -208,6 +214,15 @@ function isSingleSubstitution(a: string, b: string): boolean {
   return a.length === b.length && differingPositions(a, b).length === 1
 }
 
+/** The longer of two tokens differing by one letter has that letter doubled ("account" for "acount"). */
+function isDoubledLetterSlip(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) !== 1) return false
+  const [short, long] = a.length < b.length ? [a, b] : [b, a]
+  let i = 0
+  while (i < short.length && short[i] === long[i]) i++
+  return long[i] === long[i + 1] || long[i] === long[i - 1]
+}
+
 /** One token is the other plus trailing letters ("table" / "tablet"): usually another word. */
 function isPrefixExtension(a: string, b: string): boolean {
   return a !== b && (a.startsWith(b) || b.startsWith(a))
@@ -228,7 +243,8 @@ export function typoSimilarity(a: string, b: string): number {
   if (d > tol && shorter >= VOWEL_PAIR_LEN && vowelOnlyDifference(a, b)) d = 1
   if (d > tol) return 0
   if (d === 2 && !sameEdges(a, b)) return 0
-  if (shorter === MIN_TYPO_LEN && isSingleSubstitution(a, b)) return 0
+  if (shorter < SUBSTITUTION_MIN_LEN && isSingleSubstitution(a, b)) return 0
+  if (shorter < OMISSION_MIN_LEN && a.length !== b.length && !isDoubledLetterSlip(a, b)) return 0
   if (shorter <= MIN_TYPO_LEN && isPrefixExtension(a, b)) return 0
   return 1 - (TYPO_SLOPE * d) / shorter
 }

@@ -61,10 +61,11 @@ function contentWords(text: string): string[] {
 /**
  * The match terms of an ask: its content words plus the forgiving variants of
  * fuzzy.ts (synonyms, written together or apart, German compound parts,
- * singular and plural, a misspelt synonym), the asker's own words first.
+ * singular and plural, a misspelt synonym), the asker's own words first. A
+ * variant that is a function word ("news" to "new") is dropped again.
  */
 export function askTerms(text: string): string[] {
-  return expandAskTerms(contentWords(text))
+  return expandAskTerms(contentWords(text)).filter((t) => !STOPWORDS.has(t))
 }
 
 function templateFor(text: string, matchTerms: string[]): QueryTemplate {

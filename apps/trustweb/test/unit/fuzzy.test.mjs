@@ -140,6 +140,7 @@ describe('false positives stay out', () => {
     ['ladder', 'latter'], ['ladder', 'bladder'], ['drill', 'trill'], ['couch', 'touch'], ['couch', 'coach'],
     ['garden', 'harden'], ['2024', '2025'], ['b2b', 'b2c'], ['hire', 'hare'], ['funds', 'fonds'],
     ['car', 'cat'], ['loan', 'lean'], ['piano', 'pian'], ['tax', 'tux'],
+    ['sneakers', 'speakers'], ['hiking', 'hiring'], ['finding', 'funding'], ['shooter', 'scooter'], ['founder', 'funder'],
     ['wohnung', 'wohnungsamt'], ['motorbike', 'motorway'], ['accountant', 'accounting'],
   ]
 
@@ -153,10 +154,18 @@ describe('false positives stay out', () => {
     expect(typoSimilarity('bike', 'bikes')).toBe(0)
   })
 
-  it('five letters forgive an omission or a swap, never a substitution', () => {
+  it('short words forgive a swap or a doubled letter, never a substitution or another omission', () => {
     expect(typoSimilarity('ladde', 'ladder')).toBe(0) // prefix of another word
     expect(typoSimilarity('shelf', 'sehlf')).toBeGreaterThan(0) // swap
     expect(typoSimilarity('shelf', 'shalf')).toBe(0) // substitution
+    expect(typoSimilarity('acount', 'account')).toBeGreaterThan(0) // doubled letter
+    expect(typoSimilarity('founder', 'funder')).toBe(0) // another omission, another word
+    expect(typoSimilarity('bicyle', 'bicycle')).toBe(0) // known limit: a plain omission under 8 letters
+  })
+
+  it('one substitution is a typo only from nine letters', () => {
+    expect(typoSimilarity('accountent', 'accountant')).toBeGreaterThan(0)
+    expect(typoSimilarity('speakers', 'sneakers')).toBe(0)
   })
 
   it('measured: no unrelated ask word matches any unrelated line word', () => {
@@ -224,6 +233,12 @@ describe('expandAskTerms', () => {
 
   it('a phrase of two ask words reaches its synonyms', () => {
     expect(expandAskTerms(['tax', 'advisor'])).toEqual(expect.arrayContaining(['steuerberater', 'accountant']))
+  })
+
+  it('a look-alike of a synonym member does not import the group (sneakers, hiking, finding, shooter, founder)', () => {
+    for (const w of ['sneakers', 'hiking', 'finding', 'shooter', 'founder']) {
+      expect(expandAskTerms([w])).toEqual(expect.not.arrayContaining(['speakers', 'hiring', 'job', 'funding', 'scooter', 'funder']))
+    }
   })
 
   it('a misspelt synonym reaches its group', () => {

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { askTemplate, askTerms, forgivingAskTemplate, lineTextsOf } from '../../trustweb/src/lexicon'
 import { MAX_EXPANDED_TERMS, MAX_LINE_NEIGHBOURS } from '../../trustweb/src/fuzzy'
-import { Audience, Ring, threadsForRing } from '../../trustweb/src/model'
+import { Audience, LineStatus, Ring, Tag, threadsForRing } from '../../trustweb/src/model'
 import type { AppState } from '../../trustweb/src/model'
 import { matchTemplate } from '../src/match/lexical'
 import { classifyIncomingQuery } from '../src/incoming_query'
@@ -96,6 +96,55 @@ describe('look-alikes stay silent', () => {
   it.each(CASES)('%s  vs  %s', (line, ask) => {
     expect(surfaces(holder(line), ask)).toBe(false)
     expect(surfacesForgiving(holder(line), ask)).toBe(false)
+  })
+})
+
+describe('look-alikes of synonym members stay silent (the acceptance holder)', () => {
+  /** The holder of trustweb_match.test.ts: a Loudspeakers line and Lena's job line. */
+  function acceptanceHolder(): AppState {
+    const s = holder('Loudspeakers', 'Scooter for rent, 20 euro a day', 'Grant writing workshop in March')
+    s.people = [{
+      id: 'p1', name: 'Lena', context: 'coffee', ring: Ring.Friend, metAt: T0,
+      lines: [{ id: 'l1', text: 'We have a new position to fill: head of operations', tag: Tag.Opportunity, audience: Audience.Friends, status: LineStatus.Current, notedAt: T0, checkedAt: T0 }],
+    }]
+    return s
+  }
+
+  it.each([
+    'Anyone selling sneakers?',
+    'Anyone going hiking this weekend?',
+    'Anyone good at finding mushrooms?',
+    'Know a good photo shooter?',
+    'Is the founder around?',
+  ])('%s', (ask) => {
+    expect(surfaces(acceptanceHolder(), ask)).toBe(false)
+    expect(surfacesForgiving(acceptanceHolder(), ask)).toBe(false)
+  })
+
+  it('and the real ones still surface', () => {
+    expect(surfaces(acceptanceHolder(), 'Anyone selling speakers?')).toBe(true)
+    expect(surfaces(acceptanceHolder(), 'Anyone hiring?')).toBe(true)
+    expect(surfaces(acceptanceHolder(), 'who has a bycicle or a scooter')).toBe(true)
+  })
+})
+
+describe('known limits', () => {
+  it('a function word reached through a plural is dropped ("news" is not "new")', () => {
+    expect(askTerms('any news about the flat?')).not.toContain('new')
+    expect(askTerms('goods weeks uses')).toEqual(expect.not.arrayContaining(['good', 'week', 'use']))
+  })
+
+  // The exact matcher checks a phrase with String.includes, without word boundaries, so a split
+  // phrase of a long ask word ("works hop" of "workshop") also fires inside "works hopefully".
+  // it.fails documents the class: when match/lexical.ts gains word-boundary phrases this test
+  // starts passing the wrong way round and must be flipped to a plain expect(...).toBe(false).
+  it.fails('KNOWN: a split phrase fires inside a longer word', () => {
+    expect(surfaces(holder('Everything works hopefully by Friday'), 'workshop')).toBe(false)
+  })
+
+  it('splits stop after ten per word, so a late joint of a very long compound is not offered', () => {
+    const phrases = askTerms('Gemeinschaftsgartenverein').filter((t) => t.includes(' '))
+    expect(phrases.length).toBeLessThanOrEqual(10)
   })
 })
 
