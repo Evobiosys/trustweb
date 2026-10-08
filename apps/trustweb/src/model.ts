@@ -559,6 +559,8 @@ export interface AppState {
    */
   shareMode?: string
   sharePins?: string[]
+  /** Wave 6e: when the small "Is this safe?" link was first shown on the Add sheet after a scan (it shows that once). Absent: not yet. */
+  safetyLinkShownAt?: number
   /**
    * The persistent connect code this phone registered on the server (connect_code.ts): {code, secret, url, updatedAt}.
    * Stays on this phone (the secret is a password); absent until the first successful registration and on a phone

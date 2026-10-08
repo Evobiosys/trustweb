@@ -767,3 +767,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .pn-general{background:var(--card); border-radius:12px; padding:8px 12px; margin-top:6px}
 .pn-general .pm-general{white-space:pre-wrap; margin:2px 0 0}
 .pm-transcribing{display:inline-block; margin-top:2px; font-size:12px; font-style:italic; color:var(--ink-soft)}
+.safe-line{margin:0 0 12px; line-height:1.45}
+.safe-link{align-self:flex-start; margin-top:8px}

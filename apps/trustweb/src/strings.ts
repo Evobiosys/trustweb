@@ -121,6 +121,18 @@ export const S = {
   generalNoteSaving: 'Saving...',
   generalNoteSaved: 'Saved on this phone.',
   generalNoteTranscribing: (n: number) => (n === 1 ? 'A voice note of theirs is still being transcribed. Your typed note is already here.' : `${n} voice notes of theirs are still being transcribed. Your typed note is already here.`),
+  // "Is this safe?" (reassurance.ts). Same sentences on the website. The GitHub sentence exists only in a build made with VITE_TW_CODE_PUBLIC=1:
+  // the condition is a build-time constant, so every other bundle does not hold the text at all (the public repository is old, decisions #23).
+  safeTitle: 'Is this safe?',
+  safeS1: 'TrustWeb is a web app. It runs in your browser or from your home screen, and you can remove it any time in Settings.',
+  safeS2: 'Your contacts and notes stay on this phone. Nothing about them leaves the phone without your yes.',
+  safeS3: 'Showing your own code to others registers a short address for it on our server (your name and the contact links you chose to share). Nothing else is sent unless you share it.',
+  safeS4: 'The person who shared this code with you shared only their contact links, for example Signal or WhatsApp. You can also use those links outside this app.',
+  safeS5: 'If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.',
+  safeCodePublic: import.meta.env.VITE_TW_CODE_PUBLIC === '1' ? 'You can read the open source code on GitHub.' : '',
+  safeBackAdd: 'Back',
+  safeBackCard: 'Back',
+  safeBackSettings: 'Settings',
   personNotesGeneral: 'General note',
   pastTranscribing: 'Transcribing...',
   personNotesTitle: 'Your notes on them',
