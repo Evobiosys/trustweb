@@ -7,6 +7,10 @@
 // TW_TRANSCRIBE_PROVIDER=openrouter|berget|berget-only (default openrouter) is the setting the build was given
 // (see tw_site.py): the transcription copy must name that provider, and Berget must not appear at all unless it is on.
 //
+// TW_HOPS_LIVE=1 (default 0) is the setting the build was given (--hops-live): 0 = the copy says passing a question on
+// through friends is not built yet and a question reaches your direct connections; 1 = it says a question can travel on
+// through friends and you choose how far. Every hop claim on the website is checked against it (wave 6).
+//
 // TW_SITE=org (default) checks the website, TW_SITE=com the hosting site. TW_APP_BASE is the app base the
 // build was given (Demo is <base>/demo/, Install <base>/?install=1); TW_SITE_HOST the host it was built for.
 
@@ -41,6 +45,7 @@ const ORG = SITE === 'org'
 const TERMS_PUBLISHED = mode === 'draft' || process.env.TW_PUBLISH_TERMS === '1'
 const TX_PROVIDER = process.env.TW_TRANSCRIBE_PROVIDER ?? 'openrouter'
 if (!['openrouter', 'berget', 'berget-only'].includes(TX_PROVIDER)) { console.error('TW_TRANSCRIBE_PROVIDER must be openrouter, berget or berget-only'); process.exit(2) }
+const HOPS_LIVE = process.env.TW_HOPS_LIVE === '1'
 const OTHER_HOST = ORG ? 'https://TrustInTheWeb.com' : 'https://TrustInTheWeb.org'
 const results = []
 const check = (name, ok, detail = '') => {
@@ -174,6 +179,21 @@ async function heroChecks(page, tag) {
   check(`${tag}: wordmark inside the viewport`, !!g.h1 && g.h1.l >= -0.5 && g.h1.r <= g.vw + 0.5)
 }
 
+// wave 6 (Jakob 2026-10-08): the demo button also sits under the hero text, on both sites, not only top right
+const heroDemoButton = () => {
+  const hero = document.querySelector('header.hero')
+  const links = [...(hero?.querySelectorAll('a') ?? [])].filter((a) => a.textContent.trim() === 'Open the live demo')
+  const a = links[0]
+  const r = a?.getBoundingClientRect()
+  const above = hero?.querySelector('.herotoday, .comhero .lede')?.getBoundingClientRect()
+  return {
+    n: links.length, href: a?.getAttribute('href'), cls: a?.className,
+    inView: !!r && r.width > 0 && r.left >= 0 && r.right <= window.innerWidth,
+    belowText: !!r && !!above && r.top >= above.bottom - 1,
+    inBar: !!a?.closest('.sitebar'),
+  }
+}
+
 async function checkPage(browser, name, width) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: 'light' })
   const page = await ctx.newPage()
@@ -214,6 +234,11 @@ async function checkPage(browser, name, width) {
   if (mode === 'draft') check(`${tag}: draft is noindex`, /noindex/.test(c.robots ?? ''))
   if (name === 'index.html' && ORG && mode === 'prod') check(`${tag}: canonical is the site's own front page`, c.canonical === (SITE_HOST === 'idea2.site' ? 'https://idea2.site/trustweb/' : `https://${SITE_HOST}/`), String(c.canonical))
   if (name === 'index.html') await heroChecks(page, tag)
+  if (name === 'index.html') {
+    const d = await page.evaluate(heroDemoButton)
+    check(`${tag}: ONE "Open the live demo" button under the hero text (not only the bar), in view, to ${APP}/demo/, ${ORG ? 'joinbtn' : 'btn-primary'}`,
+      d.n === 1 && d.href === `${APP}/demo/` && d.inView && d.belowText && !d.inBar && d.cls === (ORG ? 'joinbtn' : 'btn-primary'), JSON.stringify(d))
+  }
   if (name === 'index.html' && ORG) {
     const p = await page.evaluate(popups)
     check(`${tag}: ${p.count} term popups stay inside the viewport`, p.count >= 11 && p.bad.length === 0, p.bad.join(', '))
@@ -543,6 +568,8 @@ async function contentChecksCom(page) {
   check('com index: "Contact us to make a solid agreement" with a contact button to the feedback form',
     /Contact us to make a solid agreement/.test(text) && (await page.locator('a[href="feedback.html?kind=pricing"]').count()) >= 2)
   check('com index: the anchors the footer needs exist (what, free, updates, agreement)', await page.evaluate(() => ['what', 'free', 'updates', 'agreement'].every((i) => document.getElementById(i))))
+  check('com index: the hero keeps "See pricing" and "Contact us" next to the demo button',
+    await page.evaluate(() => ['pricing.html', 'feedback.html?kind=pricing'].every((h) => document.querySelectorAll(`header.hero .btnrow a[href="${h}"]`).length === 1)))
   check('com index: links to the website TrustInTheWeb.org', (await page.locator('a[href="https://trustintheweb.org/"]').count()) >= 1)
   check(`com: pages are index, pricing, feedback, imprint, privacy, data policy${TERMS_PUBLISHED ? ', terms' : ''} (nothing else)`,
     pageNames.join(',') === `data-policy.html,feedback.html,imprint.html,index.html,pricing.html,privacy.html${TERMS_PUBLISHED ? ',terms.html' : ''}`, pageNames.join(','))
@@ -598,7 +625,12 @@ async function contentChecksOrg(page) {
   })
   check('index: hero says what it can do today: call into your web FIRST, then people you trust, record and keep a meeting, inventory',
     today.heading === 'What it can do today' && today.items.join('|') === 'Call into your web|Keep the people you trust|Record and keep a meeting|Keep an inventory', JSON.stringify(today))
-  check('index: the hero links "the vision" to why.html', today.link === 'why.html', String(today.link))
+  check(HOPS_LIVE ? 'index: the hero no longer links "the vision" (hops are live)' : 'index: the hero links "the vision" to why.html',
+    HOPS_LIVE ? today.link === undefined : today.link === 'why.html', String(today.link))
+  const heroMore = await page.evaluate(() => document.querySelector('.hero .herotoday-more')?.textContent.replace(/\s+/g, ' ').trim())
+  check(`index: hero line under the list, hops ${HOPS_LIVE ? 'live' : 'not live'}`,
+    heroMore === (HOPS_LIVE ? 'Your question can travel on through friends: you choose how far (one hop by default).'
+      : 'Passing a question on further through friends is not built yet. It is the vision.'), String(heroMore))
   const always = await page.evaluate(() => { const a = document.querySelector('.hero a.alwayslink'); return { text: a?.textContent, href: a?.getAttribute('href'), tag: a?.closest('p')?.textContent.replace(/\s+/g, ' ').trim() } })
   const wantAlways = SITE_HOST === 'trustintheweb.org' && mode === 'prod' ? 'https://trustintheweb.org/whitepaper.html#bonobos' : 'whitepaper.html#bonobos'
   check(`index: "always" in "We have always trusted our friends" links to the white paper's bonobo section (${wantAlways})`,
@@ -647,9 +679,21 @@ async function contentChecksOrg(page) {
     !/Was motiviert die Leute|What makes people put their information in|worn out by apps|Brauche ich das wirklich/.test(faq.text), faq.ids.join(','))
   check('faq: Facebook one-liner, revenue "being worked out", German brackets, no pricing link', /Facebook lets you repost\. TrustWeb lets you ask/.test(faq.text) && /Being worked out\./.test(faq.text) && /\(Ist das nicht Facebook/.test(faq.text) &&
     (await page.locator('a[href*="pricing"]').count()) === 0)
-  check('faq: nothing says multi-degree querying works today', !/travels? (further|on) .{0,40}today/i.test(faq.text) && /Today a question reaches the people you are directly connected with/.test(faq.text))
-  check('faq: Q1 and the introductions question keep "a question reaches the people you are directly connected with" and point to the demo walkthrough',
-    (faq.text.replace(/\s+/g, ' ').match(/a question reaches the people you are directly connected with; the demo walkthrough shows a scripted example of the next step/gi) ?? []).length >= 2 && !/Jonas/.test(faq.text))
+  if (HOPS_LIVE) {
+    const ft = faq.text.replace(/\s+/g, ' ')
+    check('faq (hops live): Q1 and the introductions question say a question can travel on through friends and you choose how far, and no longer say it reaches only direct connections',
+      /A question can travel on through friends, with consent at each step, instead of being broadcast: you choose how far \(one hop by default\)\./.test(ft) &&
+      /The friend in the middle can pass your question on, so an introduction stays warm: you choose how far it travels \(one hop by default\)\./.test(ft) &&
+      !/directly connected|scripted example/.test(ft) && !/Jonas/.test(ft))
+  } else {
+    check('faq: nothing says multi-degree querying works today', !/travels? (further|on) .{0,40}today/i.test(faq.text) && /Today a question reaches the people you are directly connected with/.test(faq.text))
+    check('faq: Q1 and the introductions question keep "a question reaches the people you are directly connected with" and point to the demo walkthrough',
+      (faq.text.replace(/\s+/g, ' ').match(/a question reaches the people you are directly connected with; the demo walkthrough shows a scripted example of the next step/gi) ?? []).length >= 2 && !/Jonas/.test(faq.text))
+  }
+  // wave 6 (N8e): scope = opportunities, resources and wants, knowledge questions later; the neighbourhood line (also in the main page FAQ section)
+  const neighbourhood = (t) => /like a neighbourhood, just online, much faster/.test(t) && /the questions are about opportunities, resources and wants/.test(t) && /Questions about knowledge come later\./.test(t)
+  check('faq: the neighbourhood line and the scope (opportunities, resources and wants; knowledge questions later) sit in the one-use-case answer',
+    neighbourhood(faq.text.replace(/\s+/g, ' ')) && await page.evaluate(() => /like a neighbourhood, just online, much faster/.test(document.querySelector('#q-one-use')?.textContent.replace(/\s+/g, ' ') ?? '')))
   check('faq: audience of a line is acquaintances (everyone in your rings), friends, close friends, or only you',
     /acquaintances \(everyone in your rings\), friends, close friends, or only you/.test(faq.text.replace(/\s+/g, ' ')))
   check('faq: import lines are "unreviewed" until kept, typed or recorded lines are "created step by step"',
@@ -660,7 +704,9 @@ async function contentChecksOrg(page) {
   check('faq: the feed is optional, early and off by default', /optional and early: it is off by default/.test(faq.text.replace(/\s+/g, ' ')))
   await page.goto(BASE + 'why.html')
   const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
-  check('why: "scalable" says built for one hop further with today\'s limit, not that it travels hop by hop today', /is built so a question can travel one hop further/.test(why) && /Today a question reaches your direct connections/.test(why))
+  check(HOPS_LIVE ? 'why: "scalable" says built for one hop further and that you choose how far (hops live), no "today only direct" limit' : 'why: "scalable" says built for one hop further with today\'s limit, not that it travels hop by hop today',
+    /is built so a question can travel one hop further/.test(why) &&
+    (HOPS_LIVE ? /You choose how far a question travels \(one hop by default\)\./.test(why) && !/Today a question reaches your direct connections/.test(why) : /Today a question reaches your direct connections/.test(why)))
   check('why: labelled as the vision, keeps the full picture, points to what works today', /The vision/.test(why) && /where TrustWeb is headed/.test(why) && (await page.locator('a[href="./#features"]').count()) === 1)
   await page.goto(BASE + 'whitepaper.html')
   const wp = await page.evaluate(() => ({ h2: document.querySelector('#bonobos h2')?.textContent.trim(), line: document.querySelector('#bonobos p:not(.eyebrow)')?.textContent.trim() }))
@@ -673,7 +719,20 @@ async function contentChecksOrg(page) {
     await page.evaluate(() => document.querySelector('#fb-kind option[value="pricing"]')?.textContent === 'Hosting or an agreement for your group'))
   await page.goto(BASE)
   const hero = await page.evaluate(() => [...document.querySelectorAll('.term .pop')].map((p) => p.textContent.replace(/\s+/g, ' ')).join(' | '))
-  check('index: the "more scalable" popup says built for one hop further, today direct connections', /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
+  check(HOPS_LIVE ? 'index: the "more scalable" popup says a question travels on through friends, you choose how far (hops live)' : 'index: the "more scalable" popup says built for one hop further, today direct connections',
+    HOPS_LIVE ? /TrustWeb lets a question travel on through friends, with consent at each step: you choose how far \(one hop by default\)\./.test(hero) && !/today it reaches your direct connections/.test(hero)
+      : /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
+  // the Introductions use-case card follows the flag too
+  const intro = await page.evaluate(() => document.getElementById('uc-introductions')?.textContent.replace(/\s+/g, ' ').trim() ?? '')
+  check(HOPS_LIVE ? 'index: Introductions card says it works today, also through friends, you choose how far' : 'index: Introductions card says direct today, passing on in the works',
+    HOPS_LIVE ? /Works today, also through friends/.test(intro) && /you choose how far \(one hop by default\)/.test(intro) && !/in the works/.test(intro)
+      : /Direct today, passing on in the works/.test(intro) && /is in the works\./.test(intro))
+  // no hop claim of the other flag value anywhere on the main page
+  const mainText = await page.evaluate(() => document.body.textContent.replace(/\s+/g, ' '))
+  const OLD_HOP_CLAIMS = /not built yet\. It is the vision|reaches your direct connections|reaches the people you are directly connected with|Direct today, passing on in the works/
+  const NEW_HOP_CLAIMS = /Your question can travel on through friends|you choose how far/
+  check(HOPS_LIVE ? 'index: no "not built yet / only direct connections" hop claim is left on the main page' : 'index: no "you choose how far" hop claim on the main page while hops are not live',
+    HOPS_LIVE ? !OLD_HOP_CLAIMS.test(mainText) && NEW_HOP_CLAIMS.test(mainText) : OLD_HOP_CLAIMS.test(mainText) && !NEW_HOP_CLAIMS.test(mainText))
 }
 
 // ---- wave 5 (Jakob 2026-10-07 15:37): the main page items, org only ----
@@ -837,7 +896,7 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
 const CONTRAST_TARGETS = [
   ['body text', 'main p', 4.5], ['section heading', 'section h2', 4.5], ['page heading', 'h1:not(.wot)', 3], ['wordmark', 'h1.wot .wm-b', 3],
   ['eyebrow', 'section .eyebrow', 4.5], ['link in text', 'main a:not(.btn-primary):not(.btn-ghost):not(.back)', 4.5], ['back link', 'a.back', 4.5],
-  ['primary button', '.btn-primary', 4.5], ['ghost button', '.btn-ghost', 4.5], ['bar Demo', '.tw-btn-demo', 4.5], ['bar Install', '.tw-btn-install', 4.5],
+  ['primary button', '.btn-primary', 4.5], ['hero demo button', '.herocta a.joinbtn', 4.5], ['ghost button', '.btn-ghost', 4.5], ['bar Demo', '.tw-btn-demo', 4.5], ['bar Install', '.tw-btn-install', 4.5],
   ['bar link to the other site', '.hostlink', 4.5], ['AI draft banner', '.banner.ai-draft', 4.5], ['AI draft banner label', '.banner.ai-draft b', 4.5], ['to confirm chip', '.tbc', 4.5],
   ['FAQ question', '#faq details.q summary', 4.5], ['FAQ answer', '#faq details.q p', 4.5], ['lineage caption', '.lineage-wrap figcaption', 4.5], ['notify note', '.joinnote', 4.5], ['stamp', '.stamp', 4.5], ['draft strip', '.draftstrip', 4.5],
   ['fact label', 'dl.facts dt', 4.5], ['table cell', 'table.plain td', 4.5], ['note', 'section p.note', 4.5], ['list item', 'main li', 4.5],
