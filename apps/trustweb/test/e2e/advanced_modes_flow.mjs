@@ -115,9 +115,11 @@ async function main() {
     ok('3. ticking changes the sentence at once', (await ada.locator('[data-signal-sharing="shared"]').count()) === 1)
     await ada.locator('.meet-page [data-share-tick="signal"]').uncheck()
 
-    // 4 Only Signal: QR, Copy, NFC follow; a number keeps the camera-app note
+    // 4 Only Signal: QR, Copy, NFC follow; a number goes into the code only with the tick (review 6b) and keeps the camera-app note
     await chooseMode(ada, 'molly')
-    ok('4. Only Signal with a phone-number link: the QR holds the signal.me link', /^https:\/\/signal\.me\/#p\/\+/.test(await payload(ada)), await payload(ada))
+    ok('4. Only Signal with an UNticked phone-number link: no code at all, and the sentence says why', !(await payload(ada)) && /not being shared: it holds your phone number/.test(await ada.locator('[data-signal-sharing="number-not-ticked"]').innerText().catch(() => '')), String(await payload(ada)))
+    await ada.locator('.meet-page [data-share-tick="signal"]').check()
+    ok('4. Only Signal with the ticked phone-number link: the QR holds the signal.me link', !!(await until(async () => /^https:\/\/signal\.me\/#p\/\+/.test((await payload(ada)) ?? ''))), await payload(ada))
     ok('4. the camera-app note stays for a phone number', /camera app, not inside Signal or Molly/.test(await ada.locator('[data-scan="camera-only"]').innerText().catch(() => '')))
     ok('4. and the general note says to scan with the camera app', (await ada.locator('[data-adv-note="camera"]').count()) === 1)
     await shot(ada, 'adv-04-only-signal-number')

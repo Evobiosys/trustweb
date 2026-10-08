@@ -22,17 +22,21 @@ describe('modes', () => {
 
 describe('modePayload', () => {
   it('Both and Only TrustWeb carry the connect link', () => {
-    expect(modePayload(ConnectMode.Both, CODE_LINK, USERNAME)).toBe(CODE_LINK)
-    expect(modePayload(ConnectMode.OnlyTrustWeb, CODE_LINK, USERNAME)).toBe(CODE_LINK)
-    expect(modePayload(ConnectMode.OnlyTrustWeb, CODE_LINK, undefined)).toBe(CODE_LINK)
+    expect(modePayload(ConnectMode.Both, CODE_LINK, USERNAME, true)).toBe(CODE_LINK)
+    expect(modePayload(ConnectMode.OnlyTrustWeb, CODE_LINK, USERNAME, true)).toBe(CODE_LINK)
+    expect(modePayload(ConnectMode.OnlyTrustWeb, CODE_LINK, undefined, false)).toBe(CODE_LINK)
   })
   it('Only Molly/Signal carries the signal.me https link, never the connect link', () => {
-    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME)).toBe(USERNAME)
-    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME, SignalProvider.Molly)).toBe(USERNAME)
-    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME)).not.toContain('/c/')
+    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME, true)).toBe(USERNAME)
+    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME, false, SignalProvider.Molly)).toBe(USERNAME)
+    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, USERNAME, false)).not.toContain('/c/')
   })
-  it('Only Molly/Signal without a saved link has no QR (null)', () => expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, undefined)).toBeNull())
-  it('never emits an sgnl:// link', () => expect(String(modePayload(ConnectMode.OnlyMolly, CODE_LINK, 'sgnl://signal.me/#eu/abc'))).not.toMatch(/^sgnl:/))
+  it('Only Molly/Signal without a saved link has no QR (null)', () => expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, undefined, true)).toBeNull())
+  it('never emits an sgnl:// link', () => expect(String(modePayload(ConnectMode.OnlyMolly, CODE_LINK, 'sgnl://signal.me/#eu/abc', true))).not.toMatch(/^sgnl:/))
+  it('a phone-number link goes into the Only Signal code only with the owner\'s tick (review 6b)', () => {
+    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, NUMBER, false)).toBeNull()
+    expect(modePayload(ConnectMode.OnlyMolly, CODE_LINK, NUMBER, true)).toMatch(/^https:\/\/signal\.me\/#p\//)
+  })
   it('a phone-number code keeps the camera-app note, a username code does not', () => {
     expect(needsCameraApp(ConnectMode.OnlyMolly, NUMBER)).toBe(true)
     expect(needsCameraApp(ConnectMode.OnlyMolly, USERNAME)).toBe(false)

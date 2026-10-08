@@ -9,6 +9,9 @@
  *   3  Phone B (a second account, "TW6b Live B <4 hex>") opens <origin>/c/<code>: the add sheet names A (it replaces the placeholder
  *      within 20 s), "Add to my web" opens A's card, and "Message on Signal" (or Molly) shows A's link (the contact text travels over
  *      the real relay, up to 30 s): its href starts with https://signal.me/#eu/ and equals A's fake link.
+ *   3b CROSS-HOST (review 6b; on by default when TW_LIVE_HOST is app.idea2.site, TW_LIVE_CROSS=0 skips it): phone C on https://app.trustweb.one
+ *      types "@<the username>" on the add sheet and must get A added and connected: the server's /c/ lands the lookup on .one, and the
+ *      app accepts A's idea2 relay (one shared relay). This is the path of a new person on the canonical host typing a name.
  *   4  ALWAYS, in a finally block (also after a FAIL, an error or a timeout): the username is released again (A's "Release" button,
  *      else a POST /name "" from A's page using the record the app keeps there), then checked with GET /who/<name> (404 expected).
  *      The secret is never printed. When the release cannot be done or checked, a WARN names the username so it can be released by hand.
@@ -39,6 +42,7 @@ const SIGNAL_PLACEHOLDER = 'Signal username link (best) or phone number (+43...)
 const CODE_WAIT_MS = 20_000
 const NAME_WAIT_MS = 20_000
 const CONTACT_WAIT_MS = 30_000
+const CROSS_HOST = 'https://app.trustweb.one'
 
 const HOST = (process.env.TW_LIVE_HOST ?? '').replace(/\/+$/, '')
 const SCREENS = process.env.TW_SCREENS || DEFAULT_SCREENS
@@ -224,7 +228,25 @@ async function stepPhoneB(browser) {
   ok('"Add to my web" opens A\'s card', card)
   await checkMessageButton(b)
   await shot(b, '04_b_card_message')
-  ok('A holds B as a connection too', Boolean(await until(async () => (await record(run.a)).peers.length === 1, 20_000)))
+  ok('A holds B as a connection too', Boolean(await until(async () => (await record(run.a)).peers.some((p) => p.displayName === NAME_B), 20_000)))
+}
+
+// ---- step 3b: a phone on the canonical host adds A by @name (cross-host) ---------------------------------
+
+async function stepCrossHost(browser) {
+  if (run.origin === CROSS_HOST || process.env.TW_LIVE_CROSS === '0') { console.log('\n[3b] cross-host @name: skipped (same host or TW_LIVE_CROSS=0)'); return }
+  console.log(`\n[3b] phone C on ${CROSS_HOST} types @${USERNAME}: lookup lands on its own host, A's relay is accepted`)
+  const c = await newPhone(browser, errors, { viewport: VIEWPORT })
+  await startPhone(c, CROSS_HOST + '/', `TW6b Live C ${TAG}`)
+  await c.locator('.rings-wrap').click({ position: { x: 12, y: 12 } })
+  await c.locator('.sheet.on [data-add-code]').waitFor({ timeout: 10_000 })
+  await c.locator('.sheet.on [data-add-code]').fill('@' + USERNAME)
+  await c.locator('.sheet.on [data-add-person]').click()
+  const card = await c.locator('.sheet.on h3', { hasText: NAME_A }).waitFor({ timeout: 20_000 }).then(() => true, () => false)
+  const status = (await bodyText(c, '.sheet.on [data-add-code-status]')).trim()
+  ok(`C on ${CROSS_HOST} adds A by @name (A's card opens)`, card, status || 'no card, no status')
+  ok('A holds C as a connection (the shared relay carried the ack across hosts)', Boolean(await until(async () => (await record(run.a)).peers.some((p) => p.displayName === `TW6b Live C ${TAG}`), 30_000)))
+  await shot(c, '03b_c_cross_host')
 }
 
 // ---- step 4: release the username, whatever happened --------------------------------------------------
@@ -278,6 +300,7 @@ async function flow(browser) {
   if (!(await stepPhoneA(browser))) return
   if (!(await stepUsername())) return
   await stepPhoneB(browser)
+  await stepCrossHost(browser)
 }
 
 async function main() {

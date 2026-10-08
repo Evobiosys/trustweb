@@ -44,7 +44,7 @@ import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { revealsPhoneNumber, signalLabelKey, channelLink, normalizeHandle } from './channel'
 import type { SignalProvider } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact } from './contact_share'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact, ticked } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -2834,12 +2834,12 @@ function meetTrustWebPage(): HTMLElement {
   function signalControls(): HTMLElement {
     return renderShareControls({
       doc: document, channel: Channel.Signal, getHandle: () => signal(),
-      getSettings: () => st().contactShare, setSettings: (next) => { st().contactShare = next; save(); sharing.refresh(); advanced.refresh() }, S: shareStrings(),
+      getSettings: () => st().contactShare, setSettings: (next) => { st().contactShare = next; save(); apply() }, S: shareStrings(),
     })
   }
   const apply = (): void => {
     const handle = signal()
-    const payload = modePayload(meetMode, view.longLink(), handle, provider())
+    const payload = modePayload(meetMode, view.longLink(), handle, !!ticked(st().myChannels, st().contactShare)[Channel.Signal], provider())
     if (meetMode === ConnectMode.OnlyMolly) view.setOverride(payload ?? '', payload === null)
     else view.setOverride(null)
     copy.disabled = !view.current() || (meetMode === ConnectMode.OnlyMolly && !payload)

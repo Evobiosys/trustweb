@@ -11,7 +11,7 @@
  * The mode is a choice for the code on screen, not a setting: it lives in memory, starts at Both whenever Meet is opened, and only
  * counts while Meet is on screen (the QR that could be scanned). Pure and DOM-free.
  */
-import { SignalProvider, qrPayload, scanAdvice, ScanAdvice } from './channel'
+import { SignalProvider, qrPayload, revealsPhoneNumber, scanAdvice, ScanAdvice } from './channel'
 import { Channel } from './model'
 import type { ChannelMap, ShareSettings } from './contact_share'
 import { ticked } from './contact_share'
@@ -33,10 +33,17 @@ export function mayShareContact(mode: ConnectMode): boolean {
   return mode !== ConnectMode.OnlyTrustWeb
 }
 
-/** What the QR (and Copy, Send, NFC) carries; null when the mode needs a Signal link that is not saved. `connectLink` is the code link or the long one. */
-export function modePayload(mode: ConnectMode, connectLink: string, signalHandle: string | undefined, provider?: SignalProvider): string | null {
+/**
+ * What the QR (and Copy, Send, NFC) carries; null when the mode needs a Signal link that is not saved, or that holds a phone number the
+ * owner has not ticked (review 6b: a phone number never leaves without his own tick, in any mode; an NFC tag keeps it for good).
+ * `connectLink` is the code link or the long one; `signalTicked` is the owner's share tick of the Signal link.
+ */
+export function modePayload(
+  mode: ConnectMode, connectLink: string, signalHandle: string | undefined, signalTicked: boolean, provider?: SignalProvider,
+): string | null {
   if (mode !== ConnectMode.OnlyMolly) return connectLink
-  return signalHandle ? qrPayload(signalHandle, provider) : null
+  if (!signalHandle || (revealsPhoneNumber(signalHandle) && !signalTicked)) return null
+  return qrPayload(signalHandle, provider)
 }
 
 /** Does the Only Molly/Signal code need the camera app (a phone-number link)? */
