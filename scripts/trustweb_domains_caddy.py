@@ -17,10 +17,25 @@ Transforms
   idea2-redirect      idea2.site/trustweb/* and /tw, /trust-web -> 301 https://trustintheweb.org{path};
                       /trustweb/draft/ keeps serving the draft folder
   evobiosys-redirect  evobiosys.org /tw, /trustweb (and subpaths) -> 301 https://evobiosys.org/trustintheweb/
+  app-trustweb-one    (wave 6c) the site block app.trustweb.one = the LIVE app.trustintheweb.org block copied, with
+                      only its host, its root directory and the deploy-target comment changed, so every route that
+                      block has today (and every one a later wave adds to it) is there by construction. Run again
+                      after a later wave added routes to the .org block: it replaces the generated block in place.
+  demo-trustweb-one   (wave 6c) demo.trustweb.one -> 301 https://app.trustweb.one/demo{uri}
+  app-org-redirect    (wave 6c, Jakob 2026-10-08 12:53) app.trustintheweb.org: ONLY its final page catch-all (the file_server)
+                      becomes 301 https://app.trustweb.one{uri}. Every handle above it (/relay, /backup, /hosted, /transcribe,
+                      /feedback, /websearch, /link, /l and whatever a later wave adds) keeps serving, so old DID documents that
+                      name https://app.trustintheweb.org/relay still work. Nothing is deleted: the app folder stays where it is.
+                      Refused unless the app.trustweb.one block exists. app-trustweb-one turns a redirect catch-all in the .org
+                      block back into the file_server for the .one block, so a rerun never copies the redirect onto the new host.
+
+  python3 -I -B scripts/trustweb_domains_caddy.py --in live --parity   exits 1 and prints the diff when the two app
+                      blocks differ in anything but host, marker and the page catch-all (the evidence for "modelled exactly").
 """
 from __future__ import annotations
 
 import argparse
+import difflib
 import sys
 from collections.abc import Callable
 from enum import Enum
@@ -29,12 +44,21 @@ QUESTHUB_STATIC = "/srv/questhub-static"
 SITE_ORG_DIR = f"{QUESTHUB_STATIC}/trustintheweb-org"
 SITE_COM_DIR = f"{QUESTHUB_STATIC}/trustintheweb-com"
 APP_DIR = f"{QUESTHUB_STATIC}/app-trustintheweb"
+APP_ONE_DIR = f"{QUESTHUB_STATIC}/app-trustweb-one"
 BACKUP_UPSTREAM = "127.0.0.1:8960"
 RELAY_UPSTREAM = "127.0.0.1:4177"
 
 SITES_MARKER = "# --- TrustInTheWeb domains (wave 3, scripts/trustweb_domains.sh) ---"
 IDEA2_MARKER = "# TrustInTheWeb migration (wave 3, 2026-10-07):"
 EVOBIOSYS_MARKER = "# TrustInTheWeb (wave 3, 2026-10-07):"
+APP_ONE_HEAD = "app.trustweb.one {"
+APP_ORG_HEAD = "app.trustintheweb.org {"
+DEMO_ONE_HEAD = "demo.trustweb.one {"
+APP_ONE_MARKER = "# app.trustweb.one (wave 6c): generated from the app.trustintheweb.org block by scripts/trustweb_domains_caddy.py app-trustweb-one."
+DEMO_ONE_MARKER = "# --- demo.trustweb.one (wave 6c, scripts/trustweb_domains.sh) ---"
+DEPLOY_TARGET_ORG = "TW_APP_TARGET=trustintheweb"
+DEPLOY_TARGET_ONE = "TW_APP_TARGET=trustweb-one"
+ORG_REDIRECT_MARKER = "# app.trustintheweb.org (wave 6c, Jakob 2026-10-08 12:53): page loads go to the canonical app host."
 
 
 class TransformError(Exception):
@@ -45,6 +69,9 @@ class Transform(str, Enum):
     SITES = "sites"
     IDEA2_REDIRECT = "idea2-redirect"
     EVOBIOSYS_REDIRECT = "evobiosys-redirect"
+    APP_TRUSTWEB_ONE = "app-trustweb-one"
+    DEMO_TRUSTWEB_ONE = "demo-trustweb-one"
+    APP_ORG_REDIRECT = "app-org-redirect"
 
 
 # Static sites get the header set of the hardened sites on this server (transparent.news, 2026-10-06):
@@ -263,10 +290,116 @@ def evobiosys_redirect(text: str) -> str:
     return _replace_once_in_block(text, "evobiosys.org, www.evobiosys.org {", EVOBIOSYS_ANCHOR, EVOBIOSYS_INSERT + EVOBIOSYS_ANCHOR)
 
 
+# A direct visit to demo.trustweb.one/demo... must not become /demo/demo...; everything else gets /demo prefixed
+# ("/" becomes "/demo/", which is the demo's own page). Both are permanent, like the other redirect blocks here.
+DEMO_ONE_BLOCK = f"""
+{DEMO_ONE_MARKER}
+# Jakob 2026-10-08: demo.trustweb.one goes to the demo, which lives in the app at /demo/.
+{DEMO_ONE_HEAD}
+	@demo_already path /demo /demo/*
+	redir @demo_already https://app.trustweb.one{{uri}} permanent
+	redir https://app.trustweb.one/demo{{uri}} permanent
+}}
+"""
+
+
+def _serve_catchall(app_dir: str, deploy_target: str) -> str:
+    """The page catch-all of an app block: the built app from `app_dir`, assets immutable, HTML revalidated."""
+    return (
+        f"\t# The app, built with base \"/\" (scripts/deploy_wot.sh, {deploy_target}).\n"
+        "\thandle {\n"
+        f"\t\troot * {app_dir}\n"
+        "\t\t@tw_app_assets path /assets/*\n"
+        "\t\theader @tw_app_assets Cache-Control \"public, max-age=31536000, immutable\"\n"
+        "\t\t@tw_app_html not path /assets/*\n"
+        "\t\theader @tw_app_html Cache-Control \"no-cache\"\n"
+        "\t\tfile_server\n"
+        "\t}\n"
+    )
+
+
+ORG_SERVE_CATCHALL = _serve_catchall(APP_DIR, DEPLOY_TARGET_ORG)
+ONE_SERVE_CATCHALL = _serve_catchall(APP_ONE_DIR, DEPLOY_TARGET_ONE)
+ORG_REDIRECT_CATCHALL = (
+    f"\t{ORG_REDIRECT_MARKER} The URI (path, query) is kept, so an old QR\n"
+    "\t# or connect link lands on the new host. The handles above keep serving (old DID documents name this host's /relay).\n"
+    f"\t# Nothing is deleted: {APP_DIR} stays on disk. Lift the redirect: put back the Caddyfile.bak.<ts>_wave6c_orgredirect.\n"
+    "\thandle {\n"
+    "\t\tredir https://app.trustweb.one{uri} permanent\n"
+    "\t}\n"
+)
+
+
+def _clone_app_block(org_block: str) -> str:
+    """The app.trustintheweb.org block as the app.trustweb.one block: host, marker and (for a redirecting .org block) the page catch-all.
+
+    The page catch-all of the .one block is always the file_server, whether the .org block currently serves the
+    app or (after app-org-redirect) redirects to this very host.
+    """
+    if not org_block.startswith(APP_ORG_HEAD + "\n"):
+        raise TransformError(f"the {APP_ORG_HEAD!r} block does not start with its head line")
+    serving, redirecting = org_block.count(ORG_SERVE_CATCHALL), org_block.count(ORG_REDIRECT_CATCHALL)
+    if serving + redirecting != 1:
+        raise TransformError(f"expected exactly one page catch-all (serving or redirecting) in the {APP_ORG_HEAD!r} block, found {serving} + {redirecting}")
+    body = org_block[len(APP_ORG_HEAD) + 1:]
+    body = body.replace(ORG_SERVE_CATCHALL, ONE_SERVE_CATCHALL).replace(ORG_REDIRECT_CATCHALL, ONE_SERVE_CATCHALL)
+    return f"{APP_ONE_HEAD}\n\t{APP_ONE_MARKER}\n{body}"
+
+
+def add_app_trustweb_one(text: str) -> str:
+    if SITES_MARKER not in text:
+        raise TransformError("the wave 3 site blocks are not in this Caddyfile (marker missing): run sites first")
+    org_start, org_end = _site_block_span(text, APP_ORG_HEAD)
+    new_block = _clone_app_block(text[org_start:org_end])
+    if f"\n{APP_ONE_HEAD}\n" not in text:
+        for other in ("app.trustweb.one,", ", app.trustweb.one"):
+            if other in text:
+                raise TransformError("app.trustweb.one is already a site address in a list: edit by hand")
+        return text.rstrip("\n") + "\n\n" + new_block
+    start, end = _site_block_span(text, APP_ONE_HEAD)
+    if APP_ONE_MARKER not in text[start:end]:
+        raise TransformError("an app.trustweb.one block exists without the marker: edit by hand")
+    return text[:start] + new_block + text[end:]
+
+
+def add_demo_trustweb_one(text: str) -> str:
+    if DEMO_ONE_MARKER in text:
+        return text
+    if "demo.trustweb.one" in text:
+        raise TransformError("demo.trustweb.one is already in this Caddyfile without the marker: edit by hand")
+    return text.rstrip("\n") + "\n" + DEMO_ONE_BLOCK
+
+
+def app_block_parity(text: str) -> list[str]:
+    """Unified diff of the two app blocks once host, marker and the page catch-all are normalised; empty = identical."""
+    org_start, org_end = _site_block_span(text, APP_ORG_HEAD)
+    one_start, one_end = _site_block_span(text, APP_ONE_HEAD)
+    org = text[org_start:org_end].replace(ORG_REDIRECT_CATCHALL, ORG_SERVE_CATCHALL)
+    one = text[one_start:one_end].replace(f"\t{APP_ONE_MARKER}\n", "", 1).replace(APP_ONE_HEAD, APP_ORG_HEAD, 1)
+    one = one.replace(ONE_SERVE_CATCHALL, ORG_SERVE_CATCHALL)
+    return list(difflib.unified_diff(org.splitlines(), one.splitlines(), "app.trustintheweb.org", "app.trustweb.one", lineterm=""))
+
+
+def app_org_redirect(text: str) -> str:
+    """Only the page catch-all of the app.trustintheweb.org block becomes the 301 to app.trustweb.one."""
+    if f"\n{APP_ONE_HEAD}\n" not in text:
+        raise TransformError("the app.trustweb.one block does not exist yet: a redirect to a host that does not serve is refused")
+    start, end = _site_block_span(text, APP_ORG_HEAD)
+    block = text[start:end]
+    if ORG_REDIRECT_CATCHALL in block:
+        return text
+    if block.count(ORG_SERVE_CATCHALL) != 1:
+        raise TransformError(f"expected exactly one serving page catch-all in the {APP_ORG_HEAD!r} block, found {block.count(ORG_SERVE_CATCHALL)}")
+    return text[:start] + block.replace(ORG_SERVE_CATCHALL, ORG_REDIRECT_CATCHALL) + text[end:]
+
+
 TRANSFORMS: dict[Transform, Callable[[str], str]] = {
     Transform.SITES: add_sites,
     Transform.IDEA2_REDIRECT: idea2_redirect,
     Transform.EVOBIOSYS_REDIRECT: evobiosys_redirect,
+    Transform.APP_TRUSTWEB_ONE: add_app_trustweb_one,
+    Transform.DEMO_TRUSTWEB_ONE: add_demo_trustweb_one,
+    Transform.APP_ORG_REDIRECT: app_org_redirect,
 }
 
 
@@ -279,11 +412,22 @@ def apply(text: str, names: list[Transform]) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--in", dest="src", required=True)
-    parser.add_argument("--out", dest="dst", required=True)
-    parser.add_argument("transforms", nargs="+", choices=[t.value for t in Transform])
+    parser.add_argument("--out", dest="dst")
+    parser.add_argument("--parity", action="store_true", help="check that the two app blocks differ only in host, marker and the page catch-all")
+    parser.add_argument("transforms", nargs="*", choices=[t.value for t in Transform])
     args = parser.parse_args(argv)
     with open(args.src, encoding="utf-8") as f:
         text = f.read()
+    if args.parity:
+        try:
+            diff = app_block_parity(text)
+        except TransformError as e:
+            print(f"trustweb_domains_caddy: {e}", file=sys.stderr)
+            return 1
+        print("\n".join(diff) if diff else "parity ok: app.trustweb.one = app.trustintheweb.org except host, marker and the page catch-all")
+        return 1 if diff else 0
+    if not args.dst or not args.transforms:
+        parser.error("--out and at least one transform are required (or --parity)")
     try:
         result = apply(text, [Transform(t) for t in args.transforms])
     except TransformError as e:

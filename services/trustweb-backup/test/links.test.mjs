@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer } from '../server.mjs'
+import { loadConfig } from '../config.mjs'
 import { createLinkStore, ID_RE } from '../link_store.mjs'
 import { validLongUrl } from '../links.mjs'
 import { call, HOST, withServer } from './helpers.mjs'
@@ -461,5 +462,23 @@ test('links off (the store cannot open): POST /link is 503 not_configured, GET /
     }
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('wave 6c: the defaults name all three app hosts (links) and their origins (feedback); a foreign host stays out', () => {
+  const saved = { l: process.env.LINK_HOSTS, f: process.env.FEEDBACK_ORIGINS }
+  delete process.env.LINK_HOSTS
+  delete process.env.FEEDBACK_ORIGINS
+  try {
+    const cfg = loadConfig({ backupDir: os.tmpdir() })
+    assert.deepEqual(cfg.linkHosts, ['app.idea2.site', 'app.trustintheweb.org', 'app.trustweb.one'])
+    for (const o of ['https://app.idea2.site', 'https://app.trustintheweb.org', 'https://app.trustweb.one']) assert.ok(cfg.feedbackOrigins.includes(o), o)
+    assert.ok(!cfg.feedbackOrigins.includes('https://trustweb.one'), 'the apex only redirects: it is not a feedback origin')
+    assert.equal(validLongUrl('https://app.trustweb.one/?connect=x#t=1', cfg.linkHosts, 2048) !== null, true)
+    assert.equal(validLongUrl('https://app.trustweb.one.evil.example/?connect=x', cfg.linkHosts, 2048), null)
+    assert.equal(validLongUrl('https://trustweb.one/?connect=x', cfg.linkHosts, 2048), null)
+  } finally {
+    if (saved.l !== undefined) process.env.LINK_HOSTS = saved.l
+    if (saved.f !== undefined) process.env.FEEDBACK_ORIGINS = saved.f
   }
 })

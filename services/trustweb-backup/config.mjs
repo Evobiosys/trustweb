@@ -49,7 +49,7 @@
 //   TRANSCRIBE_MAX_BYTES             21600000     1 h at 48 kbps
 //   FEEDBACK_FILE                    path of the 0600 JSON-lines file. Unset = feedback off.
 //   FEEDBACK_ORIGINS                 comma list, default https://idea2.site,https://app.idea2.site plus the TrustInTheWeb sites
-//                                    (trustintheweb.org, trustintheweb.com, app.trustintheweb.org; production also sets it in a
+//                                    (trustintheweb.org, trustintheweb.com, app.trustintheweb.org, app.trustweb.one; production also sets it in a
 //                                    systemd drop-in, scripts/trustweb_domains.sh backup-env)
 //   FEEDBACK_MAX_BYTES               2000000
 //   FEEDBACK_PER_HOUR                5            per IP
@@ -61,7 +61,7 @@
 //                                                 deferred:true for a replay instead of burning the subscriber's bucket
 //   NEWSLETTER_PER_MINUTE            2            the same, per sliding minute (the subscriber: 3/min)
 //   NEWSLETTER_PER_30_DAYS           240          the same, per sliding 30 days (the subscriber: 250/30 days; 20 a day would empty it in 12)
-//   LINK_HOSTS                       comma list, default app.idea2.site,app.trustintheweb.org: the only hosts a stored connect link may point at
+//   LINK_HOSTS                       comma list, default app.idea2.site,app.trustintheweb.org,app.trustweb.one: the only hosts a stored connect link may point at
 //                                    (and the only Origins POST /link accepts). Exact host match, no port, no userinfo.
 //   LINKS_FILE                       the short-link store (JSON, 0600, atomic rewrite). Default <BACKUP_DIR>/links.json (the unit's state dir).
 //   LINK_TTL_DAYS                    30           a short link answers 404 after this
@@ -125,10 +125,10 @@ export function transcribeChain({ setting, fallback, bergetKey, openrouterKey })
 
 const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean)
 /** Where the website feedback form may post from: the idea2 pages and the TrustInTheWeb sites (wave 3). */
-const DEFAULT_FEEDBACK_ORIGINS = 'https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org'
+const DEFAULT_FEEDBACK_ORIGINS = 'https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org,https://app.trustweb.one'
 
-/** Where a short connect link may point: the two app hosts (wave 5). */
-const DEFAULT_LINK_HOSTS = 'app.idea2.site,app.trustintheweb.org'
+/** Where a short connect link may point: the three app hosts (wave 5, app.trustweb.one added in wave 6c). */
+const DEFAULT_LINK_HOSTS = 'app.idea2.site,app.trustintheweb.org,app.trustweb.one'
 
 export function loadConfig(options = {}) {
   const setting = pick(options, 'transcribeProvider', 'TRANSCRIBE_PROVIDER', PROVIDER_AUTO, String) // an unknown name is kept: /transcribe answers 503 for it

@@ -27,14 +27,16 @@ const demo = (origin = ORIGIN + '/') => connect(origin) + '#' + demoFragment({
 })
 
 describe('canShorten', () => {
-  it('is true for exactly the two app origins', () => {
+  it('is true for exactly the three app origins (wave 6c: app.trustweb.one is the canonical one)', () => {
     expect(canShorten(ORIGIN)).toBe(true)
     expect(canShorten(IDEA2)).toBe(true)
+    expect(canShorten('https://app.trustweb.one')).toBe(true)
   })
   it.each([
     'http://127.0.0.1:8984', 'http://localhost:5190', 'null', 'file://', 'https://idea2.site', 'https://trustintheweb.org',
     'https://www.trustintheweb.org', 'http://app.trustintheweb.org', 'https://app.trustintheweb.org:8443', 'https://evil.example', '',
-    'https://app.trustintheweb.org.evil.example',
+    'https://app.trustintheweb.org.evil.example', 'https://trustweb.one', 'https://demo.trustweb.one', 'https://app.trustweb.one.evil.example',
+    'http://app.trustweb.one', 'https://app.trustweb.one:8443',
   ])('is false for %s', (o) => expect(canShorten(o)).toBe(false))
 })
 

@@ -7,11 +7,19 @@
 #   trustintheweb.com      the hosting site                                 /srv/questhub-static/trustintheweb-com
 #   trustweb.one           301 -> https://trustintheweb.org{uri}
 #   www.<each>             301 -> the apex
+#   app.trustweb.one       THE app (canonical, wave 6c, Jakob 2026-10-08)       /srv/questhub-static/app-trustweb-one
+#   demo.trustweb.one      301 -> https://app.trustweb.one/demo{uri}
+#   app.trustintheweb.org  after `org-redirect`: its page loads 301 to app.trustweb.one{uri}; its API handles keep serving
 #
 # Steps (each idempotent; --dry-run prints and changes nothing):
 #   ./scripts/trustweb_domains.sh dns [--dry-run]           A records apex/www/app -> questhub (TTL 300); never touches other records
 #   ./scripts/trustweb_domains.sh caddy-sites [--dry-run]   the site blocks above (scripts/trustweb_domains_caddy.py sites)
 #   ./scripts/trustweb_domains.sh backup-env [--dry-run]    trustweb-backup: ALLOWED_HOSTS + FEEDBACK_ORIGINS for the new hosts
+#   ./scripts/trustweb_domains.sh app-one [--dry-run]       (wave 6c) app.trustweb.one = a copy of the app.trustintheweb.org block + the
+#                                                           demo.trustweb.one redirect; creates the app folder with the served SELinux context.
+#                                                           Run it again after a later wave added routes to the .org block.
+#   ./scripts/trustweb_domains.sh org-redirect [--dry-run]  (wave 6c, A1) app.trustintheweb.org page loads -> 301 app.trustweb.one{uri}.
+#                                                           Refused until https://app.trustweb.one/ serves the app. Deletes nothing.
 #   ./scripts/trustweb_domains.sh placeholders [--dry-run]  trustintheweb.com index (only while that dir is empty) and
 #                                                           evobiosys.org/trustintheweb/ (only while absent)
 #   ./scripts/trustweb_domains.sh redirects [--dry-run]     idea2.site/trustweb/*, /tw, /trust-web -> trustintheweb.org;
@@ -41,6 +49,7 @@ REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known 
 COM_DIR=$STATIC/trustintheweb-com
 ORG_DIR=$STATIC/trustintheweb-org
 APP_DIR=$STATIC/app-trustintheweb
+APP_ONE_DIR=$STATIC/app-trustweb-one
 EVO_PAGE_DIR=$STATIC/evobiosys-org/trustintheweb
 DROPIN_DIR=/etc/systemd/system/trustweb-backup.service.d
 DROPIN=$DROPIN_DIR/10-trustweb-domains.conf
@@ -52,15 +61,18 @@ ZONES=(trustintheweb.org trustintheweb.com trustweb.one)
 records_of() {
   case "$1" in
     trustintheweb.org) echo ". www app" ;;
-    trustintheweb.com|trustweb.one) echo ". www" ;;
+    trustintheweb.com) echo ". www" ;;
+    trustweb.one) echo ". www app demo" ;;
     *) echo "unknown zone $1" >&2; return 1 ;;
   esac
 }
 
-ALLOWED_HOSTS="app.idea2.site,app.trustintheweb.org"
-FEEDBACK_ORIGINS="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org"
+APP_HOSTS="app.idea2.site app.trustintheweb.org app.trustweb.one"
+ALLOWED_HOSTS="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
+LINK_HOSTS="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
+FEEDBACK_ORIGINS="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org,https://app.trustweb.one"
 
-usage() { sed -n '2,33p' "$0" >&2; exit 2; }
+usage() { sed -n '2,40p' "$0" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 CMD="$1"; shift
 DRY=0
@@ -171,16 +183,42 @@ cmd_caddy_sites() {
   caddy_change sites
 }
 
+# app.trustweb.one (wave 6c): the block is generated from the live app.trustintheweb.org block, so every route that
+# block has (and every one a later wave adds) is copied by construction; demo.trustweb.one redirects to /demo/ there.
+cmd_app_one() {
+  echo "Caddy: app.trustweb.one (copy of the app.trustintheweb.org block) + demo.trustweb.one -> https://app.trustweb.one/demo{uri}"
+  if ! dry; then
+    # The root must exist with the served SELinux context before Caddy points at it (absent = 404, var_t = 403).
+    rsh "set -e; sudo install -d -o almalinux -g almalinux -m 0755 $APP_ONE_DIR; sudo chcon --reference=$REF $APP_ONE_DIR; ls -dZ $APP_ONE_DIR"
+  fi
+  caddy_change app-trustweb-one demo-trustweb-one
+}
+
+# A1 (Jakob 2026-10-08 12:53): few people use app.trustintheweb.org, so its pages move to app.trustweb.one. Only the page
+# catch-all of the block is replaced; the API handles keep serving; nothing on the server is deleted or renamed.
+cmd_org_redirect() {
+  echo "Caddy: app.trustintheweb.org page loads -> 301 https://app.trustweb.one{uri} (API handles keep serving, nothing deleted)"
+  local probe
+  probe="$(rsh "curl -sS --max-time 15 https://app.trustweb.one/ -o /tmp/twone.$TS -w '%{http_code}\\n'; grep -c '/assets/' /tmp/twone.$TS || true; curl -sS --max-time 15 -o /dev/null -w '%{http_code}\\n' https://app.trustweb.one/manifest.json; rm -f /tmp/twone.$TS" | tr '\n' ' ')"
+  case "$probe" in
+    "200 "[1-9]*" 200 ") say "https://app.trustweb.one/ serves the app ($probe)" ;;
+    *) echo "https://app.trustweb.one/ is not serving the app yet ($probe): redirect refused" >&2; return 1 ;;
+  esac
+  caddy_change app-trustweb-one app-org-redirect
+}
+
 # ---------------------------------------------------------------- trustweb-backup environment
 # A systemd drop-in, not a rewrite of the unit: scripts/deploy_trustweb_backup.sh (another agent's
 # file this wave) rewrites trustweb-backup.service on every --production run; a drop-in survives that,
 # and its Environment= lines win over the unit's own (drop-ins are applied after the unit file).
 cmd_backup_env() {
   echo "trustweb-backup: ALLOWED_HOSTS=$ALLOWED_HOSTS"
+  echo "                 LINK_HOSTS=$LINK_HOSTS"
   echo "                 FEEDBACK_ORIGINS=$FEEDBACK_ORIGINS"
   local text="# TrustInTheWeb domains (wave 3, scripts/trustweb_domains.sh backup-env). Overrides the unit's own values.
 [Service]
 Environment=ALLOWED_HOSTS=$ALLOWED_HOSTS
+Environment=LINK_HOSTS=$LINK_HOSTS
 Environment=FEEDBACK_ORIGINS=$FEEDBACK_ORIGINS"
   if dry; then say "[dry-run] $DROPIN:"; echo "$text" | sed 's/^/    /'; return 0; fi
   if [ "$(rsh "sudo cat $DROPIN 2>/dev/null || true")" = "$text" ]; then say "drop-in already in place"; return 0; fi
@@ -192,7 +230,7 @@ Environment=FEEDBACK_ORIGINS=$FEEDBACK_ORIGINS"
   rsh "sudo systemctl daemon-reload && sudo systemctl restart trustweb-backup"
   sleep 2
   local ok=1 host
-  for host in app.idea2.site app.trustintheweb.org; do
+  for host in $APP_HOSTS; do
     if [ "$(rsh "curl -fsS -H 'Host: $host' http://127.0.0.1:8960/health" 2>/dev/null)" = ok ]; then say "health ok with Host: $host"; else say "health FAILED with Host: $host" >&2; ok=0; fi
   done
   after="$(backup_fingerprint)"; say "backups after: $after"
@@ -202,7 +240,7 @@ Environment=FEEDBACK_ORIGINS=$FEEDBACK_ORIGINS"
     rsh "if [ -e $DROPIN.bak.$TS ]; then sudo cp -p $DROPIN.bak.$TS $DROPIN; else sudo rm -f $DROPIN; fi; sudo systemctl daemon-reload && sudo systemctl restart trustweb-backup"
     return 1
   fi
-  rsh "systemctl show trustweb-backup -p Environment | tr ' ' '\n' | grep -E '^(Environment=)?(ALLOWED_HOSTS|FEEDBACK_ORIGINS)='"
+  rsh "systemctl show trustweb-backup -p Environment | tr ' ' '\n' | grep -E '^(Environment=)?(ALLOWED_HOSTS|LINK_HOSTS|FEEDBACK_ORIGINS)='"
 }
 
 backup_fingerprint() {
@@ -275,9 +313,6 @@ VERIFY=(
   "https://trustintheweb.org/ 200"
   "https://trustintheweb.org/faq.html 200"
   "https://www.trustintheweb.org/faq.html 301 https://trustintheweb.org/faq.html"
-  "https://app.trustintheweb.org/ 200"
-  "https://app.trustintheweb.org/demo/ 200"
-  "https://app.trustintheweb.org/manifest.json 200"
   "https://app.trustintheweb.org/hosted/status 200"
   "https://app.trustintheweb.org/backup/health 200"
   "https://trustintheweb.com/ 200"
@@ -286,6 +321,30 @@ VERIFY=(
   "https://www.trustweb.one/faq.html 301 https://trustintheweb.org/faq.html"
   "https://app.idea2.site/trustweb/ 200"
   "https://app.idea2.site/hosted/status 200"
+)
+# app.trustintheweb.org pages: served until `org-redirect`, 301 to the same URI on app.trustweb.one afterwards (its API paths above stay 200).
+VERIFY_ORG_SERVING=(
+  "https://app.trustintheweb.org/ 200"
+  "https://app.trustintheweb.org/demo/ 200"
+  "https://app.trustintheweb.org/manifest.json 200"
+)
+VERIFY_ORG_REDIRECTED=(
+  "https://app.trustintheweb.org/ 301 https://app.trustweb.one/"
+  "https://app.trustintheweb.org/demo/ 301 https://app.trustweb.one/demo/"
+  "https://app.trustintheweb.org/solo.html 301 https://app.trustweb.one/solo.html"
+  "https://app.trustintheweb.org/manifest.json 301 https://app.trustweb.one/manifest.json"
+  "https://app.trustintheweb.org/?connect=abc 301 https://app.trustweb.one/?connect=abc"
+)
+VERIFY_ONE=(
+  "https://app.trustweb.one/ 200"
+  "https://app.trustweb.one/demo/ 200"
+  "https://app.trustweb.one/solo.html 200"
+  "https://app.trustweb.one/manifest.json 200"
+  "https://app.trustweb.one/hosted/status 200"
+  "https://app.trustweb.one/backup/health 200"
+  "https://demo.trustweb.one/ 301 https://app.trustweb.one/demo/"
+  "https://demo.trustweb.one/demo/ 301 https://app.trustweb.one/demo/"
+  "https://demo.trustweb.one/solo.html 301 https://app.trustweb.one/demo/solo.html"
 )
 VERIFY_REDIRECTS=(
   "https://idea2.site/trustweb 301 https://trustintheweb.org/"
@@ -301,6 +360,8 @@ VERIFY_REDIRECTS=(
 cmd_verify() {
   local fail=0 line url want loc got
   local checks=("${VERIFY[@]}")
+  if rsh "sudo grep -q 'wave 6c, Jakob 2026-10-08 12:53' /etc/caddy/Caddyfile"; then checks+=("${VERIFY_ORG_REDIRECTED[@]}"); else checks+=("${VERIFY_ORG_SERVING[@]}"); fi
+  if rsh "sudo grep -q '^app.trustweb.one {' /etc/caddy/Caddyfile"; then checks+=("${VERIFY_ONE[@]}"); else say "(app.trustweb.one block not installed yet: its checks skipped)"; fi
   if rsh "sudo grep -q 'TrustInTheWeb migration' /etc/caddy/Caddyfile"; then checks+=("${VERIFY_REDIRECTS[@]}"); else say "(redirects not installed yet: their checks skipped)"; fi
   for line in "${checks[@]}"; do
     read -r url want loc <<<"$line"
@@ -315,7 +376,7 @@ cmd_verify() {
   done
   echo "TLS (issuer, notAfter):"
   local host
-  for host in trustintheweb.org www.trustintheweb.org app.trustintheweb.org trustintheweb.com www.trustintheweb.com trustweb.one www.trustweb.one; do
+  for host in trustintheweb.org www.trustintheweb.org app.trustintheweb.org trustintheweb.com www.trustintheweb.com trustweb.one www.trustweb.one app.trustweb.one demo.trustweb.one; do
     say "$host: $(rsh "echo | openssl s_client -connect $host:443 -servername $host 2>/dev/null | openssl x509 -noout -issuer -enddate 2>/dev/null | tr '\n' ' '" || echo none)"
   done
   return "$fail"
@@ -326,6 +387,8 @@ echo "--------"
 case "$CMD" in
   dns) cmd_dns ;;
   caddy-sites) cmd_caddy_sites ;;
+  app-one) cmd_app_one ;;
+  org-redirect) cmd_org_redirect ;;
   backup-env) cmd_backup_env ;;
   placeholders) cmd_placeholders ;;
   redirects) cmd_redirects ;;

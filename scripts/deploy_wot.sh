@@ -54,6 +54,13 @@
 #                              Storage is per origin: a phone's TrustWeb data stays on
 #                              the origin it was made on (app.idea2.site for everyone
 #                              before 2026-10-07); moving = Backup there, Restore here.
+#   app.trustweb.one/          THE canonical app host (wave 6c, Jakob 2026-10-08): the same app at its root, built the same
+#                              way as app.trustintheweb.org (site link https://trustintheweb.org/). Deploy it ALONE with
+#                                TW_APP_TARGET=trustweb-one ./scripts/deploy_wot.sh
+#                              Its own directory /srv/questhub-static/app-trustweb-one (scripts/trustweb_domains.sh app-one).
+#                              demo.trustweb.one redirects to its /demo/. Once app.trustintheweb.org redirects its pages here
+#                              (trustweb_domains.sh org-redirect), a TW_APP_TARGET=trustintheweb deploy still pushes files
+#                              but nobody is served them; its verify table then follows the 301 to this host.
 #   idea2.site/trustweb/       NOT the app (reversed 2026-09-25, owner: "/tw should
 #                              redirect to /trustweb and /trustweb should show what /tw
 #                              shows, instead of directing to the app"). A TrustWeb-
@@ -148,37 +155,36 @@ deploy_trustweb() {
   "$REPO/scripts/deploy_trustweb_peer.sh" --republish-cards
 }
 
-# app.trustintheweb.org (wave 3): the same app, base "/", linking to https://trustintheweb.org/.
-# Built into its own outDir so apps/trustweb/dist (the app.idea2.site build) is never touched, and
+# The app at a domain root (wave 3: app.trustintheweb.org; wave 6c: app.trustweb.one): the same app, base "/", linking to
+# https://trustintheweb.org/. Built into its own outDir so apps/trustweb/dist (the app.idea2.site build) is never touched, and
 # pushed to its own directory only. The demo inventory card (demo-peer.json) is copied over from the
 # app.idea2.site directory on the server: one demo peer, one relay (its card names app.idea2.site/relay;
-# both hosts proxy /relay/* to the same relay process, which routes on the recipient DID only).
+# every host proxies /relay/* to the same relay process, which routes on the recipient DID only).
 REMOTE_TRUSTINTHEWEB=/srv/questhub-static/app-trustintheweb
-TRUSTINTHEWEB_SITE_URL=https://trustintheweb.org/
-deploy_trustweb_trustintheweb() {
-  local out; out="$(mktemp -d /tmp/tw-app-trustintheweb.XXXXXX)"
-  echo "typechecking, building and pushing trustweb for app.trustintheweb.org (base /, site $TRUSTINTHEWEB_SITE_URL)"
+REMOTE_TRUSTWEB_ONE=/srv/questhub-static/app-trustweb-one
+ROOT_APP_SITE_URL=https://trustintheweb.org/
+deploy_trustweb_at_root() { # $1 host, $2 remote dir
+  local host="$1" dest="$2" out; out="$(mktemp -d /tmp/tw-app-root.XXXXXX)"
+  echo "typechecking, building and pushing trustweb for $host (base /, site $ROOT_APP_SITE_URL)"
   ( cd "$REPO/apps/trustweb" \
     && "$REPO/apps/demo/node_modules/.bin/tsc" --noEmit -p tsconfig.json \
-    && TW_BASE=/ VITE_TW_SITE_URL="$TRUSTINTHEWEB_SITE_URL" "$REPO/apps/demo/node_modules/.bin/vite" build --outDir "$out" --emptyOutDir >/dev/null )
-  grep -q "$TRUSTINTHEWEB_SITE_URL" "$out"/assets/*.js || { echo "the build does not link to $TRUSTINTHEWEB_SITE_URL: not pushed" >&2; exit 1; }
+    && TW_BASE=/ VITE_TW_SITE_URL="$ROOT_APP_SITE_URL" "$REPO/apps/demo/node_modules/.bin/vite" build --outDir "$out" --emptyOutDir >/dev/null )
+  grep -q "$ROOT_APP_SITE_URL" "$out"/assets/*.js || { echo "the build does not link to $ROOT_APP_SITE_URL: not pushed" >&2; exit 1; }
   if grep -q '"/trustweb/assets/' "$out/index.html"; then echo "the build still has base /trustweb/: not pushed" >&2; exit 1; fi
-  push_dir "$out" "$REMOTE_TRUSTINTHEWEB"
+  push_dir "$out" "$dest"
   rm -rf "$out"
   echo "copying the demo inventory card from $REMOTE_TRUSTWEB (if published)"
-  rsh "if [ -f $REMOTE_TRUSTWEB/demo-peer.json ]; then cp $REMOTE_TRUSTWEB/demo-peer.json $REMOTE_TRUSTINTHEWEB/ && chmod 0644 $REMOTE_TRUSTINTHEWEB/demo-peer.json && sudo chcon --reference=$REF $REMOTE_TRUSTINTHEWEB/demo-peer.json && echo '  demo-peer.json copied'; else echo '  no card published: nothing to copy'; fi"
+  rsh "if [ -f $REMOTE_TRUSTWEB/demo-peer.json ]; then cp $REMOTE_TRUSTWEB/demo-peer.json $dest/ && chmod 0644 $dest/demo-peer.json && sudo chcon --reference=$REF $dest/demo-peer.json && echo '  demo-peer.json copied'; else echo '  no card published: nothing to copy'; fi"
 }
+deploy_trustweb_trustintheweb() { deploy_trustweb_at_root app.trustintheweb.org "$REMOTE_TRUSTINTHEWEB"; }
+deploy_trustweb_one() { deploy_trustweb_at_root app.trustweb.one "$REMOTE_TRUSTWEB_ONE"; }
 
-TRUSTINTHEWEB_URLS=(
-  "https://app.trustintheweb.org/"
-  "https://app.trustintheweb.org/solo.html"
-  "https://app.trustintheweb.org/demo"
-  "https://app.trustintheweb.org/emergent-demo"
-  "https://app.trustintheweb.org/ea-demo"
-  "https://app.trustintheweb.org/manifest.json"
-  "https://app.trustintheweb.org/hosted/status"
-  "https://app.trustintheweb.org/backup/health"
-)
+root_app_urls() { # $1 host
+  printf '%s\n' "https://$1/" "https://$1/solo.html" "https://$1/demo" "https://$1/emergent-demo" "https://$1/ea-demo" \
+    "https://$1/manifest.json" "https://$1/hosted/status" "https://$1/backup/health"
+}
+TRUSTINTHEWEB_URLS=($(root_app_urls app.trustintheweb.org))
+TRUSTWEB_ONE_URLS=($(root_app_urls app.trustweb.one))
 
 TRUSTWEB_URLS=(
   "https://app.idea2.site/trustweb/"
@@ -204,11 +210,14 @@ TRUSTWEB_URLS=(
 case "${TW_APP_TARGET:-}" in
   ""|idea2) ;;
   trustintheweb) ;;
-  *) echo "unknown TW_APP_TARGET: ${TW_APP_TARGET} (idea2 or trustintheweb)" >&2; exit 2 ;;
+  trustweb-one) ;;
+  *) echo "unknown TW_APP_TARGET: ${TW_APP_TARGET} (idea2, trustintheweb or trustweb-one)" >&2; exit 2 ;;
 esac
 
 if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then
   deploy_trustweb_trustintheweb
+elif [ "${TW_APP_TARGET:-}" = "trustweb-one" ]; then
+  deploy_trustweb_one
 elif [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
   deploy_trustweb
 else
@@ -321,6 +330,8 @@ verify_urls=(
 )
 if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then
   verify_urls=("${TRUSTINTHEWEB_URLS[@]}")
+elif [ "${TW_APP_TARGET:-}" = "trustweb-one" ]; then
+  verify_urls=("${TRUSTWEB_ONE_URLS[@]}")
 elif [ "${ONLY_TRUSTWEB:-}" = "1" ]; then
   verify_urls=("${TRUSTWEB_URLS[@]}")
 else
@@ -357,6 +368,7 @@ done
 
 relay_host=app.idea2.site
 [ "${TW_APP_TARGET:-}" = "trustintheweb" ] && relay_host=app.trustintheweb.org
+[ "${TW_APP_TARGET:-}" = "trustweb-one" ] && relay_host=app.trustweb.one
 relay=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
   "https://$relay_host/relay/send" -H 'content-type: application/json' \
   -d '{"to":"did:peer:2.deploycheck"}' 2>/dev/null || true)
@@ -371,7 +383,11 @@ printf '  %-46s %s\n' "POST $relay_host/relay/send" "$relay"
 echo "--------"
 if [ "$fail" = "0" ]; then
   echo "all good"
-  if [ "${TW_APP_TARGET:-}" = "trustintheweb" ]; then echo "live: https://app.trustintheweb.org/"; else echo "live: https://app.idea2.site/wot/demo/"; fi
+  case "${TW_APP_TARGET:-}" in
+    trustintheweb) echo "live: https://app.trustintheweb.org/" ;;
+    trustweb-one) echo "live: https://app.trustweb.one/" ;;
+    *) echo "live: https://app.idea2.site/wot/demo/" ;;
+  esac
 else
   echo "SOMETHING IS NOT 200 -- read the table above before demoing" >&2
   exit 1

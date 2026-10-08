@@ -6,14 +6,14 @@
  *
  * This module is pure: no DOM, no strings (the view maps a ShortLinkError to words), fetch and clock injected.
  *
- * What may be sent, and only after an explicit tap: a connect url (or a demo-account url) on one of the two app origins,
+ * What may be sent, and only after an explicit tap: a connect url (or a demo-account url) on one of the three app origins,
  * never one that carries a key (a hand-over link's recovery key, a meeting's transcript key) or the notes a Meet code can
  * carry in its fragment: those stay on the phone, the fragment being the part a browser never sends anywhere.
  */
 import { SHORTENABLE_FRAGMENT_KEYS } from './demo_account'
 
-/** The only origins that serve /link and /l/<id> (Caddy routes both in these two site blocks). */
-export const SHORT_LINK_ORIGINS: readonly string[] = ['https://app.idea2.site', 'https://app.trustintheweb.org']
+/** The only origins that serve /link and /l/<id> (Caddy routes both in these three site blocks). */
+export const SHORT_LINK_ORIGINS: readonly string[] = ['https://app.idea2.site', 'https://app.trustintheweb.org', 'https://app.trustweb.one']
 /** How long the server keeps a short link (LINK_TTL_DAYS), for the words next to the button. */
 export const SHORT_LINK_DAYS = 30
 /** The server's body and url cap (LINK_MAX_BYTES). A longer url is not offered rather than refused. */
@@ -59,7 +59,7 @@ export type ShortOutcome =
   | { ok: true; link: ShortLink; short: string; fromCache: boolean }
   | { ok: false; error: ShortLinkError; retryAfterSeconds?: number }
 
-/** May this page offer short links at all: exactly the two app origins. */
+/** May this page offer short links at all: exactly the three app origins. */
 export function canShorten(origin: string): boolean {
   return SHORT_LINK_ORIGINS.includes(origin)
 }
