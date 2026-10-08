@@ -26,6 +26,20 @@ describe('toE164', () => {
 describe('Signal', () => {
   it('links a phone number', () => expect(link(Channel.Signal, '+43 660 1234567')).toBe('https://signal.me/#p/+436601234567'))
   it('keeps a pasted signal.me link', () => expect(link(Channel.Signal, 'https://signal.me/#eu/abcDEF123')).toBe('https://signal.me/#eu/abcDEF123'))
+  it('turns a pasted sgnl:// link into the https form', () => {
+    expect(link(Channel.Signal, 'sgnl://signal.me/#eu/abcDEF123')).toBe('https://signal.me/#eu/abcDEF123')
+  })
+  it('keeps a pasted phone link', () => expect(link(Channel.Signal, 'https://signal.me/#p/+436601234567')).toBe('https://signal.me/#p/+436601234567'))
+  it('refuses a signal.me link Signal could not open', () => {
+    for (const bad of ['https://signal.me/', 'https://signal.me/#', 'https://signal.me/#xyz', 'https://signal.me/#p/12', 'https://signal.me/#eu/', 'https://signal.me/#eu/a b']) {
+      expect(normalizeHandle(Channel.Signal, bad)).toBeNull()
+    }
+  })
+  it('refuses another scheme or another host', () => {
+    expect(normalizeHandle(Channel.Signal, 'http://signal.me/#eu/abcDEF123')).toBeNull()
+    expect(normalizeHandle(Channel.Signal, 'https://signal.me.evil.example/#eu/abcDEF123')).toBeNull()
+    expect(normalizeHandle(Channel.Signal, 'sgnl://evil.example/#eu/abcDEF123')).toBeNull()
+  })
   it('refuses a bare username (Signal cannot link one)', () => expect(link(Channel.Signal, 'lena.42')).toBeNull())
 })
 
