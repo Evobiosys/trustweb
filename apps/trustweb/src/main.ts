@@ -4320,6 +4320,17 @@ function supersede(): void {
   location.reload()
 }
 
+/**
+ * The person comes back to this tab, which then takes the drain and saves what arrives: a record another tab saved while a sheet was
+ * left open here must be taken over first, or this tab's older copy would be written over it (a new connection lost). The stale sheet
+ * closes (closing it takes the record over, settleAdoption).
+ */
+function catchUpBeforeDraining(): void {
+  if (!adoptWaiting || superseded) return
+  if (sheet.classList.contains('on')) closeSheet()
+  else setTimeout(settleAdoption, 0)
+}
+
 /** The sheet closed or the field was left: take over what another tab saved meanwhile, unless this tab saved last (then it is ours). */
 function settleAdoption(): void {
   if (!adoptWaiting || !state || superseded || busyWithRecord()) return
@@ -4344,9 +4355,13 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
+  catchUpBeforeDraining()
   if (state && !state.testOf?.handedOverAt) net.activate(slept)
 })
-window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
+window.addEventListener('focus', () => {
+  catchUpBeforeDraining()
+  if (state && !state.testOf?.handedOverAt) net.activate(false)
+})
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
 // drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).
 window.addEventListener('storage', (e) => {
