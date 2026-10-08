@@ -36,13 +36,19 @@
 #   Install, the feedback endpoint); tw_site_rehost.py stays as the safety net that fails on any old URL.
 #   The live production site: TW_SITE_HOST=trustintheweb.org TW_SERVICES_LIVE=1 ./scripts/build_tw_front_door.sh
 #
-# TWO FLAGS (wave 2: transcription got its own, because it stays off until a
-# provider key is placed, whatever hosting does):
+# THREE FLAGS (wave 2: transcription got its own, because it stays off until a
+# provider key is placed, whatever hosting does; wave 6: passing a question on through friends got its own):
 #   SERVICES_LIVE (TW_SERVICES_LIVE=1 or --services-live): 0 = pricing and privacy
 #     say hosting is "starting soon (experimental)"; 1 = switched on.
 #   TRANSCRIBE_LIVE (TW_TRANSCRIBE_LIVE=1 or --transcribe-live): 0 = pricing,
 #     privacy and FAQ say server transcription is coming and switched off today;
 #     1 = switched on (through OpenRouter, see privacy).
+#   HOPS_LIVE (TW_HOPS_LIVE=1 or --hops-live, default 0): 0 = the copy says passing a question on through friends is
+#     not built yet and today a question reaches your direct connections; 1 = the copy says a question can travel on
+#     through friends and you choose how far (one hop by default): the hero line, the "more scalable" popup, the
+#     Introductions use case, why.html and the two FAQ answers (all <!--IF:hops-off--> / <!--IF:hops-on--> blocks in
+#     scripts/tw-front-door/). Set it to 1 only after the app that relays a question through friends is live on both
+#     app hosts. Handled exactly like TW_SERVICES_LIVE: an explicit build env, never inferred from the server.
 # TW_TRANSCRIBE_PROVIDER=openrouter|berget|berget-only (default openrouter) says which provider the copy names for
 #   server transcription: openrouter = OpenRouter only (no Berget wording anywhere); berget = Berget AI in Sweden
 #   with OpenRouter in the US as the fallback; berget-only = Berget alone. Flip it to match the server's status
@@ -113,6 +119,7 @@ SSHENV=(env SSH_ASKPASS="$HOME/.ssh/questhub-jump-askpass" SSH_ASKPASS_REQUIRE=f
 
 SERVICES_LIVE="${TW_SERVICES_LIVE:-0}"   # <- hosting flag, see the header
 TRANSCRIBE_LIVE="${TW_TRANSCRIBE_LIVE:-0}"   # <- server transcription flag, see the header
+HOPS_LIVE="${TW_HOPS_LIVE:-0}"   # <- passing a question on through friends flag, see the header
 TRANSCRIBE_PROVIDER="${TW_TRANSCRIBE_PROVIDER:-openrouter}"   # <- which provider the transcription copy names, see the header
 case "$TRANSCRIBE_PROVIDER" in
   openrouter|berget|berget-only) ;;
@@ -125,8 +132,9 @@ for arg in "$@"; do
     --draft) DRAFT=1 ;;
     --services-live) SERVICES_LIVE=1 ;;
     --transcribe-live) TRANSCRIBE_LIVE=1 ;;
+    --hops-live) HOPS_LIVE=1 ;;
     --publish-terms) PUBLISH_TERMS=1 ;;
-    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --publish-terms)" >&2; exit 2 ;;
+    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --hops-live, --publish-terms)" >&2; exit 2 ;;
   esac
 done
 
@@ -154,6 +162,7 @@ fi
 [ "$DRAFT" = 1 ] && ARGS+=(--draft)
 [ "$SERVICES_LIVE" = 1 ] && ARGS+=(--services-live)
 [ "$TRANSCRIBE_LIVE" = 1 ] && ARGS+=(--transcribe-live)
+[ "$HOPS_LIVE" = 1 ] && ARGS+=(--hops-live)
 [ "$PUBLISH_TERMS" = 1 ] && ARGS+=(--publish-terms)
 python3 -I "$FRAG/tw_site.py" "${ARGS[@]}"
 if [ "$SITE_HOST" != idea2.site ]; then

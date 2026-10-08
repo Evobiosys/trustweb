@@ -5,7 +5,7 @@ the server first and deploys the output afterwards. Nothing here touches the
 network or the server.
 
     tw_site.py --src SOURCE_INDEX --frag FRAGMENT_DIR --out OUT_DIR
-               [--draft] [--services-live] [--transcribe-live] [--publish-terms]
+               [--draft] [--services-live] [--transcribe-live] [--hops-live] [--publish-terms]
                [--transcribe-provider openrouter|berget|berget-only]
                [--site org|com] [--site-host HOST] [--app-base URL]
 
@@ -31,7 +31,10 @@ name is active and dropped otherwise. Names: soon / live (hosting is described
 as "starting soon" until --services-live), tx-off / tx-on (server transcription
 is described as "coming, switched off today" until --transcribe-live; it has its
 own flag because it stays off until a provider key is placed, whatever hosting
-does), draft / prod, org / com, terms. Blocks must not nest.
+does), hops-off / hops-on (wave 6: the copy that says a question reaches only your direct connections today, versus
+the copy that says it can travel on through friends and you choose how far; hops-on only with --hops-live, which the
+orchestrator passes once the app that relays a question through friends is live), draft / prod, org / com, terms.
+Blocks must not nest.
 
 TRANSCRIPTION PROVIDER FLAG (who the copy says transcribes on the server). The words on privacy, pricing
 and the third-party list name the provider that really runs, never one that does not:
@@ -51,7 +54,9 @@ wine red as primary and the navy as accent, and device typefaces only (no font i
 Tokens in fragments, replaced in the finished page: {{APP}} app base, {{API}}
 app origin, {{ORG}} / {{COM}} prefix of a link to the other site (empty for the
 own site, so own links stay relative), {{SELF_URL}}, {{WHITEPAPER}},
-{{SITE_NAME}}, {{SITE_KIND}} (org or com), {{BACK}}, and the fragments {{WORDMARK}} and {{SWIRLS}}.
+{{SITE_NAME}}, {{SITE_KIND}} (org or com), {{BACK}}, and the fragments {{WORDMARK}}, {{SWIRLS}} and
+{{DEMO_BUTTON}} (wave 6: the "Open the live demo" button under the hero text, one source in demo-button.html
+for both sites; its class token {{DEMO_BTN_CLASS}} picks the button style each site defines).
 
 Every link between the site's own pages is relative, so the same output works
 under /trustweb/, under /trustweb/draft/ and at the root of a domain.
@@ -112,6 +117,7 @@ class Flags:
     site_host: str = IDEA2_HOST
     app_base: str = DEFAULT_APP_BASE
     transcribe_provider: TranscribeProvider = TranscribeProvider.OPENROUTER
+    hops_live: bool = False
 
     @property
     def terms_visible(self) -> bool:
@@ -137,6 +143,7 @@ class Flags:
         names = {
             "live" if self.services_live else "soon",
             "tx-on" if self.transcribe_live else "tx-off",
+            "hops-on" if self.hops_live else "hops-off",
             f"prov-{self.transcribe_provider.value}",
             "draft" if self.draft else "prod",
             self.site.value,
@@ -166,6 +173,7 @@ class Flags:
             "SITE_NAME": "TrustInTheWeb.org" if self.is_org else "TrustInTheWeb.com",
             "SITE_KIND": self.site.value,
             "TX_ROUTE": TX_ROUTE[self.transcribe_provider],
+            "DEMO_BTN_CLASS": "joinbtn" if self.is_org else "btn-primary",
             "BACK": back,
             "AI_DRAFT": AI_DRAFT_BANNER,
         }
@@ -295,18 +303,20 @@ def chrome_pieces(frag_dir: Path, flags: Flags) -> tuple[str, str]:
     )
 
 
+FRAGMENT_TOKENS = frozenset({"WORDMARK", "SWIRLS", "DEMO_BUTTON"})
+
+
 def fill_tokens(text: str, frag_dir: Path, flags: Flags) -> str:
-    """Replace {{TOKEN}} with the site's values; the two fragment tokens expand first, so
+    """Replace {{TOKEN}} with the site's values; the fragment tokens expand first, so
     tokens inside them resolve too. An unknown token is left in place (verify_site fails on it)."""
     values = {
         **flags.tokens(),
         "WORDMARK": fragment(frag_dir, "wordmark.html").strip(),
         "SWIRLS": fragment(frag_dir, "swirls.html").strip(),
+        "DEMO_BUTTON": fragment(frag_dir, "demo-button.html").strip(),
     }
     expanded = TOKEN_RE.sub(
-        lambda m: (
-            values[m.group(1)] if m.group(1) in ("WORDMARK", "SWIRLS") else m.group(0)
-        ),
+        lambda m: values[m.group(1)] if m.group(1) in FRAGMENT_TOKENS else m.group(0),
         text,
     )
     return TOKEN_RE.sub(lambda m: values.get(m.group(1), m.group(0)), expanded)
@@ -729,6 +739,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="describe server transcription as switched on (default: coming, off today)",
     )
     ap.add_argument(
+        "--hops-live",
+        action="store_true",
+        help="describe passing a question on through friends as live (default: not built yet, only direct connections)",
+    )
+    ap.add_argument(
         "--transcribe-provider",
         default=os.environ.get(
             TRANSCRIBE_PROVIDER_ENV, TranscribeProvider.OPENROUTER.value
@@ -778,6 +793,7 @@ def main(argv: list[str]) -> int:
         site_host=args.site_host,
         app_base=args.app_base,
         transcribe_provider=provider,
+        hops_live=args.hops_live,
     )
     if flags.is_org and args.src is None:
         raise SystemExit("--src is required for --site org")
@@ -786,7 +802,7 @@ def main(argv: list[str]) -> int:
     print("built: " + " ".join(written))
     print(
         f"flags: draft={flags.draft} services_live={flags.services_live} "
-        f"transcribe_live={flags.transcribe_live} terms={flags.terms_visible} "
+        f"transcribe_live={flags.transcribe_live} hops_live={flags.hops_live} terms={flags.terms_visible} "
         f"site={flags.site.value} host={flags.site_host} app={flags.app_base} "
         f"transcribe_provider={flags.transcribe_provider.value}"
     )
