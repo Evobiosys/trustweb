@@ -7,7 +7,7 @@
  * the inventory export, provenance, or any share or contact payload, and it never goes to a server in plaintext (the only copy that leaves
  * the phone is the end-to-end encrypted backup, backup.ts, which holds the whole record under the person's own key). cascade.ts
  * askSources strips it from its copy of the record; test/unit/general_notes.test.mjs scans the source for every place that names the field,
- * so a new reader of it cannot appear unnoticed. Not to be confused with PastMeeting.generalNotes (the field under "General notes" on Record).
+ * so a new reader that names it must be added there on purpose (a generic spread of the record is not seen by the scan). Not to be confused with PastMeeting.generalNotes (the field under "General notes" on Record).
  *
  * Pure and DOM-free: the clock, the timers and the store are injected.
  */

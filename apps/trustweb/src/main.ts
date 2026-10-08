@@ -2994,8 +2994,9 @@ function meetTrustWebPage(): HTMLElement {
     if (qr.isConnected) { shown = true; advanced.refresh(); void namesSync().refresh() } else if (shown) stopListening()
   })
   const stopNames = namesSync().onChange(() => { if (qr.isConnected) namesView.update(); else stopNames() })
-  // Meet was opened by the person: ask now (names the operator granted show at once); the registration's own answer asks again, throttled.
-  if (st().connectCode) void namesSync().refresh(true)
+  // Meet was opened by the person: ask (names the operator granted show at once after a reload; a read at most every 30 s, because POST /name shares
+  // the per-address budget of POST /connect and many phones can sit behind one venue address).
+  if (st().connectCode) void namesSync().refresh()
   void (async () => {
     await net.start()
     const link = net.connectLink(APP_URL)

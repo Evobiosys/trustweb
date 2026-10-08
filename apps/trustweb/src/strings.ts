@@ -129,6 +129,8 @@ export const S = {
   safeS3: 'Showing your own code to others registers a short address for it on our server (your name and the contact links you chose to share). Nothing else is sent unless you share it.',
   safeS4: 'The person who shared this code with you shared only their contact links, for example Signal or WhatsApp. You can also use those links outside this app.',
   safeS5: 'If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.',
+  // No "?." on import.meta.env on purpose: Vite folds the literal VITE_TW_CODE_PUBLIC at build time and the line must vanish from the default bundle.
+  // Outside Vite (plain node) import.meta.env is undefined and this read would throw; only vitest and Vite import strings.ts.
   safeCodePublic: import.meta.env.VITE_TW_CODE_PUBLIC === '1' ? 'You can read the open source code on GitHub.' : '',
   safeBackAdd: 'Back',
   safeBackCard: 'Back',

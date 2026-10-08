@@ -220,7 +220,7 @@ describe('PRIVACY: the General note is Only me', () => {
     askSources(state, Ring.Friend, 0)
     expect(state.people[0].generalNote).toBe(SECRET)
   })
-  it('the source names the field only where it is meant to: a new reader cannot appear unnoticed', () => {
+  it('the source names the field only where it is meant to: a new reader that names the field must be added to the allowlist (a generic spread of the record is not caught)', () => {
     const allowed = new Set([
       'general_notes.ts', // the rules
       'person_general_view.ts', // the field on the card (through generalNoteOf / commit; names it only in comments)

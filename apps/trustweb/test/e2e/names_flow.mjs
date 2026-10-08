@@ -81,7 +81,7 @@ async function main() {
     t.ok('setup: Ada has a code on the (stubbed) server', !!ada.code)
     server.grant(ada.code, 'japossert')
     server.grant(ada.code, 'jakob', { alias: true })
-    await ada.page.getByRole('button', { name: 'Back' }).click()
+    await ada.page.reload()
     await ada.page.locator('.hdr [aria-label^="Show my code"]').click()
     await openAdvanced(ada.page)
     const seen = await until(async () => /japossert/.test(await nameBlock(ada.page).innerText()) ? true : null, 15_000)
