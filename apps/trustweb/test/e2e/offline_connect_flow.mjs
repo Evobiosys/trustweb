@@ -9,6 +9,8 @@
  *   E  an ask that arrived while A was away: no consent prompt for a long gone asker, but "<B> asked while you were away"
  *   F  cross-host: A on app.trustweb.one, B on app.trustintheweb.org adds A by its code; A closed meanwhile; both orders
  *   G  A on the Meet page while two people connect one after the other: two people in A's web, not one merged card
+ *   H  (review 6f) two tabs; a card's sheet stays open in the tab that does not drain while a new person lands in the other tab: the
+ *      switch flipped in that open sheet afterwards is saved AND the new person stays (the take-over keeps the sheet's objects live)
  * Ports: Vite TW_PORT (8970), TLS fronts TW_PORT+1 and TW_PORT+2. TW_SHOTS=<dir> for screenshots. PARTS=a,b,... to run a subset.
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8970 ../../node_modules/.bin/tsx ../trustweb/test/e2e/offline_connect_flow.mjs
  */
@@ -294,6 +296,42 @@ async function partG(browser) {
   await a.ctx.close(); await p.ctx.close(); await b.ctx.close()
 }
 
+async function partH(browser) {
+  const server = fakeConnectServer(ORIGIN)
+  const a = await newPhone(browser, server)
+  await startPhone(a.page, 'Ada Sheets')
+  const code = await showCode(a.page, server)
+  await backHome(a.page)
+  const b = await newPhone(browser, server)
+  await startPhone(b.page, 'Bo Card')
+  await openAndAdd(b.page, code)
+  t.ok('h: Bo is in her web', !!(await until(() => inWeb(a.page, 'Bo Card'), 15_000)))
+  const tab2 = await reopen(a.ctx) // opened later: it is in front and takes the drain
+  await a.page.waitForTimeout(3000)
+  // In the first tab Ada opens Bo's card and leaves it open.
+  await a.page.locator('.node:not(.you)', { hasText: 'Bo Card' }).click()
+  await a.page.locator('.sheet.on [data-pass-on]').waitFor({ timeout: 5_000 })
+  const c = await newPhone(browser, server)
+  await startPhone(c.page, 'Cy Later')
+  await openAndAdd(c.page, code)
+  const landed = await until(async () => (await record(tab2)).people.some((p) => p.name === 'Cy Later'), 20_000)
+  t.ok('h: Cy lands while the card stays open in the other tab', !!landed && await a.page.locator('.sheet.on [data-pass-on]').isVisible())
+  await a.page.waitForTimeout(800)
+  await a.page.locator('.sheet.on [data-pass-on]').click()
+  await a.page.waitForTimeout(800)
+  const r = await record(a.page)
+  t.ok('h: the switch flipped in the open sheet is saved', r.people.find((p) => p.name === 'Bo Card')?.passOn === true, JSON.stringify(r.people.map((p) => [p.name, p.passOn])))
+  t.ok('h: and Cy is still in the record (the open sheet did not write the older copy back)', r.people.some((p) => p.name === 'Cy Later') && r.peers.some((p) => p.displayName === 'Cy Later'), JSON.stringify(r.people.map((p) => p.name)))
+  // The other tab saves once more (a name change is a save): it took the switch over and does not write it away.
+  await tab2.locator('.node.you').click()
+  await tab2.locator('.sheet input[aria-label="Your name"]').fill('Ada Sheets')
+  await tab2.getByRole('button', { name: 'Save', exact: true }).click()
+  await tab2.waitForTimeout(800)
+  const r2 = await record(tab2)
+  t.ok('h: after the other tab saved too, both the switch and Cy are kept', r2.people.find((p) => p.name === 'Bo Card')?.passOn === true && r2.people.some((p) => p.name === 'Cy Later'), JSON.stringify(r2.people.map((p) => [p.name, p.passOn])))
+  await a.ctx.close(); await b.ctx.close(); await c.ctx.close()
+}
+
 async function main() {
   const app = await startApp(PORT)
   let front = null
@@ -304,8 +342,8 @@ async function main() {
     front2 = await startHttpsOrigin({ port: PORT + 2, appPort: PORT, host: HOST2 })
     browser = await launch([`--host-resolver-rules=MAP ${HOST} 127.0.0.1:${PORT + 1}, MAP ${HOST2} 127.0.0.1:${PORT + 2}`])
     console.log(`offline_connect_flow: app ${app.base}, https fronts ${front.origin} ${front2.origin}`)
-    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g').split(',')
-    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG }
+    const parts = (process.env.PARTS || 'a,b,c,d,e,f,g,h').split(',')
+    const run = { a: partA, b: partB, c: partC, d: partD, e: partE, f: partF, g: partG, h: partH }
     for (const p of parts) {
       try { await run[p](browser) } catch (e) { t.ok(`${p}: ran to the end`, false, String(e?.message ?? e).split('\n')[0]) }
     }

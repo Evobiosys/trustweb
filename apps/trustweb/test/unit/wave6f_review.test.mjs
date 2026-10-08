@@ -2,11 +2,11 @@
  * Wave 6f review + fix (the rules the review added or changed):
  *   ack_retry.ts   this visit's attempts per connection are spaced and capped, whatever their outcome (a timed-out send may have been stored)
  *   peer_cards.ts  the unmerge-by-name step runs ONCE per record; a card its owner renames later is never moved by it
- *   tab_sync.ts    what a tab does with a record another tab saved: adopt, wait while a sheet holds it, or stop when reset or re-owned
+ *   tab_sync.ts    what a tab does with a record another tab saved: adopt it in place (objects kept by id), or stop when reset or re-owned
  */
 import { attemptAllowed, nextAttempts, ACK_ATTEMPT_GAP_MS, ACK_ATTEMPTS_PER_VISIT } from '../../src/ack_retry.ts'
 import { repairPeerCards } from '../../src/peer_cards.ts'
-import { StoredChange, storedChange } from '../../src/tab_sync.ts'
+import { StoredChange, adoptInPlace, storedChange } from '../../src/tab_sync.ts'
 
 const NOW = 1_800_000_000_000
 const H = 60 * 60 * 1000
@@ -60,21 +60,60 @@ describe('peer_cards: the unmerge step runs once per record', () => {
 
 describe('tab_sync: a record another tab of this profile saved', () => {
   const mine = { me: { id: 'me' } }
-  it('the same identity, nothing open: adopt it', () => {
-    expect(storedChange(mine, false, 'me', false)).toBe(StoredChange.Adopt)
-  })
-  it('the same identity while a sheet or a field holds the current record: wait (an edit there must not land on a record no longer saved)', () => {
-    expect(storedChange(mine, false, 'me', true)).toBe(StoredChange.Wait)
+  it('the same identity: adopt it', () => {
+    expect(storedChange(mine, false, 'me')).toBe(StoredChange.Adopt)
   })
   it('removed (Reset this phone in another tab): this tab is superseded and must never write its copy back', () => {
-    expect(storedChange(null, true, 'me', false)).toBe(StoredChange.Superseded)
-    expect(storedChange(null, true, 'me', true)).toBe(StoredChange.Superseded)
+    expect(storedChange(null, true, 'me')).toBe(StoredChange.Superseded)
   })
-  it('another identity (a hand-over taken, a restore): superseded, also while busy', () => {
-    expect(storedChange({ me: { id: 'other' } }, false, 'me', false)).toBe(StoredChange.Superseded)
-    expect(storedChange({ me: { id: 'other' } }, false, 'me', true)).toBe(StoredChange.Superseded)
+  it('another identity (a hand-over taken, a restore): superseded', () => {
+    expect(storedChange({ me: { id: 'other' } }, false, 'me')).toBe(StoredChange.Superseded)
   })
   it('unreadable: ignored, this tab carries on with its own', () => {
-    expect(storedChange(null, false, 'me', false)).toBe(StoredChange.Ignore)
+    expect(storedChange(null, false, 'me')).toBe(StoredChange.Ignore)
+  })
+})
+
+describe('tab_sync: adoptInPlace keeps the objects a sheet holds', () => {
+  it('an edit through an object held from before the take-over lands on the adopted record (not on a copy no longer saved)', () => {
+    const ann = person('ann', 'Ann', { peerId: 'a' })
+    const cur = state([ann], [peer('a', 'Ann')])
+    const next = JSON.parse(JSON.stringify(cur))
+    next.peers.push(peer('bo', 'Bo')) // the other tab received Bo
+    next.people.push(person('bo-card', 'Bo', { peerId: 'bo' }))
+    next.people[0].ring = 'friend' // and changed Ann there
+    const out = adoptInPlace(cur, next)
+    expect(out).toBe(cur)
+    expect(cur.people[0]).toBe(ann) // the very object the open sheet holds
+    expect(ann.ring).toBe('friend')
+    ann.passOn = true // the sheet's "Pass their asks on", after the take-over
+    const saved = JSON.parse(JSON.stringify(cur))
+    expect(saved.people.find((p) => p.id === 'ann').passOn).toBe(true)
+    expect(saved.peers.map((p) => p.id)).toEqual(['a', 'bo'])
+    expect(saved.people.map((p) => p.id)).toEqual(['ann', 'bo-card'])
+  })
+  it('keys and items the newer record no longer has are gone; order follows the newer record', () => {
+    const cur = { a: 1, gone: 2, list: [{ id: 'x', v: 1 }, { id: 'y', v: 2 }], plain: [1, 2, 3] }
+    const x = cur.list[0]
+    adoptInPlace(cur, { a: 3, list: [{ id: 'z', v: 9 }, { id: 'x', v: 5 }], plain: [4] })
+    expect(cur).toEqual({ a: 3, list: [{ id: 'z', v: 9 }, { id: 'x', v: 5 }], plain: [4] })
+    expect(cur.list[1]).toBe(x)
+  })
+  it('a duplicate id reuses the held object once only', () => {
+    const cur = { list: [{ id: 'x', v: 1 }] }
+    adoptInPlace(cur, { list: [{ id: 'x', v: 2 }, { id: 'x', v: 3 }] })
+    expect(cur.list[0]).not.toBe(cur.list[1])
+    expect(cur.list.map((i) => i.v)).toEqual([2, 3])
+  })
+  it('never copies a key that reaches a prototype', () => {
+    const cur = { me: { id: 'me' } }
+    adoptInPlace(cur, JSON.parse('{"me":{"id":"me"},"__proto__":{"polluted":1},"x":{"constructor":{"prototype":{"bad":1}}}}'))
+    expect({}.polluted).toBeUndefined()
+    expect({}.bad).toBeUndefined()
+    expect(Object.getPrototypeOf(cur)).toBe(Object.prototype)
+  })
+  it('a change of type takes the newer value', () => {
+    expect(adoptInPlace({ a: 1 }, [1])).toEqual([1])
+    expect(adoptInPlace([1], 'x')).toBe('x')
   })
 })

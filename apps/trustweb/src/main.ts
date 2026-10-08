@@ -71,7 +71,7 @@ import { S } from './strings'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk, liveAwayAsks } from './away_asks'
-import { StoredChange, storedChange } from './tab_sync'
+import { StoredChange, adoptInPlace, storedChange } from './tab_sync'
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
@@ -245,9 +245,9 @@ let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);
 // nothing is merged over it, and the person is told.
 const recordKeptAside = wasUnreadable(persona, storeCtx)
-// Wave 6f review (tab_sync.ts): another tab saved a newer record while this one was busy with the current one (taken over once the
-// sheet closes or the field is left); and: another tab reset this record or gave it another identity, so this tab never saves again.
-let adoptWaiting = false
+// Wave 6f review (tab_sync.ts): another tab's newer record was taken over while a sheet was open or a field had the focus (the screen is
+// drawn again once that ends); and: another tab reset this record or gave it another identity, so this tab never saves again.
+let redrawWaiting = false
 let superseded = false
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
@@ -858,8 +858,8 @@ function closeSheet(): void {
   sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
-  // Wave 6f review: a record another tab saved while this sheet was open is taken over now (after the handler that closed it).
-  if (adoptWaiting) setTimeout(settleAdoption, 0)
+  // Wave 6f review: a record another tab saved while this sheet was open was taken over then; draw it now (after the handler that closed it).
+  if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -4279,8 +4279,8 @@ const openInstallSheet = installSheets.openInstall
 // boot
 // ---------------------------------------------------------------------------
 
-/** Does an open sheet or a field with the focus hold objects of the current record (tab_sync.ts Wait)? */
-function busyWithRecord(): boolean {
+/** Is the person in an open sheet or a field? Then the screen is not drawn again under them (their sheet and their typing stay). */
+function busyOnScreen(): boolean {
   const a = document.activeElement
   const typing = a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)
   return typing || sheet.classList.contains('on')
@@ -4289,12 +4289,9 @@ function busyWithRecord(): boolean {
 /** Wave 6f review: what another tab did to this persona's record (tab_sync.ts). */
 function onStoredChange(next: AppState | null, removed: boolean): void {
   if (!state || superseded) return
-  switch (storedChange(next, removed, state.me.id, busyWithRecord())) {
+  switch (storedChange(next, removed, state.me.id)) {
     case StoredChange.Adopt:
       if (next) adoptRecord(next)
-      return
-    case StoredChange.Wait:
-      adoptWaiting = true
       return
     case StoredChange.Superseded:
       supersede()
@@ -4304,47 +4301,31 @@ function onStoredChange(next: AppState | null, removed: boolean): void {
   }
 }
 
+/**
+ * Takes the newer record over in place (tab_sync.ts adoptInPlace): the objects an open sheet or a pending handler holds stay the live
+ * ones, so what the person does there is saved with the newer record and never writes the older one back.
+ */
 function adoptRecord(next: AppState): void {
-  adoptWaiting = false
-  state = next
+  if (!state) return
+  adoptInPlace(state, next)
   // Handed over to another phone from another tab: this tab never drains for that identity again (one relay identity, one phone).
-  if (next.testOf?.handedOverAt) net.stop()
+  if (state.testOf?.handedOverAt) net.stop()
+  if (busyOnScreen()) { redrawWaiting = true; return }
+  render()
+}
+
+/** The sheet closed or the field was left after a take-over: draw the newer record now. */
+function redrawAfterAdoption(): void {
+  if (!redrawWaiting || busyOnScreen()) return
+  redrawWaiting = false
   render()
 }
 
 /** Reset or given another identity in another tab: this copy is never written back; the page starts again from what is stored. */
 function supersede(): void {
   superseded = true
-  adoptWaiting = false
   net.stop()
   location.reload()
-}
-
-/**
- * The person comes back to this tab, which then takes the drain and saves what arrives: a record another tab saved while a sheet was
- * left open here must be taken over first, or this tab's older copy would be written over it (a new connection lost). The stale sheet
- * closes (closing it takes the record over, settleAdoption).
- */
-function catchUpBeforeDraining(): void {
-  if (!adoptWaiting || superseded) return
-  if (sheet.classList.contains('on')) closeSheet()
-  else setTimeout(settleAdoption, 0)
-}
-
-/** The sheet closed or the field was left: take over what another tab saved meanwhile, unless this tab saved last (then it is ours). */
-function settleAdoption(): void {
-  if (!adoptWaiting || !state || superseded || busyWithRecord()) return
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(storageKey(persona, storeCtx))
-  } catch {
-    adoptWaiting = false
-    return
-  }
-  // From here on nothing is busy: the decision is Adopt, Superseded or Ignore, never Wait again.
-  adoptWaiting = false
-  if (raw !== null && raw === JSON.stringify(state)) return
-  onStoredChange(raw === null ? null : parseRecord(raw), raw === null)
 }
 
 // Wave 6f (drain_lock.ts): the tab in front of the person takes the relay drain; after a long time hidden (a laptop that slept) it
@@ -4355,20 +4336,16 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
-  catchUpBeforeDraining()
   if (state && !state.testOf?.handedOverAt) net.activate(slept)
 })
-window.addEventListener('focus', () => {
-  catchUpBeforeDraining()
-  if (state && !state.testOf?.handedOverAt) net.activate(false)
-})
+window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
 // drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).
 window.addEventListener('storage', (e) => {
   if (e.storageArea !== localStorage || e.key !== storageKey(persona, storeCtx)) return
   onStoredChange(e.newValue === null ? null : parseRecord(e.newValue), e.newValue === null)
 })
-document.addEventListener('focusout', () => { if (adoptWaiting) setTimeout(settleAdoption, 0) })
+document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 render()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
