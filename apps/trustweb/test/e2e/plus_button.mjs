@@ -71,7 +71,7 @@ async function main() {
     ok('nav is exactly Web | Record | Inventory', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'Inventory']), JSON.stringify(tabs))
     ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
     const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
-    ok('header right reads search, QR, more', hdr.length === 3 && /Search/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
+    ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
 
     await page.getByRole('button', { name: 'Search contacts' }).click()
