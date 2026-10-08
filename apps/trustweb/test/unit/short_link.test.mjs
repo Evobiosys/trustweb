@@ -261,7 +261,9 @@ describe('the words', () => {
   it('say the 30 days and that the server keeps the link', () => {
     expect(S.shortLinkNote).toMatch(/our server for 30 days/)
     expect(S.shortLinkNote).toMatch(/expires/)
-    expect(S.hintText.qr).toMatch(/kept on our server for 30 days/)
+    // wave 6b: the QR hint speaks of the connect code (kept on our server for as long as it is used), not the 30 day short link
+    expect(S.hintText.qr).toMatch(/our server keeps it for you/)
+    expect(S.hintText.qr).toMatch(/long link works without the server/)
   })
   it('have a sentence for every failure, and the long link stays the answer', () => {
     for (const e of Object.values(ShortLinkError)) {

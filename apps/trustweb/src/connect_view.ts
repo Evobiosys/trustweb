@@ -34,6 +34,11 @@ export interface ConnectView {
   longLink(): string
   /** True when the code link (not the long one) is on show. */
   isShort(): boolean
+  /**
+   * The Advanced choice: another payload takes the QR's place (and Copy / NFC follow it); `hidden` removes the QR when the choice has
+   * nothing to show yet. null puts the connect link back.
+   */
+  setOverride(payload: string | null, hidden?: boolean): void
 }
 
 export function createConnectView(o: ConnectViewOptions): ConnectView {
@@ -42,6 +47,8 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
   let shown = ''
   let short = false
   let attached = false
+  let override: string | null = null
+  let qrHidden = false
 
   const codeLine = el('p', { class: 'short-link', 'data-link': 'code', hidden: true })
   const status = el('p', { class: 'meta', role: 'status', 'data-code-status': '' })
@@ -57,19 +64,23 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
   const showQr = (payload: string): void => {
     // renderQr swaps the canvas in at once, so the latest call is always the one on screen.
     o.qr.setAttribute('data-payload', payload)
+    // Nothing to draw (Only Signal with no Signal link saved): no code at all, rather than an encoder error.
+    if (!payload) { o.qr.replaceChildren(); return }
     void o.renderQr(o.qr, payload)
   }
 
   const refresh = (): void => {
     if (!long) return
     const code = o.offer ? o.keeper.shortFor(long) : null
-    const next = withFrag(code ?? long)
-    short = code !== null
+    const mine = withFrag(code ?? long)
+    const next = override ?? mine
+    short = code !== null && override === null
     codeLine.hidden = !short
     codeLine.textContent = short ? next : ''
     note.hidden = !short
-    status.textContent = !short && o.offer && canRegister(o.origin) ? S.connectCodePending : ''
+    status.textContent = override === null && !short && o.offer && canRegister(o.origin) ? S.connectCodePending : ''
     longText.textContent = withFrag(long)
+    o.qr.hidden = qrHidden
     if (next !== shown) { shown = next; showQr(next) }
   }
 
@@ -91,6 +102,11 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
     current: () => shown,
     isShort: () => short,
     longLink: () => (long ? withFrag(long) : ''),
+    setOverride(payload: string | null, hidden = false): void {
+      override = payload
+      qrHidden = hidden
+      refresh()
+    },
     setLink(nextLong: string, nextFrag: string): void {
       long = nextLong
       frag = nextFrag

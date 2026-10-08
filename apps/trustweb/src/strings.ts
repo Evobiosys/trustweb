@@ -11,6 +11,8 @@ import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
+import { ConnectMode, SignalSharing } from './connect_modes'
+import { ClaimError } from './connect_code'
 import { AddKind, DidProblem, ParseError, ResolveError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
 
@@ -353,7 +355,7 @@ export const S = {
   savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to your inventory.`,
   hintText: {
     meeting: 'Meeting: record a conversation you both agreed to, with a live transcript and who said what.',
-    qr: `Your code: someone scans it, or you send them the link, to connect with you. The link can be shortened if you tap Short link: it is then kept on our server for ${SHORT_LINK_DAYS} days. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.`,
+    qr: 'Your code: someone scans it, or you send them the link, to connect with you. It is one short link that stays the same when your name changes; our server keeps it for you, and the long link works without the server. Under Advanced you can show only your Signal or Molly link, or only TrustWeb. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
     'call-web': 'Checking for resonance: call into your web and feel the vibrations come back.',
     'web-tap': 'Tap empty space in the web to add someone. Tap a person to see your notes.',
     'about-who': 'Who: the recording is about a person. The notes go to them in your web.',
@@ -829,7 +831,6 @@ export const S = {
   takeButton: (account: string) => `Take over ${account}`,
   takeWorking: 'Unpacking...',
   takeFailed: 'The hand-over could not be opened. Ask for a fresh link.',
-  meetSwipe: 'Swipe for your Signal code.',
   meetAddMine: (app: string) => `Add your ${app} link once, and it shows here next to your TrustWeb code.`,
   meetYour: (app: string) => `Your ${app}`,
   meetMineHint: 'Best: your Signal username link. It keeps your phone number private and works in the scanner of Signal and Molly. In Signal or Molly: Settings > Profile > Username > QR code or link > Copy link, then paste it here. Kept on this phone.',
@@ -1239,5 +1240,45 @@ export const S = {
       default: return 'Expected a TrustWeb code or link, a name like @ada, or a did:peer: address.'
     }
   },
+  // Wave 6b (c): Advanced under the one QR, and the sharing line (connect_advanced_view.ts)
+  advancedLabel: 'Advanced',
+  advancedMode: {
+    [ConnectMode.Both]: (app: string) => `TrustWeb and ${app}`,
+    [ConnectMode.OnlyMolly]: (app: string) => `Only ${app}`,
+    [ConnectMode.OnlyTrustWeb]: () => 'Only TrustWeb',
+  } as Record<ConnectMode, (app: string) => string>,
+  advancedModeHint: {
+    [ConnectMode.Both]: (app: string) => `One code. After they scan it they are connected on TrustWeb, and they get your ${app} link if you ticked it.`,
+    [ConnectMode.OnlyMolly]: (app: string) => `The code is your ${app} link only. TrustWeb is not involved.`,
+    [ConnectMode.OnlyTrustWeb]: () => 'The connect code only. This scan shares none of your messenger links, whatever is ticked.',
+  } as Record<ConnectMode, (app: string) => string>,
+  advancedMollyNote: 'Scan this with the phone\'s camera app. The scanner inside Signal or Molly reads username links only. A Signal username link is the better choice: it keeps your phone number private.',
+  advancedMollyNone: 'Save your Signal link first: in this choice the code is that link.',
+  advancedFollow: 'Copy link and the NFC tag follow this choice.',
+  sharingLine: {
+    [SignalSharing.Shared]: 'Scanning this also gives them your Signal link, so they can message you in one press.',
+    [SignalSharing.NumberNotTicked]: 'Your Signal link is not being shared: it holds your phone number, so it needs your own tick below.',
+    [SignalSharing.NotTicked]: 'Your Signal link is not being shared: the box below is not ticked.',
+    [SignalSharing.NoLink]: 'No Signal link saved, so scanning shares none. Add one so people can message you in one press.',
+    [SignalSharing.Off]: 'Only TrustWeb: this scan shares no Signal or Matrix link.',
+  } as Record<SignalSharing, string>,
+  usernameLabel: 'Your username on our server (optional)',
+  usernamePh: 'for example ada',
+  usernameClaim: 'Claim',
+  usernameRelease: 'Release',
+  usernameHint: 'Friends can then type @name instead of scanning. Our server keeps the name next to your code, so anyone who types the exact name can find your connect link. Names are never listed. Leave it empty to stay unlisted. 3 to 30 letters, digits, dots, dashes or underscores.',
+  usernameHeld: (name: string) => `@${name} is yours.`,
+  usernameReleased: 'The name is released. Your code works as before.',
+  usernameFailed: {
+    [ClaimError.NoCode]: 'Your code is not on our server yet. Try again in a moment.',
+    [ClaimError.BadName]: 'Use 3 to 30 letters, digits, dots, dashes or underscores, starting and ending with a letter or digit (like ada or ada.l). Some names are reserved.',
+    [ClaimError.Taken]: 'That name is taken. Try another.',
+    [ClaimError.Forgotten]: 'Our server no longer knows this code. Open this page again: a new code is made, then claim the name again.',
+    [ClaimError.RateLimited]: 'Too many tries just now. Wait a minute and try again.',
+    [ClaimError.Network]: 'No answer from our server. Check your connection and try again.',
+    [ClaimError.Server]: 'Our server did not answer properly. Try again in a moment.',
+  } as Record<ClaimError, string>,
+  sharingAddSignal: 'Add my Signal link',
+  sharingEditSignal: 'Edit my Signal link',
   cardNoMessenger: (name: string) => `No Signal or Molly link from ${name} yet. If they share one, it shows here.`,
 } as const

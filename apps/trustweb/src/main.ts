@@ -29,6 +29,8 @@ import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
+import { createAdvanced, createSharingLine } from './connect_advanced_view'
+import { ConnectMode, effectiveMode, mayShareContact, modePayload, needsCameraApp, signalSharing } from './connect_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
@@ -40,7 +42,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { ScanAdvice, qrPayload, scanAdvice, signalLabelKey, channelLink, normalizeHandle } from './channel'
+import { revealsPhoneNumber, signalLabelKey, channelLink, normalizeHandle } from './channel'
 import type { SignalProvider } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1039,7 +1041,6 @@ function screenStart(): Node[] {
     void net.start().then(announceLink)
     void completePendingConnect()
     maybeOpenPendingShare()
-    void ensureConnectCode()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -1683,6 +1684,8 @@ function chatIo(): ChatIo {
 /** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
 function sendContactTo(peer: Peer): void {
   if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  // Wave 6b: "Only TrustWeb" on the open Meet page shares no messenger link with this scan; the tick and the sent record stay untouched.
+  if (!mayShareContact(effectiveMode(meetMode, screen === Screen.Meet))) return
   const s = st()
   const out = contactToSend(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id])
   if (!out) return
@@ -2710,24 +2713,25 @@ async function makeNotes(): Promise<void> {
 // meet: this phone's code (QR), NFC where the browser can, a link to copy
 // ---------------------------------------------------------------------------
 
-/** The pages of Meet: the TrustWeb code first, then my Signal code, then my Matrix code once set, then Demo account. */
+/**
+ * The pages of Meet: the one code, then Demo account. Wave 6b: my Signal and Matrix codes are no longer pages to swipe to; the Signal link
+ * rides in the one code (the sharing line) or becomes the code under Advanced > Only Signal/Molly, and both are edited in Settings.
+ */
 enum MeetPage {
   TrustWeb = 'trustweb',
-  Signal = 'signal',
-  Matrix = 'matrix',
   /** A test account for the person in front of you (owner 2026-10-06). */
   Demo = 'demo',
 }
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
+/** The Advanced choice of the code on screen (connect_modes.ts): memory only, the default whenever Meet is opened. */
+let meetMode: ConnectMode = ConnectMode.Both
+
 function meetPages(): MeetPage[] {
-  // Tana, 2026-08-24: "on the same page that one shows one's QR code, one should
-  // also show one's Signal code, and once that is ready, one's Matrix code."
-  const mine = st().myChannels ?? {}
   // Demo phones (solo) and demo accounts do not hand out demo accounts of their own.
   const demo = solo || st().testOf ? [] : [MeetPage.Demo]
-  return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : []), ...demo]
+  return [MeetPage.TrustWeb, ...demo]
 }
 
 function openMeet(from: Screen, notes = ''): void {
@@ -2735,6 +2739,7 @@ function openMeet(from: Screen, notes = ''): void {
   meetNotes = notes
   meetShare = null
   meetPage = MeetPage.TrustWeb
+  meetMode = ConnectMode.Both
   demoShowing = null
   go(Screen.Meet)
 }
@@ -2747,21 +2752,10 @@ function screenMeet(): Node[] {
     class: meetPage === pg ? 'on' : '', role: 'tab', 'aria-selected': String(meetPage === pg),
     onclick: () => { meetPage = pg; render() },
   }, [S.meetPage[pg]])))
-  const body = meetPage === MeetPage.TrustWeb ? meetTrustWebPage()
-    : meetPage === MeetPage.Demo ? meetDemoPage()
-    : meetMessengerPage(meetPage === MeetPage.Signal ? Channel.Signal : Channel.Matrix)
-  // Swipe between the pages, like a second page under the QR code.
-  let startX = 0
-  body.addEventListener('pointerdown', (e) => { startX = e.clientX })
-  body.addEventListener('pointerup', (e) => {
-    const dx = e.clientX - startX
-    if (Math.abs(dx) < 60) return
-    const k = pages.indexOf(meetPage) + (dx < 0 ? 1 : -1)
-    if (k >= 0 && k < pages.length) { meetPage = pages[k]; render() }
-  })
+  const body = meetPage === MeetPage.Demo ? meetDemoPage() : meetTrustWebPage()
   return [
     header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom), qr: false }),
-    el('div', { class: 'scroll pad' }, [tabs, body]),
+    el('div', { class: 'scroll pad' }, [pages.length > 1 ? tabs : null, body]),
   ]
 }
 
@@ -2798,7 +2792,7 @@ function connectEligible(): boolean {
   return !solo && persona === 'me' && !!state && !state.testOf && window.top === window
 }
 
-/** Registers or updates this phone's connect code when due (boot, a new name, the Meet page); never throws, never blocks. */
+/** Registers or updates this phone's connect code when due (boot where a code exists, a new name, the Meet page); never throws, never blocks. */
 async function ensureConnectCode(): Promise<void> {
   if (!connectEligible()) return
   try {
@@ -2814,12 +2808,13 @@ function meetTrustWebPage(): HTMLElement {
   const nfcStatus = el('p', { class: 'meta' })
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
-    onclick: () => copyLink(view.current()),
+    onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
   const nfc = nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
+          if (!view.current()) return
           nfcStatus.textContent = S.meetNfcWaiting
           // The code link never changes, so a tag keeps working; before the server answered the long link goes on it.
           writeLinkToTag(view.current()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
@@ -2827,6 +2822,41 @@ function meetTrustWebPage(): HTMLElement {
       }, [S.meetNfcWrite])
     : null
   const sharedDd = el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes])
+  const signal = (): string | undefined => st().myChannels?.[Channel.Signal]
+  const provider = (): SignalProvider | undefined => st().contactShare?.signalProvider
+  const sharing = createSharingLine({
+    sharing: () => signalSharing(meetMode, st().myChannels, st().contactShare, revealsPhoneNumber),
+    controls: () => (signal() ? signalControls() : null),
+    editSignal: () => editMineSheet(Channel.Signal),
+  })
+  // The tick lives in shareControlsFor; a change of it must reach the sentence above it and the provider word of Advanced.
+  function signalControls(): HTMLElement {
+    return renderShareControls({
+      doc: document, channel: Channel.Signal, getHandle: () => signal(),
+      getSettings: () => st().contactShare, setSettings: (next) => { st().contactShare = next; save(); sharing.refresh(); advanced.refresh() }, S: shareStrings(),
+    })
+  }
+  const apply = (): void => {
+    const handle = signal()
+    const payload = modePayload(meetMode, view.longLink(), handle, provider())
+    if (meetMode === ConnectMode.OnlyMolly) view.setOverride(payload ?? '', payload === null)
+    else view.setOverride(null)
+    copy.disabled = !view.current() || (meetMode === ConnectMode.OnlyMolly && !payload)
+    advanced.refresh()
+    sharing.refresh()
+  }
+  const advanced = createAdvanced({
+    providerWord: () => chName(Channel.Signal, provider()),
+    getMode: () => meetMode,
+    setMode: (m) => { meetMode = m; apply() },
+    hasSignal: () => !!signal(),
+    cameraOnly: () => needsCameraApp(ConnectMode.OnlyMolly, signal()),
+    editSignal: () => editMineSheet(Channel.Signal),
+    username: { available: () => connectEligible() && st().connectCode !== undefined, current: () => codeKeeper().name(), claim: (name) => codeKeeper().claim(name) },
+  })
+  // The username field appears once the code is on the server.
+  let shown = false
+  const stopListening = codeKeeper().onChange(() => { if (qr.isConnected) { shown = true; advanced.refresh() } else if (shown) stopListening() })
   void (async () => {
     await net.start()
     const link = net.connectLink(APP_URL)
@@ -2841,10 +2871,12 @@ function meetTrustWebPage(): HTMLElement {
     view.setLink(link, frag)
     copy.removeAttribute('disabled')
     nfc?.removeAttribute('disabled')
+    apply()
   })()
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     qr,
+    sharing.el,
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
       el('dt', {}, [S.meetShared]), sharedDd,
@@ -2852,6 +2884,7 @@ function meetTrustWebPage(): HTMLElement {
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
     view.el,
+    advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
     el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),
     el('p', { class: 'meta', 'data-ways': 'soon' }, [S.meetWaysSoon]),
@@ -2859,35 +2892,6 @@ function meetTrustWebPage(): HTMLElement {
     // Where the browser can write a tag (Chrome on Android), the link can go onto one; phone to phone stays "later".
     nfc,
     nfc ? nfcStatus : null,
-    el('p', { class: 'meta center' }, [S.meetSwipe]),
-  ])
-}
-
-/** My own Signal (or Matrix) code, so they can also reach me there; or a field to add it. */
-function meetMessengerPage(ch: Channel): HTMLElement {
-  const mine = st().myChannels ?? {}
-  const value = mine[ch]
-  if (!value) {
-    return el('div', { class: 'meet-page' }, [
-      el('p', { class: 'hint' }, [S.meetAddMine(S.chLabel[ch])]),
-      singleChannelEditor(ch, () => render()),
-      el('p', { class: 'meta' }, [S.meetMineHint]),
-    ])
-  }
-  const link = channelLink(ch, value)
-  // Signal: the payload comes from channel.ts (always https; the in-app scanner of Signal/Molly reads username codes only, see wave6/u3_signal_finding.txt).
-  const payload = (ch === Channel.Signal && qrPayload(value)) || link
-  const provider = ch === Channel.Signal ? st().contactShare?.signalProvider : undefined
-  const qr = el('div', { class: 'qrwrap', 'data-payload': payload })
-  void renderQr(qr, payload)
-  return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetMineLead(chName(ch, provider))]),
-    qr,
-    // phone-number code: a plain note first (a username code scans anywhere, so no note)
-    ch === Channel.Signal && scanAdvice(value) === ScanAdvice.CameraAppOnly ? el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]) : null,
-    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch, provider))]),
-    el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
-    ch === Channel.Signal ? shareControlsFor(ch) : null,
   ])
 }
 
@@ -3644,8 +3648,8 @@ function editNameSheet(): void {
     closeSheet()
     render()
     toast(S.meNameSaved)
-    // Wave 6b: the connect link carries the name, so the server's copy under the same code is updated.
-    void ensureConnectCode()
+    // Wave 6b: the connect link carries the name, so the server's copy under the same code is updated (only where a code was ever made).
+    if (s.connectCode) void ensureConnectCode()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveName() })
   openSheet([
@@ -4078,7 +4082,8 @@ if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
   maybeOpenPendingShare()
-  void ensureConnectCode()
+  // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
+  if (state.connectCode) void ensureConnectCode()
   offerDemoContent()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

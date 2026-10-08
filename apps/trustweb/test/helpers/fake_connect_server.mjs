@@ -21,7 +21,7 @@ export function fakeConnectServer(origin) {
     /** The next n POST /connect answer this status instead of working (a broken server). */
     failNext: 0,
     failStatus: 500,
-    /** Resolve answers this status for GET /c/<code> instead of the redirect (null: normal). */
+    /** GET /c/<code> and GET /who/<name> answer this status instead of the redirect (null: normal). */
     openStatus: null,
   }
   const wait = () => (s.delayMs ? new Promise((r) => setTimeout(r, s.delayMs)) : Promise.resolve())
@@ -77,6 +77,7 @@ export function fakeConnectServer(origin) {
     const wanted = decodeURIComponent(url.pathname.slice('/who/'.length))
     s.opens.push({ path: url.pathname })
     await wait()
+    if (s.openStatus) return route.fulfill({ status: s.openStatus, body: 'x' })
     const code = s.names.get(wanted)
     // The real server answers /who/<name> with a 302 to /c/<code> and that with a 302 to the link. Playwright does not route the second hop of a
     // redirect again (the app's catch-all would answer /c/<code> with the page), so the stub collapses the two into one redirect to the link.

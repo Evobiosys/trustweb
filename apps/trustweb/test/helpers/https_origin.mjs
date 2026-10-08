@@ -16,8 +16,8 @@ import net from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-/** What goes to the service: the short-link routes, and /backup (a meeting's pack for the Meet code) where a test wants it. */
-const SERVICE_PREFIXES = ['/link', '/l/', '/backup']
+/** What goes to the service: the short-link routes, the connect-code routes (wave 6b: /connect, /c/<code>, /name, /who/<name>), and /backup (a meeting's pack for the Meet code) where a test wants it. */
+const SERVICE_PREFIXES = ['/link', '/l/', '/backup', '/connect', '/c/', '/name', '/who/']
 
 /**
  * @param {object} o

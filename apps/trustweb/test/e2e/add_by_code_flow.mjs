@@ -89,9 +89,22 @@ async function main() {
     const server = fakeConnectServer(ORIGIN)
     const ada = await phoneWithCode(browser, server, 'Ada Lovelace')
     t.ok('setup: Ada has a code on the (stubbed) server', !!ada.code)
-    // Ada holds the name @ada (the stub keeps it, as POST /name would)
-    server.names.set('ada', ada.code)
+    // Ada claims @ada through Meet > Advanced (POST /name against the stub); Cy cannot take the same name
+    const claim = async (page, name) => {
+      await page.locator('.hdr [aria-label^="Show my code"]').click()
+      await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
+      if (await page.locator('.advanced-panel').isHidden()) await page.locator('[data-act="advanced"]').click()
+      await page.locator('[data-username]').waitFor({ timeout: 15_000 })
+      await page.locator('[data-username]').fill(name)
+      await page.locator('[data-act="claim-name"]').click()
+      const said = await until(async () => { const x = await page.locator('[data-username-status]').innerText(); return x ? x : null }, 10_000)
+      await page.getByRole('button', { name: 'Back' }).click()
+      return said
+    }
+    t.ok('setup: Ada claims "@Ada" (typed with a capital and an @) and the page says it is hers', /@ada is yours/.test(await claim(ada.page, '@Ada')) && server.names.get('ada') === ada.code)
+    t.ok('setup: the record keeps the name next to the code', (await record(ada.page)).connectCode.name === 'ada')
     const cy = await phoneWithCode(browser, server, 'Cy Coder')
+    t.ok('setup: Cy cannot claim the same name ("That name is taken")', /That name is taken/.test(await claim(cy.page, 'ada')) && server.names.get('ada') === ada.code)
 
     // 1  "@ada"
     const bo = await newPhone(browser, server)

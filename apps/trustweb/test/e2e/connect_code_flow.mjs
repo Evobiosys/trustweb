@@ -33,6 +33,8 @@ const until = async (fn, ms = 20_000) => {
   while (Date.now() - t0 < ms) { const v = await fn().catch(() => null); if (v) return v; await new Promise((r) => setTimeout(r, 200)) }
   return null
 }
+/** Waits for a locator to show (locator.isVisible() does not wait). */
+const appears = (locator, ms = 10_000) => locator.waitFor({ timeout: ms }).then(() => true, () => false)
 const record = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
 const payload = (page) => page.getAttribute('.qrwrap', 'data-payload')
 
@@ -58,10 +60,10 @@ async function openMeet(page) {
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
 }
 
-const addSheetOpen = (page) => page.locator('[data-connect-add-title]').waitFor({ timeout: 20_000 }).then(() => true, () => false)
+const addSheetOpen = (page) => page.locator('.sheet.on [data-connect-add-title]').waitFor({ timeout: 20_000 }).then(() => true, () => false)
 
 async function addToWeb(page) {
-  await page.locator('[data-connect-add]').click()
+  await page.locator('.sheet.on [data-connect-add]').click()
 }
 
 /** Ada's phone: an account, Meet open, the code made; her Signal username link saved (shared on connect). */
@@ -109,11 +111,11 @@ async function partA(browser) {
 
   // a broken server: the long link stays, nothing blocks; the next visit asks again
   const broken = fakeConnectServer(ORIGIN)
-  broken.failNext = 2 // the attempt at boot, and the one when Meet opens
+  broken.failNext = 1 // the first attempt, made when Meet opens (the server is not told of a phone before its code is shown)
   const b = await newPhone(browser, broken)
   await startPhone(b.page, 'Bo Broken')
   await openMeet(b.page)
-  await until(async () => broken.posts.length >= 2)
+  await until(async () => broken.posts.length >= 1)
   await b.page.waitForTimeout(500)
   const long = await payload(b.page)
   t.ok('a: a 500 from the server: the long link stays in the QR, and no error page', /\?connect=did%3Apeer%3A2/.test(long) && (await b.page.locator('.meet-page').isVisible()))
@@ -122,7 +124,7 @@ async function partA(browser) {
   await b.page.getByRole('button', { name: 'Back' }).click()
   await b.page.locator('.hdr [aria-label^="Show my code"]').click()
   const code2 = await until(async () => { const c = [...broken.codes.keys()][0]; return c && (await payload(b.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
-  t.ok('a: opening Meet again asks again and the code arrives', !!code2 && broken.posts.length === 3)
+  t.ok('a: opening Meet again asks again and the code arrives', !!code2 && broken.posts.length === 2)
   await b.ctx.close()
 }
 
@@ -131,10 +133,9 @@ async function partB(browser) {
   const a = await adaPhone(browser, server)
   // Ada's Signal username link, ticked by default (a username link is)
   await a.page.locator('.hdr [aria-label^="Show my code"]').click()
-  await a.page.getByRole('tab', { name: 'Signal' }).click()
+  await a.page.locator('[data-act="edit-signal"]').click()
   await a.page.getByPlaceholder('Signal username link (best) or phone number (+43...)').fill(USERNAME_LINK)
   await a.page.getByRole('button', { name: 'Save', exact: true }).click()
-  await a.page.getByRole('tab', { name: 'TrustWeb' }).click()
   await a.page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(a.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
   t.ok('b: Ada\'s code is on screen', !!code)
@@ -145,15 +146,15 @@ async function partB(browser) {
   await b.page.goto(`${ORIGIN}/c/${code}#n=${encodeURIComponent('Notes from Ada')}`)
   t.ok('b: Bo opens /c/<code>: the 302 reached the app', server.opens.length === opensBefore + 1)
   t.ok('b: the add sheet opens, naming Ada (from the link)', await addSheetOpen(b.page))
-  t.ok('b: title "Add Ada Lovelace to your web?" and the name field holds her name', (await b.page.locator('[data-connect-add-title]').innerText()) === 'Add Ada Lovelace to your web?' && (await b.page.locator('[data-connect-add-name]').inputValue()) === 'Ada Lovelace')
+  t.ok('b: title "Add Ada Lovelace to your web?" and the name field holds her name', (await b.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add Ada Lovelace to your web?' && (await b.page.locator('.sheet.on [data-connect-add-name]').inputValue()) === 'Ada Lovelace')
   t.ok('b: the address bar no longer holds the link', !b.page.url().includes('connect=') && !b.page.url().includes('#n='))
   const recB = await record(b.page)
   t.ok('b: already connected underneath (the handshake ran), and the 302 kept the fragment (her notes arrived)', recB.peers.length === 1 && recB.peers[0].displayName === 'Ada Lovelace' && JSON.stringify(recB.people).includes('Notes from Ada'), JSON.stringify(recB.people).slice(0, 160))
   t.ok('b: Ada\'s phone got Bo as a connection too', !!(await until(async () => (await record(a.page)).peers.length === 1)))
   await shot(b.page, 'cc_b_add_sheet.png')
-  await b.page.locator('[data-ring="friend"]').click()
+  await b.page.locator('.sheet.on [data-ring="friend"]').click()
   await addToWeb(b.page)
-  t.ok('b: the card of Ada opens', await b.page.locator('.sheet.on h3', { hasText: 'Ada Lovelace' }).isVisible({ timeout: 5000 }))
+  t.ok('b: the card of Ada opens', await appears(b.page.locator('.sheet.on h3', { hasText: 'Ada Lovelace' }), 5000))
   const afterAdd = await record(b.page)
   t.ok('b: she is in the Friend ring, on the person AND on the connection', afterAdd.people[0].ring === 'friend' && afterAdd.peers[0].ring === 'friend')
   const msg = b.page.locator('.sheet.on a', { hasText: 'Message on Signal' })
@@ -172,7 +173,7 @@ async function partB(browser) {
   await startPhone(c.page, 'Cy Later')
   await c.page.goto(`${ORIGIN}/c/${code}`)
   await addSheetOpen(c.page)
-  await c.page.locator('[data-connect-later]').click()
+  await c.page.locator('.sheet.on [data-connect-later]').click()
   const recC = await record(c.page)
   t.ok('b: "Not now" keeps the connection as an acquaintance and closes the sheet', recC.peers.length === 1 && recC.people[0].ring === 'acquaintance' && (await c.page.locator('.sheet.on').count()) === 0)
   await a.ctx.close(); await b.ctx.close(); await c.ctx.close()
@@ -187,7 +188,7 @@ async function partB(browser) {
   await e.page.goto(`${ORIGIN}/c/${code2}`)
   await addSheetOpen(e.page)
   await addToWeb(e.page)
-  t.ok('b: Dee shared no messenger link: the card says so plainly', await e.page.locator('[data-no-messenger]').isVisible({ timeout: 5000 }) && /No Signal or Molly link from Dee Plain yet/.test(await e.page.locator('[data-no-messenger]').innerText()))
+  t.ok('b: Dee shared no messenger link: the card says so plainly', await appears(e.page.locator('[data-no-messenger]'), 5000) && /No Signal or Molly link from Dee Plain yet/.test(await e.page.locator('[data-no-messenger]').innerText()))
   await shot(e.page, 'cc_b_card_no_link.png')
   await d.ctx.close(); await e.ctx.close()
 }
@@ -205,12 +206,15 @@ async function partC(browser) {
   await shot(f.page, 'cc_c_first_time.png')
   await f.page.getByLabel('Your first name').fill('Fay Newcomer')
   await f.page.getByRole('button', { name: 'Connect', exact: true }).click()
-  t.ok('c: after the account is made the add sheet follows, with Ada selected', await addSheetOpen(f.page) && (await f.page.locator('[data-connect-add-name]').inputValue()) === 'Ada Lovelace')
+  t.ok('c: after the account is made the add sheet follows, with Ada selected', await addSheetOpen(f.page) && (await f.page.locator('.sheet.on [data-connect-add-name]').inputValue()) === 'Ada Lovelace')
   await addToWeb(f.page)
   const rec = await record(f.page)
   t.ok('c: Ada is in Fay\'s web, connected', rec.people.length === 1 && rec.people[0].name === 'Ada Lovelace' && rec.people[0].peerId === rec.peers[0].id)
   t.ok('c: Ada\'s phone knows Fay by the name she typed', !!(await until(async () => (await record(a.page)).people.some((p) => p.name === 'Fay Newcomer'))))
-  t.ok('c: Fay\'s phone asked the server for a code of her own too (a personal account)', !!(await until(async () => server.codes.size === 2)))
+  t.ok('c: the server has been told of no one but Ada: Fay has not shown a code yet', server.codes.size === 1)
+  await f.page.locator('.sheet.on .sheet-home').click()
+  await openMeet(f.page)
+  t.ok('c: when Fay shows her own code, her phone asks the server for one (a personal account)', !!(await until(async () => server.codes.size === 2)))
   await a.ctx.close(); await f.ctx.close()
 }
 
@@ -229,14 +233,14 @@ async function partD(browser) {
   await startPhone(b.page, 'Bo Typist')
   await b.page.goto(bare)
   t.ok('d: the add sheet opens at once, before any name', await addSheetOpen(b.page))
-  const field = b.page.locator('[data-connect-add-name]')
+  const field = b.page.locator('.sheet.on [data-connect-add-name]')
   t.ok('d: the field is empty with the "Waiting for their name..." placeholder, and editable', (await field.inputValue()) === '' && (await field.getAttribute('placeholder')) === 'Waiting for their name...' && await field.isEditable())
-  t.ok('d: the title does not claim a name', (await b.page.locator('[data-connect-add-title]').innerText()) === 'Add this person to your web?')
+  t.ok('d: the title does not claim a name', (await b.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add this person to your web?')
   await shot(b.page, 'cc_d_waiting_name.png')
   await field.fill('Ada from the tram')
   t.ok('d: the late name does NOT replace what the person typed', await (async () => {
     await b.page.waitForTimeout(6500)
-    return (await field.inputValue()) === 'Ada from the tram' && (await b.page.locator('[data-connect-add-title]').innerText()) === 'Add Ada Lovelace to your web?'
+    return (await field.inputValue()) === 'Ada from the tram' && (await b.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add Ada Lovelace to your web?'
   })())
   await addToWeb(b.page)
   const rec = await record(b.page)
@@ -249,10 +253,10 @@ async function partD(browser) {
   await c.page.goto(bare)
   await addSheetOpen(c.page)
   await c.page.waitForTimeout(500)
-  const early = await c.page.locator('[data-connect-add]').isEnabled()
+  const early = await c.page.locator('.sheet.on [data-connect-add]').isEnabled()
   t.ok('d: "Add to my web" is available before the name came', early)
-  const filled = await until(async () => (await c.page.locator('[data-connect-add-name]').inputValue()) === 'Ada Lovelace', 15_000)
-  t.ok('d: untouched, the field takes the name when the handshake delivers it', !!filled && !(await c.page.locator('[data-connect-add-waiting]').isVisible()))
+  const filled = await until(async () => (await c.page.locator('.sheet.on [data-connect-add-name]').inputValue()) === 'Ada Lovelace', 15_000)
+  t.ok('d: untouched, the field takes the name when the handshake delivers it', !!filled && !(await c.page.locator('.sheet.on [data-connect-add-waiting]').isVisible()))
   await addToWeb(c.page)
   t.ok('d: and the person is stored under it', (await record(c.page)).people.some((p) => p.name === 'Ada Lovelace'))
   await c.ctx.close()
@@ -288,7 +292,7 @@ async function partE(browser) {
   await g.page.getByRole('button', { name: /Start|Connect/ }).first().click()
   await g.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await g.page.waitForTimeout(1500)
-  t.ok('e: a demo account is connected directly: no add sheet', (await g.page.locator('[data-connect-add-title]').count()) === 0 && (await record(g.page)).peers.length >= 1)
+  t.ok('e: a demo account is connected directly: no add sheet', (await g.page.locator('.sheet.on [data-connect-add-title]').count()) === 0 && (await record(g.page)).peers.length >= 1)
   t.ok('e: and a demo account asks for no connect code of its own', server.codes.size === 1)
   await a.ctx.close(); await g.ctx.close()
 }

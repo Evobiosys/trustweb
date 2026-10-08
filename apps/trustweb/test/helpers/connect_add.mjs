@@ -6,9 +6,9 @@
 
 /** Waits for the add sheet, optionally picks a ring, presses "Add to my web", and closes the card that opens. Returns the card's text. */
 export async function acceptAdd(page, { ring, keepCard = false } = {}) {
-  await page.locator('[data-connect-add]').waitFor({ timeout: 25_000 })
-  if (ring) await page.locator(`[data-ring="${ring}"]`).click()
-  await page.locator('[data-connect-add]').click()
+  await page.locator('.sheet.on [data-connect-add]').waitFor({ timeout: 25_000 })
+  if (ring) await page.locator(`.sheet.on [data-ring="${ring}"]`).click()
+  await page.locator('.sheet.on [data-connect-add]').click()
   const card = page.locator('.sheet.on')
   await card.waitFor({ timeout: 10_000 })
   const text = await card.innerText()

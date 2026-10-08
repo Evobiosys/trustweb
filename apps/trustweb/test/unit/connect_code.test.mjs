@@ -8,7 +8,7 @@ import {
   connectShortLink, isClaimable,
   createConnectKeeper, readConnectRecord, registerConnect, registrationDue, repairConnectRecord, shortToShow,
 } from '../../src/connect_code.ts'
-import { buildConnectLinkUrl } from '../../../demo/src/connect_link.ts'
+import { buildConnectLinkUrl, parseConnectLinkParams } from '../../../demo/src/connect_link.ts'
 
 const ORIGIN = 'https://app.trustintheweb.org'
 const CODE = 'AbCdEfGhIjKlMnOpQrStUv'
@@ -338,5 +338,20 @@ describe('usernames: claimName and the keeper', () => {
     expect(calls).toHaveLength(3)
     const none = createConnectKeeper({ ...deps(fake([minted()]).f), load: () => undefined, store: () => {} })
     expect(await none.claim('ada')).toEqual({ ok: false, error: ClaimError.NoCode })
+  })
+})
+
+describe('P1: nothing in the app cuts the name out of a connect link (the "name=Ja" of 2026-10-08)', () => {
+  it.each(['Ja', 'Jakob', 'Jakob Possert-Bienzle', 'J'.repeat(40), 'Zoë & Søren #1', 'a=b&c=d', '名前'])('%j survives build and parse unchanged', (name) => {
+    const link = buildConnectLinkUrl(ORIGIN + '/', DID, { id: 'p1p1p1p1p1p1', displayName: name })
+    expect(new URL(link).searchParams.get('name')).toBe(name)
+    expect(parseConnectLinkParams(new URL(link).search)?.from.displayName).toBe(name)
+  })
+  it('the registered url holds the whole name and the server copy is that url unchanged', async () => {
+    const { f, calls } = fake([minted()])
+    const long = buildConnectLinkUrl(ORIGIN + '/', DID, { id: 'p1p1p1p1p1p1', displayName: 'Jakob Possert-Bienzle' })
+    await registerConnect(deps(f), null, long)
+    expect(calls[0].body.url).toBe(long)
+    expect(new URL(calls[0].body.url).searchParams.get('name')).toBe('Jakob Possert-Bienzle')
   })
 })
