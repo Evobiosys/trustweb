@@ -1597,6 +1597,8 @@ function chatSheet(personId: string): void {
 async function flushAllChats(): Promise<void> {
   if (!state) return
   for (const id of peersWithPending(st().chats ?? NO_CHATS)) await flushPending(chatIo(), id)
+  // An open chat shows "Waiting" until it is redrawn from the book the flush just updated.
+  openChat?.refresh()
 }
 
 /** A contact text can beat the card on the scanning phone (the card is made after completeConnect returns): hold it, apply it when the card exists. */
