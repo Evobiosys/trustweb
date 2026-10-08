@@ -74,6 +74,8 @@ describe('U7: the copy says what the app does', () => {
   it('the walkthrough no longer claims an explicit yes in Settings or that the middle cannot read the answer', () => {
     const src = readFileSync(new URL('../../src/walkthrough.ts', import.meta.url), 'utf8')
     expect(src).not.toMatch(/said yes once|said once, in Settings|set his phone once|cannot read/)
-    expect(src).toMatch(/unless he switches that off on their card/)
+    // wave 6f S1: passing on is off by default; the walkthrough says he switched it on
+    expect(src).toMatch(/it is off by default/)
+    expect(src).not.toMatch(/unless he switches that off/)
   })
 })

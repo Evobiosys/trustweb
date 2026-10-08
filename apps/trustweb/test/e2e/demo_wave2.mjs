@@ -159,7 +159,7 @@ async function partSwitchAndSecondDegree(browser, base) {
   await page.getByRole('tab', { name: '3 people' }).click()
   await page.locator('.wt-tick').nth(2).click()
   const relay = await page.locator('.wt-screen').nth(1).innerText()
-  ok('hop 1: Jonas\'s phone passes it on by his standing setting (on by default, his to switch off), shown on his phone', /Sam asks your friends/.test(relay) && /Pass their asks on: On/.test(relay) && /switch it off/.test(relay), relay)
+  ok('hop 1: Jonas\'s phone passes it on because he switched it on for Sam (off by default, wave 6f), shown on his phone', /Sam asks your friends/.test(relay) && /Pass their asks on: On/.test(relay) && /off by default/.test(relay), relay)
   await page.locator('.wt-tick').nth(3).click()
   ok('hop 2: Maya decides for this ask', /Sam, through Jonas, asks/.test(await page.locator('.wt-screen').nth(2).innerText()))
   await page.locator('.wt-tick').nth(5).click()

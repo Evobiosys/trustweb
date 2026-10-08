@@ -702,7 +702,7 @@ export const S = {
     'Every answer still needs a yes, and a "no" looks exactly like "no match".',
   ],
   passOnTitle: 'Pass their asks on',
-  passOnHint: 'When they ask further than their own contacts, their ask may go on through you to yours. Whoever answers still decides with their own yes.',
+  passOnHint: 'Off unless you switch it on. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
   logPassedOn: (n: number, back: number) => (back ? `passed on to ${n}, ${back} came back` : `passed on to ${n}`),
   queryWaiting: (s: number) => (s > 0 ? `Answers in about ${s} s` : 'Waiting for anyone still deciding...'),
   resultShared: (name: string) => `${name} chose to share`,

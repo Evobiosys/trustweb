@@ -105,8 +105,8 @@ describe('askSources: only lines this step admits ever reach the matcher', () =>
   })
 })
 
-describe('pass their asks on: the default by ring, the setting wins', () => {
-  it.each([[R.Close, true], [R.Friend, true], [R.Acquaintance, false], [R.Intending, false]])('%s: %s', (ring, want) => {
+describe('pass their asks on: off by default for every ring (wave 6f S1), the setting wins', () => {
+  it.each([[R.Close, false], [R.Friend, false], [R.Acquaintance, false], [R.Intending, false]])('%s: %s', (ring, want) => {
     expect(passesAsksOn({ ring })).toBe(want)
   })
   it('the per-person setting wins either way', () => {
@@ -168,16 +168,18 @@ describe('passing on through this phone (one_jakob.ts): who, and never the same 
       person('Ann', { peerId: 'ann', ring: R.Acquaintance }),
       person('Cleo', { peerId: 'cleo', ring: R.Close, passOn: false }),
       person('Jakob', { peerId: 'jp', doorPeerId: 'door2' }),
+      person('Dee', { peerId: 'dee', ring: R.Acquaintance, passOn: true }),
     ],
     testAccounts: [{ id: 'acct1', name: 'Anna-demo', createdAt: 1, peerId: 'anna' }],
   }
   it.each([
     ['an acquaintance: no (by ring)', peer('ann', 'd-ann', R.Acquaintance), null, false],
     ['a close friend who was switched off: no (the setting wins)', peer('cleo', 'd-cleo', R.Close), null, false],
-    ['a friend without a person card: yes (by ring)', peer('x', 'd-x', R.Friend), null, true],
-    ['this phone\'s own front door: yes', peer('door', 'd-door', R.Acquaintance), 'd-door', true],
-    ['someone else\'s front door: by ring', peer('door', 'd-door', R.Acquaintance), null, false],
-    ['a demo account this phone allowed: yes', peer('anna', 'd-anna', R.Acquaintance), null, true],
+    ['a friend without a person card: no (off by default since 6f)', peer('x', 'd-x', R.Friend), null, false],
+    ['this phone\'s own front door: no (off by default since 6f)', peer('door', 'd-door', R.Acquaintance), 'd-door', false],
+    ['someone else\'s front door: no', peer('door', 'd-door', R.Acquaintance), null, false],
+    ['a demo account this phone allowed: no (off by default since 6f)', peer('anna', 'd-anna', R.Acquaintance), null, false],
+    ['an acquaintance switched on: yes (the setting is the only way in)', peer('dee', 'd-dee', R.Acquaintance), null, true],
   ])('%s', (_n, p, own, want) => expect(passOnAllowed(s, p, own)).toBe(want))
   it('samePersonTarget: this phone\'s own door, and the sender\'s other peer, are never asked again; anyone else is', () => {
     const sender = peer('jp', 'd-jp', R.Friend)

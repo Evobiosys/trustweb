@@ -258,14 +258,12 @@ export interface Person {
 }
 
 /**
- * Do this person's asks go on through me by default? Close friends and friends
- * yes, acquaintances and people I only intend to meet no (Jakob 2026-10-07:
- * "per default, if I have close friends, I should be able to just share their
- * inventory as well. Or to be able to choose"). The per-person setting wins.
+ * Do this person's asks go on through me? Only when I switched it on for them (Jakob 2026-10-08 19:49: "make it possible not to pass
+ * their asks on, per default it should be no"; wave 6f S1). Before 6f close friends and friends passed on by default; a record that
+ * holds an explicit value keeps it, an unset one now reads as off. The ring no longer decides.
  */
 export function passesAsksOn(p: Pick<Person, 'passOn' | 'ring'>): boolean {
-  if (typeof p.passOn === 'boolean') return p.passOn
-  return p.ring === Ring.Close || p.ring === Ring.Friend
+  return p.passOn === true
 }
 
 /** A person's fediverse address and whether the Feed shows their public posts. */

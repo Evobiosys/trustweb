@@ -59,17 +59,13 @@ export function mergeOneJakob(s: AppState, doorContext: string): boolean {
 }
 
 /**
- * Wave 6: may this peer's asks go on through this phone? The person's own
- * setting wins; then this phone's own front door (its published card's did)
- * and the demo accounts this phone allowed pass on by default (Jakob
- * 2026-10-08: "most importantly for the demo, the querying through me should
- * be possible"); everyone else by ring (model.ts passesAsksOn).
+ * Wave 6: may this peer's asks go on through this phone? Wave 6f S1 (Jakob 2026-10-08 19:49, "per default it should be no"): only
+ * when the person's own "Pass their asks on" is switched on, for everyone alike: close friends, friends, acquaintances, front doors
+ * (this phone's own too) and demo accounts. Unset = off. `ownDoorDid` is kept for the callers and samePersonTarget; it no longer
+ * turns passing on on by itself.
  */
-export function passOnAllowed(s: Pick<AppState, 'people' | 'testAccounts'>, peer: Peer, ownDoorDid: string | null): boolean {
+export function passOnAllowed(s: Pick<AppState, 'people' | 'testAccounts'>, peer: Peer, _ownDoorDid: string | null): boolean {
   const person = personOfPeer(s, peer.id)
-  if (typeof person?.passOn === 'boolean') return person.passOn
-  if (ownDoorDid !== null && peer.did === ownDoorDid) return true
-  if ((s.testAccounts ?? []).some((t) => t.peerId === peer.id)) return true
   return passesAsksOn(person ?? { ring: peer.ring })
 }
 

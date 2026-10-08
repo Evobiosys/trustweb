@@ -251,6 +251,9 @@ describe('through Jakob: a demo account asks his front door, his phone passes it
       samePerson: (target, sender) => samePersonTarget(J.state, target, sender, door.card.did),
     })
     await J.net.completeConnect({ did: door.card.did, from: { id: door.card.id, displayName: door.card.name } }, Ring.Acquaintance)
+    // Wave 6f S1: passing on is off by default, also for his own front door; Jakob switched "Pass their asks on" on for it (its card).
+    expect(passOnAllowed(J.state, J.state.peers.find((p) => p.did === door.card.did), door.card.did)).toBe(false)
+    J.state.people.push({ id: 'door-card', name: door.card.name, context: '', ring: Ring.Acquaintance, metAt: 1, lines: [], peerId: door.card.id, passOn: true })
     for (let i = 0; i < 100 && !door.status().owner; i++) await sleep(20)
     expect(door.status().owner).toBe(true)
     const F = await phone('Fritz', [{ text: 'Ladder, 3 m, to lend' }])
