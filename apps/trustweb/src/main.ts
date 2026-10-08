@@ -47,7 +47,7 @@ import {
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
-import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import { cleanHelloName, helloText, NAMELESS_PEER, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
@@ -68,7 +68,9 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
-import { clearState, isEphemeral, loadState, saveState, wasUnreadable } from './store'
+import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
+import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
+import { addAwayAsk, dismissAwayAsk, liveAwayAsks } from './away_asks'
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
@@ -114,7 +116,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
-import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
+import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, sameName, samePersonTarget } from './one_jakob'
 
 enum Screen {
   Start = 'start',
@@ -292,6 +294,13 @@ try {
     if (codeFixed || modesFixed || notesFixed) save()
   }
 } catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
+// Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
+// A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
+try {
+  if (state && !solo && !isDemoPersona(persona) && !state.testOf) {
+    if (repairPeerCards(state, () => true, () => randomId(8), S.peerCardRepairedContext, Date.now())) save()
+  }
+} catch { /* the record stays as loaded */ }
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -381,14 +390,15 @@ const net = new Net({
   onPeerConnected: (peer) => {
     const s = st()
     const byName = draft.name.trim()
-    let person = s.people.find((p) => p.peerId === peer.id)
-      ?? (byName ? s.people.find((p) => p.name.toLowerCase() === byName.toLowerCase()) : undefined)
+    // Wave 6f (peer_cards.ts): the Meet draft's name only claims a card that no connection holds yet; the second person to connect
+    // while the code is on screen gets a card of their own (before, they took over the first one's card and never showed).
+    let person = cardForNewPeer(s.people, peer, byName)
     if (!person) {
       if (screen === Screen.Meet && !byName) draft.name = peer.displayName
       person = { id: randomId(8), name: peer.displayName, context: draft.context, ring: peer.ring, metAt: Date.now(), lines: [] }
       s.people.push(person)
     }
-    person.peerId = peer.id
+    if (person.doorPeerId !== peer.id) person.peerId = peer.id
     save()
     sendHelloTo(peer)
     sendContactTo(peer)
@@ -409,10 +419,12 @@ const net = new Net({
     showAllowCard(acct)
     return true
   },
-  // The owner's phone allowed this demo account (its ack came back).
+  // A connection this phone already holds sent its ack again: the owner allowed this demo account, or (wave 6f) a phone that opened
+  // this phone's link is still waiting to hear back (ack_retry.ts): make sure it has a card, and answer with the hello once per visit.
   onPeerConfirmed: (peer) => {
     const s = st()
-    if (!s.testOf || s.testOf.approvedAt || s.testOf.name !== peer.displayName) return
+    if (!s.testOf) { onAckAgain(peer); return }
+    if (s.testOf.approvedAt || s.testOf.name !== peer.displayName) return
     s.testOf.approvedAt = Date.now()
     save()
     toast(S.demoApprovedToast(peer.displayName))
@@ -427,7 +439,50 @@ const net = new Net({
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
+  // Wave 6f (ack_retry.ts): a real phone re-sends its connect-ack until the other phone answers; never the side-by-side demo, a demo
+  // account's view, a demo account of this phone, or this site's demo front door (its flows are their own).
+  mayResendAck: (peer) => !solo && !isDemoPersona(persona) && !st().testOf && !demoAccounts().some((t) => t.peerId === peer.id) && peer.did !== demoPeer?.did,
+  onAwayAsk: (ask) => { const s = st(); s.awayAsks = addAwayAsk(s.awayAsks, ask, Date.now()); save(); showAwayAsks() },
 })
+
+/** Peers this visit already answered with a hello after a repeated ack (one hello per peer per visit stops their re-sends). */
+const helloAgainSent = new Set<string>()
+
+/** Wave 6f: a known connection's ack came again. It gets a card if it has none, and one hello per visit. */
+function onAckAgain(peer: Peer): void {
+  const s = st()
+  if (solo || isDemoPersona(persona)) return
+  if (!personOf(s.people, peer.id)) {
+    s.people.push(cardFor(peer, randomId(8), S.peerCardRepairedContext, Date.now()))
+    save()
+    toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
+    render()
+  }
+  if (helloAgainSent.has(peer.id)) return
+  helloAgainSent.add(peer.id)
+  sendHelloTo(peer)
+}
+
+/** Wave 6f (away_asks.ts): "<name> asked while you were away", the newest first, one card at a time under the header. */
+function showAwayAsks(): void {
+  if (!state) return
+  const live = liveAwayAsks(state.awayAsks, Date.now())
+  const first = live[0]
+  if (!first) return
+  const peer = state.peers.find((p) => p.id === first.peerId)
+  const person = peer ? personOf(state.people, peer.id) : undefined
+  const done = (): void => {
+    const s = st()
+    s.awayAsks = dismissAwayAsk(s.awayAsks, first.id, Date.now())
+    save()
+    hideNotice()
+    showAwayAsks()
+  }
+  const actions: HTMLElement[] = []
+  if (person) actions.push(el('button', { class: 'btn btn-electric btn-sm', 'data-away-message': '1', onclick: () => { done(); chatSheet(person.id) } }, [S.awayAskMessage(first.from)]))
+  actions.push(el('button', { class: 'btn btn-ghost btn-sm', 'data-away-dismiss': '1', onclick: done }, [S.awayAskDismiss]))
+  showNotice(S.awayAskTitle(first.from), S.awayAskBody(first.text, live.length - 1), actions)
+}
 
 /** The did of this site's front door when it is this phone's own (one_jakob.ts ownFrontDoor); null: none known. */
 function ownDoorDid(): string | null {
@@ -1551,6 +1606,13 @@ function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
 let cardOpenFor: string | null = null
 
+/** Wave 6f: a card whose connection goes by another name says so (" · connected as Ann"), so a card that two connections met on shows it. */
+function connectedAsSuffix(p: Person): string {
+  const linked = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  if (!linked || linked.displayName === NAMELESS_PEER || sameName(linked.displayName, p.name)) return ''
+  return ' · ' + S.sheetConnectedAs(linked.displayName)
+}
+
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
@@ -1559,7 +1621,7 @@ function personSheet(personId: string): void {
   openSheet([
     el('h3', {}, [p.name, isDemoPerson(st(), p.id) ? dummyChip() : null]),
     el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
-    el('div', { class: 'path' }, [p.peerId ? S.sheetConnected : S.sheetNotesOnly]),
+    el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     current.length
       ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline', 'data-line': l.id }, [
           tagChip(l.tag, l.customTag), el('span', {}, [l.text]), el('em', {}, [S.audienceLabel[l.audience]]),
@@ -4206,6 +4268,28 @@ const openInstallSheet = installSheets.openInstall
 // boot
 // ---------------------------------------------------------------------------
 
+// Wave 6f (drain_lock.ts): the tab in front of the person takes the relay drain; after a long time hidden (a laptop that slept) it
+// opens a fresh socket, since the one it held may be dead without knowing it.
+const WAKE_FRESH_MS = 60_000
+let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return }
+  const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
+  hiddenSince = 0
+  if (state && !state.testOf?.handedOverAt) net.activate(slept)
+})
+window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
+// Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
+// drain: this tab shows it too, instead of keeping an older copy and writing that back over it on its next save.
+window.addEventListener('storage', (e) => {
+  if (e.storageArea !== localStorage || e.key !== storageKey(persona, storeCtx) || !e.newValue || !state) return
+  const next = parseRecord(e.newValue)
+  if (!next || next.me.id !== state.me.id) return
+  state = next
+  const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement
+  if (!typing && !sheet.classList.contains('on')) render()
+})
+
 render()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
 const afterCarry = (): void => { if (installable && wantInstall) openInstallSheet() }
@@ -4218,6 +4302,8 @@ if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
   maybeOpenPendingShare()
+  // Wave 6f: asks that matched while this phone was closed (they arrive with the drain; kept ones show at once).
+  setTimeout(showAwayAsks, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
   offerDemoContent()

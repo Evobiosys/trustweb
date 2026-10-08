@@ -22,6 +22,11 @@
  * which leaves at a moment fixed by the envelope alone (one window per step
  * left), whether or not anything was passed on.
  *
+ * Wave 6f (THE ONE THING: whoever opens my link appears in MY web, also when I was offline): the phone that opened a link re-sends
+ * its connect-ack until it hears from the sharer (ack_retry.ts); a tab that is not in front of the person no longer fights the one
+ * in front for the relay drain (drain_lock.ts); an ask that arrives after its asker stopped waiting is kept as "asked while you were
+ * away" instead of a consent prompt for nobody (away_asks.ts).
+ *
  * DIDs stay in this layer. Nothing here hands a DID string to the UI.
  */
 import { createIdentity, deserializeIdentity, serializeIdentity, ecdhSharedSecret } from '../../demo/src/did'
@@ -39,7 +44,11 @@ import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, ChatEnvelope, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import { ackDue, noteAckSent, noteHeard } from './ack_retry'
+import { AWAY_TEXT_MAX, isAwayAsk } from './away_asks'
 import { askSources } from './cascade'
+import { createDrainLock, drainLockName } from './drain_lock'
+import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
 import {
   askerOf, askFields, askReachOf, askTimeoutMs, answerDelayMs, cascadeFields, dedupeItems, hopInfo, markThrough, MAX_FANOUT,
@@ -49,7 +58,7 @@ import type { HopInfo } from './hops'
 import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { askTemplate, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
-import type { AppState, LineRef, LogEntry, MatchScope, Peer } from './model'
+import type { AppState, AwayAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
 
 export type { RelayStatus }
 
@@ -58,6 +67,8 @@ const RELEVANCE_BAND = 0.5
 const MAX_SHARED = 3
 /** A passed-on ask stops waiting for the next step this share of a window before this phone's own moment, to seal and send in time. */
 const HOP_COLLECT_LEAD = 0.1
+/** A tab in front of the person waits at most this long for the drain lock before it carries on (sends still work without the drain). */
+const LOCK_WAIT_MS = 2_000
 
 /** The template of an ask, for its id and what travels (the asker's own words only). */
 export function templateFor(text: string): QueryTemplate {
@@ -138,6 +149,13 @@ export interface NetHooks {
    * answer once already (one_jakob.ts samePersonTarget).
    */
   samePerson(target: Peer, sender: Peer): boolean
+  /**
+   * Wave 6f (ack_retry.ts): may this phone re-send its connect-ack to `peer` until it hears from them? Absent: never (tests, and the
+   * side-by-side demo / demo accounts, whose flows are their own).
+   */
+  mayResendAck?(peer: Peer): boolean
+  /** Wave 6f (away_asks.ts): an ask that matched this web arrived after its asker had stopped waiting; nothing was answered. */
+  onAwayAsk?(ask: AwayAsk, peer: Peer): void
 }
 
 /** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
@@ -165,9 +183,24 @@ function prune(m: MatchResult): MatchResult {
   return { ...m, hits: m.hits.filter((h) => h.score >= top * RELEVANCE_BAND).slice(0, MAX_SHARED) }
 }
 
+/** The page's Web Locks manager, when it has one (secure pages in current browsers). */
+function pageLocks(): LockManagerLike | undefined {
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManagerLike }) : undefined
+  return nav?.locks
+}
+
+/** Is this tab the one in front of the person (visible or focused)? Outside a page: yes. */
+function inFront(): boolean {
+  if (typeof document === 'undefined') return true
+  return document.visibilityState === 'visible' || (typeof document.hasFocus === 'function' && document.hasFocus())
+}
+
 export class Net {
   private channel: RelayChannel | null = null
   private identity: DidIdentity | null = null
+  private lock: DrainLock | null = null
+  /** Connect-acks being sent right now (by DID): never two at once for one peer. */
+  private acking = new Set<string>()
   private keys = new Map<string, Promise<CryptoKey>>()
   private awaiting = new Map<string, (env: AnswerEnvelope) => void>()
   private seenQids = new Set<string>()
@@ -208,32 +241,70 @@ export class Net {
     return this.hooks.state().peers.find((p) => p.did === did)
   }
 
-  /** Opens the relay drain once; safe to call repeatedly. */
+  /**
+   * Opens the relay drain once; safe to call repeatedly. The drain itself is held by ONE tab of this browser profile (drain_lock.ts):
+   * a tab in front of the person takes it, a tab behind another waits for it. Resolves once this tab drains, or at once when another
+   * tab does (its sends then fail like an offline phone's and are retried).
+   */
   start(): Promise<void> {
     if (this.starting) return this.starting
     this.starting = (async () => {
       const identity = this.ensureIdentity()
-      const channel = createRelayChannel(this.relayOrigin ? { relayOrigin: this.relayOrigin } : {})
-      this.channel = channel
-      channel.onStatus((status) => this.hooks.onStatus(status))
-      channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
-      channel.onEnvelope(async (fromDid) => {
-        const peer = this.peerByDid(fromDid)
-        return peer ? this.pairKey(peer) : null
-      }, (env, fromDid) => { void this.handleEnvelope(env, fromDid) })
-      try {
-        await channel.connect(identity)
-      } catch {
-        /* relay.ts keeps reconnecting on its own; the status badge shows it */
-      }
+      let granted: () => void = () => {}
+      const firstGrant = new Promise<void>((resolve) => { granted = resolve })
+      this.lock = createDrainLock(drainLockName(identity.did), pageLocks(), {
+        onGranted: () => { this.openDrain(identity).then(granted, granted) },
+        onLost: () => this.closeDrain(),
+      })
+      this.lock.request(inFront())
+      await Promise.race([firstGrant, new Promise<void>((resolve) => setTimeout(resolve, LOCK_WAIT_MS))])
     })()
     return this.starting
   }
 
+  /** A fresh channel for this identity (never a closed one again: its late close event would start a second socket). */
+  private async openDrain(identity: DidIdentity): Promise<void> {
+    this.closeDrain()
+    const channel = createRelayChannel(this.relayOrigin ? { relayOrigin: this.relayOrigin } : {})
+    this.channel = channel
+    channel.onStatus((status) => {
+      if (this.channel !== channel) return // a channel this tab already closed
+      this.hooks.onStatus(status)
+      if (status === 'connected') void this.resendAcks()
+    })
+    channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
+    channel.onEnvelope(async (fromDid) => {
+      const peer = this.peerByDid(fromDid)
+      return peer ? this.pairKey(peer) : null
+    }, (env, fromDid) => { void this.handleEnvelope(env, fromDid) })
+    try {
+      await channel.connect(identity)
+    } catch {
+      /* relay.ts keeps reconnecting on its own; the status badge shows it */
+    }
+  }
+
+  private closeDrain(): void {
+    const channel = this.channel
+    this.channel = null
+    channel?.close()
+  }
+
+  /**
+   * The person is in front of this tab (it became visible or got the focus): it takes the drain from any other tab of this profile.
+   * `fresh`: after a long time hidden (a laptop that slept), the socket it holds may be dead without knowing it: open a new one.
+   */
+  activate(fresh = false): void {
+    if (!this.lock || !this.identity) return
+    if (!this.lock.held()) { this.lock.request(true); return }
+    if (fresh) void this.openDrain(this.identity)
+  }
+
   /** Closes the relay drain for good: after a hand-over the identity lives on another phone. */
   stop(): void {
-    this.channel?.close()
-    this.channel = null
+    this.lock?.release()
+    this.lock = null
+    this.closeDrain()
     this.starting = null
   }
 
@@ -245,7 +316,7 @@ export class Net {
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
   async completeConnect(params: ConnectLinkParams, ring: Ring): Promise<Peer> {
     const s = this.hooks.state()
-    const identity = this.ensureIdentity()
+    this.ensureIdentity()
     // A connection this phone already holds under that DID keeps its id and name (a bare-DID add made it up, a scan may bring the real ones).
     const known = s.peers.find((x) => x.did === params.did)
     const peer = upsertPeer(s, {
@@ -257,12 +328,41 @@ export class Net {
     })
     this.hooks.save()
     await this.start()
-    try {
-      await this.channel?.sendRaw(params.did, encodeForQr(buildConnectAck(s.me, identity)))
-    } catch {
-      /* the peer is saved; the other phone learns of us on its next successful ack */
-    }
+    await this.sendAck(peer)
     return peer
+  }
+
+  /**
+   * One connect-ack to `peer` (the cleartext bootstrap wire of connect_link.ts, byte-for-byte the same every time). Counted only when
+   * the relay accepted it; a failure is retried by resendAcks (ack_retry.ts). Never two at once for one peer.
+   */
+  private async sendAck(peer: Peer): Promise<void> {
+    if (this.acking.has(peer.did)) return
+    this.acking.add(peer.did)
+    try {
+      if (!this.channel) return
+      await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity())))
+      const stored = this.peerByDid(peer.did)
+      if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
+    } catch {
+      /* the peer is saved; resendAcks tries again on the next connect of the drain (ack_retry.ts) */
+    } finally {
+      this.acking.delete(peer.did)
+    }
+  }
+
+  /** Wave 6f: re-sends the connect-ack to every connection that has not answered yet and is due (ack_retry.ts). */
+  async resendAcks(): Promise<void> {
+    const may = this.hooks.mayResendAck
+    if (!may || !this.channel) return
+    const now = Date.now()
+    const due = this.hooks.state().peers.filter((p) => ackDue(p, now) && may.call(this.hooks, p))
+    for (const peer of due) await this.sendAck(peer)
+  }
+
+  /** Wave 6f: this phone heard from `peer` (they know us): no more connect-acks to them. */
+  private heard(peer: Peer): void {
+    if (noteHeard(peer, Date.now())) this.hooks.save()
   }
 
   /** Only a cleartext connect-ack is ever recognised here; every other wire is ciphertext. */
@@ -279,12 +379,14 @@ export class Net {
       connectedAt: Date.now(),
     }
     if (known) {
-      this.hooks.onPeerConfirmed(upsertPeer(s, incoming))
+      const peer = upsertPeer(s, incoming)
+      noteHeard(peer, Date.now())
       this.hooks.save()
+      this.hooks.onPeerConfirmed(peer)
       return true
     }
     if (this.hooks.holdPeer(incoming)) return true
-    const peer = upsertPeer(s, incoming)
+    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now() })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)
     return true
@@ -296,15 +398,14 @@ export class Net {
     const peer = upsertPeer(s, { ...held, connectedAt: Date.now() })
     this.hooks.save()
     await this.start()
-    try {
-      await this.channel?.sendRaw(peer.did, encodeForQr(buildConnectAck(s.me, this.ensureIdentity())))
-    } catch {
-      /* the peer is saved either way; that phone just does not learn of the yes until its next ask is answered */
-    }
+    await this.sendAck(peer)
     return peer
   }
 
   private async handleEnvelope(env: Envelope, fromDid: string): Promise<void> {
+    // It opened with the pair key: that phone knows this one.
+    const from = this.peerByDid(fromDid)
+    if (from) this.heard(from)
     if (env.t === 'answer') {
       this.awaiting.get(env.qid)?.(env)
       return
@@ -358,6 +459,11 @@ export class Net {
     const s = this.hooks.state()
     const info = hopInfo(q)
     const text = q.freeText ?? ''
+    // Wave 6f: its asker stopped waiting long ago (this phone was closed): no prompt, no answer, never passed on (away_asks.ts).
+    if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, this.windowMs))) {
+      this.handleAwayAsk(q, peer, info, text)
+      return
+    }
     const tpl = templateFor(text)
     // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
     const deadline = receivedAt + answerDelayMs(info, this.windowMs)
@@ -418,6 +524,23 @@ export class Net {
         this.logHarvest(entry, await answer(share ? sharedItems(matches) : []))
       },
     })
+  }
+
+  /**
+   * An ask that arrived after its asker stopped waiting: logged (as no match, marked away), and kept for the person when it matched this
+   * web AND came straight from its asker (so "Message <name>" reaches the person who asked, not a front door or a friend in between).
+   * Nothing is sent, nothing is passed on.
+   */
+  private handleAwayAsk(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string): void {
+    if (!text || !surfacesHere(q)) return
+    const entry = this.log(peer, text, LogOutcome.NoMatch)
+    entry.away = true
+    this.hooks.save()
+    const direct = !info.door && q.relayed !== true && askerOf(info, peer.displayName) === peer.displayName && throughOf(info, peer.displayName).length === 0
+    if (!direct) return
+    const { threads } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
+    if (!classifyIncomingQuery(matchAsk(text, threads), false, true).surface) return
+    this.hooks.onAwayAsk?.({ id: q.qid, at: Date.now(), peerId: peer.id, from: peer.displayName, text: [...text].slice(0, AWAY_TEXT_MAX).join('') }, peer)
   }
 
   /**

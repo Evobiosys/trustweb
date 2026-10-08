@@ -305,6 +305,15 @@ export interface Peer {
   did: string
   ring: Ring
   connectedAt: number
+  /**
+   * Wave 6f (ack_retry.ts): when this phone first heard from that phone (its connect-ack, or any sealed envelope that opened with the pair
+   * key). Set: they know this phone, no connect-ack is re-sent to them. Absent (older records, or a scan whose ack was never answered): see ackTries.
+   */
+  heardAt?: number
+  /** Wave 6f: how many connect-acks the relay accepted for them from this phone. Absent: none yet (a first send that failed counts nothing). */
+  ackTries?: number
+  /** Wave 6f: when the relay last accepted a connect-ack for them. Absent: never. */
+  ackSentAt?: number
 }
 
 export interface InventoryItem {
@@ -352,6 +361,22 @@ export interface LogEntry {
   passedOn?: number
   /** Wave 6: how many lines came back from them and went on to the asker. Absent: none. */
   cameBack?: number
+  /** Wave 6f (away_asks.ts): the ask reached this phone after its asker had stopped waiting; it was not answered. Absent: a live ask. */
+  away?: boolean
+}
+
+/** Wave 6f: an ask that matched this web while this phone was away (away_asks.ts). This phone only; never sent. */
+export interface AwayAsk {
+  /** The ask's qid (dedupe: a relay redelivery is the same ask). */
+  id: string
+  /** When it reached this phone. */
+  at: number
+  /** The asking connection (peer id), for "Message <name>". */
+  peerId: string
+  /** The asker's name as this phone knows it (or the person a front door asked for). */
+  from: string
+  /** What they asked, bounded (away_asks.ts AWAY_TEXT_MAX). */
+  text: string
 }
 
 export interface Me {
@@ -569,6 +594,11 @@ export interface AppState {
   connectCode?: ConnectRecord
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. */
   chats?: ChatBook
+  /**
+   * Wave 6f (away_asks.ts): asks that matched this web but reached this phone after the asker had stopped waiting ("<name> asked while
+   * you were away"), newest first, at most AWAY_ASKS_MAX, each kept AWAY_ASK_KEEP_MS or until dismissed. Absent: none. Older builds ignore it.
+   */
+  awayAsks?: AwayAsk[]
   /**
    * Superseded by `transcription` (2026-10-06); still read from records saved
    * before it: true there means TranscriptionChoice.TalkWeave. Settings drops

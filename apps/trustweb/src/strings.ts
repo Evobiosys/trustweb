@@ -1318,4 +1318,12 @@ export const S = {
   sharingAddLink: (app: string) => `Add my ${app} link`,
   sharingEditLink: (app: string) => `Edit my ${app} link`,
   cardNoMessenger: (name: string) => `No messenger link from ${name} yet. If they share one, it shows here.`,
+  // wave 6f: asks that arrived while this phone was closed (away_asks.ts)
+  awayAskTitle: (name: string) => `${name} asked while you were away`,
+  awayAskBody: (text: string, more: number) => `“${text}” Your web had something for it. They have stopped waiting, so nothing was sent; write to them if you can help.${more > 0 ? ` (${more} more)` : ''}`,
+  awayAskMessage: (name: string) => `Message ${name}`,
+  awayAskDismiss: 'Dismiss',
+  // wave 6f: a card made for a connection that had none (peer_cards.ts)
+  peerCardRepairedContext: 'Connected on TrustWeb',
+  sheetConnectedAs: (name: string) => `connected as ${name}`,
 } as const
