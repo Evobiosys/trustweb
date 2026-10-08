@@ -29,6 +29,19 @@ Answer moments are a function of the envelope alone (hops.ts answerDelayMs / doo
 off and a further step cannot be told apart by WHEN. The matcher widens an ask on the door's own lines (typos, plurals, "Community
 hof" for "Communityhof": lexicon.forgivingAskTemplate); nothing of that widening ever travels. 66 tests in 4 files after wave 6.
 
+WAVE 6d (2026-10-08): FRIENDS OF THE OWNER, ANSWERED THROUGH THE DOOR (Jakob: "one dummy friend of mine that has a Tandem to lend out
+to friends of friends")
+The inventory file may carry an optional section next to "items":
+  "friends": [{ "name": "Mira", "ring": "close|friend|acquaintance", "allowedInAdvance": true, "at"?: "2026-10-08", "note"?: "demo content",
+                "items": [{ "text", "audience", "degrees"?, "aliases"?: ["other words for the line, matched on, never shown"] }] }]
+A friend who set allowedInAdvance to exactly true is asked THROUGH the door as her own phone would be at the next step: only for an ask
+that may travel one more step (hops.ts mayCascade: not "My contacts", not direct, not a repeat or cycle, not the owner himself), with
+cascade.ts askSources at hop + 1 in HER ring for the owner, matched on its own (never merged with the door's lines). Her lines come
+back in the same sealed answer marked via ["Jakob"] ("through Jakob"), her name and "Allowed in advance by <her>" in the context.
+They never change WHEN an answer is sent (the moment is fixed first: doorAnswerDelayMs / answerDelayMs) and one answer slot is kept
+for them. Without the section, with junk in it, or with allowedInAdvance missing: nothing changes (such lines are counted as held).
+Status and log carry counts only ("friends", "friendLines"; "friend=N" at the end of the ask line), never a name or a line.
+
 OWNER BINDING (the claim ceremony)
 Start the peer with TW_PEER_CLAIM=1 (or touch <state>/claim-open), then open its connect link on the owner's
 phone within TW_PEER_CLAIM_MINUTES (default 10). The first phone to do so becomes the owner; the window closes;
@@ -67,19 +80,20 @@ RUN (local)
   curl -s http://127.0.0.1:8961/status    # {"relay":"connected","peers":0,"owner":false,"forward":false,"claimOpen":true,"presetLines":5,"heldLines":2}
   cat /tmp/twpeer/demo-peer.json          # the card the app reads
 Env: TW_PEER_STATE (dir: state.json with identity, peers and owner; demo-peer.json; grants.json; claim-open),
-TW_PEER_INVENTORY (json: {"items":[{"text","audience": "fof"|"friends"|"me","preset"?: {"by","at","note"?}}]}),
+TW_PEER_INVENTORY (json: {"items":[{"text","audience": "fof"|"friends"|"me","preset"?: {"by","at","note"?}}],"friends"?: [...see wave 6d]}),
 TW_PEER_RELAY (origin), TW_PEER_NAME (default "Jakob"), TW_PEER_POLICY (open|granted),
 TW_PEER_HEALTH_PORT (0 = none; loopback only, Host checked, any Origin refused), TW_PEER_ASKS_PER_HOUR (default 30
 per asker), TW_PEER_FORWARD (1|0, default 1), TW_PEER_FORWARD_WAIT_MS (default 120000; the asker's app waits
 180 s), TW_PEER_CLAIM (1 opens a claim window at start), TW_PEER_CLAIM_MINUTES (default 10). SIGHUP reloads the
 inventory and the grants.
 
-TEST (2026-10-08, wave 6: 66 tests in 4 files; 2026-10-07: 57)
+TEST (2026-10-08, wave 6d: 103 tests in 5 files; wave 6: 66 in 4; 2026-10-07: 57)
   cd services/trustweb-peer && TW_VITEST_CACHE=$(mktemp -d) ../../apps/demo/node_modules/.bin/vitest run --config test/vitest.config.mjs --root .
   ../../apps/demo/node_modules/.bin/tsc --noEmit -p tsconfig.json      (peer.ts, inventory_export.ts, the exporter CLI)
   test/peer.test.mjs             the peer (22): presets, claim, forward, granted policy, travelling asks, against an in-memory relay
   test/inventory_export.test.mjs the exporter (24): marks, Tana reader, the four outputs, property test "nothing unmarked
                                  leaves" over 400 random inventories, CLI dry run against a fake tana_mcp.sh
+  test/friends.test.mjs          wave 6d (35): the friends section, the admission matrix, aliases, the whole peer through a relay
   test/personal.test.mjs         "without an app" end to end (6): exporter -> server file -> personal peer -> granted asker
   test/scripts.test.mjs          grant, claim and --republish-cards against a fake host; personal --host never defaulted (14)
   TW_VITEST_CACHE gives a run its own cache dir (node_modules are shared with the primary checkout).

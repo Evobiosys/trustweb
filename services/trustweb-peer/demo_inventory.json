@@ -1,5 +1,5 @@
 {
-  "_note": "Demo content for the demo front door on the Swiss server: exactly the owner's ten public lines, ticked allow-in-advance and verbatim (apps/trustweb/src/demo_inventory_public.ts is the one place they live; apps/trustweb/test/unit/demo_inventory_public.test.mjs pins this file to them). The front door is named Jakob (wave 5, owner 2026-10-07: in the demo people connect with him and his actual public resources). Every line carries its preset, so it is shared visibly marked as allowed in advance; a line without a preset would be held and never shared.",
+  "_note": "Demo content for the demo front door on the Swiss server: exactly the owner's ten public lines, ticked allow-in-advance and verbatim (apps/trustweb/src/demo_inventory_public.ts is the one place they live; apps/trustweb/test/unit/demo_inventory_public.test.mjs pins this file to them). The front door is named Jakob (wave 5, owner 2026-10-07: in the demo people connect with him and his actual public resources). Every line carries its preset, so it is shared visibly marked as allowed in advance; a line without a preset would be held and never shared. The `friends` section (wave 6d) holds one dummy friend, Mira, who allowed in advance a tandem to lend: the door answers it THROUGH Jakob, only for an ask that may travel one step further (How far? Friends of friends), never for My contacts.",
   "items": [
     { "text": "I keep a tech stack doc covering LLM/AI, infrastructure, dev tools, knowledge, and communication channels.", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-07", "note": "demo content" } },
     { "text": "I have a tech stack file at /root/resources/tech-stack.md.", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-07", "note": "demo content" } },
@@ -11,5 +11,11 @@
     { "text": "I work as a founder, and what I'm founding is the TrustWeb.one", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-07", "note": "demo content" } },
     { "text": "I use the Equal Earth over the Mercator projection for global maps", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-07", "note": "demo content" } },
     { "text": "I can help you clean up your online presence, making sure everywhere you show up on the web links to your current website.", "audience": "fof", "preset": { "by": "Jakob", "at": "2026-10-07", "note": "demo content" } }
+  ],
+  "friends": [
+    { "name": "Mira", "ring": "friend", "allowedInAdvance": true, "at": "2026-10-08", "note": "demo content",
+      "items": [
+        { "text": "Tandem bicycle to lend, weekends (two seats, Vienna)", "audience": "fof", "degrees": 1, "aliases": ["Tandemfahrrad", "Tandemrad", "Fahrrad"] }
+      ] }
   ]
 }
