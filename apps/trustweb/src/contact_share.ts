@@ -74,10 +74,19 @@ export function withTick(settings: ShareSettings | undefined, channel: Channel, 
 /**
  * Called right after the owner SAVES a value on the Meet page: records the
  * visible default tick once (never over a tick he already set, never for a
- * phone number). Returns the settings unchanged when there is nothing to do.
+ * phone number). A tick given for a username link does not carry over when he
+ * replaces it by a phone number: that tick is reset, because the consent was
+ * for something that does not reveal his number. `previous` is the value that
+ * was saved before this one. Returns the settings unchanged when nothing applies.
  */
-export function settleDefaultTick(settings: ShareSettings | undefined, channel: Channel, handle: string): ShareSettings | undefined {
-  if (settings?.shareOnConnect && channel in settings.shareOnConnect) return settings
+export function settleDefaultTick(
+  settings: ShareSettings | undefined, channel: Channel, handle: string, previous?: string,
+): ShareSettings | undefined {
+  const ticks = settings?.shareOnConnect
+  if (ticks && channel in ticks) {
+    const widened = ticks[channel] === true && sharesPhoneNumber(channel, handle) && !!previous && !sharesPhoneNumber(channel, previous)
+    return widened ? withTick(settings, channel, false) : settings
+  }
   return defaultShareTick(channel, handle) ? withTick(settings, channel, true) : settings
 }
 
@@ -273,4 +282,24 @@ export function reachableChannels(person: ContactCarrier): Reachable[] {
 /** The one link "Message on Signal / Molly" points at: Signal first, then the owner's channel order. */
 export function primaryReachable(person: ContactCarrier): Reachable | null {
   return reachableChannels(person)[0] ?? null
+}
+
+// A contact text can reach the scanning phone before it has created the card of
+// the person who sent it (the card is made after the connect call returns). The
+// text is held, bounded, and applied the moment the card exists.
+const HELD_MAX = 20
+
+export type HeldContacts = Map<string, string>
+
+export function holdContact(held: HeldContacts, peerId: string, text: string): void {
+  held.delete(peerId)
+  held.set(peerId, text)
+  while (held.size > HELD_MAX) held.delete(held.keys().next().value as string)
+}
+
+/** Removes and returns the held text of one peer. */
+export function takeContact(held: HeldContacts, peerId: string): string | undefined {
+  const text = held.get(peerId)
+  held.delete(peerId)
+  return text
 }

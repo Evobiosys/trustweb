@@ -5,7 +5,7 @@
  */
 import {
   CONTACT_TEXT_MAX, CONTACT_VALUE_MAX, buildContactPayload, contactFingerprint, contactText, defaultShareTick, isContactText,
-  contactToSend, mergeContact, parseContactText, receiveContactText, settleDefaultTick, primaryReachable, reachableChannels, shouldSendContact, sharesPhoneNumber, ticked,
+  contactToSend, holdContact, mergeContact, takeContact, parseContactText, receiveContactText, settleDefaultTick, primaryReachable, reachableChannels, shouldSendContact, sharesPhoneNumber, ticked,
   validateContactPayload, withProvider, withTick,
 } from '../../src/contact_share.ts'
 import { SignalProvider } from '../../src/channel.ts'
@@ -213,6 +213,20 @@ describe('settleDefaultTick (after the owner saves a value)', () => {
     const on = { shareOnConnect: { [Channel.Signal]: true } }
     expect(settleDefaultTick(on, Channel.Signal, PHONE)).toBe(on)
   })
+  it('a tick given for a username link is reset when he replaces it by a phone number', () => {
+    const on = { shareOnConnect: { [Channel.Signal]: true }, signalProvider: SignalProvider.Molly }
+    expect(settleDefaultTick(on, Channel.Signal, PHONE, USER)).toEqual({ shareOnConnect: { [Channel.Signal]: false }, signalProvider: SignalProvider.Molly })
+  })
+  it('a phone number replaced by another keeps its tick, and a number replaced by a username link keeps it', () => {
+    const on = { shareOnConnect: { [Channel.Signal]: true } }
+    expect(settleDefaultTick(on, Channel.Signal, '+436609999999', PHONE)).toBe(on)
+    expect(settleDefaultTick(on, Channel.Signal, USER, PHONE)).toBe(on)
+  })
+  it('an unticked setting stays unticked when the value widens, and a first save has no previous value', () => {
+    const off = { shareOnConnect: { [Channel.Signal]: false } }
+    expect(settleDefaultTick(off, Channel.Signal, PHONE, USER)).toBe(off)
+    expect(settleDefaultTick({ shareOnConnect: { [Channel.Signal]: true } }, Channel.Signal, PHONE, undefined)).toEqual({ shareOnConnect: { [Channel.Signal]: true } })
+  })
   it('does nothing for a channel that is not the Meet page one', () => {
     expect(settleDefaultTick(undefined, Channel.Matrix, '@lena:matrix.org')).toBeUndefined()
   })
@@ -246,5 +260,28 @@ describe('receiveContactText', () => {
     expect(receiveContactText(APP, person, 'hello', 7)).toBe(false)
     expect(receiveContactText(APP, person, `${APP}?contact=1#signal=bad`, 8)).toBe(false)
     expect(person.theirChannels).toEqual({ [Channel.Signal]: USER })
+  })
+})
+
+describe('held contacts (the text beats the card)', () => {
+  it('holds a text until the card exists, then hands it over once', () => {
+    const held = new Map()
+    holdContact(held, 'p1', 'text-1')
+    expect(takeContact(held, 'p1')).toBe('text-1')
+    expect(takeContact(held, 'p1')).toBeUndefined()
+    expect(takeContact(held, 'nobody')).toBeUndefined()
+  })
+  it('a newer text from the same peer replaces the older one', () => {
+    const held = new Map()
+    holdContact(held, 'p1', 'old')
+    holdContact(held, 'p1', 'new')
+    expect(takeContact(held, 'p1')).toBe('new')
+  })
+  it('is bounded: the oldest peer falls out', () => {
+    const held = new Map()
+    for (let i = 0; i < 25; i++) holdContact(held, `p${i}`, 't')
+    expect(held.size).toBe(20)
+    expect(held.has('p0')).toBe(false)
+    expect(held.has('p24')).toBe(true)
   })
 })
