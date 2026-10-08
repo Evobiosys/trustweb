@@ -59,8 +59,6 @@ async function connect(host, joiner, joinerName, fresh) {
 /** On `page`, the person card of `name`: switch "Pass their asks on" to `on`. */
 async function setPassOn(page, name, on) {
   await tab(page, 'Web')
-  // Wave 6h: an ask that matched nothing here leaves a quiet card under the header (unmatched_asks.ts); it is put away first.
-  while (await page.locator('[data-unmatched-dismiss]').count()) await page.locator('[data-unmatched-dismiss]').first().click()
   await page.locator('.node', { hasText: name }).first().click()
   const row = page.locator('.sheet.on [data-pass-on]')
   await row.waitFor({ timeout: 5_000 })
@@ -78,7 +76,7 @@ async function ask(page, text, reachChoice) {
   await page.locator('.query-dock textarea').fill(text)
   const t0 = Date.now()
   await page.getByRole('button', { name: 'Call into my web' }).click()
-  await page.locator('.card.asked .outcome').waitFor({ timeout: 480_000 }) // wave 6h: 120 s per step, three steps at most here
+  await page.locator('.card.asked .outcome').waitFor({ timeout: 240_000 })
   return { text: await page.locator('.card.asked').innerText(), ms: Date.now() - t0 }
 }
 
@@ -156,7 +154,7 @@ async function main() {
     await ann.locator('[data-reach-custom]').fill('5')
     await ann.locator('[data-reach-custom]').dispatchEvent('change')
     await until(async () => (await record(ann)).askReach === 5)
-    ok('custom: 5 steps, remembered on this phone', (await record(ann)).askReach === 5 && /up to about 10 min/.test(await ann.locator('[data-reach-hint]').innerText()))
+    ok('custom: 5 steps, remembered on this phone', (await record(ann)).askReach === 5 && /up to 150 s/.test(await ann.locator('[data-reach-hint]').innerText()))
     await ann.locator('[data-reach-choice="no-limit"]').click()
     await until(async () => (await record(ann)).askReach === -1)
     ok('no limit: stored as the sentinel, never Infinity, and it says where it stops', (await record(ann)).askReach === -1 && /at most 6 steps/.test(await ann.locator('[data-reach-hint]').innerText()))
@@ -176,7 +174,7 @@ async function main() {
     // (the overlay's text was read before the tap; a picture of it for the evidence comes from the next ask in step 4)
     ok('Cleo is asked "Ann asks", through Ben', Boolean(seen1) && /Ann asks/.test(seen1) && /Through Ben/i.test(seen1) && seen1.includes(LADDER), seen1 ?? 'no overlay')
     ok('Ann gets Cleo\'s ladder, from Ben, marked "through Ben", on a card that says Ben passed it on (not that he chose to share)', /Ben passed this on/.test(r1.text) && !/Ben chose to share/.test(r1.text) && r1.text.includes(LADDER) && /through Ben/.test(r1.text), r1.text)
-    ok('it comes at Ben\'s fixed moment: two windows (about 4 min since wave 6h), not before', r1.ms >= 238_000, String(r1.ms))
+    ok('it comes at Ben\'s fixed moment: two windows (about 60 s), not before', r1.ms >= 58_000, String(r1.ms))
     await ann.locator('.card.asked .outcome').scrollIntoViewIfNeeded()
     await shot(ann, 'u1-04-ann-through-ben')
     await until(async () => (await record(ben)).log.find((e) => e.text === q1)?.passedOn === 1)
@@ -191,7 +189,7 @@ async function main() {
     const r2 = await ask(ann, q2, 'contacts')
     ok('maxHops 1: nothing comes back', /No match|nothing/i.test(r2.text) && !r2.text.includes(LADDER), r2.text)
     ok('and Cleo was never asked', (await logCount(cleo, q2)) === 0)
-    ok('the default ask is answered at one window (120 s since wave 6h)', r2.ms >= 118_000 && r2.ms < 140_000, String(r2.ms))
+    ok('the default ask is answered at one window (about 30 s), as before', r2.ms >= 28_000 && r2.ms < 50_000, String(r2.ms))
 
     // 3. Ben's pass-on off: nothing, at the same moment as 1
     await setPassOn(ben, 'Ann', false)
