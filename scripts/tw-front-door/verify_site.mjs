@@ -11,6 +11,10 @@
 // through friends is not built yet and a question reaches your direct connections; 1 = it says a question can travel on
 // through friends and you choose how far. Every hop claim on the website is checked against it (wave 6).
 //
+// TW_INPERSON_LIVE=1, TW_INPERSON_LOOKUP=1, TW_INPERSON_ADVANCED=1 (default 0 for all) are settings the build was given
+// (--inperson-live, --inperson-lookup, --inperson-advanced): these control whether the "Meet in person" section shows
+// QR code/link feature, typing code/name/DID option, and advanced sharing choices (wave 6b).
+//
 // TW_SITE=org (default) checks the website, TW_SITE=com the hosting site. TW_APP_BASE is the app base the
 // build was given (Demo is <base>/demo/, Install <base>/?install=1); TW_SITE_HOST the host it was built for.
 
@@ -46,6 +50,9 @@ const TERMS_PUBLISHED = mode === 'draft' || process.env.TW_PUBLISH_TERMS === '1'
 const TX_PROVIDER = process.env.TW_TRANSCRIBE_PROVIDER ?? 'openrouter'
 if (!['openrouter', 'berget', 'berget-only'].includes(TX_PROVIDER)) { console.error('TW_TRANSCRIBE_PROVIDER must be openrouter, berget or berget-only'); process.exit(2) }
 const HOPS_LIVE = process.env.TW_HOPS_LIVE === '1'
+const INPERSON_LIVE = process.env.TW_INPERSON_LIVE === '1'
+const INPERSON_LOOKUP = process.env.TW_INPERSON_LOOKUP === '1'
+const INPERSON_ADVANCED = process.env.TW_INPERSON_ADVANCED === '1'
 const OTHER_HOST = ORG ? 'https://TrustInTheWeb.com' : 'https://TrustInTheWeb.org'
 const results = []
 const check = (name, ok, detail = '') => {
@@ -757,11 +764,41 @@ async function wave5OrgChecks(page) {
   check('main page: waitlist copy is exactly "You can use it right now. If you want to be notified once it is stable, leave your email here."',
     w.note === 'You can use it right now. If you want to be notified once it is stable, leave your email here.', String(w.note))
   check('main page: the notify box reads as the notice for the production build (button "Notify me", heading about being told when it is stable)', w.button === 'Notify me' && /stable/.test(w.heading ?? ''), `${w.button} / ${w.heading}`)
-  check('main page: FAQ is a section (id faq) after the use cases, with the same 10 questions as faq.html, all closed, and an "All questions" link to faq.html',
-    w.faqPresent && w.faqIds.length === 10 && new Set(w.faqIds).size === 10 && w.faqClosed && w.allHref === 'faq.html' && w.faqAfterUse, w.faqIds.join(','))
+  const expectedFaqCount = INPERSON_LIVE ? 11 : 10
+  check(`main page: FAQ is a section (id faq) after the use cases, with ${expectedFaqCount} questions (${INPERSON_LIVE ? 'includes meet in person' : 'no meet in person'}), all closed, and an "All questions" link to faq.html`,
+    w.faqPresent && w.faqIds.length === expectedFaqCount && new Set(w.faqIds).size === expectedFaqCount && w.faqClosed && w.allHref === 'faq.html' && w.faqAfterUse, w.faqIds.join(','))
   await page.goto(BASE + 'faq.html')
   const pageIds = await page.evaluate(() => [...document.querySelectorAll('details.q')].map((d) => d.id))
   check('faq.html still exists with the same question ids as the main page section', pageIds.join(',') === w.faqIds.join(','), pageIds.join(','))
+  const faqContent = await page.evaluate(() => {
+    const q = document.getElementById('q-meet-in-person')
+    if (!q) return { ok: false }
+    const text = q.textContent
+    return {
+      ok: true,
+      hasInWorks: /in the works/.test(text),
+      hasQRCode: /QR code|scan it with your camera/.test(text),
+      hasServerInfo: /server keeps your connect code/.test(text),
+      hasTyping: /Or type instead|type it instead/.test(text),
+      hasDID: /DID|unique identifier/.test(text),
+      hasAdvanced: /Advanced/.test(text),
+    }
+  })
+  if (INPERSON_LIVE) {
+    check('faq: q-meet-in-person exists with QR code scanning and server info when inperson-live is on',
+      faqContent.ok && faqContent.hasQRCode && faqContent.hasServerInfo && !faqContent.hasInWorks, JSON.stringify(faqContent))
+  } else {
+    check('faq: q-meet-in-person shows "in the works" message when inperson-live is off',
+      faqContent.ok && faqContent.hasInWorks && !faqContent.hasQRCode, JSON.stringify(faqContent))
+  }
+  if (INPERSON_LOOKUP) {
+    check('faq: meet in person shows typing option with DID when inperson-lookup is on',
+      faqContent.ok && faqContent.hasTyping && faqContent.hasDID, 'typing option with DID')
+  }
+  if (INPERSON_ADVANCED) {
+    check('faq: meet in person shows advanced choices when inperson-advanced is on',
+      faqContent.ok && faqContent.hasAdvanced, 'advanced choices')
+  }
   check('main page: use case "QuestHub" is now "Coordinating Quests" (no uc-questhub card, QuestHub named nowhere outside the lineage and the team text)',
     !w.questhubCard && w.questsTitle === 'Coordinating Quests' && !/QuestHub/i.test(w.useText) && !w.questhubOutside, JSON.stringify([w.questhubCard, w.questsTitle, w.questhubOutside]))
   check('main page: the hero keeps the big wordmark "Trust in the Web", the bar has no site name', w.heroWordmark === 'Trust in the Web' && !/TrustInTheWeb\.org/.test(w.barBrandText), `${w.heroWordmark} / ${w.barBrandText}`)
