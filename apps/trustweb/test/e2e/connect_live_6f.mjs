@@ -10,6 +10,8 @@
  * WARNING: this runs on PRODUCTION. It creates throwaway TrustWeb instances and one connect code per run (codes expire on the server, as for
  * any phone). No username is claimed. Never point it at anything but the hosts below.
  * TW_LIVE_HOST (A) and TW_LIVE_B_HOST (B, default = A) are each one of  https://app.idea2.site/trustweb  |  https://app.trustweb.one
+ * Runs back to back from one address meet the connect service's budget (6 POST /connect + /name per minute, 30 per hour): space them
+ * by a minute or more; a missing code then reads as FAIL in step 1 or 4 (the app itself falls back to the long link).
  * TW_SCREENS=<dir> (default W6/screens/live-6f/). Headless only. Exit 0 all PASS, 1 any FAIL, 2 bad setup.
  *   cd apps/demo && TW_LIVE_HOST=https://app.trustweb.one PLAYWRIGHT_PACKAGE=<playwright-core> ../../node_modules/.bin/tsx ../trustweb/test/e2e/connect_live_6f.mjs
  */
@@ -21,6 +23,8 @@ import { checker, launch, record, startPhone } from './swiss_harness.mjs'
 const ALLOWED_HOSTS = ['https://app.idea2.site/trustweb', 'https://app.trustweb.one']
 const DEFAULT_SCREENS = '/Users/personal/Documents/agents/4claude/DEVLOG/trustweb-wave-1733/wave6/screens/live-6f/'
 const VIEWPORT = { width: 390, height: 844 }
+/** services/trustweb-backup CONNECT_PER_MINUTE is 6 per address: runs and parts that each mint a code are spaced by this. */
+const BUDGET_PAUSE_MS = 65_000
 const HOST = (process.env.TW_LIVE_HOST ?? '').replace(/\/+$/, '')
 const B_HOST = (process.env.TW_LIVE_B_HOST ?? HOST).replace(/\/+$/, '')
 const SCREENS = process.env.TW_SCREENS || DEFAULT_SCREENS
@@ -161,7 +165,8 @@ async function main() {
   const browser = await launch()
   try {
     await offlineAdd(browser)
-    if (!CROSS) await meetTwoPeople(browser)
+    // The connect service allows 6 POST /connect + /name per network address per minute: one minute between the two codes.
+    if (!CROSS) { await new Promise((r) => setTimeout(r, BUDGET_PAUSE_MS)); await meetTwoPeople(browser) }
   } catch (e) {
     ok('ran to the end', false, String(e?.message ?? e).split('\n')[0])
   } finally {
