@@ -80,6 +80,8 @@ test('a request that fails the guard is answered by the UNCHANGED pipeline, byte
     const local = `127.0.0.1:${srv.port}`
     const probes = [
       { host: APP, headers: { 'X-Admin-Token': TOKEN } }, // a public app host (what Caddy forwards)
+      // EXACTLY what Caddy relays from the internet: socket 127.0.0.1, the public Host kept, and its default X-Forwarded-For/-Proto/-Host (wave 6e review)
+      { host: APP, headers: { 'X-Admin-Token': TOKEN, 'X-Forwarded-For': '203.0.113.7', 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': APP } },
       { host: 'evil.example.com', headers: { 'X-Admin-Token': TOKEN } }, // 421
       { host: local, headers: { 'X-Admin-Token': TOKEN, 'X-Forwarded-For': '203.0.113.7' } },
       { host: local, headers: { 'X-Admin-Token': TOKEN, 'X-Real-IP': '203.0.113.7' } },
@@ -118,6 +120,26 @@ test('PRODUCTION SHAPE: ALLOWED_HOSTS lists only the public app hosts; the admin
     assert.equal(publicHost.text, 'bad id')
     const a = await mint(srv.port)
     assert.equal((await grant(srv, a.code, 'japossert')).status, 200)
+  })
+})
+
+test('PRODUCTION HOSTS, the request Caddy relays: Host app.trustweb.one from 127.0.0.1 with X-Forwarded-*, even WITH the right token, is answered like an unknown path and changes nothing', async () => {
+  const hosts = ['app.idea2.site', 'app.trustintheweb.org', 'app.trustweb.one']
+  await withServer(0, { ...BASE, allowedHosts: [...hosts, APP] }, async ({ srv }) => { // APP only so the test can mint with its stand-in long url
+    const a = await mint(srv.port)
+    const relayed = { 'X-Admin-Token': TOKEN, 'X-Forwarded-For': '203.0.113.7', 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'app.trustweb.one' }
+    for (const headers of [relayed, { 'X-Admin-Token': TOKEN }]) {
+      for (const [method, url, body] of [['GET', '/admin/names', undefined], ['POST', '/admin/name', { code: a.code, name: 'japossert' }], ['DELETE', '/admin/name', { code: a.code, name: 'japossert' }]]) {
+        const text = body === undefined ? undefined : JSON.stringify(body)
+        const req = (path) => call(srv.port, { method, url: path, host: 'app.trustweb.one', headers: { Connection: 'close', ...JSON_H, ...headers }, body: text })
+        const asked = await req(url)
+        assert.deepEqual(shape(asked), shape(await req('/zz/zz')), `${method} ${url} ${Object.keys(headers).join(',')}`)
+        assert.equal(asked.status, 400, 'the plain "bad id" of an unknown path, never a JSON admin answer')
+        assert.equal(asked.text, 'bad id')
+      }
+    }
+    const read = await claim(srv.port, { code: a.code, secret: a.secret })
+    assert.deepEqual(read.json, { name: '', aliases: [], locked: [] }, 'nothing was granted through the public host')
   })
 })
 
