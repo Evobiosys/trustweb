@@ -266,6 +266,8 @@ async function partC(browser, base) {
   t.ok('c: a plain note adds no person and no thing', s1.people.length === before.people.length && s1.inventory.length === before.inventory.length, JSON.stringify([s1.people.length, s1.inventory.length]))
   const plain = s1.meetings?.find((m) => m.plain === true)
   t.ok('c: it is kept as a past meeting only, marked plain, with its note and no link', plain && plain.lines.some((l) => /map of repair cafes/.test(l.text)) && plain.personId === undefined && plain.kind !== 'none', JSON.stringify(plain))
+  // U7 (F7): the Review screen of a plain note shows no audience per line, so none is stored: its lines never answer an ask (notes_source.ts).
+  t.ok('c: a plain note stores no audience on its lines (never a source for asks)', plain && plain.lines.every((l) => l.audience === undefined), JSON.stringify(plain?.lines))
   await toRecord(page)
   await page.locator('.past-link').click()
   t.ok('c: the Past meetings list says "Plain note"', /Plain note/.test(await page.locator('.pm-row').first().innerText()))
@@ -286,6 +288,8 @@ async function partC(browser, base) {
   t.ok('c: no new line in the inventory', s2.inventory.length === before.inventory.length, String(s2.inventory.length))
   t.ok('c: the note is context on the existing thing, with when and the meeting it came from', thing?.context?.length === 1 && thing.context[0].text === 'Lent two of them to Anna in June' && typeof thing.context[0].at === 'number' && typeof thing.context[0].meetingId === 'string', JSON.stringify(thing))
   t.ok('c: the thing itself is untouched (text, audience)', thing.text === 'Loudspeakers' && thing.audience === before.inventory.find((i) => i.text === 'Loudspeakers').audience)
+  // U7 (F7): the context screen shows no audience either: a meeting kept from it stores none on its lines.
+  t.ok('c: a meeting kept from the context screen stores no audience on its lines', (s2.meetings ?? []).filter((m) => (m.lines ?? []).some((l) => /Lent two of them/.test(l.text))).every((m) => m.lines.every((l) => l.audience === undefined)), JSON.stringify(s2.meetings?.map((m) => m.lines)))
   await page.locator('.inv-text', { hasText: 'Loudspeakers' }).click()
   await shot(page, 'c_item_sheet_context.png')
   t.ok('c: the item sheet shows the context', /Lent two of them to Anna in June/.test(await page.locator('[data-item-context]').innerText()))

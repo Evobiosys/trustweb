@@ -1,6 +1,6 @@
 /**
- * Wave 6 review (U7): one test per confirmed finding that was fixed in the review pass.
- * Each case failed before its fix.
+ * Wave 6 review (U7): covers each confirmed finding that was fixed in the review pass
+ * (the front-door fixes are covered in services/trustweb-peer/test/peer.test.mjs).
  */
 import { readVia, sanitizeHopItems } from '../../src/hops.ts'
 import { channelLink, normalizeHandle } from '../../src/channel.ts'
