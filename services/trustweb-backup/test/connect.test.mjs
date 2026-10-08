@@ -455,7 +455,7 @@ test('names: claim 200 {name}; idempotent for the owner; /who/ answers 302 to th
     const a = await mint(srv.port)
     const r = await claim(srv.port, { name: 'ada.l-1_x', ...a })
     assert.equal(r.status, 200)
-    assert.deepEqual(r.json, { name: 'ada.l-1_x' })
+    assert.deepEqual(r.json, { name: 'ada.l-1_x', aliases: [] })
     assert.equal((await claim(srv.port, { name: 'ada.l-1_x', ...a })).status, 200)
     const w = await who(srv.port, 'ada.l-1_x')
     assert.equal(w.status, 302)
@@ -499,7 +499,7 @@ test('names: release with "" frees the name (200 {name: ""}, idempotent), /who/ 
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
     const released = await claim(srv.port, { name: '', ...a })
     assert.equal(released.status, 200)
-    assert.deepEqual(released.json, { name: '' })
+    assert.deepEqual(released.json, { name: '', aliases: [] })
     assert.equal((await who(srv.port, 'ada')).status, 404)
     assert.equal((await readStore(backupDir)).codes[a.code].name, undefined)
     assert.equal((await claim(srv.port, { name: '', ...a })).status, 200)
@@ -519,13 +519,12 @@ test('names: a code that claims another name RELEASES the old one in the same wr
   })
 })
 
-test('names: bad names are 400 field name: charset, case, "@", spaces, unicode, length 2 and 31, edges, code-shaped, reserved (also with separators); "jakob" is allowed', async () => {
+test('names: bad names are 400 field name: charset, case, "@", spaces, unicode, length 2 and 31, edges, code-shaped; reserved names are 409 reserved AFTER the secret check (wave 6e, also with separators); "jakob" is allowed', async () => {
   await withServer(0, BASE, async ({ srv }) => {
     const a = await mint(srv.port)
     const bad = [
       'Ada', '@ada', 'ad a', 'ada!', 'ad\r\nx', 'ada/x', '../x', 'ädä', 'ab', 'a'.repeat(31), '.ada', 'ada.', '-ada', 'ada-', '_ada',
       'a'.repeat(22), 'a1_-'.repeat(5) + 'ab', // 22 characters that look like a code
-      'admin', 'ad-min', 'ad.min', 'no-reply', 'noreply', 'trustweb', 'trust_web', 'evobiosys', 'root', 'support',
       5, null, [], {},
     ]
     for (const name of bad) {
@@ -534,10 +533,18 @@ test('names: bad names are 400 field name: charset, case, "@", spaces, unicode, 
       assert.equal(r.json.field, 'name')
     }
     for (const name of ['jakob', 'abc', 'a'.repeat(30), 'a.b', 'x_y-z', '007']) assert.equal((await claim(srv.port, { name, ...a })).status, 200, name)
+    for (const name of ['admin', 'ad-min', 'ad.min', 'no-reply', 'noreply', 'trustweb', 'trust_web', 'evobiosys', 'root', 'support']) {
+      const r = await claim(srv.port, { name, ...a })
+      assert.equal(r.status, 409, name)
+      assert.deepEqual(r.json, { error: 'reserved', message: 'That name is reserved.', field: 'name' })
+      assert.equal((await claim(srv.port, { name, code: a.code, secret: OTHER_SECRET })).status, 403, 'a wrong secret learns nothing about reservation')
+    }
     assert.equal(isReserved('jakob'), false)
     assert.ok(NAME_RE.test('a.b') && !isClaimableName('Ada'))
-    // a missing name is a 400 too; code/secret shape errors name their field
-    assert.equal((await claim(srv.port, { ...a })).json.field, 'name')
+    // a missing name is the READ intent now (wave 6e): 200 with the names, nothing changes; code/secret shape errors name their field
+    const read = await claim(srv.port, { ...a })
+    assert.equal(read.status, 200)
+    assert.equal(typeof read.json.name, 'string')
     assert.equal((await claim(srv.port, { name: 'ada', code: 'short', secret: a.secret })).json.field, 'code')
     assert.equal((await claim(srv.port, { name: 'ada', code: a.code })).json.field, 'secret')
     assert.equal((await claim(srv.port, { name: 'ada', code: a.code, secret: 'x' })).json.field, 'secret')
@@ -771,7 +778,7 @@ test('store: concurrent mints serialise their writes; prune drops the expired an
     const made = await Promise.all(Array.from({ length: 30 }, (_, i) => store.mint(`https://x.test/?connect=${i}`, 's'.repeat(43))))
     assert.equal(new Set(made.map((m) => m.code)).size, 30)
     assert.equal(Object.keys(JSON.parse(await fs.readFile(file, 'utf8')).codes).length, 30)
-    assert.deepEqual(await store.setName(made[0].code, 's'.repeat(43), 'ada'), { kind: 'named' })
+    assert.deepEqual(await store.claim(made[0].code, 's'.repeat(43), { name: 'ada' }), { kind: 'named', name: 'ada', aliases: [] })
     assert.equal(store.codeOf('ada'), made[0].code)
     t = 1100
     assert.equal(await store.prune(), 30)

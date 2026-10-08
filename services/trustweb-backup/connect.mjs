@@ -2,8 +2,8 @@
 //
 //   POST /connect {url, code?, secret?}   mint (201 {code, secret, url}) or update (200 {code, url}) the long connect url stored under a stable code
 //   GET  /c/<code>                        302 to the stored (re-validated) url
-//   POST /name {name, code, secret}       claim a username for the code ("" releases)
-//   GET  /who/<name>                      302 to https://<same app host>/c/<code>
+//   POST /name {code, secret, name?, alias?, release?}   claim a primary name or an alias, release one, or (nothing else given) READ the names (wave 6e)
+//   GET  /who/<name>                      302 to https://<same app host>/c/<code>   (the primary name or an alias)
 //
 // OPEN REDIRECT: /c/ redirects ONLY to a url that passes validLongUrl (https, one of cfg.linkHosts exactly, no port or userinfo, a connect
 // parameter) on this very request, so a tampered store file gives 404. /who/ redirects ONLY to https://<request Host, exactly one of
@@ -24,11 +24,36 @@
 // ABUSE: POST /connect and POST /name share one per-address budget (IPv4 as it is, IPv6 by /64, in memory); GET /c/ and GET /who/ share a more
 // generous one and answer a plain-text 429. Bodies are capped at cfg.connectMaxBytes, JSON only, own-host Origin only, never cross-site.
 
-import { CODE_RE, isClaimableName, isNameShape } from './connect_names.mjs'
+import { CODE_RE, isNameShape } from './connect_names.mjs'
 import { newSecret, SECRET_RE } from './connect_store.mjs'
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'
 import { createWindowLimiter, ipKey } from './limits.mjs'
 import { notFoundPage, originAllowed, readJsonObject, validLongUrl } from './links.mjs'
+
+/** What a store refusal answers on POST /name: [status, error]. The `field` is always "name". */
+const NAME_REFUSALS = Object.freeze({
+  locked: [409, 'name_locked'],
+  reserved: [409, 'reserved'],
+  taken: [409, 'name_taken'],
+  too_many: [409, 'too_many_names'],
+})
+
+/**
+ * The ONE intent of a POST /name body (wave 6e, contract 10.9.2), judged on shape alone:
+ * {intent: 'claim', name, alias} | {intent: 'release', name} (name null = the legacy {"name": ""}: the primary) | {intent: 'read'} | {field} (a 400 naming the field).
+ */
+export function nameIntent(body) {
+  const { name, alias, release } = body
+  if (alias !== undefined && typeof alias !== 'boolean') return { field: 'alias' }
+  if (release !== undefined) {
+    if (name !== undefined) return { field: 'release' }
+    if (alias !== undefined) return { field: 'alias' }
+    return isNameShape(release) ? { intent: 'release', name: release } : { field: 'release' }
+  }
+  if (name === undefined) return alias === undefined ? { intent: 'read' } : { field: 'alias' }
+  if (name === '') return alias === true ? { field: 'alias' } : { intent: 'release', name: null }
+  return isNameShape(name) ? { intent: 'claim', name, alias: alias === true } : { field: 'name' }
+}
 
 const PORT_SUFFIX = /:\d+$/
 /** Where the app lives on each app host: under /trustweb/ on app.idea2.site (scripts/deploy_wot.sh), at the root everywhere else. */
@@ -158,23 +183,34 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     return code === undefined ? mint(res, req, url) : replace(res, req, code, secret, url)
   }
 
-  /** POST /name. Returns the status it answered. */
+  /** The store call of a POST /name intent. */
+  function applyIntent(intent, code, secret) {
+    if (intent.intent === 'read') return store.read(code, secret)
+    if (intent.intent === 'release') return store.release(code, secret, intent.name)
+    return store.claim(code, secret, { name: intent.name, alias: intent.alias })
+  }
+
+  /** POST /name: claim, release or read (contract 10.9.2). Returns the status it answered. */
   async function name(req, res) {
     const got = await receive(req, res)
     if (got.body === undefined) return got.status
-    const { name: wanted, code, secret } = got.body
-    if (typeof wanted !== 'string' || (wanted !== '' && !isClaimableName(wanted))) return jsonError(res, 400, 'bad_request', { field: 'name' })
+    const { code, secret } = got.body
+    const intent = nameIntent(got.body)
+    if (intent.field !== undefined) return jsonError(res, 400, 'bad_request', { field: intent.field })
     if (typeof code !== 'string' || !CODE_RE.test(code)) return jsonError(res, 400, 'bad_request', { field: 'code' })
     if (typeof secret !== 'string' || !SECRET_RE.test(secret)) return jsonError(res, 400, 'bad_request', { field: 'secret' })
     let result
     try {
-      result = await store.setName(code, secret, wanted)
+      result = await applyIntent(intent, code, secret)
     } catch {
       return jsonError(res, 500, 'server_error')
     }
     if (result.kind === 'forbidden') return jsonError(res, 403, 'forbidden')
-    if (result.kind === 'taken') return jsonError(res, 409, 'name_taken', { field: 'name' })
-    sendJson(res, 200, { name: wanted })
+    if (result.kind !== 'named') {
+      const [status, error] = NAME_REFUSALS[result.kind]
+      return jsonError(res, status, error, { field: 'name' })
+    }
+    sendJson(res, 200, { name: result.name, aliases: result.aliases })
     return 200
   }
 
