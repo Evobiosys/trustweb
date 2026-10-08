@@ -126,7 +126,7 @@ export const S = {
   safeTitle: 'Is this safe?',
   safeS1: 'TrustWeb is a web app. It runs in your browser or from your home screen, and you can remove it any time in Settings.',
   safeS2: 'Your contacts and notes stay on this phone. Nothing about them leaves the phone without your yes.',
-  safeS3: 'Opening Meet registers a short address for your code on our server: your name, your username if you chose one, and a public key so other phones can reach you. Your contact links go only to the person who connects with you, encrypted.',
+  safeS3: 'Opening Meet registers a short address for your code on our server: your name, your username if you chose one, and a public key so other phones can reach you. When you connect through TrustWeb, your contact links go only to that person, encrypted.',
   safeS4: 'The person who shared this code with you shared their name and the contact links they chose, for example Signal or WhatsApp. You can also use those links outside this app.',
   safeS5: 'If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.',
   // No "?." on import.meta.env on purpose: Vite folds the literal VITE_TW_CODE_PUBLIC at build time and the line must vanish from the default bundle.
