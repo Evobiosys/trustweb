@@ -306,7 +306,51 @@ export interface QueryEnvelope {
    * `direct` together mean a hop ignored the asker's wish (never surfaced).
    */
   direct?: true
+  // ----- BEGIN TrustWeb wave 6 (U1): how far an ask travels (hops) -----
+  // All optional; an older build's parseQuery copies known fields only, so it
+  // ignores every one of them (the ask then behaves as one hop, as before).
+  // Validated in wire.ts parseQuery (present-and-malformed rejects the whole
+  // envelope); the rules that read them live in apps/trustweb/src/hops.ts.
+  // An ask that goes to direct contacts only (maxHops 1, the default) carries
+  // NONE of them: it is byte-for-byte the ask of the build before.
+  /**
+   * How many steps the ASKER lets the ask travel: 1 = my direct contacts
+   * (never sent: absence means 1), 2 = friends of friends, up to HOP_CAP, or
+   * HOPS_UNBOUNDED ("no limit", which still stops at HOP_CAP; never Infinity
+   * in JSON). `direct: true` overrides it to 1.
+   */
+  maxHops?: number
+  /** How often this ask was passed on before it reached the receiver: 0 = sent by the asker (or by a front door for its owner). */
+  hop?: number
+  /** The asker's id for this ask, the same on every hop (each hop mints its own `qid`): a phone answers one root once. */
+  root?: string
+  /**
+   * Hashed ids (SEEN_ID_RE) of the asker and of every phone that passed the
+   * ask on, salted with `root` (hops.ts seenHash): a phone never passes it to
+   * anyone listed, so a cycle stops. The chain only, never anyone's contacts.
+   */
+  seen?: string[]
+  /** Display names before the sender: the asker first, then the phones that passed it on (the sender is `from`). At most HOP_CAP. */
+  via?: string[]
+  /** Set by a front door (services/trustweb-peer) on an ask it forwards to its OWNER's phone: the same person, so not a hop. */
+  door?: true
+  // ----- END TrustWeb wave 6 (U1) -----
 }
+
+// ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
+/** The furthest any ask travels (also what "no limit" means). Each step adds one answer window (gate.ts RELAY_DEADLINE_MS). */
+export const HOP_CAP = 6
+/** QueryEnvelope.maxHops for "no limit" (bounded by HOP_CAP in practice). */
+export const HOPS_UNBOUNDED = -1
+/** The longest name in QueryEnvelope.via / SharedItem.via. */
+export const VIA_NAME_MAX = 40
+/** The most entries QueryEnvelope.seen may carry: the asker, every forwarder and a front door's asker, with room to spare. */
+export const SEEN_MAX = 16
+/** One QueryEnvelope.seen entry: 16 lower-case hex characters. */
+export const SEEN_ID_RE = /^[0-9a-f]{16}$/
+/** QueryEnvelope.root: a random id like a qid. */
+export const ROOT_RE = /^[A-Za-z0-9_-]{6,40}$/
+// ----- END TrustWeb wave 6 (U1) -----
 
 /** Bound for QueryEnvelope.freeText, same reasoning as wire.ts's CHAT_MAX_LEN
  *  for ChatEnvelope.text: the boundary must reject an oversized value rather
@@ -464,6 +508,13 @@ export interface SharedItem {
   when: string
   /** Which group it came from, or 'eine Gruppe' if the user chose to blur it. */
   context: string
+  /**
+   * TrustWeb wave 6 (U1): the names an item passed through on its way back,
+   * from the asker's side ("through B"); the person who holds it is not named.
+   * Absent: the answering person's own line. Untrusted on arrival: read it
+   * with apps/trustweb/src/hops.ts readVia.
+   */
+  via?: string[]
 }
 
 // ---------------------------------------------------------------------------

@@ -146,6 +146,8 @@ export interface NoteLine {
   checkedAt: number
   /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
   source?: ItemSource
+  /** Wave 6: how many degrees past my direct contacts it may answer (cascade.ts). Absent: 0 for a note about a person. */
+  degrees?: number
 }
 
 /** Where an item or a note came from: the chain of proof (wave 1733, owner 2026-10-06). A fixed set. */
@@ -222,6 +224,28 @@ export interface Person {
    * that instance. This phone only. Absent: none.
    */
   fediverse?: FediverseLink
+  /**
+   * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
+   * they ask further than one step. Absent: the default (passesAsksOn).
+   */
+  passOn?: boolean
+  /**
+   * Wave 6 (N6, one Jakob): the front door (services/trustweb-peer) that is
+   * this person's own inventory, connected as a second peer but shown as this
+   * one person. Absent: none.
+   */
+  doorPeerId?: string
+}
+
+/**
+ * Do this person's asks go on through me by default? Close friends and friends
+ * yes, acquaintances and people I only intend to meet no (Jakob 2026-10-07:
+ * "per default, if I have close friends, I should be able to just share their
+ * inventory as well. Or to be able to choose"). The per-person setting wins.
+ */
+export function passesAsksOn(p: Pick<Person, 'passOn' | 'ring'>): boolean {
+  if (typeof p.passOn === 'boolean') return p.passOn
+  return p.ring === Ring.Close || p.ring === Ring.Friend
 }
 
 /** A person's fediverse address and whether the Feed shows their public posts. */
@@ -278,6 +302,8 @@ export interface InventoryItem {
    * CONTEXT_MAX (note_fields.ts). This phone only: the matcher reads the item's text alone and answers never carry it. Absent: none.
    */
   context?: InventoryContext[]
+  /** Wave 6: how many degrees past my direct contacts it may answer (cascade.ts). Absent: by audience (acquaintances 1, else 0). */
+  degrees?: number
 }
 
 /** One note added as context to an inventory item. */
@@ -302,6 +328,10 @@ export interface LogEntry {
   outcome: LogOutcome
   /** The asking peer, so Review / requests can mark asks from a demo account. Absent in older entries. */
   peerId?: string
+  /** Wave 6: how many of my contacts I passed this ask on to (hops.ts). Absent: not passed on. */
+  passedOn?: number
+  /** Wave 6: how many lines came back from them and went on to the asker. Absent: none. */
+  cameBack?: number
 }
 
 export interface Me {
@@ -352,7 +382,7 @@ export interface Found {
    * (wave 1733 round B, review: the Feed links an answer to a person by the
    * peer, never by a name inside the answer). Absent in finds saved before.
    */
-  shared: { from: string; peerId?: string; items: { text: string; context: string; when: string }[] }[]
+  shared: { from: string; peerId?: string; items: { text: string; context: string; when: string; via?: string[] }[] }[]
 }
 
 /** One line of a meeting transcript as kept on this phone (who said it, when in the recording, what). */
@@ -511,6 +541,12 @@ export interface AppState {
    * An older build ignores it.
    */
   askDirectOnly?: boolean
+  /**
+   * Wave 6: how far this phone's asks travel ("How far?" in the ask dock):
+   * hops.ts maxHops, 1..HOP_CAP or HOPS_UNBOUNDED. Absent: 1 (my contacts).
+   * `askDirectOnly` wins. An older build ignores it.
+   */
+  askReach?: number
   /**
    * Wave 3: the web search engines this phone said yes to sending its words
    * to, for results inside the app (web_results.ts; once per engine). Absent: none.

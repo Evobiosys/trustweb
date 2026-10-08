@@ -12,7 +12,7 @@
  */
 
 import type { AnswerEnvelope, ChatEnvelope, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope } from './types'
-import { FREE_TEXT_MAX_LEN, WIRE_VERSION } from './types'
+import { FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -84,6 +84,8 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   // QueryEnvelope.direct doc comment): the same convention once more.
   if ('direct' in o && o.direct !== true) return null
   const direct = o.direct === true ? (true as const) : undefined
+  const hops = parseHopFields(o)
+  if (hops === null) return null
   return {
     v: WIRE_VERSION,
     t: 'query',
@@ -96,8 +98,56 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(relayed ? { relayed } : {}),
     ...(escalated ? { escalated } : {}),
     ...(direct ? { direct } : {}),
+    ...hops,
   }
 }
+
+// ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
+type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door'>
+
+function isIntIn(v: unknown, lo: number, hi: number): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi
+}
+
+function isStringList(v: unknown, max: number, ok: (s: string) => boolean): v is string[] {
+  return Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && ok(x))
+}
+
+/**
+ * The optional hop fields, each with the same strictness as `direct` above:
+ * absent is fine, present-and-malformed rejects the whole envelope (null).
+ * Returns only the fields that are present, so an ask without them parses to
+ * exactly the shape it had before wave 6.
+ */
+function parseHopFields(o: Record<string, unknown>): HopFields | null {
+  const out: HopFields = {}
+  if ('maxHops' in o) {
+    if (o.maxHops !== HOPS_UNBOUNDED && !isIntIn(o.maxHops, 1, HOP_CAP)) return null
+    out.maxHops = o.maxHops as number
+  }
+  if ('hop' in o) {
+    if (!isIntIn(o.hop, 0, HOP_CAP - 1)) return null
+    out.hop = o.hop
+  }
+  if ('root' in o) {
+    if (typeof o.root !== 'string' || !ROOT_RE.test(o.root)) return null
+    out.root = o.root
+  }
+  if ('seen' in o) {
+    if (!isStringList(o.seen, SEEN_MAX, (x) => SEEN_ID_RE.test(x))) return null
+    out.seen = [...o.seen]
+  }
+  if ('via' in o) {
+    if (!isStringList(o.via, HOP_CAP, (x) => x.length > 0 && x.length <= VIA_NAME_MAX)) return null
+    out.via = [...o.via]
+  }
+  if ('door' in o) {
+    if (o.door !== true) return null
+    out.door = true
+  }
+  return out
+}
+// ----- END TrustWeb wave 6 (U1) -----
 
 function parseAnswer(o: Record<string, unknown>): AnswerEnvelope | null {
   if (!isNonEmptyString(o.qid)) return null
