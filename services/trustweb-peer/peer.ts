@@ -52,6 +52,15 @@
  * line answers a further-out ask only within its degrees (cascade.ts). The
  * answer moment stays fixed by the envelope alone (hops.ts doorAnswerDelayMs).
  *
+ * Friends (wave 6d, Jakob 2026-10-08: "one dummy friend of mine that has a Tandem to lend out to friends of friends"): the
+ * inventory file may also carry an optional `friends` section, [{ name, ring, allowedInAdvance: true, at?, note?, items: [{ text,
+ * audience, degrees? }] }]. A friend of the owner who allowed her lines in advance is asked THROUGH this door exactly as her own
+ * phone would be at the next step: only for an ask that may travel one more hop (hops.ts mayCascade), through cascade.ts
+ * askSources at hop + 1 in HER ring for the owner, matched on their own (never merged with the door's lines), and every such line
+ * comes back marked `via: [this door's name]` ("through Jakob") with her name in its context. Her lines never change WHEN an
+ * answer is sent (the moment is fixed before anything is matched) and never answer a "My contacts" ask. An absent or malformed
+ * section changes nothing.
+ *
  * Privacy on this host: no ask text is ever logged; the log has counts and
  * outcomes only. The inventory file is read once at start and on SIGHUP.
  *
@@ -81,10 +90,11 @@ import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayl
 import type { QueryTemplate } from '../../apps/demo/src/types'
 import type { ChatThread } from '../../apps/demo/src/types'
 import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
-import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
+import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayCascade, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
 import type { HopInfo } from '../../apps/trustweb/src/hops'
 import { ASK_TEMPLATE_ID, askTemplate, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
+import { stripUnsafe } from '../../apps/trustweb/src/safe_text'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
 
 export enum PeerPolicy {
@@ -130,6 +140,26 @@ export interface LoadedInventory {
   held: number
 }
 
+/** A friend of the door's owner who allowed her lines in advance, as loaded (wave 6d). */
+export interface FriendEntry {
+  name: string
+  /** How the friend holds the owner: the ring the ask is handed to her in (cascade.ts admission at hop + 1). */
+  ring: Ring
+  /** The mark shown next to each of her lines: who, a friend of whom, allowed in advance by whom. */
+  context: string
+  items: InventoryItem[]
+  /** Other words for a line (item id -> words): another language, a compound; matched on, never shown or sent. */
+  aliases: ReadonlyMap<string, readonly string[]>
+}
+
+export interface LoadedFriends {
+  friends: FriendEntry[]
+  /** Shareable lines of all friends together. */
+  lines: number
+  /** Well-formed friend lines that are NOT shared: the friend did not allow them in advance, or they are too long. */
+  held: number
+}
+
 export interface PeerOptions {
   /** Where state.json, demo-peer.json, grants.json and claim-open live. */
   stateDir: string
@@ -170,6 +200,9 @@ export interface PeerStatus {
   claimOpen: boolean
   presetLines: number
   heldLines: number
+  /** Friends of the owner whose lines this door answers through him, and how many lines (counts only, never their text). */
+  friends: number
+  friendLines: number
 }
 
 export interface RunningPeer {
@@ -214,13 +247,20 @@ export const INVENTORY_LINE_MAX = 300
 const ANSWER_WORST_WHEN = 'early September'
 const ANSWER_WORST_NAME_LEN = 40
 
-/** Would this line, alone, still fit the answer block (apps/demo gate.ts truncateSharedJson) under its own preset context? */
-export function fitsAnswer(text: string, preset: PresetPermission): boolean {
-  const body = truncateSharedJson({
-    from: 'x'.repeat(ANSWER_WORST_NAME_LEN), templateId: ASK_TEMPLATE_ID,
-    items: [{ text, when: ANSWER_WORST_WHEN, context: presetContext(preset) }],
-  })
+/** Would this item, alone, still fit the answer block (apps/demo gate.ts truncateSharedJson)? */
+function fitsBlock(item: SharedItem): boolean {
+  const body = truncateSharedJson({ from: 'x'.repeat(ANSWER_WORST_NAME_LEN), templateId: ASK_TEMPLATE_ID, items: [item] })
   return !new TextDecoder().decode(body).includes('"tr":1')
+}
+
+/** Would this line, alone, still fit the answer block under its own preset context? */
+export function fitsAnswer(text: string, preset: PresetPermission): boolean {
+  return fitsBlock({ text, when: ANSWER_WORST_WHEN, context: presetContext(preset) })
+}
+
+/** Would a friend's line, alone, still fit the answer block with her mark and the "through <door>" name it travels with? */
+export function fitsFriendAnswer(text: string, context: string): boolean {
+  return fitsBlock({ text, when: ANSWER_WORST_WHEN, context, via: ['x'.repeat(ANSWER_WORST_NAME_LEN)] })
 }
 const CLAIM_FILE = 'claim-open'
 /** apps/demo's prune(): keep the relevance band, at most three lines (net.ts). */
@@ -267,10 +307,9 @@ export function presetContext(p: PresetPermission): string {
   return `Allowed in advance by ${p.by} (${day})` + (p.note ? `: ${p.note}` : '')
 }
 
-/** Reads the inventory file; a malformed line is skipped, never guessed at; a line without a preset, over INVENTORY_LINE_MAX, or too long for the answer block with its preset, is held. */
-export function loadInventory(file: string, now: number): LoadedInventory {
-  const raw: unknown = JSON.parse(readFileSync(file, 'utf8'))
-  const items = (raw as { items?: unknown }).items
+/** Parses the inventory file's `items`; a malformed line is skipped, never guessed at; a line without a preset, over INVENTORY_LINE_MAX, or too long for the answer block with its preset, is held. */
+export function parseInventory(raw: unknown, now: number): LoadedInventory {
+  const items = (raw as { items?: unknown } | null)?.items
   if (!Array.isArray(items)) return { preset: [], held: 0 }
   const out: LoadedInventory = { preset: [], held: 0 }
   for (const it of items) {
@@ -287,6 +326,104 @@ export function loadInventory(file: string, now: number): LoadedInventory {
     })
   }
   return out
+}
+
+/** Reads the inventory file (the owner's lines; the optional friends section is read by parseFriends from the same parse). */
+export function loadInventory(file: string, now: number): LoadedInventory {
+  return parseInventory(JSON.parse(readFileSync(file, 'utf8')), now)
+}
+
+/** The rings a friend may hold the owner in: "intending" admits nothing (cascade.ts), so it is not a friend. */
+const FRIEND_RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance]
+const FRIEND_NOTE_MAX_LEN = 60
+const ALIASES_MAX = 6
+const ALIAS_MAX_LEN = 40
+
+/** The mark next to a friend's line: whose it is, whose friend, and that she allowed it in advance (never a private detail). */
+export function friendContext(name: string, doorName: string, at?: string, note?: string): string {
+  return `${name}, a friend of ${doorName}. Allowed in advance by ${name}${at ? ` (${at})` : ''}${note ? `: ${note}` : ''}`
+}
+
+function optionalDay(v: unknown): string | undefined {
+  return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v.slice(0, 10) : undefined
+}
+
+function optionalNote(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? stripUnsafe(v).trim().slice(0, FRIEND_NOTE_MAX_LEN) : undefined
+}
+
+/** The optional `aliases` of a line: a few short words, cleaned; anything else = none. */
+function parseAliases(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  const words = v.filter((w): w is string => typeof w === 'string').map((w) => stripUnsafe(w).trim().slice(0, ALIAS_MAX_LEN)).filter(Boolean)
+  return [...new Set(words)].slice(0, ALIASES_MAX)
+}
+
+/** One friend's lines: shareable ones become items; every other well-formed line is only counted as held. */
+function parseFriendItems(raw: unknown, context: string, allowed: boolean, now: number): { items: InventoryItem[]; aliases: Map<string, string[]>; held: number } {
+  const out: { items: InventoryItem[]; aliases: Map<string, string[]>; held: number } = { items: [], aliases: new Map(), held: 0 }
+  if (!Array.isArray(raw)) return out
+  for (const it of raw) {
+    const o = (typeof it === 'object' && it !== null ? it : {}) as Record<string, unknown>
+    if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
+    const text = o.text.trim()
+    if (!allowed || text.length > INVENTORY_LINE_MAX || !fitsFriendAnswer(text, context)) { out.held++; continue }
+    const degrees = isDegrees(o.degrees) ? { degrees: o.degrees } : {}
+    const id = randomId(8)
+    out.items.push({ id, text, audience: o.audience, included: true, createdAt: now, ...degrees })
+    const aliases = parseAliases(o.aliases)
+    if (aliases.length) out.aliases.set(id, aliases)
+  }
+  return out
+}
+
+/**
+ * The optional `friends` section of the inventory file (wave 6d): [{ name, ring, allowedInAdvance: true, at?, note?, items }].
+ * Absent or not an array = no friends, today's behaviour. An entry without a usable name or ring is skipped; one that did not set
+ * `allowedInAdvance` to exactly true is held whole (counted, never shared). Never throws on content.
+ */
+export function parseFriends(raw: unknown, doorName: string, now: number): LoadedFriends {
+  const out: LoadedFriends = { friends: [], lines: 0, held: 0 }
+  const section = (raw as { friends?: unknown } | null)?.friends
+  if (!Array.isArray(section)) return out
+  for (const f of section) {
+    const o = (typeof f === 'object' && f !== null ? f : {}) as Record<string, unknown>
+    const name = typeof o.name === 'string' ? stripUnsafe(o.name).trim().slice(0, ANSWER_WORST_NAME_LEN) : ''
+    const ring = FRIEND_RINGS.find((r) => r === o.ring)
+    if (!name || !ring) continue
+    const context = friendContext(name, doorName, optionalDay(o.at), optionalNote(o.note))
+    const parsed = parseFriendItems(o.items, context, o.allowedInAdvance === true, now)
+    out.held += parsed.held
+    if (!parsed.items.length) continue
+    out.friends.push({ name, ring, context, items: parsed.items, aliases: parsed.aliases })
+    out.lines += parsed.items.length
+  }
+  return out
+}
+
+/** The answer from the owner's friends for an ask at the owner's door that arrived at step `hop` (their step is hop + 1). */
+export function friendAnswers(friends: readonly FriendEntry[], text: string, hop: number, doorName: string, me: AppState['me']): SharedItem[] {
+  const out: SharedItem[] = []
+  for (const friend of friends) {
+    // Matched on the line plus its aliases; what is shown and sent is the line's own text.
+    const matchable = friend.items.map((i) => ({ ...i, text: [i.text, ...(friend.aliases.get(i.id) ?? [])].join(' ') }))
+    const asState: AppState = { v: 1, me, peers: [], people: [], inventory: matchable, log: [], notificationsOn: false }
+    const { threads, refs } = askSources(asState, friend.ring, hop + 1)
+    const match = matchAsk(text, threads)
+    if (!classifyIncomingQuery(match, false, true).surface) continue
+    for (const h of match.hits) {
+      const r = refs.get(h.threadId)
+      const own = r ? friend.items.find((i) => `inv:${i.id}` === r.threadId) : undefined
+      if (r && own) out.push({ text: own.text, when: coarseWhen(r.at), context: friend.context, via: [doorName] })
+    }
+  }
+  return out
+}
+
+/** Owner's live share first, then the door's own lines; one slot stays free for a friend's line, so it is never crowded out. */
+export function mergeAnswerItems(owner: readonly SharedItem[], preset: readonly SharedItem[], friends: readonly SharedItem[]): SharedItem[] {
+  const reserved = friends.length ? 1 : 0
+  return [...[...owner, ...preset].slice(0, MAX_SHARED - reserved), ...friends].slice(0, MAX_SHARED)
 }
 
 /**
@@ -384,7 +521,14 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   mkdirSync(opts.stateDir, { recursive: true, mode: 0o700 })
   const state = loadState(opts.stateDir, opts.relayOrigin, name)
   const identity: DidIdentity = deserializeIdentity(state.identity)
-  let inventory = loadInventory(opts.inventoryFile, Date.now())
+  /** The inventory file read once: the door's own lines and the optional friends section come from the same parse. */
+  const readInventoryFile = (now: number): { inventory: LoadedInventory; friends: LoadedFriends } => {
+    const raw: unknown = JSON.parse(readFileSync(opts.inventoryFile, 'utf8'))
+    return { inventory: parseInventory(raw, now), friends: parseFriends(raw, name, now) }
+  }
+  const first = readInventoryFile(Date.now())
+  let inventory = first.inventory
+  let friends = first.friends
   let grants = loadGrants(opts.stateDir)
   const limiter = new AskRateLimit(opts.asksPerHour ?? DEFAULT_ASKS_PER_HOUR)
   const keys = new Map<string, Promise<CryptoKey>>()
@@ -440,20 +584,21 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
   }
 
   const reload = (): void => {
-    let nextInventory: LoadedInventory
+    let next: { inventory: LoadedInventory; friends: LoadedFriends }
     let nextGrants: Set<string>
     try {
-      nextInventory = loadInventory(opts.inventoryFile, Date.now())
+      next = readInventoryFile(Date.now())
       nextGrants = loadGrants(opts.stateDir)
     } catch (e) {
       // Both stay as they were; the reason is logged without the file's content.
       log('reload failed (kept the previous inventory and grants): ' + fileErrorForLog(e))
       return
     }
-    inventory = nextInventory
+    inventory = next.inventory
+    friends = next.friends
     grants = nextGrants
     const dropped = pruneUngranted()
-    log(`reloaded: ${inventory.preset.length} preset lines, ${inventory.held} held, ${grants.size} grants${dropped ? `, ${dropped} no longer granted (forgotten)` : ''}`)
+    log(`reloaded: ${inventory.preset.length} preset lines, ${inventory.held} held, ${grants.size} grants${dropped ? `, ${dropped} no longer granted (forgotten)` : ''}, ${friends.lines} friends' lines (${friends.friends.length} friends)`)
   }
   process.on('SIGHUP', reload)
 
@@ -620,12 +765,16 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
           })
       : []
 
+    // 3. The owner's friends who allowed their lines in advance (wave 6d): only for an ask that may go one step further than this
+    // door, as their own phones would answer it. They never change the moment (settleMs is fixed above) nor set `early`.
+    const friendItems = !silent && !self && text && mayCascade(q) ? friendAnswers(friends.friends, text, info.hop, state.me.displayName, state.me) : []
+
     // 1. The owner's live decision, in parallel with the answer window.
     const owner = passOn ? await forwardToOwner(q, info, peer, text, tpl.id, ownerDeadline) : { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] }
 
-    const items = [...owner.items, ...presetItems].slice(0, MAX_SHARED)
+    const items = mergeAnswerItems(owner.items, presetItems, friendItems)
     // Shape kept stable for apps/trustweb/test/e2e/demo_account.mjs ("ask shared"): outcome first, then the parts.
-    log(`ask ${items.length ? AskOutcome.Shared : AskOutcome.NoMatch} (${items.length}): preset=${presetItems.length} owner=${owner.outcome}${owner.outcome === OwnerOutcome.Shared ? `(${owner.items.length})` : ''}`)
+    log(`ask ${items.length ? AskOutcome.Shared : AskOutcome.NoMatch} (${items.length}): preset=${presetItems.length} owner=${owner.outcome}${owner.outcome === OwnerOutcome.Shared ? `(${owner.items.length})` : ''} friend=${friendItems.length}`)
     if (!items.length) {
       await answer(null)
       return
@@ -646,9 +795,11 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     claimOpen: claimOpen(),
     presetLines: inventory.preset.length,
     heldLines: inventory.held,
+    friends: friends.friends.length,
+    friendLines: friends.lines,
   })
   const health = opts.healthPort ? await healthServer(opts.healthPort, card, status) : null
-  log(`${name}: up with ${inventory.preset.length} preset lines (${inventory.held} held, never shared), policy ${policy}, ${state.peers.length} peers, owner ${state.owner ? 'bound' : 'not bound'}, forward ${forward ? 'on' : 'off'}`)
+  log(`${name}: up with ${inventory.preset.length} preset lines (${inventory.held} held, never shared), policy ${policy}, ${state.peers.length} peers, owner ${state.owner ? 'bound' : 'not bound'}, forward ${forward ? 'on' : 'off'}, ${friends.lines} friends' lines (${friends.friends.length} friends${friends.held ? `, ${friends.held} held` : ''})`)
 
   return {
     card,
