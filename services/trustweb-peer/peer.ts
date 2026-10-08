@@ -90,7 +90,7 @@ import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayl
 import type { QueryTemplate } from '../../apps/demo/src/types'
 import type { ChatThread } from '../../apps/demo/src/types'
 import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
-import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayCascade, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
+import { answerDelayMs, dedupeItems, doorAnswerDelayMs, doorFields, hopInfo, mayCascade, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
 import type { HopInfo } from '../../apps/trustweb/src/hops'
 import { ASK_TEMPLATE_ID, askTemplate, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
@@ -148,8 +148,8 @@ export interface FriendEntry {
   /** The mark shown next to each of her lines: who, a friend of whom, allowed in advance by whom. */
   context: string
   items: InventoryItem[]
-  /** Other words for a line (item id -> words): another language, a compound; matched on, never shown or sent. */
-  aliases: ReadonlyMap<string, readonly string[]>
+  /** The same lines with their aliases (other languages, compounds) appended: what the matcher reads. Never shown or sent. */
+  matchable: InventoryItem[]
 }
 
 export interface LoadedFriends {
@@ -248,8 +248,8 @@ const ANSWER_WORST_WHEN = 'early September'
 const ANSWER_WORST_NAME_LEN = 40
 
 /** Would this item, alone, still fit the answer block (apps/demo gate.ts truncateSharedJson)? */
-function fitsBlock(item: SharedItem): boolean {
-  const body = truncateSharedJson({ from: 'x'.repeat(ANSWER_WORST_NAME_LEN), templateId: ASK_TEMPLATE_ID, items: [item] })
+function fitsBlock(item: SharedItem, from: string = 'x'.repeat(ANSWER_WORST_NAME_LEN)): boolean {
+  const body = truncateSharedJson({ from, templateId: ASK_TEMPLATE_ID, items: [item] })
   return !new TextDecoder().decode(body).includes('"tr":1')
 }
 
@@ -258,9 +258,9 @@ export function fitsAnswer(text: string, preset: PresetPermission): boolean {
   return fitsBlock({ text, when: ANSWER_WORST_WHEN, context: presetContext(preset) })
 }
 
-/** Would a friend's line, alone, still fit the answer block with her mark and the "through <door>" name it travels with? */
-export function fitsFriendAnswer(text: string, context: string): boolean {
-  return fitsBlock({ text, when: ANSWER_WORST_WHEN, context, via: ['x'.repeat(ANSWER_WORST_NAME_LEN)] })
+/** Would a friend's line, alone, still fit the answer block with her mark and the door's own name as the sender and as "through <door>"? (Exact, multibyte names included.) */
+export function fitsFriendAnswer(text: string, context: string, doorName: string): boolean {
+  return fitsBlock({ text, when: ANSWER_WORST_WHEN, context, via: [doorName] }, doorName)
 }
 const CLAIM_FILE = 'claim-open'
 /** apps/demo's prune(): keep the relevance band, at most three lines (net.ts). */
@@ -313,7 +313,7 @@ export function parseInventory(raw: unknown, now: number): LoadedInventory {
   if (!Array.isArray(items)) return { preset: [], held: 0 }
   const out: LoadedInventory = { preset: [], held: 0 }
   for (const it of items) {
-    const o = it as Record<string, unknown>
+    const o = asRecord(it)
     if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
     const preset = parsePreset(o.preset)
     const text = o.text.trim()
@@ -337,6 +337,9 @@ export function loadInventory(file: string, now: number): LoadedInventory {
 const FRIEND_RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance]
 const FRIEND_NOTE_MAX_LEN = 60
 const ALIASES_MAX = 6
+/** Bounds on a friends section: every ask runs the matcher once per friend, on the event loop. */
+const FRIENDS_MAX = 20
+const FRIEND_ITEMS_MAX = 20
 const ALIAS_MAX_LEN = 40
 
 /** The mark next to a friend's line: whose it is, whose friend, and that she allowed it in advance (never a private detail). */
@@ -344,30 +347,54 @@ export function friendContext(name: string, doorName: string, at?: string, note?
   return `${name}, a friend of ${doorName}. Allowed in advance by ${name}${at ? ` (${at})` : ''}${note ? `: ${note}` : ''}`
 }
 
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}/
+
 function optionalDay(v: unknown): string | undefined {
-  return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v.slice(0, 10) : undefined
+  return typeof v === 'string' && ISO_DAY_RE.test(v) && !Number.isNaN(Date.parse(v)) ? v.slice(0, 10) : undefined
+}
+
+/** Clips by code points, never through a surrogate pair. */
+function clipChars(s: string, max: number): string {
+  return [...s].slice(0, max).join('')
 }
 
 function optionalNote(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? stripUnsafe(v).trim().slice(0, FRIEND_NOTE_MAX_LEN) : undefined
 }
 
+/** How many entries a friend's `items` holds (counted as held when the friend is beyond the cap). */
+function countLines(items: unknown): number {
+  return Array.isArray(items) ? items.length : 0
+}
+
 /** The optional `aliases` of a line: a few short words, cleaned; anything else = none. */
+/** A JSON value as a record, or an empty one: hostile content never throws out of the load path. */
+function asRecord(v: unknown): Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
 function parseAliases(v: unknown): string[] {
   if (!Array.isArray(v)) return []
   const words = v.filter((w): w is string => typeof w === 'string').map((w) => stripUnsafe(w).trim().slice(0, ALIAS_MAX_LEN)).filter(Boolean)
   return [...new Set(words)].slice(0, ALIASES_MAX)
 }
 
-/** One friend's lines: shareable ones become items; every other well-formed line is only counted as held. */
-function parseFriendItems(raw: unknown, context: string, allowed: boolean, now: number): { items: InventoryItem[]; aliases: Map<string, string[]>; held: number } {
-  const out: { items: InventoryItem[]; aliases: Map<string, string[]>; held: number } = { items: [], aliases: new Map(), held: 0 }
+interface ParsedFriendItems {
+  items: InventoryItem[]
+  aliases: Map<string, string[]>
+  held: number
+}
+
+/** One friend's lines: shareable ones become items; every other well-formed line (or any beyond FRIEND_ITEMS_MAX) is only counted as held. */
+function parseFriendItems(raw: unknown, context: string, doorName: string, allowed: boolean, now: number): ParsedFriendItems {
+  const out: ParsedFriendItems = { items: [], aliases: new Map(), held: 0 }
   if (!Array.isArray(raw)) return out
   for (const it of raw) {
-    const o = (typeof it === 'object' && it !== null ? it : {}) as Record<string, unknown>
+    const o = asRecord(it)
     if (typeof o.text !== 'string' || !o.text.trim() || !isAudience(o.audience)) continue
-    const text = o.text.trim()
-    if (!allowed || text.length > INVENTORY_LINE_MAX || !fitsFriendAnswer(text, context)) { out.held++; continue }
+    const text = stripUnsafe(o.text).trim()
+    if (!text) continue
+    if (!allowed || out.items.length >= FRIEND_ITEMS_MAX || text.length > INVENTORY_LINE_MAX || !fitsFriendAnswer(text, context, doorName)) { out.held++; continue }
     const degrees = isDegrees(o.degrees) ? { degrees: o.degrees } : {}
     const id = randomId(8)
     out.items.push({ id, text, audience: o.audience, included: true, createdAt: now, ...degrees })
@@ -387,27 +414,28 @@ export function parseFriends(raw: unknown, doorName: string, now: number): Loade
   const section = (raw as { friends?: unknown } | null)?.friends
   if (!Array.isArray(section)) return out
   for (const f of section) {
-    const o = (typeof f === 'object' && f !== null ? f : {}) as Record<string, unknown>
-    const name = typeof o.name === 'string' ? stripUnsafe(o.name).trim().slice(0, ANSWER_WORST_NAME_LEN) : ''
+    if (out.friends.length >= FRIENDS_MAX) { out.held += countLines(asRecord(f).items); continue }
+    const o = asRecord(f)
+    const name = typeof o.name === 'string' ? clipChars(stripUnsafe(o.name).trim(), ANSWER_WORST_NAME_LEN) : ''
     const ring = FRIEND_RINGS.find((r) => r === o.ring)
     if (!name || !ring) continue
     const context = friendContext(name, doorName, optionalDay(o.at), optionalNote(o.note))
-    const parsed = parseFriendItems(o.items, context, o.allowedInAdvance === true, now)
+    const parsed = parseFriendItems(o.items, context, doorName, o.allowedInAdvance === true, now)
     out.held += parsed.held
     if (!parsed.items.length) continue
-    out.friends.push({ name, ring, context, items: parsed.items, aliases: parsed.aliases })
+    const matchable = parsed.items.map((i) => ({ ...i, text: [i.text, ...(parsed.aliases.get(i.id) ?? [])].join(' ') }))
+    out.friends.push({ name, ring, context, items: parsed.items, matchable })
     out.lines += parsed.items.length
   }
   return out
 }
 
 /** The answer from the owner's friends for an ask at the owner's door that arrived at step `hop` (their step is hop + 1). */
-export function friendAnswers(friends: readonly FriendEntry[], text: string, hop: number, doorName: string, me: AppState['me']): SharedItem[] {
+export function friendAnswers(friends: readonly FriendEntry[], text: string, hop: number, doorName: string): SharedItem[] {
   const out: SharedItem[] = []
   for (const friend of friends) {
     // Matched on the line plus its aliases; what is shown and sent is the line's own text.
-    const matchable = friend.items.map((i) => ({ ...i, text: [i.text, ...(friend.aliases.get(i.id) ?? [])].join(' ') }))
-    const asState: AppState = { v: 1, me, peers: [], people: [], inventory: matchable, log: [], notificationsOn: false }
+    const asState: AppState = { v: 1, me: { id: 'door', displayName: doorName }, peers: [], people: [], inventory: friend.matchable, log: [], notificationsOn: false }
     const { threads, refs } = askSources(asState, friend.ring, hop + 1)
     const match = matchAsk(text, threads)
     if (!classifyIncomingQuery(match, false, true).surface) continue
@@ -420,10 +448,13 @@ export function friendAnswers(friends: readonly FriendEntry[], text: string, hop
   return out
 }
 
-/** Owner's live share first, then the door's own lines; one slot stays free for a friend's line, so it is never crowded out. */
+/**
+ * The owner's live share first, then the friends' lines, then the door's own: the answer is one fixed block and its tail is what
+ * gets cut when it is full, so a friend's line (the one that needs the friend's mark) is never behind a long door line. Same
+ * line twice (the owner's share and a friend's) is shown once, as a phone does (hops.ts dedupeItems).
+ */
 export function mergeAnswerItems(owner: readonly SharedItem[], preset: readonly SharedItem[], friends: readonly SharedItem[]): SharedItem[] {
-  const reserved = friends.length ? 1 : 0
-  return [...[...owner, ...preset].slice(0, MAX_SHARED - reserved), ...friends].slice(0, MAX_SHARED)
+  return dedupeItems([...owner, ...friends, ...preset]).slice(0, MAX_SHARED)
 }
 
 /**
@@ -765,11 +796,11 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
           })
       : []
 
-    // 3. The owner's friends who allowed their lines in advance (wave 6d): only for an ask that may go one step further than this
+    // 2. The owner's friends who allowed their lines in advance (wave 6d): only for an ask that may go one step further than this
     // door, as their own phones would answer it. They never change the moment (settleMs is fixed above) nor set `early`.
-    const friendItems = !silent && !self && text && mayCascade(q) ? friendAnswers(friends.friends, text, info.hop, state.me.displayName, state.me) : []
+    const friendItems = !silent && !self && text && mayCascade(q) ? friendAnswers(friends.friends, text, info.hop, state.me.displayName) : []
 
-    // 1. The owner's live decision, in parallel with the answer window.
+    // 3. The owner's live decision, in parallel with the answer window.
     const owner = passOn ? await forwardToOwner(q, info, peer, text, tpl.id, ownerDeadline) : { outcome: OwnerOutcome.NotAsked, items: [] as SharedItem[] }
 
     const items = mergeAnswerItems(owner.items, presetItems, friendItems)

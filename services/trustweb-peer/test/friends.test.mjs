@@ -18,11 +18,10 @@ import { createRelayChannel } from '../../../apps/demo/src/relay.ts'
 import { deriveEcdhPairKey, randomId } from '../../../apps/demo/src/crypto.ts'
 import { encodeForQr } from '../../../apps/demo/src/wire.ts'
 import { buildConnectAck } from '../../../apps/demo/src/connect_link.ts'
-import { interpret } from '../../../apps/demo/src/gate.ts'
+import { interpret, truncateSharedJson } from '../../../apps/demo/src/gate.ts'
 import { sealRelayAnswer } from '../../../apps/demo/src/answer_key.ts'
 
-const WINDOW_MS = 150
-const ME = { id: 'door-id', displayName: 'Jakob' }
+const WINDOW_MS = 400
 const TANDEM = 'Tandem bicycle to lend, weekends (two seats, Vienna)'
 const PRESET = { by: 'Jakob', at: '2026-10-07', note: 'demo content' }
 
@@ -161,11 +160,14 @@ describe('parseFriends: the optional friends section of the inventory file', () 
     expect(r.friends[0].items[0]).toMatchObject({ text: TANDEM, audience: 'fof', degrees: 1 })
     expect(r.friends[0].context).toBe('Mira, a friend of Jakob. Allowed in advance by Mira (2026-10-08): demo content')
     expect(inv.items).toHaveLength(10)
+    expect(inv.friends).toHaveLength(1)
+    expect(inv.friends[0]).toMatchObject({ name: 'Mira', ring: 'friend', allowedInAdvance: true })
+    expect(inv.friends[0].items).toHaveLength(1)
   })
 })
 
 describe('friendAnswers: the admission matrix at hop + 1 (cascade.ts, the friend\'s ring for the owner)', () => {
-  const ask = (friends, text, hop = 0) => friendAnswers(friends, text, hop, 'Jakob', ME)
+  const ask = (friends, text, hop = 0) => friendAnswers(friends, text, hop, 'Jakob')
   const one = (item, over = {}) => parse([friend({ items: [item], ...over })]).friends
 
   it('the tandem line, friends of friends: answered at the step after the door, marked "through Jakob" with Mira in its context', () => {
@@ -203,7 +205,8 @@ describe('friendAnswers: the admission matrix at hop + 1 (cascade.ts, the friend
   })
   it('aliases (other words for a line, matched on only): the German compound finds it, and no alias is ever shown or sent', () => {
     const friends = one({ text: TANDEM, audience: 'fof', degrees: 1, aliases: ['Tandemfahrrad', 'Tandemrad', 'Fahrrad', 'Tandemfahrrad', 7, '  '] })
-    expect([...friends[0].aliases.values()]).toEqual([['Tandemfahrrad', 'Tandemrad', 'Fahrrad']])
+    expect(friends[0].matchable[0].text).toBe(TANDEM + ' Tandemfahrrad Tandemrad Fahrrad')
+    expect(friends[0].items[0].text).toBe(TANDEM)
     for (const q of ['Tandemfahrrad', 'tandemfahrrad', 'Tandemrad', 'Fahrrad']) {
       const out = ask(friends, q)
       expect(out).toHaveLength(1)
@@ -211,9 +214,9 @@ describe('friendAnswers: the admission matrix at hop + 1 (cascade.ts, the friend
       expect(JSON.stringify(out)).not.toMatch(/fahrrad|tandemrad/i)
     }
     expect(ask(friends, 'projector')).toEqual([])
-    expect(parse([friend({ items: [{ text: TANDEM, audience: 'fof', aliases: 'Tandemfahrrad' }] })]).friends[0].aliases.size).toBe(0)
+    expect(parse([friend({ items: [{ text: TANDEM, audience: 'fof', aliases: 'Tandemfahrrad' }] })]).friends[0].matchable[0].text).toBe(TANDEM)
     const many = one({ text: TANDEM, audience: 'fof', aliases: Array.from({ length: 20 }, (_, i) => 'w' + i + 'z'.repeat(60)) })
-    const [kept] = [...many[0].aliases.values()]
+    const kept = many[0].matchable[0].text.slice(TANDEM.length + 1).split(' ')
     expect(kept).toHaveLength(6)
     expect(kept.every((w) => w.length === 40)).toBe(true)
   })
@@ -225,20 +228,64 @@ describe('friendAnswers: the admission matrix at hop + 1 (cascade.ts, the friend
     expect(textsOf(out)).toEqual([TANDEM, 'Tandem trailer for kids'])
   })
   it('no friends = no items', () => {
-    expect(friendAnswers([], 'tandem', 0, 'Jakob', ME)).toEqual([])
+    expect(friendAnswers([], 'tandem', 0, 'Jakob')).toEqual([])
   })
 })
 
-describe('mergeAnswerItems: owner first, then the door\'s lines, one slot kept for a friend', () => {
+describe('mergeAnswerItems: owner first, then the friends, then the door\'s lines (the tail is what the full answer block cuts)', () => {
   const line = (t) => ({ text: t, when: 'w', context: 'c' })
-  it('without friends it is exactly the old merge (first three of owner then preset)', () => {
+  it('without friends it is the old merge (first three of owner then preset)', () => {
     expect(textsOf(mergeAnswerItems([line('o1')], [line('p1'), line('p2'), line('p3')], []))).toEqual(['o1', 'p1', 'p2'])
     expect(textsOf(mergeAnswerItems([], [], []))).toEqual([])
   })
-  it('a friend\'s line is never crowded out; others fill the rest', () => {
-    expect(textsOf(mergeAnswerItems([line('o1')], [line('p1'), line('p2')], [line('f1'), line('f2')]))).toEqual(['o1', 'p1', 'f1'])
+  it('a friend\'s line stands before the door\'s lines; the same line twice is shown once', () => {
+    expect(textsOf(mergeAnswerItems([line('o1')], [line('p1'), line('p2')], [line('f1'), line('f2')]))).toEqual(['o1', 'f1', 'f2'])
     expect(textsOf(mergeAnswerItems([], [], [line('f1'), line('f2'), line('f3'), line('f4')]))).toEqual(['f1', 'f2', 'f3'])
-    expect(textsOf(mergeAnswerItems([], [line('p1')], [line('f1')]))).toEqual(['p1', 'f1'])
+    expect(textsOf(mergeAnswerItems([], [line('p1')], [line('f1')]))).toEqual(['f1', 'p1'])
+    expect(textsOf(mergeAnswerItems([line('Same')], [], [line('same')]))).toEqual(['Same'])
+  })
+  it('review fix: Mira survives the one 512-byte answer block next to the longest of Jakob\'s own lines', () => {
+    const longest = JSON.parse(readFileSync(path.join(import.meta.dirname, '..', 'demo_inventory.json'), 'utf8')).items.reduce((a, b) => (b.text.length > a.text.length ? b : a))
+    const mira = friendAnswers(parseFriends(JSON.parse(readFileSync(path.join(import.meta.dirname, '..', 'demo_inventory.json'), 'utf8')), 'Jakob', 1).friends, 'tandem', 0, 'Jakob')
+    const own = { text: longest.text, when: 'early October', context: 'Allowed in advance by Jakob (2026-10-07): demo content' }
+    const body = new TextDecoder().decode(truncateSharedJson({ from: 'Jakob', templateId: 'free', items: mergeAnswerItems([], [own], mira) }))
+    expect(longest.text.length).toBeGreaterThan(170)
+    expect(body).toContain('Tandem bicycle')
+  })
+})
+
+describe('review fixes: caps, hostile content, exact size check', () => {
+  it('a multibyte door name is measured exactly: a line that fits for "Jakob" can be held for a long non-ASCII name', () => {
+    const fits = (door) => parseFriends({ friends: [friend({ items: [{ text: 'a'.repeat(250), audience: 'fof' }] })] }, door, 1).lines
+    expect(fits('Jakob')).toBe(1)
+    expect(fits('\u00dc'.repeat(200))).toBe(0)
+  })
+  it('at most 20 friends and 20 lines each; the rest is held, counted', () => {
+    const many = Array.from({ length: 25 }, (_, i) => friend({ name: 'F' + i, items: [{ text: 'Line ' + i, audience: 'fof' }] }))
+    const r = parseFriends({ friends: many }, 'Jakob', 1)
+    expect(r.friends).toHaveLength(20)
+    expect(r.held).toBe(5)
+    const lines = parseFriends({ friends: [friend({ items: Array.from({ length: 30 }, (_, i) => ({ text: 'L' + i, audience: 'fof' })) })] }, 'Jakob', 1)
+    expect(lines.lines).toBe(20)
+    expect(lines.held).toBe(10)
+  })
+  it('hostile shapes never throw: null or array entries, items that are null, prototype keys; control characters are stripped from a line', () => {
+    expect(() => parseFriends({ friends: [null, [], { __proto__: { name: 'x' } }, { name: 'M', ring: 'friend', allowedInAdvance: true, items: [null, [], 'x', { text: 7 }] }] }, 'Jakob', 1)).not.toThrow()
+    const r = parse([friend({ items: [{ text: '\u202eTandem\u0007', audience: 'fof' }] })])
+    expect(r.friends[0].items[0].text).toBe('Tandem')
+    const dir = tmp()
+    const f = path.join(dir, 'inv.json')
+    writeFileSync(f, JSON.stringify({ items: [null, 'x', [], { text: 'Loudspeakers', audience: 'fof', preset: PRESET }] }))
+    expect(loadInventory(f, 1).preset.map((l) => l.item.text)).toEqual(['Loudspeakers'])
+    rmSync(dir, { recursive: true })
+  })
+  it('the day must be a YYYY-MM-DD date and the name is clipped by characters, not through a surrogate pair', () => {
+    expect(parse([friend({ at: '1' })]).friends[0].context).toBe('Mira, a friend of Jakob. Allowed in advance by Mira: demo content')
+    expect(parse([friend({ at: 'Tue, 01 Oct 2026' })]).friends[0].context).not.toMatch(/\(/)
+    const name = parse([friend({ name: '\u{1F6B2}'.repeat(10) + 'a'.repeat(60) })]).friends[0].name
+    expect([...name]).toHaveLength(40)
+    expect(name.endsWith('a'.repeat(30))).toBe(true)
+    expect(name).not.toMatch(/\uFFFD/)
   })
 })
 
@@ -397,25 +444,54 @@ describe('the peer against an in-memory relay: a friend of the owner answered th
     await d.done()
   }, 30_000)
 
-  it('SIGHUP re-reads the file: removing the friends section stops the answers, putting it back resumes them', async () => {
+  it('SIGHUP re-reads the file: a bad file keeps the friends, removing the section stops the answers, putting it back resumes them', async () => {
     const dir0 = tmp()
     const f = path.join(dir0, 'inv.json')
     const shipped = JSON.parse(readFileSync(SHIPPED, 'utf8'))
     writeFileSync(f, JSON.stringify(shipped))
     const d = await door({ inventoryFile: f })
     expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00001'))).outcome).toBe('shared')
-    writeFileSync(f, JSON.stringify({ items: shipped.items }))
-    process.emit('SIGHUP')
-    await until(() => d.lines.some((l) => /reloaded: 10 preset lines, 0 held, 0 grants, 0 friends' lines \(0 friends\)/.test(l)))
-    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00002'))).outcome).toBe('nothing')
     writeFileSync(f, '{ not json')
     process.emit('SIGHUP')
     await until(() => d.lines.some((l) => /reload failed \(kept the previous inventory/.test(l)))
+    expect(d.peer.status()).toMatchObject({ presetLines: 10, friends: 1, friendLines: 1 })
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00002'))).outcome).toBe('shared')
+    writeFileSync(f, JSON.stringify({ items: shipped.items }))
+    process.emit('SIGHUP')
+    await until(() => d.lines.some((l) => /reloaded: 10 preset lines, 0 held, 0 grants, 0 friends' lines \(0 friends\)/.test(l)))
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00003'))).outcome).toBe('nothing')
     writeFileSync(f, JSON.stringify(shipped))
     process.emit('SIGHUP')
     await until(() => d.lines.some((l) => /reloaded: 10 preset lines, 0 held, 0 grants, 1 friends' lines \(1 friends\)/.test(l)))
-    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00003'))).outcome).toBe('shared')
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootHup00004'))).outcome).toBe('shared')
     await d.done()
     rmSync(dir0, { recursive: true })
   }, 60_000)
+
+  it('the moment is the same with and without the friends section, for the same travelling ask', async () => {
+    const dir0 = tmp()
+    const f = path.join(dir0, 'inv.json')
+    writeFileSync(f, JSON.stringify({ items: JSON.parse(readFileSync(SHIPPED, 'utf8')).items }))
+    const withF = await door()
+    const without = await door({ inventoryFile: f })
+    const time = async (d, root) => { const t = Date.now(); await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof(root)); return Date.now() - t }
+    const a = await time(withF, 'rootSame00001')
+    const b = await time(without, 'rootSame00002')
+    expect(Math.abs(a - b)).toBeLessThan(WINDOW_MS / 2)
+    await withF.done(); await without.done()
+    rmSync(dir0, { recursive: true })
+  }, 30_000)
+
+  it('a cycle back to this door and the per-asker rate limit answer nothing, with the friends present, at the travelling moment', async () => {
+    const d = await door({ asksPerHour: 2 })
+    const root = 'rootCycle0001'
+    const cycle = { ...(await fof(root)), seen: [await seenHash(root, 'anna'), await seenHash(root, d.peer.card.id)] }
+    const t0 = Date.now()
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, cycle)).outcome).toBe('nothing')
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(2 * WINDOW_MS - 30)
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootLimit0001'))).outcome).toBe('shared')
+    // the third ask in the hour: rate limited, nothing, whatever it asks
+    expect((await d.anna.ask(d.peer.card.did, 'tandem', 6000, await fof('rootLimit0002'))).outcome).toBe('nothing')
+    await d.done()
+  }, 30_000)
 })
