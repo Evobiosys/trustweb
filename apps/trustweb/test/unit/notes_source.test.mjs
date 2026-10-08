@@ -27,13 +27,14 @@ const hits = (s, ring, hop, ask, scope) => {
 }
 
 describe('the setting and its defaults', () => {
-  it('on for a personal account, off for a demo account and for a record with demo content; the choice wins', () => {
+  it('on for a personal account (also one that shows demo content), off for a demo account\'s own phone; the choice wins', () => {
     expect(notesMatchDefault({})).toBe(true)
     expect(notesMatchDefault({ testOf: { name: 'Jakob', createdAt: 1 } })).toBe(false)
-    expect(notesMatchDefault({ demo: { people: [], inventory: [] } })).toBe(false)
+    expect(notesMatchDefault({ demo: { people: [], inventory: [] } })).toBe(true)
     expect(asksMatchNotes({})).toBe(true)
+    expect(asksMatchNotes({ demo: { people: [], inventory: [] } })).toBe(true)
     expect(asksMatchNotes({ asksMatchNotes: false })).toBe(false)
-    expect(asksMatchNotes({ asksMatchNotes: true, demo: { people: [], inventory: [] } })).toBe(true)
+    expect(asksMatchNotes({ asksMatchNotes: true, testOf: { name: 'Jakob', createdAt: 1 } })).toBe(true)
     expect(asksMatchNotes({ asksMatchNotes: 'yes' })).toBe(true) // a malformed value reads as the default, never as a choice
   })
 })
@@ -67,9 +68,15 @@ describe('what a meeting note answers', () => {
     const lines = [nline('Pickleball court for everybody', Audience.FriendsOfFriends)]
     expect(hits(record([meeting('m1', lines)], { asksMatchNotes: false }), Ring.Friend, 0, ASK)).toEqual([])
     expect(hits(record([meeting('m1', lines)], { testOf: { name: 'X', createdAt: 1 } }), Ring.Friend, 0, ASK)).toEqual([])
-    const demo = record([meeting('m1', lines)], { demo: { people: [], inventory: [] }, asksMatchNotes: true })
+    const demo = record([meeting('m1', lines)], { demo: { people: [], inventory: [] } })
     expect(hits(demo, Ring.Friend, 0, ASK, demoAccountScope(demo))).toEqual([])
     expect(hits(demo, Ring.Friend, 0, ASK).length).toBe(1)
+  })
+
+  it('a meeting another phone sent me is never a source (those are their notes)', () => {
+    const received = record([meeting('m1', [FRIENDS], { fromName: 'Ben' })])
+    expect(hits(received, Ring.Friend, 0, ASK)).toEqual([])
+    expect(hits(record([meeting('m1', [FRIENDS])]), Ring.Friend, 0, ASK).length).toBe(1)
   })
 
   it('a copy of a card line is left to the card: its audience governs, retired or narrowed or not', () => {

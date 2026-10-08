@@ -15,7 +15,9 @@
  *   - the typed "General notes" text reaches an ask only as the note line it became on the Review screen (an Only me line
  *     until widened); the raw text of a meeting (PastMeeting.generalNotes) and its transcript are never matched;
  *   - a demo account's ask is scoped to the demo content (model.ts demoAccountScope), so no meeting note joins it;
- *   - Settings > Advanced "Let asks match my notes too": on for a personal account, off for a demo phone or a demo account.
+ *   - a meeting another phone sent me (fromName) is never a source: those are their notes, not mine;
+ *   - Settings > Advanced "Let asks match my notes too": on for a personal account (also one that shows demo content), off for a demo
+ *     account's own phone and for the side-by-side demo phones.
  * Pure and DOM-free.
  */
 import type { ChatThread } from '../../demo/src/types'
@@ -29,13 +31,17 @@ export const MEETING_NOTE_CONTEXT = 'A note I took in a meeting'
 /** The thread id prefix of a meeting note ("meet:<meeting id>:<line index>"); model.ts threadIsDemo reads it as not demo. */
 export const MEETING_THREAD_PREFIX = 'meet:'
 
-/** The default of "Let asks match my notes too": a demo account's record and a record with demo content start off. */
-export function notesMatchDefault(s: Pick<AppState, 'testOf' | 'demo'>): boolean {
-  return !s.testOf && !s.demo
+/**
+ * The default of "Let asks match my notes too": on for a personal account, off for a demo account's own phone. A personal phone that also shows
+ * demo content stays ON: its demo-account askers are scoped to the demo content anyway (no meeting note joins a scoped ask), and the
+ * side-by-side demo phones are stored OFF at boot.
+ */
+export function notesMatchDefault(s: Pick<AppState, 'testOf'>): boolean {
+  return !s.testOf
 }
 
 /** Is the notes source on for this record? What the person chose wins; absent reads as the default. */
-export function asksMatchNotes(s: Pick<AppState, 'asksMatchNotes' | 'testOf' | 'demo'>): boolean {
+export function asksMatchNotes(s: Pick<AppState, 'asksMatchNotes' | 'testOf'>): boolean {
   return typeof s.asksMatchNotes === 'boolean' ? s.asksMatchNotes : notesMatchDefault(s)
 }
 
@@ -60,7 +66,8 @@ export function meetingNoteThreads(s: AppState, ring: Ring, hop: number, scope?:
   const onCards = cardKeys(s)
   const seen = new Set<string>()
   for (const m of s.meetings) {
-    if (!Array.isArray(m.lines)) continue
+    // A meeting somebody else sent me (kept from a share) holds THEIR notes, never mine to answer with.
+    if (m.fromName || !Array.isArray(m.lines)) continue
     m.lines.forEach((l, i) => {
       if (typeof l?.text !== 'string' || !l.audience) return
       const key = noteKey(l.text)

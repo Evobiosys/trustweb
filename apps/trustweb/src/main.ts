@@ -2089,7 +2089,7 @@ function draftWasMeeting(): boolean {
  * End meeting already wrote: the transcript at End meeting, the notes and the
  * person at save. Never loses what was recorded, whatever happens after.
  */
-function recordPastMeeting(opts: { personId?: string } = {}): void {
+function recordPastMeeting(opts: { personId?: string; reviewed?: boolean } = {}): void {
   const s = st()
   const existing = draft.meetingId ? (s.meetings ?? []).find((m) => m.id === draft.meetingId) : undefined
   const m: PastMeeting = existing ?? {
@@ -2108,7 +2108,9 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   m.durationMs = Math.max(m.durationMs, totalMs())
   m.meeting = m.meeting || draft.mode === RecordMode.Meeting
   const lines = draft.lines.filter((l) => l.text.trim()).map((l) => ({
-    text: l.text.trim(), tag: l.tag, audience: l.audience, ...(l.atMs === undefined ? {} : { atMs: l.atMs }), ...(l.line === undefined ? {} : { line: l.line }),
+    // The audience is stored only from a Review save (the person saw each line's audience there): a meeting stored at End meeting, before
+    // Review, carries none, so no extraction default ever answers an ask (notes_source.ts: no audience, no match).
+    text: l.text.trim(), tag: l.tag, ...(opts.reviewed ? { audience: l.audience } : {}), ...(l.atMs === undefined ? {} : { atMs: l.atMs }), ...(l.line === undefined ? {} : { line: l.line }),
   }))
   if (lines.length) m.lines = lines
   const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
@@ -3296,7 +3298,7 @@ function saveDraftWhat(): void {
   const what = draft.name.trim()
   const lines = draft.lines.filter((l) => l.text.trim())
   // The meeting is stored first, so every item can point at it (the chain of proof).
-  if (draftIsMeeting()) recordPastMeeting()
+  if (draftIsMeeting()) recordPastMeeting({ reviewed: true })
   const target = contextTarget()
   if (target) {
     const added = addContextLines(target, lines.map((l) => l.text), now, draft.meetingId)
@@ -3322,7 +3324,7 @@ function saveDraftWhat(): void {
 
 /** "None of these": the notes are kept as a past meeting only, a plain note with no person and no thing behind it. */
 function saveDraftPlain(): void {
-  recordPastMeeting()
+  recordPastMeeting({ reviewed: true })
   save()
   toast(S.savedPlainToast)
   newDraft()
@@ -3343,7 +3345,7 @@ function saveDraft(): void {
   const peer = s.peers.find((x) => x.id === p.peerId)
   if (peer) peer.ring = draft.ring
   // The meeting is stored first, so every note can point at it (the chain of proof).
-  if (draftIsMeeting()) recordPastMeeting({ personId: p.id })
+  if (draftIsMeeting()) recordPastMeeting({ personId: p.id, reviewed: true })
   const meeting = draftWasMeeting()
   for (const l of draft.lines) {
     p.lines.push({
