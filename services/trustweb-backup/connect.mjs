@@ -164,13 +164,15 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     return minute.limited || hour.limited ? slowDownText(res, Math.max(minute.retryAfter, hour.retryAfter)) : null
   }
 
-  /** The stored url of `code` when it passes validation now; a stored one that does not is dropped. Else null. */
+  /**
+   * The stored url of `code` when it passes validation now, else null. An invalid one (a tampered file, a changed host list) is NOT deleted: the
+   * code keeps its place and its age, so a misconfigured host list can never erase people's permanent codes. The check comes before `open`
+   * so that an entry that does not validate never has its last-use time refreshed.
+   */
   function checkedUrl(code, { touch }) {
     if (!CODE_RE.test(code)) return null
-    const stored = touch ? store.open(code) : store.peek(code)
-    if (stored === null) return null
-    const url = validLongUrl(stored, cfg.linkHosts, cfg.connectMaxBytes)
-    if (url === null) store.drop(code)
+    const url = validLongUrl(store.peek(code), cfg.linkHosts, cfg.connectMaxBytes)
+    if (url !== null && touch) store.open(code)
     return url
   }
 

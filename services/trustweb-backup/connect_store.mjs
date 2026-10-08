@@ -61,7 +61,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       await fs.rename(file, `${file}.unreadable`)
       return
     }
-    for (const [code, e] of Object.entries(parsed.codes)) if (isEntry(code, e)) index(code, normalise(e))
+    for (const [code, e] of Object.entries(parsed.codes)) if (isEntry(code, e) && !expired(e)) index(code, normalise(e))
   }
 
   /** A loaded entry without a usable or unique name loses the name, never the code. */
@@ -183,7 +183,10 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       const entry = live(code)
       if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
       const owner = name === '' ? undefined : names.get(name)
-      if (owner !== undefined && owner !== code) return { kind: 'taken' }
+      if (owner !== undefined && owner !== code) {
+        if (live(owner) !== undefined) return { kind: 'taken' }
+        unindex(owner) // an expired owner that the sweep has not reached yet gives its name up with its code
+      }
       if ((entry.name ?? '') === name) return { kind: 'named' }
       const before = { name: entry.name, seen: entry.seen }
       if (entry.name !== undefined) names.delete(entry.name)
@@ -225,12 +228,6 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     /** The stored url of a live code without touching `seen`, or null. */
     peek(code) {
       return live(code)?.url ?? null
-    },
-
-    /** Forgets one code (a stored url that no longer passes validation). Background rewrite. */
-    drop(code) {
-      unindex(code)
-      background()
     },
 
     /** Drops every expired code (and its name) and rewrites the file when any went. Returns how many. */

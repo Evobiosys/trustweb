@@ -292,15 +292,41 @@ test('an expired code is gone from the file by the sweep timer without any reque
   })
 })
 
-test('an expired but unswept code acts as unknown for its name too: /who/ is 404 and the name can be claimed by another code', async () => {
+test('an expired but unswept code acts as unknown for its name too: /who/ is 404 and ANOTHER, already stored code can claim the name at once (no mint in between)', async () => {
   let t = T0
-  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
+    t = T0 + 300 * DAY
+    const b = await mint(srv.port, LONG2) // stored while a is still alive; the claim below must not rely on a later mint sweeping a
+    t = T0
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
-    t = T0 + 366 * DAY
+    t = T0 + 366 * DAY // a expired (not swept: the hourly timer has not run), b is live
     assert.equal((await who(srv.port, 'ada')).status, 404)
-    const b = await mint(srv.port, LONG2)
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
+    assert.equal((await who(srv.port, 'ada')).headers.location, `${ORIGIN}/c/${b.code}`)
+    const stored = (await readStore(backupDir)).codes
+    assert.equal(stored[a.code], undefined, 'the expired owner left the file with the claim')
+    assert.equal(stored[b.code].name, 'ada')
+  })
+})
+
+test('LOAD: an expired entry listed first never takes a name from the live entry that holds the same one', async () => {
+  await inTempDir(async (dir) => {
+    const file = path.join(dir, 'backup', 'connect.json')
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    const h = sha256hex('x')
+    const old = 'O'.repeat(22)
+    const live = 'L'.repeat(22)
+    const url = new URL(LONG).href
+    const t = T0
+    await fs.writeFile(file, JSON.stringify({ v: 1, codes: { [old]: { h, url, seen: t - 400 * DAY, name: 'twin' }, [live]: { h, url, seen: t, name: 'twin' } } }))
+    const srv = await startServer(serverOptions(dir, { now: () => t }))
+    try {
+      assert.equal((await who(srv.port, 'twin')).headers.location, `${ORIGIN}/c/${live}`)
+      assert.equal((await openCode(srv.port, old)).status, 404)
+    } finally {
+      await srv.close()
+    }
   })
 })
 
@@ -657,22 +683,35 @@ test('TAMPERED FILE: hostile entries never produce a redirect off the app hosts:
   })
 })
 
-test('TAMPERED FILE while running: a url that stops validating (the host list changed) answers 404 on /c/ and /who/ and is dropped from the file', async () => {
+test('TAMPERED FILE while running: a url that stops validating (the host list changed) answers 404 on /c/ and /who/; the code is NOT erased and its age is not refreshed; with the list back it works again', async () => {
   await inTempDir(async (dir) => {
-    const one = await startServer(serverOptions(dir))
+    let t = T0
+    const one = await startServer(serverOptions(dir, { now: () => t }))
     const a = (await connect(one.port, { url: LONG })).json
     await claim(one.port, { name: 'ada', ...a })
     await one.close()
-    const two = await startServer(serverOptions(dir, { linkHosts: ['app.other.test'], allowedHosts: [HOST, '127.0.0.1', 'app.other.test'] }))
+    t = T0 + 3 * DAY // older than the 24 h touch threshold: a valid open WOULD refresh `seen`
+    const file = path.join(dir, 'backup', 'connect.json')
+    const two = await startServer(serverOptions(dir, { linkHosts: ['app.other.test'], allowedHosts: [HOST, '127.0.0.1', 'app.other.test'], now: () => t }))
     try {
       assert.equal((await who(two.port, 'ada', { host: 'app.other.test' })).status, 404) // the target's url no longer validates
       const r = await openCode(two.port, a.code)
       assert.equal(r.status, 404)
       assert.equal(r.headers.location, undefined)
       await settle()
-      assert.deepEqual(Object.keys(JSON.parse(await fs.readFile(path.join(dir, 'backup', 'connect.json'), 'utf8')).codes), [])
+      const kept = JSON.parse(await fs.readFile(file, 'utf8')).codes[a.code]
+      assert.ok(kept, 'the code stays in the file')
+      assert.equal(kept.seen, T0, 'an entry that does not validate is not refreshed')
+      assert.equal(kept.name, 'ada')
     } finally {
       await two.close()
+    }
+    const three = await startServer(serverOptions(dir, { now: () => t }))
+    try {
+      assert.equal((await openCode(three.port, a.code)).headers.location, new URL(LONG).href)
+      assert.equal((await who(three.port, 'ada')).status, 302)
+    } finally {
+      await three.close()
     }
   })
 })
