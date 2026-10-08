@@ -9,15 +9,18 @@
  * weekend"), surfacing a consent prompt for the wrong thing. This app runs in
  * English by default, so its lexicon is bilingual from the start: English and
  * German stopwords, plus a small synonym table so "motorcycle" finds
- * "motorbike" and "who is hiring" finds "a new position to fill".
+ * "motorbike" and "who is hiring" finds "a new position to fill". The synonym
+ * table and the other forgiving variants (typos, "Communityhof" for "Community
+ * hof", plurals) live in fuzzy.ts.
  *
  * The anonymity floor is the shared DEFAULT_K, never a demo-only 1 (C-03).
  * Owner-declared lines (inventory, own notes) pass through the existing B-08
  * bypass in match/lexical.ts, the same way apps/demo's inventory does.
  */
 import { DEFAULT_K } from '../../../packages/network-access/src/anonymity'
-import { tokenize, normalize } from '../../demo/src/match/normalize'
-import type { QueryTemplate } from '../../demo/src/types'
+import { tokenize } from '../../demo/src/match/normalize'
+import { expandAskTerms, lineNeighbours } from './fuzzy'
+import type { ChatThread, QueryTemplate } from '../../demo/src/types'
 
 export const ASK_TEMPLATE_ID = 'trustweb.ask'
 
@@ -50,42 +53,37 @@ const STOPWORDS_DE = [
 
 const STOPWORDS = new Set([...STOPWORDS_EN, ...STOPWORDS_DE])
 
+/** The content words of an ask: normalized, function words dropped. */
+function contentWords(text: string): string[] {
+  return tokenize(text).filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+}
+
 /**
- * Synonym groups. A query word that equals any member (after normalize())
- * adds every member of its group as a match term. Phrases are allowed;
- * match/lexical.ts treats a term with a space as a phrase.
+ * The match terms of an ask: its content words plus the forgiving variants of
+ * fuzzy.ts (synonyms, written together or apart, German compound parts,
+ * singular and plural, a misspelt synonym), the asker's own words first. A
+ * variant that is a function word ("news" to "new") is dropped again.
  */
-const SYNONYM_GROUPS: string[][] = [
-  ['motorbike', 'motorbikes', 'motorcycle', 'motorcycles', 'motorrad', 'moped', 'scooter'],
-  ['room', 'rooms', 'flat', 'apartment', 'place to stay', 'couch', 'wohnung', 'zimmer'],
-  ['bicycle', 'bike', 'bikes', 'fahrrad'],
-  ['job', 'jobs', 'position', 'role', 'opening', 'vacancy', 'hiring', 'hire', 'stelle'],
-  ['funding', 'fund', 'funds', 'grant', 'grants', 'funder', 'funders', 'foerderung'],
-  ['car', 'cars', 'auto'],
-  ['drill', 'bohrmaschine'],
-  ['ladder', 'leiter'],
-  ['loudspeaker', 'loudspeakers', 'speaker', 'speakers', 'lautsprecher', 'boxen'],
-  ['intro', 'intros', 'introduction', 'introductions'],
-]
-
-const SYNONYM_INDEX: Map<string, string[]> = (() => {
-  const m = new Map<string, string[]>()
-  for (const group of SYNONYM_GROUPS) {
-    const normalized = group.map((w) => normalize(w))
-    for (const w of normalized) m.set(w, normalized)
-  }
-  return m
-})()
-
-/** The content words of an ask: normalized, stopwords dropped, synonyms expanded. */
 export function askTerms(text: string): string[] {
-  const words = tokenize(text).filter((w) => w.length >= 2 && !STOPWORDS.has(w))
-  const terms = new Set<string>()
-  for (const w of words) {
-    terms.add(w)
-    for (const syn of SYNONYM_INDEX.get(w) ?? []) terms.add(syn)
+  return expandAskTerms(contentWords(text)).filter((t) => !STOPWORDS.has(t))
+}
+
+function templateFor(text: string, matchTerms: string[]): QueryTemplate {
+  const t = text.trim()
+  return {
+    id: ASK_TEMPLATE_ID,
+    version: 1,
+    category: 'freetext',
+    title: { de: `"${t}"`, en: `"${t}"` },
+    question: { de: t, en: t },
+    matchTerms,
+    boostTerms: [],
+    excludeTerms: [],
+    minScore: 1,
+    kThreshold: DEFAULT_K,
+    sensitivity: 'high',
+    ttlSeconds: 3600,
   }
-  return [...terms]
 }
 
 /**
@@ -94,19 +92,23 @@ export function askTerms(text: string): string[] {
  * better silence than a prompt for something nobody asked about.
  */
 export function askTemplate(text: string): QueryTemplate {
-  const t = text.trim()
-  return {
-    id: ASK_TEMPLATE_ID,
-    version: 1,
-    category: 'freetext',
-    title: { de: `"${t}"`, en: `"${t}"` },
-    question: { de: t, en: t },
-    matchTerms: askTerms(t),
-    boostTerms: [],
-    excludeTerms: [],
-    minScore: 1,
-    kThreshold: DEFAULT_K,
-    sensitivity: 'high',
-    ttlSeconds: 3600,
-  }
+  return templateFor(text, askTerms(text))
+}
+
+/**
+ * askTemplate plus the words of the holder's own lines that the ask means
+ * forgivingly (a typo, a plural, a synonym, "Community hof" for "Communityhof").
+ * The extra terms are built here, on the holder's phone, from lines it already
+ * holds; only the asker's text ever travels. Stopwords never come back in, and
+ * the list stays bounded (fuzzy.MAX_LINE_NEIGHBOURS on top of MAX_EXPANDED_TERMS).
+ */
+export function forgivingAskTemplate(text: string, lineTexts: readonly string[]): QueryTemplate {
+  const terms = askTerms(text)
+  const neighbours = lineNeighbours(contentWords(text), lineTexts).filter((n) => !STOPWORDS.has(n))
+  return templateFor(text, [...new Set([...terms, ...neighbours])])
+}
+
+/** The text of every line in the threads the matcher is about to read (for forgivingAskTemplate). */
+export function lineTextsOf(threads: readonly ChatThread[]): string[] {
+  return threads.flatMap((t) => t.messages.filter((m) => !m.system).map((m) => m.text))
 }
