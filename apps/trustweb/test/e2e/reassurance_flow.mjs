@@ -20,8 +20,8 @@ const errors = []
 const LINES = [
   'TrustWeb is a web app. It runs in your browser or from your home screen, and you can remove it any time in Settings.',
   'Your contacts and notes stay on this phone. Nothing about them leaves the phone without your yes.',
-  'Showing your own code to others registers a short address for it on our server (your name and the contact links you chose to share). Nothing else is sent unless you share it.',
-  'The person who shared this code with you shared only their contact links, for example Signal or WhatsApp. You can also use those links outside this app.',
+  'Opening Meet registers a short address for your code on our server: your name, your username if you chose one, and a public key so other phones can reach you. Your contact links go only to the person who connects with you, encrypted.',
+  'The person who shared this code with you shared their name and the contact links they chose, for example Signal or WhatsApp. You can also use those links outside this app.',
   'If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.',
 ]
 
