@@ -67,8 +67,14 @@ export function sharesPhoneNumber(channel: Channel, handle: string): boolean {
   return channel === Channel.Signal && revealsPhoneNumber(handle)
 }
 
+/** The stored ticks, or none when the record holds anything but a plain object there (a corrupted record never throws). */
+function tickMap(settings: ShareSettings | undefined): ShareSettings['shareOnConnect'] {
+  const t = settings?.shareOnConnect
+  return typeof t === 'object' && t !== null && !Array.isArray(t) ? t : undefined
+}
+
 export function withTick(settings: ShareSettings | undefined, channel: Channel, on: boolean): ShareSettings {
-  return { ...settings, shareOnConnect: { ...settings?.shareOnConnect, [channel]: on } }
+  return { ...settings, shareOnConnect: { ...tickMap(settings), [channel]: on } }
 }
 
 /**
@@ -82,7 +88,7 @@ export function withTick(settings: ShareSettings | undefined, channel: Channel, 
 export function settleDefaultTick(
   settings: ShareSettings | undefined, channel: Channel, handle: string, previous?: string,
 ): ShareSettings | undefined {
-  const ticks = settings?.shareOnConnect
+  const ticks = tickMap(settings)
   if (ticks && channel in ticks) {
     const widened = ticks[channel] === true && sharesPhoneNumber(channel, handle) && !!previous && !sharesPhoneNumber(channel, previous)
     return widened ? withTick(settings, channel, false) : settings

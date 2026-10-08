@@ -27,6 +27,7 @@
 import { HOP_CAP, HOPS_UNBOUNDED, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX } from '../../demo/src/types'
 import type { QueryEnvelope, SharedItem } from '../../demo/src/types'
 import type { AppState } from './model'
+import { stripUnsafe } from './safe_text'
 
 export { HOP_CAP, HOPS_UNBOUNDED }
 
@@ -176,8 +177,9 @@ function cappedNames(xs: readonly string[]): string[] {
   return xs.map(clipName).filter(Boolean).slice(-HOP_CAP)
 }
 
+/** A name from the wire, as shown on a consent prompt or an answer: no bidi overrides or control characters (safe_text.ts), trimmed, clipped. */
 function clipName(s: string): string {
-  return s.trim().slice(0, VIA_NAME_MAX)
+  return stripUnsafe(s).trim().slice(0, VIA_NAME_MAX)
 }
 
 /**
@@ -236,7 +238,7 @@ export function readVia(v: unknown): string[] {
 }
 
 function clip(v: unknown, max: number): string {
-  return typeof v === 'string' ? v.slice(0, max) : ''
+  return typeof v === 'string' ? stripUnsafe(v).slice(0, max) : ''
 }
 
 /** Items that came back from the next step (untrusted, decrypted): well-formed ones only, bounded. */

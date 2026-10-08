@@ -81,7 +81,7 @@ import type { AnswerEnvelope, MatchResult, QueryEnvelope, SharedItem, SharedPayl
 import type { QueryTemplate } from '../../apps/demo/src/types'
 import type { ChatThread } from '../../apps/demo/src/types'
 import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
-import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash } from '../../apps/trustweb/src/hops'
+import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash, surfacesAt } from '../../apps/trustweb/src/hops'
 import type { HopInfo } from '../../apps/trustweb/src/hops'
 import { ASK_TEMPLATE_ID, askTemplate, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
@@ -580,15 +580,19 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
     // The same ask by another path, or a cycle back to this door (hops.ts): answered like no match, same moment.
     const repeat = roots.repeat(info.root, receivedAt)
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, state.me.id))
-    const silent = repeat || cycle
+    // Also silent: an ask that arrived further out than its asker allowed (hops.ts surfacesAt), as on a phone.
+    const silent = repeat || cycle || !surfacesAt(q)
     // ONE answer instant per ask, fixed before anything is decided: while the
     // ask goes to the owner's phone, every answer the owner did not add to is
     // sent at the forward deadline, so a decline, no match, the phone off and
     // the rate limit cannot be told apart by WHEN they arrive (gate.ts I3,
     // RELAY_DEADLINE_MS). Only the owner's live share goes early: its content
     // says so anyway. A travelling ask adds one window per further step (hops.ts).
-    const passOn = !silent && forwards(self, q)
-    const settleMs = passOn ? doorAnswerDelayMs(info, answerWindowMs, forwardWaitMs) : answerDelayMs({ ...info, door: false }, answerWindowMs)
+    // The moment follows what this door WOULD do with such an ask, never whether it is a repeat or a cycle,
+    // so a silent answer arrives exactly when a forwarded one would (nothing tells the asker it came twice).
+    const wouldForward = forwards(self, q)
+    const passOn = !silent && wouldForward
+    const settleMs = wouldForward ? doorAnswerDelayMs(info, answerWindowMs, forwardWaitMs) : answerDelayMs({ ...info, door: false }, answerWindowMs)
     const ownerDeadline = receivedAt + settleMs
     const answer = async (payload: SharedPayload | null, early = false): Promise<void> => {
       await settleAt(receivedAt, early ? answerWindowMs : settleMs)

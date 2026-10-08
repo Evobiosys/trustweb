@@ -63,9 +63,9 @@ const waiting = (s: number): string => `<div class="wt-h">Call into your web</di
 const consent = (who: string, q: string, match: string): string =>
   `<div class="wt-cosmic"><b>${who} asks</b><br>"${q}"<br><small>On this phone, this matches:</small>${card('', match)}<span class="wt-btn">Share these</span><span class="wt-btn ghost">Don't share</span></div>`
 const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb app</b><br>${body}</div>`
-/** The friend in the middle: his yes to this hop, given once in Settings (wave 2, P24: "per default I am happy to be the relay"). */
+/** The friend in the middle: "Pass their asks on", on by default for friends (wave 2, P24: "per default I am happy to be the relay"; wave 6 per person on the card). */
 const relayYes = (who: string, q: string): string =>
-  `<div class="wt-cosmic"><b>${who} asks your friends</b><br>"${q}"<br><small>Your setting: pass on asks from people you know to your friends. <b>On</b> (you said yes once).</small>${card('ok', 'Passed on. You never see the answer.')}</div>`
+  `<div class="wt-cosmic"><b>${who} asks your friends</b><br>"${q}"<br><small>Pass their asks on: <b>On</b> (on by default for friends; switch it off on their card).</small>${card('ok', 'Passed on. You never see the answer.')}</div>`
 /** The asker's screen with the setting on: the ask and the line saying it stops at direct contacts. */
 const askDirect = (q: string): string => `${ask(q, 1)}<br><small>${DIRECT_ONLY}</small>`
 /** The friend in the middle, with an ask that says "direct contacts only": checked on his phone, never passed on. */
@@ -154,7 +154,7 @@ const MODES: Mode[] = [
     label: '3 people · Job lead',
     title: 'A job lead, months after meeting',
     intro: 'Example A from our funding application (Manifund): an acquaintance finds an opening through a friend, without the person in the middle lifting a finger. Jonas is the friend in the middle.',
-    note: 'Second-degree query, played as a script: a yes at each hop, Jonas\'s once for asks from Sam, Maya\'s for this ask. In the app this is live: choose "How far?" when you ask.',
+    note: 'Second-degree query, played as a script: Jonas\'s phone passes it on (on by default for friends, he can switch it off for Sam), Maya says yes for this ask. In the app this is live: choose "How far?" when you ask.',
     people: [
       { id: 'sam', name: 'Sam', role: 'Jonas\'s acquaintance' },
       { id: 'jonas', name: 'Jonas', role: 'in the middle: passes the ask along and the answer back' },
@@ -174,7 +174,7 @@ const MODES: Mode[] = [
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
-        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. The first yes is Jonas\'s: he said once, in Settings, that asks from people he knows may go on to his friends. He is not asked each time, and the answer is not shown to him.',
+        text: '"Who is hiring?" It reaches Jonas and, through him, his friends. Jonas\'s phone passes asks from friends on to his friends unless he switches that off on their card. He is not asked each time, and the answer is not shown to him.',
         screens: { sam: ask('Who is hiring?', 1), jonas: relayYes('Sam', 'Who is hiring?'), maya: quiet('The ask arrives through Jonas and is checked on this phone.') },
       },
       {
@@ -246,7 +246,7 @@ const MODES: Mode[] = [
       },
       {
         title: 'Lena calls into her web', changed: ['lena', 'jonas', 'maya'], path: ['lena', 'jonas', 'maya'],
-        text: '"Any new open-source funding?" It reaches Jonas and, through him, his close friend Maya. Jonas set his phone once to pass questions from friends on: he is not asked each time, and the answer is not shown to him.',
+        text: '"Any new open-source funding?" It reaches Jonas and, through him, his close friend Maya. Jonas\'s phone passes questions from friends on unless he switches that off on their card: he is not asked each time, and the answer is not shown to him.',
         screens: { lena: ask('Any new open-source funding?', 1), jonas: quiet('Passed on. Jonas is not asked each time.'), maya: quiet('The ask arrives through Jonas and is checked on this phone.'), aisha: noApp('Nothing reaches Aisha.') },
       },
       {

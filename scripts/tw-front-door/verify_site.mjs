@@ -682,7 +682,7 @@ async function contentChecksOrg(page) {
   if (HOPS_LIVE) {
     const ft = faq.text.replace(/\s+/g, ' ')
     check('faq (hops live): Q1 and the introductions question say a question can travel on through friends and you choose how far, and no longer say it reaches only direct connections',
-      /A question can travel on through friends, with consent at each step, instead of being broadcast: you choose how far \(one hop by default\)\./.test(ft) &&
+      /A question can travel on through friends instead of being broadcast: you choose how far \(one hop by default\)\. Everyone who answers says yes; a friend in the middle passes it on unless they switch that off\./.test(ft) && !/with consent at each step/.test(ft) &&
       /The friend in the middle can pass your question on, so an introduction stays warm: you choose how far it travels \(one hop by default\)\./.test(ft) &&
       !/directly connected|scripted example/.test(ft) && !/Jonas/.test(ft))
   } else {
@@ -706,7 +706,7 @@ async function contentChecksOrg(page) {
   const why = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '))
   check(HOPS_LIVE ? 'why: "scalable" says built for one hop further and that you choose how far (hops live), no "today only direct" limit' : 'why: "scalable" says built for one hop further with today\'s limit, not that it travels hop by hop today',
     /is built so a question can travel one hop further/.test(why) &&
-    (HOPS_LIVE ? /You choose how far a question travels \(one hop by default\)\./.test(why) && !/Today a question reaches your direct connections/.test(why) : /Today a question reaches your direct connections/.test(why)))
+    (HOPS_LIVE ? /You choose how far a question travels \(one hop by default\); a friend's phone passes it on unless they switch that off\./.test(why) && !/Today a question reaches your direct connections/.test(why) : /Today a question reaches your direct connections/.test(why)))
   check('why: labelled as the vision, keeps the full picture, points to what works today', /The vision/.test(why) && /where TrustWeb is headed/.test(why) && (await page.locator('a[href="./#features"]').count()) === 1)
   await page.goto(BASE + 'whitepaper.html')
   const wp = await page.evaluate(() => ({ h2: document.querySelector('#bonobos h2')?.textContent.trim(), line: document.querySelector('#bonobos p:not(.eyebrow)')?.textContent.trim() }))
@@ -720,7 +720,7 @@ async function contentChecksOrg(page) {
   await page.goto(BASE)
   const hero = await page.evaluate(() => [...document.querySelectorAll('.term .pop')].map((p) => p.textContent.replace(/\s+/g, ' ')).join(' | '))
   check(HOPS_LIVE ? 'index: the "more scalable" popup says a question travels on through friends, you choose how far (hops live)' : 'index: the "more scalable" popup says built for one hop further, today direct connections',
-    HOPS_LIVE ? /TrustWeb lets a question travel on through friends, with consent at each step: you choose how far \(one hop by default\)\./.test(hero) && !/today it reaches your direct connections/.test(hero)
+    HOPS_LIVE ? /TrustWeb lets a question travel on through friends: you choose how far \(one hop by default\)\. Everyone who answers says yes; a friend in the middle passes it on unless they switch that off\./.test(hero) && !/with consent at each step/.test(hero) && !/today it reaches your direct connections/.test(hero)
       : /is built so a question can travel one hop further, with consent at each step \(today it reaches your direct connections; the demo shows the next hop\)/.test(hero))
   // the Introductions use-case card follows the flag too
   const intro = await page.evaluate(() => document.getElementById('uc-introductions')?.textContent.replace(/\s+/g, ' ').trim() ?? '')

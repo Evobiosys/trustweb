@@ -6,8 +6,8 @@
  * from strings.ts.
  */
 import { el } from '../../demo/src/ui/dom'
-import { Audience, passesAsksOn } from './model'
-import type { InventoryItem, Person } from './model'
+import { Audience } from './model'
+import type { InventoryItem } from './model'
 import { DEGREES_CHOICES, DEGREES_MAX, DegreesChoice, degreesChoice, degreesFor, itemDegrees } from './cascade'
 import { effectiveMaxHops, HOP_CAP, HOPS_UNBOUNDED, REACH_CHOICES, ReachChoice, reachChoice, reachFor, readVia } from './hops'
 import { S } from './strings'
@@ -98,9 +98,12 @@ export function answerTitle(from: string, items: readonly { via?: unknown }[]): 
   return items.length > 0 && items.every((it) => readVia(it.via).length > 0) ? S.resultPassedOn(from) : S.resultShared(from)
 }
 
-/** On a person's card: may their asks go on through me ("Pass their asks on"). */
-export function passOnRow(p: Person, onToggle: (next: boolean) => void): HTMLElement {
-  const on = passesAsksOn(p)
+/**
+ * On a person's card: may their asks go on through me ("Pass their asks on"). `on` is the EFFECTIVE value
+ * (one_jakob.ts passOnAllowed: the person's choice, else this phone's own front door and its demo accounts, else
+ * the ring), so the switch shows what the phone does and one tap flips it.
+ */
+export function passOnRow(on: boolean, onToggle: (next: boolean) => void): HTMLElement {
   return el('button', {
     class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-pass-on': '1',
     onclick: () => onToggle(!on),

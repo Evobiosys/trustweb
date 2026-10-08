@@ -20,7 +20,8 @@ export function toE164(input: string): string | null {
 const MATRIX_ID = /^@[a-z0-9._=\-/+]+:[a-z0-9.-]+\.[a-z]{2,}(:\d{1,5})?$/i
 const TELEGRAM_USER = /^[a-z][a-z0-9_]{4,31}$/i
 const MESSENGER_USER = /^[a-z0-9.]{5,50}$/i
-const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i
+/** An address only: no ? # & = / anywhere, so a value (also one another phone sent) can never carry mailto: parameters such as a prefilled body. */
+const EMAIL = /^[^\s@?#&=/]+@[^\s@?#&=/]+\.[a-z]{2,}$/i
 
 function linkOn(input: string, hosts: readonly string[]): URL | null {
   try {
@@ -67,8 +68,8 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
     }
     case Channel.Matrix: {
       const link = linkOn(raw, ['matrix.to'])
-      const id = link ? decodeURIComponent(link.hash.replace(/^#\/?/, '')) : raw
-      return MATRIX_ID.test(id) ? id : null
+      const id = link ? safeDecode(link.hash.replace(/^#\/?/, '')) : raw
+      return id !== null && MATRIX_ID.test(id) ? id : null
     }
     case Channel.Delta: {
       const link = linkOn(raw, ['i.delta.chat'])
@@ -86,6 +87,15 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
       const user = link ? link.pathname.replace(/^\//, '') : raw.replace(/^@/, '')
       return MESSENGER_USER.test(user) ? user : null
     }
+  }
+}
+
+/** decodeURIComponent that never throws: a malformed escape (a typo, or a value another phone sent) is no handle at all. */
+function safeDecode(s: string): string | null {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return null
   }
 }
 

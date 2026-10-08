@@ -118,7 +118,7 @@ function append(thread: ChatThread, m: ChatMessage, unreadAdd: number): ChatThre
 
 export interface Queued {
   book: ChatBook
-  /** The new message, or null when the text was empty, too long or not a string. */
+  /** The new message, or null when the text was empty, too long or not a string, or too many messages already wait to be sent. */
   message: ChatMessage | null
 }
 
@@ -127,6 +127,8 @@ export function queueOutgoing(book: ChatBook, peerId: string, raw: unknown, now:
   const text = cleanChatText(raw)
   if (!text || !peerId) return { book, message: null }
   const thread = threadOf(book, peerId)
+  // At most one fewer waiting message than the thread holds: an unsent message is never dropped to make room, and an arriving one always fits.
+  if (thread.messages.filter((m) => m.state === MessageState.Pending).length >= CHAT_KEEP_PER_PERSON - 1) return { book, message: null }
   const lastOut = [...thread.messages].reverse().find((m) => m.dir === ChatDirection.Out)
   const sentAt = Math.max(now, (lastOut?.sentAt ?? 0) + 1)
   const message: ChatMessage = {

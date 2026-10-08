@@ -28,13 +28,14 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { ANSWER_WINDOW_MS, Net } from './net'
+import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { ScanAdvice, qrPayload, scanAdvice, signalLabelKey, channelLink, normalizeHandle } from './channel'
 import type { SignalProvider } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
-import { TextKind, migrateChats, peersWithPending, receiveText, routeText } from './chat'
+import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
 import { flushPending, renderChat, renderShareControls } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
@@ -1446,13 +1447,20 @@ function personSheet(personId: string): void {
     // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
-    p.peerId ? passOnRow(p, (next) => { p.passOn = next; save(); personSheet(p.id) }) : null,
+    passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     sharedReachRow(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
   ])
+}
+
+/** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */
+function passOnRowFor(p: Person): HTMLElement | null {
+  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  if (!peer) return null
+  return passOnRow(passOnAllowed(st(), peer, ownDoorDid()), (next) => { p.passOn = next; save(); personSheet(p.id) })
 }
 
 /** "Message on Signal / Molly" for a link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
@@ -2803,7 +2811,8 @@ function onKeepText(peer: Peer, text: string): void {
   if (notice === KeepNotice.Ask) {
     const acct = demoAccounts().find((t) => t.peerId === peer.id)
     if (acct) keepDemoAccount(acct)
-  } else if (notice === KeepNotice.Yes && s.testOf && s.testOf.name === peer.displayName && guestGranted(s.testOf)) {
+  } else if (notice === KeepNotice.Yes && s.testOf && s.testOf.name === peer.displayName
+    && s.people.some((p) => p.peerId === peer.id && p.name === s.testOf?.name) && guestGranted(s.testOf)) {
     save()
     toast(S.demoKeptByOwner(peer.displayName))
     render()
@@ -2814,7 +2823,9 @@ function onKeepText(peer: Peer, text: string): void {
 function askOwnerToKeep(): void {
   const s = st()
   const t = s.testOf
-  if (!t || !guestAsk(t)) return
+  if (!t || guestKept(t)) return
+  // Asking again is allowed: a yes lost on a relay outage would otherwise leave the account to run out (the owner's phone answers every ask).
+  guestAsk(t)
   const owner = s.people.find((p) => p.peerId && p.name === t.name)
   const peer = owner ? s.peers.find((p) => p.id === owner.peerId) : undefined
   save()
@@ -2837,6 +2848,16 @@ function createDemoAccount(raw: string): DemoAccount | null {
 }
 
 /** Ends the account: forgets its peer and its person, so that phone can no longer ask this web. */
+/** A peer that is gone: its chat thread (with any message still waiting for it) and the record of what contact it was sent go too. */
+function forgetPeerTraces(s: AppState, peerId: string): void {
+  if (s.chats) s.chats = removeThread(s.chats, peerId)
+  if (s.contactSent && typeof s.contactSent === 'object' && peerId in s.contactSent) {
+    const next = { ...s.contactSent }
+    delete next[peerId]
+    s.contactSent = next
+  }
+}
+
 function removeDemoAccount(id: string, why: 'ended' | 'expired' = 'ended'): void {
   const s = st()
   const acct = (s.testAccounts ?? []).find((t) => t.id === id)
@@ -2845,6 +2866,7 @@ function removeDemoAccount(id: string, why: 'ended' | 'expired' = 'ended'): void
   if (acct.peerId) {
     s.peers = s.peers.filter((p) => p.id !== acct.peerId)
     s.people = s.people.filter((p) => p.peerId !== acct.peerId)
+    forgetPeerTraces(s, acct.peerId)
   }
   s.testAccounts = (s.testAccounts ?? []).filter((t) => t.id !== id)
   if (!s.testAccounts.length) delete s.testAccounts
@@ -2881,9 +2903,12 @@ async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
   if (acct.peerId && acct.peerId !== held.id) {
     s.peers = s.peers.filter((p) => p.id !== acct.peerId)
     s.people = s.people.filter((p) => p.peerId !== acct.peerId)
+    forgetPeerTraces(s, acct.peerId)
   }
   const peer = await net.admitPeer(held)
   acct.peerId = peer.id
+  // Kept before this phone was admitted (or by a second phone on the same code): the guest learns it now, not never.
+  if (isKept(acct)) void net.sendText(peer, keepText(APP_URL, KeepNotice.Yes)).catch(() => { /* the guest can ask again */ })
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
     person = { id: randomId(8), name: peer.displayName, context: S.demoAccountContext, ring: peer.ring, metAt: Date.now(), lines: [], peerId: peer.id }
@@ -3026,7 +3051,8 @@ function recordFound(text: string, results: AskResult[]): void {
   if (!s) return
   // By the peer that answered (this phone's name for it), never by the name the answer gives itself (review-app-b);
   // items checked: an answer is another phone's data.
-  const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.slice(0, max) : '')
+  // Another phone's bytes: no bidi overrides or control characters kept (safe_text.ts), clipped.
+  const str = (v: unknown, max: number): string => (typeof v === 'string' ? stripUnsafe(v).slice(0, max) : '')
   const shared = results
     .filter((r) => r.decoded?.outcome === 'shared' && r.decoded.shared)
     .map((r) => ({
@@ -3073,7 +3099,12 @@ function demoOfLine(s: AppState): string | null {
 function keepAskRow(s: AppState): HTMLElement | null {
   const t = s.testOf
   if (!t || t.own || t.handedOverAt || guestKept(t)) return null
-  if (guestAsked(t)) return el('p', { class: 'meta', 'data-keep-asked': '1' }, [S.demoKeepAsked(t.name)])
+  if (guestAsked(t)) {
+    return el('div', { class: 'keep-ask' }, [
+      el('p', { class: 'meta', 'data-keep-asked': '1' }, [S.demoKeepAsked(t.name)]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-keep-ask-again': '1', onclick: askOwnerToKeep }, [S.demoKeepAskAgain]),
+    ])
+  }
   return el('div', { class: 'keep-ask' }, [
     el('button', { class: 'btn btn-electric', 'data-keep-ask': '1', onclick: askOwnerToKeep }, [S.demoKeepAsk]),
     el('p', { class: 'meta' }, [S.demoKeepAskHint(t.name)]),
@@ -3297,9 +3328,10 @@ function saveDraftWhat(): void {
   const now = Date.now()
   const what = draft.name.trim()
   const lines = draft.lines.filter((l) => l.text.trim())
-  // The meeting is stored first, so every item can point at it (the chain of proof).
-  if (draftIsMeeting()) recordPastMeeting({ reviewed: true })
   const target = contextTarget()
+  // The meeting is stored first, so every item can point at it (the chain of proof). Its lines carry an audience only when the
+  // screen showed one per line (screenPlaceWhat); the context screen of an existing thing shows none, so none is stored (notes_source.ts).
+  if (draftIsMeeting()) recordPastMeeting({ reviewed: !target })
   if (target) {
     const added = addContextLines(target, lines.map((l) => l.text), now, draft.meetingId)
     save()
@@ -3324,7 +3356,8 @@ function saveDraftWhat(): void {
 
 /** "None of these": the notes are kept as a past meeting only, a plain note with no person and no thing behind it. */
 function saveDraftPlain(): void {
-  recordPastMeeting({ reviewed: true })
+  // No audience is stored: the Review screen of a plain note shows none per line, so its lines never answer an ask (notes_source.ts, fail closed).
+  recordPastMeeting()
   save()
   toast(S.savedPlainToast)
   newDraft()

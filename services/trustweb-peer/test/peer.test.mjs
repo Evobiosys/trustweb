@@ -522,8 +522,28 @@ describe('the peer against an in-memory relay', () => {
     const b = await anna.ask(peer.card.did, 'who has a ladder, again', 6000, { maxHops: 2, hop: 0, root: 'rootDEF456', seen: [] })
     expect(b.outcome).toBe('nothing')
     expect(Date.now() - t1).toBeGreaterThanOrEqual(600 + WINDOW_MS - 30)
+    // U7: the same ask by a second path (a repeat) answers nothing at the moment a forwarded one would, never earlier
+    const t2 = Date.now()
+    const c = await anna.ask(peer.card.did, 'who has a ladder', 6000, { maxHops: 2, hop: 0, root, seen: [] })
+    expect(c.outcome).toBe('nothing')
+    expect(Date.now() - t2).toBeGreaterThanOrEqual(600 + WINDOW_MS - 30)
     expect(lines.join('\n')).not.toMatch(/ladder|Anna/i)
     jakob.close(); anna.close()
+    await peer.stop()
+    rmSync(dir, { recursive: true })
+  }, 30_000)
+
+  it('wave 6 (U7): an ask that arrived further than its asker allowed gets nothing, even from a line with no degrees limit', async () => {
+    const dir = tmp()
+    const inv = inventoryFile(dir, [{ text: 'Cargo bike, any distance', audience: 'fof', degrees: -1, preset: PRESET }])
+    const peer = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: WINDOW_MS })
+    const ben = await phone(relayOrigin, 'Ben', null)
+    await ben.connectTo(peer.card.did)
+    await until(() => peer.peerCount() === 1)
+    const far = { relayed: true, maxHops: 2, hop: 2, root: 'rootBeyond1', seen: [], via: ['Ann', 'Cleo'] }
+    expect((await ben.ask(peer.card.did, 'cargo bike', 4000, far)).outcome).toBe('nothing')
+    expect((await ben.ask(peer.card.did, 'cargo bike', 4000, { ...far, root: 'rootWithin1', hop: 1 })).outcome).toBe('shared')
+    ben.close()
     await peer.stop()
     rmSync(dir, { recursive: true })
   }, 30_000)

@@ -437,7 +437,8 @@ export class Net {
       targets.push(p)
     }
     if (!targets.length) return NO_HARVEST
-    const fields = cascadeFields(q, info, [self, fromSender], q.from.displayName || sender.displayName)
+    // The sender's name as this phone knows it (from the connect, as on its own prompt), never the per-ask claim in `from`.
+    const fields = cascadeFields(q, info, [self, fromSender], sender.displayName)
     const waitMs = Math.max(0, deadline - Date.now() - this.windowMs * HOP_COLLECT_LEAD)
     // Each target is bounded by waitMs on its own (sendAsk never waits on a send), so one stalled contact costs nothing but its line.
     const answers = await Promise.all(targets.map((p) => this.sendAsk(p, q.freeText ?? '', fields, waitMs)))

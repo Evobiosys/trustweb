@@ -637,10 +637,10 @@ export const S = {
     [ReachChoice.NoLimit]: 'No limit',
   } as Record<ReachChoice, string>,
   reachHint: (steps: number, noLimit: boolean): string => noLimit
-    ? `As far as it goes through your web, at most ${HOP_CAP} steps; answers can take up to ${HOP_CAP * STEP_S} s.`
+    ? `As far as it goes through your web, at most ${HOP_CAP} steps; answers can take up to ${HOP_CAP * STEP_S} s. People you do not know see your name and your question.`
     : steps <= 1
       ? 'Only the people you are connected with. They answer from their own lines.'
-      : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${steps * STEP_S} s.`,
+      : `Up to ${steps} steps: your contacts may pass it on to theirs, where they allow it. Answers can take up to ${steps * STEP_S} s. People you do not know see your name and your question.`,
   reachCustomAria: `Steps, 1 to ${HOP_CAP}`,
   queryWindowFar: (s: number) => `Every answer is held until about ${s} s after you asked, so a "no" still looks exactly like "no match", and nobody can tell how far your ask went.`,
   resultPassedOn: (name: string) => `${name} passed this on`,
@@ -774,6 +774,7 @@ export const S = {
   demoKeepAsk: 'Make it your personal account',
   demoKeepAskHint: (owner: string) => `Ask ${owner} to keep your account, so it does not end after a week. It then stays until you leave.`,
   demoKeepAsked: (owner: string) => `Asked ${owner} to keep it. Until the answer comes, your account still ends as shown above.`,
+  demoKeepAskAgain: 'Ask again',
   demoKeepAskedToast: (owner: string) => `Asked ${owner} to keep your account.`,
   demoKeptLine: 'Your account stays until you leave.',
   demoKeptByOwner: (owner: string) => `${owner} keeps your account. It stays until you leave.`,
