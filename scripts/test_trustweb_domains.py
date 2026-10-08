@@ -4,10 +4,13 @@
 """
 from __future__ import annotations
 
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -284,6 +287,140 @@ class AppOrgRedirect(unittest.TestCase):
         out = self.redirected()
         self.assertEqual(block_of(out, "trustweb.one, www.trustweb.one {"), block_of(live, "trustweb.one, www.trustweb.one {"))
         self.assertEqual(block_of(out, "idea2.site, www.idea2.site {"), block_of(live, "idea2.site, www.idea2.site {"))
+
+
+
+class OrgRedirectIsNotCached(unittest.TestCase):
+    """Review 6c: lifting the A1 redirect is the only way back to an app.trustintheweb.org phone's own data, so no browser may keep the 301."""
+
+    def test_the_redirect_handle_says_no_store_before_redir_and_the_new_host_does_not_inherit_it(self) -> None:
+        once = caddy.apply(caddy.apply(live_like_fixture(), [caddy.Transform.APP_TRUSTWEB_ONE]), [caddy.Transform.APP_ORG_REDIRECT])
+        org = block_of(once, "app.trustintheweb.org {")
+        handle = org[org.rindex("\thandle {\n"):]
+        self.assertIn('\t\theader Cache-Control "no-store"\n', handle)
+        self.assertLess(handle.index("header Cache-Control"), handle.index("redir https://app.trustweb.one{uri} permanent"))
+        self.assertIn("Caddyfile.bak.<ts>", org)
+        self.assertNotIn("_wave6c_orgredirect", org)
+        self.assertNotIn('"no-store"', block_of(once, "app.trustweb.one {"))
+
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _read(rel: str) -> str:
+    return (REPO / rel).read_text(encoding="utf-8")
+
+
+def _shell_value(rel: str, name: str) -> str:
+    m = re.search(rf'^{name}="([^"]*)"$', _read(rel), re.MULTILINE)
+    assert m is not None, f"{name} not found in {rel}"
+    return m.group(1)
+
+
+def _js_string(rel: str, name: str) -> str:
+    m = re.search(rf"^const {name} = '([^']*)'$", _read(rel), re.MULTILINE)
+    assert m is not None, f"{name} not found in {rel}"
+    return m.group(1)
+
+
+def _shell_function(rel: str, name: str) -> str:
+    m = re.search(rf"^{name}\(\) \{{.*?^\}}$", _read(rel), re.MULTILINE | re.DOTALL)
+    assert m is not None, f"{name}() not found in {rel}"
+    return m.group(0)
+
+
+APP_HOSTS = {"app.idea2.site", "app.trustintheweb.org", "app.trustweb.one"}
+SITE_ORIGINS = {"https://idea2.site", "https://trustintheweb.org", "https://trustintheweb.com"}
+
+
+class HostListsAgreeAcrossFiles(unittest.TestCase):
+    """Review 6c: every list of app hosts and feedback origins (app, service defaults, unit, drop-in) names the same exact set."""
+
+    def test_app_host_lists_are_one_set(self) -> None:
+        m = re.search(r"SHORT_LINK_ORIGINS: readonly string\[\] = \[([^\]]*)\]", _read("apps/trustweb/src/short_link.ts"))
+        assert m is not None
+        origins = re.findall(r"'([^']*)'", m.group(1))
+        self.assertEqual({urlsplit(o).hostname for o in origins}, APP_HOSTS)
+        lists = {
+            "short_link.ts": [urlsplit(o).hostname or "" for o in origins],
+            "config.mjs DEFAULT_LINK_HOSTS": _js_string("services/trustweb-backup/config.mjs", "DEFAULT_LINK_HOSTS").split(","),
+            "deploy_trustweb_backup.sh ALLOWED_HOSTS_PRODUCTION": _shell_value("scripts/deploy_trustweb_backup.sh", "ALLOWED_HOSTS_PRODUCTION").split(","),
+            "deploy_trustweb_backup.sh LINK_HOSTS_ALL": _shell_value("scripts/deploy_trustweb_backup.sh", "LINK_HOSTS_ALL").split(","),
+            "trustweb_domains.sh APP_HOSTS": _shell_value("scripts/trustweb_domains.sh", "APP_HOSTS").split(" "),
+            "trustweb_domains.sh ALLOWED_HOSTS": _shell_value("scripts/trustweb_domains.sh", "ALLOWED_HOSTS").split(","),
+            "trustweb_domains.sh LINK_HOSTS": _shell_value("scripts/trustweb_domains.sh", "LINK_HOSTS").split(","),
+        }
+        for where, hosts in lists.items():
+            self.assertEqual(len(hosts), len(set(hosts)), where)
+            self.assertEqual(set(hosts), APP_HOSTS, where)
+        for o in origins:
+            parts = urlsplit(o)
+            self.assertEqual((parts.scheme, parts.port, parts.path, parts.query, parts.fragment), ("https", None, "", "", ""), o)
+
+    def test_feedback_origins_are_the_app_origins_plus_the_three_sites_and_nothing_else(self) -> None:
+        want = {f"https://{h}" for h in APP_HOSTS} | SITE_ORIGINS
+        for where, raw in (
+            ("config.mjs", _js_string("services/trustweb-backup/config.mjs", "DEFAULT_FEEDBACK_ORIGINS")),
+            ("deploy_trustweb_backup.sh", _shell_value("scripts/deploy_trustweb_backup.sh", "FEEDBACK_ORIGINS_ALL")),
+            ("trustweb_domains.sh", _shell_value("scripts/trustweb_domains.sh", "FEEDBACK_ORIGINS")),
+        ):
+            origins = raw.split(",")
+            self.assertEqual(len(origins), len(set(origins)), where)
+            self.assertEqual(set(origins), want, where)
+            self.assertNotIn("https://trustweb.one", origins, where)
+            self.assertFalse(any("demo." in o for o in origins), where)
+
+    def test_the_new_app_folder_is_named_the_same_everywhere(self) -> None:
+        self.assertEqual(caddy.APP_ONE_DIR, "/srv/questhub-static/app-trustweb-one")
+        self.assertIn(f"CARD_DIR_TRUSTWEB_ONE={caddy.APP_ONE_DIR}\n", _read("scripts/deploy_trustweb_peer.sh"))
+        self.assertIn("$CARD_DIR_TRUSTWEB_ONE", _read("scripts/deploy_trustweb_peer.sh"))
+        self.assertIn(f"REMOTE_TRUSTWEB_ONE={caddy.APP_ONE_DIR}\n", _read("scripts/deploy_wot.sh"))
+        self.assertIn("APP_ONE_DIR=$STATIC/app-trustweb-one\n", _read("scripts/trustweb_domains.sh"))
+
+
+def _bash(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["bash", "-c", "set -euo pipefail\n" + script], capture_output=True, text=True, timeout=30, check=False)
+
+
+class OrgRedirectProbe(unittest.TestCase):
+    """Review 6c: org-redirect runs only when app.trustweb.one serves the app AND its backup answers (a stale drop-in = 421 there)."""
+
+    def ok(self, probe: str) -> bool:
+        fn = _shell_function("scripts/trustweb_domains.sh", "org_probe_ok")
+        return _bash(f"{fn}\norg_probe_ok '{probe}'").returncode == 0
+
+    def test_accepts_only_a_serving_app_with_a_healthy_backup(self) -> None:
+        self.assertTrue(self.ok("200 1 200 200 "))
+        self.assertTrue(self.ok("200 12 200 200"))
+        for bad in ("200 1 200 421 ", "200 0 200 200 ", "404 1 200 200 ", "200 1 404 200 ", "000 200 200 ", "200 1 200 ", "",
+                    "200 1 200 200 200 ", "200 x 200 200 "):
+            self.assertFalse(self.ok(bad), bad)
+
+
+class BackupDeployChecksEveryHost(unittest.TestCase):
+    """Review 6c: a production deploy fails, naming backup-env, when the effective environment refuses an app host."""
+
+    def run_check(self, refused_host: str) -> subprocess.CompletedProcess[str]:
+        fn = _shell_function("scripts/deploy_trustweb_backup.sh", "verify_every_app_host")
+        hosts = _shell_value("scripts/deploy_trustweb_backup.sh", "ALLOWED_HOSTS_PRODUCTION")
+        stub = (
+            'rsh() { case "$1" in *"Host: ' + refused_host + '\'"*) echo 421; return 0 ;; esac\n'
+            '  case "$1" in *"-X OPTIONS"*) echo 204 ;; *) echo 200 ;; esac; }\n'
+        )
+        return _bash(f'ALLOWED_HOSTS_PRODUCTION="{hosts}"\n{stub}{fn}\nverify_every_app_host')
+
+    def test_all_hosts_served(self) -> None:
+        r = self.run_check("nobody.example")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for host in APP_HOSTS:
+            self.assertIn(f"ok   Host {host} -> /health 200", r.stdout)
+            self.assertIn(f"ok   Origin https://{host} -> feedback preflight 204", r.stdout)
+
+    def test_a_refused_new_host_fails_and_names_backup_env(self) -> None:
+        r = self.run_check("app.trustweb.one")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("FAIL Host app.trustweb.one -> /health 421", r.stderr)
+        self.assertIn("trustweb_domains.sh backup-env", r.stderr)
 
 
 if __name__ == "__main__":

@@ -320,11 +320,17 @@ def _serve_catchall(app_dir: str, deploy_target: str) -> str:
 
 ORG_SERVE_CATCHALL = _serve_catchall(APP_DIR, DEPLOY_TARGET_ORG)
 ONE_SERVE_CATCHALL = _serve_catchall(APP_ONE_DIR, DEPLOY_TARGET_ONE)
+# FROZEN once installed: app-trustweb-one, app-org-redirect and --parity recognise the live redirect by this exact text,
+# so an edit after the deploy makes them refuse (or report drift) until the live block is edited to match by hand.
+# Cache-Control no-store (review 6c): a 301 without it is cached by browsers indefinitely, and lifting the redirect
+# (restoring the Caddyfile backup) is the only way back to the data an app.trustintheweb.org phone keeps in its browser.
 ORG_REDIRECT_CATCHALL = (
     f"\t{ORG_REDIRECT_MARKER} The URI (path, query) is kept, so an old QR\n"
     "\t# or connect link lands on the new host. The handles above keep serving (old DID documents name this host's /relay).\n"
-    f"\t# Nothing is deleted: {APP_DIR} stays on disk. Lift the redirect: put back the Caddyfile.bak.<ts>_wave6c_orgredirect.\n"
+    f"\t# Nothing is deleted: {APP_DIR} stays on disk. Lift the redirect: restore the Caddyfile.bak.<ts> that\n"
+    "\t# scripts/trustweb_domains.sh org-redirect wrote. no-store: browsers must not store this 301, so lifting it brings the pages back.\n"
     "\thandle {\n"
+    "\t\theader Cache-Control \"no-store\"\n"
     "\t\tredir https://app.trustweb.one{uri} permanent\n"
     "\t}\n"
 )
