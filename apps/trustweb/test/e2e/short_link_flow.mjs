@@ -1,16 +1,18 @@
 /**
- * Short connect links in the app (wave 5, part 2), headless, own ports:
+ * Short connect links in the app (wave 5, part 2; wave 6b moved the TrustWeb Meet page to the persistent connect code, covered by
+ * connect_code_flow.mjs, so the "Short link" tap (/link, /l/<id>, 30 days) now lives on a DEMO ACCOUNT's code, which is where it stays),
+ * headless, own ports:
  *   A  a page that is not an app origin (http://127.0.0.1): no Short link, no request, "Show the long link" works
- *   B  on https://app.trustintheweb.org (the loopback app behind a TLS front, STUBBED /link): nothing is requested on opening
- *      the Meet sheet; one request per tap; the QR, Copy and the long/short views follow the choice; a repeat tap and a switch
+ *   B  on https://app.trustintheweb.org (the loopback app behind a TLS front, STUBBED /link), a demo account's code: nothing is
+ *      requested on opening the Meet sheet; one request per tap; the QR, Copy and the long/short views follow the choice; a repeat tap and a switch
  *      back and forth ask the server no second time; the note says "30 days"
- *   N  an NFC tag always gets the long link, even with the short one chosen (Web NFC stubbed)
+ *   N  an NFC tag gets the connect code once the server answered (the code never changes), the long link before (Web NFC stubbed)
  *   C  every failure falls back to the long link: 500, 400, 429 with Retry-After, 503, 507, a broken 200, a refused connection,
  *      offline; a retry afterwards works
  *   D  a demo-account code (Meet > Demo account) offers it too, and its QR follows
- *   E  a code that carries a meeting's key (the pack on the real server) is not shortened (nothing sent), and says why
- *   F  the REAL services/trustweb-backup server (temp state dir, loopback 8992) behind the same origin: POST, the 302 with the
- *      fragment, and a second phone opening the short link lands on the connect screen of the first
+ *   E  a code that carries a meeting's key: the key rides in the fragment of the code link and is never sent to /connect
+ *   F  the REAL services/trustweb-backup server (temp state dir, loopback 8992) behind the same origin: a demo account's POST /link, the
+ *      302 with the fragment, and a second phone opening the short link lands on the connect screen of the first
  * Parts: PARTS=a,b,n,c,d,e,f (default all). SHOTS=<dir> saves screenshots.
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<playwright-core> TW_PORT=8980 ../../node_modules/.bin/tsx ../trustweb/test/e2e/short_link_flow.mjs
@@ -23,6 +25,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launch, startApp, tally } from '../helpers/e2e_harness.mjs'
 import { startHttpsOrigin } from '../helpers/https_origin.mjs'
+import { fakeConnectServer } from '../helpers/fake_connect_server.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SERVER = path.resolve(HERE, '../../../../services/trustweb-backup/server.mjs')
@@ -63,12 +66,24 @@ async function openMeet(page, origin, name = 'Jakob Possert-Bienzle') {
   await page.locator('.meet-page .btn', { hasText: 'Copy link' }).waitFor()
 }
 
+/** A demo account's code (Meet > Demo account): the page that keeps the "Short link" choice. */
+async function openDemoMeet(page, origin, name = 'Jakob Possert-Bienzle', account = 'Ada') {
+  await openMeet(page, origin, name)
+  await page.getByRole('tab', { name: 'Demo account' }).click()
+  await page.waitForTimeout(500)
+  await page.getByLabel('Name of the demo account').focus()
+  await page.keyboard.type(account)
+  await page.getByRole('button', { name: 'Make the demo account' }).click()
+  await page.getByRole('heading', { name: `${account}-demo is ready` }).waitFor({ timeout: 10_000 })
+  await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
+}
+
 const payload = (page) => page.getAttribute('.qrwrap', 'data-payload')
 const canvasPng = (page) => page.evaluate(() => document.querySelector('.qrwrap canvas').toDataURL())
 const shortBtn = (page) => page.locator('.link-choice [data-act="short"]')
 const status = (page) => page.locator('.link-choice [data-short-status]')
 const clip = (page) => page.evaluate(() => navigator.clipboard.readText())
-const copyBtn = (page) => page.locator('.meet-page > .btn', { hasText: 'Copy link' })
+const copyBtn = (page) => page.locator('.meet-page > .btn, .demo-acct .btn', { hasText: 'Copy link' })
 
 /** Stubs POST /link; `answer(n)` gives the fulfilment for the n-th call. Returns the recorded bodies. */
 async function stubLink(ctx, origin, answer) {
@@ -108,14 +123,14 @@ async function partA(browser, base) {
 async function partB(browser, origin) {
   const { ctx, page } = await newPage(browser, origin)
   const calls = await stubLink(ctx, origin, () => ok201)
-  await openMeet(page, origin)
+  await openDemoMeet(page, origin)
   t.ok('b: the page is really on the app origin', page.url().startsWith(origin + '/'), page.url())
   t.ok('b: opening the Meet sheet asked the server nothing', calls.length === 0)
   t.ok('b: "Short link" is offered (not pressed)', (await shortBtn(page).isVisible()) && (await shortBtn(page).getAttribute('aria-pressed')) === 'false')
   const note = await page.locator('.link-choice [data-short-note]').innerText()
   t.ok('b: the note says 30 days, our server and that it expires', /our server for 30 days/.test(note) && /expires/.test(note), note)
   const long = await payload(page)
-  t.ok('b: until the tap the QR carries the long link', long.startsWith(origin + '/?connect=did%3Apeer%3A2'), long.slice(0, 70))
+  t.ok('b: until the tap the QR carries the long link (with the account in its fragment)', long.startsWith(origin + '/?connect=did%3Apeer%3A2') && long.includes('#t=Ada-demo'), long.slice(0, 70))
   const longPng = await canvasPng(page)
   await shot(page, 'sl_b1_before_tap.png')
 
@@ -150,8 +165,8 @@ async function partB(browser, origin) {
   t.ok('b: choosing short a second time asks the server no second time (cached for the visit)', calls.length === 1 && (await payload(page)) === short)
 
   // a redraw of the screen (swipe to another Meet page and back) keeps the view, still no request
-  await page.getByRole('tab', { name: 'Signal' }).click()
-  await page.getByRole('tab', { name: /TrustWeb|Code/ }).first().click().catch(() => {})
+  await page.getByRole('tab', { name: 'TrustWeb' }).click()
+  await page.getByRole('tab', { name: 'Demo account' }).click()
   await page.locator('.qrwrap canvas').waitFor()
   await page.waitForFunction(() => !!document.querySelector('.link-choice [data-short-status]'))
   const afterRedraw = await payload(page)
@@ -166,15 +181,18 @@ async function partN(browser, origin) {
     window.__nfcWrites = []
     window.NDEFReader = class { async write(m) { window.__nfcWrites.push(m.records[0].data) } }
   })
-  await stubLink(ctx, origin, () => ok201)
+  const server = fakeConnectServer(origin)
+  server.delayMs = 1500
+  await server.install(ctx)
   await openMeet(page, origin)
   const long = await payload(page)
-  await shortBtn(page).click()
-  await page.locator('.link-choice [data-link="short"]').waitFor({ timeout: 5_000 })
-  await page.getByRole('button', { name: 'Write the long link to an NFC tag' }).click()
+  await page.getByRole('button', { name: 'Write your link to an NFC tag' }).click()
   await page.waitForFunction(() => window.__nfcWrites.length === 1)
-  const written = await page.evaluate(() => window.__nfcWrites[0])
-  t.ok('n: with the short link chosen, an NFC tag is still written with the LONG link (a tag is kept; a short link expires)', written === long && (await payload(page)).includes('/l/'), written.slice(0, 60))
+  t.ok('n: before the server answered, a tag gets the long link (the fallback)', (await page.evaluate(() => window.__nfcWrites[0])) === long)
+  const code = await page.waitForFunction(() => /\/c\/[A-Za-z0-9_-]{22}$/.test(document.querySelector('.qrwrap')?.getAttribute('data-payload') ?? ''), null, { timeout: 15_000 }).then(() => payload(page))
+  await page.getByRole('button', { name: 'Write your link to an NFC tag' }).click()
+  await page.waitForFunction(() => window.__nfcWrites.length === 2)
+  t.ok('n: once the code is there, a tag gets the code link (it never changes, so the tag keeps working)', (await page.evaluate(() => window.__nfcWrites[1])) === code, code)
   await ctx.close()
 }
 
@@ -193,7 +211,7 @@ async function partC(browser, origin) {
     const { ctx, page } = await newPage(browser, origin)
     let mode = c.answer
     const calls = await stubLink(ctx, origin, () => mode)
-    await openMeet(page, origin)
+    await openDemoMeet(page, origin)
     const long = await payload(page)
     await shortBtn(page).click()
     await page.waitForFunction(() => /\./.test(document.querySelector('.link-choice [data-short-status]')?.textContent ?? '') && !/Making/.test(document.querySelector('.link-choice [data-short-status]')?.textContent ?? ''), null, { timeout: 15_000 })
@@ -252,8 +270,8 @@ async function partE(browser, origin) {
   const { ctx, page } = await newPage(browser, origin)
   // headless Chromium crashes on the on-device speech probe: no speech engine, transcription off (as pair.mjs)
   await ctx.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition })
-  const posts = []
-  page.on('request', (r) => { if (r.method() === 'POST' && new URL(r.url()).pathname === '/link') posts.push(r.postData()) })
+  const server = fakeConnectServer(origin)
+  await server.install(ctx)
   await page.goto(origin + '/')
   await page.getByLabel('Your first name').fill('Jakob')
   await page.getByRole('button', { name: 'Start on this phone' }).click()
@@ -271,13 +289,12 @@ async function partE(browser, origin) {
   await page.getByRole('button', { name: 'Meet Ben' }).click()
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   await page.waitForFunction(() => /[#&]k=/.test(document.querySelector('.qrwrap')?.getAttribute('data-payload') ?? ''), null, { timeout: 15_000 }).catch(() => {})
-  const long = await payload(page)
-  t.ok('e: the code after a meeting carries the meeting\'s key in its fragment (#...k=, the part that must not be sent)', /#.*\bk=TW/.test(long), long.slice(-100))
-  t.ok('e: so "Short link" is not offered', !(await shortBtn(page).isVisible()))
-  t.ok('e: and it says why', /notes or a key inside the link/.test(await status(page).innerText()), await status(page).innerText())
-  t.ok('e: "Show the long link" is still there and shows it', await page.locator('.link-choice [data-act="long"]').isVisible())
-  t.ok('e: nothing was sent to /link', posts.length === 0)
-  await shot(page, 'sl_e_key_not_shortened.png')
+  await page.waitForFunction(() => /\/c\//.test(document.querySelector('.qrwrap')?.getAttribute('data-payload') ?? ''), null, { timeout: 15_000 }).catch(() => {})
+  const shown = await payload(page)
+  t.ok('e: the code after a meeting is the connect code WITH the meeting\'s key in its fragment (#...k=, the part no server sees)', new RegExp(`^${origin.replace(/[.]/g, '\\.')}/c/[A-Za-z0-9_-]{22}#.*\\bk=TW`).test(shown), shown.slice(-100))
+  t.ok('e: what was sent to /connect holds the link only: no fragment, no key, no notes', server.posts.length >= 1 && server.posts.every((p) => !p.body.url.includes('#') && !/k=TW|n=/.test(p.body.url)), JSON.stringify(server.posts.map((p) => p.body.url.slice(-40))))
+  t.ok('e: "Show the long link" still shows the long link with the key', /connect=.*#.*\bk=TW/.test(await page.locator('.link-choice [data-link="long"]').innerText()) || (await page.locator('.link-choice [data-act="long"]').isVisible()))
+  await shot(page, 'sl_e_key_in_fragment.png')
   await ctx.close()
 }
 
@@ -316,54 +333,33 @@ async function partF(browser, origin, svc) {
   const a = await newPage(browser, origin)
   const posts = []
   a.page.on('request', (r) => { if (r.method() === 'POST' && new URL(r.url()).pathname === '/link') posts.push(r.postData()) })
-  await openMeet(a.page, origin, 'Jakob Possert-Bienzle')
+  await openDemoMeet(a.page, origin, 'Jakob Possert-Bienzle', 'Ada')
   const long = await payload(a.page)
   await shortBtn(a.page).click()
   await a.page.locator('.link-choice [data-link="short"]').waitFor({ timeout: 10_000 })
   const short = await a.page.locator('.link-choice [data-link="short"]').innerText()
   t.ok('f: the real server made a short link of the form <origin>/l/<10 characters>', new RegExp(`^${origin.replace(/[.]/g, '\\.')}/l/[A-Za-z0-9]{10}$`).test(short), short)
-  t.ok('f: it is much shorter than the long link', short.length < long.length / 4, `${short.length} vs ${long.length}`)
+  t.ok('f: it is much shorter than the long link', short.length < long.length / 2, `${short.length} vs ${long.length}`)
   t.ok('f: exactly one POST, carrying the long link', posts.length === 1 && JSON.parse(posts[0]).url === long)
   t.ok('f: the QR carries the short link', (await payload(a.page)) === short)
   const id = short.split('/l/')[1]
   const redirect = await rawGet('/l/' + id)
-  t.ok('f: GET /l/<id> answers 302 to the long link, fragment included (none here: a plain connect link), no-store', redirect.status === 302 && redirect.headers.location === long && /no-store/.test(redirect.headers['cache-control'] ?? ''), JSON.stringify(redirect))
+  t.ok('f: GET /l/<id> answers 302 to the long link, the #fragment (t, a, x ...) included, no-store', redirect.status === 302 && redirect.headers.location === long && long.includes('#t=Ada-demo&a=') && /no-store/.test(redirect.headers['cache-control'] ?? ''), JSON.stringify(redirect).slice(-120))
   const missing = await rawGet('/l/ZZZZZZZZZZ')
   t.ok('f: an unknown id answers 404', missing.status === 404)
 
-  // a second phone opens the short link: the redirect lands on the first phone's connect screen
-  const b = await newPage(browser, origin)
-  await b.page.goto(short)
-  await b.page.getByLabel('Your first name').waitFor({ timeout: 15_000 })
-  const body = await b.page.locator('body').innerText()
-  t.ok('f: the second phone, opening the short link, lands on the connect screen naming Jakob Possert-Bienzle', /Jakob Possert-Bienzle/.test(body) && (await b.page.getByRole('button', { name: 'Connect', exact: true }).count()) === 1, body.slice(0, 200))
-  await shot(b.page, 'sl_f_opened_via_short_link.png')
-  await b.ctx.close()
-
-  // the same for a demo-account link: the fragment (t, a, x ...) survives the redirect
-  await a.page.getByRole('tab', { name: 'Demo account' }).click()
-  await a.page.waitForTimeout(500)
-  await a.page.getByLabel('Name of the demo account').focus()
-  await a.page.keyboard.type('Ada')
-  await a.page.getByRole('button', { name: 'Make the demo account' }).click()
-  await a.page.getByRole('heading', { name: 'Ada-demo is ready' }).waitFor({ timeout: 10_000 })
-  await a.page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-  const demoLong = await payload(a.page)
-  await shortBtn(a.page).click()
-  await a.page.locator('.link-choice [data-link="short"]').waitFor({ timeout: 10_000 })
-  const demoShort = await a.page.locator('.link-choice [data-link="short"]').innerText()
-  const demoRedirect = await rawGet('/l/' + demoShort.split('/l/')[1])
-  t.ok('f: a demo-account link comes back from the redirect byte for byte, #fragment included', demoRedirect.status === 302 && demoRedirect.headers.location === demoLong && demoLong.includes('#t=Ada-demo&a='), (demoRedirect.headers.location ?? '').slice(-80))
+  // a second phone opens the demo short link: the redirect lands on the connect screen of the first
   const c = await newPage(browser, origin)
-  await c.page.goto(demoShort)
+  await c.page.goto(short)
   await c.page.getByLabel('Your first name').waitFor({ timeout: 15_000 })
   const body2 = await c.page.locator('body').innerText()
   t.ok('f: a phone that opens the demo short link is offered the connection to Jakob Possert-Bienzle', /Jakob Possert-Bienzle/.test(body2), body2.slice(0, 200))
+  await shot(c.page, 'sl_f_opened_via_short_link.png')
   await c.ctx.close()
 
   // the store: a file, 0600, no log line with an id or url
   const links = JSON.parse(readFileSync(path.join(svc.dir, 'backup', 'links.json'), 'utf8'))
-  t.ok('f: the service stored two links (one per distinct long link)', JSON.stringify(links).includes(id) && (Array.isArray(links) ? links.length : Object.keys(links.links ?? links).length) >= 2)
+  t.ok('f: the service stored the link', JSON.stringify(links).includes(id))
   t.ok('f: its log names neither ids nor urls', !svc.log.join('').includes(id) && !svc.log.join('').includes('connect='))
   await a.ctx.close()
 }

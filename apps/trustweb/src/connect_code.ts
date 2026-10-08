@@ -1,0 +1,250 @@
+/**
+ * The persistent connect code (wave 6b, owner 2026-10-08: "it should be like a uuid that the relay hosts for it to be short,
+ * which should also show on the qr code"). Server side: services/trustweb-backup (connect.mjs, contract section 10 of
+ * DEVLOG/trustweb-wave-1733/services-api-contract.txt): POST /connect keeps this phone's long connect link under a code that
+ * never changes, GET /c/<code> redirects to it.
+ *
+ * The phone keeps {code, secret, url, updatedAt} in its record (AppState.connectCode, optional, record stays v:1). It registers
+ * once, then UPDATES the stored link when its long link changes (a new name) or after 30 days (so the server's 365 day
+ * expiry never runs out for a phone that is used). The secret is a password: it stays in the record, never in a URL, a QR,
+ * a log or a message; the record leaves the phone only inside the encrypted backup (backup.ts, the person's own key).
+ *
+ * Pure of DOM and strings: fetch, clock, timers and the record store are injected. A failed POST never blocks anything: the
+ * long link stays on show and the keeper tries again later (a few times, with growing pauses), then at the next ensure().
+ */
+import { canShorten, shareBlock } from './short_link'
+
+/** Exactly what the server mints: 16 random bytes as base64url. */
+export const CONNECT_CODE_RE = /^[A-Za-z0-9_-]{22}$/
+/** 32 random bytes as base64url (contract 10.0). */
+export const CONNECT_SECRET_RE = /^[A-Za-z0-9_-]{43}$/
+/** The stored link is sent again after this long even when it did not change. */
+export const CONNECT_REFRESH_MS = 30 * 24 * 60 * 60 * 1000
+/** One request waits this long, then the long link stays. */
+export const CONNECT_TIMEOUT_MS = 10_000
+/** Pauses before the retries of a failed registration (never under a minute: the server's budget is 6 POSTs a minute per address); after the last one the keeper rests until the next ensure(). */
+export const CONNECT_RETRY_MS: readonly number[] = [60_000, 180_000, 600_000]
+
+/** What the phone keeps (AppState.connectCode). */
+export interface ConnectRecord {
+  code: string
+  secret: string
+  /** The long link the server holds for this code, without any fragment. */
+  url: string
+  /** Epoch ms of the last successful mint or update. */
+  updatedAt: number
+}
+
+/** Why a registration did not happen; the long link always stays. */
+export enum ConnectError {
+  /** Not an app origin (localhost, a preview): the service is not there, nothing is sent. */
+  NotHere = 'not-here',
+  /** This link may not be sent (a key or notes in it, or longer than the server takes). */
+  Refused = 'refused',
+  /** No answer: offline, blocked, or the 10 seconds ran out. */
+  Network = 'network',
+  /** 429: too many requests from this address just now. */
+  RateLimited = 'rate-limited',
+  /** 503 or 507: the feature is off, or the server holds as many codes as it takes. */
+  Unavailable = 'unavailable',
+  /** 5xx, or a 2xx that is not a code. */
+  Server = 'server',
+}
+
+export type ConnectOutcome = { ok: true; record: ConnectRecord } | { ok: false; error: ConnectError }
+
+/** A stored value, checked: a record with a well-formed code and secret, or null (a corrupted record never throws). */
+export function readConnectRecord(raw: unknown): ConnectRecord | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const { code, secret, url, updatedAt } = raw as Record<string, unknown>
+  if (typeof code !== 'string' || !CONNECT_CODE_RE.test(code)) return null
+  if (typeof secret !== 'string' || !CONNECT_SECRET_RE.test(secret)) return null
+  if (typeof url !== 'string' || typeof updatedAt !== 'number' || !Number.isFinite(updatedAt)) return null
+  return { code, secret, url, updatedAt }
+}
+
+/** Boot migration: a connectCode value that is not a good record is dropped. True when the state changed. Never throws. */
+export function repairConnectRecord(state: { connectCode?: unknown }): boolean {
+  if (state.connectCode === undefined) return false
+  if (readConnectRecord(state.connectCode)) return false
+  delete state.connectCode
+  return true
+}
+
+/** The short link of a code on this origin (never APP_URL: the app may live under /trustweb/, /c/ sits at the root). */
+export function connectShortLink(origin: string, code: string): string {
+  return `${origin}/c/${code}`
+}
+
+/** The code inside a short link of this origin, or null. */
+export function codeOfShortLink(origin: string, link: string): string | null {
+  const prefix = `${origin}/c/`
+  if (!link.startsWith(prefix)) return null
+  const code = link.slice(prefix.length).split(/[?#]/)[0]
+  return CONNECT_CODE_RE.test(code) ? code : null
+}
+
+/** May this page register at all: exactly the two app origins. */
+export function canRegister(origin: string): boolean {
+  return canShorten(origin)
+}
+
+/** Does the server's copy need to be written: nothing there yet, another link, or older than 30 days. */
+export function registrationDue(record: ConnectRecord | null, longUrl: string, now: number): boolean {
+  if (!record) return true
+  if (record.url !== longUrl) return true
+  return now - record.updatedAt >= CONNECT_REFRESH_MS || now < record.updatedAt
+}
+
+/** The short link to show for this long link right now, or null while the server's copy is missing or out of date. */
+export function shortToShow(origin: string, record: ConnectRecord | null, longUrl: string, now: number): string | null {
+  if (!record || registrationDue(record, longUrl, now)) return null
+  return connectShortLink(origin, record.code)
+}
+
+function errorForStatus(status: number): ConnectError {
+  if (status === 429) return ConnectError.RateLimited
+  if (status === 503 || status === 507) return ConnectError.Unavailable
+  if (status >= 500) return ConnectError.Server
+  return ConnectError.Refused
+}
+
+export interface ConnectClientDeps {
+  /** The page's origin (location.origin). */
+  origin: string
+  fetch: typeof fetch
+  now: () => number
+  timeoutMs?: number
+}
+
+/** The body the server reads (contract 10.1): url, and code + secret for an update. */
+function bodyFor(url: string, record: ConnectRecord | null): string {
+  return JSON.stringify(record ? { url, code: record.code, secret: record.secret } : { url })
+}
+
+async function post(deps: ConnectClientDeps, body: string): Promise<{ status: number; json: unknown } | ConnectError.Network> {
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? CONNECT_TIMEOUT_MS)
+  try {
+    const res = await deps.fetch(`${deps.origin}/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      cache: 'no-store',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: ctl.signal,
+    })
+    const json: unknown = await res.json().catch(() => null)
+    return { status: res.status, json }
+  } catch {
+    return ConnectError.Network
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function field(json: unknown, key: string): unknown {
+  return typeof json === 'object' && json !== null ? (json as Record<string, unknown>)[key] : undefined
+}
+
+/** A mint answer (201 {code, secret}), checked. */
+function mintedRecord(json: unknown, url: string, now: number): ConnectRecord | null {
+  const code = field(json, 'code')
+  const secret = field(json, 'secret')
+  if (typeof code !== 'string' || !CONNECT_CODE_RE.test(code) || typeof secret !== 'string' || !CONNECT_SECRET_RE.test(secret)) return null
+  return { code, secret, url, updatedAt: now }
+}
+
+/**
+ * One registration: mint when the phone holds no code, update when it does. A 403 on an update means the server no longer knows
+ * the code (expired, or its file was lost): the phone mints a new one once, so the address works again (the old code is gone).
+ * Never throws.
+ */
+export async function registerConnect(deps: ConnectClientDeps, record: ConnectRecord | null, longUrl: string): Promise<ConnectOutcome> {
+  if (!canRegister(deps.origin)) return { ok: false, error: ConnectError.NotHere }
+  if (shareBlock(longUrl, deps.origin) !== null) return { ok: false, error: ConnectError.Refused }
+  const res = await post(deps, bodyFor(longUrl, record))
+  if (res === ConnectError.Network) return { ok: false, error: ConnectError.Network }
+  if (record && res.status === 403) return registerConnect(deps, null, longUrl)
+  if (res.status !== 200 && res.status !== 201) return { ok: false, error: errorForStatus(res.status) }
+  if (record && res.status === 200) {
+    if (field(res.json, 'code') !== record.code) return { ok: false, error: ConnectError.Server }
+    return { ok: true, record: { ...record, url: longUrl, updatedAt: deps.now() } }
+  }
+  const minted = res.status === 201 ? mintedRecord(res.json, longUrl, deps.now()) : null
+  return minted ? { ok: true, record: minted } : { ok: false, error: ConnectError.Server }
+}
+
+export interface ConnectKeeperDeps extends ConnectClientDeps {
+  /** Where the phone keeps the record (AppState.connectCode). */
+  load: () => unknown
+  store: (record: ConnectRecord) => void
+  setTimer?: (fn: () => void, ms: number) => unknown
+  clearTimer?: (handle: unknown) => void
+}
+
+export interface ConnectKeeper {
+  /** Registers or updates the server's copy when due (one request at a time, retries on failure); resolves true when the copy is current. */
+  ensure(longUrl: string): Promise<boolean>
+  /** The short link to show for this long link now, or null (no code yet, an out-of-date copy, or not an app origin). */
+  shortFor(longUrl: string): string | null
+  /** Called whenever a registration succeeded. Returns the way to stop listening. */
+  onChange(listener: () => void): () => void
+}
+
+/** The per-visit keeper: one request in flight, a bounded retry after a failure, the record kept through deps.store. */
+export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
+  const listeners = new Set<() => void>()
+  const setTimer = deps.setTimer ?? ((fn: () => void, ms: number): unknown => setTimeout(fn, ms))
+  const clearTimer = deps.clearTimer ?? ((h: unknown): void => clearTimeout(h as ReturnType<typeof setTimeout>))
+  let wanted = ''
+  let running: Promise<boolean> | null = null
+  let retryHandle: unknown = null
+  let attempt = 0
+
+  const held = (): ConnectRecord | null => readConnectRecord(deps.load())
+  const stopRetry = (): void => { if (retryHandle !== null) { clearTimer(retryHandle); retryHandle = null } }
+
+  const scheduleRetry = (): void => {
+    stopRetry()
+    if (attempt >= CONNECT_RETRY_MS.length) return
+    const pause = CONNECT_RETRY_MS[attempt]
+    attempt += 1
+    retryHandle = setTimer(() => { retryHandle = null; void ensure(wanted, true) }, pause)
+  }
+
+  const run = async (longUrl: string): Promise<boolean> => {
+    const out = await registerConnect(deps, held(), longUrl)
+    if (!out.ok) {
+      if (out.error !== ConnectError.NotHere && out.error !== ConnectError.Refused) scheduleRetry()
+      return false
+    }
+    deps.store(out.record)
+    attempt = 0
+    stopRetry()
+    for (const l of [...listeners]) l()
+    // The link changed while this request ran: that answer was for another link, the caller asks again.
+    return !registrationDue(held(), wanted, deps.now())
+  }
+
+  const ensure = (longUrl: string, retry = false): Promise<boolean> => {
+    wanted = longUrl
+    if (!canRegister(deps.origin)) return Promise.resolve(false)
+    if (!registrationDue(held(), longUrl, deps.now())) return Promise.resolve(true)
+    if (!retry) attempt = 0
+    if (running) return running.then(() => (registrationDue(held(), wanted, deps.now()) ? ensure(wanted, true) : true))
+    const call = run(longUrl).finally(() => { running = null })
+    running = call
+    return call
+  }
+
+  return {
+    ensure: (longUrl: string): Promise<boolean> => ensure(longUrl),
+    shortFor: (longUrl: string): string | null => (canRegister(deps.origin) ? shortToShow(deps.origin, held(), longUrl, deps.now()) : null),
+    onChange(listener: () => void): () => void {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}

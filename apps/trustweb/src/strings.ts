@@ -455,7 +455,7 @@ export const S = {
   meetWaysNow: 'Now: this QR code, or the link (Copy link) for someone you are not meeting in person.',
   meetWaysSoon: 'Coming soon: a moving QR code.',
   meetWaysLater: 'Coming later: NFC, Bluetooth and AirDrop, phone to phone.',
-  meetNfcWrite: 'Write the long link to an NFC tag',
+  meetNfcWrite: 'Write your link to an NFC tag',
   meetNfcWaiting: 'Hold a tag or card to the back of this phone...',
   meetNfcDone: 'Written. Anyone who taps that tag gets your link.',
   meetNfcFailed: 'Could not write the tag.',
@@ -1195,4 +1195,14 @@ export const S = {
   chatNewToast: (name: string) => `New message from ${name}`,
   chatNotifBody: (name: string) => `${name} wrote to you`,
   chSharedBy: (name: string) => `Shared by ${name} when you connected`,
+  // Wave 6b: one connect code (connect_code.ts, connect_view.ts) and the add sheet after a scan (connect_add_view.ts)
+  connectCodePending: 'Long link, until the server answers. The short code follows by itself.',
+  connectCodeNote: 'This short link is your connect code: it stays the same when your name changes. Our server keeps your connect link for it (your name, your TrustWeb address, no notes and no messenger links). The long link below works without our server.',
+  connectAddTitle: (name: string) => (name ? `Add ${name} to your web?` : 'Add this person to your web?'),
+  connectAddLead: 'You are connected. Choose how close you are; you can change it any time on their card.',
+  connectAddNamePh: 'Name',
+  connectAddWaiting: 'Waiting for their name...',
+  connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
+  connectAddedToast: (name: string) => `${name} is in your web.`,
+  cardNoMessenger: (name: string) => `No Signal or Molly link from ${name} yet. If they share one, it shows here.`,
 } as const

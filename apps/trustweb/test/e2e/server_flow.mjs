@@ -26,6 +26,7 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { checker, launch, newPhone, record, startFakeProvider, startPhone, startRelay, startSwissServer, startVite } from './swiss_harness.mjs'
+import { acceptAdd } from '../helpers/connect_add.mjs'
 
 const SHOTS = process.env.TW_SHOTS
 const c = checker()
@@ -338,6 +339,7 @@ async function partD(browser, base, provider) {
   await b.goto(url)
   await b.getByLabel('Your first name').fill('Anna')
   await b.getByRole('button', { name: 'Connect', exact: true }).click()
+  await acceptAdd(b)
   await until(async () => (await record(a)).peers.length === 1, 20_000)
   ok('Anna is connected to Jakob', (await record(a)).peers.length === 1)
 
