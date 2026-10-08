@@ -103,12 +103,24 @@ export function readConnectRecord(raw: unknown): ConnectRecord | null {
   }
 }
 
-/** Boot migration: a connectCode value that is not a good record is dropped. True when the state changed. Never throws. */
+/** Boot migration: a connectCode value that is not a good record is dropped; its name fields are cleaned (valid, unique, at most two aliases). True when the state changed. Never throws. */
 export function repairConnectRecord(state: { connectCode?: unknown }): boolean {
   if (state.connectCode === undefined) return false
-  if (readConnectRecord(state.connectCode)) return false
-  delete state.connectCode
-  return true
+  const clean = readConnectRecord(state.connectCode)
+  if (!clean) {
+    delete state.connectCode
+    return true
+  }
+  // A readable record keeps whatever else it holds (a newer build's fields); only its three name fields are made exactly what the reader sees.
+  const raw = state.connectCode as Record<string, unknown>
+  let changed = false
+  for (const key of ['name', 'aliases', 'lockedNames'] as const) {
+    if (JSON.stringify(raw[key]) === JSON.stringify(clean[key])) continue
+    if (clean[key] === undefined) delete raw[key]
+    else raw[key] = clean[key]
+    changed = true
+  }
+  return changed
 }
 
 /** The short link of a code on this origin (never APP_URL: the app may live under /trustweb/, /c/ sits at the root). */

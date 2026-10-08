@@ -54,6 +54,15 @@ describe('readConnectRecord / repairConnectRecord', () => {
     expect(good.connectCode).toEqual(record())
     expect(repairConnectRecord({})).toBe(false)
   })
+  it('a readable record with damaged name fields is cleaned in place, other fields kept; a clean one is left alone', () => {
+    const state = { connectCode: { ...record({ name: 'ada', aliases: ['A!', 'ada', 'ada2', 'ada3', 'ada4'], lockedNames: ['gone', 'ada2'] }), futureField: 7 } }
+    expect(repairConnectRecord(state)).toBe(true)
+    expect(state.connectCode).toMatchObject({ name: 'ada', aliases: ['ada2', 'ada3'], lockedNames: ['ada2'], futureField: 7 })
+    expect(repairConnectRecord(state)).toBe(false)
+    const junk = { connectCode: { ...record(), aliases: 'x', lockedNames: [5] } }
+    expect(repairConnectRecord(junk)).toBe(true)
+    expect('aliases' in junk.connectCode || 'lockedNames' in junk.connectCode).toBe(false)
+  })
   it('an old record without the field migrates (nothing there, nothing thrown)', () => {
     const old = { v: 1, me: { id: 'a', displayName: 'A' }, people: [], peers: [], inventory: [], log: [], notificationsOn: false }
     expect(() => repairConnectRecord(old)).not.toThrow()

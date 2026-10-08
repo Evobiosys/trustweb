@@ -15,6 +15,7 @@
  *   D. Roll back: the record the new build saved loads in the OLD build
  *      (TW_OLD_DIST, the pre-wave dist), an old-build save keeps every new
  *      field, and the new build reads it back without a change.
+ *   G. (wave 6e) The fields of this wave: kept, repaired when damaged, kept by the OLD build's saves (TW_OLD_DIST = the live build 206c1d7).
  *   E. The audio store failing (IndexedDB refused; quota on write): recording
  *      and saving still work, the memo and its notes are stored, no player.
  *
@@ -286,6 +287,88 @@ async function partF(browser, base) {
   }
 }
 
+/**
+ * G (wave 6e): the fields this wave adds (shareMode, sharePins, Person.generalNote, safetyLinkShownAt, connectCode.aliases and lockedNames,
+ * contactSentChannels). A record that holds them well-formed keeps every one in this build; a record that holds them damaged (an unknown mode,
+ * a pin list of junk, a note that is not text or far too long) is repaired at boot without throwing and without losing anything else; the
+ * pre-wave build opens it, and its saves keep every new field; this build reads that back without a change.
+ */
+const CODE = 'AbCdEfGhIjKlMnOpQrStUv'
+const SECRET = 'S'.repeat(43)
+const sixEFields = (s) => JSON.stringify({
+  mode: s.shareMode, pins: s.sharePins, seen: s.safetyLinkShownAt, sent: s.contactSentChannels,
+  notes: s.people.map((p) => p.generalNote ?? null), code: s.connectCode ? { n: s.connectCode.name, a: s.connectCode.aliases, l: s.connectCode.lockedNames } : null,
+})
+async function partG(browser, base) {
+  console.log('G. wave 6e fields: kept, repaired when damaged, and kept by the pre-wave build (rollback)')
+  const good = preWaveState()
+  good.shareMode = 'trustweb-whatsapp'
+  good.sharePins = ['only-signal', 'trustweb-whatsapp']
+  good.myChannels = { signal: 'https://signal.me/#eu/adaUsernameCode0123456789', whatsapp: 'https://wa.me/qr/ABCDEFGH12345' }
+  good.safetyLinkShownAt = NOW
+  good.contactSentChannels = { peerx: { signal: 'https://signal.me/#eu/adaUsernameCode0123456789' } }
+  good.people[0].generalNote = 'Likes chess.\nBirthday in May.'
+  good.connectCode = { code: CODE, secret: SECRET, url: 'https://app.idea2.site/?connect=x', updatedAt: NOW, name: 'ada', aliases: ['ada2'], lockedNames: ['ada2'] }
+  const raw = JSON.stringify(good)
+  const { ctx, page, errors } = await pageWith(browser, base, { [ME]: raw })
+  await webUp(page)
+  await page.waitForTimeout(1_000)
+  const s1 = JSON.parse((await readAll(page))[ME])
+  ok('wave 6e record: opens on the web, nothing lost', JSON.stringify(counts(s1)) === JSON.stringify(counts(good)))
+  ok('wave 6e record: every wave 6e field kept as it was', sixEFields(s1) === sixEFields(good), sixEFields(s1))
+  ok('wave 6e record: no page errors', errors.length === 0, errors.join(' | '))
+  const settled = (await readAll(page))[ME]
+  await ctx.close()
+
+  const bad = preWaveState()
+  bad.shareMode = 'both'
+  bad.sharePins = ['nope', 'only-signal', 'only-signal', 'trustweb-signal', 'only-trustweb']
+  bad.people[0].generalNote = 12345
+  bad.people[1].generalNote = 'x'.repeat(9000)
+  bad.people[2].generalNote = '   '
+  bad.connectCode = { code: CODE, secret: SECRET, url: 'https://app.idea2.site/?connect=x', updatedAt: NOW, name: 'ada', aliases: ['A!', 'ada', 'ada3', 'ada4', 'ada5'], lockedNames: ['gone', 'ada3'] }
+  const d = await pageWith(browser, base, { [ME]: JSON.stringify(bad) })
+  await webUp(d.page)
+  await d.page.waitForTimeout(1_000)
+  const fixed = JSON.parse((await readAll(d.page))[ME])
+  ok('damaged 6e fields: opens on the web, nothing else lost', JSON.stringify(counts(fixed)) === JSON.stringify(counts(bad)))
+  ok('damaged 6e fields: an unknown mode is dropped, the pin list is cleaned to known, unique, at most two', fixed.shareMode === undefined && JSON.stringify(fixed.sharePins) === JSON.stringify(['only-signal', 'trustweb-signal']), JSON.stringify([fixed.shareMode, fixed.sharePins]))
+  ok('damaged 6e fields: a note that is not text is dropped, an over-long one cut to 4000, an empty one removed',
+    fixed.people[0].generalNote === undefined && fixed.people[1].generalNote.length === 4000 && fixed.people[2].generalNote === undefined)
+  ok('damaged 6e fields: the code record keeps a valid name, at most two aliases and locked only for names held',
+    fixed.connectCode?.name === 'ada' && JSON.stringify(fixed.connectCode.aliases) === JSON.stringify(['ada3', 'ada4']) && JSON.stringify(fixed.connectCode.lockedNames) === JSON.stringify(['ada3']), JSON.stringify(fixed.connectCode))
+  ok('damaged 6e fields: no page errors', d.errors.length === 0, d.errors.join(' | '))
+  const boot1 = (await readAll(d.page))[ME]
+  await d.page.reload()
+  await webUp(d.page)
+  ok('damaged 6e fields: the second boot saves the very same bytes (idempotent)', (await readAll(d.page))[ME] === boot1)
+  await d.ctx.close()
+
+  if (!OLD_DIST || !existsSync(path.join(OLD_DIST, 'index.html'))) { console.log('  SKIP  no TW_OLD_DIST: the rollback half of G'); return }
+  const server = await serveDist(OLD_DIST, OLD_PORT)
+  const oldBase = `http://127.0.0.1:${OLD_PORT}/`
+  try {
+    const old = await pageWith(browser, oldBase, { [ME]: settled })
+    await webUp(old.page)
+    ok('the pre-wave build opens the wave 6e record on the web', await old.page.getByLabel('Your first name').count() === 0)
+    await old.page.locator('nav.tabs button', { hasText: 'Inventory' }).click()
+    await old.page.locator('.inv .mini').first().click()
+    await old.page.locator('.inv .mini').first().click()
+    const back = JSON.parse((await readAll(old.page))[ME])
+    ok('after a pre-wave-build save: nothing lost', JSON.stringify(counts(back)) === JSON.stringify(counts(JSON.parse(settled))))
+    ok('after a pre-wave-build save: every wave 6e field is still there', sixEFields(back) === sixEFields(JSON.parse(settled)), sixEFields(back))
+    ok('pre-wave build: no page errors', old.errors.length === 0, old.errors.join(' | '))
+    await old.ctx.close()
+    const again = await pageWith(browser, base, { [ME]: JSON.stringify(back) })
+    await webUp(again.page)
+    await again.page.waitForTimeout(1_000)
+    ok('and this build reads it back without a change', (await readAll(again.page))[ME] === JSON.stringify(back))
+    await again.ctx.close()
+  } finally {
+    await new Promise((r) => server.close(r))
+  }
+}
+
 async function recordAndSaveMemo(page) {
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
@@ -351,6 +434,7 @@ async function main() {
     await partD(browser, base, newRecord)
     await partE(browser, base)
     await partF(browser, base)
+    await partG(browser, base)
   } catch (e) {
     failures++
     console.log('  FAIL  run aborted: ' + (e?.stack ?? e))
