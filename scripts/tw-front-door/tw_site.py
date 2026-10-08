@@ -33,7 +33,9 @@ is described as "coming, switched off today" until --transcribe-live; it has its
 own flag because it stays off until a provider key is placed, whatever hosting
 does), hops-off / hops-on (wave 6: the copy that says a question reaches only your direct connections today, versus
 the copy that says it can travel on through friends and you choose how far; hops-on only with --hops-live, which the
-orchestrator passes once the app that relays a question through friends is live), draft / prod, org / com, terms.
+orchestrator passes once the app that relays a question through friends is live), inperson-off / inperson-on (wave 6b: the copy
+describing meeting in person with QR scan and code link; inperson-lookup-off/on for typing code/name/DID; inperson-advanced-off/on for
+advanced sharing choices), draft / prod, org / com, terms.
 Blocks must not nest.
 
 TRANSCRIPTION PROVIDER FLAG (who the copy says transcribes on the server). The words on privacy, pricing
@@ -118,6 +120,9 @@ class Flags:
     app_base: str = DEFAULT_APP_BASE
     transcribe_provider: TranscribeProvider = TranscribeProvider.OPENROUTER
     hops_live: bool = False
+    inperson_live: bool = False
+    inperson_lookup: bool = False
+    inperson_advanced: bool = False
 
     @property
     def terms_visible(self) -> bool:
@@ -144,6 +149,9 @@ class Flags:
             "live" if self.services_live else "soon",
             "tx-on" if self.transcribe_live else "tx-off",
             "hops-on" if self.hops_live else "hops-off",
+            "inperson-on" if self.inperson_live else "inperson-off",
+            "inperson-lookup-on" if self.inperson_lookup else "inperson-lookup-off",
+            "inperson-advanced-on" if self.inperson_advanced else "inperson-advanced-off",
             f"prov-{self.transcribe_provider.value}",
             "draft" if self.draft else "prod",
             self.site.value,
@@ -744,6 +752,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="describe passing a question on through friends as live (default: not built yet, only direct connections)",
     )
     ap.add_argument(
+        "--inperson-live",
+        action="store_true",
+        help="describe meeting in person with QR scan and code link as live (default: not built yet)",
+    )
+    ap.add_argument(
+        "--inperson-lookup",
+        action="store_true",
+        help="describe typing code / name / DID as live (default: not built yet)",
+    )
+    ap.add_argument(
+        "--inperson-advanced",
+        action="store_true",
+        help="describe advanced sharing choices as live (default: not built yet)",
+    )
+    ap.add_argument(
         "--transcribe-provider",
         default=os.environ.get(
             TRANSCRIBE_PROVIDER_ENV, TranscribeProvider.OPENROUTER.value
@@ -794,6 +817,9 @@ def main(argv: list[str]) -> int:
         app_base=args.app_base,
         transcribe_provider=provider,
         hops_live=args.hops_live,
+        inperson_live=args.inperson_live,
+        inperson_lookup=args.inperson_lookup,
+        inperson_advanced=args.inperson_advanced,
     )
     if flags.is_org and args.src is None:
         raise SystemExit("--src is required for --site org")
@@ -802,7 +828,8 @@ def main(argv: list[str]) -> int:
     print("built: " + " ".join(written))
     print(
         f"flags: draft={flags.draft} services_live={flags.services_live} "
-        f"transcribe_live={flags.transcribe_live} hops_live={flags.hops_live} terms={flags.terms_visible} "
+        f"transcribe_live={flags.transcribe_live} hops_live={flags.hops_live} inperson_live={flags.inperson_live} "
+        f"inperson_lookup={flags.inperson_lookup} inperson_advanced={flags.inperson_advanced} terms={flags.terms_visible} "
         f"site={flags.site.value} host={flags.site_host} app={flags.app_base} "
         f"transcribe_provider={flags.transcribe_provider.value}"
     )
