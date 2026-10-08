@@ -39,6 +39,20 @@ describe('the hard guard: an account that is not kept behaves exactly as before'
   })
 })
 
+describe('the hard guard, exhaustively: the sweep takes down exactly the accounts the build before took down', () => {
+  it('for 600 records without `keep` (with and without an end, past and future, odd values), the old rule and the new one agree', () => {
+    const ends = [undefined, NOW - 400 * DAY, NOW - 1, NOW, NOW + 1, NOW + 7 * DAY, NOW + 1000 * DAY, Number.NaN]
+    const created = [NOW - 900 * DAY, NOW - 8 * DAY, NOW - 6 * DAY, NOW]
+    const records = []
+    for (const e of ends) for (const c of created) for (let i = 0; i < 18; i++) {
+      records.push({ id: `${records.length}`, name: 'x-demo', createdAt: c, ...(e === undefined ? {} : { expiresAt: e }), ...(i % 3 === 0 ? { peerId: 'p' } : {}) })
+    }
+    expect(records.length).toBeGreaterThanOrEqual(576)
+    const old = records.filter((t) => endOf(t) <= NOW).map((t) => t.id)
+    expect(dueForTakeDown(records, NOW, endOf).map((t) => t.id)).toEqual(old)
+  })
+})
+
 describe('keeping and un-keeping', () => {
   it('a kept account is never due, however old; keeping twice changes nothing the second time', () => {
     const a = { id: 'a', name: 'Anna-demo', createdAt: NOW - 400 * DAY, expiresAt: NOW - 390 * DAY }

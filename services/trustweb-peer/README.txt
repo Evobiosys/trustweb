@@ -18,6 +18,17 @@ sends the same sealed fixed-length answer after the same 30 s window. Reuses app
 copies nothing. Everything is documented at the top of peer.ts; the inventory design is in
 INVENTORY_ARCHITECTURE.txt next to this file.
 
+WAVE 6 (2026-10-08): TRAVELLING ASKS, DEGREES, FORGIVING MATCHING (this replaces every "one hop only" reading above)
+An ask may now travel further than one step: the asker chooses how far (QueryEnvelope maxHops, 1 = the default, the ask of the
+build before, which carries none of the new fields). The door answers its own preset lines at hop 0 and, within each line's
+optional "degrees" (default one degree for an "fof" line), at hop 1 and further. A travelling ask goes to the owner's phone at the
+same step with `door`, `via` [asker] and `seen`, and the OWNER'S PHONE then passes it on to his own friends per his own settings
+(hops.ts, net.ts); the door never passes an ask on itself. A DIRECT ask (Settings > Advanced "Ask only my direct contacts",
+direct:true) is still never forwarded. Repeats and cycles are answered like no match, at the same moment, never forwarded twice.
+Answer moments are a function of the envelope alone (hops.ts answerDelayMs / doorAnswerDelayMs), so a decline, no match, the phone
+off and a further step cannot be told apart by WHEN. The matcher widens an ask on the door's own lines (typos, plurals, "Community
+hof" for "Communityhof": lexicon.forgivingAskTemplate); nothing of that widening ever travels. 66 tests in 4 files after wave 6.
+
 OWNER BINDING (the claim ceremony)
 Start the peer with TW_PEER_CLAIM=1 (or touch <state>/claim-open), then open its connect link on the owner's
 phone within TW_PEER_CLAIM_MINUTES (default 10). The first phone to do so becomes the owner; the window closes;
@@ -63,14 +74,14 @@ per asker), TW_PEER_FORWARD (1|0, default 1), TW_PEER_FORWARD_WAIT_MS (default 1
 180 s), TW_PEER_CLAIM (1 opens a claim window at start), TW_PEER_CLAIM_MINUTES (default 10). SIGHUP reloads the
 inventory and the grants.
 
-TEST (2026-10-07, wave 1733: 57 tests in 4 files)
+TEST (2026-10-08, wave 6: 66 tests in 4 files; 2026-10-07: 57)
   cd services/trustweb-peer && TW_VITEST_CACHE=$(mktemp -d) ../../apps/demo/node_modules/.bin/vitest run --config test/vitest.config.mjs --root .
   ../../apps/demo/node_modules/.bin/tsc --noEmit -p tsconfig.json      (peer.ts, inventory_export.ts, the exporter CLI)
-  test/peer.test.mjs             the peer (14): presets, claim, forward, granted policy, against an in-memory relay
+  test/peer.test.mjs             the peer (22): presets, claim, forward, granted policy, travelling asks, against an in-memory relay
   test/inventory_export.test.mjs the exporter (24): marks, Tana reader, the four outputs, property test "nothing unmarked
                                  leaves" over 400 random inventories, CLI dry run against a fake tana_mcp.sh
   test/personal.test.mjs         "without an app" end to end (6): exporter -> server file -> personal peer -> granted asker
-  test/scripts.test.mjs          grant, claim and --republish-cards against a fake host; personal --host never defaulted (13)
+  test/scripts.test.mjs          grant, claim and --republish-cards against a fake host; personal --host never defaulted (14)
   TW_VITEST_CACHE gives a run its own cache dir (node_modules are shared with the primary checkout).
   (The app's e2e test demo_account.mjs step 6 ran against the OLD auto-answering peer; it needs an owner phone
   or preset lines now. Not changed by this pass: apps/trustweb is another agent's.)
