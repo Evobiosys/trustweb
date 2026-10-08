@@ -133,7 +133,7 @@ class Subpages(unittest.TestCase):
     def test_the_faq_section_comes_from_the_one_faq_fragment(self) -> None:
         f = flags(site.Site.ORG)
         section = site.faq_section(FRAG, f)
-        self.assertEqual(section.count('<details class="q"'), 11)  # wave 6b added q-meet-in-person
+        self.assertEqual(section.count('<details class="q"'), 12)  # wave 6e added q-is-this-safe
         self.assertIn('<a href="faq.html">All questions', section)
         self.assertNotIn("<!--", section.replace("<!-- ===", "").replace("=== -->", ""))
 

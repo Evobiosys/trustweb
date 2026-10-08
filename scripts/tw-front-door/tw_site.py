@@ -123,6 +123,7 @@ class Flags:
     inperson_live: bool = False
     inperson_lookup: bool = False
     inperson_advanced: bool = False
+    code_public: bool = False
 
     @property
     def terms_visible(self) -> bool:
@@ -159,6 +160,8 @@ class Flags:
         }
         if self.terms_visible:
             names.add("terms")
+        if self.code_public:
+            names.add("code-public")
         return frozenset(names)
 
     def tokens(self) -> dict[str, str]:
@@ -781,6 +784,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="publish terms.html outside the draft",
     )
     ap.add_argument(
+        "--code-public",
+        action="store_true",
+        help="include GitHub link in the Is-this-safe FAQ (default: omitted)",
+    )
+    ap.add_argument(
         "--site",
         choices=[site.value for site in Site],
         default=Site.ORG.value,
@@ -821,6 +829,7 @@ def main(argv: list[str]) -> int:
         inperson_live=args.inperson_live,
         inperson_lookup=args.inperson_lookup,
         inperson_advanced=args.inperson_advanced,
+        code_public=args.code_public,
     )
     if flags.is_org and args.src is None:
         raise SystemExit("--src is required for --site org")
@@ -830,7 +839,7 @@ def main(argv: list[str]) -> int:
     print(
         f"flags: draft={flags.draft} services_live={flags.services_live} "
         f"transcribe_live={flags.transcribe_live} hops_live={flags.hops_live} inperson_live={flags.inperson_live} "
-        f"inperson_lookup={flags.inperson_lookup} inperson_advanced={flags.inperson_advanced} terms={flags.terms_visible} "
+        f"inperson_lookup={flags.inperson_lookup} inperson_advanced={flags.inperson_advanced} code_public={flags.code_public} terms={flags.terms_visible} "
         f"site={flags.site.value} host={flags.site_host} app={flags.app_base} "
         f"transcribe_provider={flags.transcribe_provider.value}"
     )

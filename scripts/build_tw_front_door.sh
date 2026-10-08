@@ -123,6 +123,7 @@ HOPS_LIVE="${TW_HOPS_LIVE:-0}"   # <- passing a question on through friends flag
 INPERSON_LIVE="${TW_INPERSON_LIVE:-0}"   # <- meeting in person flag, see the header
 INPERSON_LOOKUP="${TW_INPERSON_LOOKUP:-0}"   # <- typing code/name/DID flag, see the header
 INPERSON_ADVANCED="${TW_INPERSON_ADVANCED:-0}"   # <- advanced sharing choices flag, see the header
+CODE_PUBLIC="${TW_CODE_PUBLIC:-0}"   # <- GitHub link in is-this-safe FAQ flag, see the header
 TRANSCRIBE_PROVIDER="${TW_TRANSCRIBE_PROVIDER:-openrouter}"   # <- which provider the transcription copy names, see the header
 case "$TRANSCRIBE_PROVIDER" in
   openrouter|berget|berget-only) ;;
@@ -139,8 +140,9 @@ for arg in "$@"; do
     --inperson-live) INPERSON_LIVE=1 ;;
     --inperson-lookup) INPERSON_LOOKUP=1 ;;
     --inperson-advanced) INPERSON_ADVANCED=1 ;;
+    --code-public) CODE_PUBLIC=1 ;;
     --publish-terms) PUBLISH_TERMS=1 ;;
-    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --hops-live, --inperson-live, --inperson-lookup, --inperson-advanced, --publish-terms)" >&2; exit 2 ;;
+    *) echo "unknown option: $arg (use --draft, --services-live, --transcribe-live, --hops-live, --inperson-live, --inperson-lookup, --inperson-advanced, --code-public, --publish-terms)" >&2; exit 2 ;;
   esac
 done
 
@@ -172,6 +174,7 @@ fi
 [ "$INPERSON_LIVE" = 1 ] && ARGS+=(--inperson-live)
 [ "$INPERSON_LOOKUP" = 1 ] && ARGS+=(--inperson-lookup)
 [ "$INPERSON_ADVANCED" = 1 ] && ARGS+=(--inperson-advanced)
+[ "$CODE_PUBLIC" = 1 ] && ARGS+=(--code-public)
 [ "$PUBLISH_TERMS" = 1 ] && ARGS+=(--publish-terms)
 python3 -I "$FRAG/tw_site.py" "${ARGS[@]}"
 if [ "$SITE_HOST" != idea2.site ]; then
