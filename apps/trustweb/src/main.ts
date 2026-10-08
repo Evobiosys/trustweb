@@ -59,6 +59,7 @@ import { canEndDemoAccount } from './demo_devices'
 import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields, travelsInPack } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
+import { asksMatchNotes, notesMatchDefault } from './notes_source'
 import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
@@ -235,7 +236,10 @@ try {
     const noted = normaliseNoteFields(state)
     // Wave 6 (N6): a demo account made before had its inviter and his front door as two people; now one (one_jakob.ts).
     const merged = mergeOneJakob(state, S.demoPeerContext)
-    if (sourced || noted || merged) save()
+    // Wave 6 (notes_source.ts): the side-by-side demo phones do not let asks match notes (their content is imaginary); stored once, so it also holds after "Add demo content" changes the default.
+    const soloOff = solo && state.asksMatchNotes === undefined
+    if (soloOff) state.asksMatchNotes = false
+    if (sourced || noted || merged || soloOff) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -1943,7 +1947,7 @@ function recordPastMeeting(opts: { personId?: string } = {}): void {
   m.durationMs = Math.max(m.durationMs, totalMs())
   m.meeting = m.meeting || draft.mode === RecordMode.Meeting
   const lines = draft.lines.filter((l) => l.text.trim()).map((l) => ({
-    text: l.text.trim(), tag: l.tag, ...(l.atMs === undefined ? {} : { atMs: l.atMs }), ...(l.line === undefined ? {} : { line: l.line }),
+    text: l.text.trim(), tag: l.tag, audience: l.audience, ...(l.atMs === undefined ? {} : { atMs: l.atMs }), ...(l.line === undefined ? {} : { line: l.line }),
   }))
   if (lines.length) m.lines = lines
   const transcript = draft.segments.map((x) => ({ speaker: x.speaker, atMs: x.atMs, text: x.text }))
@@ -3339,6 +3343,11 @@ function settingsSheet(): void {
       // Off is stored as absent: the record keeps only what differs from the default.
       onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
+    el('button', {
+      class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
+      // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
+      onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
+    }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
     ...HINTS.map((id) => el('button', {
       class: 'radio' + (hintHidden(id) ? '' : ' on'),
       'aria-pressed': String(!hintHidden(id)),

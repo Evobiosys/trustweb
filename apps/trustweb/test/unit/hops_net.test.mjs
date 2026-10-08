@@ -329,3 +329,34 @@ describe('forgiving matching on the REAL ask path (wave 6 U2 hook): a phone and 
     rmSync(dir, { recursive: true, force: true })
   }, 60_000)
 })
+
+describe('notes through me (wave 6 U4 b): a meeting note answers an ask, but only the person says yes', () => {
+  const note = { text: 'Pickleball court behind the old tram depot, bookable online', tag: 'note', audience: Audience.Friends }
+  const meetings = [{ id: 'm1', about: 'Anna Berger', kind: 'who', where: 'Café Prückel', startedAt: Date.now() - 3 * 86_400_000, endedAt: Date.now(), durationMs: 1, meeting: true, lines: [note], transcript: [] }]
+
+  it('the hit goes in front of the holder, never auto-answered; "no" looks like no match; "yes" carries the line only', async () => {
+    const asker = await phone('Asker')
+    const holder = await phone('Holder', [], { state: { meetings } })
+    await connect(asker, holder)
+    holder.share = () => null // the person has not decided yet
+    const pending = asker.net.ask('Do you know a good pickleball court?')
+    await until(() => holder.asks.length === 1)
+    expect(holder.asks[0].matches.map((m) => m.text)).toEqual([note.text])
+    await holder.asks[0].decide(false)
+    expect(sharedOf(await pending)).toEqual([])
+
+    holder.share = () => true
+    const results = await asker.net.ask('Do you know a good pickleball court?')
+    const items = sharedOf(results)
+    expect(items.map((i) => i.text)).toEqual([note.text])
+    expect(JSON.stringify(results)).not.toMatch(/Anna|Prückel/)
+  }, 20_000)
+
+  it('with the setting off the holder is never asked', async () => {
+    const asker = await phone('Asker')
+    const holder = await phone('Holder', [], { state: { meetings, asksMatchNotes: false } })
+    await connect(asker, holder)
+    expect(sharedOf(await asker.net.ask('Do you know a good pickleball court?'))).toEqual([])
+    expect(holder.asks.length).toBe(0)
+  }, 20_000)
+})

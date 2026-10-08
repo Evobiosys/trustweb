@@ -411,7 +411,7 @@ export interface PastMeeting {
   /** A meeting (who, where, consent) rather than a memo by yourself. */
   meeting: boolean
   /** The notes; `atMs` / `line` say where in the recording each was noted, when known (wave 1733). */
-  lines: { text: string; tag: Tag; atMs?: number; line?: number }[]
+  lines: { text: string; tag: Tag; atMs?: number; line?: number; audience?: Audience }[]
   transcript: TranscriptLine[]
   /** Another phone sent it (notes and transcript of a meeting they recorded). */
   fromName?: string
@@ -547,6 +547,12 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /**
+   * Wave 6 (Jakob 2026-10-08: "all my notes should be queriable"): meeting notes also answer asks that
+   * arrive through this phone (notes_source.ts), each hit still in front of the person for a yes or no.
+   * Absent: on for a personal account, off for a demo phone or a demo account (notesMatchDefault).
+   */
+  asksMatchNotes?: boolean
   /**
    * Wave 3: the web search engines this phone said yes to sending its words
    * to, for results inside the app (web_results.ts; once per engine). Absent: none.
@@ -860,15 +866,7 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { t
   const threads: ChatThread[] = []
   const push = (threadId: string, text: string, context: string, at: number): void => {
     refs.set(threadId, { threadId, text, context, at })
-    threads.push({
-      id: threadId,
-      title: context,
-      kind: 'direct',
-      participants: [s.me.displayName],
-      messages: [{ ts: new Date(at).toISOString(), author: s.me.displayName, text, system: false }],
-      source: 'self',
-      included: true,
-    })
+    threads.push(lineThread(s.me.displayName, threadId, text, context, at))
   }
   for (const item of s.inventory) {
     if (!item.included || !audienceAdmits(item.audience, ring)) continue
@@ -883,6 +881,19 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { t
     }
   }
   return { threads, refs }
+}
+
+/** One line as the matcher reads it: a single-message thread, source 'self' (owner-declared), like apps/demo's inventoryThreads(). */
+export function lineThread(owner: string, threadId: string, text: string, context: string, at: number): ChatThread {
+  return {
+    id: threadId,
+    title: context,
+    kind: 'direct',
+    participants: [owner],
+    messages: [{ ts: new Date(at).toISOString(), author: owner, text, system: false }],
+    source: 'self',
+    included: true,
+  }
 }
 
 /**

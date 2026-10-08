@@ -109,6 +109,8 @@ export const S = {
   setRingNames: 'Show ring names on the web',
   setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
+  setNotesMatch: 'Let asks match my notes too',
+  setNotesMatchHint: 'When somebody asks through you, the notes you took in meetings can match too (never a note that is "Only me"). You still say yes or no to every ask, and only the one line goes out, never the whole note or the meeting. Off for a demo phone.',
   setDirectOnly: 'Ask only my direct contacts',
   setDirectOnlyHint: 'Your asks go to the people you are connected with and stop there: each one answers from their own inventory and never passes your ask on to their friends or to a front door. Off: they may pass it on where they allowed it.',
   addDeviceShort: 'Add a device',

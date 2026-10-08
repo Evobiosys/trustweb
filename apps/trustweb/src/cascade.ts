@@ -24,6 +24,7 @@ import { HOP_CAP } from '../../demo/src/types'
 import type { ChatThread } from '../../demo/src/types'
 import { Audience, audienceAdmits, threadsForRing } from './model'
 import type { AppState, InventoryItem, LineRef, MatchScope, NoteLine, Ring } from './model'
+import { meetingNoteThreads } from './notes_source'
 
 /** Stored `degrees` for "as far as any ask goes" (bounded by hops.ts HOP_CAP in practice). */
 export const DEGREES_UNBOUNDED = -1
@@ -104,7 +105,7 @@ export function lineAdmits(line: Pick<NoteLine, 'audience' | 'degrees'>, ring: R
  * Everything an incoming ask may be matched against, as the matcher's input:
  * model.ts threadsForRing over a copy of the record that holds only the lines
  * this step admits. THE function the incoming-ask matchers call (net.ts and
- * services/trustweb-peer); a further source (U4: notes "through me") joins here.
+ * services/trustweb-peer). The notes of stored meetings join here too (notes_source.ts, wave 6 U4).
  */
 export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchScope): { threads: ChatThread[]; refs: Map<string, LineRef> } {
   const admitted: AppState = {
@@ -112,5 +113,8 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
     inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop)),
     people: s.people.map((p) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
   }
-  return threadsForRing(admitted, ring, scope)
+  const base = threadsForRing(admitted, ring, scope)
+  const notes = meetingNoteThreads(s, ring, hop, scope)
+  notes.refs.forEach((ref, id) => base.refs.set(id, ref))
+  return { threads: [...base.threads, ...notes.threads], refs: base.refs }
 }
