@@ -1419,6 +1419,8 @@ function personSheet(personId: string): void {
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
     current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
+    // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
+    past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     p.peerId ? passOnRow(p, (next) => { p.passOn = next; save(); personSheet(p.id) }) : null,
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),

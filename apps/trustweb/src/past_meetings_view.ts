@@ -11,6 +11,7 @@ import type { StoredTake } from './audio_store'
 import { mountPlayer } from './audio_player'
 import type { PlayerHandle } from './audio_player'
 import { meetingSearchPanel } from './meeting_search_view'
+import { lineIsCurrent, personNotes } from './person_notes'
 import type { Segment } from './meeting_transcriber'
 import { isDemoPerson, pastMeetings } from './model'
 import type { AppState, ItemSource, PastMeeting, Tag, TranscriptLine } from './model'
@@ -27,6 +28,12 @@ export const MEETINGS_MAX = 200
 
 /** A line to open a past meeting at: a note, or a transcript line (highlighted and scrolled to). */
 export type PastFocus = SourceFocus
+
+/** Where the back link of an opened meeting goes (default: the list of past meetings). */
+export interface PastBack {
+  label: string
+  go: () => void
+}
 
 export interface PastMeetingsHooks {
   state: () => AppState
@@ -53,7 +60,9 @@ export interface PastMeetingsHooks {
 export interface PastMeetings {
   link(): HTMLElement
   listSheet(): void
-  open(m: PastMeeting, focus?: PastFocus, from?: ItemSource): void
+  open(m: PastMeeting, focus?: PastFocus, from?: ItemSource, back?: PastBack): void
+  /** A person's card section "Notes": their note lines and past meetings per day, searchable (person_notes.ts). */
+  personSection(personId: string, back: PastBack): HTMLElement
   searchView(query: string, onQuery: (q: string) => void, onClose: () => void): HTMLElement
   keepAudio(meetingId: string, recorded: readonly Recording[]): Promise<void>
   cap(list: PastMeeting[]): PastMeeting[]
@@ -155,11 +164,11 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     listSheet()
   }
 
-  function open(m: PastMeeting, focus?: PastFocus, from?: ItemSource): void {
+  function open(m: PastMeeting, focus?: PastFocus, from?: ItemSource, back?: PastBack): void {
     const person = m.personId ? h.state().people.find((p) => p.id === m.personId) : undefined
     const general = cleanGeneralNotes(m.generalNotes)
     h.openSheet([
-      el('button', { class: 'back-link', onclick: listSheet }, ['‹ ' + S.pastTitle]),
+      el('button', { class: 'back-link', 'data-back': back ? 'person' : 'list', onclick: back ? back.go : listSheet }, ['‹ ' + (back ? back.label : S.pastTitle)]),
       el('h3', {}, [m.about, dummyFor(m)]),
       el('p', { class: 'meta' }, [pastMeta(m)]),
       general ? el('h4', { class: 'eyebrow' }, [S.pastGeneralNotes]) : null,
@@ -182,7 +191,35 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     h.opened?.(m)
   }
 
+  /** The "Notes" section of a person's card: a search field, then the days with their meetings and lines. */
+  function personSection(personId: string, back: PastBack): HTMLElement {
+    const person = h.state().people.find((p) => p.id === personId)
+    const input = el('input', {
+      class: 'field search-field person-notes-field', type: 'search', placeholder: S.personNotesPh(person?.name ?? ''),
+      'aria-label': S.personNotesPh(person?.name ?? ''), autocomplete: 'off',
+    })
+    const list = el('div', { class: 'person-notes-list', 'aria-live': 'polite' })
+    const fill = (): void => {
+      const days = personNotes(h.state(), personId, input.value, (m) => [whenLabel(m.startedAt), ...isoDateLabels(m.startedAt)])
+      if (!days.length) {
+        list.replaceChildren(el('p', { class: 'meta', 'data-person-notes-empty': '1' }, [input.value.trim() ? S.personNotesNothing(input.value.trim()) : S.personNotesNone]))
+        return
+      }
+      list.replaceChildren(...days.map((d) => el('div', { class: 'pn-day', 'data-pn-day': String(d.day) }, [
+        el('h5', { class: 'eyebrow' }, [new Date(d.day).toLocaleDateString([], { dateStyle: 'medium' })]),
+        ...d.meetings.map((m) => el('button', { class: 'pm-row', 'data-pn-meeting': m.id, onclick: () => open(m, undefined, undefined, back) }, [el('b', {}, [m.about]), el('i', {}, [pastMeta(m)]), generalSnippet(m)])),
+        ...d.lines.map((l) => el('div', { class: 'sline' + (lineIsCurrent(l) ? '' : ' gone'), 'data-pn-line': l.id }, [
+          h.tagChip(l.tag), el('span', {}, [l.text]), lineIsCurrent(l) ? null : el('em', {}, [S.personNotesGone]),
+        ])),
+      ])))
+    }
+    input.addEventListener('input', fill)
+    fill()
+    return el('div', { class: 'person-notes', 'data-person-notes': '1' }, [el('h4', { class: 'eyebrow' }, [S.personNotesTitle]), input, list])
+  }
+
   return {
+    personSection,
     link: () => el('button', { class: 'past-link', onclick: listSheet }, [S.pastLink(pastMeetings(h.state()).length)]),
     listSheet,
     open,

@@ -1,0 +1,64 @@
+/**
+ * The notes Jakob took on one person, by day (wave 6, U4 c; his 08:23 message: "i would like to be able to see the notes that i have
+ * taken on other people"): every note line on the person's card (also the ones no longer true) and every past meeting about them
+ * (stored ones and the entries pastMeetings() derives from older notes), grouped per day, newest first, and searchable with the same
+ * words rule as the past-meetings search (search.ts: every word of the query must appear, case and accents ignored).
+ * Pure and DOM-free; past_meetings_view.ts draws it.
+ */
+import { LineStatus, pastMeetings } from './model'
+import type { AppState, NoteLine, PastMeeting } from './model'
+import { fold, queryWords, searchMeetings } from './search'
+
+const DAY_MS = 86_400_000
+
+/** One day of notes on a person. */
+export interface PersonNoteDay {
+  /** Start of the day (UTC, as pastMeetings() groups), ms. */
+  day: number
+  meetings: PastMeeting[]
+  lines: NoteLine[]
+}
+
+/** The day a moment belongs to. */
+export function dayOf(at: number): number {
+  return Math.floor(at / DAY_MS) * DAY_MS
+}
+
+/** The past meetings about this person: the ones that name them, newest first. */
+export function meetingsAbout(s: Pick<AppState, 'meetings' | 'people'>, personId: string): PastMeeting[] {
+  return pastMeetings(s).filter((m) => m.personId === personId)
+}
+
+/** Does every word of the query appear in the text (folded)? An empty query matches everything. */
+function matchesWords(text: string, words: readonly string[]): boolean {
+  const folded = fold(text)
+  return words.every((w) => folded.includes(w))
+}
+
+/**
+ * The days of notes on the person, newest first; with a query only the lines and meetings that hold all its words.
+ * `dateLabels` gives the dates a meeting answers to (as in the past-meetings search), so "October" finds a day.
+ */
+export function personNotes(s: AppState, personId: string, query: string, dateLabels: (m: PastMeeting) => readonly string[]): PersonNoteDay[] {
+  const person = s.people.find((p) => p.id === personId)
+  if (!person) return []
+  const words = queryWords(query)
+  const all = meetingsAbout(s, personId)
+  const meetings = words.length ? searchMeetings(all, query, dateLabels).map((r) => r.meeting) : all
+  const lines = person.lines.filter((l) => !words.length || matchesWords(`${l.text} ${l.tag}`, words))
+  const days = new Map<number, PersonNoteDay>()
+  const entry = (at: number): PersonNoteDay => {
+    const day = dayOf(at)
+    let d = days.get(day)
+    if (!d) { d = { day, meetings: [], lines: [] }; days.set(day, d) }
+    return d
+  }
+  for (const m of meetings) entry(m.startedAt).meetings.push(m)
+  for (const l of lines) entry(l.notedAt).lines.push(l)
+  return [...days.values()].sort((a, b) => b.day - a.day)
+}
+
+/** Is this line still true? (LineStatus.Gone: the person said it no longer is; kept so nothing noted is lost.) */
+export function lineIsCurrent(l: Pick<NoteLine, 'status'>): boolean {
+  return l.status === LineStatus.Current
+}

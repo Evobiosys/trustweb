@@ -109,6 +109,12 @@ export const S = {
   setRingNames: 'Show ring names on the web',
   setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
+  // Wave 6 (U4 c): the notes on one person, on their card.
+  personNotesTitle: 'Your notes on them',
+  personNotesPh: (name: string) => (name ? `Search your notes on ${name}` : 'Search these notes'),
+  personNotesNone: 'No notes or meetings with them yet.',
+  personNotesNothing: (q: string) => `Nothing about "${q}" in your notes on them.`,
+  personNotesGone: 'no longer true',
   setNotesMatch: 'Let asks match my notes too',
   setNotesMatchHint: 'When somebody asks through you, the notes you took in meetings can match too (never a note that is "Only me"). You still say yes or no to every ask, and only the one line goes out, never the whole note or the meeting. Off for a demo phone.',
   setDirectOnly: 'Ask only my direct contacts',
