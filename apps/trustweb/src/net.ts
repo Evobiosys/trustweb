@@ -46,7 +46,7 @@ import {
   mayCascade, RootMemory, sanitizeHopItems, seenHash, throughOf,
 } from './hops'
 import type { HopInfo } from './hops'
-import { askTemplate } from './lexicon'
+import { askTemplate, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, LineRef, LogEntry, MatchScope, Peer } from './model'
 
@@ -58,17 +58,18 @@ const MAX_SHARED = 3
 /** A passed-on ask stops waiting for the next step this share of a window before this phone's own moment, to seal and send in time. */
 const HOP_COLLECT_LEAD = 0.1
 
-/**
- * U2's matcher hook (wave 6): the ONE place this file builds a QueryTemplate
- * from free text, so swapping in the forgiving matcher is one line here.
- */
-function templateFor(text: string): QueryTemplate {
+/** The template of an ask, for its id and what travels (the asker's own words only). */
+export function templateFor(text: string): QueryTemplate {
   return askTemplate(text)
 }
 
-/** The ONE place this file runs the matcher on an incoming ask (with apps/demo's prune). */
-function matchAsk(tpl: QueryTemplate, threads: ChatThread[]): MatchResult {
-  return prune(matchTemplate(tpl, threads))
+/**
+ * The ONE place this file runs the matcher on an incoming ask (with apps/demo's prune). The
+ * template is widened on THIS phone by the holder's own lines (typos, plurals, "Community hof"
+ * for "Communityhof": lexicon.forgivingAskTemplate); nothing of that widening ever travels.
+ */
+export function matchAsk(text: string, threads: ChatThread[]): MatchResult {
+  return prune(matchTemplate(forgivingAskTemplate(text, lineTextsOf(threads)), threads))
 }
 
 /** What came back from the people this phone passed an ask on to. */
@@ -360,7 +361,7 @@ export class Net {
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
     const silent = repeat || cycle || !surfacesHere(q)
     const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
-    const match = text && !silent ? matchAsk(tpl, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
+    const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const key = await this.pairKey(peer)
     // Passed on the moment it arrives, never waiting for the person here: the next step's answers are

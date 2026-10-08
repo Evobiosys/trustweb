@@ -280,3 +280,52 @@ describe('through Jakob: a demo account asks his front door, his phone passes it
     rmSync(dir, { recursive: true, force: true })
   }, 30_000)
 })
+
+describe('forgiving matching on the REAL ask path (wave 6 U2 hook): a phone and a front door read an ask against their own lines', () => {
+  const ASKS = [
+    // [what the holder wrote, what the asker typed]
+    ['Communityhof Nord: shared garden and workshop', 'Who knows a Community hof?'],
+    ['Community hof Süd: open evenings for newcomers', 'Communityhof'],
+    ['Bicycle repair stand in the courtyard', 'Who has bicycles?'],
+    ['Bike pump and tools to lend', 'Does anyone have a bicycle?'],
+    ['Tax advisor for small associations, first hour free', 'I need an accountant'],
+    ['Steuerberater für kleine Vereine', 'accountant'],
+  ]
+
+  it('a Net answers each ask from the holder\'s line (the asker\'s "Communityhof" vs "Community hof", bicycles, accountant)', async () => {
+    for (const [line, ask] of ASKS) {
+      const holder = await phone('Holder', [{ text: line }])
+      const asker = await phone('Asker')
+      await connect(asker, holder)
+      const results = await asker.net.ask(ask)
+      expect(sharedOf(results).map((i) => i.text), `${ask} -> ${line}`).toEqual([line])
+      expect(holder.asks.at(-1).matches.map((m) => m.text)).toEqual([line])
+    }
+  }, 30_000)
+
+  it('a Net does not answer an ask that means something else (the widening is forgiving, not loose)', async () => {
+    const holder = await phone('Holder', [{ text: 'Community garden plot, 10 m2' }, { text: 'Bicycle repair stand in the courtyard' }])
+    const asker = await phone('Asker')
+    await connect(asker, holder)
+    expect(sharedOf(await asker.net.ask('Who has a piano?'))).toEqual([])
+  })
+
+  it('a front door (startPeer, preset lines) answers the same asks', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-forgiving-door-'))
+    const inv = path.join(dir, 'inv.json')
+    const preset = { by: 'Jakob', at: '2026-10-07' }
+    writeFileSync(inv, JSON.stringify({ items: ASKS.map(([text]) => ({ text, audience: 'fof', preset })) }))
+    const door = await startPeer({ stateDir: path.join(dir, 'state'), inventoryFile: inv, relayOrigin, healthPort: 0, answerWindowMs: W, forwardWaitMs: 900, log: () => {} })
+    const asker = await phone('Anna-demo')
+    await asker.net.completeConnect({ did: door.card.did, from: { id: door.card.id, displayName: door.card.name } }, Ring.Acquaintance)
+    await until(() => door.peerCount() === 1)
+    for (const [line, ask] of ASKS) {
+      const texts = sharedOf(await asker.net.ask(ask)).map((i) => i.text)
+      // the door holds all six lines: two of them say "accountant" (English and German), so either one answers that ask
+      const ok = /accountant/.test(ask) ? ASKS.filter(([, a]) => /accountant/.test(a)).map(([l]) => l) : [line]
+      expect(texts.some((t) => ok.includes(t)), `${ask} -> ${texts.join(' | ')}`).toBe(true)
+    }
+    await door.stop()
+    rmSync(dir, { recursive: true, force: true })
+  }, 60_000)
+})

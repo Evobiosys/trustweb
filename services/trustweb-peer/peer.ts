@@ -83,7 +83,7 @@ import type { ChatThread } from '../../apps/demo/src/types'
 import { askSources, isDegrees } from '../../apps/trustweb/src/cascade'
 import { answerDelayMs, doorAnswerDelayMs, doorFields, hopInfo, mayForwardToOwner, RootMemory, sanitizeHopItems, seenHash } from '../../apps/trustweb/src/hops'
 import type { HopInfo } from '../../apps/trustweb/src/hops'
-import { ASK_TEMPLATE_ID, askTemplate } from '../../apps/trustweb/src/lexicon'
+import { ASK_TEMPLATE_ID, askTemplate, forgivingAskTemplate, lineTextsOf } from '../../apps/trustweb/src/lexicon'
 import { Audience, AUDIENCES, Ring, coarseWhen } from '../../apps/trustweb/src/model'
 import type { AppState, InventoryItem, LineRef, Peer } from '../../apps/trustweb/src/model'
 
@@ -233,17 +233,18 @@ function prune(m: MatchResult): MatchResult {
   return { ...m, hits: m.hits.filter((h) => h.score >= top * RELEVANCE_BAND).slice(0, MAX_SHARED) }
 }
 
-/**
- * U2's matcher hook (wave 6): the ONE place this file builds a QueryTemplate
- * from free text, so swapping in the forgiving matcher is one line here.
- */
+/** The template of an ask, for its id and what travels (the asker's own words only). */
 function templateFor(text: string): QueryTemplate {
   return askTemplate(text)
 }
 
-/** The ONE place this file runs the matcher on an ask (with apps/demo's prune). */
-function matchAsk(tpl: QueryTemplate, threads: ChatThread[]): MatchResult {
-  return prune(matchTemplate(tpl, threads))
+/**
+ * The ONE place this file runs the matcher on an ask (with apps/demo's prune). The template is
+ * widened here by the preset lines (typos, plurals, "Community hof" for "Communityhof"); nothing
+ * of that widening ever travels.
+ */
+export function matchAsk(text: string, threads: ChatThread[]): MatchResult {
+  return prune(matchTemplate(forgivingAskTemplate(text, lineTextsOf(threads)), threads))
 }
 
 function isAudience(v: unknown): v is Audience {
@@ -602,7 +603,7 @@ export async function startPeer(opts: PeerOptions): Promise<RunningPeer> {
 
     // 2. Lines the owner allowed in advance, visibly marked as such.
     const { threads, refs } = askSources(asAppState(), peer.ring, info.hop)
-    const match = text && !silent ? matchAsk(tpl, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
+    const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const presets = presetById()
     const presetItems: SharedItem[] = surface
