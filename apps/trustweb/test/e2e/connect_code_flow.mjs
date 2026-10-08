@@ -17,6 +17,7 @@ import path from 'node:path'
 import { launch, startApp, tally } from '../helpers/e2e_harness.mjs'
 import { startHttpsOrigin } from '../helpers/https_origin.mjs'
 import { fakeConnectServer } from '../helpers/fake_connect_server.mjs'
+import { saveChannel } from '../helpers/share_box.mjs'
 
 const PORT = Number(process.env.TW_PORT || 8983)
 const HTTPS_PORT = Number(process.env.TW_HTTPS_PORT || PORT + 1)
@@ -134,9 +135,7 @@ async function partB(browser) {
   const a = await adaPhone(browser, server)
   // Ada's Signal username link, ticked by default (a username link is)
   await a.page.locator('.hdr [aria-label^="Show my code"]').click()
-  await a.page.locator('[data-act="edit-signal"]').click()
-  await a.page.getByPlaceholder('Signal username link (best) or phone number (+43...)').fill(USERNAME_LINK)
-  await a.page.getByRole('button', { name: 'Save', exact: true }).click()
+  await saveChannel(a.page, 'signal', USERNAME_LINK)
   await a.page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(a.page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
   t.ok('b: Ada\'s code is on screen', !!code)
@@ -189,7 +188,7 @@ async function partB(browser) {
   await e.page.goto(`${ORIGIN}/c/${code2}`)
   await addSheetOpen(e.page)
   await addToWeb(e.page)
-  t.ok('b: Dee shared no messenger link: the card says so plainly', await appears(e.page.locator('[data-no-messenger]'), 5000) && /No Signal or Molly link from Dee Plain yet/.test(await e.page.locator('[data-no-messenger]').innerText()))
+  t.ok('b: Dee shared no messenger link: the card says so plainly', await appears(e.page.locator('[data-no-messenger]'), 5000) && /No messenger link from Dee Plain yet/.test(await e.page.locator('[data-no-messenger]').innerText()))
   await shot(e.page, 'cc_b_card_no_link.png')
   await d.ctx.close(); await e.ctx.close()
 }

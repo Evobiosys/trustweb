@@ -228,14 +228,14 @@ export interface Person {
    * that instance. This phone only. Absent: none.
    */
   fediverse?: FediverseLink
-  /** Which app the owner names for HIS Signal entry on this card (label and hint only). Absent: unlabelled (today's behaviour). */
+  /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**
    * What this person shared with me when we connected (contact_share.ts): ticked by them, validated on receipt. SEPARATE from `channels`,
    * which stays the owner's own typed list and is never written from the wire. Absent: nothing shared.
    */
   theirChannels?: Partial<Record<Channel, string>>
-  /** The app they named for their Signal entry. */
+  /** Wave 6e: no longer stored from the wire; an older record may still hold it, ignored. */
   theirSignalProvider?: SignalProvider
   theirChannelsAt?: number
   /**
@@ -541,6 +541,18 @@ export interface AppState {
   contactShare?: ShareSettings
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
+  /**
+   * peer id -> the channels (and values) that contact text carried, next to the fingerprint above (wave 6e): a later scan in a narrower
+   * mode does not send a smaller set over a bigger one. Absent in older records; an older build ignores it.
+   */
+  contactSentChannels?: Record<string, Partial<Record<Channel, string>>>
+  /**
+   * Wave 6e: the share mode shown on Meet last (share_modes.ts ShareMode, kept per phone: Meet opens with it) and the pinned modes
+   * (at most two, first pin first). Absent: the default order. A stored mode whose link was removed falls back to the default; an
+   * unknown value is dropped at boot. An older build ignores both.
+   */
+  shareMode?: string
+  sharePins?: string[]
   /**
    * The persistent connect code this phone registered on the server (connect_code.ts): {code, secret, url, updatedAt}.
    * Stays on this phone (the secret is a password); absent until the first successful registration and on a phone

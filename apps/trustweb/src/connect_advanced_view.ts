@@ -1,21 +1,24 @@
 /**
- * The two small pieces of the Meet page that go with the Advanced choice (connect_modes.ts), DOM and words only:
- *   - the sharing line: one plain sentence saying whether a scan also hands over the Signal link, and why not when it does not,
- *     with the tick (the caller passes the controls) one tap away
- *   - the Advanced disclosure (collapsed by default) with the three choices
+ * The pieces of the Meet page that go with the share modes (share_modes.ts), DOM and words only:
+ *   - the share row: THREE buttons, the primary mode, the secondary mode and an arrow that opens Advanced
+ *   - the sharing line: one plain sentence saying what a scan hands over in the mode on show, with the tick one tap away
+ *   - the Advanced panel: EVERY mode with a pin toggle, the notes of the mode on show, the contact box, then the names block
  */
 import { el } from '../../demo/src/ui/dom'
 import { cleanUsername } from './connect_code'
 import type { ClaimOutcome } from './connect_code'
-import { CONNECT_MODES, ConnectMode, SignalSharing } from './connect_modes'
+import { ShareMode, SHARE_MODES, ModeSharing, channelOf } from './share_modes'
+import { Channel } from './model'
 import { S } from './strings'
 
 export interface SharingLineOptions {
-  sharing: () => SignalSharing
-  /** The provider + tick controls (main.ts shareControlsFor) when a Signal link is saved. */
+  sharing: () => ModeSharing
+  /** The channel the mode is about (null for Only TrustWeb): names the sentence. */
+  channel: () => Channel | null
+  /** The tick of that channel (the hook's share controls) when a link is saved. */
   controls: () => HTMLElement | null
-  /** Opens the Signal link editor (save, change). */
-  editSignal: () => void
+  /** Opens the contact box on that channel (Advanced) so the link can be saved or changed. */
+  addLink: (channel: Channel) => void
 }
 
 export interface SharingLine {
@@ -26,31 +29,78 @@ export interface SharingLine {
 export function createSharingLine(o: SharingLineOptions): SharingLine {
   const text = el('p', { class: 'meta', 'data-signal-sharing': '' })
   const controls = el('div', { class: 'sharing-controls' })
-  const edit = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'edit-signal', onclick: () => o.editSignal() })
+  const edit = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'edit-link' })
+  edit.addEventListener('click', () => { const ch = o.channel(); if (ch) o.addLink(ch) })
   const root = el('div', { class: 'sharing-line' }, [text, controls, edit])
   const refresh = (): void => {
     const s = o.sharing()
-    text.textContent = S.sharingLine[s]
+    const ch = o.channel()
+    const name = ch ? S.chLabel[ch] : ''
+    text.textContent = S.sharingLine[s](name)
     text.setAttribute('data-signal-sharing', s)
-    const c = s === SignalSharing.Off || s === SignalSharing.NoLink ? null : o.controls()
+    const c = s === ModeSharing.Off || s === ModeSharing.NoLink ? null : o.controls()
     controls.replaceChildren(...(c ? [c] : []))
-    edit.hidden = s === SignalSharing.Off
-    edit.textContent = s === SignalSharing.NoLink ? S.sharingAddSignal : S.sharingEditSignal
+    edit.hidden = s === ModeSharing.Off || ch === null
+    edit.textContent = s === ModeSharing.NoLink ? S.sharingAddLink(name) : S.sharingEditLink(name)
+  }
+  refresh()
+  return { el: root, refresh }
+}
+
+export interface ShareRowOptions {
+  /** The modes on the two buttons, in order (share_modes.ts rowModes). */
+  modes: () => ShareMode[]
+  current: () => ShareMode
+  pick: (mode: ShareMode) => void
+  /** The Advanced panel is open: the arrow shows it. */
+  isOpen: () => boolean
+  toggleAdvanced: () => void
+}
+
+export interface ShareRow {
+  el: HTMLElement
+  refresh(): void
+}
+
+/** [primary][secondary][arrow down]: the pinned modes in pin order, and the way into Advanced. */
+export function createShareRow(o: ShareRowOptions): ShareRow {
+  const row = el('div', { class: 'seg share-row', role: 'group', 'aria-label': S.shareRowLabel, 'data-share-row': '' })
+  const now = el('p', { class: 'meta', 'data-share-now': '', hidden: true })
+  const root = el('div', { class: 'share-row-wrap' }, [row, now])
+  const refresh = (): void => {
+    const shown = o.modes()
+    const cur = o.current()
+    const buttons = shown.map((m, i) => el('button', {
+      class: cur === m ? 'on' : '', type: 'button', 'aria-pressed': String(cur === m), 'data-mode': m, 'data-slot': i === 0 ? 'primary' : 'secondary',
+      onclick: () => o.pick(m),
+    }, [S.shareMode[m]]))
+    const open = o.isOpen()
+    const hidden = !shown.includes(cur)
+    const arrow = el('button', {
+      class: 'share-arrow' + (hidden ? ' on' : ''), type: 'button', 'data-act': 'advanced', 'aria-expanded': String(open), 'aria-label': S.advancedLabel,
+      onclick: () => o.toggleAdvanced(),
+    }, [open ? '▴' : '▾'])
+    row.replaceChildren(...buttons, arrow)
+    // The remembered mode may sit outside the two buttons (Only Signal, for one): it must still show as the one in force.
+    now.hidden = !hidden
+    now.textContent = hidden ? S.shareModeNow(S.shareMode[cur]) : ''
   }
   refresh()
   return { el: root, refresh }
 }
 
 export interface AdvancedOptions {
-  /** "Signal", "Molly" or "Signal or Molly": the provider word of the wave 6 setting. */
-  providerWord: () => string
-  getMode: () => ConnectMode
-  setMode: (m: ConnectMode) => void
-  /** Is a Signal link saved? (Only Molly/Signal needs one.) */
-  hasSignal: () => boolean
-  /** Does the saved link hold a phone number (the QR then needs the camera app)? */
+  current: () => ShareMode
+  pins: () => ShareMode[]
+  pick: (mode: ShareMode) => void
+  /** Pins or unpins; returns false when a third pin was refused. */
+  togglePin: (mode: ShareMode) => boolean
+  /** Is the channel of this mode saved? (Only TrustWeb needs none.) */
+  available: (mode: ShareMode) => boolean
+  /** Does the code of the mode on show hold a phone number (the QR then needs the camera app)? */
   cameraOnly: () => boolean
-  editSignal: () => void
+  /** The contact box (one for Meet > Advanced and Settings). */
+  contactBox: HTMLElement
   /** The optional username on our server (V1 POST /name). `available` is false until this phone holds a code there. */
   username: { available: () => boolean; current: () => string; claim: (name: string) => Promise<ClaimOutcome> }
 }
@@ -58,18 +108,13 @@ export interface AdvancedOptions {
 export interface AdvancedView {
   el: HTMLElement
   refresh(): void
+  setOpen(open: boolean): void
+  isOpen(): boolean
 }
 
 export function createAdvanced(o: AdvancedOptions): AdvancedView {
-  const toggle = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'advanced', 'aria-expanded': 'false' }, [S.advancedLabel + ' ▾'])
-  const panel = el('div', { class: 'advanced-panel', role: 'radiogroup', 'aria-label': S.advancedLabel, hidden: true })
-  const root = el('div', { class: 'advanced' }, [toggle, panel])
-  toggle.addEventListener('click', () => {
-    const open = panel.hidden
-    panel.hidden = !open
-    toggle.setAttribute('aria-expanded', String(open))
-    toggle.textContent = S.advancedLabel + (open ? ' ▴' : ' ▾')
-  })
+  const panel = el('div', { class: 'advanced-panel', role: 'group', 'aria-label': S.advancedLabel, hidden: true, 'data-advanced-panel': '' })
+  const root = el('div', { class: 'advanced' }, [panel])
 
   const usernameRow = (): HTMLElement => {
     const input = el('input', {
@@ -96,29 +141,42 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
     ])
   }
   let username: HTMLElement | null = null
+  const pinNote = el('p', { class: 'meta', role: 'status', 'data-pin-note': '' })
+
+  const modeRow = (m: ShareMode): HTMLElement => {
+    const cur = o.current() === m
+    const pinIndex = o.pins().indexOf(m)
+    const channel = channelOf(m)
+    return el('div', { class: 'mode-row', 'data-mode-row': m }, [
+      el('button', {
+        class: 'radio' + (cur ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': String(cur), 'data-mode': m,
+        onclick: () => o.pick(m),
+      }, [el('b', {}, [S.shareMode[m]]), el('small', {}, [S.shareModeHint[m]]), channel && !o.available(m) ? el('small', { 'data-mode-missing': m }, [S.shareModeMissing(S.chLabel[channel])]) : null]),
+      el('button', {
+        class: 'btn btn-ghost btn-sm pin' + (pinIndex >= 0 ? ' on' : ''), type: 'button', 'aria-pressed': String(pinIndex >= 0), 'data-pin': m,
+        onclick: () => { pinNote.textContent = o.togglePin(m) ? '' : S.pinRefused },
+      }, [pinIndex >= 0 ? S.pinPinned(pinIndex + 1) : S.pinPin]),
+    ])
+  }
 
   const refresh = (): void => {
-    const word = o.providerWord()
-    const mode = o.getMode()
-    const choices = CONNECT_MODES.map((m) => el('button', {
-      class: 'radio' + (mode === m ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': String(mode === m), 'data-mode': m,
-      onclick: () => { o.setMode(m) },
-    }, [el('b', {}, [S.advancedMode[m](word)]), el('small', {}, [S.advancedModeHint[m](word)])]))
+    const cur = o.current()
     const notes: HTMLElement[] = []
-    if (mode === ConnectMode.OnlyMolly) {
-      if (!o.hasSignal()) {
-        notes.push(el('p', { class: 'meta', 'data-adv-note': 'no-link' }, [S.advancedMollyNone]))
-        notes.push(el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => o.editSignal() }, [S.sharingAddSignal]))
-      } else {
-        notes.push(el('p', { class: 'meta', 'data-adv-note': 'camera' }, [S.advancedMollyNote]))
-        if (o.cameraOnly()) notes.push(el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]))
-      }
-    }
+    if (o.cameraOnly()) notes.push(el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]))
+    else if (cur === ShareMode.OnlySignal || cur === ShareMode.OnlyWhatsApp) notes.push(el('p', { class: 'meta', 'data-adv-note': 'camera' }, [S.advancedOnlyNote]))
     notes.push(el('p', { class: 'meta' }, [S.advancedFollow]))
     // Built once, so a redraw of the choices never clears what is being typed.
     if (o.username.available()) { username ??= usernameRow() } else username = null
-    panel.replaceChildren(...choices, ...notes, ...(username ? [username] : []))
+    panel.replaceChildren(
+      el('p', { class: 'meta' }, [S.pinLead]),
+      ...SHARE_MODES.map(modeRow), pinNote, ...notes, o.contactBox, ...(username ? [username] : []),
+    )
   }
   refresh()
-  return { el: root, refresh }
+  return {
+    el: root,
+    refresh,
+    setOpen: (open) => { panel.hidden = !open },
+    isOpen: () => !panel.hidden,
+  }
 }

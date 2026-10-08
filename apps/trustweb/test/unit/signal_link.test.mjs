@@ -1,11 +1,11 @@
 /**
- * Signal and Molly (src/channel.ts, wave 6 U3): what a stored Signal value is,
- * the QR payload, where a code can be scanned, and the provider label.
+ * Signal (src/channel.ts, wave 6 U3): what a stored Signal value is,
+ * the QR payload and where a code can be scanned. The Signal/Molly label choice went in wave 6e.
  * See DEVLOG wave6/u3_signal_finding.txt for the source-code evidence.
  */
 import {
-  ScanAdvice, SignalHandleKind, SignalLabelKey, SignalProvider, isSignalProvider, qrPayload,
-  revealsPhoneNumber, scanAdvice, signalHandleKind, signalLabelKey,
+  ScanAdvice, SignalHandleKind, SignalProvider, isSignalProvider, qrPayload,
+  revealsPhoneNumber, scanAdvice, signalHandleKind,
 } from '../../src/channel.ts'
 
 const USER = 'https://signal.me/#eu/abcDEF123_-xyz'
@@ -61,17 +61,7 @@ describe('scanAdvice', () => {
   })
 })
 
-describe('signalLabelKey', () => {
-  it('unset provider reproduces chName: both apps named on Android, Signal elsewhere', () => {
-    expect(signalLabelKey(undefined, true)).toBe(SignalLabelKey.SignalOrMolly)
-    expect(signalLabelKey(undefined, false)).toBe(SignalLabelKey.Signal)
-  })
-  it('a chosen provider names that app on every platform', () => {
-    for (const android of [true, false]) {
-      expect(signalLabelKey(SignalProvider.Molly, android)).toBe(SignalLabelKey.Molly)
-      expect(signalLabelKey(SignalProvider.Signal, android)).toBe(SignalLabelKey.Signal)
-    }
-  })
+describe('the provider guard (the record field is still read)', () => {
   it('isSignalProvider guards unknown values', () => {
     expect(isSignalProvider('molly')).toBe(true)
     expect(isSignalProvider('whatsapp')).toBe(false)
