@@ -446,9 +446,10 @@ const net = new Net({
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
   // Wave 6f (ack_retry.ts): a real phone re-sends its connect-ack until the other phone answers; never the side-by-side demo, a demo
   // account's view, a demo account of this phone, or this site's demo front door (its flows are their own).
-  // Not before demo-peer.json is known (review 6f: the first 'connected' can come before it): resendAcks runs again once it is.
+  // Not before demo-peer.json is known (review 6f: the first 'connected' can come before it, and a first visit from a link never
+  // probes it at boot): it is asked for here, and resendAcks runs again once it is known.
   mayResendAck: (peer) => !solo && !isDemoPersona(persona) && !st().testOf && !demoAccounts().some((t) => t.peerId === peer.id)
-    && demoPeer !== undefined && peer.did !== demoPeer?.did,
+    && demoPeerKnown() && peer.did !== demoPeer?.did,
   onAwayAsk: (ask) => { const s = st(); s.awayAsks = addAwayAsk(s.awayAsks, ask, Date.now()); save(); showAwayAsks() },
 })
 
@@ -3143,6 +3144,13 @@ function probeDemoPeer(): Promise<DemoPeerRef | null> {
     return demoPeer
   })()
   return demoPeerProbe
+}
+
+/** Is demo-peer.json known yet? If not, it is asked for once and the waiting connect-acks are re-sent when it is (ack_retry.ts). */
+function demoPeerKnown(): boolean {
+  if (demoPeer !== undefined) return true
+  if (!demoPeerProbe) void probeDemoPeer().then(() => net.resendAcks())
+  return false
 }
 
 function demoAccounts(): DemoAccount[] {
