@@ -96,8 +96,11 @@ describe('peer_cards: repairPeerCards mends records that already went wrong', ()
   })
   it('a card renamed by its owner ("Ada from the tram") is not touched', () => {
     const s = state([person('p1', 'Ada from the tram', { peerId: 'x' })], [peer('x', 'Ada')])
-    expect(repairPeerCards(s, () => true, ids(), 'ctx', NOW)).toBe(false)
+    // Review 6f: true only for the once-marker (peerCardsUnmergedAt); the card stays as it is.
+    expect(repairPeerCards(s, () => true, ids(), 'ctx', NOW)).toBe(true)
     expect(s.people).toHaveLength(1)
+    expect(s.people[0]).toMatchObject({ name: 'Ada from the tram', peerId: 'x' })
+    expect(repairPeerCards(s, () => true, ids(), 'ctx', NOW)).toBe(false)
   })
   it('a connection without any card gets one; a connection the caller leaves out does not', () => {
     const s = state([], [peer('x', 'Pat'), peer('z', 'Skip')])

@@ -9,8 +9,9 @@
  * repairPeerCards() mends records that already went wrong (boot, idempotent, never throws):
  *   1. a merged card: card C is linked to connection Y, but carries the name of connection X, which has no card of its own, while Y is
  *      called something else: C goes back to X (its notes were about X) and Y gets a card of its own. What arrived from Y over the wire
- *      after Y connected (the contact links of contact_share.ts) moves with Y.
- *   2. a connection without any card (an older build, a card lost): it gets one, named as the connection is.
+ *      after Y connected (the contact links of contact_share.ts) moves with Y. ONCE per record (AppState.peerCardsUnmergedAt, review 6f):
+ *      the merge cannot happen any more, and a rule that moves cards by name must never touch a card its owner renamed later.
+ *   2. a connection without any card (an older build, a card lost): it gets one, named as the connection is. Every start.
  * Connections of a demo account's own view, of the side-by-side demo, and front doors already joined to a person (doorPeerId) are
  * left as they are by the caller and by personOf().
  *
@@ -88,9 +89,13 @@ function fillMissing(s: AppState, keep: (peer: Peer) => boolean, newId: () => st
 export function repairPeerCards(s: AppState, keep: (peer: Peer) => boolean, newId: () => string, context: string, now: number): boolean {
   try {
     if (!Array.isArray(s.people) || !Array.isArray(s.peers)) return false
-    const a = unmerge(s, keep, newId, context, now)
-    const b = fillMissing(s, keep, newId, context, now)
-    return a || b
+    const once = s.peerCardsUnmergedAt === undefined
+    if (once) {
+      unmerge(s, keep, newId, context, now)
+      s.peerCardsUnmergedAt = now
+    }
+    const filled = fillMissing(s, keep, newId, context, now)
+    return once || filled
   } catch {
     return false
   }

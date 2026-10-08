@@ -598,6 +598,12 @@ export interface AppState {
    */
   awayAsks?: AwayAsk[]
   /**
+   * Wave 6f, review (peer_cards.ts): when this record's merged cards were mended, once. The Meet-draft merge cannot happen since 6f, so the
+   * unmerge-by-name step only mends records made before; later it never runs, and a card its owner renames is never moved by it. Absent:
+   * not yet (the next start of a real phone mends and sets it). Older builds ignore it.
+   */
+  peerCardsUnmergedAt?: number
+  /**
    * Superseded by `transcription` (2026-10-06); still read from records saved
    * before it: true there means TranscriptionChoice.TalkWeave. Settings drops
    * it the first time a transcription choice is made.
