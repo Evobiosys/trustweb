@@ -44,7 +44,8 @@ import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
 import type { AnswerEnvelope, ChatEnvelope, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
-import { ackDue, noteAckSent, noteHeard } from './ack_retry'
+import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
+import type { AckAttempts } from './ack_retry'
 import { AWAY_TEXT_MAX, isAwayAsk } from './away_asks'
 import { askSources } from './cascade'
 import { createDrainLock, drainLockName } from './drain_lock'
@@ -201,6 +202,8 @@ export class Net {
   private lock: DrainLock | null = null
   /** Connect-acks being sent right now (by DID): never two at once for one peer. */
   private acking = new Set<string>()
+  /** This visit's connect-ack attempts per DID, whatever their outcome (ack_retry.ts attemptAllowed). */
+  private ackAttempts = new Map<string, AckAttempts>()
   private keys = new Map<string, Promise<CryptoKey>>()
   private awaiting = new Map<string, (env: AnswerEnvelope) => void>()
   private seenQids = new Set<string>()
@@ -341,6 +344,7 @@ export class Net {
     this.acking.add(peer.did)
     try {
       if (!this.channel) return
+      this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
       await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity())))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
@@ -351,13 +355,23 @@ export class Net {
     }
   }
 
-  /** Wave 6f: re-sends the connect-ack to every connection that has not answered yet and is due (ack_retry.ts). */
+  /**
+   * Wave 6f: re-sends the connect-ack to every connection that has not answered yet and is due (ack_retry.ts). Each one is checked again
+   * right before its send (review 6f): two reconnects close together must not both send to the same peer from a list made earlier.
+   */
   async resendAcks(): Promise<void> {
+    if (!this.hooks.mayResendAck || !this.channel) return
+    const dids = this.hooks.state().peers.map((p) => p.did)
+    for (const did of dids) {
+      const peer = this.peerByDid(did)
+      if (peer && this.mayResendNow(peer, Date.now())) await this.sendAck(peer)
+    }
+  }
+
+  /** Due by the record, allowed by this visit's attempts, and allowed by the app (never the demo flows). */
+  private mayResendNow(peer: Peer, now: number): boolean {
     const may = this.hooks.mayResendAck
-    if (!may || !this.channel) return
-    const now = Date.now()
-    const due = this.hooks.state().peers.filter((p) => ackDue(p, now) && may.call(this.hooks, p))
-    for (const peer of due) await this.sendAck(peer)
+    return ackDue(peer, now) && attemptAllowed(this.ackAttempts.get(peer.did), now) && may !== undefined && may.call(this.hooks, peer)
   }
 
   /** Wave 6f: this phone heard from `peer` (they know us): no more connect-acks to them. */
@@ -459,18 +473,19 @@ export class Net {
     const s = this.hooks.state()
     const info = hopInfo(q)
     const text = q.freeText ?? ''
+    // The same ask again by another path, a cycle back to this phone, or one that went further than
+    // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
+    const repeat = this.roots.repeat(info.root, receivedAt)
+    const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
     // Wave 6f: its asker stopped waiting long ago (this phone was closed): no prompt, no answer, never passed on (away_asks.ts).
+    // A repeat or a cycle (this phone's own ask coming back) stays as silent as it is live: not logged, not kept (review 6f).
     if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, this.windowMs))) {
-      this.handleAwayAsk(q, peer, info, text)
+      if (!repeat && !cycle) this.handleAwayAsk(q, peer, info, text)
       return
     }
     const tpl = templateFor(text)
     // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
     const deadline = receivedAt + answerDelayMs(info, this.windowMs)
-    // The same ask again by another path, a cycle back to this phone, or one that went further than
-    // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
-    const repeat = this.roots.repeat(info.root, receivedAt)
-    const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
     const silent = repeat || cycle || !surfacesHere(q)
     const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }

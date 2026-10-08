@@ -46,6 +46,32 @@ export function ackDue(peer: Pick<Peer, 'heardAt' | 'ackTries' | 'ackSentAt' | '
   return now - peer.ackSentAt >= ackGapMs(tries)
 }
 
+/**
+ * Within one visit, whatever the outcome of a send: at least this long between two attempts for one connection, and at most
+ * ACK_ATTEMPTS_PER_VISIT of them. A send that failed is not counted in the record (ackTries), yet one that timed out on this side may
+ * still have been stored by the relay, and every reconnect of the drain (a wake after a long sleep opens a fresh socket) asks again:
+ * without this an unlucky network would add a row to the sharer's queue at every reconnect.
+ */
+export const ACK_ATTEMPT_GAP_MS = 2 * 60 * 1000
+export const ACK_ATTEMPTS_PER_VISIT = ACK_MAX_TRIES
+
+/** This visit's attempts for one connection (memory only, never stored). */
+export interface AckAttempts {
+  at: number
+  n: number
+}
+
+/** May this visit try once more for that connection? */
+export function attemptAllowed(last: AckAttempts | undefined, now: number): boolean {
+  if (!last) return true
+  return last.n < ACK_ATTEMPTS_PER_VISIT && now - last.at >= ACK_ATTEMPT_GAP_MS
+}
+
+/** One more attempt this visit. */
+export function nextAttempts(last: AckAttempts | undefined, now: number): AckAttempts {
+  return { at: now, n: (last?.n ?? 0) + 1 }
+}
+
 /** Records one ack the relay accepted. */
 export function noteAckSent(peer: Peer, now: number): void {
   peer.ackTries = (isTime(peer.ackTries) ? peer.ackTries : 0) + 1
