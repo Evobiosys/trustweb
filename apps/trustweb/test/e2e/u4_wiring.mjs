@@ -14,6 +14,7 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { checker, launch, newPhone, record, startPhone, startRelay, startVite } from './swiss_harness.mjs'
+import { acceptAdd } from '../helpers/connect_add.mjs'
 
 const PORT = Number(process.env.TW_PORT || 8970)
 const SHOTS = process.env.TW_SHOTS
@@ -50,6 +51,7 @@ async function connect(host, joiner, joinerName, fresh) {
     await joiner.getByLabel('Your first name').fill(joinerName)
     await joiner.getByRole('button', { name: 'Connect', exact: true }).click()
   }
+  await acceptAdd(joiner)
   await until(async () => (await record(host)).peers.length === before + 1)
   await host.getByRole('button', { name: 'Back' }).click().catch(() => {})
   await joiner.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })

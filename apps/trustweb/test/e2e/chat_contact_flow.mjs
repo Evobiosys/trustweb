@@ -19,6 +19,7 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { checker, launch, newPhone, record, startPhone, startVite } from './swiss_harness.mjs'
+import { acceptAdd } from '../helpers/connect_add.mjs'
 
 const PORT = Number(process.env.TW_PORT || 8970)
 const SHOTS = process.env.TW_SHOTS
@@ -45,24 +46,31 @@ async function startRelayOn(store, port = 0) {
   return { relay, port: out.port }
 }
 
-/** Opens the Meet page's Signal tab. */
+/** Opens the Meet page (the one code; wave 6b removed the Signal tab). */
 async function openSignalTab(page) {
   await tab(page, 'Web')
   await page.locator('.hdr [aria-label^="Show my code"]').click()
-  await page.getByRole('tab', { name: 'Signal' }).click()
+  await page.locator('.meet-page').waitFor({ timeout: 10_000 })
 }
 
-/** On the Signal tab: type the value and save. */
+/** Saves the Signal link through the Meet page's "Add/Edit my Signal link" sheet. */
 async function saveSignal(page, value) {
+  await page.locator('[data-act="edit-signal"]').click()
   await page.getByPlaceholder(SIGNAL_PH).fill(value)
   await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.locator('.meet-page').waitFor({ timeout: 10_000 })
+}
+
+/** Advanced > one of the three choices ('both' | 'molly' | 'trustweb'). */
+async function chooseMode(page, mode) {
+  if ((await page.locator('.advanced-panel').isHidden())) await page.locator('[data-act="advanced"]').click()
+  await page.locator(`[data-mode="${mode}"]`).click()
 }
 
 /** `joiner` opens `host`'s TrustWeb code and connects (one scan). */
 async function connect(host, joiner, joinerName, fresh) {
   await tab(host, 'Web')
   await host.locator('.hdr [aria-label^="Show my code"]').click()
-  await host.getByRole('tab', { name: 'TrustWeb' }).click()
   await host.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const url = await host.getAttribute('.qrwrap', 'data-payload')
   const before = (await record(host)).peers.length
@@ -71,6 +79,7 @@ async function connect(host, joiner, joinerName, fresh) {
     await joiner.getByLabel('Your first name').fill(joinerName)
     await joiner.getByRole('button', { name: 'Connect', exact: true }).click()
   }
+  await acceptAdd(joiner)
   await until(async () => (await record(host)).peers.length === before + 1)
   await host.getByRole('button', { name: 'Back' }).click().catch(() => {})
   await joiner.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
@@ -101,11 +110,14 @@ async function main() {
     await openSignalTab(alice)
     await saveSignal(alice, USERNAME_LINK)
     await alice.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-    ok('1. the QR holds the username link', (await alice.getAttribute('.qrwrap', 'data-payload')) === USERNAME_LINK)
+    ok('1. the one code is the connect link, and the page says a scan also gives the Signal link', /connect=/.test(await alice.getAttribute('.qrwrap', 'data-payload') ?? '') && (await alice.locator('[data-signal-sharing="shared"]').count()) === 1)
+    await chooseMode(alice, 'molly')
+    ok('1. Advanced > Only Signal: the QR holds the username link', (await alice.getAttribute('.qrwrap', 'data-payload')) === USERNAME_LINK)
     ok('1. no camera-app note for a username code', (await alice.locator('[data-scan="camera-only"]').count()) === 0)
-    ok('1. the share tick is on by itself for a username link', await alice.locator('[data-share-tick="signal"]').isChecked())
+    ok('1. the share tick is on by itself for a username link', await alice.locator('.meet-page [data-share-tick="signal"]').isChecked())
     ok('1. the record says so', (await record(alice)).contactShare?.shareOnConnect?.signal === true)
     await shot(alice, 'chat-01-alice-signal-tab')
+    await chooseMode(alice, 'both')
     await connect(alice, bob, 'Bob', true)
     const bobCardOfAlice = await until(async () => (await personOf(bob, 'Alice'))?.theirChannels?.signal)
     ok('1. Bob\'s card for Alice holds her username link as THEIR channel', bobCardOfAlice === USERNAME_LINK, String(bobCardOfAlice))
@@ -122,10 +134,13 @@ async function main() {
     await openSignalTab(bob)
     await saveSignal(bob, PHONE)
     await bob.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-    ok('2. the share tick stays OFF for a phone number', !(await bob.locator('[data-share-tick="signal"]').isChecked()))
-    ok('2. a plain note says the link holds the number', (await bob.locator('[data-share="phone"]').count()) === 1)
+    ok('2. the share tick stays OFF for a phone number', !(await bob.locator('.meet-page [data-share-tick="signal"]').isChecked()))
+    ok('2. a plain note says the link holds the number', (await bob.locator('.meet-page [data-share="phone"]').count()) === 1)
+    ok('2. the page says in one sentence that the Signal link is NOT shared, and why', (await bob.locator('[data-signal-sharing="number-not-ticked"]').innerText()).includes('is not being shared: it holds your phone number'))
+    await chooseMode(bob, 'molly')
     ok('2. the QR note says: camera app, not inside Signal or Molly', /camera app, not inside Signal or Molly/.test(await bob.locator('[data-scan="camera-only"]').innerText().catch(() => '')))
     await shot(bob, 'chat-03-bob-phone-number')
+    await chooseMode(bob, 'both')
     await connect(bob, carl, 'Carl', true)
     await new Promise((r) => setTimeout(r, 3_000))
     const carlSees = await personOf(carl, 'Bob')
@@ -134,16 +149,12 @@ async function main() {
 
     // 3. replacing the username link by a number turns the tick off
     await openSignalTab(alice)
-    await alice.getByRole('button', { name: /Change your Signal/ }).click()
-    await alice.getByPlaceholder(SIGNAL_PH).fill(PHONE)
-    await alice.getByRole('button', { name: 'Save', exact: true }).click()
+    await saveSignal(alice, PHONE)
     await until(async () => (await record(alice)).myChannels?.signal?.includes('#p/'))
     ok('3. the saved link is now a phone number', /^\+436601234567$/.test((await record(alice)).myChannels.signal), (await record(alice)).myChannels?.signal)
     ok('3. the tick turned OFF by itself (a number needs its own yes)', (await record(alice)).contactShare?.shareOnConnect?.signal !== true)
     // put the username link back so later steps can rely on it
-    await alice.getByRole('button', { name: /Change your Signal/ }).click()
-    await alice.getByPlaceholder(SIGNAL_PH).fill(USERNAME_LINK)
-    await alice.getByRole('button', { name: 'Save', exact: true }).click()
+    await saveSignal(alice, USERNAME_LINK)
 
     // 4. chat
     await openPerson(bob, 'Alice')

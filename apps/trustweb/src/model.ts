@@ -13,6 +13,7 @@ import type { ChatThread } from '../../demo/src/types'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
+import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
 
 export enum Ring {
@@ -540,6 +541,12 @@ export interface AppState {
   contactShare?: ShareSettings
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
+  /**
+   * The persistent connect code this phone registered on the server (connect_code.ts): {code, secret, url, updatedAt}.
+   * Stays on this phone (the secret is a password); absent until the first successful registration and on a phone
+   * that is not served from one of the two app origins. Older builds ignore it.
+   */
+  connectCode?: ConnectRecord
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. */
   chats?: ChatBook
   /**

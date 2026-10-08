@@ -24,6 +24,17 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
+import { createConnectKeeper, repairConnectRecord } from './connect_code'
+import type { ConnectKeeper } from './connect_code'
+import { createConnectView } from './connect_view'
+import type { ConnectView } from './connect_view'
+import { renderConnectAdd } from './connect_add_view'
+import { createAdvanced, createSharingLine } from './connect_advanced_view'
+import { ConnectMode, effectiveMode, mayShareContact, modePayload, needsCameraApp, signalSharing } from './connect_modes'
+import { resolveAddInput, ParseError } from './add_by_code'
+import type { AddFailure } from './add_by_code'
+import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
@@ -31,7 +42,7 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { ScanAdvice, qrPayload, scanAdvice, signalLabelKey, channelLink, normalizeHandle } from './channel'
+import { revealsPhoneNumber, signalLabelKey, channelLink, normalizeHandle } from './channel'
 import type { SignalProvider } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -250,7 +261,9 @@ try {
     if (soloOff) state.asksMatchNotes = false
     // Wave 6 (chat.ts): a corrupted `chats` value is repaired, never thrown on.
     const chatsFixed = migrateChats(state)
-    if (sourced || noted || merged || soloOff || chatsFixed) save()
+    // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped, never thrown on.
+    const codeFixed = repairConnectRecord(state)
+    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -353,6 +366,7 @@ const net = new Net({
     }
     person.peerId = peer.id
     save()
+    sendHelloTo(peer)
     sendContactTo(peer)
     applyHeldContact(peer, person)
     closeSheet()
@@ -736,6 +750,7 @@ function sheetHomeBar(): HTMLElement {
 
 function openSheet(children: (Node | null)[]): void {
   openChat = null
+  cardOpenFor = null
   // A past meeting's player stops whenever the sheet changes (past_meetings_view.ts).
   past.stopPlayer()
   delete sheet.dataset.kind
@@ -749,6 +764,7 @@ function openSheet(children: (Node | null)[]): void {
 
 function closeSheet(): void {
   openChat = null
+  cardOpenFor = null
   // A closed sheet keeps its last content off-screen; inert takes it out of
   // the tab order and the accessibility tree.
   past.stopPlayer()
@@ -927,12 +943,62 @@ async function completePendingConnect(): Promise<void> {
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
-  // The code carried the meeting too (notes and transcript, encrypted): open it now.
-  if (pendingShare) {
-    const link = pendingShare
-    pendingShare = null
-    void openShare(link)
+  // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
+  if (demoLink || solo) openPendingShare()
+  else openConnectAdd(peer, person, link.from.displayName)
+}
+
+/** The code carried the meeting too (notes and transcript, encrypted): open it now. True when something opened. */
+function openPendingShare(): boolean {
+  if (!pendingShare) return false
+  const link = pendingShare
+  pendingShare = null
+  void openShare(link)
+  return true
+}
+
+/** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
+async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean }> {
+  const out = await resolveAddInput({ origin: location.origin, fetch: (i, init) => fetch(i, init) }, input)
+  if (!out.ok) return out.failure
+  if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
+  const peer = await net.completeConnect(out.link, ring)
+  const s = st()
+  let person = s.people.find((p) => p.peerId === peer.id)
+  const existed = person !== undefined
+  if (!person) {
+    person = { id: randomId(8), name: name || peer.displayName, context: where, ring, metAt: Date.now(), lines: [], peerId: peer.id }
+    s.people.push(person)
   }
+  save()
+  sendContactTo(peer)
+  applyHeldContact(peer, person)
+  return { person, existed }
+}
+
+/** The sheet after a scan (connect_add_view.ts): the person is connected; pick the ring, correct the name, then their card opens. */
+let connectAdd: { peerId: string; handle: ConnectAddHandle } | null = null
+
+function openConnectAdd(peer: Peer, person: Person, given: string): void {
+  const handle = renderConnectAdd({
+    name: given,
+    ring: person.ring,
+    onAdd: (typed, ring) => {
+      const s = st()
+      if (typed) person.name = typed
+      person.ring = ring
+      const held = s.peers.find((x) => x.id === peer.id)
+      if (held) held.ring = ring
+      save()
+      connectAdd = null
+      toast(S.connectAddedToast(person.name))
+      render()
+      if (!openPendingShare()) personSheet(person.id)
+    },
+    onLater: () => { connectAdd = null; closeSheet(); openPendingShare() },
+  })
+  connectAdd = { peerId: peer.id, handle }
+  openSheet(handle.nodes)
 }
 
 /**
@@ -1256,8 +1322,12 @@ const RIPPLE_LEAD_MS = 360
 
 function addPersonSheet(ring: Ring): void {
   let picked = ring
+  let busy = false
   const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
   const where = el('input', { class: 'field', placeholder: S.recWherePh, maxlength: '80', 'aria-label': S.addWhere })
+  // Wave 6b: their code, @name, DID or pasted link; nothing is looked up until "Add to my web" is pressed.
+  const code = el('input', { class: 'field', placeholder: S.addCodePh, maxlength: '2048', 'aria-label': S.addCodeLabel, 'data-add-code': '', id: 'add-code', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' })
+  const codeStatus = el('p', { class: 'meta', role: 'status', 'data-add-code-status': '' })
   const radios = el('div', { class: 'add-rings' })
   const drawRadios = (): void => {
     radios.replaceChildren(...RINGS.map((r) => el('button', {
@@ -1266,7 +1336,22 @@ function addPersonSheet(ring: Ring): void {
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
+  const addByCode = async (): Promise<void> => {
+    busy = true
+    addBtn.setAttribute('disabled', '')
+    codeStatus.textContent = S.addCodeBusy
+    const out = await connectByCode(code.value, picked, name.value.trim().slice(0, 40), where.value.trim().slice(0, 80))
+    busy = false
+    addBtn.removeAttribute('disabled')
+    if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
+    closeSheet()
+    toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
+    render()
+    personSheet(out.person.id)
+  }
   const add = (): void => {
+    if (busy) return
+    if (code.value.trim()) { void addByCode(); return }
     const n = name.value.trim()
     if (!n) { name.focus(); return }
     const s = st()
@@ -1276,14 +1361,20 @@ function addPersonSheet(ring: Ring): void {
     toast(S.savedToast(n, S.ringLabel[picked]))
     render()
   }
+  const addBtn = el('button', { class: 'btn btn-electric', 'data-add-person': '', onclick: add }, [S.addSave])
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
+  code.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   openSheet([
     el('h3', {}, [S.addTitle]),
     el('p', { class: 'meta' }, [S.addLead]),
     name,
     where,
+    el('label', { class: 'meta', for: 'add-code' }, [S.addCodeLabel]),
+    code,
+    codeStatus,
+    el('p', { class: 'meta' }, [S.addCodeHint]),
     radios,
-    el('button', { class: 'btn btn-electric', onclick: add }, [S.addSave]),
+    addBtn,
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.addCancel]),
   ])
   setTimeout(() => name.focus(), 320)
@@ -1427,6 +1518,9 @@ function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
   ]
 }
 
+/** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
+let cardOpenFor: string | null = null
+
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
@@ -1450,10 +1544,18 @@ function personSheet(personId: string): void {
     passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     sharedReachRow(p),
+    noMessengerRow(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
   ])
+  cardOpenFor = p.id
+}
+
+/** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
+function noMessengerRow(p: Person): HTMLElement | null {
+  if (!p.peerId || primaryReachable(p)) return null
+  return el('p', { class: 'meta', 'data-no-messenger': p.id }, [S.cardNoMessenger(p.name)])
 }
 
 /** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */
@@ -1582,6 +1684,8 @@ function chatIo(): ChatIo {
 /** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
 function sendContactTo(peer: Peer): void {
   if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  // Wave 6b: "Only TrustWeb" on the open Meet page shares no messenger link with this scan; the tick and the sent record stay untouched.
+  if (!mayShareContact(effectiveMode(meetMode, screen === Screen.Meet))) return
   const s = st()
   const out = contactToSend(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id])
   if (!out) return
@@ -1589,6 +1693,27 @@ function sendContactTo(peer: Peer): void {
     s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }
     save()
   }).catch(() => { /* the relay was down: it is tried again at the next connect */ })
+}
+
+/** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
+function sendHelloTo(peer: Peer): void {
+  if (isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)) return
+  const text = helloText(APP_URL, st().me.displayName)
+  if (text) net.sendText(peer, text).catch(() => { /* the other phone keeps the typed name, or none */ })
+}
+
+/** Net: a connected phone told its name. It fills in only a name this phone does not have yet, and it reaches an open add sheet. */
+function onHelloText(peer: Peer, text: string): void {
+  const name = parseHelloText(APP_URL, text)
+  if (!name) return
+  const s = st()
+  const held = s.peers.find((x) => x.id === peer.id)
+  const person = s.people.find((x) => x.peerId === peer.id)
+  if (held && wantsHelloName(held.displayName)) held.displayName = name
+  if (person && wantsHelloName(person.name)) person.name = cleanHelloName(name)
+  save()
+  if (connectAdd?.peerId === peer.id) connectAdd.handle.setTheirName(name)
+  render()
 }
 
 let openChat: { peerId: string; refresh(): void } | null = null
@@ -1617,6 +1742,9 @@ function applyContact(peer: Peer, person: Person, text: string): void {
   save()
   toast(S.contactReceivedToast(peer.displayName))
   render()
+  // Their card is open (the scan just landed on it): show the Message button now, unless the person is typing in it.
+  const typing = sheet.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement
+  if (cardOpenFor === person.id && sheet.classList.contains('on') && !typing) personSheet(person.id)
 }
 
 /** Call right after a card for `peer` exists (onPeerConnected, completePendingConnect). */
@@ -1648,6 +1776,7 @@ function onIncomingText(peer: Peer, text: string, ts: number): void {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
+    case TextKind.Hello: onHelloText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts); return
     case TextKind.Ignore: return
   }
@@ -2584,24 +2713,25 @@ async function makeNotes(): Promise<void> {
 // meet: this phone's code (QR), NFC where the browser can, a link to copy
 // ---------------------------------------------------------------------------
 
-/** The pages of Meet: the TrustWeb code first, then my Signal code, then my Matrix code once set, then Demo account. */
+/**
+ * The pages of Meet: the one code, then Demo account. Wave 6b: my Signal and Matrix codes are no longer pages to swipe to; the Signal link
+ * rides in the one code (the sharing line) or becomes the code under Advanced > Only Signal/Molly, and both are edited in Settings.
+ */
 enum MeetPage {
   TrustWeb = 'trustweb',
-  Signal = 'signal',
-  Matrix = 'matrix',
   /** A test account for the person in front of you (owner 2026-10-06). */
   Demo = 'demo',
 }
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
+/** The Advanced choice of the code on screen (connect_modes.ts): memory only, the default whenever Meet is opened. */
+let meetMode: ConnectMode = ConnectMode.Both
+
 function meetPages(): MeetPage[] {
-  // Tana, 2026-08-24: "on the same page that one shows one's QR code, one should
-  // also show one's Signal code, and once that is ready, one's Matrix code."
-  const mine = st().myChannels ?? {}
   // Demo phones (solo) and demo accounts do not hand out demo accounts of their own.
   const demo = solo || st().testOf ? [] : [MeetPage.Demo]
-  return [MeetPage.TrustWeb, MeetPage.Signal, ...(mine[Channel.Matrix] ? [MeetPage.Matrix] : []), ...demo]
+  return [MeetPage.TrustWeb, ...demo]
 }
 
 function openMeet(from: Screen, notes = ''): void {
@@ -2609,6 +2739,7 @@ function openMeet(from: Screen, notes = ''): void {
   meetNotes = notes
   meetShare = null
   meetPage = MeetPage.TrustWeb
+  meetMode = ConnectMode.Both
   demoShowing = null
   go(Screen.Meet)
 }
@@ -2621,21 +2752,10 @@ function screenMeet(): Node[] {
     class: meetPage === pg ? 'on' : '', role: 'tab', 'aria-selected': String(meetPage === pg),
     onclick: () => { meetPage = pg; render() },
   }, [S.meetPage[pg]])))
-  const body = meetPage === MeetPage.TrustWeb ? meetTrustWebPage()
-    : meetPage === MeetPage.Demo ? meetDemoPage()
-    : meetMessengerPage(meetPage === MeetPage.Signal ? Channel.Signal : Channel.Matrix)
-  // Swipe between the pages, like a second page under the QR code.
-  let startX = 0
-  body.addEventListener('pointerdown', (e) => { startX = e.clientX })
-  body.addEventListener('pointerup', (e) => {
-    const dx = e.clientX - startX
-    if (Math.abs(dx) < 60) return
-    const k = pages.indexOf(meetPage) + (dx < 0 ? 1 : -1)
-    if (k >= 0 && k < pages.length) { meetPage = pages[k]; render() }
-  })
+  const body = meetPage === MeetPage.Demo ? meetDemoPage() : meetTrustWebPage()
   return [
     header(name ? S.meetTitleWith(name) : S.meetTitle, { back: () => go(meetFrom), qr: false }),
-    el('div', { class: 'scroll pad' }, [tabs, body]),
+    el('div', { class: 'scroll pad' }, [pages.length > 1 ? tabs : null, body]),
   ]
 }
 
@@ -2653,51 +2773,118 @@ function connectLinkChooser(qr: HTMLElement): LinkChooser {
   return createLinkChooser({ origin: location.origin, offer: !solo, linker: shortLinker, qr, renderQr, copy: copyLink })
 }
 
+/** One connect-code keeper per visit (connect_code.ts): the record lives in the app state, the requests only go out from the two app origins. */
+let connectKeeper: ConnectKeeper | null = null
+
+function codeKeeper(): ConnectKeeper {
+  connectKeeper ??= createConnectKeeper({
+    origin: location.origin,
+    fetch: (input, init) => fetch(input, init),
+    now: () => Date.now(),
+    load: () => state?.connectCode,
+    store: (record) => { st().connectCode = record; save() },
+  })
+  return connectKeeper
+}
+
+/** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
+function connectEligible(): boolean {
+  return !solo && persona === 'me' && !!state && !state.testOf && window.top === window
+}
+
+/** Registers or updates this phone's connect code when due (boot where a code exists, a new name, the Meet page); never throws, never blocks. */
+async function ensureConnectCode(): Promise<void> {
+  if (!connectEligible()) return
+  try {
+    await net.start()
+    await codeKeeper().ensure(net.connectLink(APP_URL))
+  } catch { /* the long link stays; the keeper tries again on the next ensure */ }
+}
+
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
-  const chooser = connectLinkChooser(qr)
+  const view: ConnectView = createConnectView({ origin: location.origin, offer: connectEligible(), keeper: codeKeeper(), qr, renderQr, copy: copyLink })
   const nfcStatus = el('p', { class: 'meta' })
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
-    onclick: () => copyLink(chooser.current()),
+    onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
   const nfc = nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
+          if (!view.current()) return
           nfcStatus.textContent = S.meetNfcWaiting
-          // A tag is written once and kept for good: it always gets the long link (a short link expires after 30 days).
-          writeLinkToTag(chooser.longLink()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
+          // The code link never changes, so a tag keeps working; before the server answered the long link goes on it.
+          writeLinkToTag(view.current()).then(() => { nfcStatus.textContent = S.meetNfcDone }, () => { nfcStatus.textContent = S.meetNfcFailed })
         },
       }, [S.meetNfcWrite])
     : null
   const sharedDd = el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes])
+  const signal = (): string | undefined => st().myChannels?.[Channel.Signal]
+  const provider = (): SignalProvider | undefined => st().contactShare?.signalProvider
+  const sharing = createSharingLine({
+    sharing: () => signalSharing(meetMode, st().myChannels, st().contactShare, revealsPhoneNumber),
+    controls: () => (signal() ? signalControls() : null),
+    editSignal: () => editMineSheet(Channel.Signal),
+  })
+  // The tick lives in shareControlsFor; a change of it must reach the sentence above it and the provider word of Advanced.
+  function signalControls(): HTMLElement {
+    return renderShareControls({
+      doc: document, channel: Channel.Signal, getHandle: () => signal(),
+      getSettings: () => st().contactShare, setSettings: (next) => { st().contactShare = next; save(); sharing.refresh(); advanced.refresh() }, S: shareStrings(),
+    })
+  }
+  const apply = (): void => {
+    const handle = signal()
+    const payload = modePayload(meetMode, view.longLink(), handle, provider())
+    if (meetMode === ConnectMode.OnlyMolly) view.setOverride(payload ?? '', payload === null)
+    else view.setOverride(null)
+    copy.disabled = !view.current() || (meetMode === ConnectMode.OnlyMolly && !payload)
+    advanced.refresh()
+    sharing.refresh()
+  }
+  const advanced = createAdvanced({
+    providerWord: () => chName(Channel.Signal, provider()),
+    getMode: () => meetMode,
+    setMode: (m) => { meetMode = m; apply() },
+    hasSignal: () => !!signal(),
+    cameraOnly: () => needsCameraApp(ConnectMode.OnlyMolly, signal()),
+    editSignal: () => editMineSheet(Channel.Signal),
+    username: { available: () => connectEligible() && st().connectCode !== undefined, current: () => codeKeeper().name(), claim: (name) => codeKeeper().claim(name) },
+  })
+  // The username field appears once the code is on the server.
+  let shown = false
+  const stopListening = codeKeeper().onChange(() => { if (qr.isConnected) { shown = true; advanced.refresh() } else if (shown) stopListening() })
   void (async () => {
     await net.start()
-    let link = net.connectLink(APP_URL)
-    // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only.
+    const link = net.connectLink(APP_URL)
+    // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only,
+    // which a browser never sends to a server, and which the redirect of /c/<code> keeps.
     let frag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
     const share = await meetSharePack()
     if (share) {
       frag += (frag ? '&' : '') + shareFragment(share)
       sharedDd.textContent = transcriptStillComing(draftMeeting()) ? S.meetSharedPending : S.meetSharedTranscript
     }
-    if (frag) link += '#' + frag
-    chooser.setLink(link)
+    view.setLink(link, frag)
     copy.removeAttribute('disabled')
     nfc?.removeAttribute('disabled')
+    apply()
   })()
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     qr,
+    sharing.el,
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
       el('dt', {}, [S.meetShared]), sharedDd,
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
-    chooser.el,
+    view.el,
+    advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
     el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),
     el('p', { class: 'meta', 'data-ways': 'soon' }, [S.meetWaysSoon]),
@@ -2705,35 +2892,6 @@ function meetTrustWebPage(): HTMLElement {
     // Where the browser can write a tag (Chrome on Android), the link can go onto one; phone to phone stays "later".
     nfc,
     nfc ? nfcStatus : null,
-    el('p', { class: 'meta center' }, [S.meetSwipe]),
-  ])
-}
-
-/** My own Signal (or Matrix) code, so they can also reach me there; or a field to add it. */
-function meetMessengerPage(ch: Channel): HTMLElement {
-  const mine = st().myChannels ?? {}
-  const value = mine[ch]
-  if (!value) {
-    return el('div', { class: 'meet-page' }, [
-      el('p', { class: 'hint' }, [S.meetAddMine(S.chLabel[ch])]),
-      singleChannelEditor(ch, () => render()),
-      el('p', { class: 'meta' }, [S.meetMineHint]),
-    ])
-  }
-  const link = channelLink(ch, value)
-  // Signal: the payload comes from channel.ts (always https; the in-app scanner of Signal/Molly reads username codes only, see wave6/u3_signal_finding.txt).
-  const payload = (ch === Channel.Signal && qrPayload(value)) || link
-  const provider = ch === Channel.Signal ? st().contactShare?.signalProvider : undefined
-  const qr = el('div', { class: 'qrwrap', 'data-payload': payload })
-  void renderQr(qr, payload)
-  return el('div', { class: 'meet-page' }, [
-    el('p', { class: 'hint' }, [S.meetMineLead(chName(ch, provider))]),
-    qr,
-    // phone-number code: a plain note first (a username code scans anywhere, so no note)
-    ch === Channel.Signal && scanAdvice(value) === ScanAdvice.CameraAppOnly ? el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]) : null,
-    el('a', { class: 'btn btn-ghost', href: link, target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch, provider))]),
-    el('button', { class: 'btn btn-ghost', onclick: () => editMineSheet(ch) }, [S.meetChangeMine(S.chLabel[ch])]),
-    ch === Channel.Signal ? shareControlsFor(ch) : null,
   ])
 }
 
@@ -3490,6 +3648,8 @@ function editNameSheet(): void {
     closeSheet()
     render()
     toast(S.meNameSaved)
+    // Wave 6b: the connect link carries the name, so the server's copy under the same code is updated (only where a code was ever made).
+    if (s.connectCode) void ensureConnectCode()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') saveName() })
   openSheet([
@@ -3922,6 +4082,8 @@ if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink)
   void completePendingConnect()
   maybeOpenPendingShare()
+  // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
+  if (state.connectCode) void ensureConnectCode()
   offerDemoContent()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
