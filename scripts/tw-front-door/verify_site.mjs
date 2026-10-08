@@ -764,9 +764,8 @@ async function wave5OrgChecks(page) {
   check('main page: waitlist copy is exactly "You can use it right now. If you want to be notified once it is stable, leave your email here."',
     w.note === 'You can use it right now. If you want to be notified once it is stable, leave your email here.', String(w.note))
   check('main page: the notify box reads as the notice for the production build (button "Notify me", heading about being told when it is stable)', w.button === 'Notify me' && /stable/.test(w.heading ?? ''), `${w.button} / ${w.heading}`)
-  const expectedFaqCount = INPERSON_LIVE ? 11 : 10
-  check(`main page: FAQ is a section (id faq) after the use cases, with ${expectedFaqCount} questions (${INPERSON_LIVE ? 'includes meet in person' : 'no meet in person'}), all closed, and an "All questions" link to faq.html`,
-    w.faqPresent && w.faqIds.length === expectedFaqCount && new Set(w.faqIds).size === expectedFaqCount && w.faqClosed && w.allHref === 'faq.html' && w.faqAfterUse, w.faqIds.join(','))
+  check('main page: FAQ is a section (id faq) after the use cases, with 11 questions (includes meet in person), all closed, and an "All questions" link to faq.html',
+    w.faqPresent && w.faqIds.length === 11 && new Set(w.faqIds).size === 11 && w.faqClosed && w.allHref === 'faq.html' && w.faqAfterUse, w.faqIds.join(','))
   await page.goto(BASE + 'faq.html')
   const pageIds = await page.evaluate(() => [...document.querySelectorAll('details.q')].map((d) => d.id))
   check('faq.html still exists with the same question ids as the main page section', pageIds.join(',') === w.faqIds.join(','), pageIds.join(','))
