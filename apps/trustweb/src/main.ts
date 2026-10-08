@@ -71,6 +71,7 @@ import { S } from './strings'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk, liveAwayAsks } from './away_asks'
+import { StoredChange, storedChange } from './tab_sync'
 import { DemoContext, Persona, isDemoContext, isPersona, seedState } from './seed'
 import { MeetingRecorder, RecorderSupport, audioExtension, clock, recorderSupport } from './recorder'
 import type { Recording } from './recorder'
@@ -244,6 +245,10 @@ let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);
 // nothing is merged over it, and the person is told.
 const recordKeptAside = wasUnreadable(persona, storeCtx)
+// Wave 6f review (tab_sync.ts): another tab saved a newer record while this one was busy with the current one (taken over once the
+// sheet closes or the field is left); and: another tab reset this record or gave it another identity, so this tab never saves again.
+let adoptWaiting = false
+let superseded = false
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
@@ -312,7 +317,7 @@ function st(): AppState {
   return state
 }
 function save(): void {
-  if (state) saveState(persona, state, storeCtx)
+  if (state && !superseded) saveState(persona, state, storeCtx)
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +446,9 @@ const net = new Net({
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
   // Wave 6f (ack_retry.ts): a real phone re-sends its connect-ack until the other phone answers; never the side-by-side demo, a demo
   // account's view, a demo account of this phone, or this site's demo front door (its flows are their own).
-  mayResendAck: (peer) => !solo && !isDemoPersona(persona) && !st().testOf && !demoAccounts().some((t) => t.peerId === peer.id) && peer.did !== demoPeer?.did,
+  // Not before demo-peer.json is known (review 6f: the first 'connected' can come before it): resendAcks runs again once it is.
+  mayResendAck: (peer) => !solo && !isDemoPersona(persona) && !st().testOf && !demoAccounts().some((t) => t.peerId === peer.id)
+    && demoPeer !== undefined && peer.did !== demoPeer?.did,
   onAwayAsk: (ask) => { const s = st(); s.awayAsks = addAwayAsk(s.awayAsks, ask, Date.now()); save(); showAwayAsks() },
 })
 
@@ -465,7 +472,8 @@ function onAckAgain(peer: Peer): void {
 
 /** Wave 6f (away_asks.ts): "<name> asked while you were away", the newest first, one card at a time under the header. */
 function showAwayAsks(): void {
-  if (!state) return
+  // A phone waiting for its Allow (a demo account) keeps the card under the header; the asks show once that is decided.
+  if (!state || demoAccounts().some((t) => t.pending)) return
   const live = liveAwayAsks(state.awayAsks, Date.now())
   const first = live[0]
   if (!first) return
@@ -850,6 +858,8 @@ function closeSheet(): void {
   sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
+  // Wave 6f review: a record another tab saved while this sheet was open is taken over now (after the handler that closed it).
+  if (adoptWaiting) setTimeout(settleAdoption, 0)
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -3266,7 +3276,7 @@ async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
   const held = acct?.pending
   if (!acct || !held) return
   delete acct.pending
-  if (!yes) { save(); hideNotice(); toast(S.demoAcctDenied(acct.name)); render(); return }
+  if (!yes) { save(); hideNotice(); toast(S.demoAcctDenied(acct.name)); render(); showAwayAsks(); return }
   // A second phone on the same code replaces the first.
   if (acct.peerId && acct.peerId !== held.id) {
     s.peers = s.peers.filter((p) => p.id !== acct.peerId)
@@ -3286,6 +3296,7 @@ async function allowDemoAccount(id: string, yes: boolean): Promise<void> {
   hideNotice()
   toast(S.demoAcctAllowed(acct.name))
   render()
+  showAwayAsks()
 }
 
 /** The approve step, in the owner's own view: a card under the header, wherever he is. */
@@ -4268,6 +4279,63 @@ const openInstallSheet = installSheets.openInstall
 // boot
 // ---------------------------------------------------------------------------
 
+/** Does an open sheet or a field with the focus hold objects of the current record (tab_sync.ts Wait)? */
+function busyWithRecord(): boolean {
+  const a = document.activeElement
+  const typing = a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)
+  return typing || sheet.classList.contains('on')
+}
+
+/** Wave 6f review: what another tab did to this persona's record (tab_sync.ts). */
+function onStoredChange(next: AppState | null, removed: boolean): void {
+  if (!state || superseded) return
+  switch (storedChange(next, removed, state.me.id, busyWithRecord())) {
+    case StoredChange.Adopt:
+      if (next) adoptRecord(next)
+      return
+    case StoredChange.Wait:
+      adoptWaiting = true
+      return
+    case StoredChange.Superseded:
+      supersede()
+      return
+    case StoredChange.Ignore:
+      return
+  }
+}
+
+function adoptRecord(next: AppState): void {
+  adoptWaiting = false
+  state = next
+  // Handed over to another phone from another tab: this tab never drains for that identity again (one relay identity, one phone).
+  if (next.testOf?.handedOverAt) net.stop()
+  render()
+}
+
+/** Reset or given another identity in another tab: this copy is never written back; the page starts again from what is stored. */
+function supersede(): void {
+  superseded = true
+  adoptWaiting = false
+  net.stop()
+  location.reload()
+}
+
+/** The sheet closed or the field was left: take over what another tab saved meanwhile, unless this tab saved last (then it is ours). */
+function settleAdoption(): void {
+  if (!adoptWaiting || !state || superseded || busyWithRecord()) return
+  let raw: string | null
+  try {
+    raw = localStorage.getItem(storageKey(persona, storeCtx))
+  } catch {
+    adoptWaiting = false
+    return
+  }
+  // From here on nothing is busy: the decision is Adopt, Superseded or Ignore, never Wait again.
+  adoptWaiting = false
+  if (raw !== null && raw === JSON.stringify(state)) return
+  onStoredChange(raw === null ? null : parseRecord(raw), raw === null)
+}
+
 // Wave 6f (drain_lock.ts): the tab in front of the person takes the relay drain; after a long time hidden (a laptop that slept) it
 // opens a fresh socket, since the one it held may be dead without knowing it.
 const WAKE_FRESH_MS = 60_000
@@ -4280,15 +4348,12 @@ document.addEventListener('visibilitychange', () => {
 })
 window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
-// drain: this tab shows it too, instead of keeping an older copy and writing that back over it on its next save.
+// drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).
 window.addEventListener('storage', (e) => {
-  if (e.storageArea !== localStorage || e.key !== storageKey(persona, storeCtx) || !e.newValue || !state) return
-  const next = parseRecord(e.newValue)
-  if (!next || next.me.id !== state.me.id) return
-  state = next
-  const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement
-  if (!typing && !sheet.classList.contains('on')) render()
+  if (e.storageArea !== localStorage || e.key !== storageKey(persona, storeCtx)) return
+  onStoredChange(e.newValue === null ? null : parseRecord(e.newValue), e.newValue === null)
 })
+document.addEventListener('focusout', () => { if (adoptWaiting) setTimeout(settleAdoption, 0) })
 
 render()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
@@ -4310,7 +4375,7 @@ if (state && !state.testOf?.handedOverAt) {
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).
-  if (!solo && !state.testOf) void probeDemoPeer()
+  if (!solo && !state.testOf) void probeDemoPeer().then(() => net.resendAcks())
   // Round B: a cut-off server job reads "may still be charged"; early packs whose transcript is done go out;
   // kept meetings whose transcript was still arriving look for it.
   if (swiss.enabled()) {
