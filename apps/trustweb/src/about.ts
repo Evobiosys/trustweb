@@ -1,7 +1,7 @@
 /**
  * Settings > About (owner 2026-10-06): TrustWeb is presented as part of
  * EvoBioSys, never as a standalone brand. The pages live on the website
- * (idea2.site/trustweb, or trustintheweb.org for the app.trustintheweb.org build; both built by
+ * (idea2.site/trustweb, or trustintheweb.org for the app.trustintheweb.org and app.trustweb.one builds; built by
  * scripts/build_tw_front_door.sh); the app only
  * links to them, each opening in a new tab.
  */
@@ -14,7 +14,7 @@ export const DEFAULT_SITE_URL = 'https://idea2.site/trustweb/'
 
 /**
  * The website this build links to. A build for another home names it at build time
- * (VITE_TW_SITE_URL=https://trustintheweb.org/ for app.trustintheweb.org, scripts/deploy_wot.sh);
+ * (VITE_TW_SITE_URL=https://trustintheweb.org/ for app.trustintheweb.org and app.trustweb.one, scripts/deploy_wot.sh);
  * anything but a plain https URL ending in "/" (no query, no fragment) falls back to the idea2 site.
  */
 export function resolveSiteUrl(raw: unknown): string {

@@ -74,8 +74,9 @@ BRAVE_CRED_FILE=/etc/trustweb/websearch-brave.json
 MOJEEK_CRED_FILE=/etc/trustweb/websearch-mojeek.json
 # The hosts the server answers for and the pages that may post feedback (wave 3: the TrustInTheWeb hosts too). Kept in the unit itself so
 # a deploy never depends on the drop-in of scripts/trustweb_domains.sh backup-env (same values; the drop-in may stay, it changes nothing).
-ALLOWED_HOSTS_PRODUCTION="app.idea2.site,app.trustintheweb.org"
-FEEDBACK_ORIGINS_ALL="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org"
+ALLOWED_HOSTS_PRODUCTION="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
+LINK_HOSTS_ALL="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
+FEEDBACK_ORIGINS_ALL="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org,https://app.trustweb.one"
 # Where feedback entries with newsletter:true are forwarded (services/trustweb-backup/newsletter.mjs). Staging must never reach the real service.
 SUBSCRIBER_URL_PRODUCTION="${TW_SUBSCRIBER_URL:-https://subscriber.questhub.eco/subscribe}"
 SUBSCRIBER_URL_STAGING="${TW_STAGING_SUBSCRIBER_URL:-http://127.0.0.1:8979/subscribe}"
@@ -175,6 +176,7 @@ Environment=HOSTED_DIR=/var/lib/trustweb-hosted${s}
 Environment=FEEDBACK_FILE=/var/lib/trustweb-hosted${s}/feedback.jsonl
 Environment=ALLOWED_HOSTS=${allowed}
 Environment=FEEDBACK_ORIGINS=${FEEDBACK_ORIGINS_ALL}
+Environment=LINK_HOSTS=${LINK_HOSTS_ALL}
 Environment=SUBSCRIBER_URL=${subscriber}
 ${staging_line}# Transcription: the provider is NOT pinned here (TRANSCRIBE_PROVIDER default auto = Berget when its key exists, else OpenRouter);
 # keys handed in as credentials, everything switched on by scripts/trustweb_transcribe_switch_on.sh (it writes TRANSCRIBE_ENABLED=1,

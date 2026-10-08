@@ -151,5 +151,140 @@ class Rehost(unittest.TestCase):
         self.assertEqual(rehost.site_label("example.org"), "example.org")
 
 
+# The live app.trustintheweb.org block carries routes the SITES_BLOCK constant predates (wave 4 and 5); the clone must copy them.
+LIVE_EXTRA_ROUTES = (
+    "\t# --- TrustWeb web results (wave 4) ---\n"
+    "\thandle /websearch* {\n\t\t@ws_query expression {http.request.uri.query} != ''\n\t\trespond @ws_query 400\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n"
+    "\thandle /link {\n\t\tlog_skip\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n"
+    "\thandle /l/* {\n\t\tlog_skip\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n"
+)
+RELAY_ANCHOR = "\t# The one relay process: a phone on app.idea2.site"
+
+
+def live_like_fixture() -> str:
+    text = caddy.apply(FIXTURE, [caddy.Transform.SITES])
+    assert text.count(RELAY_ANCHOR) == 1
+    return text.replace(RELAY_ANCHOR, LIVE_EXTRA_ROUTES + RELAY_ANCHOR)
+
+
+def block_of(text: str, head: str) -> str:
+    start = text.index("\n" + head + "\n") + 1
+    return text[start:text.index("\n}\n", start) + 3]
+
+
+class AppTrustwebOne(unittest.TestCase):
+    """Wave 6c: app.trustweb.one is the app.trustintheweb.org block, host and root changed, nothing else."""
+
+    def test_block_copies_every_live_route_and_changes_only_host_and_root(self) -> None:
+        live = live_like_fixture()
+        out = caddy.apply(live, [caddy.Transform.APP_TRUSTWEB_ONE])
+        one = block_of(out, "app.trustweb.one {")
+        for route in ("handle /websearch*", "handle /link", "handle /l/*", "handle /relay/*", "handle /backup/*", "handle /feedback"):
+            self.assertIn(route, one)
+        self.assertIn("{http.request.uri.query} != ''", one)
+        self.assertIn("root * /srv/questhub-static/app-trustweb-one\n", one)
+        self.assertNotIn("app-trustintheweb", one)
+        self.assertIn("TW_APP_TARGET=trustweb-one", one)
+        self.assertIn('Permissions-Policy "camera=(self), microphone=(self), geolocation=()"', one)
+        self.assertEqual(caddy.app_block_parity(out), [])
+        # the source block and everything before it are untouched
+        self.assertEqual(block_of(out, "app.trustintheweb.org {"), block_of(live, "app.trustintheweb.org {"))
+        self.assertTrue(out.startswith(live.rstrip("\n")))
+
+    def test_second_run_is_a_no_op(self) -> None:
+        once = caddy.apply(live_like_fixture(), [caddy.Transform.APP_TRUSTWEB_ONE])
+        self.assertEqual(caddy.apply(once, [caddy.Transform.APP_TRUSTWEB_ONE]), once)
+
+    def test_a_later_route_on_the_org_block_shows_as_drift_and_a_rerun_syncs_it(self) -> None:
+        once = caddy.apply(live_like_fixture(), [caddy.Transform.APP_TRUSTWEB_ONE])
+        later = once.replace(RELAY_ANCHOR, "\thandle /connect {\n\t\tlog_skip\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n" + RELAY_ANCHOR, 1)
+        drift = caddy.app_block_parity(later)
+        self.assertTrue(any(line.startswith("-") and "handle /connect" in line for line in drift), drift)
+        synced = caddy.apply(later, [caddy.Transform.APP_TRUSTWEB_ONE])
+        self.assertEqual(caddy.app_block_parity(synced), [])
+        self.assertIn("handle /connect", block_of(synced, "app.trustweb.one {"))
+        self.assertEqual(synced.count("\napp.trustweb.one {\n"), 1)
+
+    def test_refuses_without_the_source_block_or_with_a_foreign_block(self) -> None:
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(FIXTURE, [caddy.Transform.APP_TRUSTWEB_ONE])
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(live_like_fixture() + "\napp.trustweb.one {\n\tfile_server\n}\n", [caddy.Transform.APP_TRUSTWEB_ONE])
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(live_like_fixture() + "\nfoo.example, app.trustweb.one {\n\tfile_server\n}\n", [caddy.Transform.APP_TRUSTWEB_ONE])
+
+    def test_demo_block_redirects_to_the_demo_path_without_doubling_it(self) -> None:
+        out = caddy.apply(live_like_fixture(), [caddy.Transform.DEMO_TRUSTWEB_ONE])
+        block = block_of(out, "demo.trustweb.one {")
+        self.assertIn("redir https://app.trustweb.one/demo{uri} permanent", block)
+        self.assertLess(block.index("@demo_already"), block.index("redir https://app.trustweb.one/demo{uri}"))
+        self.assertIn("redir @demo_already https://app.trustweb.one{uri} permanent", block)
+        self.assertEqual(caddy.apply(out, [caddy.Transform.DEMO_TRUSTWEB_ONE]), out)
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(live_like_fixture() + "\ndemo.trustweb.one {\n\tfile_server\n}\n", [caddy.Transform.DEMO_TRUSTWEB_ONE])
+
+    def test_never_touches_the_apex_redirect_or_the_old_app_hosts(self) -> None:
+        live = live_like_fixture()
+        out = caddy.apply(live, [caddy.Transform.APP_TRUSTWEB_ONE, caddy.Transform.DEMO_TRUSTWEB_ONE])
+        self.assertEqual(block_of(out, "trustweb.one, www.trustweb.one {"), block_of(live, "trustweb.one, www.trustweb.one {"))
+        self.assertEqual(out.count("\ntrustweb.one, www.trustweb.one {\n"), 1)
+        self.assertNotIn("redir https://app.trustintheweb.org", out)
+
+
+class AppOrgRedirect(unittest.TestCase):
+    """Wave 6c, Jakob 12:53: app.trustintheweb.org page loads 301 to app.trustweb.one; its API handles keep serving."""
+
+    def redirected(self) -> str:
+        live = live_like_fixture()
+        with_one = caddy.apply(live, [caddy.Transform.APP_TRUSTWEB_ONE])
+        return caddy.apply(with_one, [caddy.Transform.APP_ORG_REDIRECT])
+
+    def test_only_the_page_catch_all_changes_and_every_api_handle_stays(self) -> None:
+        live = live_like_fixture()
+        out = self.redirected()
+        org = block_of(out, "app.trustintheweb.org {")
+        self.assertIn("redir https://app.trustweb.one{uri} permanent", org)
+        self.assertNotIn("file_server", org)
+        for route in ("handle /relay/*", "handle /backup/*", "handle /hosted/*", "handle /transcribe", "handle /feedback", "handle /websearch*", "handle /link", "handle /l/*"):
+            self.assertIn(route, org)
+        # everything of the block above the catch-all is byte-identical to before
+        before = block_of(live, "app.trustintheweb.org {")
+        head = before[:before.index(caddy.ORG_SERVE_CATCHALL)]
+        self.assertTrue(org.startswith(head))
+        # the app folder is not renamed or dropped from the file: only the comment names it
+        self.assertNotIn("root *", org)
+
+    def test_idempotent_and_refused_without_the_new_host(self) -> None:
+        once = self.redirected()
+        self.assertEqual(caddy.apply(once, [caddy.Transform.APP_ORG_REDIRECT]), once)
+        with self.assertRaises(caddy.TransformError):
+            caddy.apply(live_like_fixture(), [caddy.Transform.APP_ORG_REDIRECT])
+
+    def test_the_new_host_never_inherits_the_redirect_and_parity_holds_either_way(self) -> None:
+        once = self.redirected()
+        again = caddy.apply(once, [caddy.Transform.APP_TRUSTWEB_ONE])  # the gate-2 rerun, with the redirect already live
+        one = block_of(again, "app.trustweb.one {")
+        self.assertNotIn("redir https://app.trustweb.one", one)
+        self.assertIn("root * /srv/questhub-static/app-trustweb-one\n", one)
+        self.assertIn("file_server", one)
+        self.assertEqual(caddy.app_block_parity(once), [])
+        self.assertEqual(caddy.app_block_parity(again), [])
+        self.assertEqual(again, once)
+
+    def test_a_later_api_route_reaches_the_new_host_even_with_the_redirect_live(self) -> None:
+        once = self.redirected()
+        later = once.replace(RELAY_ANCHOR, "\thandle /connect {\n\t\tlog_skip\n\t\treverse_proxy 127.0.0.1:8960\n\t}\n" + RELAY_ANCHOR, 1)
+        synced = caddy.apply(later, [caddy.Transform.APP_TRUSTWEB_ONE])
+        self.assertIn("handle /connect", block_of(synced, "app.trustweb.one {"))
+        self.assertIn("handle /connect", block_of(synced, "app.trustintheweb.org {"))
+        self.assertNotIn("redir https://app.trustweb.one", block_of(synced, "app.trustweb.one {"))
+
+    def test_apex_and_idea2_hosts_are_untouched(self) -> None:
+        live = live_like_fixture()
+        out = self.redirected()
+        self.assertEqual(block_of(out, "trustweb.one, www.trustweb.one {"), block_of(live, "trustweb.one, www.trustweb.one {"))
+        self.assertEqual(block_of(out, "idea2.site, www.idea2.site {"), block_of(live, "idea2.site, www.idea2.site {"))
+
+
 if __name__ == "__main__":
     unittest.main()

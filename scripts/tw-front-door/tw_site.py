@@ -13,7 +13,7 @@ network or the server.
 TrustInTheWeb.com (the hosted service, with the pricing). --site-host is the
 host the output is served from (default idea2.site, where the org site lives
 under /trustweb/ until it moves); --app-base is the app's base URL (default
-https://app.idea2.site/trustweb; on the new host https://app.trustintheweb.org).
+https://app.idea2.site/trustweb; on the new hosts https://app.trustweb.one, formerly https://app.trustintheweb.org).
 Every default reproduces the pre-wave-3 build, so an older caller still works.
 
 What it builds (see the fragments next to this file):
@@ -793,7 +793,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument(
         "--app-base",
         default=DEFAULT_APP_BASE,
-        help="base URL of the app (default https://app.idea2.site/trustweb; new host https://app.trustintheweb.org)",
+        help="base URL of the app (default https://app.idea2.site/trustweb; new hosts https://app.trustweb.one, formerly https://app.trustintheweb.org)",
     )
     return ap.parse_args(argv)
 

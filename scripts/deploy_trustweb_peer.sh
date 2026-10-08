@@ -39,7 +39,8 @@ CARD_DIR=/srv/questhub-static/app-idea2-trustweb
 # Wave 3: the same app also runs at app.trustintheweb.org (its own folder, scripts/deploy_wot.sh TW_APP_TARGET=trustintheweb).
 # The demo card goes into every app folder that exists on the host, so a card republished later is never stale on one host.
 CARD_DIR_TRUSTINTHEWEB=/srv/questhub-static/app-trustintheweb
-CARD_DIRS="$CARD_DIR $CARD_DIR_TRUSTINTHEWEB"
+CARD_DIR_TRUSTWEB_ONE=/srv/questhub-static/app-trustweb-one
+CARD_DIRS="$CARD_DIR $CARD_DIR_TRUSTINTHEWEB $CARD_DIR_TRUSTWEB_ONE"
 REF=/srv/questhub-static/wot-app   # a directory whose SELinux context is known good (see deploy_wot.sh)
 RELAY=https://app.idea2.site
 

@@ -261,6 +261,16 @@ describe('deploy_trustweb_peer.sh --republish-cards', () => {
     }
     rmSync(h.root, { recursive: true })
   }, 60_000)
+  it('wave 6c: the demo card goes into all THREE app folders (app.trustweb.one too) when they exist', async () => {
+    const h = withDemoActive()
+    for (const dir of ['app-idea2-trustweb', 'app-trustintheweb', 'app-trustweb-one']) mkdirSync(path.join(h.root, 'srv', dir), { recursive: true })
+    const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)
+    expect(r.code).toBe(0)
+    for (const dir of ['app-idea2-trustweb', 'app-trustintheweb', 'app-trustweb-one']) {
+      expect(JSON.parse(readFileSync(path.join(h.root, 'srv', dir, 'demo-peer.json'), 'utf8'))).toEqual(CARD)
+    }
+    rmSync(h.root, { recursive: true })
+  }, 60_000)
   it('fails (non-zero) when a card cannot be republished, so deploy_wot.sh stops instead of losing the card silently', async () => {
     const h = withDemoActive()   // no srv/app-idea2-trustweb dir: the copy fails
     const r = await run('deploy_trustweb_peer.sh', ['--republish-cards'], h.env)

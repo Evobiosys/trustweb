@@ -24,12 +24,12 @@
 #                                       so a PRODUCTION run for idea2.site is refused once that redirect is live
 #                                       (--draft still works: idea2.site/trustweb/draft/ is still served).
 #   TW_SITE_HOST=trustintheweb.org      https://trustintheweb.org/ (dir trustintheweb-org, draft at /draft/),
-#                                       app TW_APP_ORIGIN (default https://app.trustintheweb.org, the app at its root).
+#                                       app TW_APP_ORIGIN (default https://app.trustweb.one, the app at its root; wave 6c, Jakob 2026-10-08).
 #                                       The pages are built exactly as for idea2, then scripts/tw_site_rehost.py
 #                                       rewrites the app, feedback and site URLs and the site label, and fails if
 #                                       any old idea2 TrustWeb URL is left.
 #   TW_SITE_HOST=trustintheweb.com      the hosting site (dir trustintheweb-com, draft at /draft/), app TW_APP_ORIGIN
-#                                       (default https://app.trustintheweb.org). Built by tw_site.py --site com from
+#                                       (default https://app.trustweb.one). Built by tw_site.py --site com from
 #                                       scripts/tw-front-door/com/ alone: no source page is fetched.
 #   tw_site.py is also handed --site-host and --app-base (the app's full base: <origin>/trustweb on app.idea2.site,
 #   the bare origin elsewhere), so the pages come out right natively (canonical, the white paper anchor, Demo,
@@ -100,11 +100,11 @@ case "$SITE_HOST" in
   trustintheweb.org)
     PROD_DIR=/srv/questhub-static/trustintheweb-org
     SITE_URL="https://trustintheweb.org"
-    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustweb.one}" ;;
   trustintheweb.com)
     PROD_DIR=/srv/questhub-static/trustintheweb-com
     SITE_URL="https://trustintheweb.com"
-    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustintheweb.org}" ;;
+    APP_ORIGIN="${TW_APP_ORIGIN:-https://app.trustweb.one}" ;;
   *) echo "unknown TW_SITE_HOST: $SITE_HOST (idea2.site, trustintheweb.org or trustintheweb.com)" >&2; exit 2 ;;
 esac
 if [ "$SITE_HOST" = idea2.site ] && [ "$APP_ORIGIN" != https://app.idea2.site ]; then
