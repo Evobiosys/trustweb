@@ -9,4 +9,6 @@ declare const __APP_VERSION__: string
 /** The website the app links to (src/about.ts resolveSiteUrl); set by the app.trustintheweb.org and app.trustweb.one builds only. */
 interface ImportMetaEnv {
   readonly VITE_TW_SITE_URL?: string
+  /** "1" in a build whose source is public: the "Is this safe?" sheet then also says the code can be read on GitHub. Absent or anything else: the sentence is not in the bundle. */
+  readonly VITE_TW_CODE_PUBLIC?: string
 }

@@ -20,6 +20,7 @@ import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { checker, launch, newPhone, record, startPhone, startVite } from './swiss_harness.mjs'
 import { acceptAdd } from '../helpers/connect_add.mjs'
+import { chooseMode as chooseShareMode, saveChannel } from '../helpers/share_box.mjs'
 
 const PORT = Number(process.env.TW_PORT || 8970)
 const SHOTS = process.env.TW_SHOTS
@@ -37,7 +38,6 @@ const until = async (fn, ms = 20_000) => {
   return null
 }
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }) }
-const SIGNAL_PH = 'Signal username link (best) or phone number (+43...)'
 
 async function startRelayOn(store, port = 0) {
   const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
@@ -55,16 +55,13 @@ async function openSignalTab(page) {
 
 /** Saves the Signal link through the Meet page's "Add/Edit my Signal link" sheet. */
 async function saveSignal(page, value) {
-  await page.locator('[data-act="edit-signal"]').click()
-  await page.getByPlaceholder(SIGNAL_PH).fill(value)
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.locator('.meet-page').waitFor({ timeout: 10_000 })
+  await saveChannel(page, 'signal', value)
 }
 
-/** Advanced > one of the three choices ('both' | 'molly' | 'trustweb'). */
+/** Advanced > one of the modes. The 6b ids map: both -> trustweb-signal, molly -> only-signal, trustweb -> only-trustweb. */
+const MODE = { both: 'trustweb-signal', molly: 'only-signal', trustweb: 'only-trustweb' }
 async function chooseMode(page, mode) {
-  if ((await page.locator('.advanced-panel').isHidden())) await page.locator('[data-act="advanced"]').click()
-  await page.locator(`[data-mode="${mode}"]`).click()
+  await chooseShareMode(page, MODE[mode] ?? mode)
 }
 
 /** `joiner` opens `host`'s TrustWeb code and connects (one scan). */
@@ -114,7 +111,7 @@ async function main() {
     await chooseMode(alice, 'molly')
     ok('1. Advanced > Only Signal: the QR holds the username link', (await alice.getAttribute('.qrwrap', 'data-payload')) === USERNAME_LINK)
     ok('1. no camera-app note for a username code', (await alice.locator('[data-scan="camera-only"]').count()) === 0)
-    ok('1. the share tick is on by itself for a username link', await alice.locator('.meet-page [data-share-tick="signal"]').isChecked())
+    ok('1. the share tick is on by itself for a username link', await alice.locator('.sharing-line [data-share-tick="signal"]').isChecked())
     ok('1. the record says so', (await record(alice)).contactShare?.shareOnConnect?.signal === true)
     await shot(alice, 'chat-01-alice-signal-tab')
     await chooseMode(alice, 'both')
@@ -134,8 +131,8 @@ async function main() {
     await openSignalTab(bob)
     await saveSignal(bob, PHONE)
     await bob.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
-    ok('2. the share tick stays OFF for a phone number', !(await bob.locator('.meet-page [data-share-tick="signal"]').isChecked()))
-    ok('2. a plain note says the link holds the number', (await bob.locator('.meet-page [data-share="phone"]').count()) === 1)
+    ok('2. the share tick stays OFF for a phone number', !(await bob.locator('.sharing-line [data-share-tick="signal"]').isChecked()))
+    ok('2. a plain note says the link holds the number', (await bob.locator('.sharing-line [data-share="phone"]').count()) === 1)
     ok('2. the page says in one sentence that the Signal link is NOT shared, and why', (await bob.locator('[data-signal-sharing="number-not-ticked"]').innerText()).includes('is not being shared: it holds your phone number'))
     await chooseMode(bob, 'molly')
     ok('2. the QR note says: camera app, not inside Signal or Molly', /camera app, not inside Signal or Molly/.test(await bob.locator('[data-scan="camera-only"]').innerText().catch(() => '')))

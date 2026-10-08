@@ -10,7 +10,9 @@
  * Wire: ONE short text inside the already encrypted chat envelope of a paired
  * peer (the pattern share.ts uses for meeting links), never inside the
  * cleartext connect-ack:
- *     <app url>?contact=1#signal=<link>&matrix=<id>&p=molly
+ *     <app url>?contact=1#signal=<link>&whatsapp=<+number>&wa=<wa.me/qr link>&matrix=<id>
+ * `whatsapp` holds a phone number (older builds show it); the wa.me/qr share link travels under its own key `wa`, which an older
+ * build drops instead of reading a number out of it. Wave 6e stopped writing the Signal/Molly hint `p=` (it is still read).
  * A build that does not know it shows nothing (share.ts only reads its own
  * prefix), so records stay v:1 and older builds ignore it. Everything received
  * is untrusted: bounded, normalised with channel.ts, stripped of control and
@@ -22,7 +24,7 @@
  * for a username link; a phone number needs his own tick.
  */
 import {
-  SignalHandleKind, SignalProvider, channelLink, isSignalProvider, normalizeHandle, revealsPhoneNumber, signalHandleKind,
+  SignalHandleKind, SignalProvider, channelLink, isSignalProvider, isWhatsAppQrLink, normalizeHandle, revealsNumberOn, signalHandleKind,
 } from './channel'
 import { CHANNELS, Channel } from './model'
 import { stripUnsafe, fingerprint } from './safe_text'
@@ -35,12 +37,14 @@ export const CONTACT_VALUE_MAX = 200
 /** The whole text must fit the 500 characters of a chat envelope, with room to spare. */
 export const CONTACT_TEXT_MAX = 480
 const PROVIDER_KEY = 'p'
+/** The key of a WhatsApp share-QR link (https://wa.me/qr/<code>): a number goes under `whatsapp`, as before. */
+const WHATSAPP_QR_KEY = 'wa'
 
 /** The owner's choices; both fields are optional on the app state and absent in older records. */
 export interface ShareSettings {
   /** Explicit ticks per channel: only `true` shares. Absent channel = not ticked. */
   shareOnConnect?: Partial<Record<Channel, boolean>>
-  /** Which app he names for his Signal entry (label and hint only). */
+  /** Wave 6e: no longer chosen anywhere; still read from older records and ignored. */
   signalProvider?: SignalProvider
 }
 
@@ -57,14 +61,22 @@ export interface BuiltContact {
   omitted: Channel[]
 }
 
-/** The initial state of the tick beside a Meet page entry: on for a username link only (a phone number is never pre-ticked). */
+/**
+ * The initial state of the tick beside a contact-box entry: on for a link or id that holds no phone number (a Signal username link,
+ * a WhatsApp share-QR link, a Matrix id), never for a phone number. The owner sees the tick and can clear it.
+ */
 export function defaultShareTick(channel: Channel, handle: string): boolean {
-  return channel === Channel.Signal && signalHandleKind(handle) === SignalHandleKind.UsernameLink
+  switch (channel) {
+    case Channel.Signal: return signalHandleKind(handle) === SignalHandleKind.UsernameLink
+    case Channel.WhatsApp: return isWhatsAppQrLink(handle)
+    case Channel.Matrix: return true
+    default: return false
+  }
 }
 
-/** Does this value carry a phone number in a channel where that matters (the sheet warns before the tick)? */
+/** Does this value carry a phone number in a channel where that matters (the box warns before the tick)? Signal and WhatsApp only. */
 export function sharesPhoneNumber(channel: Channel, handle: string): boolean {
-  return channel === Channel.Signal && revealsPhoneNumber(handle)
+  return revealsNumberOn(channel, handle)
 }
 
 /** The stored ticks, or none when the record holds anything but a plain object there (a corrupted record never throws). */
@@ -94,13 +106,6 @@ export function settleDefaultTick(
     return widened ? withTick(settings, channel, false) : settings
   }
   return defaultShareTick(channel, handle) ? withTick(settings, channel, true) : settings
-}
-
-export function withProvider(settings: ShareSettings | undefined, provider: SignalProvider | undefined): ShareSettings {
-  const next: ShareSettings = { ...settings }
-  if (provider) next.signalProvider = provider
-  else delete next.signalProvider
-  return next
 }
 
 /** A value fit to leave this phone: still a valid handle for its channel, bounded, free of hidden characters. */
@@ -137,17 +142,17 @@ export function buildContactPayload(appUrl: string, mine: ChannelMap | undefined
   for (const ch of CHANNELS) {
     const v = wanted[ch]
     if (!v) continue
-    const trial: ContactPayload = withProviderHint({ v: 1, channels: { ...channels, [ch]: v } }, settings)
+    const trial: ContactPayload = { v: 1, channels: { ...channels, [ch]: v } }
     if (contactText(appUrl, trial).length <= CONTACT_TEXT_MAX) channels[ch] = v
     else omitted.push(ch)
   }
   if (!Object.keys(channels).length) return null
-  return { payload: withProviderHint({ v: 1, channels }, settings), omitted }
+  return { payload: { v: 1, channels }, omitted }
 }
 
-function withProviderHint(payload: ContactPayload, settings: ShareSettings | undefined): ContactPayload {
-  const p = settings?.signalProvider
-  return payload.channels[Channel.Signal] && p && isSignalProvider(p) ? { ...payload, signalProvider: p } : payload
+/** The wire key of one value: the channel's own name, except a WhatsApp share-QR link (see the header). */
+function wireKey(channel: Channel, value: string): string {
+  return channel === Channel.WhatsApp && isWhatsAppQrLink(value) ? WHATSAPP_QR_KEY : channel
 }
 
 /** The chat text that carries a payload. */
@@ -155,7 +160,7 @@ export function contactText(appUrl: string, payload: ContactPayload): string {
   const q = new URLSearchParams()
   for (const ch of CHANNELS) {
     const v = payload.channels[ch]
-    if (v) q.set(ch, v)
+    if (v) q.set(wireKey(ch, v), v)
   }
   if (payload.signalProvider) q.set(PROVIDER_KEY, payload.signalProvider)
   return `${appUrl}?${CONTACT_PARAM}=1#${q.toString()}`
@@ -176,7 +181,10 @@ export function parseContactText(appUrl: string, text: string): ContactPayload |
   } catch {
     return null
   }
-  const raw: Record<string, unknown> = { v: 1, channels: Object.fromEntries(CHANNELS.map((ch) => [ch, q.get(ch)]).filter(([, v]) => v !== null)) }
+  const channels: Record<string, string> = Object.fromEntries(CHANNELS.map((ch) => [ch, q.get(ch)]).filter(([, v]) => v !== null))
+  const waQr = q.get(WHATSAPP_QR_KEY)
+  if (waQr !== null && channels[Channel.WhatsApp] === undefined) channels[Channel.WhatsApp] = waQr
+  const raw: Record<string, unknown> = { v: 1, channels }
   const p = q.get(PROVIDER_KEY)
   if (p !== null) raw.signalProvider = p
   return validateContactPayload(raw)
@@ -205,18 +213,31 @@ export interface ContactToSend {
   text: string
   fingerprint: string
   omitted: Channel[]
+  /** What the text carries, to be remembered next to the fingerprint (AppState.contactSentChannels). */
+  channels: ChannelMap
 }
 
 /**
  * Everything the connect hook needs: the text to send to one peer, or null when
- * nothing is ticked or this exact contact already went to that peer.
+ * nothing is ticked, this exact contact already went to that peer, or what would
+ * go is NARROWER than what that peer already holds (a second scan in another mode
+ * must not wipe, on an older build that replaces the whole set, what the first one
+ * gave). `sentChannels` is what went to that peer before.
  */
 export function contactToSend(
   appUrl: string, mine: ChannelMap | undefined, settings: ShareSettings | undefined, sentFingerprint: string | undefined,
+  sentChannels?: ChannelMap,
 ): ContactToSend | null {
   const built = buildContactPayload(appUrl, mine, settings)
   if (!built || !shouldSendContact(sentFingerprint, built.payload)) return null
-  return { text: contactText(appUrl, built.payload), fingerprint: contactFingerprint(built.payload), omitted: built.omitted }
+  if (sentChannels && isNarrower(built.payload.channels, sentChannels)) return null
+  return { text: contactText(appUrl, built.payload), fingerprint: contactFingerprint(built.payload), omitted: built.omitted, channels: built.payload.channels }
+}
+
+/** True when `next` offers fewer channels than `sent` and every one of them is unchanged: sending it would only take something away. */
+export function isNarrower(next: ChannelMap, sent: ChannelMap): boolean {
+  const kept = (Object.keys(next) as Channel[])
+  return kept.length < Object.keys(sent).length && kept.every((ch) => sent[ch] === next[ch])
 }
 
 /** A contact text arrived from a connected peer: stores it on their card. True when the card changed. */
@@ -242,21 +263,19 @@ export function shouldSendContact(sentFingerprint: string | undefined, payload: 
  */
 export interface ContactCarrier {
   channels?: ChannelMap
-  /** The owner's pick for his own Signal entry on this card (label and hint only). */
-  signalProvider?: SignalProvider
   theirChannels?: ChannelMap
-  theirSignalProvider?: SignalProvider
   theirChannelsAt?: number
 }
 
-/** Stores a received payload on a person. Returns false when it changed nothing (idempotent). */
+/**
+ * Stores a received payload on a person, channel by channel: a channel in the payload replaces that channel, the others stay (wave 6e:
+ * a later scan in another mode carries fewer channels and must not take away what an earlier one gave). Returns false when it changed
+ * nothing (idempotent). The Signal/Molly hint of older senders is read by the parser and ignored here.
+ */
 export function mergeContact(person: ContactCarrier, payload: ContactPayload, now: number): boolean {
-  const same = JSON.stringify(person.theirChannels ?? {}) === JSON.stringify(payload.channels)
-    && person.theirSignalProvider === payload.signalProvider
-  if (same) return false
-  person.theirChannels = { ...payload.channels }
-  if (payload.signalProvider) person.theirSignalProvider = payload.signalProvider
-  else delete person.theirSignalProvider
+  const next: ChannelMap = { ...person.theirChannels, ...payload.channels }
+  if (JSON.stringify(person.theirChannels ?? {}) === JSON.stringify(next)) return false
+  person.theirChannels = next
   person.theirChannelsAt = now
   return true
 }
@@ -266,7 +285,6 @@ export interface Reachable {
   channel: Channel
   value: string
   link: string
-  provider?: SignalProvider
   /** Typed by the owner on the card, or shared by the person when they connected. */
   source: 'own' | 'theirs'
 }
@@ -279,13 +297,17 @@ export function reachableChannels(person: ContactCarrier): Reachable[] {
     const theirs = person.theirChannels?.[ch]
     const value = own ?? theirs
     if (!value) continue
-    const provider = ch === Channel.Signal ? (own ? person.signalProvider : person.theirSignalProvider) : undefined
-    out.push({ channel: ch, value, link: channelLink(ch, value), ...(provider ? { provider } : {}), source: own ? 'own' : 'theirs' })
+    out.push({ channel: ch, value, link: channelLink(ch, value), source: own ? 'own' : 'theirs' })
   }
   return out
 }
 
-/** The one link "Message on Signal / Molly" points at: Signal first, then the owner's channel order. */
+/** Every way to reach a person that THEY shared and the owner has not typed himself: one "Message on ..." button each. */
+export function sharedReachables(person: ContactCarrier): Reachable[] {
+  return reachableChannels(person).filter((r) => r.source === 'theirs')
+}
+
+/** The one link the chat's "Message on ..." points at: Signal first, then the owner's channel order. */
 export function primaryReachable(person: ContactCarrier): Reachable | null {
   return reachableChannels(person)[0] ?? null
 }

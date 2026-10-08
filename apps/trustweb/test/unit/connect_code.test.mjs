@@ -4,9 +4,9 @@
  * that the secret never leaves in anything but the POST body.
  */
 import {
-  CONNECT_CODE_RE, CONNECT_COOLDOWN_MS, CONNECT_MIN_GAP_MS, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, claimName, cleanUsername, codeOfShortLink,
+  CONNECT_CODE_RE, CONNECT_COOLDOWN_MS, CONNECT_MIN_GAP_MS, CONNECT_REFRESH_MS, CONNECT_RETRY_MS, CONNECT_SECRET_RE, ClaimError, ConnectError, canRegister, cleanUsername, codeOfShortLink,
   connectShortLink, isClaimable,
-  createConnectKeeper, readConnectRecord, registerConnect, registrationDue, repairConnectRecord, shortToShow,
+  createConnectKeeper, readConnectRecord, readNameList, registerConnect, registrationDue, repairConnectRecord, shortToShow,
 } from '../../src/connect_code.ts'
 import { buildConnectLinkUrl, parseConnectLinkParams } from '../../../demo/src/connect_link.ts'
 
@@ -53,6 +53,15 @@ describe('readConnectRecord / repairConnectRecord', () => {
     expect(repairConnectRecord(good)).toBe(false)
     expect(good.connectCode).toEqual(record())
     expect(repairConnectRecord({})).toBe(false)
+  })
+  it('a readable record with damaged name fields is cleaned in place, other fields kept; a clean one is left alone', () => {
+    const state = { connectCode: { ...record({ name: 'ada', aliases: ['A!', 'ada', 'ada2', 'ada3', 'ada4'], lockedNames: ['gone', 'ada2'] }), futureField: 7 } }
+    expect(repairConnectRecord(state)).toBe(true)
+    expect(state.connectCode).toMatchObject({ name: 'ada', aliases: ['ada2', 'ada3'], lockedNames: ['ada2'], futureField: 7 })
+    expect(repairConnectRecord(state)).toBe(false)
+    const junk = { connectCode: { ...record(), aliases: 'x', lockedNames: [5] } }
+    expect(repairConnectRecord(junk)).toBe(true)
+    expect('aliases' in junk.connectCode || 'lockedNames' in junk.connectCode).toBe(false)
   })
   it('an old record without the field migrates (nothing there, nothing thrown)', () => {
     const old = { v: 1, me: { id: 'a', displayName: 'A' }, people: [], peers: [], inventory: [], log: [], notificationsOn: false }
@@ -279,17 +288,33 @@ describe('createConnectKeeper', () => {
     expect(await k.ensure(longUrl())).toBe(true)
     expect(calls).toHaveLength(2)
   })
-  it('a 429 on a username claim pauses the registration too (one budget on the server)', async () => {
+  it('a 429 on a name call pauses the registration too (one budget on the server): noteRateLimited', async () => {
     let now = NOW
-    const { k, calls } = keeper([minted(), { status: 429, body: {} }, updated()], { now: () => now })
+    const { k, calls } = keeper([minted(), updated()], { now: () => now })
     await k.ensure(longUrl())
-    const claimed = await k.claim('ada')
-    expect(claimed.ok).toBe(false)
+    expect(k.coolingDown()).toBe(false)
+    k.noteRateLimited()
+    expect(k.coolingDown()).toBe(true)
     expect(await k.ensure(longUrl('Ada Other'))).toBe(false)
-    expect(calls).toHaveLength(2)
+    expect(calls).toHaveLength(1)
     now = NOW + CONNECT_COOLDOWN_MS
+    expect(k.coolingDown()).toBe(false)
     expect(await k.ensure(longUrl('Ada Other'))).toBe(true)
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(2)
+  })
+  it('an update keeps the names written while it ran (names_sync.ts), and a new code starts with none', async () => {
+    const box = { value: record({ name: 'ada' }) }
+    const f = async () => { box.value = record({ name: 'ada', aliases: ['ada2'], lockedNames: ['ada'] }); return { status: 200, ok: true, json: async () => ({ code: CODE, url: `${ORIGIN}/c/${CODE}` }) } }
+    const k = createConnectKeeper({ ...deps(f), load: () => box.value, store: (r) => { box.value = r } })
+    await k.ensure(longUrl('Ada B'))
+    expect(box.value).toMatchObject({ name: 'ada', aliases: ['ada2'], lockedNames: ['ada'] })
+    const box2 = { value: record({ name: 'ada', aliases: ['ada2'] }) }
+    const f2 = fake([{ status: 403, body: { error: 'forbidden' } }, minted(CODE2, SECRET2)]).f
+    const k2 = createConnectKeeper({ ...deps(f2), load: () => box2.value, store: (r) => { box2.value = r } })
+    await k2.ensure(longUrl('Ada B'))
+    expect(box2.value.code).toBe(CODE2)
+    expect(box2.value.name).toBeUndefined()
+    expect(box2.value.aliases).toBeUndefined()
   })
   it('a 403 that is not "forbidden" (forbidden_origin) never throws the code away', async () => {
     const { k, box, calls } = keeper([minted(), { status: 403, body: { error: 'forbidden_origin' } }], {})
@@ -333,7 +358,7 @@ describe('createConnectKeeper', () => {
   })
 })
 
-describe('usernames: claimName and the keeper', () => {
+describe('usernames: the record', () => {
   it('cleans what is typed: no @, lowercase, trimmed', () => {
     expect(cleanUsername('  @Ada.L ')).toBe('ada.l')
     expect(cleanUsername('ADA')).toBe('ada')
@@ -344,47 +369,27 @@ describe('usernames: claimName and the keeper', () => {
     expect(isClaimable('a.b-c_d')).toBe(true)
     for (const bad of ['ab', 'Ada', '-ada', 'ada-', 'a'.repeat(31), 'ada lovelace', 'ada!', 'abcdefghijklmnopqrstuv', '@ada']) expect(isClaimable(bad)).toBe(false)
   })
-  it('POSTs {name, code, secret} to /name and answers the name', async () => {
-    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }])
-    expect(await claimName(deps(f), record(), 'ada')).toEqual({ ok: true, name: 'ada' })
-    expect(calls[0].url).toBe(`${ORIGIN}/name`)
-    expect(calls[0].body).toEqual({ name: 'ada', code: CODE, secret: SECRET })
-    expect(calls[0].init.referrerPolicy).toBe('no-referrer')
-  })
-  it('"" releases', async () => {
-    expect(await claimName(deps(fake([{ status: 200, body: { name: '' } }]).f), record(), '')).toEqual({ ok: true, name: '' })
-  })
-  it.each([[409, ClaimError.Taken], [403, ClaimError.Forgotten], [429, ClaimError.RateLimited], [400, ClaimError.BadName], [500, ClaimError.Server], [503, ClaimError.Server]])('status %i is %s', async (status, error) => {
-    expect(await claimName(deps(fake([{ status, body: {} }]).f), record(), 'ada')).toEqual({ ok: false, error })
-  })
-  it('a bad name never reaches the network; offline is Network; a 200 for another name is Server', async () => {
-    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }])
-    expect(await claimName(deps(f), record(), 'Ada')).toEqual({ ok: false, error: ClaimError.BadName })
-    expect(calls).toHaveLength(0)
-    expect(await claimName(deps(fake(['offline']).f), record(), 'ada')).toEqual({ ok: false, error: ClaimError.Network })
-    expect(await claimName(deps(fake([{ status: 200, body: { name: 'bob' } }]).f), record(), 'ada')).toEqual({ ok: false, error: ClaimError.Server })
-  })
   it('a stored record keeps a valid name and drops an invalid one without dropping the record', () => {
     expect(readConnectRecord(record({ name: 'ada' })).name).toBe('ada')
     const bad = readConnectRecord(record({ name: 'A!' }))
     expect(bad).toEqual(record())
     expect('name' in bad).toBe(false)
   })
-  it('the keeper stores the claimed name, an update keeps it, a release removes it, and with no code nothing is sent', async () => {
-    const box = { value: record() }
-    const { f, calls } = fake([{ status: 200, body: { name: 'ada' } }, updated(), { status: 200, body: { name: '' } }])
-    const k = createConnectKeeper({ ...deps(f), load: () => box.value, store: (r) => { box.value = r } })
-    expect(k.name()).toBe('')
-    expect(await k.claim('ada')).toEqual({ ok: true, name: 'ada' })
-    expect(box.value.name).toBe('ada')
-    expect(k.name()).toBe('ada')
-    await k.ensure(longUrl('Ada B'))
-    expect(box.value.name).toBe('ada')
-    expect(await k.claim('')).toEqual({ ok: true, name: '' })
-    expect('name' in box.value).toBe(false)
-    expect(calls).toHaveLength(3)
-    const none = createConnectKeeper({ ...deps(fake([minted()]).f), load: () => undefined, store: () => {} })
-    expect(await none.claim('ada')).toEqual({ ok: false, error: ClaimError.NoCode })
+  it('keeps aliases and locked names (wave 6e): valid, unique, at most two aliases, locked only for names still held', () => {
+    const r = readConnectRecord(record({ name: 'ada', aliases: ['ada2', 'ada2', 'A!', 'ada', 'ada3', 'ada4'], lockedNames: ['ada', 'gone', 'ada3'] }))
+    expect(r.aliases).toEqual(['ada2', 'ada3'])
+    expect(r.lockedNames).toEqual(['ada', 'ada3'])
+  })
+  it('an old record without aliases still reads, and junk aliases are dropped, never thrown on', () => {
+    expect(readConnectRecord(record({ name: 'ada' }))).toEqual(record({ name: 'ada' }))
+    for (const junk of [null, 5, 'x', {}, [1, null, {}]]) {
+      const r = readConnectRecord(record({ aliases: junk, lockedNames: junk }))
+      expect(r).toEqual(record())
+    }
+  })
+  it('readNameList: names only, no codes, no duplicates, bounded', () => {
+    expect(readNameList(['ada', 'ada', CODE, 'ab'], 3)).toEqual(['ada'])
+    expect(readNameList(undefined, 3)).toEqual([])
   })
 })
 

@@ -2,7 +2,9 @@
  * Contact links (src/channel.ts): every messenger, typed and pasted forms,
  * and malformed input. The link must open the app (https universal links).
  */
-import { channelLink, normalizeHandle, toE164 } from '../../src/channel.ts'
+import {
+  channelLink, isWhatsAppQrLink, normalizeHandle, revealsNumberOn, revealsWhatsAppNumber, toE164, whatsAppQrPayload,
+} from '../../src/channel.ts'
 import { Channel } from '../../src/model.ts'
 
 const link = (ch, input) => {
@@ -47,6 +49,41 @@ describe('WhatsApp', () => {
   it('links a phone number', () => expect(link(Channel.WhatsApp, '0043 660 1234567')).toBe('https://wa.me/436601234567'))
   it('reads a pasted wa.me link', () => expect(link(Channel.WhatsApp, 'https://wa.me/436601234567')).toBe('https://wa.me/436601234567'))
   it('refuses text', () => expect(link(Channel.WhatsApp, 'lena')).toBeNull())
+  it('stores a number as E.164 and a wa.me link of a number the same way', () => {
+    expect(normalizeHandle(Channel.WhatsApp, '+43 000 000 0000')).toBe('+430000000000')
+    expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/430000000000')).toBe('+430000000000')
+    expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/430000000000/')).toBe('+430000000000')
+  })
+  it('keeps WhatsApp\'s own share-QR link whole: wa.me/qr/<code>, no number in it', () => {
+    expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/qr/ABCDEFGH12345')).toBe('https://wa.me/qr/ABCDEFGH12345')
+    expect(link(Channel.WhatsApp, 'https://wa.me/qr/ABCDEFGH12345')).toBe('https://wa.me/qr/ABCDEFGH12345')
+    expect(isWhatsAppQrLink('https://wa.me/qr/ABCDEFGH12345')).toBe(true)
+  })
+  it('a share-QR code made of many digits is NOT read as a phone number (the old digit strip did)', () => {
+    expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/qr/12345678901')).toBe('https://wa.me/qr/12345678901')
+    expect(revealsWhatsAppNumber('https://wa.me/qr/12345678901')).toBe(false)
+  })
+  it('refuses every other shape: query string, hash, other path, other host, http, short code, odd characters', () => {
+    for (const bad of [
+      'https://wa.me/qr/ABCDEFGH12345?text=hi', 'https://wa.me/qr/ABCDEFGH12345#x', 'https://wa.me/430000000000?text=hi', 'https://wa.me/430000000000#x',
+      'https://wa.me/qr/', 'https://wa.me/qr/ABC', 'https://wa.me/qr/ABCDEFGH12345/extra', 'https://wa.me/message/ABCDEFGH12345', 'https://wa.me/',
+      'http://wa.me/qr/ABCDEFGH12345', 'https://wa.me.evil.test/qr/ABCDEFGH12345', 'https://api.whatsapp.com/send?phone=430000000000', 'https://wa.me/qr/ABCD-EFGH12345',
+      'https://wa.me/qr/ABCDEFGH12345?', 'ftp://wa.me/430000000000',
+    ]) expect(normalizeHandle(Channel.WhatsApp, bad), bad).toBeNull()
+  })
+  it('whatsAppQrPayload: the wa.me link of a number or the share-QR link, null for anything else', () => {
+    expect(whatsAppQrPayload('+430000000000')).toBe('https://wa.me/430000000000')
+    expect(whatsAppQrPayload('https://wa.me/qr/ABCDEFGH12345')).toBe('https://wa.me/qr/ABCDEFGH12345')
+    expect(whatsAppQrPayload('lena')).toBeNull()
+    expect(whatsAppQrPayload('')).toBeNull()
+  })
+  it('revealsNumberOn: Signal numbers and WhatsApp numbers yes, links without a number and other channels no', () => {
+    expect(revealsNumberOn(Channel.WhatsApp, '+430000000000')).toBe(true)
+    expect(revealsNumberOn(Channel.WhatsApp, 'https://wa.me/qr/ABCDEFGH12345')).toBe(false)
+    expect(revealsNumberOn(Channel.Signal, '+430000000000')).toBe(true)
+    expect(revealsNumberOn(Channel.Signal, 'https://signal.me/#eu/abcDEF123_-xyz')).toBe(false)
+    expect(revealsNumberOn(Channel.Matrix, '@lena:matrix.org')).toBe(false)
+  })
 })
 
 describe('Matrix', () => {

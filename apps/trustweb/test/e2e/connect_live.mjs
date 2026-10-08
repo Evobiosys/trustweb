@@ -31,6 +31,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { checker, launch, newPhone, record, startPhone } from './swiss_harness.mjs'
+import { saveChannel } from '../helpers/share_box.mjs'
 
 const ALLOWED_HOSTS = ['https://app.idea2.site/trustweb', 'https://app.trustweb.one', 'https://app.trustintheweb.org']
 const MOVED_TO = { 'https://app.trustintheweb.org': 'https://app.trustweb.one' }
@@ -101,11 +102,8 @@ async function openMeet(page) {
 
 /** Saves the fake username link and makes sure the "share when we connect" tick is on. */
 async function saveSignalLink(page) {
-  await page.locator('[data-act="edit-signal"]').click()
-  await page.getByPlaceholder(SIGNAL_PLACEHOLDER).fill(SIGNAL_LINK)
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await page.locator('.meet-page').waitFor({ timeout: 10_000 })
-  const tick = page.locator('.meet-page [data-share-tick="signal"]')
+  await saveChannel(page, 'signal', SIGNAL_LINK)
+  const tick = page.locator('.meet-page [data-share-tick="signal"]').first()
   if ((await tick.count()) > 0 && !(await tick.isChecked())) await tick.check()
   return (await tick.count()) === 0 || (await tick.isChecked())
 }
@@ -204,7 +202,7 @@ async function checkAddSheetNamesA(b) {
 }
 
 async function checkMessageButton(b) {
-  const msg = b.locator('.sheet.on a', { hasText: /Message on (Signal|Molly)/ })
+  const msg = b.locator('.sheet.on a', { hasText: /Message on Signal/ })
   const href = await until(async () => ((await msg.count()) === 1 ? await msg.getAttribute('href') : null), CONTACT_WAIT_MS)
   if (!href) {
     const none = (await b.locator('[data-no-messenger]').count()) > 0

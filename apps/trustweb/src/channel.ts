@@ -51,6 +51,35 @@ function normalizeSignal(raw: string): string | null {
   return toE164(raw)
 }
 
+// ---------------------------------------------------------------------------
+// WhatsApp (wave 6e). Two stored shapes, and only these:
+//   +436601234567                 a phone number (canonical E.164): the link is https://wa.me/<digits>
+//   https://wa.me/qr/<code>       WhatsApp's own share-QR link: it carries NO phone number
+// A wa.me link with a query string, a hash or any other path is no WhatsApp handle at all (nothing a person pastes may smuggle a
+// prefilled message or a tracking parameter into a link this phone shows, shares or draws).
+// ---------------------------------------------------------------------------
+
+/** The code of a wa.me/qr link: letters and digits only (WhatsApp's own are 13 upper-case characters; the bound is generous). */
+const WA_QR_CODE = /^[A-Za-z0-9]{8,40}$/
+const WA_QR_PATH = /^\/qr\/([A-Za-z0-9]{8,40})\/?$/
+const WA_NUMBER_PATH = /^\/(\d{7,15})\/?$/
+
+/** True for the canonical stored share-QR form (https://wa.me/qr/<code>), nothing else. */
+export function isWhatsAppQrLink(value: string): boolean {
+  const m = /^https:\/\/wa\.me\/qr\/([^/]+)$/.exec(value)
+  return m !== null && WA_QR_CODE.test(m[1])
+}
+
+function normalizeWhatsApp(raw: string): string | null {
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return toE164(raw)
+  const link = linkOn(raw, ['wa.me'])
+  if (!link || link.search !== '' || link.hash !== '' || /[?#]/.test(raw)) return null
+  const qr = WA_QR_PATH.exec(link.pathname)
+  if (qr) return `https://wa.me/qr/${qr[1]}`
+  const digits = WA_NUMBER_PATH.exec(link.pathname)
+  return digits ? toE164('+' + digits[1]) : null
+}
+
 /**
  * The canonical value to store, or null if the input is not a valid way to
  * reach someone on this channel.
@@ -61,11 +90,8 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
   switch (channel) {
     case Channel.Signal:
       return normalizeSignal(raw)
-    case Channel.WhatsApp: {
-      const link = linkOn(raw, ['wa.me'])
-      const digits = link ? link.pathname.replace(/\D/g, '') : null
-      return digits ? toE164('+' + digits) : toE164(raw)
-    }
+    case Channel.WhatsApp:
+      return normalizeWhatsApp(raw)
     case Channel.Matrix: {
       const link = linkOn(raw, ['matrix.to'])
       const id = link ? safeDecode(link.hash.replace(/^#\/?/, '')) : raw
@@ -105,7 +131,7 @@ export function channelLink(channel: Channel, value: string): string {
     case Channel.Signal:
       return value.startsWith('https://') ? value : `https://signal.me/#p/${value}`
     case Channel.WhatsApp:
-      return `https://wa.me/${value.replace(/\D/g, '')}`
+      return isWhatsAppQrLink(value) ? value : `https://wa.me/${value.replace(/\D/g, '')}`
     case Channel.Matrix:
       return `https://matrix.to/#/${value}`
     case Channel.Delta:
@@ -127,7 +153,10 @@ export function channelLink(channel: Channel, value: string): string {
 // link opener (see DEVLOG wave6/u3_signal_finding.txt).
 // ---------------------------------------------------------------------------
 
-/** Which app the owner names for a Signal entry. */
+/**
+ * Which app the owner once named for a Signal entry. Wave 6e removed the choice from every screen ("don't make me choose, most people
+ * don't have Molly"): the record field `signalProvider` and a received `p=molly` are still read, and ignored.
+ */
 export enum SignalProvider {
   Signal = 'signal',
   Molly = 'molly',
@@ -184,17 +213,24 @@ export function scanAdvice(handle: string): ScanAdvice {
   return revealsPhoneNumber(handle) ? ScanAdvice.CameraAppOnly : ScanAdvice.AnyScanner
 }
 
-/** Keys of the app's strings for the Signal row; the module holds no copy itself. */
-export enum SignalLabelKey {
-  Signal = 'signal',
-  Molly = 'molly',
-  /** No provider chosen on Android: Signal's link may open Molly instead, so both are named. */
-  SignalOrMolly = 'signal-or-molly',
+// ---------------------------------------------------------------------------
+// WhatsApp, as a code (wave 6e)
+// ---------------------------------------------------------------------------
+
+/** True when a stored WhatsApp value is a phone number (a wa.me/qr share link carries none). */
+export function revealsWhatsAppNumber(value: string): boolean {
+  return /^\+[1-9]\d{6,14}$/.test(value.trim())
 }
 
-/** Unset provider: exactly what main.ts chName does today (Android names both apps, elsewhere Signal). */
-export function signalLabelKey(provider: SignalProvider | undefined, isAndroid: boolean): SignalLabelKey {
-  if (provider === SignalProvider.Molly) return SignalLabelKey.Molly
-  if (provider === SignalProvider.Signal) return SignalLabelKey.Signal
-  return isAndroid ? SignalLabelKey.SignalOrMolly : SignalLabelKey.Signal
+/** Does this stored value carry a phone number, on the channels where that is a question (Signal, WhatsApp)? */
+export function revealsNumberOn(channel: Channel, value: string): boolean {
+  if (channel === Channel.Signal) return revealsPhoneNumber(value)
+  if (channel === Channel.WhatsApp) return revealsWhatsAppNumber(value)
+  return false
+}
+
+/** The https link a WhatsApp QR holds (https://wa.me/<digits> or the wa.me/qr share link), or null when the value is no WhatsApp handle. */
+export function whatsAppQrPayload(handle: string): string | null {
+  const v = handle.trim()
+  return revealsWhatsAppNumber(v) || isWhatsAppQrLink(v) ? channelLink(Channel.WhatsApp, v) : null
 }

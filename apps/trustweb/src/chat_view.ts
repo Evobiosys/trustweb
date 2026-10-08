@@ -16,8 +16,7 @@ import {
   CHAT_TEXT_MAX, ChatDirection, MessageState, markDelivered, markRead, pendingOutgoing, queueOutgoing,
 } from './chat'
 import type { ChatBook, ChatMessage } from './chat'
-import { SIGNAL_PROVIDERS, SignalProvider } from './channel'
-import { sharesPhoneNumber, withProvider, withTick } from './contact_share'
+import { sharesPhoneNumber, withTick } from './contact_share'
 import type { Reachable, ShareSettings } from './contact_share'
 import { Channel } from './model'
 
@@ -256,10 +255,10 @@ export function renderChat(deps: ChatViewDeps): ChatHandle {
 }
 
 // ---------------------------------------------------------------------------
-// the owner's side: which app, and whether this link is shared when we connect
+// the owner's side: whether this link is shared when we connect
 // ---------------------------------------------------------------------------
 
-/** Copy for the controls under a saved Signal link on the Meet page. */
+/** Copy for the tick under a saved link in the contact box. */
 export interface ShareStrings {
   /** "Share this link with people when we connect on TrustWeb" */
   tickLabel: string
@@ -267,9 +266,6 @@ export interface ShareStrings {
   tickPhoneNote: string
   /** "Links already sent stay with the people who got them." */
   tickHint: string
-  providerLabel: string
-  providerNames: Record<SignalProvider, string>
-  providerHint: string
 }
 
 export interface ShareControlsDeps {
@@ -280,18 +276,6 @@ export interface ShareControlsDeps {
   getSettings(): ShareSettings | undefined
   setSettings(next: ShareSettings): void
   S: ShareStrings
-}
-
-function providerButtons(deps: ShareControlsDeps, redraw: () => void): HTMLElement {
-  const { doc, S } = deps
-  const current = deps.getSettings()?.signalProvider
-  const buttons = SIGNAL_PROVIDERS.map((p) => {
-    const b = h(doc, 'button', { class: 'btn btn-ghost btn-sm', type: 'button', 'aria-pressed': String(current === p), 'data-provider': p }, [S.providerNames[p]])
-    // Pressing the chosen one again clears the choice (back to the unlabelled default).
-    b.addEventListener('click', () => { deps.setSettings(withProvider(deps.getSettings(), current === p ? undefined : p)); redraw() })
-    return b
-  })
-  return h(doc, 'div', { class: 'chat-row', role: 'group', 'aria-label': S.providerLabel }, [h(doc, 'span', {}, [S.providerLabel]), ...buttons])
 }
 
 function tickRow(deps: ShareControlsDeps, handle: string): HTMLElement {
@@ -307,9 +291,8 @@ function tickRow(deps: ShareControlsDeps, handle: string): HTMLElement {
 }
 
 /**
- * The two controls under a saved Signal link: which app it is (a label and a
- * hint only), and the "share when we connect" tick. The tick is unticked until
- * the owner ticks it or the hook calls settleDefaultTick after a save.
+ * The "share when we connect" tick under a saved link (Signal, WhatsApp, Matrix; wave 6e removed the Signal/Molly pick). The tick is
+ * unticked until the owner ticks it or the hook calls settleDefaultTick after a save.
  */
 export function renderShareControls(deps: ShareControlsDeps): HTMLElement {
   const { doc } = deps
@@ -318,13 +301,7 @@ export function renderShareControls(deps: ShareControlsDeps): HTMLElement {
   const draw = (): void => {
     const handle = deps.getHandle()
     if (!handle) { root.replaceChildren(); return }
-    root.replaceChildren(
-      ...[
-        deps.channel === Channel.Signal ? providerButtons(deps, draw) : null,
-        deps.channel === Channel.Signal ? h(doc, 'p', { class: 'chat-note' }, [deps.S.providerHint]) : null,
-        tickRow(deps, handle),
-      ].filter((n): n is HTMLElement => n !== null),
-    )
+    root.replaceChildren(tickRow(deps, handle))
   }
   draw()
   return root

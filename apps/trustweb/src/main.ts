@@ -25,12 +25,26 @@ import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
 import { createConnectKeeper, repairConnectRecord } from './connect_code'
+import { createNamesSync } from './names_sync'
+import type { NamesSync } from './names_sync'
+import { createNamesView } from './names_view'
+import { repairGeneralNotes, setGeneralNote, generalNoteOf } from './general_notes'
+import { createAdvancedMemory, localStorageCell } from './notes_advanced_memory'
+import { createGeneralSection } from './person_general_view'
+import { pendingTranscripts } from './person_notes'
+import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
+import { safetyLink, safetySheetNodes } from './reassurance_view'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
-import { createAdvanced, createSharingLine } from './connect_advanced_view'
-import { ConnectMode, mayShareContact, modePayload, needsCameraApp, signalSharing } from './connect_modes'
+import { createAdvanced, createShareRow, createSharingLine } from './connect_advanced_view'
+import { BOX_CHANNELS, createContactBox } from './contact_box_view'
+import type { ContactBox } from './contact_box_view'
+import {
+  ShareMode, channelOf, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable, modePayload, modeSharing, narrowMine, needsCameraApp, repairShareFields, rowModes, readPins,
+  togglePin,
+} from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
@@ -42,9 +56,8 @@ import { ANSWER_WINDOW_MS, Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { revealsPhoneNumber, signalLabelKey, channelLink, normalizeHandle } from './channel'
-import type { SignalProvider } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, takeContact, ticked } from './contact_share'
+import { channelLink, normalizeHandle } from './channel'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -263,7 +276,11 @@ try {
     const chatsFixed = migrateChats(state)
     // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped, never thrown on.
     const codeFixed = repairConnectRecord(state)
-    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed) save()
+    // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped, never thrown on.
+    const modesFixed = repairShareFields(state)
+    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired, never thrown on.
+    const notesFixed = repairGeneralNotes(state)
+    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed || modesFixed || notesFixed) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
@@ -998,7 +1015,13 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
     onLater: () => { connectAdd = null; closeSheet(); openPendingShare() },
   })
   connectAdd = { peerId: peer.id, handle }
-  openSheet(handle.nodes)
+  const nodes: Node[] = [...handle.nodes]
+  // Wave 6e: a small "Is this safe?" link the first time a scan lands here (reassurance.ts); the sheet comes back to this one.
+  if (offerFirstTime(st())) {
+    if (markFirstTimeShown(st(), Date.now())) save()
+    nodes.push(safetyLink(SafetyPlace.AddSheet, () => openSheet(safetySheetNodes({ place: SafetyPlace.AddSheet, back: { label: S.safeBackAdd, go: () => openSheet(nodes) } }))))
+  }
+  openSheet(nodes)
 }
 
 /**
@@ -1540,16 +1563,41 @@ function personSheet(personId: string): void {
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
+    // Wave 6e: the General note, under "Advanced", collapsed unless it was open in the last two minutes (general_notes.ts, person_general_view.ts).
+    generalNoteSection(p),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     sharedReachRow(p),
     noMessengerRow(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
+    safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
   ])
   cardOpenFor = p.id
+}
+
+/** One memory of "the Advanced disclosure of a card was open" for the whole phone: a timestamp in one storage cell, two minutes (notes_advanced_memory.ts). */
+const personAdvancedMemory = createAdvancedMemory(
+  localStorageCell('trustweb.ui.personAdvancedAt', () => { try { return window.localStorage } catch { return undefined } }),
+  () => Date.now(),
+)
+
+/** The General note of a person: autosaved into the record (Only me), see general_notes.ts. */
+function generalNoteSection(p: Person): HTMLElement {
+  const section = createGeneralSection({
+    name: p.name,
+    note: () => generalNoteOf(p),
+    commit: (text) => {
+      // The record may have been replaced since the card opened: write into the person as the record holds it now.
+      const now = st().people.find((x) => x.id === p.id)
+      if (now && setGeneralNote(now, text)) save()
+    },
+    memory: personAdvancedMemory,
+    pendingVoice: () => pendingTranscripts(st(), p.id),
+  })
+  return section.el
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -1565,22 +1613,25 @@ function passOnRowFor(p: Person): HTMLElement | null {
   return passOnRow(passOnAllowed(st(), peer, ownDoorDid()), (next) => { p.passOn = next; save(); personSheet(p.id) })
 }
 
-/** "Message on Signal / Molly" for a link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
+/** One "Message on ..." button for each link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
 function sharedReachRow(p: Person): HTMLElement | null {
-  const r = primaryReachable(p)
-  if (!r || r.source !== 'theirs') return null
+  const shared = sharedReachables(p)
+  if (!shared.length) return null
   return el('div', { class: 'ch-row shared' }, [
-    el('a', { class: 'btn btn-ghost', href: r.link, target: '_blank', rel: 'noopener noreferrer' }, [S.chatMessageOn(reachLabel(r))]),
+    ...shared.map((r) => el('a', {
+      class: 'btn btn-ghost', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel,
+    }, [S.chatMessageOn(reachLabel(r))])),
     el('p', { class: 'meta' }, [S.chSharedBy(p.name)]),
   ])
 }
+
+/** The channels the contact box does not hold (Delta Chat, Telegram, Messenger): Settings keeps them, never shared by a scan. */
+const CHANNELS_OTHER: readonly Channel[] = CHANNELS.filter((ch) => !BOX_CHANNELS.includes(ch))
 
 /** Where a set of messenger handles lives: a person's card, or my own contact info. */
 interface ChannelOwner {
   get(): Partial<Record<Channel, string>>
   set(ch: Channel, value: string | null): void
-  /** The app named for the Signal entry of this owner (label only). */
-  provider?(): SignalProvider | undefined
 }
 
 function personChannels(p: Person): ChannelOwner {
@@ -1592,7 +1643,6 @@ function personChannels(p: Person): ChannelOwner {
       p.channels = next
       save()
     },
-    provider: () => p.signalProvider,
   }
 }
 
@@ -1610,7 +1660,6 @@ function myChannels(): ChannelOwner {
       else if (s.contactShare?.shareOnConnect) delete s.contactShare.shareOnConnect[ch] // a removed link is no longer shared
       save()
     },
-    provider: () => st().contactShare?.signalProvider,
   }
 }
 
@@ -1619,12 +1668,12 @@ function myChannels(): ChannelOwner {
  * show as "Open in ..." links; "Add other ways to contact them" expands the
  * full list, in the owner's order. Kept on this phone.
  */
-function channelsView(owner: ChannelOwner, labels: { title: string; add: string; hint: string }): HTMLElement {
+function channelsView(owner: ChannelOwner, labels: { title: string; add: string; hint: string }, channels: readonly Channel[] = CHANNELS): HTMLElement {
   const box = el('div', { class: 'channels' })
   let expanded = false
   const draw = (edit?: Channel): void => {
     const known = owner.get()
-    const shown = expanded || edit ? CHANNELS : CHANNELS.filter((ch) => known[ch])
+    const shown = expanded || edit ? channels : channels.filter((ch) => known[ch])
     box.replaceChildren(
       el('h4', { class: 'eyebrow' }, [labels.title]),
       ...shown.map((ch) => channelRow(owner, ch, edit === ch, (next) => draw(next))),
@@ -1637,11 +1686,9 @@ function channelsView(owner: ChannelOwner, labels: { title: string; add: string;
   return box
 }
 
-/** Signal's link opens Molly where it is installed instead; Molly exists on Android only (A2), so only there it is named. */
-/** Unset provider = exactly the old behaviour: Android names both apps (Signal's link may open Molly), elsewhere Signal. A chosen provider names that app. */
-const chName = (ch: Channel, provider?: SignalProvider): string =>
-  ch === Channel.Signal ? S.chProviderLabel[signalLabelKey(provider, /Android/i.test(navigator.userAgent))] : S.chLabel[ch]
-const reachLabel = (r: Reachable): string => chName(r.channel, r.provider)
+/** The label of a channel: "Signal" everywhere (wave 6e removed the Signal/Molly pick; only the camera-app note names both apps). */
+const chName = (ch: Channel): string => S.chLabel[ch]
+const reachLabel = (r: Reachable): string => chName(r.channel)
 
 const NO_CHATS: ChatBook = {}
 
@@ -1651,20 +1698,39 @@ const chatStrings = (): ChatStrings => ({
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
 })
 
-const shareStrings = (): ShareStrings => ({
-  tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint,
-  providerLabel: S.providerLabel, providerNames: S.providerNames, providerHint: S.providerHint,
-})
+const shareStrings = (): ShareStrings => ({ tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint })
 
-/** The provider + "share when we connect" controls under my saved Signal link (Meet page and the "Your Signal" sheet). */
-function shareControlsFor(ch: Channel): HTMLElement {
+/** The "share when we connect" tick (and the phone-number warning) under one of my saved links; `after` runs once a tick was changed and saved. */
+function tickControlsFor(ch: Channel, after: () => void): HTMLElement {
   return renderShareControls({
-    doc: document, channel: ch,
-    getHandle: () => st().myChannels?.[ch],
+    doc: document, channel: ch, getHandle: () => st().myChannels?.[ch],
     getSettings: () => st().contactShare,
-    setSettings: (next) => { st().contactShare = next; save() },
+    setSettings: (next) => { st().contactShare = next; save(); after() },
     S: shareStrings(),
   })
+}
+
+/**
+ * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. Meet > Advanced and Settings both draw it
+ * from here. `changed` runs after a link was saved or removed, `ticked` after a tick was changed (the Meet page redraws its sentence).
+ */
+function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () => void }): ContactBox {
+  let box: ContactBox | null = null
+  const ticks = (ch: Channel): HTMLElement => tickControlsFor(ch, () => { hooks.ticked?.(); box?.refreshTicks() })
+  box = createContactBox({
+    mine: () => st().myChannels ?? {},
+    save: (ch, value) => myChannels().set(ch, value),
+    remove: (ch) => {
+      myChannels().set(ch, null)
+      // A remembered mode about a link that is gone falls back to the default.
+      const stored = st().shareMode
+      if (isShareMode(stored) && channelOf(stored) === ch) { delete st().shareMode; save() }
+    },
+    normalize: normalizeHandle,
+    ticks,
+    changed: hooks.changed,
+  })
+  return box
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -1684,14 +1750,17 @@ function chatIo(): ChatIo {
 /** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
 function sendContactTo(peer: Peer): void {
   if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
-  // Wave 6b: "Only TrustWeb" shares no messenger link with this scan; the tick and the sent record stay untouched. The choice of the code
-  // shown last counts even after Meet was left (a scan can arrive late over the relay); opening Meet again resets it to the default.
-  if (!mayShareContact(meetMode)) return
+  // Wave 6e: the mode shown on Meet last (it is remembered, so a scan that arrives late over the relay is judged by it) NARROWS what goes:
+  // TrustWeb+X sends channel X only, Only TrustWeb sends nothing and leaves the tick and the sent record alone. The tick still applies
+  // afterwards (contact_share.ts), so a mode never sends a link that is not ticked.
+  const mode = shareModeNow()
+  if (!mayShareContact(mode)) return
   const s = st()
-  const out = contactToSend(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id])
+  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id])
   if (!out) return
   net.sendText(peer, out.text).then(() => {
     s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }
+    s.contactSentChannels = { ...s.contactSentChannels, [peer.id]: out.channels }
     save()
   }).catch(() => { /* the relay was down: it is tried again at the next connect */ })
 }
@@ -1744,7 +1813,7 @@ function applyContact(peer: Peer, person: Person, text: string): void {
   toast(S.contactReceivedToast(peer.displayName))
   render()
   // Their card is open (the scan just landed on it): show the Message button now, unless the person is typing in it.
-  const typing = sheet.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement
+  const typing = sheet.contains(document.activeElement) && (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
   if (cardOpenFor === person.id && sheet.classList.contains('on') && !typing) personSheet(person.id)
 }
 
@@ -1785,7 +1854,7 @@ function onIncomingText(peer: Peer, text: string, ts: number): void {
 
 function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
   const value = owner.get()[ch]
-  const label = el('span', { class: 'ch-name ch-' + ch }, [chName(ch, owner.provider?.())])
+  const label = el('span', { class: 'ch-name ch-' + ch }, [chName(ch)])
   if (edit) {
     const input = el('input', { class: 'field', placeholder: S.chPh[ch], value: value ?? '', 'aria-label': S.chPh[ch], autocomplete: 'off' })
     const msg = el('p', { class: 'meta ch-msg' })
@@ -1811,7 +1880,7 @@ function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (ed
   }
   return el('div', { class: 'ch-row' }, [
     label,
-    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch, owner.provider?.()))]),
+    el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
     el('button', { class: 'mini', 'aria-label': S.chEdit(S.chLabel[ch]), onclick: () => redraw(ch) }, [S.chEditShort]),
   ])
 }
@@ -2726,8 +2795,19 @@ enum MeetPage {
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
-/** The Advanced choice of the code shown last (connect_modes.ts): memory only, the default whenever Meet is opened. */
-let meetMode: ConnectMode = ConnectMode.Both
+/** The share mode in force (share_modes.ts): the remembered one while its link is still saved, else the primary button. */
+function shareModeNow(): ShareMode {
+  const s = st()
+  return effectiveMode(s.shareMode, s.sharePins, s.myChannels)
+}
+
+function setShareMode(mode: ShareMode): void {
+  st().shareMode = mode
+  save()
+}
+
+/** The Advanced panel stays open while Meet redraws; Meet opens with it closed. */
+let meetAdvancedOpen = false
 
 function meetPages(): MeetPage[] {
   // Demo phones (solo) and demo accounts do not hand out demo accounts of their own.
@@ -2740,7 +2820,7 @@ function openMeet(from: Screen, notes = ''): void {
   meetNotes = notes
   meetShare = null
   meetPage = MeetPage.TrustWeb
-  meetMode = ConnectMode.Both
+  meetAdvancedOpen = false
   demoShowing = null
   go(Screen.Meet)
 }
@@ -2788,6 +2868,22 @@ function codeKeeper(): ConnectKeeper {
   return connectKeeper
 }
 
+/** One names client per visit (names_sync.ts): the names a code holds on the server, read when Meet opens, claimed and released from Advanced. */
+let namesSyncer: NamesSync | null = null
+
+function namesSync(): NamesSync {
+  namesSyncer ??= createNamesSync({
+    origin: location.origin,
+    fetch: (input, init) => fetch(input, init),
+    now: () => Date.now(),
+    load: () => state?.connectCode,
+    store: (record) => { st().connectCode = record; save() },
+    keeper: codeKeeper(),
+    offer: connectEligible(),
+  })
+  return namesSyncer
+}
+
 /** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
 function connectEligible(): boolean {
   return !solo && persona === 'me' && !!state && !state.testOf && window.top === window
@@ -2823,41 +2919,83 @@ function meetTrustWebPage(): HTMLElement {
       }, [S.meetNfcWrite])
     : null
   const sharedDd = el('dd', {}, [notes ? S.meetSharedValue : S.meetSharedNoNotes])
-  const signal = (): string | undefined => st().myChannels?.[Channel.Signal]
-  const provider = (): SignalProvider | undefined => st().contactShare?.signalProvider
+  const mine = (): Partial<Record<Channel, string>> => st().myChannels ?? {}
+  // The mode in force may change under this page (a link removed in Settings); everything below asks shareModeNow() each time.
+  const modeChannel = (): Channel | null => channelOf(shareModeNow())
+  // A mode whose link is not saved yet: tapping it opens the box on that link, and the mode is taken the moment the link is saved.
+  let wanted: ShareMode | null = null
+  const pick = (m: ShareMode): void => {
+    if (modeAvailable(m, st().myChannels)) { wanted = null; setShareMode(m); apply(); return }
+    wanted = m
+    meetAdvancedOpen = true
+    apply()
+    const ch = channelOf(m)
+    if (ch) box.edit(ch)
+  }
+  const box: ContactBox = buildContactBox({
+    // The link just saved is the one a waiting mode wanted: take that mode now.
+    changed: (ch) => {
+      if (wanted && channelOf(wanted) === ch && modeAvailable(wanted, st().myChannels)) { setShareMode(wanted); wanted = null }
+      apply()
+    },
+    ticked: () => apply(true),
+  })
   const sharing = createSharingLine({
-    sharing: () => signalSharing(meetMode, st().myChannels, st().contactShare, revealsPhoneNumber),
-    controls: () => (signal() ? signalControls() : null),
-    editSignal: () => editMineSheet(Channel.Signal),
+    sharing: () => modeSharing(shareModeNow(), st().myChannels, st().contactShare),
+    channel: modeChannel,
+    controls: () => { const ch = modeChannel(); return ch && mine()[ch] ? tickControlsFor(ch, () => apply(true)) : null },
+    addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
   })
-  // The tick lives in shareControlsFor; a change of it must reach the sentence above it and the provider word of Advanced.
-  function signalControls(): HTMLElement {
-    return renderShareControls({
-      doc: document, channel: Channel.Signal, getHandle: () => signal(),
-      getSettings: () => st().contactShare, setSettings: (next) => { st().contactShare = next; save(); apply() }, S: shareStrings(),
-    })
-  }
-  const apply = (): void => {
-    const handle = signal()
-    const payload = modePayload(meetMode, view.longLink(), handle, !!ticked(st().myChannels, st().contactShare)[Channel.Signal], provider())
-    if (meetMode === ConnectMode.OnlyMolly) view.setOverride(payload ?? '', payload === null)
+  const apply = (ticksOnly = false): void => {
+    const mode = shareModeNow()
+    const payload = modePayload(mode, view.longLink(), st().myChannels, st().contactShare)
+    // Only Signal / Only WhatsApp replace the connect link in the QR (and Copy, NFC); no QR at all while their link is missing or unticked.
+    if (isOnlyMessenger(mode)) view.setOverride(payload ?? '', payload === null)
     else view.setOverride(null)
-    copy.disabled = !view.current() || (meetMode === ConnectMode.OnlyMolly && !payload)
-    advanced.refresh()
+    copy.disabled = !view.current() || payload === null
+    row.refresh()
     sharing.refresh()
+    if (ticksOnly) box.refreshTicks()
+    else advanced.refresh()
+    advanced.setOpen(meetAdvancedOpen)
   }
-  const advanced = createAdvanced({
-    providerWord: () => chName(Channel.Signal, provider()),
-    getMode: () => meetMode,
-    setMode: (m) => { meetMode = m; apply() },
-    hasSignal: () => !!signal(),
-    cameraOnly: () => needsCameraApp(ConnectMode.OnlyMolly, signal()),
-    editSignal: () => editMineSheet(Channel.Signal),
-    username: { available: () => connectEligible() && st().connectCode !== undefined, current: () => codeKeeper().name(), claim: (name) => codeKeeper().claim(name) },
+  const row = createShareRow({
+    modes: () => rowModes(st().sharePins, st().myChannels),
+    current: shareModeNow,
+    pick,
+    isOpen: () => meetAdvancedOpen,
+    toggleAdvanced: () => { meetAdvancedOpen = !meetAdvancedOpen; apply(true) },
   })
-  // The username field appears once the code is on the server.
+  const namesView = createNamesView({
+    names: () => namesSync().names(),
+    claim: (name, isAlias) => namesSync().claim(name, isAlias),
+    release: (name) => namesSync().release(name),
+  })
+  const advanced = createAdvanced({
+    current: shareModeNow,
+    pins: () => readPins(st().sharePins),
+    pick,
+    togglePin: (m) => {
+      const r = togglePin(readPins(st().sharePins), m)
+      if (r.refused) return false
+      if (r.pins.length) st().sharePins = r.pins; else delete st().sharePins
+      save()
+      apply()
+      return true
+    },
+    available: (m) => modeAvailable(m, st().myChannels),
+    cameraOnly: () => needsCameraApp(shareModeNow(), st().myChannels),
+    contactBox: box.el,
+    names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
+  })
+  // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
   let shown = false
-  const stopListening = codeKeeper().onChange(() => { if (qr.isConnected) { shown = true; advanced.refresh() } else if (shown) stopListening() })
+  const stopListening = codeKeeper().onChange(() => {
+    if (qr.isConnected) { shown = true; advanced.refresh(); void namesSync().refresh() } else if (shown) stopListening()
+  })
+  const stopNames = namesSync().onChange(() => { if (qr.isConnected) namesView.update(); else stopNames() })
+  // Meet was opened by the person: ask now (names the operator granted show at once); the registration's own answer asks again, throttled.
+  if (st().connectCode) void namesSync().refresh(true)
   void (async () => {
     await net.start()
     const link = net.connectLink(APP_URL)
@@ -2876,6 +3014,7 @@ function meetTrustWebPage(): HTMLElement {
   })()
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
+    row.el,
     qr,
     sharing.el,
     el('dl', { class: 'qr-facts' }, [
@@ -3319,20 +3458,6 @@ function screenHandedOver(): Node[] {
   ]
 }
 
-/** One of my own channels, straight in edit mode; `done` runs after save or cancel. */
-function singleChannelEditor(ch: Channel, done: () => void): HTMLElement {
-  return channelRow(myChannels(), ch, true, () => done())
-}
-
-function editMineSheet(ch: Channel): void {
-  openSheet([
-    el('h3', {}, [S.meetYour(S.chLabel[ch])]),
-    singleChannelEditor(ch, () => { closeSheet(); render() }),
-    ch === Channel.Signal ? shareControlsFor(ch) : null,
-    el('p', { class: 'meta' }, [S.meetMineHint]),
-  ])
-}
-
 // ---------------------------------------------------------------------------
 // meet: step 2, review and tag
 // ---------------------------------------------------------------------------
@@ -3741,7 +3866,8 @@ function settingsSheet(): void {
     pick(TabOrder.WebLeft, S.setTabsWebLeft),
     pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
     el('p', { class: 'meta' }, [S.setTabsHint]),
-    channelsView(myChannels(), { title: S.myTitle, add: S.myAdd, hint: S.myHint }),
+    buildContactBox({}).el,
+    channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
@@ -3788,6 +3914,7 @@ function settingsSheet(): void {
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
     installable ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...aboutGroup(),
+    safetyLink(SafetyPlace.Settings, () => openSheet(safetySheetNodes({ place: SafetyPlace.Settings, back: { label: S.safeBackSettings, go: settingsSheet } }))),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
       onclick: () => {

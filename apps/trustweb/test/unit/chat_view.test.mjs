@@ -7,7 +7,6 @@
  */
 import { MessageState, emptyBook, queueOutgoing, receiveText } from '../../src/chat.ts'
 import { ThreadStatus, chatViewModel, flushPending, injectChatStyles, renderChat, renderShareControls, safeHref, submitText } from '../../src/chat_view.ts'
-import { SignalProvider } from '../../src/channel.ts'
 import { Channel } from '../../src/model.ts'
 
 class FakeNode {
@@ -34,9 +33,9 @@ const makeDoc = () => {
 }
 
 const USER = 'https://signal.me/#eu/abcDEF123_-xyz'
-const reach = { channel: Channel.Signal, value: USER, link: USER, provider: SignalProvider.Molly, source: 'theirs' }
+const reach = { channel: Channel.Signal, value: USER, link: USER, source: 'theirs' }
 const S = {
-  title: (n) => `Chat with ${n}`, messageOn: (r) => `Message on ${r.provider === 'molly' ? 'Molly' : 'Signal'}`,
+  title: (n) => `Chat with ${n}`, messageOn: () => 'Message on Signal',
   notConnected: (n) => `${n} is not connected yet`, empty: (n) => `Say hello to ${n}`, offline: 'Waiting for a connection',
   placeholder: 'Message', send: 'Send', sendAgain: 'Send again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n} left`, you: 'You',
 }
@@ -107,7 +106,7 @@ describe('renderChat', () => {
     const a = root.byTag('a')[0]
     expect(a.attrs.href).toBe(USER)
     expect(a.attrs.rel).toBe('noopener noreferrer')
-    expect(a.textContent).toBe('Message on Molly')
+    expect(a.textContent).toBe('Message on Signal')
     expect(root.children.indexOf(a)).toBeLessThan(root.children.findIndex((c) => (c.attrs?.class ?? '') === 'chat-composer'))
     expect(root.find((n) => n.attrs['data-chat'] === 'empty')).toHaveLength(1)
     expect(root.byTag('textarea')).toHaveLength(1)
@@ -258,7 +257,6 @@ describe('injectChatStyles', () => {
 describe('renderShareControls', () => {
   const SS = {
     tickLabel: 'Share this link when we connect', tickPhoneNote: 'This link holds your phone number', tickHint: 'Sent links stay with the people who got them',
-    providerLabel: 'Which app', providerNames: { signal: 'Signal', molly: 'Molly' }, providerHint: 'Only a label',
   }
   const make = (handle, settings) => {
     const box = { handle, settings }
@@ -271,10 +269,11 @@ describe('renderShareControls', () => {
   it('nothing saved yet: no controls', () => {
     expect(make(undefined, undefined).root.children).toHaveLength(0)
   })
-  it('starts unticked, with no provider chosen', () => {
+  it('starts unticked, and offers no Signal/Molly choice any more (wave 6e)', () => {
     const { root } = make(USER, undefined)
     expect(root.byTag('input')[0].checked).toBe(false)
-    expect(root.byTag('button').every((b) => b.attrs['aria-pressed'] === 'false')).toBe(true)
+    expect(root.byTag('button')).toHaveLength(0)
+    expect(root.find((n) => n.attrs['data-provider'] !== undefined)).toHaveLength(0)
   })
   it('ticking records the tick and unticking records false', () => {
     const { box, root } = make(USER, undefined)
@@ -290,12 +289,18 @@ describe('renderShareControls', () => {
     expect(make('+436601234567', undefined).root.find((n) => n.attrs['data-share'] === 'phone')).toHaveLength(1)
     expect(make(USER, undefined).root.find((n) => n.attrs['data-share'] === 'phone')).toHaveLength(0)
   })
-  it('choosing Molly sets the label, pressing it again clears it, the tick survives', () => {
-    const { box, root } = make(USER, { shareOnConnect: { signal: true } })
-    root.byTag('button').find((b) => b.attrs['data-provider'] === 'molly').fire('click')
-    expect(box.settings).toEqual({ shareOnConnect: { signal: true }, signalProvider: 'molly' })
-    expect(root.byTag('button').find((b) => b.attrs['data-provider'] === 'molly').attrs['aria-pressed']).toBe('true')
-    root.byTag('button').find((b) => b.attrs['data-provider'] === 'molly').fire('click')
-    expect(box.settings).toEqual({ shareOnConnect: { signal: true } })
+  it('a stored provider stays in the settings when the tick changes (read, never changed)', () => {
+    const { box, root } = make(USER, { shareOnConnect: { signal: true }, signalProvider: 'molly' })
+    const input = root.byTag('input')[0]
+    input.checked = false
+    input.fire('change')
+    expect(box.settings).toEqual({ shareOnConnect: { signal: false }, signalProvider: 'molly' })
+  })
+  it('WhatsApp: a number shows the warning, a wa.me/qr link does not; Matrix has the tick only', () => {
+    const wa = (handle) => renderShareControls({ doc: makeDoc(), channel: Channel.WhatsApp, getHandle: () => handle, getSettings: () => undefined, setSettings: () => {}, S: SS })
+    expect(wa('+430000000000').find((n) => n.attrs['data-share'] === 'phone')).toHaveLength(1)
+    expect(wa('https://wa.me/qr/ABCDEFGH12345').find((n) => n.attrs['data-share'] === 'phone')).toHaveLength(0)
+    const mx = renderShareControls({ doc: makeDoc(), channel: Channel.Matrix, getHandle: () => '@lena:matrix.org', getSettings: () => undefined, setSettings: () => {}, S: SS })
+    expect(mx.byTag('input')[0].attrs['data-share-tick']).toBe('matrix')
   })
 })

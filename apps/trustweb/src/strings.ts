@@ -6,12 +6,11 @@
  */
 import { Audience, Channel, DefaultRecording, InferenceRegion, LogOutcome, ProvenanceState, ProviderDataPolicy, QueryStyle, Ring, SearchEngine, Tag, TranscribeProviderName, TranscriptionChoice } from './model'
 import type { TranscribeProviderInfo, TranscribeRoute } from './model'
-import { SignalProvider } from './channel'
 import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
-import { ConnectMode, SignalSharing } from './connect_modes'
+import { ModeSharing, ShareMode } from './share_modes'
 import { ClaimError } from './connect_code'
 import { AddKind, DidProblem, ParseError, ResolveError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -115,6 +114,27 @@ export const S = {
   setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
   // Wave 6 (U4 c): the notes on one person, on their card.
+  personAdvanced: 'Advanced',
+  generalNoteTitle: 'General notes',
+  generalNotePh: (name: string) => `Anything about ${name || 'them'}: how you know them, what they care about, what is on your mind...`,
+  generalNoteHint: 'Only me. It stays on this phone (and in your encrypted backup, if you made one): it is never sent in an answer, a share or a search by others.',
+  generalNoteSaving: 'Saving...',
+  generalNoteSaved: 'Saved on this phone.',
+  generalNoteTranscribing: (n: number) => (n === 1 ? 'A voice note of theirs is still being transcribed. Your typed note is already here.' : `${n} voice notes of theirs are still being transcribed. Your typed note is already here.`),
+  // "Is this safe?" (reassurance.ts). Same sentences on the website. The GitHub sentence exists only in a build made with VITE_TW_CODE_PUBLIC=1:
+  // the condition is a build-time constant, so every other bundle does not hold the text at all (the public repository is old, decisions #23).
+  safeTitle: 'Is this safe?',
+  safeS1: 'TrustWeb is a web app. It runs in your browser or from your home screen, and you can remove it any time in Settings.',
+  safeS2: 'Your contacts and notes stay on this phone. Nothing about them leaves the phone without your yes.',
+  safeS3: 'Showing your own code to others registers a short address for it on our server (your name and the contact links you chose to share). Nothing else is sent unless you share it.',
+  safeS4: 'The person who shared this code with you shared only their contact links, for example Signal or WhatsApp. You can also use those links outside this app.',
+  safeS5: 'If you do not want TrustWeb, just leave it, or remove it in Settings. The Signal or WhatsApp link still works on its own.',
+  safeCodePublic: import.meta.env.VITE_TW_CODE_PUBLIC === '1' ? 'You can read the open source code on GitHub.' : '',
+  safeBackAdd: 'Back',
+  safeBackCard: 'Back',
+  safeBackSettings: 'Settings',
+  personNotesGeneral: 'General note',
+  pastTranscribing: 'Transcribing...',
   personNotesTitle: 'Your notes on them',
   personNotesPh: (name: string) => (name ? `Search your notes on ${name}` : 'Search these notes'),
   personNotesNone: 'No notes or meetings with them yet.',
@@ -355,7 +375,7 @@ export const S = {
   savedWhatToast: (n: number) => `Saved ${n === 1 ? 'one line' : `${n} lines`} to your inventory.`,
   hintText: {
     meeting: 'Meeting: record a conversation you both agreed to, with a live transcript and who said what.',
-    qr: 'Your code: someone scans it, or you send them the link, to connect with you. It is one short link that stays the same when your name changes; our server keeps it for you, and the long link works without the server. Under Advanced you can show only your Signal or Molly link, or only TrustWeb. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
+    qr: 'Your code: someone scans it, or you send them the link, to connect with you. It is one short link that stays the same when your name changes; our server keeps it for you, and the long link works without the server. Under the arrow you can pin the modes you use most (TrustWeb with Signal, WhatsApp or Matrix), or show only your Signal or WhatsApp link, or only TrustWeb. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
     'call-web': 'Checking for resonance: call into your web and feel the vibrations come back.',
     'web-tap': 'Tap empty space in the web to add someone. Tap a person to see your notes.',
     'about-who': 'Who: the recording is about a person. The notes go to them in your web.',
@@ -714,7 +734,7 @@ export const S = {
   } as Record<Channel, string>,
   chPh: {
     [Channel.Signal]: 'Signal username link (best) or phone number (+43...)',
-    [Channel.WhatsApp]: 'Phone number (+43...)',
+    [Channel.WhatsApp]: 'Phone number (+43...) or wa.me link',
     [Channel.Matrix]: '@name:server.org',
     [Channel.Delta]: 'Delta Chat invite link or email address',
     [Channel.Telegram]: 'Username or phone number',
@@ -722,7 +742,7 @@ export const S = {
   } as Record<Channel, string>,
   chInvalid: {
     [Channel.Signal]: 'Paste a signal.me username link, or use an international number like +43 660 1234567.',
-    [Channel.WhatsApp]: 'Use an international number like +43 660 1234567.',
+    [Channel.WhatsApp]: 'Use an international number like +43 660 1234567, or paste a link like https://wa.me/4366012345 or https://wa.me/qr/... (no extra parts after it).',
     [Channel.Matrix]: 'A Matrix address looks like @name:server.org.',
     [Channel.Delta]: 'Paste their i.delta.chat invite link, or an email address.',
     [Channel.Telegram]: 'A Telegram username has 5 to 32 letters, digits or _, or use +43... .',
@@ -732,6 +752,7 @@ export const S = {
   chAdd: 'Add',
   chAddOther: 'Add other ways to contact them',
   myTitle: 'Your contact info',
+  myTitleMore: 'Other ways to reach you',
   myAdd: 'Add ways to reach you',
   myHint: 'Shown only when you show your code, so people can also reach you there. Kept on this phone.',
   meetPagesLabel: 'Which code to show',
@@ -832,9 +853,6 @@ export const S = {
   takeWorking: 'Unpacking...',
   takeFailed: 'The hand-over could not be opened. Ask for a fresh link.',
   meetAddMine: (app: string) => `Add your ${app} link once, and it shows here next to your TrustWeb code.`,
-  meetYour: (app: string) => `Your ${app}`,
-  meetMineHint: 'Best: your Signal username link. It keeps your phone number private and works in the scanner of Signal and Molly. In Signal or Molly: Settings > Profile > Username > QR code or link > Copy link, then paste it here. Kept on this phone.',
-  meetMineLead: (app: string) => `Let them scan this to reach you on ${app} too.`,
   meetChangeMine: (app: string) => `Change your ${app}`,
   chEditShort: 'Edit',
   chEdit: (app: string) => `Edit ${app}`,
@@ -1170,14 +1188,9 @@ export const S = {
   imgRemove: 'Remove the picture',
   imgHint: 'The picture stays on this phone: it shows here (and in your Feed, if you switched it on) and is never sent with an answer, a backup or a meeting.',
   imgFailed: 'This picture could not be read.',
-  chSignalMolly: 'Signal or Molly',
-  // Signal / Molly (wave 6, U3)
-  chProviderLabel: { signal: 'Signal', molly: 'Molly', 'signal-or-molly': 'Signal or Molly' } as Record<string, string>,
+  // Signal and WhatsApp codes (wave 6e: the Signal/Molly pick is gone; only the camera-app note names both apps)
   meetScanCameraNote: 'This code holds your phone number. Scan it with the phone\'s camera app, not inside Signal or Molly: their scanner only reads username codes.',
-  providerLabel: 'Which app is this?',
-  providerNames: { [SignalProvider.Signal]: 'Signal', [SignalProvider.Molly]: 'Molly' } as Record<SignalProvider, string>,
-  providerHint: 'Only a label. Signal and Molly use the same signal.me link, and the phone that opens it decides which app answers; where Signal is installed it usually opens first.',
-  shareTick: 'Share this link with people when we connect on TrustWeb',
+  shareTick: 'Share this when we connect on TrustWeb',
   shareTickPhone: 'This link holds your phone number. Tick it only if every new connection may have it.',
   shareTickHint: 'Links already sent stay with the people who got them.',
   // Contact received / chat
@@ -1242,43 +1255,65 @@ export const S = {
   },
   // Wave 6b (c): Advanced under the one QR, and the sharing line (connect_advanced_view.ts)
   advancedLabel: 'Advanced',
-  advancedMode: {
-    [ConnectMode.Both]: (app: string) => `TrustWeb and ${app}`,
-    [ConnectMode.OnlyMolly]: (app: string) => `Only ${app}`,
-    [ConnectMode.OnlyTrustWeb]: () => 'Only TrustWeb',
-  } as Record<ConnectMode, (app: string) => string>,
-  advancedModeHint: {
-    [ConnectMode.Both]: (app: string) => `One code. After they scan it they are connected on TrustWeb, and they get your ${app} link if you ticked it.`,
-    [ConnectMode.OnlyMolly]: (app: string) => `The code is your ${app} link only. TrustWeb is not involved.`,
-    [ConnectMode.OnlyTrustWeb]: () => 'The connect code only. This scan shares none of your messenger links, whatever is ticked.',
-  } as Record<ConnectMode, (app: string) => string>,
-  advancedMollyNote: 'Scan this with the phone\'s camera app. The scanner inside Signal or Molly reads username links only. A Signal username link is the better choice: it keeps your phone number private.',
-  advancedMollyNone: 'Save your Signal link first: in this choice the code is that link.',
+  shareRowLabel: 'How to share your code',
+  shareMode: {
+    [ShareMode.TrustWebSignal]: 'TrustWeb + Signal',
+    [ShareMode.TrustWebWhatsApp]: 'TrustWeb + WhatsApp',
+    [ShareMode.TrustWebMatrix]: 'TrustWeb + Matrix',
+    [ShareMode.OnlyTrustWeb]: 'Only TrustWeb',
+    [ShareMode.OnlySignal]: 'Only Signal',
+    [ShareMode.OnlyWhatsApp]: 'Only WhatsApp',
+  } as Record<ShareMode, string>,
+  shareModeHint: {
+    [ShareMode.TrustWebSignal]: 'One code. After they scan it they are connected on TrustWeb, and they get your Signal link if you ticked it.',
+    [ShareMode.TrustWebWhatsApp]: 'One code. After they scan it they are connected on TrustWeb, and they get your WhatsApp link if you ticked it.',
+    [ShareMode.TrustWebMatrix]: 'One code. After they scan it they are connected on TrustWeb, and they get your Matrix address if you ticked it.',
+    [ShareMode.OnlyTrustWeb]: 'The connect code only. This scan shares none of your messenger links, whatever is ticked.',
+    [ShareMode.OnlySignal]: 'The code is your Signal link only. TrustWeb is not involved.',
+    [ShareMode.OnlyWhatsApp]: 'The code is your WhatsApp link only. TrustWeb is not involved.',
+  } as Record<ShareMode, string>,
+  shareModeNow: (label: string) => `Showing: ${label}`,
+  shareModeMissing: (app: string) => `Add your ${app} link below first.`,
+  pinLead: 'Pin up to two modes: they sit next to the arrow, the first pin first. Unpin one and the other moves up.',
+  pinPin: 'Pin',
+  pinPinned: (n: number) => `Pinned ${n}`,
+  pinRefused: 'Two modes are pinned already. Unpin one first.',
+  advancedOnlyNote: 'Scan this with the phone\'s camera app, or inside the messenger if it has a scanner. A link without a phone number is the better choice: it keeps your number private.',
   advancedFollow: 'Copy link and the NFC tag follow this choice.',
   sharingLine: {
-    [SignalSharing.Shared]: 'Scanning this also gives them your Signal link, so they can message you in one press.',
-    [SignalSharing.NumberNotTicked]: 'Your Signal link is not being shared: it holds your phone number, so it needs your own tick below.',
-    [SignalSharing.NotTicked]: 'Your Signal link is not being shared: the box below is not ticked.',
-    [SignalSharing.NoLink]: 'No Signal link saved, so scanning shares none. Add one so people can message you in one press.',
-    [SignalSharing.Off]: 'Only TrustWeb: this scan shares no Signal or Matrix link.',
-  } as Record<SignalSharing, string>,
-  usernameLabel: 'Your username on our server (optional)',
+    [ModeSharing.Shared]: (app: string) => `Scanning this also gives them your ${app} link, so they can message you in one press.`,
+    [ModeSharing.NumberNotTicked]: (app: string) => `Your ${app} link is not being shared: it holds your phone number, so it needs your own tick below.`,
+    [ModeSharing.NotTicked]: (app: string) => `Your ${app} link is not being shared: the box below is not ticked.`,
+    [ModeSharing.NoLink]: (app: string) => `No ${app} link saved, so scanning shares none. Add one so people can message you in one press.`,
+    [ModeSharing.Off]: () => 'Only TrustWeb: this scan shares no Signal, WhatsApp or Matrix link.',
+    [ModeSharing.LinkOnly]: (app: string) => `The code is your ${app} link itself. Nothing is sent over TrustWeb.`,
+  } as Record<ModeSharing, (app: string) => string>,
+  contactBoxTitle: 'Your contact info',
+  contactBoxHint: 'Each link shows on the card of anyone you connect with, only if its box is ticked and the mode you show is that one. Kept on this phone. Best for Signal: your username link (Settings > Profile > Username > QR code or link > Copy link), which keeps your phone number private.',
+  usernameLabel: 'Your username',
+  usernameAliasLabel: 'A second name (optional)',
+  usernameMoreLabel: 'Also yours',
   usernamePh: 'for example ada',
   usernameClaim: 'Claim',
   usernameRelease: 'Release',
-  usernameHint: 'Friends can then type @name instead of scanning. Our server keeps the name next to your code, so anyone who types the exact name can find your connect link. Names are never listed. Leave it empty to stay unlisted. 3 to 30 letters, digits, dots, dashes or underscores.',
+  usernameHint: 'Friends can then type @name instead of scanning. Our server keeps up to three names next to your code (one main name and up to two more), so anyone who types an exact name can find your connect link. Names are never listed. Leave them empty to stay unlisted. 3 to 30 letters, digits, dots, dashes or underscores.',
+  usernameLockedMark: 'Reserved for you',
+  usernameClaimAlias: 'Add',
   usernameHeld: (name: string) => `@${name} is yours.`,
   usernameReleased: 'The name is released. Your code works as before.',
   usernameFailed: {
     [ClaimError.NoCode]: 'Your code is not on our server yet. Try again in a moment.',
     [ClaimError.BadName]: 'Use 3 to 30 letters, digits, dots, dashes or underscores, starting and ending with a letter or digit (like ada or ada.l). Some names are reserved.',
-    [ClaimError.Taken]: 'That name is taken. Try another.',
+    [ClaimError.Taken]: 'That name is taken.',
+    [ClaimError.Reserved]: 'This name is reserved.',
+    [ClaimError.NameLocked]: 'This name is reserved for you and stays; ask to change it.',
+    [ClaimError.TooManyNames]: 'You already have 3 names.',
     [ClaimError.Forgotten]: 'Our server no longer knows this code. Open this page again: a new code is made, then claim the name again.',
     [ClaimError.RateLimited]: 'Too many tries just now. Wait a minute and try again.',
     [ClaimError.Network]: 'No answer from our server. Check your connection and try again.',
     [ClaimError.Server]: 'Our server did not answer properly. Try again in a moment.',
   } as Record<ClaimError, string>,
-  sharingAddSignal: 'Add my Signal link',
-  sharingEditSignal: 'Edit my Signal link',
-  cardNoMessenger: (name: string) => `No Signal or Molly link from ${name} yet. If they share one, it shows here.`,
+  sharingAddLink: (app: string) => `Add my ${app} link`,
+  sharingEditLink: (app: string) => `Edit my ${app} link`,
+  cardNoMessenger: (name: string) => `No messenger link from ${name} yet. If they share one, it shows here.`,
 } as const

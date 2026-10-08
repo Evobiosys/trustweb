@@ -11,7 +11,8 @@ import type { StoredTake } from './audio_store'
 import { mountPlayer } from './audio_player'
 import type { PlayerHandle } from './audio_player'
 import { meetingSearchPanel } from './meeting_search_view'
-import { lineIsCurrent, personNotes } from './person_notes'
+import { generalNoteMatches, generalNoteOf } from './general_notes'
+import { lineIsCurrent, personNotes, transcriptPending } from './person_notes'
 import type { Segment } from './meeting_transcriber'
 import { isDemoPerson, pastMeetings } from './model'
 import type { AppState, ItemSource, PastMeeting, Tag, TranscriptLine } from './model'
@@ -199,15 +200,25 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
       'aria-label': S.personNotesPh(person?.name ?? ''), autocomplete: 'off',
     })
     const list = el('div', { class: 'person-notes-list', 'aria-live': 'polite' })
+    // The General note (general_notes.ts) is one more entry in this list, found by the same words; it is Only me and never leaves the phone.
+    const general = (): HTMLElement[] => {
+      const note = person ? generalNoteOf(person) : ''
+      return note && generalNoteMatches(note, input.value)
+        ? [el('div', { class: 'pn-general', 'data-pn-general': '1' }, [el('h5', { class: 'eyebrow' }, [S.personNotesGeneral]), el('p', { class: 'pm-general' }, [note])])]
+        : []
+    }
     const fill = (): void => {
       const days = personNotes(h.state(), personId, input.value, (m) => [whenLabel(m.startedAt), ...isoDateLabels(m.startedAt)])
-      if (!days.length) {
+      if (!days.length && !general().length) {
         list.replaceChildren(el('p', { class: 'meta', 'data-person-notes-empty': '1' }, [input.value.trim() ? S.personNotesNothing(input.value.trim()) : S.personNotesNone]))
         return
       }
-      list.replaceChildren(...days.map((d) => el('div', { class: 'pn-day', 'data-pn-day': String(d.day) }, [
+      list.replaceChildren(...general(), ...days.map((d) => el('div', { class: 'pn-day', 'data-pn-day': String(d.day) }, [
         el('h5', { class: 'eyebrow' }, [new Date(d.day).toLocaleDateString([], { dateStyle: 'medium' })]),
-        ...d.meetings.map((m) => el('button', { class: 'pm-row', 'data-pn-meeting': m.id, onclick: () => open(m, undefined, undefined, back) }, [el('b', {}, [m.about]), el('i', {}, [pastMeta(m)]), generalSnippet(m)])),
+        ...d.meetings.map((m) => el('button', { class: 'pm-row', 'data-pn-meeting': m.id, onclick: () => open(m, undefined, undefined, back) }, [
+          el('b', {}, [m.about]), el('i', {}, [pastMeta(m)]), generalSnippet(m),
+          transcriptPending(m) ? el('span', { class: 'pm-transcribing', 'data-pn-transcribing': m.id }, [S.pastTranscribing]) : null,
+        ])),
         ...d.lines.map((l) => el('div', { class: 'sline' + (lineIsCurrent(l) ? '' : ' gone'), 'data-pn-line': l.id }, [
           h.tagChip(l.tag), el('span', {}, [l.text]), lineIsCurrent(l) ? null : el('em', {}, [S.personNotesGone]),
         ])),
