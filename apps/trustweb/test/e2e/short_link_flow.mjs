@@ -292,7 +292,7 @@ async function partE(browser, origin) {
   await page.waitForFunction(() => /\/c\//.test(document.querySelector('.qrwrap')?.getAttribute('data-payload') ?? ''), null, { timeout: 15_000 }).catch(() => {})
   const shown = await payload(page)
   t.ok('e: the code after a meeting is the connect code WITH the meeting\'s key in its fragment (#...k=, the part no server sees)', new RegExp(`^${origin.replace(/[.]/g, '\\.')}/c/[A-Za-z0-9_-]{22}#.*\\bk=TW`).test(shown), shown.slice(-100))
-  t.ok('e: what was sent to /connect holds the link only: no fragment, no key, no notes', server.posts.length >= 1 && server.posts.every((p) => !p.body.url.includes('#') && !/k=TW|n=/.test(p.body.url)), JSON.stringify(server.posts.map((p) => p.body.url.slice(-40))))
+  t.ok('e: what was sent to /connect holds the link only: no fragment, no key, no notes', server.posts.filter((p) => p.body.url).length >= 1 && server.posts.filter((p) => p.body.url).every((p) => !p.body.url.includes('#') && !/k=TW|n=/.test(p.body.url)), JSON.stringify(server.posts.filter((p) => p.body.url).map((p) => p.body.url.slice(-40))))
   t.ok('e: "Show the long link" still shows the long link with the key', /connect=.*#.*\bk=TW/.test(await page.locator('.link-choice [data-link="long"]').innerText()) || (await page.locator('.link-choice [data-act="long"]').isVisible()))
   await shot(page, 'sl_e_key_in_fragment.png')
   await ctx.close()

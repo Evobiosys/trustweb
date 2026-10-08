@@ -22,6 +22,7 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { chooseMode, saveChannel } from '../helpers/share_box.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TW_ROOT = path.resolve(HERE, '../..')
@@ -141,16 +142,13 @@ async function main() {
 
     // Meet: ONE code (wave 6b); my Signal link rides in it, or becomes the code under Advanced > Only Signal
     await page.locator('.hdr .status-pill.qr').click()
-    await page.locator('[data-act="edit-signal"]').click()
-    await page.locator('.sheet .ch-row.editing input').fill('https://signal.me/#eu/jakobDemo123')
-    await page.locator('.sheet').getByRole('button', { name: 'Save' }).click()
+    await saveChannel(page, 'signal', 'https://signal.me/#eu/jakobDemo123')
     await page.locator('.qrwrap canvas').waitFor({ timeout: 10_000 })
     ok('Meet has no Signal page any more: no Signal tab', (await page.getByRole('tab', { name: 'Signal' }).count()) === 0)
-    await page.locator('[data-act="advanced"]').click()
-    await page.locator('[data-mode="molly"]').click()
+    await chooseMode(page, 'only-signal')
     ok('Advanced > Only Signal: Meet shows my Signal code once added', (await page.getAttribute('.qrwrap', 'data-payload')) === 'https://signal.me/#eu/jakobDemo123')
-    await page.locator('[data-mode="both"]').click()
-    ok('the unified code is the TrustWeb code', /connect=/.test(await page.getAttribute('.qrwrap', 'data-payload') ?? ''))
+    await chooseMode(page, 'trustweb-signal')
+    ok('the unified code is the TrustWeb code', /connect=|\/c\//.test(await page.getAttribute('.qrwrap', 'data-payload') ?? ''))
     await page.getByRole('button', { name: 'Back' }).click()
     ok('the call button explains itself on hover', /resonance/.test(await page.getByRole('button', { name: 'Call into your web' }).getAttribute('title') ?? ''))
 

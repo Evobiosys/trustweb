@@ -144,7 +144,7 @@ async function main() {
     server.answerLocked = false
     const eve = await phoneWithCode(browser, server, 'Eve')
     server.grant(eve.code, 'evelyn')
-    await eve.page.getByRole('button', { name: 'Back' }).click()
+    await eve.page.reload()
     await eve.page.locator('.hdr [aria-label^="Show my code"]').click()
     await openAdvanced(eve.page)
     await until(async () => /evelyn/.test(await nameBlock(eve.page).innerText()) ? true : null, 15_000)
