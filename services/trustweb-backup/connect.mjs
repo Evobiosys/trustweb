@@ -9,6 +9,13 @@
 // parameter) on this very request, so a tampered store file gives 404. /who/ redirects ONLY to https://<request Host, exactly one of
 // cfg.linkHosts>/c/<22 characters of the code regex> and only when that code's url passes the same check. Both are rebuilt from validated parts.
 //
+// THE APP'S OWN LOOKUP (review 6b): the app resolves a typed code or @name with a same-origin fetch that follows the redirects. When the code
+// was made on ANOTHER app host, the stored url leaves the page's origin and the browser turns the last hop into a network error (no CORS on
+// app pages). So a request the browser marks as a same-origin, non-navigation fetch (Sec-Fetch-Site: same-origin, Sec-Fetch-Mode not
+// "navigate") gets the same connect link on the REQUEST host (its app path, the stored query and fragment), re-validated like any other.
+// The app hosts share one relay, so the link works from there. A navigation (a scanned QR, a tapped link) keeps the stored url unchanged:
+// it lands on the host the sharer chose. A request without the headers (old browsers, curl) also keeps it.
+//
 // NO ORACLE: an unknown or expired code and a wrong secret answer with the same 403 (store.update and store.setName hash and compare either way).
 //
 // LOGGING: none. No logger is passed to this module, it never touches stdout/stderr, and server.mjs does not log these routes
@@ -24,6 +31,22 @@ import { createWindowLimiter, ipKey } from './limits.mjs'
 import { notFoundPage, originAllowed, readJsonObject, validLongUrl } from './links.mjs'
 
 const PORT_SUFFIX = /:\d+$/
+/** Where the app lives on each app host: under /trustweb/ on app.idea2.site (scripts/deploy_wot.sh), at the root everywhere else. */
+const APP_PATHS = new Map([['app.idea2.site', '/trustweb/']])
+const appPathOf = (host) => APP_PATHS.get(host) ?? '/'
+
+/** Is this request the app's own fetch from one of its pages (not a navigation)? Only the browser's fetch-metadata headers decide. */
+export function isSameOriginFetch(req) {
+  const site = String(req.headers['sec-fetch-site'] ?? '').toLowerCase()
+  const mode = String(req.headers['sec-fetch-mode'] ?? '').toLowerCase()
+  return site === 'same-origin' && mode !== '' && mode !== 'navigate'
+}
+
+/** `url` (already validated) moved onto `host` with the app path of that host, query and fragment kept; `url` itself when it is on `host`. */
+export function onHost(url, host) {
+  const u = new URL(url)
+  return u.hostname === host ? url : `https://${host}${appPathOf(host)}${u.search}${u.hash}`
+}
 
 /** The request Host when it is exactly one of `hosts` (a port is dropped), else null. */
 export function appHostOf(req, hosts) {
@@ -176,12 +199,19 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     return url
   }
 
+  /** Where /c/ sends this request: the stored url, or for the app's own same-origin fetch the same link on the request host (see the head). */
+  function landingFor(req, url) {
+    const host = appHostOf(req, cfg.linkHosts)
+    if (host === null || !isSameOriginFetch(req)) return url
+    return validLongUrl(onHost(url, host), cfg.linkHosts, cfg.connectMaxBytes) ?? url
+  }
+
   /** GET|HEAD /c/<code>. pathname is the request path without its query. Returns the status it answered. */
   function open(req, res, pathname) {
     const gated = readGate(req, res)
     if (gated !== null) return gated
     const url = checkedUrl(pathname.slice('/c/'.length), { touch: true })
-    return url === null ? notFoundPage(res) : redirect(res, url)
+    return url === null ? notFoundPage(res) : redirect(res, landingFor(req, url))
   }
 
   /** GET|HEAD /who/<name>. Returns the status it answered. */

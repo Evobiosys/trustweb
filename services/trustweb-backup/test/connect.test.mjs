@@ -904,3 +904,38 @@ test('other routes keep logging method and status only (the quiet list is the li
     assert.deepEqual(lines, ['GET 200'])
   })
 })
+
+// ---------------------------------------------------------------- the app's own lookup across app hosts (review 6b)
+
+test('GET /c/<code> as the app\'s same-origin fetch lands on the REQUEST host (its app path, query and fragment kept); a navigation keeps the stored url', async () => {
+  const IDEA2 = 'app.idea2.site'
+  const ONE = 'app.trustweb.one'
+  const stored = `https://${IDEA2}/trustweb/?connect=did%3Apeer%3A2.Ez6LSacross&id=p-9&name=Ada#t=x`
+  await withServer(0, { ...ROOMY, linkHosts: [IDEA2, ONE], allowedHosts: [IDEA2, ONE, '127.0.0.1'] }, async ({ srv }) => {
+    const r = await connect(srv.port, { url: stored }, { host: IDEA2 })
+    assert.equal(r.status, 201)
+    const code = r.json.code
+    const fetchHeaders = { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors' }
+    const lookup = await openCode(srv.port, code, { host: ONE, headers: fetchHeaders })
+    assert.equal(lookup.status, 302)
+    assert.equal(lookup.headers.location, `https://${ONE}/?connect=did%3Apeer%3A2.Ez6LSacross&id=p-9&name=Ada#t=x`)
+    const onIdea2 = await openCode(srv.port, code, { host: IDEA2, headers: fetchHeaders })
+    assert.equal(onIdea2.headers.location, stored, 'the stored host is the request host: unchanged')
+    for (const headers of [{}, { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate' }, { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate' }, { 'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'cors' }, { 'Sec-Fetch-Site': 'same-origin' }]) {
+      const nav = await openCode(srv.port, code, { host: ONE, headers })
+      assert.equal(nav.status, 302)
+      assert.equal(nav.headers.location, stored, JSON.stringify(headers))
+    }
+    assert.equal((await claim(srv.port, { name: 'ada', code, secret: r.json.secret }, { host: IDEA2 })).status, 200)
+    const byName = await who(srv.port, 'ada', { host: ONE, headers: fetchHeaders })
+    assert.equal(byName.headers.location, `https://${ONE}/c/${code}`)
+  })
+})
+
+test('the request-host landing never leaves the app hosts: a Host that is not an app host keeps the stored url (and the 421 guard comes first)', async () => {
+  await withServer(0, BASE, async ({ srv }) => {
+    const { code } = await mint(srv.port)
+    const r = await openCode(srv.port, code, { headers: { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors' } })
+    assert.equal(r.headers.location, LONG)
+  })
+})
