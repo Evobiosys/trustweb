@@ -129,7 +129,8 @@ async function sectionFrontDoor(browser, scratch, publicDir, relay) {
     const asks = [
       ['Is there a workshop on the building blocks of trustweb?', /workshop on the conceptual building blocks/, 'workshop'],
       ['Who can help me tidy up my online presence?', /clean up your online presence/, 'online presence'],
-      ['Which license would you use for SaaS?', /perfect' open-source license/, 'license'],
+      // two of the ten lines are about the license (the "perfect" one and the AGPL/AMPL one): either answers
+      ['Which license would you use for SaaS?', /perfect' open-source license|AGPL by default/, 'license'],
       ['Which map projection do you use for global maps?', /Equal Earth/, 'projection'],
     ]
     for (const [text, expect, label] of asks) {
