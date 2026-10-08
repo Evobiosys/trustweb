@@ -73,7 +73,9 @@ BERGET_CRED_FILE=/etc/trustweb/berget.json  # Berget AI (the default provider on
 BRAVE_CRED_FILE=/etc/trustweb/websearch-brave.json
 MOJEEK_CRED_FILE=/etc/trustweb/websearch-mojeek.json
 # The hosts the server answers for and the pages that may post feedback (wave 3: the TrustInTheWeb hosts too). Kept in the unit itself so
-# a deploy never depends on the drop-in of scripts/trustweb_domains.sh backup-env (same values; the drop-in may stay, it changes nothing).
+# a deploy never depends on the drop-in of scripts/trustweb_domains.sh backup-env. The drop-in WINS over these lines (it is applied after
+# the unit), so it must carry the same lists: a drop-in older than a host added here leaves that host at 421. verify_every_app_host
+# (after a production install) catches exactly that and names the fix (review 6c: the wave 3 drop-in lacks app.trustweb.one).
 ALLOWED_HOSTS_PRODUCTION="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
 LINK_HOSTS_ALL="app.idea2.site,app.trustintheweb.org,app.trustweb.one"
 FEEDBACK_ORIGINS_ALL="https://idea2.site,https://app.idea2.site,https://trustintheweb.org,https://trustintheweb.com,https://app.trustintheweb.org,https://app.trustweb.one"
@@ -428,6 +430,23 @@ fi
 REMOTE
 }
 
+# Every app host must reach the service, and every app origin may post feedback, as seen on the loopback port with that Host
+# (no DNS or TLS needed). Fails (no rollback: the new code is fine) when the effective environment lacks a host.
+verify_every_app_host() {
+  local host code bad=0
+  for host in ${ALLOWED_HOSTS_PRODUCTION//,/ }; do
+    code=$(rsh "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host' http://127.0.0.1:8960/health" || true)
+    if [ "$code" = 200 ]; then echo "  ok   Host $host -> /health $code"; else echo "  FAIL Host $host -> /health $code (want 200)" >&2; bad=1; fi
+    code=$(rsh "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X OPTIONS -H 'Host: $host' -H 'Origin: https://$host' http://127.0.0.1:8960/feedback" || true)
+    if [ "$code" = 204 ]; then echo "  ok   Origin https://$host -> feedback preflight $code"; else echo "  FAIL Origin https://$host -> feedback preflight $code (want 204)" >&2; bad=1; fi
+  done
+  if [ "$bad" = 1 ]; then
+    echo "an app host is refused: the drop-in /etc/systemd/system/trustweb-backup.service.d/10-trustweb-domains.conf overrides this unit's lists." >&2
+    echo "Run scripts/trustweb_domains.sh backup-env (it writes the same lists into the drop-in), then rerun this deploy's verify." >&2
+    return 1
+  fi
+}
+
 do_production() {
   echo "PRODUCTION: unit trustweb-backup on 127.0.0.1:8960 (orchestrator only)"
   [ "$DRY" = 1 ] || remote_state "BEFORE (free -m, df -h)"
@@ -435,7 +454,7 @@ do_production() {
   install_unit trustweb-backup "" 8960 256M
   check_data_labels ""
   install_caddy_routes
-  if [ "$DRY" = 1 ]; then echo "[dry-run] verify: curl https://app.idea2.site/backup/health, /hosted/status, foreign Origin -> 403"; return; fi
+  if [ "$DRY" = 1 ]; then echo "[dry-run] verify: curl https://app.idea2.site/backup/health, /hosted/status, foreign Origin -> 403, then every app host on 127.0.0.1:8960 (/health 200, feedback preflight 204)"; return; fi
   echo "verify through the public origin"
   sleep 1
   curl -fsS https://app.idea2.site/backup/health && echo "  <- /backup/health"
@@ -444,6 +463,8 @@ do_production() {
   echo "foreign Origin -> $code (expect 403)"
   code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://idea2.site' https://app.idea2.site/feedback)
   echo "feedback preflight from idea2.site -> $code (expect 204)"
+  echo "every app host (ALLOWED_HOSTS_PRODUCTION) on the loopback port"
+  verify_every_app_host || exit 1
   remote_state "AFTER (free -m, df -h)"
 }
 

@@ -48,7 +48,7 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
 
   /link, /l/<id>  (wave 5) short connect links: POST /link {"url"} -> 201 {"id","expires_at"} (200 when the same url is already stored),
                   GET /l/<id> -> 302 to the stored long url, fragment included; unknown/expired/malformed id -> the same tiny 404 page.
-                  Only https urls of LINK_HOSTS (app.idea2.site, app.trustintheweb.org) with a connect parameter; 2 KB body cap, own-host Origin,
+                  Only https urls of LINK_HOSTS (app.idea2.site, app.trustintheweb.org, app.trustweb.one) with a connect parameter; 2 KB body cap, own-host Origin,
                   6/min and 30/h per address, 30 days, at most 5000, store <BACKUP_DIR>/links.json (0600). Never logged (not even method and
                   status): the modules have no logger. Caddy: scripts/trustweb_links_caddy_install.sh (log_skip). links.mjs, link_store.mjs.
                   Contract: services-api-contract.txt section 9.

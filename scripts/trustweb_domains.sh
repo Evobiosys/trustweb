@@ -199,12 +199,21 @@ cmd_app_one() {
 cmd_org_redirect() {
   echo "Caddy: app.trustintheweb.org page loads -> 301 https://app.trustweb.one{uri} (API handles keep serving, nothing deleted)"
   local probe
-  probe="$(rsh "curl -sS --max-time 15 https://app.trustweb.one/ -o /tmp/twone.$TS -w '%{http_code}\\n'; grep -c '/assets/' /tmp/twone.$TS || true; curl -sS --max-time 15 -o /dev/null -w '%{http_code}\\n' https://app.trustweb.one/manifest.json; rm -f /tmp/twone.$TS" | tr '\n' ' ')"
-  case "$probe" in
-    "200 "[1-9]*" 200 ") say "https://app.trustweb.one/ serves the app ($probe)" ;;
-    *) echo "https://app.trustweb.one/ is not serving the app yet ($probe): redirect refused" >&2; return 1 ;;
-  esac
+  probe="$(rsh "curl -sS --max-time 15 https://app.trustweb.one/ -o /tmp/twone.$TS -w '%{http_code}\\n'; grep -c '/assets/' /tmp/twone.$TS || true; curl -sS --max-time 15 -o /dev/null -w '%{http_code}\\n' https://app.trustweb.one/manifest.json; curl -sS --max-time 15 -o /dev/null -w '%{http_code}\\n' https://app.trustweb.one/backup/health; rm -f /tmp/twone.$TS" | tr '\n' ' ')"
+  if org_probe_ok "$probe"; then say "https://app.trustweb.one/ serves the app and its backup ($probe)"; else
+    echo "https://app.trustweb.one/ is not serving the app and /backup/health yet (index, assets, manifest, backup: $probe): redirect refused" >&2
+    echo "  (a 421 on /backup/health = the trustweb-backup drop-in lacks app.trustweb.one: run backup-env first)" >&2
+    return 1
+  fi
   caddy_change app-trustweb-one app-org-redirect
+}
+
+# org_probe_ok "<index code> <lines naming /assets/> <manifest code> <backup health code>": the new host serves the built app
+# AND its backup service answers for it, so a person redirected there can Restore (review 6c: a stale drop-in = 421 there).
+org_probe_ok() {
+  local index assets manifest health extra
+  read -r index assets manifest health extra <<<"$1" || true
+  [ "$index" = 200 ] && [ -z "$extra" ] && [ "$manifest" = 200 ] && [ "$health" = 200 ] && [[ "$assets" =~ ^[1-9][0-9]*$ ]]
 }
 
 # ---------------------------------------------------------------- trustweb-backup environment
