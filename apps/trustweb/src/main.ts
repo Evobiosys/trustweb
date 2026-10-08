@@ -57,7 +57,7 @@ import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, sentChannelsBefore, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -274,17 +274,24 @@ try {
     if (soloOff) state.asksMatchNotes = false
     // Wave 6 (chat.ts): a corrupted `chats` value is repaired, never thrown on.
     const chatsFixed = migrateChats(state)
-    // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped, never thrown on.
-    const codeFixed = repairConnectRecord(state)
-    // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped, never thrown on.
-    const modesFixed = repairShareFields(state)
-    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired, never thrown on.
-    const notesFixed = repairGeneralNotes(state)
-    if (sourced || noted || merged || soloOff || chatsFixed || codeFixed || modesFixed || notesFixed) save()
+    if (sourced || noted || merged || soloOff || chatsFixed) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
 }
+// The field repairs of waves 6b and 6e run in their own block, so a failure of a migration above (state reloaded as stored) does not skip
+// them (review 6e). Each never throws on its own; the block is a second net.
+try {
+  if (state) {
+    // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
+    const codeFixed = repairConnectRecord(state)
+    // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
+    const modesFixed = repairShareFields(state)
+    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
+    const notesFixed = repairGeneralNotes(state)
+    if (codeFixed || modesFixed || notesFixed) save()
+  }
+} catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -1756,7 +1763,7 @@ function sendContactTo(peer: Peer): void {
   const mode = shareModeNow()
   if (!mayShareContact(mode)) return
   const s = st()
-  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id])
+  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], sentChannelsBefore(APP_URL, s.myChannels, s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id]))
   if (!out) return
   net.sendText(peer, out.text).then(() => {
     s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }

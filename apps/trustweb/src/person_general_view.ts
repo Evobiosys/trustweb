@@ -31,6 +31,33 @@ export interface GeneralSection {
   flush(): void
 }
 
+/** Re-stamping "was open" while typing at most this often (one localStorage write per keystroke is not needed for a two-minute memory). */
+const MARK_EVERY_MS = 10_000
+
+interface LiveSection { root: HTMLElement; flush: () => void }
+/** The sections built on this page; ONE pair of page listeners serves them all (no listener per card that lives on after the card). */
+const live = new Set<LiveSection>()
+let pageHooked = false
+
+/** Saves what every section is waiting with, and forgets the sections that left the page. */
+function flushLive(): void {
+  for (const s of [...live]) {
+    s.flush()
+    if (!s.root.isConnected) live.delete(s)
+  }
+}
+
+/** Adds a section; a section that already left the page is saved one last time and forgotten. */
+function track(section: LiveSection): void {
+  for (const s of [...live]) if (!s.root.isConnected) { s.flush(); live.delete(s) }
+  live.add(section)
+  if (pageHooked) return
+  pageHooked = true
+  // A card closed or a page hidden while a pause is running must not lose the last words.
+  document.addEventListener('visibilitychange', flushLive)
+  window.addEventListener('pagehide', flushLive)
+}
+
 export function createGeneralSection(o: GeneralSectionOptions): GeneralSection {
   const startsOpen = o.memory.wasOpen()
   const toggle = el('button', {
@@ -62,8 +89,10 @@ export function createGeneralSection(o: GeneralSectionOptions): GeneralSection {
       status.textContent = S.generalNoteSaved
     },
   })
+  let markedAt = Number.NEGATIVE_INFINITY
   area.addEventListener('input', () => {
-    o.memory.markOpen()
+    const t = Date.now()
+    if (t - markedAt >= MARK_EVERY_MS) { markedAt = t; o.memory.markOpen() }
     status.textContent = S.generalNoteSaving
     saver.input(area.value)
   })
@@ -75,14 +104,7 @@ export function createGeneralSection(o: GeneralSectionOptions): GeneralSection {
     toggle.textContent = S.personAdvanced + (open ? ' ▴' : ' ▾')
     if (open) { o.memory.markOpen(); drawVoice(); area.focus() } else { saver.flush(); o.memory.markClosed() }
   })
-  // A card closed or a page hidden while a pause is running must not lose the last words.
-  // The listeners go when the card is gone.
-  const onHide = (): void => {
-    saver.flush()
-    if (!root.isConnected) { document.removeEventListener('visibilitychange', onHide); window.removeEventListener('pagehide', onHide) }
-  }
-  document.addEventListener('visibilitychange', onHide)
-  window.addEventListener('pagehide', onHide)
+  track({ root, flush: () => saver.flush() })
   return {
     el: root,
     flush: () => saver.flush(),

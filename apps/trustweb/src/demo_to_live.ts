@@ -33,6 +33,7 @@ import { AboutKind, AUDIENCES, isDemoItem, isDemoPerson, LineStatus, RINGS, TAGS
 import { DemoContext, Persona, RETIRED_SEED_ITEM_TEXTS, seedState } from './seed'
 import { isPublicDemoPerson } from './demo_inventory_public'
 import { markDemo } from './provenance'
+import { cleanGeneralNote } from './general_notes'
 
 /** The one-shot record the demo page leaves for the live app (same origin). */
 export const CARRY_KEY = 'trustweb.carry.v1'
@@ -224,7 +225,12 @@ function isNoteLine(v: unknown): v is NoteLine {
 /** A carried person with only well-formed notes, never a relay link; null where the person itself is malformed. */
 function cleanPerson(v: unknown): Person | null {
   if (!isRec(v) || !isId(v.id) || !isStr(v.name) || !isStr(v.context) || !oneOf(RINGS, v.ring) || !isNum(v.metAt) || !Array.isArray(v.lines)) return null
-  return unlinked({ ...(v as unknown as Person), lines: v.lines.filter(isNoteLine) })
+  const person: Person = { ...(v as unknown as Person), lines: v.lines.filter(isNoteLine) }
+  // The General note (wave 6e) is carried cleaned: text only, at most GENERAL_NOTE_MAX, dropped when empty (review 6e).
+  const note = cleanGeneralNote(v.generalNote)
+  if (note) person.generalNote = note
+  else delete person.generalNote
+  return unlinked(person)
 }
 
 function isItem(v: unknown): v is InventoryItem {

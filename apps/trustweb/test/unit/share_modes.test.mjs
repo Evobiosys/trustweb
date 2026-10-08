@@ -125,6 +125,16 @@ describe('the remembered mode', () => {
     expect(effectiveMode(ShareMode.TrustWebWhatsApp, [], { [Channel.Signal]: SIGNAL_USER })).toBe(ShareMode.TrustWebSignal)
     expect(effectiveMode(ShareMode.OnlySignal, [], {})).toBe(ShareMode.OnlyTrustWeb)
   })
+  it('a PINNED mode whose link was removed stays on its button but is never the mode in force (review 6e)', () => {
+    expect(effectiveMode(undefined, [ShareMode.OnlySignal], {})).toBe(ShareMode.OnlyTrustWeb)
+    expect(effectiveMode(ShareMode.OnlySignal, [ShareMode.OnlySignal, ShareMode.TrustWebWhatsApp], { [Channel.WhatsApp]: WA_QR })).toBe(ShareMode.TrustWebWhatsApp)
+    expect(effectiveMode(undefined, [ShareMode.TrustWebMatrix, ShareMode.OnlyWhatsApp], { [Channel.Signal]: SIGNAL_USER })).toBe(ShareMode.TrustWebSignal)
+    expect(rowModes([ShareMode.OnlySignal], {})).toContain(ShareMode.OnlySignal)
+  })
+  it('togglePin ignores a value that is not a mode', () => {
+    expect(togglePin([], 'zzz')).toEqual({ pins: [], refused: false })
+    expect(togglePin([ShareMode.OnlyTrustWeb], 'zzz').pins).toEqual([ShareMode.OnlyTrustWeb])
+  })
   it('an unknown stored value (a newer or damaged record) counts as none', () => {
     expect(effectiveMode('both', [], ALL)).toBe(ShareMode.TrustWebSignal)
     expect(effectiveMode(42, [], {})).toBe(ShareMode.OnlyTrustWeb)

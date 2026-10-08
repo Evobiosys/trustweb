@@ -113,6 +113,7 @@ export interface PinResult {
  */
 export function togglePin(pins: readonly ShareMode[], mode: ShareMode): PinResult {
   const now = readPins(pins)
+  if (!isShareMode(mode)) return { pins: now, refused: false } // not a mode (a stale or damaged caller): nothing changes
   if (now.includes(mode)) return { pins: now.filter((m) => m !== mode), refused: false }
   if (now.length >= MAX_PINS) return { pins: now, refused: true }
   return { pins: [...now, mode], refused: false }
@@ -126,12 +127,13 @@ export function rowModes(pins: unknown, mine: ChannelMap | undefined): ShareMode
 }
 
 /**
- * The mode in force: the remembered one while its channel is still saved, else the primary button. A stored value that is not a mode
+ * The mode in force: the remembered one while its channel is still saved, else the first button whose channel is saved (a pinned mode
+ * whose link was removed stays on its button but is never the mode in force), else the default primary. A stored value that is not a mode
  * (a newer or damaged record) counts as none.
  */
 export function effectiveMode(stored: unknown, pins: unknown, mine: ChannelMap | undefined): ShareMode {
   if (isShareMode(stored) && modeAvailable(stored, mine)) return stored
-  return rowModes(pins, mine)[0]
+  return rowModes(pins, mine).find((m) => modeAvailable(m, mine)) ?? defaultModes(mine)[0] // the default list always ends with Only TrustWeb
 }
 
 /** Boot repair for the two optional record fields. True when the state changed. Never throws. */

@@ -183,7 +183,9 @@ export function parseContactText(appUrl: string, text: string): ContactPayload |
   }
   const channels: Record<string, string> = Object.fromEntries(CHANNELS.map((ch) => [ch, q.get(ch)]).filter(([, v]) => v !== null))
   const waQr = q.get(WHATSAPP_QR_KEY)
-  if (waQr !== null && channels[Channel.WhatsApp] === undefined) channels[Channel.WhatsApp] = waQr
+  // wa= (a WhatsApp share-QR link) stands in when there is no usable whatsapp= value: a broken whatsapp= must not hide a valid wa=.
+  const waNumber = channels[Channel.WhatsApp]
+  if (waQr !== null && (waNumber === undefined || sendable(Channel.WhatsApp, waNumber) === null)) channels[Channel.WhatsApp] = waQr
   const raw: Record<string, unknown> = { v: 1, channels }
   const p = q.get(PROVIDER_KEY)
   if (p !== null) raw.signalProvider = p
@@ -232,6 +234,18 @@ export function contactToSend(
   if (!built || !shouldSendContact(sentFingerprint, built.payload)) return null
   if (sentChannels && isNarrower(built.payload.channels, sentChannels)) return null
   return { text: contactText(appUrl, built.payload), fingerprint: contactFingerprint(built.payload), omitted: built.omitted, channels: built.payload.channels }
+}
+
+/**
+ * What went to a peer before, for contactToSend. A peer served before wave 6e has a fingerprint but no channel list: it got everything that
+ * was ticked then, approximated by everything ticked now (`mine` unnarrowed), so a narrowed send that would only take channels away (an
+ * older receiver replaces the whole set) is skipped for it too (review 6e). No fingerprint: nothing went, undefined.
+ */
+export function sentChannelsBefore(
+  appUrl: string, mine: ChannelMap | undefined, settings: ShareSettings | undefined, sentFingerprint: string | undefined, sentChannels: ChannelMap | undefined,
+): ChannelMap | undefined {
+  if (sentChannels !== undefined || sentFingerprint === undefined) return sentChannels
+  return buildContactPayload(appUrl, mine, settings)?.payload.channels
 }
 
 /** True when `next` offers fewer channels than `sent` and every one of them is unchanged: sending it would only take something away. */
