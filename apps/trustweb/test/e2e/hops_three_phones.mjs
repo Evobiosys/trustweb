@@ -62,8 +62,8 @@ async function setPassOn(page, name, on) {
   await page.locator('.node', { hasText: name }).first().click()
   const row = page.locator('.sheet.on [data-pass-on]')
   await row.waitFor({ timeout: 5_000 })
-  if ((await row.getAttribute('aria-pressed')) !== String(on)) await row.click()
-  await page.locator(`.sheet.on [data-pass-on][aria-pressed="${on}"]`).waitFor({ timeout: 5_000 })
+  if ((await row.getAttribute('aria-checked')) !== String(on)) await row.click()
+  await page.locator(`.sheet.on [data-pass-on][aria-checked="${on}"]`).waitFor({ timeout: 5_000 })
   await closeSheet(page)
 }
 

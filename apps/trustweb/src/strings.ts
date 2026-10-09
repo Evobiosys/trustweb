@@ -711,6 +711,8 @@ export const S = {
     'Lines from a recording or a meeting start as Close friends; widen them when you save the notes, or later on the line.',
   ],
   passOnTitle: 'Pass their asks on',
+  passOnStateOn: 'On',
+  passOnStateOff: 'Off',
   passOnHint: 'On unless you switch it off. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
   logPassedOn: (n: number, back: number) => (back ? `passed on to ${n}, ${back} came back` : `passed on to ${n}`),
   queryWaiting: (s: number) => (s > 0 ? `Answers in ${s < 120 ? `about ${s} s` : waitLabel(s)}` : 'Waiting for anyone still deciding...'),

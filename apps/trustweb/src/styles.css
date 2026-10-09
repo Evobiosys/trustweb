@@ -809,3 +809,18 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .sheet-name{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .signal-top{display:inline-grid; place-items:center; width:32px; height:32px; padding:6px; border-radius:50%; background:var(--card); color:var(--teal); flex-shrink:0}
 .signal-top:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+
+/* "Pass their asks on": a phone-style switch row (on = green, knob right; off = grey, knob left). */
+.passon-row{display:flex; align-items:center; justify-content:space-between; gap:14px; width:100%; text-align:left; font:inherit; color:var(--ink);
+  background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:12px 14px; cursor:pointer}
+.passon-text{display:flex; flex-direction:column; gap:3px; min-width:0}
+.passon-text small{color:var(--ink-soft); font-size:12.5px; line-height:1.35}
+.passon-ctl{display:flex; align-items:center; gap:9px; flex:none}
+.passon-state{font-weight:700; font-size:13px; color:var(--ink-soft); min-width:2.2em; text-align:right}
+.passon-row.on .passon-state{color:var(--teal)}
+.ios-switch{position:relative; width:51px; height:31px; border-radius:999px; background:#c9ccd1; transition:background .2s; flex:none}
+.ios-knob{position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.3); transition:transform .2s}
+.passon-row.on .ios-switch{background:var(--teal)}
+.passon-row.on .ios-knob{transform:translateX(20px)}
+.passon-row:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){ .ios-switch,.ios-knob{transition:none} }

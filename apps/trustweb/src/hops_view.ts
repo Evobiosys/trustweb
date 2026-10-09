@@ -104,8 +104,15 @@ export function answerTitle(from: string, items: readonly { via?: unknown }[]): 
  * switch shows what the phone does and one tap flips it.
  */
 export function passOnRow(on: boolean, onToggle: (next: boolean) => void): HTMLElement {
+  // A phone-style switch (knob slides, green when on, grey when off) with the state written beside it, so off reads as off, not as an unticked box.
   return el('button', {
-    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-pass-on': '1',
+    class: 'passon-row' + (on ? ' on' : ''), role: 'switch', 'aria-checked': String(on), 'data-pass-on': '1',
     onclick: () => onToggle(!on),
-  }, [el('b', {}, [S.passOnTitle]), el('small', {}, [S.passOnHint])])
+  }, [
+    el('span', { class: 'passon-text' }, [el('b', {}, [S.passOnTitle]), el('small', {}, [S.passOnHint])]),
+    el('span', { class: 'passon-ctl' }, [
+      el('span', { class: 'passon-state' }, [on ? S.passOnStateOn : S.passOnStateOff]),
+      el('span', { class: 'ios-switch', 'aria-hidden': 'true' }, [el('span', { class: 'ios-knob' })]),
+    ]),
+  ])
 }
