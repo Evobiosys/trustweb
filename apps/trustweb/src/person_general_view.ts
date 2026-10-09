@@ -23,6 +23,8 @@ export interface GeneralSectionOptions {
   pendingVoice: () => number
   /** Autosave timing, for tests. */
   autosave?: Pick<AutosaveDeps, 'delayMs' | 'setTimer' | 'clearTimer'>
+  /** Wave 6i: more under Advanced, after the note (the "Get their earlier asks again" button of a connected person). Absent: nothing. */
+  extra?: HTMLElement | null
 }
 
 export interface GeneralSection {
@@ -72,6 +74,7 @@ export function createGeneralSection(o: GeneralSectionOptions): GeneralSection {
   const voice = el('p', { class: 'meta', 'data-general-transcribing': '', hidden: true })
   const panel = el('div', { class: 'person-advanced-panel', hidden: !startsOpen, 'data-person-advanced-panel': '' }, [
     el('h4', { class: 'eyebrow' }, [S.generalNoteTitle]), voice, area, status, el('p', { class: 'meta' }, [S.generalNoteHint]),
+    o.extra ?? null,
   ])
   const root = el('div', { class: 'person-advanced', 'data-person-advanced': '' }, [toggle, panel])
 

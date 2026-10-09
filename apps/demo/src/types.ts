@@ -345,7 +345,52 @@ export interface QueryEnvelope {
    */
   answerWindowMs?: number
   // ----- END TrustWeb wave 6h -----
+  // ----- BEGIN TrustWeb wave 6i: an earlier ask, asked again -----
+  /**
+   * Set ONLY on an ask the asker's phone sends again on its own, after the receiver tightened the asker's ring
+   * (apps/trustweb/src/reask.ts): `originalQid` is the qid the receiver got the first time, `originalAt` the asker's
+   * clock at that first ask (the receiver shows "Earlier ask from <name> (<date>)"). Carries nothing else.
+   * Present-and-malformed rejects the envelope like the hop fields; older builds' parseQuery drop it (the ask then
+   * reads as a new one).
+   */
+  reask?: ReaskRef
+  // ----- END TrustWeb wave 6i -----
 }
+
+// ----- BEGIN TrustWeb wave 6i -----
+/** QueryEnvelope.reask: which earlier ask this one repeats. */
+export interface ReaskRef {
+  originalQid: string
+  originalAt: number
+}
+
+/** ChatEnvelope.re: the ask a message answers (or follows up), so the message carries its question. */
+export interface ChatRe {
+  /** The qid of that ask between these two phones (each connection gets its own). */
+  qid: string
+  /** The ask's words, at most RE_TEXT_MAX characters. */
+  text: string
+  /** When it was asked (the sender's clock; display only). */
+  at: number
+}
+
+/** The longest ChatRe.text: an ask's own bound (FREE_TEXT_MAX_LEN). */
+export const RE_TEXT_MAX = 200
+/** A qid as this app mints it (crypto.ts randomId: base64url), bounded. Also ReaskRef.originalQid. */
+export const QID_RE = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * "Ask me again" (TrustWeb wave 6i): sent, sealed with the pair key, by a phone whose person just TIGHTENED the receiver's
+ * ring (or pressed "Get their earlier asks again"). The receiver re-sends the asks it made to the sender that were never
+ * answered with a share (apps/trustweb/src/reask.ts). It carries no ring and no text: the receiver learns nothing about the
+ * sender's lines. Loosening a ring sends nothing at all. An older build's decodeFromQr does not know `t` and returns null,
+ * so its relay channel never acks the wire: it waits on the relay until that phone runs a build that reads it.
+ */
+export interface AskAgainEnvelope {
+  v: 1
+  t: 'ask-again'
+}
+// ----- END TrustWeb wave 6i -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): bounds for the hop fields above -----
 /** The furthest any ask travels (also what "no limit" means). Each step adds one answer window (gate.ts RELAY_DEADLINE_MS). */
@@ -418,6 +463,8 @@ export interface ChatEnvelope {
   text: string
   /** Sender's clock, for ordering in the local log only. Never trusted. */
   ts: number
+  /** TrustWeb wave 6i: the ask this message answers. Optional; older builds' parseChat drop it and show the text alone. */
+  re?: ChatRe
 }
 
 /**

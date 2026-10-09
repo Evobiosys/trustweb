@@ -32,6 +32,10 @@
  * silently and shows on its next open (late_answers.ts); a prompt survives a reload (held_asks.ts); a direct contact's ask that matched
  * nothing leaves a quiet card for the ASKED person only (unmatched_asks.ts); refresh() reopens the drain after a sleep (wake_watch.ts).
  *
+ * Wave 6i (THE ONE THING: an ask and its answer stay one conversation): a chat message may carry the ask it answers (chat_re.ts); an
+ * ask-again envelope (sent only when this phone TIGHTENS a connection's ring) makes the other phone re-send its earlier unanswered asks
+ * to this one, each marked as earlier (reask.ts); loosening sends nothing at all.
+ *
  * DIDs stay in this layer. Nothing here hands a DID string to the UI.
  */
 import { createIdentity, deserializeIdentity, serializeIdentity, ecdhSharedSecret } from '../../demo/src/did'
@@ -48,7 +52,7 @@ import { sealRelayAnswer } from '../../demo/src/answer_key'
 import { classifyIncomingQuery } from '../../demo/src/incoming_query'
 import { matchTemplate } from '../../demo/src/match/lexical'
 import { FREE_TEXT_MAX_LEN } from '../../demo/src/types'
-import type { AnswerEnvelope, ChatEnvelope, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ChatThread, DecodedAnswer, MatchResult, QueryEnvelope, QueryTemplate, SharedItem, SharedPayload } from '../../demo/src/types'
 import { ackDue, attemptAllowed, nextAttempts, noteAckSent, noteHeard } from './ack_retry'
 import type { AckAttempts } from './ack_retry'
 import { ANSWER_WINDOW_MS, carriesWindow, passOnWindowFields, receivedWindowMs, windowFields } from './ask_window'
@@ -64,11 +68,13 @@ import {
 import type { HopInfo } from './hops'
 import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
-import { addLateAnswer, addSentAsk, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
+import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
-import { addUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
+import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
+import { askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk } from './reask'
+import type { EarlierAsk, ReaskPlan } from './reask'
 
 export type { RelayStatus }
 
@@ -131,12 +137,21 @@ export interface IncomingAsk {
   lateMode: boolean
   /** Wave 6h: it reached this phone after its asker had stopped waiting; a yes goes as a late answer. */
   arrivedLate: boolean
+  /**
+   * Wave 6i: the connection of the person who ASKED, when the ask came straight from them (not passed on by a friend, not through a front
+   * door): "Message <name>" from the prompt goes there, carrying this ask (chat_re.ts). Null: no message from the prompt.
+   */
+  askerPeerId: string | null
+  /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring; `at` null: shown without a date. */
+  earlier: { at: number | null } | null
   decide(share: boolean): Promise<void>
 }
 
 export interface AskResult {
   peerId: string
   peerName: string
+  /** Wave 6i: the qid this connection got (so "Message <name>" from the answer carries the question, chat_re.ts). */
+  qid: string
   decoded: DecodedAnswer | null
 }
 
@@ -162,8 +177,8 @@ export interface NetHooks {
   onLogChanged(): void
   /** What this asker may be matched against; undefined = everything their ring admits. */
   askScope(peer: Peer): MatchScope | undefined
-  /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). */
-  onText(peer: Peer, text: string, ts: number): void
+  /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). `re` (wave 6i): the ask a chat message answers. */
+  onText(peer: Peer, text: string, ts: number, re?: ChatRe): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -188,6 +203,11 @@ export interface NetHooks {
   onUnmatchedAsk?(): void
   /** Review 6h (late_answers.ts openWindowUntil): late answers the drain brought right after an open were released; show them. */
   onLateAnswersReleased?(): void
+  /**
+   * Wave 6i (reask.ts): `peer` tightened this phone's ring and asks for its earlier asks again: may this phone re-send them? Absent:
+   * never (tests, the side-by-side demo, demo accounts and their owners: their flows are their own).
+   */
+  mayReask?(peer: Peer): boolean
 }
 
 /** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
@@ -246,6 +266,9 @@ export class Net {
   private releaseUntil = 0
   /** Review 6h: the restoreHeldAsks run in progress, if any. */
   private restoring: Promise<void> | null = null
+  /** Wave 6i (reask.ts): per connection (peer id), when its last ask-again started a round of re-asks here, and the rounds running. */
+  private askAgainAt = new Map<string, number>()
+  private reasking = new Set<string>()
   private readonly windowMs: number
   private readonly relayOrigin: string | undefined
 
@@ -316,7 +339,7 @@ export class Net {
     channel.onStatus((status) => {
       if (this.channel !== channel) return // a channel this tab already closed
       this.hooks.onStatus(status)
-      if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes() }
+      if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes(); void this.flushAskAgain() }
     })
     channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
     channel.onEnvelope(async (fromDid) => {
@@ -472,8 +495,9 @@ export class Net {
     if (env.t === 'query') await this.handleQuery(env, fromDid)
     if (env.t === 'chat') {
       const peer = this.peerByDid(fromDid)
-      if (peer) this.hooks.onText(peer, env.text, env.ts)
+      if (peer) this.hooks.onText(peer, env.text, env.ts, env.re)
     }
+    if (env.t === 'ask-again' && from) await this.onAskAgain(from)
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
   }
 
@@ -481,9 +505,10 @@ export class Net {
    * A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). `ts` defaults to now;
    * a retry of a waiting chat message passes its ORIGINAL ts so the receiver can drop a duplicate (chat.ts).
    */
-  async sendText(peer: Peer, text: string, ts: number = Date.now()): Promise<void> {
+  async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe): Promise<void> {
     await this.start()
-    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts }
+    // Wave 6i: `re`, the ask this message answers (chat_re.ts makeRe built it), travels inside the same sealed envelope.
+    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts, ...(re ? { re } : {}) }
     const key = await this.pairKey(peer)
     if (!this.channel) throw new Error('relay not connected')
     await this.channel.send(peer.did, env, key)
@@ -528,18 +553,22 @@ export class Net {
     // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
     const repeat = this.roots.repeat(info.root, receivedAt)
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
+    // Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring. One already shown at this ring (or
+    // a tighter one) is answered like no match, never shown again: a double tap or a lower-then-raise repeats no prompt.
+    const earlier = this.earlierOf(q, info, peer, receivedAt)
+    const quietEarlier = earlier !== null && !this.noteEarlier(earlier, peer, receivedAt)
     // Its asker stopped waiting long ago (this phone was closed or asleep). A repeat or a cycle stays as silent as it is live (review 6f).
     if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, windowMs))) {
-      if (repeat || cycle) return
+      if (repeat || cycle || quietEarlier) return
       // Wave 6h: the asker's build takes a late yes: the prompt still shows. Wave 6f for an older asker: no prompt (away_asks.ts).
-      if (lateMode && receivedAt - q.issuedAt <= LATE_KEEP_MS) await this.handleLateArrival(q, peer, info, text, receivedAt)
+      if (lateMode && receivedAt - q.issuedAt <= LATE_KEEP_MS) await this.handleLateArrival(q, peer, info, text, receivedAt, earlier)
       else this.handleAwayAsk(q, peer, info, text)
       return
     }
     const tpl = templateFor(text)
     // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
     const deadline = receivedAt + answerDelayMs(info, windowMs)
-    const silent = repeat || cycle || !surfacesHere(q)
+    const silent = repeat || cycle || quietEarlier || !surfacesHere(q)
     const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
@@ -551,8 +580,9 @@ export class Net {
       : Promise.resolve(NO_HARVEST)
     const reply = this.replier(q.qid, tpl.id, peer, key, receivedAt, deadline, harvest)
 
-    // A repeat or a cycle is not a new ask: answered (nothing, at the same moment) but not logged a second time.
-    if (repeat || cycle) {
+    // A repeat or a cycle is not a new ask: answered (nothing, at the same moment) but not logged a second time. Wave 6i: nor is an
+    // earlier ask that came again and still matches nothing (no log row, no card: one tightening must not bring twenty of them).
+    if (repeat || cycle || (earlier !== null && !surface)) {
       await reply.atMoment([])
       return
     }
@@ -571,8 +601,37 @@ export class Net {
       through: info.door ? [] : throughOf(info, peer.displayName),
       doorName: info.door ? peer.displayName : null,
       relayed: q.relayed === true && (info.door || !info.travels),
-      matches, receivedAt, deadline, lateMode,
+      matches, receivedAt, deadline, lateMode, ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, reply)
+  }
+
+  /**
+   * Wave 6i (reask.ts): the earlier ask an incoming ask repeats, read only on an ask straight from its asker that carries its window (a
+   * re-ask is always direct and always carries it); anything else is an ordinary ask.
+   */
+  private earlierOf(q: QueryEnvelope, info: HopInfo, peer: Peer, receivedAt: number): EarlierAsk | null {
+    if (!q.reask || !carriesWindow(q) || !this.straightFromAsker(q, info, peer)) return null
+    return earlierAsk(q.reask, receivedAt)
+  }
+
+  /** Wave 6i: remembers that this earlier ask came again at the asker's ring now; true when it is to be shown (reask.ts showsEarlierAsk). */
+  private noteEarlier(earlier: EarlierAsk, peer: Peer, now: number): boolean {
+    const s = this.hooks.state()
+    const show = showsEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, now)
+    s.reaskSeen = noteEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, now)
+    this.hooks.save()
+    return show
+  }
+
+  /** Wave 6i: the held prompt's fields for an earlier ask that is shown; its old "nothing matched" card goes (the prompt replaces it). */
+  private earlierFields(earlier: EarlierAsk | null, peer: Peer, now: number): Pick<HeldAsk, 'earlierAt' | 'reaskOf'> {
+    if (!earlier) return {}
+    const s = this.hooks.state()
+    if (Array.isArray(s.unmatchedAsks) && s.unmatchedAsks.some((a) => isUnmatchedFor(a, earlier.originalQid, peer.id))) {
+      s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, earlier.originalQid, now)
+      this.hooks.save()
+    }
+    return { reaskOf: earlier.originalQid, ...(earlier.at !== null ? { earlierAt: earlier.at } : {}) }
   }
 
   /**
@@ -596,6 +655,8 @@ export class Net {
       qid: held.qid, fromName: held.fromName, text: held.text, matches: held.matches, receivedAt: held.receivedAt,
       relayed: held.relayed, through: held.through, doorName: held.doorName,
       deadline: held.deadline, lateMode: held.lateMode, arrivedLate: held.arrivedLate === true,
+      askerPeerId: !held.relayed && held.doorName === null && held.through.length === 0 ? held.peerId : null,
+      earlier: held.reaskOf !== undefined ? { at: held.earlierAt ?? null } : null,
       decide: async (share: boolean) => {
         if (decided) return
         decided = true
@@ -752,12 +813,14 @@ export class Net {
    * asker's app takes a late yes, so it is shown like a live one, marked as late; nothing leaves at a moment and it is never passed on.
    * Only straight from its asker (a late yes to a friend in between would reach nobody); otherwise it is logged like the 6f away ask.
    */
-  private async handleLateArrival(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string, receivedAt: number): Promise<void> {
+  private async handleLateArrival(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string, receivedAt: number, earlier: EarlierAsk | null = null): Promise<void> {
     if (!text || !surfacesHere(q)) return
     if (!this.straightFromAsker(q, info, peer)) { this.handleAwayAsk(q, peer, info, text); return }
     const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
     const match = matchAsk(text, threads)
     if (!classifyIncomingQuery(match, false, true).surface) {
+      // Wave 6i: an earlier ask that came again and still matches nothing stays silent (no log row, no card).
+      if (earlier) return
       const entry = this.log(peer, text, LogOutcome.NoMatch)
       entry.away = true
       this.hooks.save()
@@ -769,7 +832,7 @@ export class Net {
     const tplId = templateFor(text).id
     this.present({
       qid: q.qid, peerId: peer.id, text, fromName: peer.displayName, through: [], doorName: null, relayed: false,
-      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true,
+      matches, receivedAt, deadline: receivedAt, lateMode: true, arrivedLate: true, ...this.earlierFields(earlier, peer, receivedAt),
     }, peer, this.replier(q.qid, tplId, peer, key, receivedAt, receivedAt, Promise.resolve(NO_HARVEST)))
   }
 
@@ -905,6 +968,7 @@ export class Net {
     const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({
       peerId: peer.id,
       peerName: peer.displayName,
+      qid,
       decoded: await this.sendAsk(peer, freeText, extra, timeoutMs, qid),
     })))
     // Review 6h: who shared at the moment has answered; a second answer of theirs for this ask is not a late one.
@@ -917,6 +981,82 @@ export class Net {
     return results
   }
 
+  // -------------------------------------------------------------------------
+  // Wave 6i (reask.ts): tightening a ring brings back the earlier asks
+  // -------------------------------------------------------------------------
+
+  /**
+   * A's side: this phone's person just TIGHTENED `peer`'s ring (or asked for their earlier asks again): one sealed ask-again, nothing
+   * else (no ring, no text). Kept on the peer (askAgainDue) until the relay took it, so a phone offline or a tab without the drain sends
+   * it on the next connect. Never called for a loosening: lowering a ring sends nothing.
+   */
+  async askAgain(peer: Peer): Promise<boolean> {
+    const stored = this.hooks.state().peers.find((p) => p.id === peer.id)
+    if (!stored) return false
+    stored.askAgainDue = Date.now()
+    this.hooks.save()
+    return this.sendAskAgain(stored)
+  }
+
+  private async sendAskAgain(peer: Peer): Promise<boolean> {
+    if (!this.channel) return false
+    const env: AskAgainEnvelope = { v: 1, t: 'ask-again' }
+    try {
+      await this.channel.send(peer.did, env, await this.pairKey(peer))
+    } catch {
+      return false
+    }
+    const stored = this.peerByDid(peer.did)
+    if (stored?.askAgainDue !== undefined) { delete stored.askAgainDue; this.hooks.save() }
+    return true
+  }
+
+  /** On every connect of the drain: the ask-agains the relay did not take yet leave now. */
+  private async flushAskAgain(): Promise<void> {
+    for (const peer of this.hooks.state().peers.filter((p) => p.askAgainDue !== undefined)) await this.sendAskAgain(peer)
+  }
+
+  /**
+   * B's side: `peer` tightened this phone's ring. One round of re-asks per connection at a time and per ASK_AGAIN_COOLDOWN_MS, only where
+   * the app allows it (mayReask); this phone shows nothing about it (A's ring is A's own).
+   */
+  private async onAskAgain(peer: Peer): Promise<void> {
+    if (this.hooks.mayReask?.(peer) !== true || !this.channel) return
+    const now = Date.now()
+    if (!askAgainAllowed(this.askAgainAt.get(peer.id), this.reasking.has(peer.id), now)) return
+    this.askAgainAt.set(peer.id, now)
+    this.reasking.add(peer.id)
+    try {
+      const plans = reaskCandidates(this.hooks.state().sentAsks, peer.id, now, (qid) => this.awaiting.has(qid))
+      const timeoutMs = askTimeoutMs(undefined, this.windowMs)
+      await Promise.all(plans.map((plan) => this.reaskOne(peer, plan, timeoutMs)))
+    } finally {
+      this.reasking.delete(peer.id)
+    }
+  }
+
+  /**
+   * One earlier ask, again, to `peer` only: a fresh qid, direct, this phone's window, marked as earlier (reask.ts reaskFields). A share at
+   * the moment is shown at once (this phone waited for it, like the dock); a later yes lands as an ordinary late answer.
+   */
+  private async reaskOne(peer: Peer, plan: ReaskPlan, timeoutMs: number): Promise<void> {
+    const qid = randomId(12)
+    const s = this.hooks.state()
+    s.sentAsks = noteReasked(s.sentAsks, plan.askId, peer.id, qid, Date.now())
+    this.hooks.save()
+    const decoded = await this.sendAsk(peer, reaskText(plan), { ...reaskFields(plan), ...windowFields(this.windowMs) }, timeoutMs, qid)
+    const items = decoded?.outcome === 'shared' && decoded.shared ? sanitizeHopItems(decoded.shared.items) : []
+    if (!items.length) return
+    const st = this.hooks.state()
+    const now = Date.now()
+    const sent = sentAskFor(st.sentAsks, qid, peer.id, now)
+    if (!sent) return
+    st.lateAnswers = addShownAnswer(st.lateAnswers, sent, peer.displayName, items, now)
+    st.sentAsks = forgetSentAsk(st.sentAsks, qid, now)
+    this.hooks.save()
+    this.hooks.onLateAnswersReleased?.()
+  }
+
   /**
    * Wave 6h (wake_watch.ts, Q1/Q2): the machine woke from a sleep or came back online. The socket this tab holds may be dead without
    * knowing it: open a fresh one when this tab drains; else queue for the drain without taking it from a tab in front of the person.
@@ -926,6 +1066,11 @@ export class Net {
     if (this.lock.held()) void this.openDrain(this.identity)
     else this.lock.request(false)
   }
+}
+
+/** Wave 6i: a kept "nothing matched" card for this ask from this connection. */
+function isUnmatchedFor(a: unknown, id: string, peerId: string): boolean {
+  return typeof a === 'object' && a !== null && (a as { id?: unknown }).id === id && (a as { peerId?: unknown }).peerId === peerId
 }
 
 /** What the answer at an ask's moment did: what came back from the next step, and whether the relay took the answer. */

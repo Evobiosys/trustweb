@@ -15,11 +15,14 @@
  *     original timestamp (the hook passes `sentAt` to Net.sendText) and so is
  *     dropped by the receiver if the first try arrived after all.
  * Ordering is by local arrival: a sender's clock is never trusted.
+ * Wave 6i (chat_re.ts): a message may carry the ask it answers (`re`), kept with it in the thread and sent again on a retry.
  *
  * Pure and DOM-free; every function returns a new book and never throws on bad
  * input, so a corrupted record cannot take the app down.
  */
 import { isKeepText, parseKeepText } from './account_keep'
+import { sanitizeRe } from './chat_re'
+import type { ChatRe } from './chat_re'
 import { parseContactText, isContactText } from './contact_share'
 import { isHelloText, parseHelloText } from './hello'
 import { stripUnsafe, fingerprint } from './safe_text'
@@ -57,6 +60,8 @@ export interface ChatMessage {
   /** The timestamp that travelled (mine: what Net.sendText sends; theirs: their claim, clamped). Display and retry only. */
   sentAt: number
   state: MessageState
+  /** Wave 6i: the ask this message answers (chat_re.ts). Absent: a plain message (and every message of older records). */
+  re?: ChatRe
 }
 
 export interface ChatThread {
@@ -123,8 +128,11 @@ export interface Queued {
   message: ChatMessage | null
 }
 
-/** Adds a message of mine in the Pending state. Its `sentAt` is the timestamp to send, strictly later than my previous one in this thread. */
-export function queueOutgoing(book: ChatBook, peerId: string, raw: unknown, now: number): Queued {
+/**
+ * Adds a message of mine in the Pending state. Its `sentAt` is the timestamp to send, strictly later than my previous one in this thread.
+ * `re` (wave 6i): the ask it answers; a malformed one is dropped, the message is kept.
+ */
+export function queueOutgoing(book: ChatBook, peerId: string, raw: unknown, now: number, re?: ChatRe | null): Queued {
   const text = cleanChatText(raw)
   if (!text || !peerId) return { book, message: null }
   const thread = threadOf(book, peerId)
@@ -134,7 +142,7 @@ export function queueOutgoing(book: ChatBook, peerId: string, raw: unknown, now:
   const sentAt = Math.max(now, (lastOut?.sentAt ?? 0) + 1)
   const message: ChatMessage = {
     key: messageKey(ChatDirection.Out, sentAt, text), dir: ChatDirection.Out, text,
-    at: Math.max(now, lastAt(thread)), sentAt, state: MessageState.Pending,
+    at: Math.max(now, lastAt(thread)), sentAt, state: MessageState.Pending, ...withRe(re),
   }
   return { book: withThread(book, peerId, append(thread, message, 0)), message }
 }
@@ -161,8 +169,17 @@ export interface Received {
   duplicate: boolean
 }
 
-/** A text arrived from a connected peer. `ts` is the sender's claim; it only helps dedupe and is clamped for display. */
-export function receiveText(book: ChatBook, peerId: string, raw: unknown, ts: unknown, now: number): Received {
+/** `{ re }` when it is well formed, else nothing (a message never fails because of its quote). */
+function withRe(re: unknown): { re?: ChatRe } {
+  const clean = sanitizeRe(re)
+  return clean ? { re: clean } : {}
+}
+
+/**
+ * A text arrived from a connected peer. `ts` is the sender's claim; it only helps dedupe and is clamped for display. `re` (wave 6i): the
+ * ask it answers, already bound by the caller (chat_re.ts bindRe); a malformed one is dropped, the message is kept.
+ */
+export function receiveText(book: ChatBook, peerId: string, raw: unknown, ts: unknown, now: number, re?: ChatRe | null): Received {
   const text = cleanChatText(raw)
   if (!text || !peerId || typeof ts !== 'number' || !Number.isFinite(ts)) return { book, message: null, duplicate: false }
   const thread = threadOf(book, peerId)
@@ -170,7 +187,7 @@ export function receiveText(book: ChatBook, peerId: string, raw: unknown, ts: un
   if (thread.messages.some((m) => m.key === key)) return { book, message: null, duplicate: true }
   const message: ChatMessage = {
     key, dir: ChatDirection.In, text, at: Math.max(now, lastAt(thread)),
-    sentAt: Math.min(Math.max(0, ts), now + CLOCK_SKEW_MS), state: MessageState.Received,
+    sentAt: Math.min(Math.max(0, ts), now + CLOCK_SKEW_MS), state: MessageState.Received, ...withRe(re),
   }
   return { book: withThread(book, peerId, append(thread, message, 1)), message, duplicate: false }
 }
@@ -225,7 +242,7 @@ function sanitizeMessage(v: unknown): ChatMessage | null {
   if ((dir === ChatDirection.In) !== (state === MessageState.Received)) return null
   // The stored key is kept: for a received message it was made from the sender's own timestamp, which `sentAt` may have clamped.
   const key = typeof o.key === 'string' && o.key.length > 0 && o.key.length <= KEY_MAX ? o.key : messageKey(dir, o.sentAt, text)
-  return { key, dir, text, at: o.at, sentAt: o.sentAt, state }
+  return { key, dir, text, at: o.at, sentAt: o.sentAt, state, ...withRe(o.re) }
 }
 
 /** Reads a stored book (migration): keeps what is valid, bounds it, drops the rest. Never throws. */

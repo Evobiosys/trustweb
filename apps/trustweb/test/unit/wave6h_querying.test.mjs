@@ -1,6 +1,6 @@
 /**
  * Wave 6h, THE ONE THING: a connected person's ask reaches me and I can answer. The pure rules (ask_window, late_answers, held_asks,
- * unmatched_asks, ask_cards, wake_watch, the drain lock's lone tab) and the protocol end to end with real Net instances over an
+ * unmatched_asks, card_stack (6i, was ask_cards), wake_watch, the drain lock's lone tab) and the protocol end to end with real Net instances over an
  * in-memory RelayServer and a short window (tests only: NetOptions): the window travels on the ask, an undecided prompt answers
  * "nothing" at its moment, a later yes lands as a late answer held until the next open (and never from anyone else), a no after the
  * moment sends nothing, a prompt survives a "reload", an ask that arrives after its asker stopped waiting can still be answered late,
@@ -20,7 +20,7 @@ import { ANSWER_WINDOW_MS, LEGACY_WINDOW_MS, carriesWindow, passOnWindowFields, 
 import { LATE_ANSWERS_MAX, LATE_KEEP_MS, addLateAnswer, addSentAsk, dismissShownLateAnswers, liveLateAnswers, releaseLateAnswers, sentAskFor, shownLateAnswers } from '../../src/late_answers.ts'
 import { HELD_ASKS_MAX, addHeldAsk, dropHeldAsk, liveHeldAsks } from '../../src/held_asks.ts'
 import { addUnmatchedAsk, dismissUnmatchedAsk, liveUnmatchedAsks, showsUnmatched, unmatchedReason, withOnlyMeOpened } from '../../src/unmatched_asks.ts'
-import { AskCardKind, nextAskCard } from '../../src/ask_cards.ts'
+import { StackCardKind, stackCards } from '../../src/card_stack.ts'
 import { SLEPT_MS, TICK_MS, watchWake } from '../../src/wake_watch.ts'
 import { createDrainLock } from '../../src/drain_lock.ts'
 import { Audience, LogOutcome, Ring, UnmatchedReason } from '../../src/model.ts'
@@ -148,18 +148,19 @@ describe('asks that matched nothing (unmatched_asks.ts)', () => {
   })
 })
 
-describe('the cards about asks (ask_cards.ts)', () => {
+describe('the cards about asks (6i: card_stack.ts, which replaced ask_cards.ts)', () => {
+  const kinds = (s, demo = false) => stackCards(s, NOW, demo, new Set(), () => true).map((c) => c.kind)
   it('late answers first, then nothing-matched (while its switch is on), then asked-while-away', () => {
     const late = releaseLateAnswers(addLateAnswer([], { qid: 'q', peerId: 'p', text: 't', at: NOW }, 'Ada', [{ text: 'x', when: '', context: '' }], NOW), NOW)
     const unmatched = [{ id: 'u', at: NOW, peerId: 'p', from: 'Bo', text: 'boat', reason: UnmatchedReason.Nothing }]
     const away = [{ id: 'a', at: NOW, peerId: 'p', from: 'Cy', text: 'drill' }]
-    expect(nextAskCard({ lateAnswers: late, unmatchedAsks: unmatched, awayAsks: away }, NOW, false)?.kind).toBe(AskCardKind.Late)
-    expect(nextAskCard({ unmatchedAsks: unmatched, awayAsks: away }, NOW, false)?.kind).toBe(AskCardKind.Unmatched)
-    expect(nextAskCard({ unmatchedAsks: unmatched, awayAsks: away }, NOW, true)?.kind).toBe(AskCardKind.Away)
-    expect(nextAskCard({ unmatchedAsks: unmatched, awayAsks: away, showUnmatchedAsks: false }, NOW, false)?.kind).toBe(AskCardKind.Away)
-    expect(nextAskCard({}, NOW, false)).toBeNull()
+    expect(kinds({ lateAnswers: late, unmatchedAsks: unmatched, awayAsks: away })).toEqual([StackCardKind.Late, StackCardKind.Unmatched, StackCardKind.Away])
+    expect(kinds({ unmatchedAsks: unmatched, awayAsks: away })[0]).toBe(StackCardKind.Unmatched)
+    expect(kinds({ unmatchedAsks: unmatched, awayAsks: away }, true)).toEqual([StackCardKind.Away])
+    expect(kinds({ unmatchedAsks: unmatched, awayAsks: away, showUnmatchedAsks: false })).toEqual([StackCardKind.Away])
+    expect(kinds({})).toEqual([])
     // a held (unreleased) late answer is not a card yet
-    expect(nextAskCard({ lateAnswers: addLateAnswer([], { qid: 'q', peerId: 'p', text: 't', at: NOW }, 'Ada', [{ text: 'x', when: '', context: '' }], NOW) }, NOW, false)).toBeNull()
+    expect(kinds({ lateAnswers: addLateAnswer([], { qid: 'q', peerId: 'p', text: 't', at: NOW }, 'Ada', [{ text: 'x', when: '', context: '' }], NOW) })).toEqual([])
   })
 })
 

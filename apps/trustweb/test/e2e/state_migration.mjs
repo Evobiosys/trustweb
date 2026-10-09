@@ -369,6 +369,75 @@ async function partG(browser, base) {
   }
 }
 
+/** Wave 6i: the fields of this wave (a quote on a chat message, re-ask bookkeeping on both sides, late answers' ask time). */
+const sixIFields = (s) => JSON.stringify({
+  re: Object.values(s.chats ?? {}).flatMap((t) => t.messages.map((m) => m.re ?? null)),
+  reaskSeen: s.reaskSeen ?? null,
+  sentTo: (s.sentAsks ?? []).map((a) => a.to),
+  late: (s.lateAnswers ?? []).map((a) => [a.askedAt, a.earlier]),
+})
+
+async function partH(browser, base) {
+  console.log('H. wave 6i fields: kept by this build; what the live build (TW_OLD_DIST = 19739d7) keeps when it saves (rollback)')
+  const T = Date.now() - 60_000
+  const good = preWaveState()
+  const peerId = good.peers[0].id
+  good.chats = { [peerId]: { messages: [
+    { key: `i:${T}:6i`, dir: 'in', text: 'I do', at: T, sentAt: T, state: 'received', re: { qid: 'Qfirst6i01', text: 'does anyone have a spare room?', at: T - 60_000 } },
+    { key: `o:${T + 1}:6i`, dir: 'out', text: 'great, thanks', at: T + 1, sentAt: T + 1, state: 'delivered' },
+  ], unread: 0 } }
+  good.sentAsks = [{ id: 'root6i0001', text: 'spare room', at: T - 2 * 86_400_000, to: [{ peerId, qid: 'Qagain6i01', at: T, reaskOf: 'Qfirst6i01', reasks: 1 }] }]
+  good.lateAnswers = [{ id: 'Qagain6i01', at: T, peerId, from: 'Anna', ask: 'spare room', items: [{ text: 'Guest room', when: '', context: '' }], releasedAt: T, askedAt: T - 2 * 86_400_000, earlier: true }]
+  good.reaskSeen = [{ id: 'Qolder6i01', at: T, peerId, ring: 'friend' }]
+  const { ctx, page, errors } = await pageWith(browser, base, { [ME]: JSON.stringify(good) })
+  await webUp(page)
+  await page.waitForTimeout(1_500)
+  const s1 = JSON.parse((await readAll(page))[ME])
+  ok('wave 6i record: opens on the web, nothing lost', JSON.stringify(counts(s1)) === JSON.stringify(counts(good)))
+  ok('wave 6i record: every wave 6i field kept as it was', sixIFields(s1) === sixIFields(good), sixIFields(s1))
+  ok('wave 6i record: no page errors', errors.length === 0, errors.join(' | '))
+  const settled = (await readAll(page))[ME]
+  await ctx.close()
+
+  const bad = JSON.parse(JSON.stringify(good))
+  bad.chats[peerId].messages[0].re = { qid: 'has space', text: 7, at: -1 }
+  bad.reaskSeen = [{ id: 1 }, 'x', { id: 'Q', at: T, peerId, ring: 'family' }]
+  bad.sentAsks[0].to[0].reasks = 'many'
+  const d = await pageWith(browser, base, { [ME]: JSON.stringify(bad) })
+  await webUp(d.page)
+  await d.page.waitForTimeout(1_500)
+  const fixed = JSON.parse((await readAll(d.page))[ME])
+  ok('damaged 6i fields: opens on the web, nothing else lost; a bad quote goes, its message stays', JSON.stringify(counts(fixed)) === JSON.stringify(counts(bad))
+    && fixed.chats[peerId].messages.length === 2 && fixed.chats[peerId].messages[0].re === undefined && fixed.chats[peerId].messages[0].text === 'I do')
+  ok('damaged 6i fields: no page errors', d.errors.length === 0, d.errors.join(' | '))
+  await d.ctx.close()
+
+  if (!OLD_DIST || !existsSync(path.join(OLD_DIST, 'index.html'))) { console.log('  SKIP  no TW_OLD_DIST: the rollback half of H'); return }
+  const server = await serveDist(OLD_DIST, OLD_PORT)
+  const oldBase = `http://127.0.0.1:${OLD_PORT}/`
+  try {
+    const old = await pageWith(browser, oldBase, { [ME]: settled })
+    await webUp(old.page)
+    ok('the live build opens the wave 6i record on the web', await old.page.getByLabel('Your first name').count() === 0)
+    await old.page.locator('nav.tabs button', { hasText: /Inventory|My Resources/ }).click()
+    await old.page.locator('.inv .mini').first().click()
+    await old.page.locator('.inv .mini').first().click()
+    const back = JSON.parse((await readAll(old.page))[ME])
+    const before = JSON.parse(settled)
+    ok('after a live-build save: nothing lost (people, lines, things, chat messages)', JSON.stringify(counts(back)) === JSON.stringify(counts(before))
+      && JSON.stringify(back.chats[peerId].messages.map((m) => m.text)) === JSON.stringify(before.chats[peerId].messages.map((m) => m.text)))
+    ok('after a live-build save: the re-ask bookkeeping and the late answers\' ask time are still there',
+      JSON.stringify(back.reaskSeen) === JSON.stringify(before.reaskSeen) && JSON.stringify((back.sentAsks ?? []).map((a) => a.to)) === JSON.stringify(before.sentAsks.map((a) => a.to))
+      && JSON.stringify((back.lateAnswers ?? []).map((a) => [a.askedAt, a.earlier])) === JSON.stringify(before.lateAnswers.map((a) => [a.askedAt, a.earlier])), JSON.stringify([back.reaskSeen, back.sentAsks, back.lateAnswers]))
+    // Known and accepted (reported): the live build's chat repair rebuilds each message from its own known fields, so a rollback drops the quotes (never a message).
+    console.log(`  NOTE  live build after its save: chat quotes kept = ${back.chats[peerId].messages.filter((m) => m.re).length} of 1`)
+    ok('live build: no page errors', old.errors.length === 0, old.errors.join(' | '))
+    await old.ctx.close()
+  } finally {
+    await new Promise((r) => server.close(r))
+  }
+}
+
 async function recordAndSaveMemo(page) {
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
@@ -435,6 +504,7 @@ async function main() {
     await partE(browser, base)
     await partF(browser, base)
     await partG(browser, base)
+    await partH(browser, base)
   } catch (e) {
     failures++
     console.log('  FAIL  run aborted: ' + (e?.stack ?? e))

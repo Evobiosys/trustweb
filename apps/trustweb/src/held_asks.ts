@@ -20,6 +20,8 @@ const isHeld = (v: unknown): v is HeldAsk =>
   && typeof v.relayed === 'boolean' && Array.isArray(v.matches) && v.matches.every(isRef) && typeof v.receivedAt === 'number'
   && typeof v.deadline === 'number' && typeof v.lateMode === 'boolean' && (v.arrivedLate === undefined || typeof v.arrivedLate === 'boolean')
   && (v.yesAt === undefined || typeof v.yesAt === 'number')
+  && (v.earlierAt === undefined || (typeof v.earlierAt === 'number' && Number.isFinite(v.earlierAt)))
+  && (v.reaskOf === undefined || typeof v.reaskOf === 'string')
 
 /** The held prompts, cleaned: well-formed, none older than LATE_KEEP_MS, oldest first (the order they are shown in), bounded. Never throws. */
 export function liveHeldAsks(list: unknown, now: number): HeldAsk[] {

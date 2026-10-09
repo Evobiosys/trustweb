@@ -100,7 +100,7 @@ const MODES: Mode[] = [
       },
       {
         title: 'They meet in person', changed: ['jonas'],
-        text: 'They talk over coffee. With Maya\'s yes, Jonas records it for his own notes. Nothing is shared with anyone.',
+        text: 'They talk over coffee. With Maya\'s yes, Jonas records it for his own notes. The lines it gives start as close friends only, and nothing is shared with anyone.',
         screens: {
           jonas: `<div class="wt-h">Meeting</div>${card('ok', 'Maya agreed to recording the meeting.')}${card('', '<i>Maya:</i> I can lend you my loudspeakers some weekend.')}`,
           maya: quiet('In a conversation with Jonas.'),

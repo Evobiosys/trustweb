@@ -11,13 +11,13 @@
  * fields).
  */
 
-import type { AnswerEnvelope, ChatEnvelope, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope } from './types'
-import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
+import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
 
-export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope
+export type Envelope = ConnectEnvelope | QueryEnvelope | AnswerEnvelope | ChatEnvelope | PingEnvelope | ConnectAckEnvelope | AskAgainEnvelope
 
 /** JSON-serialise an envelope for a QR code. */
 export function encodeForQr(env: Envelope): string {
@@ -86,6 +86,13 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
   const direct = o.direct === true ? (true as const) : undefined
   const hops = parseHopFields(o)
   if (hops === null) return null
+  // TrustWeb wave 6i (types.ts QueryEnvelope.reask): the same strictness once more.
+  let reask: ReaskRef | undefined
+  if ('reask' in o) {
+    const r = parseReask(o.reask)
+    if (r === null) return null
+    reask = r
+  }
   return {
     v: WIRE_VERSION,
     t: 'query',
@@ -99,8 +106,37 @@ function parseQuery(o: Record<string, unknown>): QueryEnvelope | null {
     ...(escalated ? { escalated } : {}),
     ...(direct ? { direct } : {}),
     ...hops,
+    ...(reask ? { reask } : {}),
   }
 }
+
+// ----- BEGIN TrustWeb wave 6i: an earlier ask asked again, the ask a chat message answers, "ask me again" -----
+function isTime(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0
+}
+
+/** QueryEnvelope.reask: exactly {originalQid, originalAt}, both well formed; anything else is null (the caller rejects the envelope). */
+function parseReask(v: unknown): ReaskRef | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null
+  const r = v as Record<string, unknown>
+  if (typeof r.originalQid !== 'string' || !QID_RE.test(r.originalQid) || !isTime(r.originalAt)) return null
+  return { originalQid: r.originalQid, originalAt: r.originalAt }
+}
+
+/** ChatEnvelope.re: {qid, text (1..RE_TEXT_MAX), at}; anything else is null (the caller rejects the envelope). */
+function parseChatRe(v: unknown): ChatRe | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null
+  const r = v as Record<string, unknown>
+  if (typeof r.qid !== 'string' || !QID_RE.test(r.qid) || !isTime(r.at)) return null
+  if (!isNonEmptyString(r.text) || r.text.length > RE_TEXT_MAX) return null
+  return { qid: r.qid, text: r.text, at: r.at }
+}
+
+function parseAskAgain(): AskAgainEnvelope {
+  // Nothing but the type: whatever else a sender put in is not read.
+  return { v: WIRE_VERSION, t: 'ask-again' }
+}
+// ----- END TrustWeb wave 6i -----
 
 // ----- BEGIN TrustWeb wave 6 (U1): the hop fields (types.ts QueryEnvelope) -----
 type HopFields = Pick<QueryEnvelope, 'maxHops' | 'hop' | 'root' | 'seen' | 'via' | 'door' | 'answerWindowMs'>
@@ -169,7 +205,14 @@ function parseChat(o: Record<string, unknown>): ChatEnvelope | null {
   // this is the one envelope whose content is free text.
   if (o.text.length > CHAT_MAX_LEN) return null
   if (typeof o.ts !== 'number' || !Number.isFinite(o.ts)) return null
-  return { v: WIRE_VERSION, t: 'chat', from: o.from, text: o.text, ts: o.ts }
+  // TrustWeb wave 6i: the ask this message answers. Absent is fine; present-and-malformed rejects the envelope (types.ts ChatEnvelope.re).
+  let re: ChatRe | undefined
+  if ('re' in o) {
+    const r = parseChatRe(o.re)
+    if (r === null) return null
+    re = r
+  }
+  return { v: WIRE_VERSION, t: 'chat', from: o.from, text: o.text, ts: o.ts, ...(re ? { re } : {}) }
 }
 
 function parsePing(o: Record<string, unknown>): PingEnvelope | null {
@@ -217,6 +260,8 @@ export function decodeFromQr(s: string): Envelope | null {
       return parsePing(o)
     case 'connect-ack':
       return parseConnectAck(o)
+    case 'ask-again':
+      return parseAskAgain()
     default:
       return null
   }

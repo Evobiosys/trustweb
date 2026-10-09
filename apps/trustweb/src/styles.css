@@ -231,6 +231,30 @@ textarea.field{resize:vertical; line-height:1.5}
 .demo-friends .notice-actions .btn{margin:0; white-space:nowrap}
 .demo-friends .notice-dismiss{border:0; background:none; padding:2px 4px; font:inherit; font-size:11.5px; font-weight:500; color:var(--warm-deep); text-decoration:underline; text-underline-offset:2px; cursor:pointer; white-space:nowrap}
 .demo-friends .notice-dismiss:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+/* Wave 6i (card_stack.ts): the quiet cards in the flow of the Web screen, above the rings; they never cover anything (review 6h R10) */
+.card-stack{display:flex; flex-direction:column; gap:8px; margin:8px 16px 0}
+.card-stack[hidden]{display:none}
+.stack-card{background:var(--card); color:var(--ink); border-radius:16px; padding:10px 14px; box-shadow:0 4px 16px rgba(36,27,46,.12);
+  display:flex; flex-direction:column; gap:4px; font-size:13px; line-height:1.45; animation:tw-pop .25s ease-out}
+.stack-card.tappable{cursor:pointer}
+.stack-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+.stack-head b{font-size:14.5px}
+.stack-body{color:var(--ink-soft); overflow-wrap:anywhere}
+.stack-actions{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:2px}
+.stack-actions .btn{margin:0}
+.stack-actions .notice-dismiss,.stack-open{border:0; background:none; padding:2px 4px; font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+  text-decoration:underline; text-underline-offset:2px; white-space:nowrap}
+.stack-open{color:var(--electric-deep); flex:0 0 auto}
+.stack-actions .notice-dismiss{font-size:11.5px; font-weight:500; color:var(--warm-deep)}
+.stack-open:focus-visible,.stack-actions .notice-dismiss:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+/* Wave 6i: "New message from <name>" away from the Web screen: tappable (a toast never is), "open" on its right */
+.msg-notice{position:absolute; left:16px; right:16px; bottom:100px; z-index:61; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
+  display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
+.msg-notice.on{opacity:1; transform:none; pointer-events:auto}
+.msg-notice.tappable{cursor:pointer}
+.msg-notice .stack-open{color:inherit}
+.ask-again-row{display:flex; flex-direction:column; gap:4px; margin-top:12px}
+.ask-again-row .btn{align-self:flex-start; margin:0}
 /* Settings: the relay state (moved here from the QR button) */
 .conn-row{display:flex; align-items:center; gap:10px; background:var(--card); border-radius:12px; padding:10px 12px; margin-top:8px; font-size:13.5px}
 .conn-row .relay-dot{position:static; box-shadow:none}
@@ -528,7 +552,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .ask-foot{font-size:12.5px; color:#C9AEE8; line-height:1.55; margin-top:10px}
 .ask-done{font-size:22px; color:#fff; margin-top:16px}
 
-@media (prefers-reduced-motion: reduce){ .ripple{display:none} .demo-friends{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
+@media (prefers-reduced-motion: reduce){ .ripple{display:none} .demo-friends,.stack-card{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
 
 /* dark: the pale pills and tints that are not tokens get night versions */
 @media (prefers-color-scheme: dark){
@@ -546,6 +570,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
   :root:not([data-theme="light"]) .rec-circle{background:radial-gradient(circle at 35% 30%, #B7A6F2, #7E66D6 72%)}
   :root:not([data-theme="light"]) .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #5D5070, #43384F 75%)}
   :root:not([data-theme="light"]) .toast{background:#F4EDF9; color:#1F1729}
+  :root:not([data-theme="light"]) .msg-notice{background:#F4EDF9; color:#1F1729}
   :root:not([data-theme="light"]) .ripple{--ripple:hsl(46,68%,58%)}
   :root:not([data-theme="light"]) .rings-wrap svg circle{stroke:rgba(201,174,232,.28)}
 }

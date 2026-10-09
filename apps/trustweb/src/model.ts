@@ -119,6 +119,13 @@ export enum Audience {
 /** In the order the pill cycles through and the item sheet lists them: widest first. */
 export const AUDIENCES: readonly Audience[] = [Audience.FriendsOfFriends, Audience.Friends, Audience.Close, Audience.OnlyMe]
 
+/**
+ * Wave 6i (Jakob 2026-10-09: "record lines should default to close friends"): who can ask about a line made from a recording or a
+ * meeting, or added by hand on its Review screen, until the person picks otherwise. Lines already stored keep their value; Tana
+ * imports keep Only me; the typed General notes line stays Only me until widened (note_fields.ts travelsInPack).
+ */
+export const RECORD_LINE_AUDIENCE: Audience = Audience.Close
+
 export enum Tag {
   Looking = 'looking',
   Offer = 'offer',
@@ -312,6 +319,11 @@ export interface Peer {
   ackTries?: number
   /** Wave 6f: when the relay last accepted a connect-ack for them. Absent: never. */
   ackSentAt?: number
+  /**
+   * Wave 6i (reask.ts): this phone tightened their ring and its "ask-again" has not left yet (offline, or a tab without the drain): sent on
+   * the next connect. Absent: nothing waiting. Never set by a loosening.
+   */
+  askAgainDue?: number
 }
 
 export interface InventoryItem {
@@ -367,6 +379,12 @@ export interface LogEntry {
 export interface SentTo {
   peerId: string
   qid: string
+  /** Wave 6i (reask.ts): when it was last sent to this connection, if that was a re-ask. Absent: with the ask itself (`SentAsk.at`). */
+  at?: number
+  /** Wave 6i: the qid this connection got the FIRST time, when `qid` belongs to a re-ask. Absent: not re-asked. */
+  reaskOf?: string
+  /** Wave 6i: how often it was re-asked to this connection (at most reask.ts REASKS_PER_ASK). Absent: never. */
+  reasks?: number
 }
 
 /**
@@ -387,6 +405,8 @@ export interface SentAsk {
 export interface SentAskTo extends SentTo {
   text: string
   at: number
+  /** Wave 6i: this qid belongs to a re-ask of an earlier ask (the late answer then says "answered your earlier ask"). */
+  earlier?: boolean
 }
 
 /** Wave 6h (late_answers.ts): a yes that came after the answer moment. Kept silently; shown as "<name> answered later" on the next app open. */
@@ -404,6 +424,10 @@ export interface LateAnswer {
   items: SharedItem[]
   /** When it was first shown (released on an app open). Absent: held, not shown yet. */
   releasedAt?: number
+  /** Wave 6i: when this phone asked it (so the card and a reply carry the question with its time). Absent: older entries. */
+  askedAt?: number
+  /** Wave 6i: the answer to an earlier ask this phone asked again after the other person tightened its ring (reask.ts). */
+  earlier?: boolean
 }
 
 /** Wave 6h (held_asks.ts): a consent prompt not decided yet, kept so a reload or a long time away does not lose it. This phone only. */
@@ -429,6 +453,20 @@ export interface HeldAsk {
   arrivedLate?: boolean
   /** The person said yes after the moment, but the relay has not taken the late answer yet (offline, another tab drains). */
   yesAt?: number
+  /** Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring: when it was first asked. */
+  earlierAt?: number
+  /** Wave 6i: the qid of that first ask (so the same earlier ask is not shown twice). */
+  reaskOf?: string
+}
+
+/** Wave 6i (reask.ts): an earlier ask this phone was asked again, and at which ring it was matched then. This phone only. */
+export interface ReaskSeen {
+  /** The first ask's qid (QueryEnvelope.reask.originalQid). */
+  id: string
+  at: number
+  peerId: string
+  /** The asker's ring here when it came again: the same earlier ask is shown again only once this ring is tighter. */
+  ring: Ring
 }
 
 /** Wave 6h (unmatched_asks.ts): why an ask from a direct contact found nothing here. */
@@ -698,6 +736,8 @@ export interface AppState {
   unmatchedAsks?: UnmatchedAsk[]
   /** Wave 6h, Settings > Advanced "Show me asks that matched nothing". Absent: on for a personal account, off on a demo phone. */
   showUnmatchedAsks?: boolean
+  /** Wave 6i (reask.ts): earlier asks this phone was asked again, kept REASK_WINDOW_MS. Absent: none. Older builds ignore it. */
+  reaskSeen?: ReaskSeen[]
   /**
    * Wave 6f, review (peer_cards.ts): when this record's merged cards were mended, once. The Meet-draft merge cannot happen since 6f, so the
    * unmerge-by-name step only mends records made before; later it never runs, and a card its owner renames is never moved by it. Absent:

@@ -55,13 +55,15 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
-import { TextKind, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
+import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
-import { flushPending, renderChat, renderShareControls } from './chat_view'
+import { bindRe, makeRe } from './chat_re'
+import type { ChatRe } from './chat_re'
+import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
@@ -71,10 +73,13 @@ import { S } from './strings'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
-import { AskCardKind, nextAskCard } from './ask_cards'
-import type { AskCard } from './ask_cards'
+import { QUIET_CARD_MS, StackCardKind, hidesItself, stackCards } from './card_stack'
+import type { StackCard } from './card_stack'
+import { drawStack } from './card_stack_view'
+import type { StackOpen } from './card_stack_view'
+import { ringRaised } from './reask'
 import { LEGACY_WINDOW_MS } from './ask_window'
-import { dismissShownLateAnswers, releaseLateAnswers, shownLateAnswers } from './late_answers'
+import { dismissLateAnswer, releaseLateAnswers, shownLateAnswers } from './late_answers'
 import { dismissUnmatchedAsk, showsUnmatched } from './unmatched_asks'
 import { watchWake } from './wake_watch'
 import { StoredChange, adoptInPlace, storedChange } from './tab_sync'
@@ -449,7 +454,7 @@ const net = new Net({
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
-  onText: (peer, text, ts) => onIncomingText(peer, text, ts),
+  onText: (peer, text, ts, re) => onIncomingText(peer, text, ts, re),
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -465,6 +470,8 @@ const net = new Net({
   onUnmatchedAsk: () => showAskCards(),
   // Review 6h: late answers that waited on the relay while the app was closed, handed over right after this open (late_answers.ts).
   onLateAnswersReleased: () => showAskCards(),
+  // Wave 6i (reask.ts): a real phone re-sends its earlier unanswered asks to a connection that tightened its ring (never the demo flows).
+  mayReask: (peer) => mayAskAgainWith(peer),
 }, solo ? { answerWindowMs: LEGACY_WINDOW_MS } : {})
 
 /** A phone that shows TrustWeb to someone (the side-by-side demo, a demo persona, a demo account's own view): some defaults differ. */
@@ -500,84 +507,60 @@ function appOpened(): boolean {
   const now = Date.now()
   // Nothing kept writes nothing: a fresh install stores no empty late list (wave 6h gate fix, install_flow).
   if (Array.isArray(s.lateAnswers) && s.lateAnswers.length) { s.lateAnswers = releaseLateAnswers(s.lateAnswers, now); save() }
+  // Wave 6i: an open shows the quiet "nothing matched" card again, even one that hid itself in the last visit.
+  quietHidden.clear()
   net.markOpened(now)
   return shownLateAnswers(s.lateAnswers, now).length > 0
 }
 
 /**
- * Wave 6h (ask_cards.ts): the quiet cards about asks, one at a time: late answers to this phone's asks (all together), asks of direct
- * contacts that matched nothing, asks that came while away (6f). Each card's buttons dismiss it and show the next.
+ * Wave 6i (card_stack.ts): the quiet cards (new messages, late answers, asks that matched nothing, asks that came while away) sit in
+ * the Web screen's flow, above the rings: they never cover anything (review 6h R10). Not over an open ask dock (it needs the room),
+ * nor while a demo account waits for its Allow card. Drawn in place, without a redraw of the screen.
  */
 function showAskCards(): void {
-  // A phone waiting for its Allow (a demo account) keeps the card under the header; the asks show once that is decided.
-  if (!state || demoAccounts().some((t) => t.pending)) return
-  // The card floats over the top of the screen: only on the Web screen and never over an open ask dock (it would cover its controls).
-  if (screen !== Screen.Web || queryOpen) return
-  const card = nextAskCard(state, Date.now(), demoPhone())
-  if (!card) return
-  askCardShownKeys.add(askCardKey(card))
-  drawAskCard(card)
-  askCardOn = true
+  drawCardStack()
 }
 
-/** Wave 6h: an ask card hides by itself after this long (it stays kept: the next app open, a new one, or the Web screen shows it again). */
-const ASK_CARD_MS = 20_000
-/** An ask card is on screen (so leaving the Web screen or opening the dock hides it, and nothing else's notice). */
-let askCardOn = false
-/** Cards already shown in this visit: coming back to the Web screen shows only one not seen yet. */
-const askCardShownKeys = new Set<string>()
+/** The element the cards live in; screenWeb puts it above the rings, so it survives a redraw of the screen. */
+const cardStackEl = el('div', { class: 'card-stack', 'data-card-stack': '1', 'aria-live': 'polite', hidden: true })
+/** Quiet cards that hid themselves in this visit (card_stack.ts QUIET_CARD_MS); an app open shows them again. */
+const quietHidden = new Set<string>()
+const quietTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-function askCardKey(card: AskCard): string {
-  return card.kind === AskCardKind.Late ? card.kind + ':' + card.answers.map((a) => a.id).join(',') : card.kind + ':' + card.ask.id
+function drawCardStack(): void {
+  if (!state || screen !== Screen.Web || queryOpen || demoAccounts().some((t) => t.pending)) { cardStackEl.replaceChildren(); cardStackEl.hidden = true; return }
+  const cards = stackCards(state, Date.now(), demoPhone(), quietHidden, (peerId) => Boolean(personOf(st().people, peerId)))
+  drawStack(cardStackEl, cards, stackDeps)
+  for (const card of cards) if (hidesItself(card)) hideQuietLater(card.key)
 }
 
-function hideAskCard(): void {
-  if (!askCardOn) return
-  askCardOn = false
-  hideNotice()
+/** The quiet card hides itself QUIET_CARD_MS after it first showed (it stays kept). */
+function hideQuietLater(key: string): void {
+  if (quietTimers.has(key)) return
+  quietTimers.set(key, setTimeout(() => { quietHidden.add(key); quietTimers.delete(key); drawCardStack() }, QUIET_CARD_MS))
 }
 
-/** Coming to the Web screen: a kept card not shown in this visit yet. */
-function showUnseenAskCard(): void {
-  if (!state || screen !== Screen.Web || queryOpen) return
-  const card = nextAskCard(state, Date.now(), demoPhone())
-  if (card && !askCardShownKeys.has(askCardKey(card))) showAskCards()
+const stackDeps = {
+  personIdOf: (peerId: string): string | null => personOf(st().people, peerId)?.id ?? null,
+  nameOf: (peerId: string): string => personOf(st().people, peerId)?.name ?? st().peers.find((p) => p.id === peerId)?.displayName ?? '',
+  openChat: (personId: string, open: StackOpen): void => chatSheet(personId, open),
+  dismiss: (card: StackCard): void => { dismissCard(card); drawCardStack() },
+  addLine: (): void => go(Screen.Inventory),
+  ringLabel: (ring: Ring | undefined): string => S.ringLabel[ring ?? Ring.Acquaintance],
+  now: (): number => Date.now(),
 }
 
-function drawAskCard(card: AskCard): void {
-  const next = (change: (s: AppState, now: number) => void) => (): void => {
-    change(st(), Date.now())
-    save()
-    hideAskCard()
-    showAskCards()
+function dismissCard(card: StackCard): void {
+  const s = st()
+  const now = Date.now()
+  switch (card.kind) {
+    case StackCardKind.Message: s.chats = markRead(s.chats ?? NO_CHATS, card.peerId); break
+    case StackCardKind.Late: s.lateAnswers = dismissLateAnswer(s.lateAnswers, card.answer.id, now); break
+    case StackCardKind.Unmatched: s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, card.ask.id, now); break
+    case StackCardKind.Away: s.awayAsks = dismissAwayAsk(s.awayAsks, card.ask.id, now); break
   }
-  const message = (peerId: string, label: string, done: () => void): HTMLElement | null => {
-    const person = personOf(st().people, peerId)
-    return person ? el('button', { class: 'btn btn-electric btn-sm', 'data-card-message': '1', onclick: () => { done(); chatSheet(person.id) } }, [label]) : null
-  }
-  if (card.kind === AskCardKind.Late) {
-    const done = next((s, now) => { s.lateAnswers = dismissShownLateAnswers(s.lateAnswers, now) })
-    const names = [...new Set(card.answers.map((a) => a.from))]
-    const body = S.lateBody(card.answers.map((a) => ({ ask: a.ask, lines: a.items.map((it) => it.text) })))
-    const one = card.answers.length === 1 ? message(card.answers[0].peerId, S.lateMessage(card.answers[0].from), done) : null
-    showNotice(S.lateTitle(names), body, [one, el('button', { class: 'btn btn-ghost btn-sm', 'data-late-dismiss': '1', onclick: done }, [S.lateDismiss])].filter((x): x is HTMLElement => x !== null), ASK_CARD_MS)
-    return
-  }
-  if (card.kind === AskCardKind.Unmatched) {
-    const a = card.ask
-    const done = next((s, now) => { s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, a.id, now) })
-    const actions = [
-      el('button', { class: 'btn btn-electric btn-sm', 'data-unmatched-add': '1', onclick: () => { done(); go(Screen.Inventory) } }, [S.unmatchedAddLine]),
-      message(a.peerId, S.unmatchedMessage(a.from), done),
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-unmatched-dismiss': '1', onclick: done }, [S.unmatchedDismiss]),
-    ].filter((x): x is HTMLElement => x !== null)
-    showNotice(S.unmatchedTitle(a.from), S.unmatchedBody(a.from, a.text, a.reason, S.ringLabel[a.ring ?? Ring.Acquaintance], card.more), actions, ASK_CARD_MS)
-    return
-  }
-  const a = card.ask
-  const done = next((s, now) => { s.awayAsks = dismissAwayAsk(s.awayAsks, a.id, now) })
-  const away = [message(a.peerId, S.awayAskMessage(a.from), done), el('button', { class: 'btn btn-ghost btn-sm', 'data-away-dismiss': '1', onclick: done }, [S.awayAskDismiss])]
-  showNotice(S.awayAskTitle(a.from), S.awayAskBody(a.text, card.more), away.filter((x): x is HTMLElement => x !== null), ASK_CARD_MS)
+  save()
 }
 
 /** The did of this site's front door when it is this phone's own (one_jakob.ts ownFrontDoor); null: none known. */
@@ -604,11 +587,13 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
+/** Wave 6i: the notice for a new message (not the toast: a toast never takes taps, this one does). */
+const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-notice': '1' })
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 /** Desktop, bottom left, outside the phone: add or remove the demo content. */
 const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
 let statusPill: HTMLElement | null = null
-phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl)
+phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
@@ -746,11 +731,9 @@ function go(s: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   screen = s
-  // Wave 6h: the ask cards belong to the Web screen (they would cover the top of any other).
-  if (s !== Screen.Web) hideAskCard()
+  // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
   render()
-  if (s === Screen.Web) showUnseenAskCard()
 }
 
 /**
@@ -913,7 +896,7 @@ function render(): void {
     }
   })()
   host.replaceChildren(...body)
-  if (screen === Screen.Web) requestAnimationFrame(fitRings)
+  if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
 }
 
@@ -941,8 +924,11 @@ function openSheet(children: (Node | null)[]): void {
 }
 
 function closeSheet(): void {
+  const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
+  // Wave 6i: a chat just read takes its "new message" card away.
+  if (wasChat) drawCardStack()
   // A closed sheet keeps its last content off-screen; inert takes it out of
   // the tab order and the accessibility tree.
   past.stopPlayer()
@@ -970,7 +956,6 @@ let friendsTimer: ReturnType<typeof setTimeout> | undefined
 function hideNotice(): void { clearTimeout(friendsTimer); friendsEl.hidden = true }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
-  askCardOn = false // whatever was there, an ask card is no longer it (showAskCards sets it again after drawing one)
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -1478,6 +1463,8 @@ function screenWeb(): Node[] {
   return [
     header(S.webTitle, { right: search, more: true }),
     el('div', { class: 'scroll' }, [
+      // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
+      queryOpen ? null : cardStackEl,
       s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
       ringsView(s, askMarks()),
       isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
@@ -1592,7 +1579,6 @@ window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() 
 /** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
 function openQuery(): void {
   queryOpen = true
-  hideAskCard()
   searchOpen = false
   if (screen === Screen.Web) render()
   else go(Screen.Web)
@@ -1774,6 +1760,7 @@ function generalNoteSection(p: Person): HTMLElement {
     },
     memory: personAdvancedMemory,
     pendingVoice: () => pendingTranscripts(st(), p.id),
+    extra: askAgainRow(p),
   })
   return section.el
 }
@@ -1883,6 +1870,7 @@ const chatStrings = (): ChatStrings => ({
   title: S.chatTitle, messageOn: (r) => S.chatMessageOn(reachLabel(r)), notConnected: S.chatNotConnected, empty: S.chatEmpty,
   offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
+  re: S.chatRe, replyingTo: S.chatReplyingTo, replyingToDrop: S.chatReplyingToDrop,
 })
 
 const shareStrings = (): ShareStrings => ({ tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint })
@@ -1925,10 +1913,10 @@ function chatIo(): ChatIo {
   return {
     getBook: () => st().chats ?? NO_CHATS,
     setBook: (b) => { const s = st(); if (b !== NO_CHATS && b !== s.chats) { s.chats = b; save() } },
-    send: async (peerId, text, sentAt) => {
+    send: async (peerId, text, sentAt, re) => {
       const peer = st().peers.find((p) => p.id === peerId)
       if (!peer) throw new Error('not connected')
-      await net.sendText(peer, text, sentAt)
+      await net.sendText(peer, text, sentAt, re)
     },
     now: Date.now,
   }
@@ -1975,12 +1963,27 @@ function onHelloText(peer: Peer, text: string): void {
 
 let openChat: { peerId: string; refresh(): void } | null = null
 
-function chatSheet(personId: string): void {
+/**
+ * The chat with one person. Wave 6i: `open.re`, the ask it was opened from (shown above the composer, carried by the next message,
+ * chat_re.ts); `open.scrollTo`, the message a "new message" card was about.
+ */
+function chatSheet(personId: string, open: StackOpen = {}): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
-  const handle = renderChat({ ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p) }, S: chatStrings(), isOnline: () => relayStatus === 'connected' })
+  hideMsgNotice()
+  const handle = renderChat({
+    ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p) }, S: chatStrings(),
+    isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo,
+  })
   openSheet([handle.el])
   if (p.peerId) openChat = { peerId: p.peerId, refresh: handle.refresh }
+  drawCardStack()
+}
+
+/** Wave 6i: the chat with the person an ask is about, carrying that ask; nothing when they have no card here. */
+function messageAbout(peerId: string, qid: string, text: string, at: number): void {
+  const person = personOf(st().people, peerId)
+  if (person) chatSheet(person.id, { re: makeRe(qid, text, at) })
 }
 
 /** Relay back up: send everything that waited. */
@@ -2016,25 +2019,60 @@ function onContactText(peer: Peer, text: string): void {
   else holdContact(heldContacts, peer.id, text)
 }
 
-function onChatText(peer: Peer, text: string, ts: number): void {
+function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const s = st()
-  const r = receiveText(s.chats ?? NO_CHATS, peer.id, text, ts, Date.now())
+  const now = Date.now()
+  // Wave 6i (chat_re.ts): the ask it answers, bound to this phone's own ask when the qid names one it sent to that connection.
+  const r = receiveText(s.chats ?? NO_CHATS, peer.id, text, ts, now, bindRe(re, s.sentAsks, peer.id, now))
   if (!r.message) return
   s.chats = r.book
   save()
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
   notify(S.chatNotifBody(peer.displayName))
-  toast(S.chatNewToast(peer.displayName))
+  newMessageNotice(peer, r.message.key)
+}
+
+/**
+ * Wave 6i: "New message from <name>", tappable, with an underlined "open" on its right. On the Web screen it is a card in the stack
+ * above the rings (it stays until read); anywhere else (or under an open sheet or dock) a notice of its own for a few seconds. Both open
+ * the chat at that message.
+ */
+function newMessageNotice(peer: Peer, key: string): void {
+  const person = personOf(st().people, peer.id)
+  if (screen === Screen.Web && !queryOpen && !sheet.classList.contains('on')) { drawCardStack(); return }
+  drawCardStack()
+  showMsgNotice(S.chatNewToast(person?.name ?? peer.displayName), person ? () => chatSheet(person.id, { scrollTo: key }) : null)
+}
+
+let msgNoticeTimer: ReturnType<typeof setTimeout> | undefined
+const MSG_NOTICE_MS = 6_000
+
+function showMsgNotice(title: string, open: (() => void) | null): void {
+  const openIt = (): void => { hideMsgNotice(); open?.() }
+  msgNoticeEl.replaceChildren(
+    el('span', { class: 'msg-notice-text' }, [title]),
+    ...(open ? [el('button', { class: 'stack-open', type: 'button', 'data-card-open': 'message', 'aria-label': S.cardOpenAria(title), onclick: openIt }, [S.cardOpen])] : []),
+  )
+  msgNoticeEl.onclick = (e) => { if (!(e.target as HTMLElement).closest('button')) openIt() }
+  msgNoticeEl.classList.toggle('tappable', open !== null)
+  msgNoticeEl.classList.add('on')
+  clearTimeout(msgNoticeTimer)
+  msgNoticeTimer = setTimeout(hideMsgNotice, MSG_NOTICE_MS)
+}
+
+function hideMsgNotice(): void {
+  clearTimeout(msgNoticeTimer)
+  msgNoticeEl.classList.remove('on')
 }
 
 /** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
-function onIncomingText(peer: Peer, text: string, ts: number): void {
+function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   switch (routeText(APP_URL, text)) {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
-    case TextKind.Chat: onChatText(peer, text, ts); return
+    case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
 }
@@ -2078,14 +2116,50 @@ function ringSheet(p: Person): void {
     ...RINGS.map((r) => el('button', {
       class: 'radio' + (p.ring === r ? ' on' : ''),
       onclick: () => {
-        p.ring = r
-        const peer = st().peers.find((x) => x.id === p.peerId)
-        if (peer) peer.ring = r
-        save()
+        changeRing(p, r)
         personSheet(p.id)
         render()
       },
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])),
+  ])
+}
+
+/**
+ * Wave 6i (reask.ts): the ONE place a person's ring changes after they were placed (their card, a note about them). A TIGHTER ring
+ * sends their phone one sealed ask-again, so their earlier asks come back as prompts; the same ring or a looser one sends nothing at
+ * all ("unfriending should be invisible"). The first pick on the add sheet after a scan is a placement, not a tightening.
+ */
+function changeRing(p: Person, ring: Ring): void {
+  const peer = st().peers.find((x) => x.id === p.peerId)
+  const before = peer?.ring
+  p.ring = ring
+  if (peer) peer.ring = ring
+  save()
+  if (peer && before !== undefined && ringRaised(before, ring) && mayAskAgainWith(peer)) { void net.askAgain(peer); return }
+  // A tightening that never left (offline) and is undone before it could: nothing goes at all.
+  if (peer && peer.askAgainDue !== undefined && before !== undefined && ringRaised(ring, before)) { delete peer.askAgainDue; save() }
+}
+
+/**
+ * Wave 6i: ask-again and re-asks are for real phones only: never the side-by-side demo, a demo persona, a demo account (either side),
+ * this site's front door or anybody's front door (doors never ask on their own, and an older door would keep the envelope forever).
+ */
+function mayAskAgainWith(peer: Peer): boolean {
+  const s = st()
+  return !solo && !isDemoPersona(persona) && !s.testOf && !demoAccounts().some((t) => t.peerId === peer.id)
+    && peer.did !== demoPeer?.did && !s.people.some((x) => x.doorPeerId === peer.id)
+}
+
+/** Wave 6i: under Advanced on a connected person's card: "Get <name>'s earlier asks again" (the same envelope as a tightening). */
+function askAgainRow(p: Person): HTMLElement | null {
+  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  if (!peer || !mayAskAgainWith(peer)) return null
+  return el('div', { class: 'ask-again-row', 'data-ask-again-row': '1' }, [
+    el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button', 'data-ask-again': p.id,
+      onclick: () => { void net.askAgain(peer).then((sent) => toast(sent ? S.askAgainSent(p.name) : S.askAgainQueued(p.name))) },
+    }, [S.askAgainButton(p.name)]),
+    el('p', { class: 'meta' }, [S.askAgainHint]),
   ])
 }
 
@@ -2320,7 +2394,7 @@ function recAdvancedView(): HTMLElement {
       const text = input.value.trim()
       if (!text) return
       // During a take the line is stamped with the take's current moment (the chain of proof, provenance.ts).
-      draft.extraLines.push({ id: randomId(8), text, tag, audience: Audience.Friends, ...(recorder.live ? { atMs: totalMs() + recorder.elapsed() } : {}) })
+      draft.extraLines.push({ id: randomId(8), text, tag, audience: RECORD_LINE_AUDIENCE, ...(recorder.live ? { atMs: totalMs() + recorder.elapsed() } : {}) })
       render()
       document.querySelector<HTMLInputElement>(`[data-adv="${tag}"] input`)?.focus()
     }
@@ -2440,7 +2514,7 @@ function onJobChange(m: PastMeeting): void {
       const have = new Set(draft.lines.map((l) => l.text))
       draft.lines = [
         ...draft.lines.filter((l) => l.text !== memo),
-        ...linesFromTranscript(draft.segments).filter((l) => !have.has(l.text)).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends, atMs: l.atMs, line: l.line })),
+        ...linesFromTranscript(draft.segments).filter((l) => !have.has(l.text)).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: RECORD_LINE_AUDIENCE, atMs: l.atMs, line: l.line })),
       ]
     }
   }
@@ -2947,8 +3021,8 @@ async function makeNotes(): Promise<void> {
   if (!draft.lines.length) {
     // Picked one utterance at a time, so every line keeps its moment in the recording (provenance.ts).
     draft.lines = [
-      ...linesFromTranscript(draft.segments).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends, atMs: l.atMs, line: l.line })),
-      ...extractLines(draft.text).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.Friends })),
+      ...linesFromTranscript(draft.segments).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: RECORD_LINE_AUDIENCE, atMs: l.atMs, line: l.line })),
+      ...extractLines(draft.text).map((l) => ({ id: randomId(8), text: l.text, tag: l.tag, audience: RECORD_LINE_AUDIENCE })),
     ]
     // Nothing transcribed here: keep the memo itself as a line, so saving
     // never dead-ends; the audio is transcribed later on the computer.
@@ -3731,7 +3805,7 @@ function screenReview(): Node[] {
       rows.length ? el('div', { class: 'lines' }, rows) : el('p', { class: 'empty' }, [S.reviewEmpty]),
       el('button', {
         class: 'btn btn-ghost',
-        onclick: () => { draft.lines.push({ id: randomId(8), text: '', tag: Tag.Note, audience: Audience.Friends }); render() },
+        onclick: () => { draft.lines.push({ id: randomId(8), text: '', tag: Tag.Note, audience: RECORD_LINE_AUDIENCE }); render() },
       }, ['+ ' + S.reviewAdd]),
       el('p', { class: 'foot' }, [S.reviewFoot]),
     ]),
@@ -3853,10 +3927,8 @@ function saveDraft(): void {
     p = { id: randomId(8), name: draft.name.trim(), context: draft.context.trim(), ring: draft.ring, metAt: now, lines: [] }
     s.people.push(p)
   }
-  p.ring = draft.ring
+  changeRing(p, draft.ring)
   if (draft.context.trim()) p.context = draft.context.trim()
-  const peer = s.peers.find((x) => x.id === p.peerId)
-  if (peer) peer.ring = draft.ring
   // The meeting is stored first, so every note can point at it (the chain of proof).
   if (draftIsMeeting()) recordPastMeeting({ personId: p.id, reviewed: true })
   const meeting = draftWasMeeting()
@@ -4104,7 +4176,7 @@ function settingsSheet(): void {
         const next = !showsUnmatched(s, demoPhone())
         if (next === !demoPhone()) delete s.showUnmatchedAsks
         else s.showUnmatchedAsks = next
-        save(); settingsSheet(); if (next) showAskCards(); else hideAskCard()
+        save(); settingsSheet(); showAskCards()
       },
     }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
     ...HINTS.map((id) => el('button', {
@@ -4268,7 +4340,7 @@ async function runAsk(text: string): Promise<void> {
   if (screen === Screen.Web) render()
 }
 
-function resultsView(results: AskResult[]): HTMLElement[] {
+function resultsView(results: AskResult[], asked: { text: string; at: number }): HTMLElement[] {
   const shared = results.filter((r) => r.decoded?.outcome === 'shared' && r.decoded.shared)
   if (!shared.length) {
     return [el('div', { class: 'outcome nothing' }, [el('b', {}, [S.resultNothing]), el('span', {}, [S.resultNothingSub])])]
@@ -4279,6 +4351,10 @@ function resultsView(results: AskResult[]): HTMLElement[] {
       el('span', {}, [it.text]), el('small', {}, [it.context + ' · ' + it.when]),
       throughTag(it.via),
     ])),
+    // Wave 6i: a message from the answer carries the question (chat_re.ts).
+    personOf(st().people, r.peerId)
+      ? el('button', { class: 'btn btn-ghost btn-sm', 'data-answer-message': r.peerId, onclick: () => messageAbout(r.peerId, r.qid, asked.text, asked.at) }, [S.answerMessage(r.peerName)])
+      : null,
   ]))
 }
 
@@ -4298,7 +4374,7 @@ function queryDock(s: AppState): HTMLElement {
         askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
         el('p', { class: 'hint' }, [(run.reach === HOPS_DEFAULT ? S.queryWindow : S.queryWindowFar)(Math.round(askWaitMs(run.reach, net.answerWindowMs) / 1000))]),
         run.results
-          ? el('div', {}, [...resultsView(run.results), webSearchRow(run.text, webResults).el])
+          ? el('div', {}, [...resultsView(run.results, { text: run.text, at: run.startedAt }), webSearchRow(run.text, webResults).el])
           : el('p', { class: 'wait' }, [el('span', { class: 'spin' }), el('span', { id: 'tw-wait' }, [' ' + S.queryWaiting(secondsLeft(run.startedAt, run.reach))])]),
       ])
     : null
@@ -4352,7 +4428,7 @@ function renderAsk(): void {
   overlay.append(
     el('div', { class: 'orb orb1' }), el('div', { class: 'orb orb2' }),
     el('div', { class: 'ask' }, [
-      el('span', { class: 'eyebrow' }, [a.arrivedLate ? S.askLateEyebrow : askEyebrow(a)]),
+      el('span', { class: 'eyebrow' }, [a.earlier ? S.askEarlierEyebrow(a.fromName, a.earlier.at !== null ? askWhenLabel(a.earlier.at) : null) : a.arrivedLate ? S.askLateEyebrow : askEyebrow(a)]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
       decided === null
@@ -4366,10 +4442,24 @@ function renderAsk(): void {
         : el('div', {}, [
             el('p', { class: 'ask-done' }, [decided ? S.askSent : S.askNotSent]),
             el('p', { class: 'ask-foot' }, [decided && askDecidedLate ? S.askSentLateSub(a.fromName) : S.askSentSub]),
+            askMessageButton(a),
             el('button', { class: 'btn btn-ghost', onclick: showNextAsk }, [S.askClose]),
           ]),
     ]),
   )
+}
+
+/**
+ * Wave 6i: "Message <name>" once the prompt is decided, for an ask straight from its asker: the chat opens carrying this ask, so the
+ * reply ("I do") arrives with its question (chat_re.ts).
+ */
+function askMessageButton(a: IncomingAsk): HTMLElement | null {
+  const peerId = a.askerPeerId
+  if (!peerId || !personOf(st().people, peerId)) return null
+  return el('button', {
+    class: 'btn btn-electric', 'data-ask-message': '1',
+    onclick: () => { showNextAsk(); messageAbout(peerId, a.qid, a.text, a.receivedAt) },
+  }, [S.askMessage(a.fromName)])
 }
 
 /** Who handed this ask over: a front door (older doors name themselves as the asker), the people it came through, or nobody. */
