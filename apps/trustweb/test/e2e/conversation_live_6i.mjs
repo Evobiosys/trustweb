@@ -151,6 +151,7 @@ async function run(browser) {
   await a.page.locator('.sheet.on .chat-msg.chat-out', { hasText: `I do ${TAG}` }).waitFor({ timeout: 15_000 })
   const aRe = await chatRe(a.page)
   ok('2: A\'s chat shows the question above "I do"', aRe.length === 1 && /Re: “does anyone have a spare room\?”/.test(aRe[0]), JSON.stringify(aRe))
+  await a.page.waitForTimeout(800)
   await shot(a.page, '2_a_reply_with_question')
   const o2 = await outcome(b.page)
   ok('2: B gets A\'s line at the fixed moment', !!o2 && o2.includes(ROOM))
@@ -164,6 +165,7 @@ async function run(browser) {
   await b.page.locator('.sheet.on .chat-msg.chat-in', { hasText: `I do ${TAG}` }).waitFor({ timeout: 10_000 })
   const bRe = await chatRe(b.page)
   ok('2: "open" opens B\'s chat; it shows the question above "I do"', bRe.length === 1 && /Re: “does anyone have a spare room\?”/.test(bRe[0]), JSON.stringify(bRe))
+  await b.page.waitForTimeout(800) // the sheet slides in
   await shot(b.page, '2_b_reply_with_question')
   await closeSheets(b.page)
   await closeSheets(a.page)
