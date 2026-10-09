@@ -237,10 +237,11 @@ async function partE(browser) {
   await back.addInitScript(() => { const real = Date.now.bind(Date); Date.now = () => real() + 20 * 60_000 })
   await back.goto(ORIGIN + '/')
   await back.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  // (The eyebrow is uppercased by CSS, and innerText follows text-transform: match it case-insensitively.)
   // Wave 6h: Bo's ask carried its window, so his app takes a late yes: the prompt shows, marked as asked while she was away (the 6f
   // "asked while you were away" card stays for asks from an older build, which cannot take one).
-  const prompt = await until(async () => { const x = await back.locator('.overlay.on').innerText(); return /Asked while you were away/.test(x) && /Bo Asker asks/.test(x) && /Ladder/.test(x) ? x : null }, 15_000)
-  t.ok('e: the ask that came while she was away still reaches her, marked so, with the matching line', !!prompt)
+  const prompt = await until(async () => { const x = await back.locator('.overlay.on').innerText(); return /Asked while you were away/i.test(x) && /Bo Asker asks/.test(x) && /Ladder/.test(x) ? x : null }, 15_000)
+  t.ok('e: the ask that came while she was away still reaches her, marked so, with the matching line', !!prompt, prompt ? '' : await back.locator('.overlay.on').innerText({ timeout: 2000 }).catch(() => '(no prompt on screen)'))
   t.ok('e: it says her yes reaches him as "answered later"', !!prompt && /answered later/.test(prompt))
   await shot(back, 'f6_e_away.png')
   await back.getByRole('button', { name: 'Share these' }).click()
