@@ -76,7 +76,8 @@ async function ask(page, text, reachChoice) {
   await page.locator('.query-dock textarea').fill(text)
   const t0 = Date.now()
   await page.getByRole('button', { name: 'Call into my web' }).click()
-  await page.locator('.card.asked .outcome').waitFor({ timeout: 330_000 })
+  // Wave 6h: the asker waits 180 s plus 120 s per extra step, so a three-step ask (the cycle) settles after up to 420 s.
+  await page.locator('.card.asked .outcome').waitFor({ timeout: 480_000 })
   return { text: await page.locator('.card.asked').innerText(), ms: Date.now() - t0 }
 }
 
