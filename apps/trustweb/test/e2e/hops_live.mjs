@@ -122,15 +122,15 @@ async function main() {
     await row.waitFor({ timeout: 10_000 })
     ok('Cleo\'s ladder travels one degree by default (friends of friends)', /\+1 degree/.test(await row.locator('.inv-actions').innerText()))
 
-    // 1. friends of friends, Ben passing Ann's asks on (an acquaintance's asks do not go on by default)
+    // 1. friends of friends, Ben passing Ann's asks on (on by default since 2026-10-09)
     await tab(ann, 'Web')
     await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
     ok('"How far?": my contacts by default, five choices', (await ann.locator('[data-reach-choice]').count()) === 5
       && (await ann.locator('[data-reach-choice="contacts"]').getAttribute('aria-checked')) === 'true')
     const benAnn = (await record(ben)).people.find((p) => p.name === ANN)
-    ok('Ben holds Ann as an acquaintance; her asks do not go on by default', benAnn?.ring === 'acquaintance' && benAnn.passOn === undefined, JSON.stringify(benAnn))
+    ok('Ben holds Ann as an acquaintance; her asks go on by default', benAnn?.ring === 'acquaintance' && benAnn.passOn === undefined, JSON.stringify(benAnn))
     await setPassOn(ben, ANN, true)
-    ok('Ben switches on "Pass their asks on" for Ann', (await record(ben)).people.find((p) => p.name === ANN)?.passOn === true)
+    ok('"Pass their asks on" is on for Ann without a tap', (await record(ben)).people.find((p) => p.name === ANN)?.passOn !== false)
     const q1 = 'Does anyone have a ladder I could borrow?'
     const cleoSaw = answerAsk(cleo, true, 'cleo_prompt')
     const r1 = await ask(ann, q1, 'fof')

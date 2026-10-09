@@ -356,3 +356,19 @@ on the name-entry screen lands with the free-text ask card absent from her own `
 ladder inventory entry `ausgeschlossen` rather than the Standard/Pro default of included;
 changing mode from "Mein Profil" updates both the profile heading and the home-screen badge
 immediately. No stray dev/preview servers left running afterward.
+
+## D-passon-default (2026-10-09): "Pass their asks on" defaults to yes
+
+Jakob, 2026-10-09: "make the default yes". Reverses the default of wave 6f S1 (2026-10-08 19:49,
+"per default it should be no"). Cause: a line shared with friends of friends stayed unseen for a
+second person because the middle phone never passed that person's ask on; the asker's reach and
+the middle phone's switch both defaulted to "direct only", so friends of friends could not work
+with defaults.
+
+- `passesAsksOn` (model.ts): on unless the person's switch is explicitly off; never for Ring.Intending.
+- `passOnAllowed` (one_jakob.ts): a person card decides; a peer with no card (a front door, a demo
+  account) stays off, so a public front door cannot push asks through a phone unasked.
+- Unchanged: the asker's own "How far?" still defaults to my contacts (reach 1); the line's audience
+  and degrees; every hop's own yes (I8). An explicit stored off keeps its value.
+- Honest label (I7/I9): this widens a default. The switch hint on the person's card now reads
+  "On unless you switch it off."

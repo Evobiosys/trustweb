@@ -100,7 +100,7 @@ export function answerTitle(from: string, items: readonly { via?: unknown }[]): 
 
 /**
  * On a person's card: may their asks go on through me ("Pass their asks on"). `on` is the EFFECTIVE value
- * (one_jakob.ts passOnAllowed: on only where it was switched on for them; off by default since wave 6f), so the
+ * (one_jakob.ts passOnAllowed: on for a person unless switched off for them; on by default since 2026-10-09), so the
  * switch shows what the phone does and one tap flips it.
  */
 export function passOnRow(on: boolean, onToggle: (next: boolean) => void): HTMLElement {

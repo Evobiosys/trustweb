@@ -163,11 +163,11 @@ async function main() {
     await until(async () => (await record(ann)).askReach === 2)
     await shot(ann, 'u1-03-ask-dock-how-far')
 
-    // 1. friends of friends, Ben passing Ann's asks on (an acquaintance's asks do not go on by default)
+    // 1. friends of friends, Ben passing Ann's asks on (on by default since 2026-10-09)
     const benAnn = (await record(ben)).people.find((p) => p.name === 'Ann')
-    ok('Ben holds Ann as an acquaintance; her asks do not go on by default', benAnn?.ring === 'acquaintance' && benAnn.passOn === undefined)
+    ok('Ben holds Ann as an acquaintance; her asks go on by default', benAnn?.ring === 'acquaintance' && benAnn.passOn === undefined)
     await setPassOn(ben, 'Ann', true)
-    ok('Ben switches on "Pass their asks on" for Ann', (await record(ben)).people.find((p) => p.name === 'Ann')?.passOn === true)
+    ok('"Pass their asks on" is on for Ann without a tap', (await record(ben)).people.find((p) => p.name === 'Ann')?.passOn !== false)
     const q1 = 'Does anyone have a ladder I could borrow?'
     const cleoSaw = answerAsk(cleo, true)
     const r1 = await ask(ann, q1)

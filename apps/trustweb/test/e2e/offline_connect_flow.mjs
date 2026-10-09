@@ -326,7 +326,7 @@ async function partH(browser) {
   await a.page.locator('.sheet.on [data-pass-on]').click()
   await a.page.waitForTimeout(800)
   const r = await record(a.page)
-  t.ok('h: the switch flipped in the open sheet is saved', r.people.find((p) => p.name === 'Bo Card')?.passOn === true, JSON.stringify(r.people.map((p) => [p.name, p.passOn])))
+  t.ok('h: the switch flipped in the open sheet is saved (on by default, so the tap switches it off)', r.people.find((p) => p.name === 'Bo Card')?.passOn === false, JSON.stringify(r.people.map((p) => [p.name, p.passOn])))
   t.ok('h: and Cy is still in the record (the open sheet did not write the older copy back)', r.people.some((p) => p.name === 'Cy Later') && r.peers.some((p) => p.displayName === 'Cy Later'), JSON.stringify(r.people.map((p) => p.name)))
   // The other tab saves once more (a name change is a save): it took the switch over and does not write it away.
   await tab2.locator('.node.you').click()
