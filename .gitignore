@@ -22,3 +22,6 @@ alpha/state/
 alpha/*.png
 alpha/*.out
 .playwright-mcp/
+
+# Private working notes live in Evobiosys/trustweb-private, never here.
+cloud-handover/
