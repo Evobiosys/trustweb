@@ -1007,15 +1007,19 @@ export class Net {
   private async sendAskAgain(peer: Peer): Promise<boolean> {
     if (!this.channel) return false
     const env: AskAgainEnvelope = { v: 1, t: 'ask-again' }
+    // Review 6i: their asks marked as earlier are read as such from now on, for a while (reask.ts acceptsReaskFrom). Set BEFORE the
+    // send: the other phone re-asks the moment the relay hands it over, and its first re-ask can arrive here before the relay's reply
+    // to this send does (seen in conversation_flow b after the review). A send that fails puts the previous value back.
+    const stored = this.peerByDid(peer.did)
+    const before = stored?.askAgainSentAt
+    if (stored) stored.askAgainSentAt = Date.now()
     try {
       await this.channel.send(peer.did, env, await this.pairKey(peer))
     } catch {
+      if (stored) { if (before === undefined) delete stored.askAgainSentAt; else stored.askAgainSentAt = before }
       return false
     }
-    const stored = this.peerByDid(peer.did)
     if (stored) {
-      // Review 6i: their asks marked as earlier are read as such from now on, for a while (reask.ts acceptsReaskFrom).
-      stored.askAgainSentAt = Date.now()
       delete stored.askAgainDue
       this.hooks.save()
     }

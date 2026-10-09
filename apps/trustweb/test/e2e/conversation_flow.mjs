@@ -192,6 +192,18 @@ async function partA(browser) {
   await notice.locator('.msg-notice-text').click()
   await b.page.locator('.sheet.on .chat-msg.chat-in', { hasText: 'free from Friday' }).waitFor({ timeout: 10_000 })
   t.ok('a: a tap anywhere on the notice opens the chat at that message', await b.page.locator('.sheet.on .chat-msg.chat-focus', { hasText: 'free from Friday' }).count() === 1)
+  // review 6i (R4): with a sheet open, the notice sits in the top strip, never over the sheet's controls
+  await closeSheets(b.page)
+  await openCard(b.page, 'Ada Reply')
+  await a.page.getByPlaceholder('Write a message').fill('or from Saturday')
+  await a.page.getByRole('button', { name: 'Send', exact: true }).click()
+  const top = b.page.locator('[data-msg-notice].on.top')
+  await top.waitFor({ timeout: 20_000 })
+  const topBox = await top.boundingBox()
+  const sheetBox = await b.page.locator('.sheet.on').boundingBox()
+  t.ok('a: with a card open, the notice sits in the top strip above the sheet, not over it', topBox && sheetBox && topBox.y + topBox.height <= sheetBox.y + 1, JSON.stringify([topBox, sheetBox]))
+  await shot(b.page, 'c6i_a5_bo_notice_over_sheet.png')
+  await closeSheets(b.page)
   // the record keeps the quote on both phones
   const adaChat = Object.values((await record(a.page)).chats ?? {}).flatMap((th) => th.messages)
   const boChat = Object.values((await record(b.page)).chats ?? {}).flatMap((th) => th.messages)

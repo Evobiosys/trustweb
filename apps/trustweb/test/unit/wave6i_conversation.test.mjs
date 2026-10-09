@@ -557,6 +557,23 @@ describe('end to end: tightening brings back the earlier asks; loosening sends n
     expect(ada.prompts).toHaveLength(0)
   })
 
+  it('the marker is accepted from the moment the ask-again leaves, before the relay has answered that send (a re-ask can be faster)', async () => {
+    const ada = await phone('Ada')
+    const bo = await phone('Bo')
+    await connect(bo, ada, Ring.Acquaintance)
+    const peer = peerOn(ada, bo)
+    const channel = ada.net.channel
+    const send = channel.send
+    let release
+    channel.send = (to, env, key) => (env.t === 'ask-again' ? new Promise((r) => { release = () => r(send(to, env, key)) }) : send(to, env, key))
+    const pending = ada.net.askAgain(peer)
+    await until(() => typeof release === 'function')
+    expect(peer.askAgainSentAt).toBeTypeOf('number') // already accepted while the send is still on its way
+    release()
+    expect(await pending).toBe(true)
+    channel.send = send
+  })
+
   it('an ask-again that cannot leave (no relay) waits on the record and goes on the next connect', async () => {
     const ada = await phone('Ada')
     const bo = await phone('Bo')
