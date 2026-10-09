@@ -22,7 +22,20 @@ export type { ChatRe }
 /** An ask's words fit to quote: no hidden or bidi characters, one line, at most RE_TEXT_MAX; '' when nothing is left. */
 export function cleanReText(raw: unknown): string {
   if (typeof raw !== 'string') return ''
-  return clipText(stripUnsafe(raw).replace(/\s+/g, ' ').trim(), RE_TEXT_MAX)
+  return clipUnits(stripUnsafe(raw).replace(/\s+/g, ' ').trim(), RE_TEXT_MAX)
+}
+
+/**
+ * Review 6i: at most `max` UTF-16 units (what the receiver's parseChat counts), never splitting a character: a quote clipped by
+ * characters alone could be longer in units, and the receiver would then drop the whole message.
+ */
+function clipUnits(s: string, max: number): string {
+  let out = ''
+  for (const ch of clipText(s, max)) {
+    if (out.length + ch.length > max) break
+    out += ch
+  }
+  return out
 }
 
 /** The context a chat started from an ask carries; null when the ask has no usable qid, words or time (the chat then opens plainly). */

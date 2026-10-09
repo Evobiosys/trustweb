@@ -15,6 +15,9 @@ import { randomId } from '../../../demo/src/crypto.ts'
 import { Net } from '../../src/net.ts'
 import { windowFields } from '../../src/ask_window.ts'
 import { NoticePlace, msgNoticePlace } from '../../src/card_stack.ts'
+import { makeRe } from '../../src/chat_re.ts'
+import { decodeFromQr, encodeForQr } from '../../../demo/src/wire.ts'
+import { RE_TEXT_MAX } from '../../../demo/src/types.ts'
 import { addSentAsk, askOfQid, forgetSentAsk, sentAskFor } from '../../src/late_answers.ts'
 import { liveHeldAsks } from '../../src/held_asks.ts'
 import { REASK_ACCEPT_MS, REASKS_PER_ASK, acceptsReaskFrom, noteReasked, reaskCandidates, undoReasked } from '../../src/reask.ts'
@@ -68,6 +71,17 @@ describe('R2/R3 late_answers.ts and reask.ts: the first qid after a re-ask, and 
     // the budget still holds for sends that left
     for (let i = 0; i < REASKS_PER_ASK; i++) list = noteReasked(list, 'A1', 'pA', 'Qx' + i, NOW)
     expect(reaskCandidates(list, 'pA', NOW)).toEqual([])
+  })
+})
+
+describe('R6 chat_re.ts: a quote fits the receiver\'s bound in UTF-16 units', () => {
+  it('a quote of wide characters is clipped to RE_TEXT_MAX units, whole characters only, and the message still parses', () => {
+    const re = makeRe('Qa1b2C3d4e5f', '\u{1F3E0}'.repeat(150), Date.UTC(2026, 9, 9))
+    expect(re.text.length).toBeLessThanOrEqual(RE_TEXT_MAX)
+    expect(re.text.length % 2).toBe(0)
+    const wire = encodeForQr({ v: 1, t: 'chat', from: { id: 'me1', displayName: 'Ada' }, text: 'I do', ts: Date.UTC(2026, 9, 9), re })
+    expect(decodeFromQr(wire)).toMatchObject({ t: 'chat', text: 'I do', re: { text: re.text } })
+    expect(makeRe('Qa1b2C3d4e5f', 'a'.repeat(250), 1).text).toHaveLength(RE_TEXT_MAX)
   })
 })
 
