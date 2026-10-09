@@ -73,7 +73,7 @@ import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, l
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
 import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
-import { askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk } from './reask'
+import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
 
 export type { RelayStatus }
@@ -554,9 +554,10 @@ export class Net {
     const repeat = this.roots.repeat(info.root, receivedAt)
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
     // Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring. One already shown at this ring (or
-    // a tighter one) is answered like no match, never shown again: a double tap or a lower-then-raise repeats no prompt.
+    // a tighter one) is answered like no match, never shown again: a double tap or a lower-then-raise repeats no prompt. Review 6i: it
+    // is remembered as shown only when its prompt is presented (earlierFields), so one that matched nothing may come again.
     const earlier = this.earlierOf(q, info, peer, receivedAt)
-    const quietEarlier = earlier !== null && !this.noteEarlier(earlier, peer, receivedAt)
+    const quietEarlier = earlier !== null && !showsEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, receivedAt)
     // Its asker stopped waiting long ago (this phone was closed or asleep). A repeat or a cycle stays as silent as it is live (review 6f).
     if (isAwayAsk(q.issuedAt, receivedAt, askTimeoutMs(info.maxHops, windowMs))) {
       if (repeat || cycle || quietEarlier) return
@@ -611,26 +612,28 @@ export class Net {
    */
   private earlierOf(q: QueryEnvelope, info: HopInfo, peer: Peer, receivedAt: number): EarlierAsk | null {
     if (!q.reask || !carriesWindow(q) || !this.straightFromAsker(q, info, peer)) return null
+    // Review 6i: only from a connection this phone asked again (reask.ts acceptsReaskFrom); a marker nobody asked for is ignored, so it
+    // can neither keep an ask out of the log nor take a card away.
+    if (!acceptsReaskFrom(peer.askAgainSentAt, receivedAt)) return null
     return earlierAsk(q.reask, receivedAt)
   }
 
-  /** Wave 6i: remembers that this earlier ask came again at the asker's ring now; true when it is to be shown (reask.ts showsEarlierAsk). */
-  private noteEarlier(earlier: EarlierAsk, peer: Peer, now: number): boolean {
-    const s = this.hooks.state()
-    const show = showsEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, now)
-    s.reaskSeen = noteEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, now)
-    this.hooks.save()
-    return show
-  }
-
-  /** Wave 6i: the held prompt's fields for an earlier ask that is shown; its old "nothing matched" card goes (the prompt replaces it). */
+  /**
+   * Wave 6i: the held prompt's fields for an earlier ask that is shown. Called only when its prompt is presented: it is remembered as
+   * shown at the asker's ring now (reask.ts noteEarlierAsk); its old "nothing matched" card goes, and so does (review 6i) a prompt for
+   * the first ask this phone still held (one ask, one prompt; a late yes to that one would still land, late_answers.ts findSent).
+   */
   private earlierFields(earlier: EarlierAsk | null, peer: Peer, now: number): Pick<HeldAsk, 'earlierAt' | 'reaskOf'> {
     if (!earlier) return {}
     const s = this.hooks.state()
+    s.reaskSeen = noteEarlierAsk(s.reaskSeen, earlier.originalQid, peer.id, peer.ring, now)
     if (Array.isArray(s.unmatchedAsks) && s.unmatchedAsks.some((a) => isUnmatchedFor(a, earlier.originalQid, peer.id))) {
       s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, earlier.originalQid, now)
-      this.hooks.save()
     }
+    if (liveHeldAsks(s.heldAsks, now).some((h) => h.qid === earlier.originalQid && h.peerId === peer.id)) {
+      s.heldAsks = dropHeldAsk(s.heldAsks, earlier.originalQid, now)
+    }
+    this.hooks.save()
     return { reaskOf: earlier.originalQid, ...(earlier.at !== null ? { earlierAt: earlier.at } : {}) }
   }
 
@@ -919,7 +922,9 @@ export class Net {
   }
 
   /** One ask to one peer; resolves with the decoded answer, or null when none came within `timeoutMs`. */
-  private async sendAsk(peer: Peer, freeText: string, extra: Partial<QueryEnvelope>, timeoutMs: number, qid: string = randomId(12)): Promise<DecodedAnswer | null> {
+  private async sendAsk(
+    peer: Peer, freeText: string, extra: Partial<QueryEnvelope>, timeoutMs: number, qid: string = randomId(12), onRefused?: () => void,
+  ): Promise<DecodedAnswer | null> {
     const s = this.hooks.state()
     const q: QueryEnvelope = {
       v: 1, t: 'query', from: s.me,
@@ -938,6 +943,7 @@ export class Net {
         if (!channel) throw new Error('relay not connected')
         await channel.send(peer.did, q, key)
       } catch {
+        onRefused?.()
         this.awaiting.get(q.qid)?.({ v: 1, t: 'answer', qid: q.qid, body: '' })
       }
     })()
@@ -1007,7 +1013,12 @@ export class Net {
       return false
     }
     const stored = this.peerByDid(peer.did)
-    if (stored?.askAgainDue !== undefined) { delete stored.askAgainDue; this.hooks.save() }
+    if (stored) {
+      // Review 6i: their asks marked as earlier are read as such from now on, for a while (reask.ts acceptsReaskFrom).
+      stored.askAgainSentAt = Date.now()
+      delete stored.askAgainDue
+      this.hooks.save()
+    }
     return true
   }
 
@@ -1042,9 +1053,16 @@ export class Net {
   private async reaskOne(peer: Peer, plan: ReaskPlan, timeoutMs: number): Promise<void> {
     const qid = randomId(12)
     const s = this.hooks.state()
+    // Noted before it leaves, so an answer that comes at once finds it; undone when the relay refuses it (review 6i: the earlier qid
+    // stays the one a late yes is matched to, and a failed try costs nothing of the per-ask budget).
     s.sentAsks = noteReasked(s.sentAsks, plan.askId, peer.id, qid, Date.now())
     this.hooks.save()
-    const decoded = await this.sendAsk(peer, reaskText(plan), { ...reaskFields(plan), ...windowFields(this.windowMs) }, timeoutMs, qid)
+    const onRefused = (): void => {
+      const st = this.hooks.state()
+      st.sentAsks = undoReasked(st.sentAsks, plan.askId, peer.id, plan.prev, Date.now())
+      this.hooks.save()
+    }
+    const decoded = await this.sendAsk(peer, reaskText(plan), { ...reaskFields(plan), ...windowFields(this.windowMs) }, timeoutMs, qid, onRefused)
     const items = decoded?.outcome === 'shared' && decoded.shared ? sanitizeHopItems(decoded.shared.items) : []
     if (!items.length) return
     const st = this.hooks.state()

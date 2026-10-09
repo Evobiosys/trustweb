@@ -73,7 +73,7 @@ import { S } from './strings'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
-import { QUIET_CARD_MS, StackCardKind, hidesItself, stackCards } from './card_stack'
+import { NoticePlace, QUIET_CARD_MS, StackCardKind, hidesItself, msgNoticePlace, stackCards } from './card_stack'
 import type { StackCard } from './card_stack'
 import { drawStack } from './card_stack_view'
 import type { StackOpen } from './card_stack_view'
@@ -589,6 +589,9 @@ const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
 /** Wave 6i: the notice for a new message (not the toast: a toast never takes taps, this one does). */
 const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-notice': '1' })
+/** Review 6i: declared with the element, ahead of anything that may open a sheet or the prompt (hideMsgNotice reads it). */
+let msgNoticeTimer: ReturnType<typeof setTimeout> | undefined
+const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 /** Desktop, bottom left, outside the phone: add or remove the demo content. */
 const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
@@ -912,6 +915,8 @@ function sheetHomeBar(): HTMLElement {
 function openSheet(children: (Node | null)[]): void {
   openChat = null
   cardOpenFor = null
+  // Review 6i: a "new message" notice above the tab bar would lie over the sheet's controls: it goes (the unread card stays).
+  hideMsgNotice()
   // A past meeting's player stops whenever the sheet changes (past_meetings_view.ts).
   past.stopPlayer()
   delete sheet.dataset.kind
@@ -2039,15 +2044,17 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
  */
 function newMessageNotice(peer: Peer, key: string): void {
   const person = personOf(st().people, peer.id)
-  if (screen === Screen.Web && !queryOpen && !sheet.classList.contains('on')) { drawCardStack(); return }
+  const sheetOpen = sheet.classList.contains('on')
   drawCardStack()
-  showMsgNotice(S.chatNewToast(person?.name ?? peer.displayName), person ? () => chatSheet(person.id, { scrollTo: key }) : null)
+  if (screen === Screen.Web && !queryOpen && !sheetOpen) return
+  const title = S.chatNewToast(person?.name ?? peer.displayName)
+  // Review 6i (card_stack.ts msgNoticePlace): never over a control: not over the consent prompt, at the top over an open sheet.
+  const place = msgNoticePlace(overlay.classList.contains('on'), sheetOpen)
+  if (place === NoticePlace.None) { toast(title); return }
+  showMsgNotice(title, person ? () => chatSheet(person.id, { scrollTo: key }) : null, place)
 }
 
-let msgNoticeTimer: ReturnType<typeof setTimeout> | undefined
-const MSG_NOTICE_MS = 6_000
-
-function showMsgNotice(title: string, open: (() => void) | null): void {
+function showMsgNotice(title: string, open: (() => void) | null, place: NoticePlace): void {
   const openIt = (): void => { hideMsgNotice(); open?.() }
   msgNoticeEl.replaceChildren(
     el('span', { class: 'msg-notice-text' }, [title]),
@@ -2055,6 +2062,7 @@ function showMsgNotice(title: string, open: (() => void) | null): void {
   )
   msgNoticeEl.onclick = (e) => { if (!(e.target as HTMLElement).closest('button')) openIt() }
   msgNoticeEl.classList.toggle('tappable', open !== null)
+  msgNoticeEl.classList.toggle('top', place === NoticePlace.Top)
   msgNoticeEl.classList.add('on')
   clearTimeout(msgNoticeTimer)
   msgNoticeTimer = setTimeout(hideMsgNotice, MSG_NOTICE_MS)
@@ -4422,6 +4430,8 @@ function showNextAsk(): void {
 function renderAsk(): void {
   const a = askShowing
   if (!a) { overlay.classList.remove('on'); overlay.replaceChildren(); return }
+  // Review 6i: nothing tappable lies over the consent prompt (its Share and Not now).
+  hideMsgNotice()
   overlay.classList.add('on')
   const decided = askDecision
   clear(overlay)
@@ -4458,7 +4468,8 @@ function askMessageButton(a: IncomingAsk): HTMLElement | null {
   if (!peerId || !personOf(st().people, peerId)) return null
   return el('button', {
     class: 'btn btn-electric', 'data-ask-message': '1',
-    onclick: () => { showNextAsk(); messageAbout(peerId, a.qid, a.text, a.receivedAt) },
+    // Review 6i: an earlier ask is quoted with its first time, as the asker's phone binds it (chat_re.ts bindRe).
+    onclick: () => { showNextAsk(); messageAbout(peerId, a.qid, a.text, a.earlier?.at ?? a.receivedAt) },
   }, [S.askMessage(a.fromName)])
 }
 

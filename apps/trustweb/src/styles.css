@@ -251,6 +251,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .msg-notice{position:absolute; left:16px; right:16px; bottom:100px; z-index:61; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   display:flex; align-items:center; justify-content:space-between; gap:10px; opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .msg-notice.on{opacity:1; transform:none; pointer-events:auto}
+/* Review 6i: over an open sheet the notice sits in the top strip (over the veil, which the sheet never reaches), never over its controls */
+.msg-notice.top{top:14px; bottom:auto; transform:translateY(-10px)}
+.msg-notice.top.on{transform:none}
 .msg-notice.tappable{cursor:pointer}
 .msg-notice .stack-open{color:inherit}
 .ask-again-row{display:flex; flex-direction:column; gap:4px; margin-top:12px}

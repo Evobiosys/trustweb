@@ -14,14 +14,16 @@
  * Bounds: B re-sends one earlier ask to one connection at most REASKS_PER_ASK times (one per possible tightening) and answers one
  * ask-again per connection at most once per ASK_AGAIN_COOLDOWN_MS; A shows the same earlier ask again only when the asker's ring is
  * tighter than when it last came (ReaskSeen), so a double tap or a lower-then-raise never repeats a prompt. A re-ask that still matches
- * nothing stays silent on A's side (no card, no log row): one tightening must not bring twenty "nothing matched" cards.
+ * nothing stays silent on A's side (no card, no log row): one tightening must not bring twenty "nothing matched" cards; it is not
+ * remembered as shown, so a later tightening or the Advanced button may bring it again (review 6i). A reads the `reask` marker only
+ * from a connection it sent an ask-again to within REASK_ACCEPT_MS (review 6i): a forged marker is an ordinary ask, logged and carded.
  * Pure and DOM-free.
  */
 import { clipText, isRecord, keptList } from './kept_list'
 import type { KeepRule } from './kept_list'
 import { liveSentAsks } from './late_answers'
 import { RINGS, Ring } from './model'
-import type { ReaskSeen, SentAsk } from './model'
+import type { ReaskSeen, SentAsk, SentTo } from './model'
 import type { QueryEnvelope, ReaskRef } from '../../demo/src/types'
 import { FREE_TEXT_MAX_LEN, QID_RE } from '../../demo/src/types'
 
@@ -33,6 +35,12 @@ export const REASK_MAX = 20
 export const REASKS_PER_ASK = RINGS.length - 1
 /** One ask-again per connection is answered at most this often (a burst of taps or of ring changes sends one round). */
 export const ASK_AGAIN_COOLDOWN_MS = 60_000
+/**
+ * Review 6i: the receiver reads an ask's `reask` marker only from a connection it sent an ask-again to within this long (the asker's
+ * phone may be closed for days before it reads the ask-again). Any other marked ask is an ordinary ask: logged, carded, shown as new, so
+ * a marker can never hide an ask from the log or take a card away.
+ */
+export const REASK_ACCEPT_MS = 14 * 24 * 60 * 60 * 1000
 /** A receiver kept this many earlier asks it was asked again. */
 export const REASK_SEEN_MAX = 200
 /** An earlier ask's claimed time may lie this far ahead of the receiver's clock (clock skew) before it is not shown. */
@@ -56,6 +64,8 @@ export interface ReaskPlan {
   firstAt: number
   /** The qid that connection got the first time. */
   originalQid: string
+  /** Review 6i: that connection's entry as it is now, put back when the re-ask does not leave (undoReasked). */
+  prev: SentTo
 }
 
 /**
@@ -71,7 +81,7 @@ export function reaskCandidates(sentAsks: unknown, peerId: string, now: number, 
     const to = a.to.find((x) => x.peerId === peerId)
     // An ask whose answer this phone still waits for is not asked again (its answer is on its way).
     if (!to || (to.reasks ?? 0) >= REASKS_PER_ASK || inFlight(to.qid)) continue
-    out.push({ askId: a.id, text: a.text, firstAt: a.at, originalQid: to.reaskOf ?? to.qid })
+    out.push({ askId: a.id, text: a.text, firstAt: a.at, originalQid: to.reaskOf ?? to.qid, prev: { ...to } })
   }
   return out
 }
@@ -82,6 +92,14 @@ export function noteReasked(sentAsks: unknown, askId: string, peerId: string, qi
     ...a,
     to: a.to.map((x) => (x.peerId !== peerId ? x : { peerId, qid, at: now, reaskOf: x.reaskOf ?? x.qid, reasks: (x.reasks ?? 0) + 1 })),
   }))
+}
+
+/**
+ * B's side, review 6i: the re-ask did not leave (the relay refused it): the remembered ask points that connection back at what it was,
+ * so a late yes to the earlier qid still lands and the failed try costs nothing of the REASKS_PER_ASK budget.
+ */
+export function undoReasked(sentAsks: unknown, askId: string, peerId: string, prev: SentTo, now: number): SentAsk[] {
+  return liveSentAsks(sentAsks, now).map((a) => (a.id !== askId ? a : { ...a, to: a.to.map((x) => (x.peerId !== peerId ? x : prev)) }))
 }
 
 /** The fields of a re-ask (on top of the ordinary ask's): direct only, never passed on, marked with the earlier ask. */
@@ -102,6 +120,15 @@ export function askAgainAllowed(lastAt: number | undefined, running: boolean, no
 // ---------------------------------------------------------------------------
 // A's side: an earlier ask that came again
 // ---------------------------------------------------------------------------
+
+/**
+ * A's side, review 6i: does this phone read a `reask` marker from this connection at all? Only when it sent them an ask-again within
+ * REASK_ACCEPT_MS (Peer.askAgainSentAt); a marker nobody asked for is ignored and the ask is an ordinary one.
+ */
+export function acceptsReaskFrom(askAgainSentAt: unknown, now: number): boolean {
+  return typeof askAgainSentAt === 'number' && Number.isFinite(askAgainSentAt) && askAgainSentAt <= now + CLOCK_SKEW_MS
+    && now - askAgainSentAt <= REASK_ACCEPT_MS
+}
 
 /** What the receiver makes of a well-formed `reask` field: the first ask's qid, and its time when that is believable (else null). */
 export interface EarlierAsk {

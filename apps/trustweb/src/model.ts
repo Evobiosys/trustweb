@@ -324,6 +324,11 @@ export interface Peer {
    * the next connect. Absent: nothing waiting. Never set by a loosening.
    */
   askAgainDue?: number
+  /**
+   * Review 6i (reask.ts acceptsReaskFrom): when the relay last took an ask-again of this phone for them. Their asks marked as earlier are
+   * read as such only within REASK_ACCEPT_MS of it; absent: never asked again, so a marked ask is an ordinary one.
+   */
+  askAgainSentAt?: number
 }
 
 export interface InventoryItem {

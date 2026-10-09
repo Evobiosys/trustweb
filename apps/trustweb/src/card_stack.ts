@@ -81,3 +81,20 @@ export function cardAsk(card: StackCard): { peerId: string; qid: string; text: s
     case StackCardKind.Message: return null
   }
 }
+
+/**
+ * Review 6i: where the tappable "new message" notice may sit away from the Web stack, so it never lies over a control. Over the consent
+ * prompt (its Share and Not now) it does not show at all (the unread card waits in the stack, the toast says it); over an open sheet it
+ * sits in the top strip, over the veil the sheet never reaches (max-height 82%), where a tap would only have closed the sheet; else
+ * above the tab bar, where the toast is.
+ */
+export enum NoticePlace {
+  None = 'none',
+  Top = 'top',
+  Bottom = 'bottom',
+}
+
+export function msgNoticePlace(promptOpen: boolean, sheetOpen: boolean): NoticePlace {
+  if (promptOpen) return NoticePlace.None
+  return sheetOpen ? NoticePlace.Top : NoticePlace.Bottom
+}

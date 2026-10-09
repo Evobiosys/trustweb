@@ -84,7 +84,8 @@ function sentAt(a: SentAsk, to: SentTo): number {
 /** The remembered ask and connection of a qid, whatever its age (within the keep time). */
 function findSent(list: unknown, qid: string, peerId: string, now: number): { ask: SentAsk; to: SentTo } | undefined {
   for (const a of liveSentAsks(list, now)) {
-    const to = a.to.find((x) => x.qid === qid && x.peerId === peerId)
+    // Review 6i: the qid of the FIRST ask still names it after a re-ask (a late yes to the prompt the other phone still holds).
+    const to = a.to.find((x) => x.peerId === peerId && (x.qid === qid || x.reaskOf === qid))
     if (to) return { ask: a, to }
   }
   return undefined
@@ -108,8 +109,9 @@ export function askOfQid(list: unknown, qid: string, peerId: string, now: number
 
 /** Forgets one connection's qid (its late answer arrived, or it shared at the moment); an ask nobody can still answer goes. */
 export function forgetSentAsk(list: unknown, qid: string, now: number): SentAsk[] {
+  // Review 6i: by the qid it carries now or by the first one (a late yes to the earlier prompt after a re-ask).
   return liveSentAsks(list, now)
-    .map((a) => ({ ...a, to: a.to.filter((x) => x.qid !== qid) }))
+    .map((a) => ({ ...a, to: a.to.filter((x) => x.qid !== qid && x.reaskOf !== qid) }))
     .filter((a) => a.to.length > 0)
 }
 

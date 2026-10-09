@@ -338,7 +338,7 @@ describe('reask.ts: the rule', () => {
     const plans = reaskCandidates(list, 'pA', NOW)
     expect(REASK_MAX).toBe(20)
     expect(plans).toHaveLength(20)
-    expect(plans[0]).toEqual({ askId: 'r23', text: 'ask 23', firstAt: NOW - 2 * 60_000, originalQid: 'Qa23' })
+    expect(plans[0]).toEqual({ askId: 'r23', text: 'ask 23', firstAt: NOW - 2 * 60_000, originalQid: 'Qa23', prev: { peerId: 'pA', qid: 'Qa23' } })
     expect(plans.map((p) => p.askId)).not.toContain('r24')
     expect(plans.map((p) => p.askId)).not.toContain('old')
     expect(plans.map((p) => p.askId)).not.toContain('other')
@@ -532,13 +532,15 @@ describe('end to end: tightening brings back the earlier asks; loosening sends n
     expect(ada.prompts).toHaveLength(0)
     expect(ada.unmatched).toBe(cards)
     expect(ada.state.log.length).toBe(logRows)
-    expect(ada.state.reaskSeen).toHaveLength(1)
+    // review 6i: a re-ask that was not shown is not remembered as shown (a later tightening or the button may bring it again)
+    expect(liveReaskSeen(ada.state.reaskSeen, Date.now())).toEqual([])
     // now close: it comes back once more, and shows
     peerOn(ada, bo).ring = Ring.Close
     bo.net.askAgainAt?.clear?.() // the per-minute guard is Bo's own; a test does not wait a minute
     await ada.net.askAgain(peerOn(ada, bo))
     await until(() => ada.prompts.length === 1, 10_000)
     expect(ada.prompts[0].earlier).not.toBeNull()
+    expect(liveReaskSeen(ada.state.reaskSeen, Date.now())).toHaveLength(1)
   })
 
   it('a phone that may not re-ask (a demo account, the side-by-side demo) ignores an ask-again', async () => {
