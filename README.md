@@ -1,6 +1,6 @@
 # TrustWeb
 
-Find people and things through people you trust. Ask the people you have actually met, and the people
+Find what you are looking for through people you trust. Ask the people you have actually met, and the people
 they trust. What you know stays on your phone; a question travels, the data stays.
 
 - The app: https://app.trustweb.one/
