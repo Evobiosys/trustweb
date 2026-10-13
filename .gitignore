@@ -25,3 +25,7 @@ alpha/*.out
 
 # Private working notes live in Evobiosys/trustweb-private, never here.
 cloud-handover/
+
+# Rust build output (rebuildable, >100 MB files) and Python caches.
+openvtc-sidecar/
+__pycache__/
