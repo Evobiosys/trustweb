@@ -286,3 +286,27 @@ describe('lineNeighbours', () => {
     expect(lineNeighbours(['bicycles'], many).length).toBeLessThanOrEqual(MAX_LINE_NEIGHBOURS)
   })
 })
+
+describe('-ing forms (Jakob 2026-10-13: "coach" finds "coaching")', () => {
+  it('coach finds coaching, both ways, also through a plural', () => {
+    expect(same('coach', 'coaching')).toBe(true)
+    expect(same('Coaching', 'coach')).toBe(true)
+    expect(same('coaches', 'coaching')).toBe(true)
+    expect(termSimilarity('coach', 'coaching')).toBeLessThan(termSimilarity('coach', 'coaches'))
+  })
+  it('a dropped e and a doubled consonant', () => {
+    expect(same('bake', 'baking')).toBe(true)
+    expect(same('shop', 'shopping')).toBe(true)
+    expect(same('cook', 'cooking')).toBe(true)
+  })
+  it('not where the base is another word, and not for short stems', () => {
+    expect(same('even', 'evening')).toBe(false)
+    expect(same('morn', 'morning')).toBe(false)
+    expect(same('thing', 'th')).toBe(false)
+    expect(same('bring', 'br')).toBe(false)
+  })
+  it('an ask for coach reaches a line that says coaching', () => {
+    expect(lineNeighbours(['coach'], ['Coaching for founders'])).toContain('coaching')
+    expect(scoreTokens(['coach'], ['coaching', 'for', 'founders'])).toBeGreaterThan(0)
+  })
+})

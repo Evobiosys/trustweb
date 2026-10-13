@@ -15,6 +15,9 @@
  *   0.95 written together or apart ("Communityhof" / "Community hof",
  *        "Steuerberater" / "Steuer Berater"), either direction
  *   0.90 plural or feminine form ("bicycles" / "bicycle", "Steuerberaterin")
+ *   0.85 the -ing form of a word of 4+ letters ("coach" / "coaching", "bake" /
+ *        "baking", "shop" / "shopping"), not where the base is another word
+ *        ("even" / "evening")
  *   0.75 synonym ("bicycles" / "bike", "accountant" / "tax advisor")
  *   0.65 to 0.90 typo: edit distance 1 from 5 letters when it is a swap of two
  *        neighbours or a doubled letter dropped or added ("acount"); any other
@@ -42,6 +45,7 @@ export const MAX_LINE_NEIGHBOURS = 24
 const SIM_EXACT = 1
 const SIM_JOINED = 0.95
 const SIM_FORM = 0.9
+const SIM_ING = 0.85
 const SIM_SYNONYM = 0.75
 const SIM_SYNONYM_TYPO = 0.68
 const SIM_NGRAM = 0.66
@@ -141,6 +145,20 @@ export function singular(t: string): string {
 export function baseForm(t: string): string {
   const s = singular(t)
   return s.replace(/(er)(innen|in)$/, '$1')
+}
+
+/** -ing words whose base is a different word ("evening" is not "even"), never folded. */
+const NOT_ING_FORMS = new Set(['evening', 'morning', 'ceiling', 'during', 'herring', 'darling', 'sterling', 'pudding', 'nothing', 'something', 'anything', 'everything'])
+
+/** One word is the -ing form of the other (after plurals): "coaching" / "coach", "baking" / "bake", "shopping" / "shop". */
+export function isIngForm(a: string, b: string): boolean {
+  const [ing, plain] = a.endsWith('ing') ? [a, b] : [b, a]
+  if (!ing.endsWith('ing') || plain.endsWith('ing') || NOT_ING_FORMS.has(ing) || !isWord(ing)) return false
+  const stem = ing.slice(0, -3)
+  const base = baseForm(plain)
+  if (base.length < 4) return false
+  if (stem === base || stem + 'e' === base) return true
+  return stem.length >= 4 && stem[stem.length - 1] === stem[stem.length - 2] && stem.slice(0, -1) === base
 }
 
 /** Both neighbours of the same noun, for widening an ask: the word, its singular, a plain plural. */
@@ -312,6 +330,7 @@ export function termSimilarity(a: string, b: string): number {
   // Wave 6h: written together or apart AND a plural ("techsetups" / "tech setup").
   if (spaced && baseForm(squash(na)) === baseForm(squash(nb))) return SIM_FORM
   if (!spaced && baseForm(na) === baseForm(nb)) return SIM_FORM
+  if (!spaced && isIngForm(na, nb)) return SIM_ING
   const parts = [synonymSimilarity(na, nb)]
   if (!spaced) {
     parts.push(typoSimilarity(na, nb), typoSimilarity(baseForm(na), baseForm(nb)), ngramSimilarity(na, nb))
