@@ -1,106 +1,55 @@
-# Ecstatic World — Web of Trust (combined branch)
+# TrustWeb
 
-A web-of-trust for real, in-person community: people meet face to face, confirm each other, and a
-trust graph gates what each person can see and share — events, offers, housing, people. This branch
-unites the two halves of the project:
+Find what you are looking for through people you trust. Ask the people you have actually met, and the people
+they trust. What you know stays on your phone; a question travels, the data stays.
 
-- **Design surface (design collaborator):** a clickable mobile mockup + the authoritative UX/data contracts and
-  architecture decisions (`mockup/`, `docs/00`–`70`). It shows the intended experience and specifies
-  the contracts behind it.
-- **Implementation (Jakob):** a working TypeScript monorepo — a local-first **agent-daemon** backend,
-  an **OpenVTC/DIDComm** peer-to-peer transport with a store-and-forward mediator, **self-sovereign
-  browser identity** (generate your keys in the browser, connect by scanning an origin's QR), app
-  **skins** (ecstatic / housing / family / business), and the designer's React app wired to the real
-  backend.
+- The app: https://app.trustweb.one/
+- The foundation (in spe): https://trustintheweb.org/ · hosting: https://trustintheweb.com/
 
-the designer's React app is imported at `apps/web` (+ `packages/ew-contract`); the sprint's vanilla client is
-`apps/mobile-ui`; the backend lives in `packages/{protocol,transport,agent-daemon,app-profiles}` and
-`packages/browser-agent`.
+TrustWeb is a local-first web app: every person's data lives in their own browser. The server side only
+relays questions between phones and offers optional services (encrypted backups, hosted recordings,
+transcription, feedback).
 
-## Live demos
+## Repository
 
-- App mockup (phone UI, clickable): https://idea2.site/web-of-trust/ — file copy: [`demos/app-mockup.html`](demos/app-mockup.html)
-- Interactive permission-gating prototype: https://evobiosys.org/web-of-trust/draft-prototype/ — file copy: [`demos/gating-prototype.html`](demos/gating-prototype.html)
-- Project site: https://evobiosys.org/web-of-trust/ · deep dive: https://evobiosys.org/systems/web-of-trust/
-- Query infrastructure incl. the 60-second scripted demo: branch [`rebiosys`](../../tree/rebiosys) — `pnpm --filter @resource-web/network-access demo:query-infra`
-- Credential-provider seam (issue/verify/revoke/present): branch [`cred-provider`](../../tree/cred-provider)
-
-
----
-
-## Part 1 — Design surface (the mockup + docs)
-
-Open `mockup/index.html` in any modern browser — one self-contained HTML file, no build. On a phone
-it renders full-screen; on desktop it shows a phone frame with a collaborators panel.
-
-**Golden demo path** — tabs are **Discover · Chat · Meet · Web · You**: browse logged-out → **Join** →
-**Quick start** → **Meet** shutter (share composer, *Scan theirs instead*) → meet Maria as **Friend**
-(the Moon Ceremony opens; as **Contact** it stays closed — levels gate depth) → request a loan in
-**Discover → Offers**, walk the loop in **Chat** (lent → returned → "Do you feel complete?") → see the
-rings, labeled asymmetry, and anonymous via-node in **Web** → **＋ Host** a gathering by tier.
-
-**Spec mode:** append `#spec` to the mockup URL (or the toggle beside the phone). Every specified
-surface gets an ID badge (e.g. `CER-4`); tap it for its contract + doc section. Registry:
-[`docs/60-anchors.md`](docs/60-anchors.md).
-
-| Doc | What it is |
+| Path | What it is |
 |---|---|
-| [00-overview](docs/00-overview.md) | Thesis, trust ladder, tiers, glossary — start here |
-| [10-ux-decisions](docs/10-ux-decisions.md) | Workshop decision log |
-| [20-data-contract](docs/20-data-contract.md) | UX→backend contract, keyed by anchor IDs |
-| [30-architecture-decisions](docs/30-architecture-decisions.md) | Open ADRs |
-| [40-infra](docs/40-infra.md) · [50-community-explainer](docs/50-community-explainer.md) · [70-placeholders](docs/70-placeholders.md) | Infra · public explainer · future circles |
+| `apps/trustweb` | The app (vanilla TypeScript, Vite). Built with `apps/demo`'s toolchain. |
+| `apps/demo` | Shared modules the app imports (relay client, matcher, gates) and the earlier demos |
+| `packages/*` | Protocol, transport, relay crypto, network access, inventory store, policies |
+| `services/` | Server parts: `trustweb-backup` (backups, hosting, feedback, names, links) and `trustweb-peer` (front doors) |
+| `docs/`, `DECISIONS.md` | Design notes and the decision log |
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before changing the mockup/docs.
+Older work (the Ecstatic World design surface, the mobile UI, OpenVTC experiments) lives in git history
+and in unmerged branches.
 
----
+## Run it locally
 
-## Part 2 — Implementation (the working backend + apps)
-
-**Run the alpha (one-command LAN demo):** boots six friend personas (each a full agent-daemon) + the
-mobile UI, reachable from phones on the same WiFi. Each persona's identity, tiered listings, loans,
-DM threads, and the store-and-forward mediator run for real.
-
-```bash
-pnpm install && pnpm -r build
-pnpm alpha        # prints a join URL + QR per persona (with a firewall preflight); Ctrl-C stops all
+```
+pnpm install
+scripts/tw_dev.sh            # dev server on 127.0.0.1:5190 with live reload, opens a phone-sized window
 ```
 
-Full runbook + the self-sovereign QR-connect flow: [ALPHA.md](ALPHA.md). Transport internals:
-[docs/TRANSPORT.md](docs/TRANSPORT.md). Daemon HTTP/WS contract: [docs/API.md](docs/API.md).
-Decisions log: [DECISIONS.md](DECISIONS.md).
+Checks (the same ones CI runs on every push):
 
-**Self-sovereign onboarding (origin-node):** an origin shows a QR that encodes a connect URL; a new
-device's *native camera* opens it, the browser **generates its own keypair** (in IndexedDB — the keys
-never leave the device), sends a consent-gated CONNECT over the mediator, and — once the origin owner
-approves — becomes its own node connected to them.
+```
+cd apps/trustweb && ../demo/node_modules/.bin/tsc --noEmit -p tsconfig.json
+cd apps/demo && node_modules/.bin/vitest run --config ../trustweb/test/unit/vitest.config.mjs --root ../trustweb
+cd apps/demo && node_modules/.bin/vitest run
+```
 
-### Privacy Honesty Box
+## How a change ships
 
-> This prototype protects the owner from social exposure by **protocol design** (indistinguishable No,
-> consent-gated identity). It does **not** yet protect against: an asker inspecting their own agent's
-> raw traffic (privacy rung 1 fixes this), peers reading request texts (rung 2), or metadata analysis
-> by the delivery-rung **mediator** (which sees recipient DID + submitter address + timing, never the
-> payload — never-decrypt — and no outer `from`). Claiming "zero-knowledge" for v0 would be false.
->
-> v0.1 surfaces obey the same posture: **listings** are owner-*published* to tier-eligible edges (a
-> `private` listing is never sent; `close` reaches only `close` edges; the guest `?public=1` view
-> strips `where_gated` server-side). **Loans** and **DMs** are connected-only; a loan's "not yet" note
-> stays local. **Second-brain relays** ping the noted person only at first relay, consent every hop,
-> and reveal no more than a direct request (I8). The alpha REST API has **no authentication by
-> default** — LAN exposure is a deliberate closed-room opt-in ([ALPHA.md](ALPHA.md)); an operator who
-> needs one can opt in to a bearer token and a CORS origin allowlist (`AGENT_DAEMON_AUTH_TOKEN` /
-> `AGENT_DAEMON_CORS_ALLOWED_ORIGINS`, `packages/agent-daemon/src/api/server.ts`) without changing
-> anything for a deployment that leaves them unset.
->
-> **v1 commitment:** actual zero-knowledge properties (asker learns only the aggregate, provably;
-> non-matching peers learn nothing). See [PRIVACY.md](PRIVACY.md).
->
-> **Which "k"?** This codebase has three unrelated parameters casually called k — k-anonymity over
-> distinct authors (`kThreshold`/`DEFAULT_K`, "`kThreshold: 1` must not ship" refers to THIS one and
-> only this one), vouch-count k for credential presentation (`VOUCH_K`), and trust-distance weighting
-> (`DEFAULT_MIN_CONTRIBUTORS`, unmerged `feat/trust-weighting`). See [docs/k-parameters.md](docs/k-parameters.md)
-> before reusing any of them, or before repeating the warning without saying which k it means.
+1. Work on a short-lived branch `task/<name>` (cloud sessions: `claude/<name>`), never directly on `main`.
+2. Look at it first: locally (`scripts/tw_dev.sh`), or for a pushed branch on its quick preview
+   (`pre` / `pre2` / `pre3` .trustweb.one, about a minute after the push).
+3. CI (`.github/workflows/ci.yml`) builds the bundle and runs the checks. Once they pass, the same bundle
+   appears on the verified preview (`dev` / `dev2` / `dev3` .trustweb.one).
+4. A human approves the exact candidate there (passkey). `main` moves forward to it and that same bundle goes
+   live, with a rollback point.
+
+Previews are password-protected and use demo data only. Every build carries `release.json` with its commit,
+so https://app.trustweb.one/release.json shows what is live.
 
 ## Licence
 
