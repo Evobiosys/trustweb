@@ -65,9 +65,25 @@ function appVersion() {
   }
 }
 
+// dist/release.json: the release identifier a deploy's health check compares with the commit it meant to ship.
+// Outside /assets/, so the server sends it no-cache. TW_RELEASE (CI: the full commit sha) wins over git.
+function releaseFile() {
+  return {
+    name: 'trustweb-release-file',
+    generateBundle() {
+      let release = process.env.TW_RELEASE ?? ''
+      if (!release) {
+        try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim() } catch { release = 'dev' }
+        if (appVersion().endsWith('-dirty')) release += '-dirty'
+      }
+      this.emitFile({ type: 'asset', fileName: 'release.json', source: JSON.stringify({ release, built_at: new Date().toISOString() }) + '\n' })
+    },
+  }
+}
+
 export default ({ command }) => ({
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
-  plugins: [pwaFiles()],
+  plugins: [pwaFiles(), releaseFile()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

@@ -1,0 +1,65 @@
+# TrustWeb on every push and pull request (GitHub-hosted runner, free minutes of a private repo).
+# Order of feedback (Jakob 2026-10-13): local preview first, then the hosted dev slot, then these checks.
+# So two jobs run side by side: `bundle` builds the app fast (about 20 s; a cloud session's dev slot is fed
+# from its artifact trustweb-<sha>), `checks` runs typecheck and the unit suites (about 2 min) and is the
+# last gate before a release. Neither ever blocks the local preview.
+name: ci
+on:
+  push:
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build the workspace packages apps/demo imports (their main is dist/)
+        run: pnpm --filter "@ew/demo^..." build
+      - name: build (base /, app.trustweb.one)
+        working-directory: apps/trustweb
+        env:
+          TW_BASE: /
+          TW_RELEASE: ${{ github.sha }}
+        run: ../demo/node_modules/.bin/vite build --outDir dist --emptyOutDir
+      - name: private-line scan
+        run: node apps/trustweb/test/scan_bundle_for_private_lines.mjs apps/trustweb/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trustweb-${{ github.sha }}
+          path: apps/trustweb/dist
+          retention-days: 30
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # wave6i_conversation reads an older wire.ts from git history
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build the workspace packages apps/demo imports (their main is dist/)
+        run: pnpm --filter "@ew/demo^..." build
+      - name: typecheck
+        working-directory: apps/trustweb
+        run: ../demo/node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - name: unit tests (trustweb)
+        working-directory: apps/demo
+        run: node_modules/.bin/vitest run --config ../trustweb/test/unit/vitest.config.mjs --root ../trustweb
+      - name: unit tests (demo)
+        working-directory: apps/demo
+        run: node_modules/.bin/vitest run
