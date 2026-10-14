@@ -24,6 +24,7 @@ export const NOTES_KEY = 'IVe9VSySDcS1'
 export const OLD_INTENDING_KEY = 'FcZJGS5EH2on'
 export const MAX_INTENDING = 10
 export const DECEASED_KEY = '__XNQ42Dtiwx'
+export const MET_THROUGH_KEY = 'X3aA3ndYjClT'
 export const CONNECTION_KEY = 'ConGRasNilsz'
 
 const BY_ID = new Map(PERSON_FIELDS.map((f) => [f.id, f]))

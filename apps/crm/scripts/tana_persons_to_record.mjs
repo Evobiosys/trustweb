@@ -160,7 +160,7 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     lines += texts.length
     delete fields['tw-ring']
     const met = firstMet[n.id]
-    return [{ id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, lines: all, fields }]
+    return [{ id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, ...(met?.metAt ? { firstMet: true } : {}), lines: all, fields }]
   })
   return { entities, lines, withoutFields, hidden, blank }
 }

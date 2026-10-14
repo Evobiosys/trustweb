@@ -193,6 +193,7 @@ export const S = {
   suggestedBecause: (reason: string) => `suggested: ${reason}`,
   confirmAll: (n: number) => `Confirm all suggestions (${n})`,
   intendingTitle: 'Intending to connect (0 = not at all, 10 = strongly)',
+  alreadyInContact: 'already in contact',
   intendingSince: (date: string) => `since ${date}`,
   ringOpen: (ring: string) => `Ring: ${ring}. Tap to change`,
   ringClose: 'Close without changing',

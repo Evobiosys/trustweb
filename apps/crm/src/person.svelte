@@ -15,7 +15,7 @@
   import { norm } from './contacts'
   import { SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
   import { Kind } from './placement'
-  import { effectivePerson, entityValues } from './person_view'
+  import { effectivePerson, entityValues, inContact } from './person_view'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { editLine, store } from './state.svelte'
@@ -90,7 +90,7 @@
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
 
-    <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
+    <IntendingChips locked={raw !== undefined && inContact(raw, values, store.crm.interactions)} value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
 
     <ContactInfo {person} />
 

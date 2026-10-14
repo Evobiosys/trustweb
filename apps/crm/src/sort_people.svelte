@@ -10,6 +10,7 @@
   import type { Choice } from './rings'
   import { applySuggestion, fileUnder, restore, setFamily, setIntending, unsortedIds, valuesOf } from './sorting.svelte'
   import type { Undo } from './sorting.svelte'
+  import { inContact } from './person_view'
   import { store } from './state.svelte'
   import { parseSuggestions } from './suggestions'
   import { S } from './strings'
@@ -68,7 +69,7 @@
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
       <RingChips suggested={suggestion?.ring === Ring.Intending ? undefined : suggestion?.ring} family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
       {#if suggestion}<p class="muted" data-part="suggested">{S.suggestedBecause(suggestion.reason)}{suggestion.family ? ` · ${S.familyTag}` : ''}</p>{/if}
-      <IntendingChips suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />
+      <IntendingChips locked={inContact(person, valuesOf(person.id), store.crm.interactions)} suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />
       <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>
   {:else}

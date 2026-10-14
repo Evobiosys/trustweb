@@ -9,12 +9,17 @@
     since?: string
     /** The suggested desire: shown outlined. */
     suggested?: number
+    /** The person is already in contact: no new desire to connect can be set (it can still be lowered). */
+    locked?: boolean
     onchoose: (n: number) => void
   }
-  const { value, since = '', suggested, onchoose }: Props = $props()
+  const { value, since = '', suggested, locked = false, onchoose }: Props = $props()
   const scale = Array.from({ length: MAX_INTENDING + 1 }, (_, i) => i)
 </script>
 
+{#if locked && value === 0}
+  <p class="muted" data-part="intending-locked" title={S.alreadyInContact}>{S.intendingTitle.split(' (')[0]}: {S.alreadyInContact}</p>
+{:else}
 <div class="intending" data-part="intending">
   <p class="muted">{S.intendingTitle}{#if since && value > 0} · {S.intendingSince(since)}{/if}</p>
   <div class="ring-chips" role="group" aria-label={S.intendingTitle}>
@@ -23,3 +28,4 @@
     {/each}
   </div>
 </div>
+{/if}
