@@ -1321,9 +1321,12 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
+/** More people than this on the rings: initials only, the name shows on hover or focus (and the card on tap). */
+const RINGS_LABEL_CAP = 24
+
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
-  const wrap = el('div', { class: 'rings-wrap', title: S.hintText[HintId.WebTap] })
+  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), title: S.hintText[HintId.WebTap] })
   wrap.addEventListener('click', (e) => onRingsTap(e as MouseEvent, wrap))
   if (touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
@@ -1362,7 +1365,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
-        el('span', {}, [p.name]),
+        el('span', { 'aria-label': p.name }, [p.name]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])

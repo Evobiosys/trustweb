@@ -120,6 +120,10 @@ textarea.field{resize:vertical; line-height:1.5}
 .ava{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; box-shadow:0 2px 10px rgba(36,27,46,.2); flex-shrink:0}
 .node span{font-size:11.5px; font-weight:600; color:var(--ink)}
 .node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
+.rings-wrap.compact .node:not(.you) .ava{width:18px; height:18px; font-size:9px}
+.rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
+.rings-wrap.compact .node:not(.you):hover,.rings-wrap.compact .node:not(.you):focus-visible{z-index:2}
+.rings-wrap.compact .node:not(.you):hover span,.rings-wrap.compact .node:not(.you):focus-visible span{display:block; position:absolute; top:100%; white-space:nowrap; background:var(--card); padding:1px 6px; border-radius:8px; box-shadow:0 2px 8px rgba(36,27,46,.2)}
 .node.you .ava{width:54px; height:54px; box-shadow:0 0 0 3px #fff, 0 0 22px rgba(154,55,240,.55)}
 .node.asked .ava{animation:asked 1.6s ease-in-out infinite}
 @keyframes asked{50%{box-shadow:0 0 0 7px rgba(18,168,227,.28), 0 2px 10px rgba(36,27,46,.2)}}
