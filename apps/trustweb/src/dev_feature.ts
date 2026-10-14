@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
-declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string } | null | undefined
+declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string; n?: number; approved?: string | null } | null | undefined
 
 const CSS = `
 .twf{position:fixed;left:8px;top:8px;z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
@@ -14,6 +14,9 @@ const CSS = `
 .twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
 .twf-rx{position:absolute;top:-13px;right:-13px;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#ff715b;color:#fff;font:700 14px/20px system-ui;cursor:pointer;pointer-events:auto}
+.twf-ok{position:fixed;right:8px;bottom:96px;z-index:99999;display:flex;gap:6px;align-items:center;padding:6px 8px;border-radius:10px;background:#241b2e;box-shadow:0 2px 12px rgba(0,0,0,.4);font:600 11px system-ui,sans-serif;color:#ffbf47}
+.twf-ok button{margin:0;border:0;border-radius:6px;padding:4px 8px;font:700 11px system-ui;cursor:pointer;background:#ffbf47;color:#241b2e}.twf-ok button+button{background:none;color:#ffbf47;border:1px solid #ffbf47}
+.twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}
 .twf-line{position:fixed;inset:0;z-index:99997;pointer-events:none;width:100%;height:100%}
 @keyframes twf{50%{box-shadow:0 0 0 8px rgba(255,113,91,.35)}}`
 
@@ -26,14 +29,9 @@ export function initDevFeature(): void {
   const bld = typeof __TW_BUILD__ === 'undefined' ? null : __TW_BUILD__
   box.innerHTML = '<b></b><i></i><span></span>'
   box.children[0].textContent = 'FEATURE · ' + f.title
+  if (bld?.n) box.children[0].prepend(Object.assign(document.createElement('span'), { className: 'twf-new', textContent: 'NEW ' + bld.n }))
   box.children[1].textContent = bld ? `${bld.branch} @ ${bld.sha} · ${bld.time} · ${bld.mode}` : ''
   box.children[2].textContent = f.hint
-  if (bld?.stockUrl && bld.mode === 'personal') {
-    const open = Object.assign(document.createElement('button'), { textContent: 'Open dev preview (no personal data)' })
-    open.addEventListener('pointerdown', (e) => e.stopPropagation())
-    open.addEventListener('click', () => window.open(bld.stockUrl, '_blank'))
-    box.appendChild(open)
-  }
   const ring = Object.assign(document.createElement('div'), { className: 'twf-ring' })
   const rx = Object.assign(document.createElement('button'), { className: 'twf-rx', textContent: '×', title: 'Remove pointer' })
   ring.appendChild(rx)
@@ -87,7 +85,26 @@ export function initDevFeature(): void {
     box.addEventListener('pointermove', move)
     box.addEventListener('pointerup', () => box.removeEventListener('pointermove', move), { once: true })
   })
+  if (bld?.mode === 'personal') document.body.append(approveBar(bld))
   let hidden = false
   try { hidden = !!sessionStorage.getItem('twf-hidden') } catch { /* ignore */ }
   show(!hidden)
+}
+
+/** Bottom right, amber: the owner's yes for this build (written to ~/.cache/trustweb-dev/approvals by the dev server), and the stock twin one tap away. */
+function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLElement {
+  const bar = Object.assign(document.createElement('div'), { className: 'twf-ok' })
+  const say = (at: string): void => { bar.firstChild!.textContent = 'approved ' + at }
+  const ok = Object.assign(document.createElement('button'), { textContent: 'Approve personal preview' })
+  ok.addEventListener('click', () => {
+    void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.json()).then((j: { at: string }) => { ok.remove(); say(j.at) })
+  })
+  bar.append(document.createElement('span'))
+  if (bld.approved) say(bld.approved); else bar.append(ok)
+  if (bld.stockUrl) {
+    const open = Object.assign(document.createElement('button'), { textContent: 'Open stock preview' })
+    open.addEventListener('click', () => window.open(bld.stockUrl, '_blank'))
+    bar.append(open)
+  }
+  return bar
 }

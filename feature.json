@@ -1,1 +1,1 @@
-{"title":"Rings: drag people between rings","hint":"Web tab > Rings. Drag a circle to another ring. Outliner glyph: three views per person.","selector":"[data-view=rings]"}
+{"title":"Web Curator inside the app","hint":"Bottom bar > Web Curator; set a ring there, switch to Web: it moved.","selector":"[data-view=curator]"}
