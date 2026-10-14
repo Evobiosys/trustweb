@@ -78,3 +78,7 @@ Published under the **evobiosys** organisation for now. Not because the project 
 EvoBioSys in the long run, and not under a personal account either: it is waiting on a name of its
 own. Once that name exists, it gets its own organisation and moves there. Treat the current
 location as a placeholder, not as the project identity.
+
+## Licensing beyond AGPL
+
+Jakob is willing to publish TrustWeb under AMPL (see https://evobiosys.org/evobiosys/AMPL) for projects that reach out: connect@japossert.com. The existing route in [`NOTICE`](NOTICE) stays.
