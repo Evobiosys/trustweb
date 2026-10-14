@@ -20,7 +20,7 @@ describe('tana persons converter', () => {
 
   it('emits an AppState the CRM accepts', () => {
     expect(isAppState(record)).toBe(true)
-    expect(stats).toEqual({ persons: 3, lines: 2, withoutFields: 1, environments: 0 })
+    expect(stats).toEqual({ persons: 3, lines: 2, withoutFields: 1, environments: 0, hidden: 0, blank: 0 })
   })
   it('turns fields into structured values, plain bullets into note lines, drops empties and truncation markers', () => {
     expect(anna.fields).toEqual({ Bxw7k4FWptqp: 'anna@example.org', 'adhoc:Met via': 'Dora Demo' })
@@ -96,5 +96,15 @@ describe('tana first met', () => {
     const fm = { m1: { metAt: 5, context: 'Gathering' }, m2: { metAt: 6, context: 'Gathering' } }
     const { record } = convert(idx, ns, [...PERSON_FIELDS], [], undefined, fm)
     expect(record.people.map((p) => [p.metAt, p.context])).toEqual([[5, 'Gathering'], [6, '']])
+  })
+})
+
+describe('hidden and blank persons', () => {
+  const idx = [...index, { id: 'd4', name: 'Dora Hide', created: '2025-05-01T10:00:00.000Z' }, { id: 'e5', name: '  ', created: '2025-05-02T10:00:00.000Z' }, { id: 'f6', name: 'Fred Listed', created: '2025-05-03T10:00:00.000Z' }]
+  const ns = { ...nodes, d4: '- Dora Hide #person\n  - **hide in trustweb**: [X]\n', e5: '-  #person\n', f6: '- Fred Listed #person\n' }
+  it('leaves out a ticked checkbox, a listed id and an empty name, and counts them', () => {
+    const { record, stats } = convert(idx, ns, [...PERSON_FIELDS], [], undefined, {}, new Set(['f6']))
+    expect(record.people.map((p: { name: string }) => p.name)).toEqual(['Anna Beispiel', 'Ben Muster', 'Cara Probe'])
+    expect(stats).toMatchObject({ persons: 3, hidden: 2, blank: 1 })
   })
 })

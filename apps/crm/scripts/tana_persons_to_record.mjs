@@ -16,6 +16,7 @@ const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', 
 const FAMILY = 'LNlpliq4GdNI'
 const CONNECTION = 'ConGRasNilsz'
 const INTENDING = 'FcZJGS5EH2on'
+export const HIDE = '4J9bhDw1UdTj'
 const MET_THROUGH = 'X3aA3ndYjClT'
 const DERIVED = 'ring: derived'
 
@@ -98,18 +99,23 @@ const WORKSPACE = 'workspace'
 
 /**
  * One entity list. Duplicate node ids collapse to the first. `workspaces` (id -> name, first = home) adds the tag line to entities outside home.
- * @returns {{ entities: object[], lines: number, withoutFields: number }}
+ * Persons with "hide in trustweb" ticked (in the outline, or listed in `hidden`) and persons with no name are left out and counted.
+ * @returns {{ entities: object[], lines: number, withoutFields: number, hidden: number, blank: number }}
  */
-function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}) {
+function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}, hiddenIds = new Set()) {
   const byLabel = new Map(schema.map((f) => [f.label.toLowerCase(), f]))
   const home = workspaces[0]?.id
   const names = new Map(workspaces.map((w) => [w.id, workspaceName(w.name)]))
   let lines = 0
   let withoutFields = 0
   const seen = new Set()
-  const entities = index.filter((n) => !seen.has(n.id) && seen.add(n.id)).map((n) => {
+  let hidden = 0
+  let blank = 0
+  const entities = index.filter((n) => !seen.has(n.id) && seen.add(n.id)).flatMap((n) => {
     const at = Date.parse(n.created)
     const { texts, ids, fields } = parseOutline(nodes[n.id] ?? '', byLabel)
+    if (derive && (fields[HIDE] === true || hiddenIds.has(n.id))) { hidden++; return [] }
+    if (derive && !n.name.trim()) { blank++; return [] }
     if (texts.length === 0 && Object.keys(fields).length === 0) withoutFields++
     const mk = (text, i, extra = {}) => ({
       id: `tana-${n.id}-${i}`, text, tag: 'note', audience: 'me', status: 'current', notedAt: at, checkedAt: at, ...extra,
@@ -125,20 +131,20 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     lines += texts.length
     delete fields['tw-ring']
     const met = firstMet[n.id]
-    return { id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, lines: all, fields }
+    return [{ id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, lines: all, fields }]
   })
-  return { entities, lines, withoutFields }
+  return { entities, lines, withoutFields, hidden, blank }
 }
 
-/** @returns {{ record: object, stats: { persons: number, lines: number, withoutFields: number, environments: number } }} */
-export function convert(index, nodes, schema, workspaces = [], env, firstMet = {}) {
-  const p = convertList(index, nodes, schema, workspaces, true, firstMet)
+/** @returns {{ record: object, stats: { persons: number, lines: number, withoutFields: number, environments: number, hidden: number, blank: number } }} */
+export function convert(index, nodes, schema, workspaces = [], env, firstMet = {}, hiddenIds = new Set()) {
+  const p = convertList(index, nodes, schema, workspaces, true, firstMet, hiddenIds)
   const e = env ? convertList(env.index, env.nodes, env.schema, workspaces) : { entities: [] }
   const record = {
     v: 1, me: { id: 'me', displayName: `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,
     ...(e.entities.length ? { environments: e.entities.map(({ ring, ...rest }) => rest) } : {}),
   }
-  return { record, stats: { persons: p.entities.length, lines: p.lines, withoutFields: p.withoutFields, environments: e.entities.length } }
+  return { record, stats: { persons: p.entities.length, lines: p.lines, withoutFields: p.withoutFields, environments: e.entities.length, hidden: p.hidden, blank: p.blank } }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -158,7 +164,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     parseSchema(schemaArg ? readFileSync(schemaArg, 'utf8') : read('person-schema.md')),
     has('workspaces.json') ? JSON.parse(read('workspaces.json')) : [], env,
     has('first-met.json') ? JSON.parse(read('first-met.json')) : {},
+    new Set(has('hidden.json') ? JSON.parse(read('hidden.json')) : []),
   )
   writeFileSync(outPath, JSON.stringify(record))
-  console.log(`persons ${stats.persons}, environments ${stats.environments}, note lines ${stats.lines}, persons without any field ${stats.withoutFields}`)
+  console.log(`persons ${stats.persons}, environments ${stats.environments}, note lines ${stats.lines}, persons without any field ${stats.withoutFields}, hidden ${stats.hidden}, blank ${stats.blank}`)
 }
