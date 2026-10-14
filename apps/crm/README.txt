@@ -19,7 +19,10 @@ DEV RECORD (dev server only; a build ignores it)
   node scripts/tana_persons_to_record.mjs <persons-index.json> <persons-nodes.json> <out.json> [person-schema.md]
                                  per person: name, one note line per field / child bullet, met date = node created,
                                  id tana-<node id>, "Google Calendar Contacts" kept as a tag; file-only, no network.
-                                 Keep the output outside the repo (private data).
+                                 Keep the output outside the repo (private data). Next to the nodes file it also reads
+                                 workspaces.json and environment-*.json/-schema.md (record.environments).
+  TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
+                                 Never in a build.
 
 RUN (from this directory; the toolchain is project-local, node >= 20)
   /opt/homebrew/bin/npm install          once; installs into apps/crm/node_modules only

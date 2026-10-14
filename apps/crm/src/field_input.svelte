@@ -28,6 +28,7 @@
   }
 </script>
 
+<div class="fld-box">
 <div class="fld-wrap">
   {#if field?.type === 'checkbox' || typeof value === 'boolean'}
     <label class="fld check" data-field={field?.id ?? label}>
@@ -58,3 +59,4 @@
     {nosync.reason}{#if nosync.href} <a href={nosync.href}>{S.openInTana}</a>{/if}
   </p>
 {/if}
+</div>
