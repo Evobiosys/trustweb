@@ -15,6 +15,8 @@ const MAX_LOG = 100
 const TANA_PREFIX = 'tana-'
 /** The queue key of "take #person off the node" (not a field). */
 const UNTAG_KEY = '#untag'
+/** read_node shows the checkbox as `**ring approved**: [X]`. */
+const APPROVED_RE = /ring approved\**:\s*\[X\]/i
 
 export const sync = $state({ running: false })
 
@@ -26,24 +28,21 @@ function log(text: string): void {
 const DEBOUNCE_MS = 2000
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
-function enqueue(personId: string, key: string): void {
+function queueOnce(personId: string, key: string): void {
   if (!prefs.queue.some((q) => q.personId === personId && q.key === key && !q.append)) prefs.queue.push({ personId, key })
   savePrefs()
-  void flush()
 }
 
 /** The edit goes to the CRM's own record first; Tana hears about it 2 s after the last keystroke of that field (auto sync), or on "Sync now". */
 export function saveField(personId: string, key: string, value: FieldValue): void {
   setField(personId, key, value)
   if (!tanaOn() || 'manual' in planFieldSync(key, value)) return
-  if (!prefs.autoSync) {
-    if (!prefs.queue.some((q) => q.personId === personId && q.key === key && !q.append)) prefs.queue.push({ personId, key })
-    savePrefs()
-    return
-  }
+  // Queued (and persisted) at once, so a window killed inside the 2 s still replays the edit on the next boot.
+  queueOnce(personId, key)
+  if (!prefs.autoSync) return
   const id = `${personId}|${key}`
   clearTimeout(timers.get(id))
-  timers.set(id, setTimeout(() => { timers.delete(id); enqueue(personId, key) }, DEBOUNCE_MS))
+  timers.set(id, setTimeout(() => { timers.delete(id); void flush() }, DEBOUNCE_MS))
 }
 
 /** Queues one note line ("2026-10-14 text") for Tana's "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
@@ -122,6 +121,11 @@ async function push(call: ToolCall, item: { personId: string; key: string; appen
   const op = planFieldSync(item.key, value)
   if ('manual' in op) return
   const nodeId = await nodeFor(call, item.personId)
+  // A suggestion never replaces a ring Jakob approved in Tana.
+  if (item.key === RING_KEY && edits?.[RING_KEY] === undefined && APPROVED_RE.test(await call('read_node', { nodeId }))) {
+    log(`${name}: ring already approved in Tana, suggestion skipped`)
+    return
+  }
   await call(op.tool, { nodeId, ...op.args })
   // "ring approved" is ticked when the person set or confirmed the ring (an edit exists), open while it is only a suggestion.
   if (item.key === RING_KEY) await call('set_field_content', { nodeId, attributeId: RING_APPROVED_KEY, content: edits?.[RING_KEY] !== undefined ? '[X]' : '[ ]', mode: 'replace' })
@@ -172,5 +176,16 @@ function queueSuggested(): void {
   savePrefs()
 }
 
+/** Local wins: a ring edit that differs from the record's ring goes to Tana again on every boot until the record catches up. */
+function queueLocalRings(): void {
+  if (!tanaOn()) return
+  for (const p of store.app.people) {
+    const ring = store.crm.personFields?.[p.id]?.[RING_KEY]
+    if (typeof ring === 'string' && ring !== p.ring) queueOnce(p.id, RING_KEY)
+  }
+}
+
 queueSuggested()
+queueLocalRings()
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => { void flush() })
 if (prefs.autoSync && prefs.queue.length > 0) void flush()

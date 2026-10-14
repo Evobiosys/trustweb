@@ -137,8 +137,9 @@ export function removeContactPoint(personId: string, index: number): void {
 
 /** Saves one #person field edit in the CRM's own record (never TrustWeb's). */
 export function setField(personId: string, key: string, value: FieldValue): void {
-  const all = store.crm.personFields ?? (store.crm.personFields = {})
-  all[personId] = { ...all[personId], [key]: value }
+  // Assign first, then write through the store: a local taken before the assignment would be the raw object, not the reactive one, and the edit would never be saved.
+  store.crm.personFields ??= {}
+  store.crm.personFields[personId] = { ...store.crm.personFields[personId], [key]: value }
   persist()
 }
 
