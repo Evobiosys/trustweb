@@ -10,6 +10,7 @@
   import InteractionForm from './interaction_form.svelte'
   import IntendingChips from './intending_chips.svelte'
   import RingLabel from './ring_label.svelte'
+  import MergeSheet from './merge_sheet.svelte'
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { norm } from './contacts'
@@ -91,6 +92,8 @@
     </div>
 
     <IntendingChips locked={raw !== undefined && inContact(raw, values, store.crm.interactions)} value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
+
+    <MergeSheet personId={person.id} />
 
     <ContactInfo {person} />
 

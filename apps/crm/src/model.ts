@@ -126,6 +126,8 @@ export interface CrmState {
   curation?: Curation
   /** NoteLine id -> the person's own edit of the line's text, and when they last said it is still true. */
   lineEdits?: Record<string, { text?: string; checkedAt?: number }>
+  /** People merged into another (the survivor keeps its id): `from`'s note lines are added to `into` on load, `from` stays in hiddenPeople. */
+  merges?: { from: string; into: string }[]
 }
 
 export function emptyCrm(): CrmState {

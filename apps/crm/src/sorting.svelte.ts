@@ -26,7 +26,7 @@ export function unsortedIds(): string[] {
 
 export type Undo = [string, FieldValue][]
 
-function apply(personId: string, edits: [string, FieldValue][], before: FieldValues): Undo {
+export function apply(personId: string, edits: [string, FieldValue][], before: FieldValues): Undo {
   for (const [key, value] of edits) saveField(personId, key, value)
   return edits.map(([key, value]) => [key, before[key] ?? (typeof value === 'boolean' ? false : '')])
 }

@@ -13,6 +13,7 @@ import type { FieldValue } from './fields'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import type { CrmState, Curation } from './model'
 import { emptyCuration } from './curation'
+import { joinPoints, linesToAdd, repoint } from './merge'
 import { sampleApp, sampleCrm } from './sample'
 import {
   Source, clearImported, loadCrm, parseImport, readImported, readTrustWeb, saveCrm, saveImported,
@@ -52,12 +53,23 @@ function start(): Store {
     crm = sampleCrm(now)
     saveCrm(persona, crm)
   }
+  for (const m of crm.merges ?? []) addLines(app.people, m.from, m.into)
   const gone = new Set((crm.hiddenPeople ?? []).map((h) => h.id))
   if (gone.size > 0) {
     for (const p of app.people) if (gone.has(p.id)) hidden.set(p.id, p)
     app.people = app.people.filter((p) => !gone.has(p.id))
   }
   return { app, crm, source, persona }
+}
+
+/** Adds the note lines of `from` that `into` lacks; returns their ids. */
+function addLines(people: Person[], from: string, into: string): string[] {
+  const a = people.find((p) => p.id === from)
+  const b = people.find((p) => p.id === into)
+  if (!a || !b) return []
+  const add = linesToAdd(b.lines, a.lines)
+  b.lines = [...b.lines, ...add]
+  return add.map((l) => l.id)
 }
 
 /** People taken out of the in-memory record, so "unhide" can put them back without a reload. */
@@ -160,6 +172,32 @@ export function curate(change: (c: Curation) => void): void {
   const c = store.crm.curation ?? (store.crm.curation = emptyCuration())
   change(c)
   persist()
+}
+
+/** Folds `from` into `into`: lines, interactions, follow-ups and contact points move over (`from` is hidden by the caller). Returns what puts it back. */
+export function mergeRecords(from: string, into: string): () => void {
+  const lines = addLines(store.app.people, from, into)
+  const interactions = repoint(store.crm.interactions, from, into)
+  const followUps = repoint(store.crm.followUps, from, into)
+  const points = store.crm.contactPoints
+  const before = { from: points[from], into: points[into] }
+  const joined = joinPoints(points[into], points[from])
+  delete points[from]
+  if (joined.length > 0) points[into] = joined
+  store.crm.merges = [...(store.crm.merges ?? []), { from, into }]
+  persist()
+  return () => {
+    const keep = store.app.people.find((p) => p.id === into)
+    if (keep) keep.lines = keep.lines.filter((l) => !lines.includes(l.id))
+    for (const x of store.crm.interactions) if (interactions.includes(x.id)) x.personId = from
+    for (const x of store.crm.followUps) if (followUps.includes(x.id)) x.personId = from
+    for (const [id, list] of [[from, before.from], [into, before.into]] as const) {
+      if (list) points[id] = list
+      else delete points[id]
+    }
+    store.crm.merges = (store.crm.merges ?? []).filter((m) => m.from !== from || m.into !== into)
+    persist()
+  }
 }
 
 /** Takes a TrustWeb export as the record to read. False when the text is not one. */

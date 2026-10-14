@@ -5,6 +5,7 @@
   import { Tab, TABS } from './nav'
   import { nav, showTab } from './nav.svelte'
   import People from './people.svelte'
+  import MergeToast from './merge_toast.svelte'
   import Person from './person.svelte'
   import SortPeople from './sort_people.svelte'
   import Pipeline from './pipeline.svelte'
@@ -49,6 +50,8 @@
       <Settings />
     {/if}
   </main>
+
+  <MergeToast />
 
   <p class="privacy">{S.privacy}</p>
 

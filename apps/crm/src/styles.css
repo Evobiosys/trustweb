@@ -243,6 +243,12 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .tana-glyph small{font-size:10px; margin-left:3px}
 .line .line-text{display:block; margin-bottom:6px; border:0; background:none; text-align:left; color:inherit; font:inherit; padding:0}
 .family-dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:6px; vertical-align:middle}
+.merge-hit{display:block; width:100%; min-height:44px; text-align:left; border:0; border-bottom:1px solid var(--line); background:none; color:var(--ink); font-size:15px}
+.merge-row{display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; padding:6px 0; border-bottom:1px solid var(--line)}
+.merge-row > strong{grid-column:1 / -1; font-size:13px}
+.merge-row label{display:flex; gap:6px; align-items:center; font-size:14px}
+.toast{position:fixed; left:12px; right:12px; bottom:72px; z-index:30; display:flex; align-items:center; gap:12px; padding:8px 14px; border-radius:12px; background:var(--ink); color:var(--bg)}
+.toast .quiet{color:inherit}
 .ring-pop{flex-basis:100%; position:relative; padding-right:36px}
 .ring-x{position:absolute; top:4px; right:0; font-size:18px}
 .ring-more{display:grid; gap:8px; margin:8px 0}
