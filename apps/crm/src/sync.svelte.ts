@@ -15,6 +15,8 @@ const MAX_LOG = 100
 const TANA_PREFIX = 'tana-'
 /** The queue key of "take #person off the node" (not a field). */
 const UNTAG_KEY = '#untag'
+/** The queue key of "move this node under another person's node" (a merge); `into` is the survivor. */
+const MOVE_KEY = '#move'
 /** read_node shows the checkbox as `**ring approved**: [X]`. */
 const APPROVED_RE = /ring approved\**:\s*\[X\]/i
 
@@ -71,6 +73,14 @@ export function untagPerson(personId: string): void {
   hidePerson(personId)
 }
 
+/** After a merge: the loser's Tana node moves under the survivor's (queued behind the note and the hide). */
+export function moveUnder(personId: string, intoId: string): void {
+  if (!tanaOn() || !knownNode(personId) || !knownNode(intoId)) return
+  prefs.queue.push({ personId, key: MOVE_KEY, into: intoId })
+  savePrefs()
+  if (prefs.autoSync) void flush()
+}
+
 /** "Hide from TrustWeb": ticks the Tana checkbox through the sync and takes the person out of the lists at once. */
 export function hideFromTrustweb(personId: string): void {
   saveField(personId, HIDE_KEY, true)
@@ -102,10 +112,15 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
   return made
 }
 
-async function push(call: ToolCall, item: { personId: string; key: string; append?: string }): Promise<void> {
+async function push(call: ToolCall, item: { personId: string; key: string; append?: string; into?: string }): Promise<void> {
   if (item.key === UNTAG_KEY) {
     await call('tag', { nodeId: await nodeFor(call, item.personId), action: 'remove', tagIds: [PERSON_TAG_ID] })
     log(`${item.personId}: #person removed in Tana`)
+    return
+  }
+  if (item.key === MOVE_KEY && item.into) {
+    await call('move_node', { nodeId: await nodeFor(call, item.personId), targetNodeId: await nodeFor(call, item.into) })
+    log(`${item.personId}: moved under ${item.into} in Tana`)
     return
   }
   const person = store.app.people.find((p) => p.id === item.personId)

@@ -4,7 +4,7 @@ import { mergeEdits } from './merge'
 import type { MergeRow, Pick } from './merge'
 import { apply, restore, valuesOf } from './sorting.svelte'
 import { mergeRecords, store } from './state.svelte'
-import { hideFromTrustweb, noteToTana, unhideInTrustweb } from './sync.svelte'
+import { hideFromTrustweb, moveUnder, noteToTana, unhideInTrustweb } from './sync.svelte'
 
 const UNDO_MS = 30_000
 
@@ -27,6 +27,7 @@ export function mergePeople(keepId: string, otherId: string, rows: readonly Merg
   const recordsUndo = mergeRecords(otherId, keepId)
   noteToTana(otherId, `merged into ${keepName}`)
   hideFromTrustweb(otherId)
+  moveUnder(otherId, keepId)
   clearTimeout(timer)
   lastMerge.name = otherName
   lastMerge.undo = (): void => {
