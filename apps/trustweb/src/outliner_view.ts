@@ -6,6 +6,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { Presence, favouriteLink, loadLayout, moveField, presence, saveLayout, sections, setValue, slotOf, value } from './outliner_fields'
 import type { Layout, Slot } from './outliner_fields'
+import { displayName } from '../../../packages/person-fields/src/display_name'
 import { Ring } from './model'
 import type { AppState, Person } from './model'
 import { S } from './strings'
@@ -59,14 +60,15 @@ export function outlinerView(d: OutlinerDeps): HTMLElement {
     const mode = opened.get(p.id)
     const tw = presence(d.s, p, Date.now())
     const fav = favouriteLink(p)
+    const shown = displayName(p.name)
     const toggle = (): void => { if (mode) opened.delete(p.id); else opened.set(p.id, 'simple'); draw() }
     const head = el('div', { class: 'prow' }, [
       el('button', { class: 'who', 'aria-expanded': String(!!mode), onclick: toggle }, [
-        el('b', {}, [p.name]),
+        el('b', { title: shown.title }, [shown.glyph ? shown.glyph + ' ' + shown.text : shown.text]),
         el('i', {}, [p.context || (p.ring === Ring.Intending ? S.olNoContext : '')]),
       ]),
       tw ? el('span', { class: 'otw ' + tw, role: 'img', 'aria-label': tw === Presence.Active ? S.olTwActive : S.olTwQuiet }) : null,
-      fav ? el('a', { class: 'ofav', href: fav.href, 'aria-label': fav.label, title: fav.label }, [fav.glyph]) : null,
+      fav ? el('a', { class: 'ofav', href: fav.href, 'aria-label': fav.label, title: fav.id === 'email' ? fav.href.replace('mailto:', '') : fav.label }, [fav.glyph]) : null,
     ])
     if (!mode) return el('div', { class: 'operson' }, [head])
     const sec = sections(p, layout)

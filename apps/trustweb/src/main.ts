@@ -21,6 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { outlinerView } from './outliner_view'
+import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
@@ -1361,7 +1362,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
         avatar(p.name, p.id),
-        el('span', {}, [p.name]),
+        el('span', { title: displayName(p.name).title }, [displayName(p.name).text]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
@@ -1719,7 +1720,7 @@ function personSheet(personId: string): void {
   const current = p.lines.filter((l) => l.status === LineStatus.Current)
   const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
   openSheet([
-    el('h3', { class: 'sheet-name' }, [p.name, isDemoPerson(st(), p.id) ? dummyChip() : null, signalTop(p)]),
+    el('h3', { class: 'sheet-name', title: displayName(p.name).title }, [displayName(p.name).text, isDemoPerson(st(), p.id) ? dummyChip() : null, signalTop(p)]),
     el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     current.length
