@@ -53,7 +53,7 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
-import { stripUnsafe } from './safe_text'
+import { fingerprint, stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
@@ -99,7 +99,7 @@ import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
-import { addNorm, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { setUpInstall } from './install'
@@ -1749,6 +1749,7 @@ function personSheet(personId: string): void {
     sharedReachRow(p),
     noMessengerRow(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
+    p.peerId ? sendProfileRow(p) : null,
     agreementsFor(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
@@ -1941,8 +1942,15 @@ function profileSheet(): void {
   sheet.dataset.kind = 'profile'
 }
 
+/** Under the contact box: "My profile" and the tick that shares it (norms, favourite way, intro) the same way the links go, in the same share modes. */
 function profileRow(): HTMLElement {
-  return el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine])
+  const tick = el('input', { type: 'checkbox', 'data-share-profile': '1' })
+  tick.checked = st().profileShare === true
+  tick.addEventListener('change', () => { if (tick.checked) st().profileShare = true; else delete st().profileShare; save() })
+  return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
+    el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
+    el('label', { class: 'chat-row' }, [tick, el('span', {}, [S.profShareTick])]),
+  ])
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -1967,6 +1975,7 @@ function sendContactTo(peer: Peer): void {
   // afterwards (contact_share.ts), so a mode never sends a link that is not ticked.
   const mode = shareModeNow()
   if (!mayShareContact(mode)) return
+  sendProfileTo(peer, false)
   const s = st()
   const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id])
   if (!out) return
@@ -1975,6 +1984,24 @@ function sendContactTo(peer: Peer): void {
     s.contactSentChannels = { ...s.contactSentChannels, [peer.id]: out.channels }
     save()
   }).catch(() => { /* the relay was down: it is tried again at the next connect */ })
+}
+
+/**
+ * Wave 7 (profile.ts): sends my profile to one connected peer in a chat text: on connect when the "share my profile" tick is on and the
+ * share mode allows it (the caller checks the mode), once per change (profileSent); `force` is the owner's own "Send my profile" tap.
+ */
+function sendProfileTo(peer: Peer, force: boolean): void {
+  const s = st()
+  if (!force && !s.profileShare) return
+  const text = buildProfileText(APP_URL, s.profile)
+  if (!text) { if (force) toast(S.profEmpty); return }
+  const fp = fingerprint(text)
+  if (!force && s.profileSent?.[peer.id] === fp) return
+  net.sendText(peer, text).then(() => {
+    s.profileSent = { ...s.profileSent, [peer.id]: fp }
+    save()
+    if (force) toast(S.profSent(peer.displayName))
+  }).catch(() => { if (force) toast(S.agrSendFailed) })
 }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
@@ -2054,6 +2081,11 @@ function onContactText(peer: Peer, text: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
   if (person) applyContact(peer, person, text)
   else holdContact(heldContacts, peer.id, text)
+}
+
+function sendProfileRow(p: Person): HTMLElement | null {
+  const peer = st().peers.find((x) => x.id === p.peerId)
+  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer, true) }, [S.profSendTo(p.name)]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
