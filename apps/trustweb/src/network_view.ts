@@ -6,8 +6,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { Ring } from './model'
 import type { Person } from './model'
-import { LAYOUT_ITERATIONS, alphaAt, buildGraph, matchIds, shake, step } from './network_graph'
-import type { Graph, GraphNode } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, buildGraph, matchIds, shake, step } from './network_graph'
+import type { Forces, Graph, GraphNode } from './network_graph'
 import { S } from './strings'
 
 export interface NetworkOptions {
@@ -17,10 +17,29 @@ export interface NetworkOptions {
   openMe: () => void
 }
 
-const LABEL_ZOOM = 1.5
+const SETTINGS_KEY = 'trustweb.ui.netSettings'
+const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7', label: '#c5d6d9' }
 const STEPS_PER_FRAME = 20
 const TAP_SLOP = 6
 const RING_VAR: Record<Ring, string> = { [Ring.Close]: '--violet', [Ring.Friend]: '--electric', [Ring.Acquaintance]: '--ink-soft', [Ring.Intending]: '' }
+
+/** Per device: the Logseq look, the forces, and whether people outside my web (ring "intending") are drawn. */
+interface Settings { logseq: boolean; showAll: boolean; forces: Forces }
+function loadSettings(): Settings {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<Settings>
+    return { logseq: v.logseq === true, showAll: v.showAll === true, forces: { ...DEFAULT_FORCES, ...v.forces } }
+  } catch { return { logseq: false, showAll: false, forces: { ...DEFAULT_FORCES } } }
+}
+function saveSettings(v: Settings): void {
+  try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)) } catch { /* not remembered */ }
+}
+
+function download(name: string, blob: Blob): void {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name }) as HTMLAnchorElement
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
 
 interface Camera { k: number; x: number; y: number }
 interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null }
@@ -32,10 +51,14 @@ function keyOf(o: NetworkOptions): string {
 }
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
-  const key = keyOf(o)
-  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, o.people), iteration: 0, camera: null }
+  const settings = loadSettings()
+  const people = settings.showAll ? o.people : o.people.filter((p) => p.ring !== Ring.Intending)
+  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
+  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
   const state = cached
   const g = state.graph
+  const near = g.nodes.map(() => new Set<number>())
+  for (const e of g.edges) { near[e.a].add(e.b); near[e.b].add(e.a) }
   let matches = new Set<string>()
   let hover: GraphNode | null = null
   let dirty = true
@@ -43,11 +66,36 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let w = 0
   let h = 0
 
-  const canvas = el('canvas', { class: 'net-canvas', role: 'img', 'aria-label': S.netAria(o.people.length) }) as HTMLCanvasElement
+  const canvas = el('canvas', { class: 'net-canvas', role: 'img', 'aria-label': S.netAria(people.length) }) as HTMLCanvasElement
   const ctx = canvas.getContext('2d')
   const search = el('input', { class: 'field net-search', type: 'search', placeholder: S.netSearchPh, 'aria-label': S.netSearchPh, autocomplete: 'off' }) as HTMLInputElement
   const shakeBtn = el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { shake(g, Date.now()); state.iteration = 0; dirty = true } }, [S.netShake])
-  const root = el('div', { class: 'net' }, [el('div', { class: 'net-bar' }, [search, shakeBtn]), canvas])
+  const rebuild = (): void => { saveSettings(settings); root.replaceWith(createNetworkView(o)) }
+  const reheat = (): void => { saveSettings(settings); state.iteration = 0; dirty = true }
+  const check = (label: string, on: boolean, set: (v: boolean) => void): HTMLElement =>
+    el('label', { class: 'net-check' }, [el('input', { type: 'checkbox', ...(on ? { checked: '' } : {}), onchange: (e: Event) => set((e.target as HTMLInputElement).checked) }), ' ' + label])
+  const slider = (label: string, k: keyof Forces, min: number, max: number, stepBy: number): HTMLElement =>
+    el('label', { class: 'net-slider' }, [label, el('input', { type: 'range', min: String(min), max: String(max), step: String(stepBy), value: String(settings.forces[k]), 'aria-label': label,
+      oninput: (e: Event) => { settings.forces[k] = Number((e.target as HTMLInputElement).value); reheat() } })])
+  const exportPng = (): void => { draw(); canvas.toBlob((b) => { if (b) download('network.png', b) }, 'image/png') }
+  const exportJson = (): void => {
+    const data = { nodes: g.nodes.map((v) => ({ id: v.id, name: v.name, ring: v.ring ?? null })), edges: g.edges.map((e) => ({ a: g.nodes[e.a].id, b: g.nodes[e.b].id })) }
+    download('network.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }))
+  }
+  const menu = el('div', { class: 'net-menu', hidden: '' }, [
+    check(S.netLogseq, settings.logseq, (v) => { settings.logseq = v; saveSettings(settings); dirty = true }),
+    check(S.netShowAll, settings.showAll, (v) => { settings.showAll = v; rebuild() }),
+    el('strong', {}, [S.netForces]),
+    slider(S.netLink, 'link', 0.3, 3, 0.1), slider(S.netCharge, 'charge', 20, 2000, 20), slider(S.netGravity, 'gravity', 0, 0.02, 0.0005),
+    slider(S.netCollide, 'collide', 0, 60, 2), slider(S.netLabels, 'labelZoom', 0.3, 4, 0.1),
+    el('div', { class: 'net-bar' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { settings.forces = { ...DEFAULT_FORCES }; state.iteration = 0; rebuild() } }, [S.netReset]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: exportPng }, [S.netPng]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: exportJson }, [S.netJson]),
+    ]),
+  ])
+  const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
+  const root = el('div', { class: 'net' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas])
 
   const fit = (): Camera => {
     const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
@@ -73,21 +121,25 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   }
 
   const draw = (): void => {
-    if (!ctx || !w) return
+    if (!ctx) return
     const c = cam()
     const dpr = window.devicePixelRatio || 1
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
     const css = getComputedStyle(document.documentElement)
     const ink = css.getPropertyValue('--ink').trim() || '#241B2E'
+    const lq = settings.logseq
+    if (lq) { ctx.fillStyle = LOGSEQ.bg; ctx.fillRect(0, 0, w, h) }
     const filtering = matches.size > 0 || search.value.trim() !== ''
-    ctx.lineWidth = 1
+    const focus = hover ? new Set<number>([g.nodes.indexOf(hover), ...near[g.nodes.indexOf(hover)]]) : null
+    const inFocus = (i: number): boolean => (!focus || focus.has(i)) && (!filtering || matches.has(g.nodes[i].id) || g.nodes[i].ring === undefined)
+    ctx.lineWidth = lq ? 0.6 : 1
     for (const e of g.edges) {
       const a = g.nodes[e.a]
       const b = g.nodes[e.b]
-      const lit = !filtering || matches.has(a.id) || matches.has(b.id)
-      ctx.strokeStyle = colour(b.ring !== undefined ? b : a)
-      ctx.globalAlpha = lit ? (e.thin ? 0.14 : 0.28) : 0.05
+      const lit = lq ? !focus || (focus.has(e.a) && focus.has(e.b)) : !filtering || matches.has(a.id) || matches.has(b.id)
+      ctx.strokeStyle = lq ? LOGSEQ.edge : colour(b.ring !== undefined ? b : a)
+      ctx.globalAlpha = lit ? (lq ? (focus ? 0.8 : 0.3) : e.thin ? 0.14 : 0.28) : 0.05
       ctx.setLineDash(e.dashed ? [3, 4] : [])
       ctx.beginPath()
       ctx.moveTo(a.x * c.k + c.x, a.y * c.k + c.y)
@@ -95,30 +147,37 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       ctx.stroke()
     }
     ctx.setLineDash([])
-    ctx.font = '600 11px system-ui, sans-serif'
+    ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
-    for (const v of g.nodes) {
-      const lit = !filtering || matches.has(v.id) || v.ring === undefined
+    const fade = Math.min(1, c.k / settings.forces.labelZoom)
+    g.nodes.forEach((v, i) => {
+      const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.ring === undefined
       const x = v.x * c.k + c.x
       const y = v.y * c.k + c.y
-      if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue
-      const rad = v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
-      ctx.globalAlpha = lit ? (v.faint ? 0.4 : 1) : 0.15
-      ctx.fillStyle = colour(v)
+      if (x < -20 || y < -20 || x > w + 20 || y > h + 20) return
+      const rad = lq ? (1.5 + Math.sqrt(near[i].size) * 1.1) * Math.sqrt(c.k) * (matches.has(v.id) ? 1.6 : 1) : v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
+      ctx.globalAlpha = lit ? (!lq && v.faint ? 0.4 : 1) : 0.15
+      ctx.fillStyle = lq ? (v === hover || matches.has(v.id) ? LOGSEQ.lit : LOGSEQ.node) : colour(v)
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
-      if (v === hover || matches.has(v.id) || v.ring === undefined || (c.k >= LABEL_ZOOM && lit)) {
+      if (lq) {
+        const a = lit ? fade : fade * 0.15
+        if (a < 0.12 && v !== hover && !matches.has(v.id)) return
+        ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
+        ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
+        ctx.fillText(v.name, x, y + rad + 10)
+      } else if (v === hover || matches.has(v.id) || v.ring === undefined || (c.k >= settings.forces.labelZoom && lit)) {
         ctx.globalAlpha = 1
         ctx.fillStyle = ink
         ctx.fillText(v.name, x, y + rad + 12)
       }
-    }
+    })
     ctx.globalAlpha = 1
   }
 
   const frame = (): void => {
     if (!canvas.isConnected) return // the screen was redrawn: this view is gone
     if (state.iteration < LAYOUT_ITERATIONS) {
-      for (let i = 0; i < STEPS_PER_FRAME && state.iteration < LAYOUT_ITERATIONS; i++) step(g, alphaAt(state.iteration++))
+      for (let i = 0; i < STEPS_PER_FRAME && state.iteration < LAYOUT_ITERATIONS; i++) step(g, alphaAt(state.iteration++), settings.forces)
       if (state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
       dirty = true
     }
