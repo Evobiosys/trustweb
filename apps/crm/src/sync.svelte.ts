@@ -9,7 +9,7 @@ import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
 import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY } from './rings'
 import { parseSuggestions } from './suggestions'
-import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
+import { PERSON_TAG_ID, connect, nameIn, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 import { notesTouched } from './notes_sync.svelte'
 
@@ -136,7 +136,10 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
 
 async function push(call: ToolCall, item: { personId: string; key: string; approved?: boolean; append?: string; into?: string; rename?: { from: string; to: string } }): Promise<void> {
   if (item.key === RENAME_KEY && item.rename) {
-    await call('edit_node', { nodeId: await nodeFor(call, item.personId), name: { old_string: item.rename.from, new_string: item.rename.to } })
+    // Tana's search/replace needs the node's exact current name, which can differ from the one shown here.
+    const nodeId = await nodeFor(call, item.personId)
+    const current = nameIn(await call('read_node', { nodeId, maxDepth: 0 })) ?? item.rename.from
+    await call('edit_node', { nodeId, name: { old_string: current, new_string: item.rename.to } })
     log(`${item.rename.from}: renamed to ${item.rename.to} in Tana`)
     return
   }
