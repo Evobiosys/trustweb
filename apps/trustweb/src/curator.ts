@@ -10,6 +10,8 @@ import { S } from './strings'
 export interface Curator {
   el: HTMLElement
   open(): void
+  /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
+  person(personId: string, onclose: () => void): HTMLElement
 }
 
 export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void }): Curator {
@@ -25,6 +27,11 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
         root.replaceChildren()
         await m.mountCurator(root, lent)
       })
+    },
+    person(personId, onclose) {
+      const page = el('div', { class: 'curator-person' }, [S.curatorLoading])
+      void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose) })
+      return page
     },
   }
 }

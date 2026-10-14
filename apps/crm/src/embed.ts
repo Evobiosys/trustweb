@@ -21,14 +21,28 @@ main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
 .tabbar{position:static; transform:none; max-width:none}`
 
-export async function mountCurator(el: HTMLElement, lent: Omit<Host, 'root'>): Promise<void> {
-  Object.assign(host, lent, { root: el })
-  const { default: App } = await import('./app.svelte')
+function shadowTarget(el: HTMLElement): HTMLElement {
   const root = el.attachShadow({ mode: 'open' })
   const target = document.createElement('div')
   target.style.height = '100%'
   root.append(Object.assign(document.createElement('style'), { textContent: EMBED_CSS + asShadowCss(css) }), target)
-  mount(App, { target })
+  return target
+}
+
+export async function mountCurator(el: HTMLElement, lent: Omit<Host, 'root'>): Promise<void> {
+  Object.assign(host, lent, { root: el })
+  const { default: App } = await import('./app.svelte')
+  mount(App, { target: shadowTarget(el) })
+}
+
+/** One person's page (the Curator tab's own, same component and CSS) in a fresh element of the host, read from the host's record as it is now. */
+export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root'>, personId: string, onclose: () => void): Promise<void> {
+  Object.assign(host, lent)
+  const [{ default: Person }, { reloadRecord }] = await Promise.all([import('./person.svelte'), import('./state.svelte')])
+  reloadRecord()
+  const theme = (host.root ?? document.documentElement).dataset.theme
+  if (theme) el.dataset.theme = theme
+  mount(Person, { target: shadowTarget(el), props: { personId, onclose } })
 }
 
 /** Back on the tab: read the host's record again (Web-view changes show up) and let it win over older ring edits. */

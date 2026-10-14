@@ -6,6 +6,7 @@
 /** The Web Curator (apps/crm/src/embed.ts, a Svelte app): aliased in vite.config.mjs, loaded lazily, type-checked by the Curator's own `npm run check`. */
 declare module '@web-curator' {
   export function mountCurator(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }): Promise<void>
+  export function mountCuratorPerson(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }, personId: string, onclose: () => void): Promise<void>
   export function refreshCurator(): Promise<void>
 }
 

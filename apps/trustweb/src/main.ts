@@ -21,7 +21,6 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { outlinerView } from './outliner_view'
-import { ringChips } from './ring_chips'
 import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, inContact, placeOnRing, ringAt } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -32,10 +31,7 @@ import { createConnectKeeper, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
-import { repairGeneralNotes, setGeneralNote, generalNoteOf } from './general_notes'
-import { createAdvancedMemory, localStorageCell } from './notes_advanced_memory'
-import { createGeneralSection } from './person_general_view'
-import { pendingTranscripts } from './person_notes'
+import { repairGeneralNotes } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import type { ConnectKeeper } from './connect_code'
@@ -59,9 +55,9 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, Provenance, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
+import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
 import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -718,16 +714,6 @@ function onRecordTap(): void {
  * tap away from here via the pill): it returns to that draft instead, where
  * discarding is the one deliberate way to drop it.
  */
-function startDraftFor(personId?: string): void {
-  if (draftInProgress()) {
-    toast(S.recBusy)
-    go(recordScreen())
-    return
-  }
-  newDraft(personId)
-  go(Screen.Record)
-}
-
 function draftInProgress(): boolean {
   // "Where" and the other person's yes count too (review P3): a Meeting draft with only those is not dropped by the next Record tap.
   return recorder.live || takes.length > 0 || draft.consent
@@ -1732,39 +1718,6 @@ function dummyChip(): HTMLElement {
 }
 
 /** An item's or a note's source, linked to the past meeting it came from where that is still stored (provenance_view.ts). */
-/**
- * A note line that came from Tana: text and a glyph with the short node id. The first tap edits the text in place; a tap on the glyph
- * while it is being edited opens the node in Tana (tana://?nodeid=<id>, the desktop app handles it).
- */
-function tanaNodeId(l: NoteLine): string {
-  return l.source?.kind === Provenance.Tana ? l.source.nodeId ?? '' : ''
-}
-
-function tanaLine(personId: string, l: NoteLine): Node[] {
-  const id = tanaNodeId(l)
-  const text = el('span', { class: 'tana-text' }, [l.text])
-  const glyph = el('button', { class: 'tana-glyph', type: 'button', title: S.tanaOpen, 'aria-label': S.tanaOpen }, ['⬡ tana-' + id.slice(0, 4)])
-  let input: HTMLInputElement | null = null
-  const edit = (): void => {
-    if (input) return
-    input = el('input', { class: 'field tana-edit', value: l.text })
-    input.value = l.text
-    const done = (): void => {
-      const v = input?.value.trim()
-      if (v && v !== l.text) { l.text = v; save() }
-      personSheet(personId)
-    }
-    input.addEventListener('blur', done)
-    input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') input?.blur() })
-    text.replaceWith(input)
-    input.focus()
-  }
-  text.addEventListener('click', edit)
-  glyph.addEventListener('pointerdown', (e) => { if (input) e.preventDefault() })
-  glyph.addEventListener('click', () => { if (input) window.location.href = 'tana://?nodeid=' + encodeURIComponent(id); else edit() })
-  return [text, glyph]
-}
-
 function sourceFor(source: ItemSource | undefined, text: string): HTMLElement | null {
   const m = source?.meetingId ? pastMeetings(st()).find((x) => x.id === source.meetingId) : undefined
   return sourceView(source, {
@@ -1853,57 +1806,17 @@ function connectedAsSuffix(p: Person): string {
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
-  const current = p.lines.filter((l) => l.status === LineStatus.Current)
-  const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
+  // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: the TrustWeb connection.
   openSheet([
-    el('h3', { class: 'sheet-name', title: displayName(p.name).title }, [displayName(p.name).text, isDemoPerson(st(), p.id) ? dummyChip() : null, signalTop(p)]),
-    el('div', { class: 'meta' }, [ringChips(p, (r) => { changeRing(p, r); personSheet(p.id); render() }), ' · ' + metaLine]),
-    el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
-    current.length
-      ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline', 'data-line': l.id }, [
-          tagChip(l.tag, l.customTag), ...(tanaNodeId(l) ? tanaLine(p.id, l) : [el('span', {}, [l.text])]), el('em', {}, [S.audienceLabel[l.audience]]),
-          tanaNodeId(l) ? null : sourceFor(l.source, l.text),
-        ])))
-      : el('p', { class: 'meta' }, [S.sheetNoNotes]),
-    current.length ? el('button', { class: 'still-icon', 'aria-label': S.sheetStillTrue, title: S.sheetStillTrue, onclick: () => startReview(p.id) }, ['✓']) : null,
-    el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
-    // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
-    past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
-    // Wave 6e: the General note, under "Advanced", collapsed unless it was open in the last two minutes (general_notes.ts, person_general_view.ts).
-    generalNoteSection(p),
-    passOnRowFor(p),
+    el('div', { class: 'path', 'data-tw-strip': p.id }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
-    sharedReachRow(p),
     noMessengerRow(p),
-    channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
-    // safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
-    // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
-    feedOn(st()) ? feed.personRow(p) : null,
+    sharedReachRow(p),
+    passOnRowFor(p),
+    askAgainRow(p),
+    curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
-}
-
-/** One memory of "the Advanced disclosure of a card was open" for the whole phone: a timestamp in one storage cell, two minutes (notes_advanced_memory.ts). */
-const personAdvancedMemory = createAdvancedMemory(
-  localStorageCell('trustweb.ui.personAdvancedAt', () => { try { return window.localStorage } catch { return undefined } }),
-  () => Date.now(),
-)
-
-/** The General note of a person: autosaved into the record (Only me), see general_notes.ts. */
-function generalNoteSection(p: Person): HTMLElement {
-  const section = createGeneralSection({
-    name: p.name,
-    note: () => generalNoteOf(p),
-    commit: (text) => {
-      // The record may have been replaced since the card opened: write into the person as the record holds it now.
-      const now = st().people.find((x) => x.id === p.id)
-      if (now && setGeneralNote(now, text)) save()
-    },
-    memory: personAdvancedMemory,
-    pendingVoice: () => pendingTranscripts(st(), p.id),
-    extra: askAgainRow(p),
-  })
-  return section.el
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -1917,16 +1830,6 @@ function passOnRowFor(p: Person): HTMLElement | null {
   const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
   if (!peer) return null
   return passOnRow(passOnAllowed(st(), peer, ownDoorDid()), (next) => { p.passOn = next; save(); personSheet(p.id) })
-}
-
-/** One "Message on ..." button for each link the person SHARED when we connected (the owner's own typed links already show in channelsView). */
-/** Wave 6h, S3: the Signal glyph next to a person's name when their Signal link is known; a tap opens it. */
-function signalTop(p: Person): HTMLElement | null {
-  const r = signalReachable(p)
-  if (!r) return null
-  const a = el('a', { class: 'signal-top', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'aria-label': S.signalTopAria(p.name), title: S.signalTopAria(p.name), 'data-signal-top': '1' })
-  a.innerHTML = ICONS.signal
-  return a
 }
 
 function sharedReachRow(p: Person): HTMLElement | null {
@@ -1947,18 +1850,6 @@ const CHANNELS_OTHER: readonly Channel[] = CHANNELS.filter((ch) => !BOX_CHANNELS
 interface ChannelOwner {
   get(): Partial<Record<Channel, string>>
   set(ch: Channel, value: string | null): void
-}
-
-function personChannels(p: Person): ChannelOwner {
-  return {
-    get: () => p.channels ?? {},
-    set: (ch, value) => {
-      const next = { ...(p.channels ?? {}) }
-      if (value) next[ch] = value; else delete next[ch]
-      p.channels = next
-      save()
-    },
-  }
 }
 
 function myChannels(): ChannelOwner {
@@ -4101,11 +3992,6 @@ function screenPlace(): Node[] {
 // ---------------------------------------------------------------------------
 // step 4: still true?
 // ---------------------------------------------------------------------------
-
-function startReview(personId: string): void {
-  review = { personId, verdict: new Map(), edits: new Map() }
-  go(Screen.StillTrue)
-}
 
 function screenStillTrue(): Node[] {
   const r = review

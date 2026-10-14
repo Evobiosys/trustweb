@@ -29,8 +29,10 @@
 
   interface Props {
     personId: string
+    /** Where the back arrow and a hidden person go; the Curator tab's own list by default. */
+    onclose?: () => void
   }
-  const { personId }: Props = $props()
+  const { personId, onclose = closePerson }: Props = $props()
 
   let form = $state<PersonForm>(PersonForm.None)
   let editing = $state<string | null>(null)
@@ -75,7 +77,7 @@
 
   function hide(): void {
     hideFromTrustweb(personId)
-    closePerson()
+    onclose()
   }
 
   function rename(from: string, to: string): void {
@@ -89,7 +91,7 @@
 </script>
 
 <section class="person" data-screen="person">
-  <button class="back" onclick={closePerson}>&larr; {S.back}</button>
+  <button class="back" onclick={onclose}>&larr; {S.back}</button>
   {#if person}
     <div class="person-head">
       <Avatar id={person.id} name={shownName(person.name)} />
