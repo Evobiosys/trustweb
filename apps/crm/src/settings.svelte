@@ -1,6 +1,7 @@
 <script lang="ts">
   import Curate from './curate.svelte'
   import FieldsEditor from './fields_editor.svelte'
+  import ImportExport from './import_export.svelte'
   import { PLACE_FIELDS } from './close'
   import { PKMS, Pkm, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
@@ -100,6 +101,8 @@
     <label class="fld check"><input type="checkbox" data-close-field={f.id} checked={prefs.close.fields.includes(f.id)}
       onchange={(e): void => togglePlaceField(f.id, e.currentTarget.checked)} /><span>{f.label}</span></label>
   {/each}
+
+  <ImportExport />
 
   <FieldsEditor />
   <Curate />
