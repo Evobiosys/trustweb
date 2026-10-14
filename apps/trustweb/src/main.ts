@@ -35,8 +35,8 @@ import { repairGeneralNotes, setGeneralNote, generalNoteOf } from './general_not
 import { createAdvancedMemory, localStorageCell } from './notes_advanced_memory'
 import { createGeneralSection } from './person_general_view'
 import { pendingTranscripts } from './person_notes'
-import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
-import { safetyLink, safetySheetNodes } from './reassurance_view'
+// import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
+// import { safetyLink, safetySheetNodes } from './reassurance_view'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -1176,10 +1176,11 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
   connectAdd = { peerId: peer.id, handle }
   const nodes: Node[] = [...handle.nodes]
   // Wave 6e: a small "Is this safe?" link the first time a scan lands here (reassurance.ts); the sheet comes back to this one.
-  if (offerFirstTime(st())) {
-    if (markFirstTimeShown(st(), Date.now())) save()
-    nodes.push(safetyLink(SafetyPlace.AddSheet, () => openSheet(safetySheetNodes({ place: SafetyPlace.AddSheet, back: { label: S.safeBackAdd, go: () => openSheet(nodes) } }))))
-  }
+  // moved to the website later, Jakob 2026-10-14 (the "Is this safe?" link and sheet: here, on the person card and in Settings)
+  // if (offerFirstTime(st())) {
+  //   if (markFirstTimeShown(st(), Date.now())) save()
+  //   nodes.push(safetyLink(SafetyPlace.AddSheet, () => openSheet(safetySheetNodes({ place: SafetyPlace.AddSheet, back: { label: S.safeBackAdd, go: () => openSheet(nodes) } }))))
+  // }
   openSheet(nodes)
 }
 
@@ -1744,7 +1745,7 @@ function personSheet(personId: string): void {
     sharedReachRow(p),
     noMessengerRow(p),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
-    safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
+    // safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
     feedOn(st()) ? feed.personRow(p) : null,
   ])
@@ -4190,7 +4191,7 @@ function settingsSheet(): void {
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
     installable ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...aboutGroup(),
-    safetyLink(SafetyPlace.Settings, () => openSheet(safetySheetNodes({ place: SafetyPlace.Settings, back: { label: S.safeBackSettings, go: settingsSheet } }))),
+    // safetyLink(SafetyPlace.Settings, () => openSheet(safetySheetNodes({ place: SafetyPlace.Settings, back: { label: S.safeBackSettings, go: settingsSheet } }))),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
       onclick: () => {
