@@ -55,6 +55,30 @@ describe('network graph', () => {
     expect(matchIds(g, ' ').size).toBe(0)
   })
 
+  describe('rings v3', () => {
+    const dist = (p) => { const g = buildGraph(me, [p]); return g.edges[0].rest }
+    it('orders close < friend < acquaintance < intending < unsorted, accepting close_friend and old family', () => {
+      const d = ['close_friend', 'friend', 'acquaintance', 'intending', 'unsorted'].map((r) => dist(person('a', r)))
+      expect([...d].sort((a, b) => a - b)).toEqual(d)
+      expect(new Set(d).size).toBe(5)
+      expect(buildGraph(me, [person('a', 'close_friend')]).nodes[1].tier).toBe(Ring.Close)
+      const old = { ...person('a', 'family'), closeness: 'friend' }
+      expect(buildGraph(me, [old]).nodes[1]).toMatchObject({ tier: Ring.Friend, family: true })
+    })
+    it('family is a tag: purple flag, distance from the ring', () => {
+      const n = buildGraph(me, [{ ...person('a', Ring.Acquaintance), tags: ['family'] }]).nodes[1]
+      expect(n).toMatchObject({ tier: Ring.Acquaintance, family: true })
+      expect(dist({ ...person('a', Ring.Acquaintance), tags: ['family'] })).toBe(dist(person('a', Ring.Acquaintance)))
+    })
+    it('higher desire sits nearer within the intending band', () => {
+      const w = (desire) => dist({ ...person('a', Ring.Intending), desire })
+      expect(w(10)).toBeLessThan(w(0))
+      expect(w(10)).toBeGreaterThan(dist(person('a', Ring.Acquaintance)))
+      expect(w(0)).toBeLessThan(dist(person('a', 'unsorted')))
+      expect(buildGraph(me, [{ ...person('a', Ring.Intending), desire: 7 }]).nodes[1].desire).toBe(7)
+    })
+  })
+
   describe('person links from fields', () => {
     const ref = (id) => [{ label: id, tanaId: id }]
     const withF = (id, fields, texts = []) => ({ ...person('tana-' + id, Ring.Friend), fields, lines: texts.map((text) => ({ status: 'current', text })) })
@@ -107,7 +131,7 @@ describe('forces', () => {
 
   it('reads tiers: new values, old none as unsorted, famous/deceased/calendar ids outside', () => {
     const p = (ring, extra = {}) => ({ ...person('x', ring), ...extra })
-    expect(tierOf(p('family'))).toBe('family')
+    expect(tierOf(p('family'))).toBe(Ring.Close)
     expect(tierOf(p('unsorted'))).toBe('unsorted')
     expect(tierOf(p('none'))).toBe('unsorted')
     expect(tierOf(p('none', { fields: { __XNQ42Dtiwx: true } }))).toBe('outside')
@@ -117,7 +141,7 @@ describe('forces', () => {
 
   it('lays family at its closeness, unsorted farthest', () => {
     const g = buildGraph(me, [{ ...person('f', 'family'), closeness: Ring.Friend }, person('u', 'none'), person('c', Ring.Close)])
-    expect(g.edges.map((e) => e.rest)).toEqual([100, 250, 60])
+    expect(g.edges.map((e) => e.rest)).toEqual([100, 260, 60])
   })
 
   it('keeps pinned nodes where they are through settle and shake, and lists them', () => {
