@@ -21,6 +21,7 @@ import { clock } from './recorder'
 import type { Recording } from './recorder'
 import { isoDateLabels, SearchField } from './search'
 import { S } from './strings'
+import { ICONS } from './icons'
 import { cleanGeneralNotes } from './note_fields'
 import { withDuration } from './webm_duration'
 
@@ -226,7 +227,14 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     }
     input.addEventListener('input', fill)
     fill()
-    return el('div', { class: 'person-notes', 'data-person-notes': '1' }, [el('h4', { class: 'eyebrow' }, [S.personNotesTitle]), input, list])
+    // The search field sits under a magnifying-glass icon (Jakob 2026-10-14): the icon opens it.
+    input.hidden = true
+    const lens = el('button', {
+      class: 'pn-lens', type: 'button', 'aria-label': S.personNotesPh(person?.name ?? ''), title: S.personNotesPh(person?.name ?? ''),
+      onclick: () => { input.hidden = !input.hidden; if (!input.hidden) input.focus() },
+    })
+    lens.innerHTML = ICONS.search
+    return el('div', { class: 'person-notes', 'data-person-notes': '1' }, [el('div', { class: 'pn-head' }, [el('h4', { class: 'eyebrow' }, [S.personNotesTitle]), lens]), input, list])
   }
 
   return {

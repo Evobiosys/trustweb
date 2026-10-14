@@ -1734,7 +1734,7 @@ function personSheet(personId: string): void {
           sourceFor(l.source, l.text),
         ])))
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
-    current.length ? el('button', { class: 'btn btn-electric', onclick: () => startReview(p.id) }, [S.sheetStillTrue]) : null,
+    current.length ? el('button', { class: 'still-icon', 'aria-label': S.sheetStillTrue, title: S.sheetStillTrue, onclick: () => startReview(p.id) }, ['✓']) : null,
     el('button', { class: 'btn btn-ghost', onclick: () => startDraftFor(p.id) }, [S.sheetAddNote]),
     // Wave 6 (U4 c): every note line and past meeting about them, per day, searchable (person_notes.ts).
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
