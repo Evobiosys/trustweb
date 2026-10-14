@@ -1,0 +1,11 @@
+{
+  "friends_v2": [
+    {"name": "Anna M\u00c3\u00bcller", "timestamp": 1585699200},
+    {"name": "Bernhard Gr\u00c3\u00bcnwald", "timestamp": 1601510400},
+    {"name": "Lena Sch\u00c3\u00b6nauer \u00f0\u009f\u008c\u00b8", "timestamp": 1612137600},
+    {"name": "Stefan \u00c3\u0084hrenthal", "timestamp": 1620000000, "email": "Stefan@Example.at"},
+    {"name": "Maria Steinbacher", "timestamp": 1630000000},
+    {"name": "   ", "timestamp": 1640000000},
+    {"name": "Josef Hinterleitner"}
+  ]
+}

@@ -1,0 +1,9 @@
+﻿First Name,Middle Name,Last Name,Nickname,File As,Organization Name,Organization Title,Birthday,Notes,Labels,E-mail 1 - Label,E-mail 1 - Value,E-mail 2 - Label,E-mail 2 - Value,Phone 1 - Label,Phone 1 - Value
+Anna,Maria,Gruber,Anni,,Alpenbau GmbH,Bauleiterin,1985-03-12,"Met at the Linz fair.
+Said ""call in spring"".",* myContacts ::: Family ::: * starred ::: Work,Home,Anna.Gruber@Example.at ::: anna@example.com,Work,anna.gruber@example.at,Mobile,+43 660 5550101 ::: +43 660 5550102
+Bernd,,Huber,,,,,--07-21,,* myContacts,,bernd.huber@example.at,,,Mobile,+43 660 5550103
+,,,Sepp,,,,1990-13,,Friends,,,,,,
+,,,,,Kaffeehaus Mozart,,,,,,,,,,
+,,,,,,,,,,,,,,,+43 660 5550104
+,,,,,,,,,,,,,,,,
+Clara,,Wimmer,,,,,,short row
