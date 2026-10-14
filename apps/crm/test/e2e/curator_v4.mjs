@@ -40,7 +40,7 @@ try {
   await first.locator('.ring-label').click()
   check(`one tap confirms (${name})`, (await page.locator(`.person-row:has-text("${name}") .ring-label.suggested`).count()) === 0)
 
-  await page.waitForTimeout(15000)
+  for (let i = 0; i < 90 && (await prefs()).queue?.length !== 0; i++) await page.waitForTimeout(2000) // v5: the suggested rings go to Tana too
   const p = await prefs()
   const fam = p.log.filter((l) => /LNlpliq4GdNI -> Tana ok/.test(l))
   console.log(`queued once: ${p.suggestedQueued.length} people; queue left ${p.queue.length}; family writes done ${fam.length}`)
