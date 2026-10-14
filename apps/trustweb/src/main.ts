@@ -20,6 +20,7 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
+import { outlinerView } from './outliner_view'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
@@ -1376,15 +1377,12 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
 
 function peopleView(s: AppState, only?: Person[]): HTMLElement {
   const order = (r: Ring): number => RINGS.indexOf(r)
-  const list = [...(only ?? s.people)].sort((a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name))
-  return el('div', { class: 'ppl' }, list.map((p) => el('button', { class: 'prow', onclick: () => personSheet(p.id) }, [
-    avatar(p.name, p.id),
-    el('div', { class: 'who' }, [
-      el('b', {}, [p.name, isDemoPerson(s, p.id) ? dummyChip() : null]),
-      el('i', {}, [p.lines.filter((l) => l.status === LineStatus.Current).length + ' notes · ' + (p.peerId ? S.sheetConnected : S.sheetNotesOnly)]),
-    ]),
-    el('span', { class: 'shield ring-' + p.ring }, [S.ringLabel[p.ring]]),
-  ])))
+  return outlinerView({
+    s, people: only ?? s.people, save,
+    order: (a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name),
+    pickRing: (p) => ringSheet(p),
+    openCard: (p) => personSheet(p.id),
+  })
 }
 
 function notificationsCard(s: AppState): HTMLElement {

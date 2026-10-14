@@ -197,6 +197,14 @@ export const S = {
   webCallBottom: 'your web',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
   searchOpen: 'Manage and search contacts',
+  // Wave 7: the outliner's rows and views.
+  olNoContext: 'intending to connect',
+  olTwActive: 'Active on TrustWeb lately',
+  olTwQuiet: 'Connected on TrustWeb, quiet lately',
+  olAdvanced: 'Advanced',
+  olMore: 'More fields',
+  olLess: 'Fewer fields',
+  olOpenCard: 'Open card',
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
   searchNotAsk: 'This looks through the people already in your web. To ask for something, call into your web.',
