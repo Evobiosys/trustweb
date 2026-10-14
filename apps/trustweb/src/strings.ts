@@ -201,6 +201,7 @@ export const S = {
   olNoContext: 'intending to connect',
   olTwActive: 'Active on TrustWeb lately',
   olTwQuiet: 'Connected on TrustWeb, quiet lately',
+  olNotInWeb: (n: number) => `Not in my web (${n})`,
   olAdvanced: 'Advanced',
   olMore: 'More fields',
   olLess: 'Fewer fields',
@@ -273,12 +274,14 @@ export const S = {
     [Ring.Friend]: 'Friend',
     [Ring.Acquaintance]: 'Acquaintance',
     [Ring.Intending]: 'Intending to connect',
+    [Ring.None]: 'Not in my web',
   } as Record<Ring, string>,
   ringHint: {
     [Ring.Close]: 'the few you would call at 3 am',
     [Ring.Friend]: 'you know each other well',
     [Ring.Acquaintance]: 'met in person, still getting to know',
     [Ring.Intending]: 'someone you plan to meet, not yet in your web',
+    [Ring.None]: 'kept for reference, not part of your web',
   } as Record<Ring, string>,
   // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {

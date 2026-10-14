@@ -840,3 +840,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .osection{min-height:12px}
 .oadv{font-size:12px; margin:12px 0 2px; color:var(--ink-soft)}
 .obody .btn{margin-top:8px; margin-right:8px}
+.onotweb{margin-top:14px}
+.onotweb>summary{font-size:13px; color:var(--ink-soft); cursor:pointer; padding:6px 0}

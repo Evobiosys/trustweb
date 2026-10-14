@@ -22,6 +22,8 @@ export enum Ring {
   Acquaintance = 'acquaintance',
   /** A tier below acquaintance: someone you plan to meet, not yet in your web. */
   Intending = 'intending',
+  /** Not in my web (famous, deceased, calendar ids): kept for reference, never offered by the ring picker, so not in RINGS. */
+  None = 'none',
 }
 
 export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]

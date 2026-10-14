@@ -1302,7 +1302,7 @@ function takeOverScreen(h: HandoverLink): Node[] {
 // ---------------------------------------------------------------------------
 
 const NS = 'http://www.w3.org/2000/svg'
-const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168 }
+const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168, [Ring.None]: 168 }
 const GRADS = [
   'linear-gradient(135deg,#FF715B,#9A37F0)', 'linear-gradient(135deg,#4FD7A0,#12A8E3)',
   'linear-gradient(135deg,#12A8E3,#9A37F0)', 'linear-gradient(135deg,#F2B544,#FF715B)',

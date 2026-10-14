@@ -26,6 +26,8 @@ export interface OutlinerDeps {
 type Open = 'simple' | 'advanced'
 /** Which people are expanded; kept across the re-renders a search keystroke causes. */
 const opened = new Map<string, Open>()
+/** The collapsed "Not in my web" group, kept across re-renders. */
+let notInWebOpen = false
 
 const LONG_PRESS_MS = 420
 /** A move beyond this before the press is long enough is a scroll, not a lift. */
@@ -34,7 +36,16 @@ const SLOP_PX = 8
 export function outlinerView(d: OutlinerDeps): HTMLElement {
   const root = el('div', { class: 'ppl outliner' })
   let layout = loadLayout()
-  const draw = (): void => root.replaceChildren(...[...d.people].sort(d.order).map(person))
+  const draw = (): void => {
+    const sorted = [...d.people].sort(d.order)
+    const out = sorted.filter((p) => p.ring === Ring.None)
+    const group = el('details', { class: 'onotweb', ontoggle: (e) => { notInWebOpen = (e.target as HTMLDetailsElement).open } }, [
+      el('summary', {}, [S.olNotInWeb(out.length)]),
+      ...out.map(person),
+    ])
+    group.open = notInWebOpen
+    root.replaceChildren(...sorted.filter((p) => p.ring !== Ring.None).map(person), ...(out.length ? [group] : []))
+  }
 
   const input = (p: Person, x: Slot): HTMLElement => {
     const commit = (v: string): void => { setValue(p, x.id, v); d.save() }
