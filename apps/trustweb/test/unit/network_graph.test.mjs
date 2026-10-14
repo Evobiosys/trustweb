@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step } from '../../src/network_graph.ts'
+import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -78,5 +78,30 @@ describe('network graph', () => {
       expect(g.nodes[3].faint).toBe(true)
       expect(g.nodes[2].faint).toBe(false)
     })
+  })
+})
+
+describe('forces', () => {
+  const people = Array.from({ length: 40 }, (_, i) => person('p' + i, [Ring.Close, Ring.Friend, Ring.Acquaintance][i % 3]))
+  const meanR = (f) => {
+    const g = buildGraph(me, people)
+    for (let i = 0; i < LAYOUT_ITERATIONS; i++) step(g, alphaAt(i), f)
+    return g.nodes.slice(1).reduce((s, n) => s + Math.hypot(n.x, n.y), 0) / people.length
+  }
+  it('default forces equal the argument-less step', () => {
+    const a = buildGraph(me, people); const b = buildGraph(me, people)
+    for (let i = 0; i < 50; i++) { step(a, alphaAt(i)); step(b, alphaAt(i), DEFAULT_FORCES) }
+    expect(a.nodes[7].x).toBe(b.nodes[7].x)
+  })
+  it('longer links and stronger charge spread the picture; stronger gravity pulls it in', () => {
+    const base = meanR(DEFAULT_FORCES)
+    expect(meanR({ ...DEFAULT_FORCES, link: 2 })).toBeGreaterThan(base)
+    expect(meanR({ ...DEFAULT_FORCES, charge: 2000 })).toBeGreaterThan(base)
+    expect(meanR({ ...DEFAULT_FORCES, gravity: 0.02 })).toBeLessThan(base)
+  })
+  it('collision keeps nodes apart', () => {
+    const g = buildGraph(me, people)
+    for (let i = 0; i < LAYOUT_ITERATIONS; i++) step(g, alphaAt(i), { ...DEFAULT_FORCES, collide: 30 })
+    expect(g.nodes.every((v) => Number.isFinite(v.x))).toBe(true)
   })
 })

@@ -39,6 +39,10 @@ export interface GraphNode {
   faint?: boolean
 }
 
+/** The sliders of the Forces panel; `DEFAULT_FORCES` reproduces the layout as it was before they existed. */
+export interface Forces { link: number; charge: number; gravity: number; collide: number; labelZoom: number }
+export const DEFAULT_FORCES: Forces = { link: 1, charge: 260, gravity: 0.002, collide: 0, labelZoom: 1.5 }
+
 export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean }
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[] }
 
@@ -117,7 +121,7 @@ export function buildGraph(me: { id: string; displayName: string }, people: read
 }
 
 /** One relaxation step; `alpha` (1 -> 0) cools the movement so the picture settles. */
-export function step(g: Graph, alpha: number): void {
+export function step(g: Graph, alpha: number, f: Forces = DEFAULT_FORCES): void {
   const { nodes, edges } = g
   const n = nodes.length
   for (let i = 0; i < n; i++) {
@@ -127,9 +131,10 @@ export function step(g: Graph, alpha: number): void {
       let d2 = dx * dx + dy * dy
       if (d2 > 90000) continue
       if (d2 < 0.01) { dx = (i % 7) - 3; dy = (j % 5) - 2; d2 = dx * dx + dy * dy + 0.01 }
-      const f = (alpha * 260) / d2
-      nodes[i].vx -= dx * f; nodes[i].vy -= dy * f
-      nodes[j].vx += dx * f; nodes[j].vy += dy * f
+      let push = (alpha * f.charge) / d2
+      if (f.collide > 0 && d2 < f.collide * f.collide) push += (alpha * (f.collide - Math.sqrt(d2)) * 0.5) / Math.sqrt(d2)
+      nodes[i].vx -= dx * push; nodes[i].vy -= dy * push
+      nodes[j].vx += dx * push; nodes[j].vy += dy * push
     }
   }
   for (const e of edges) {
@@ -138,13 +143,13 @@ export function step(g: Graph, alpha: number): void {
     const dx = b.x - a.x
     const dy = b.y - a.y
     const d = Math.hypot(dx, dy) || 0.01
-    const f = ((d - e.rest) / d) * 0.08 * alpha
-    a.vx += dx * f; a.vy += dy * f
-    b.vx -= dx * f; b.vy -= dy * f
+    const pull = ((d - e.rest * f.link) / d) * 0.08 * alpha
+    a.vx += dx * pull; a.vy += dy * pull
+    b.vx -= dx * pull; b.vy -= dy * pull
   }
   for (const v of nodes) {
     if (v.pinned) { v.x = 0; v.y = 0; v.vx = 0; v.vy = 0; continue }
-    v.vx -= v.x * 0.002 * alpha; v.vy -= v.y * 0.002 * alpha
+    v.vx -= v.x * f.gravity * alpha; v.vy -= v.y * f.gravity * alpha
     v.x += v.vx; v.y += v.vy
     v.vx *= 0.6; v.vy *= 0.6
   }
