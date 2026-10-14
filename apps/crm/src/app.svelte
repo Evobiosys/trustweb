@@ -7,6 +7,7 @@
   import People from './people.svelte'
   import Person from './person.svelte'
   import Pipeline from './pipeline.svelte'
+  import Settings from './settings.svelte'
   import { forgetImport, importText, store } from './state.svelte'
   import { Source } from './storage'
   import { S } from './strings'
@@ -17,6 +18,7 @@
     [Tab.Timeline]: S.tabs.timeline,
     [Tab.Pipeline]: S.tabs.pipeline,
     [Tab.FollowUps]: S.tabs.followUps,
+    [Tab.Settings]: S.tabs.settings,
   }
 
   let importFailed = $state(false)
@@ -68,6 +70,8 @@
       <Timeline />
     {:else if nav.tab === Tab.Pipeline}
       <Pipeline />
+    {:else if nav.tab === Tab.Settings}
+      <Settings />
     {:else}
       <Followups />
     {/if}
