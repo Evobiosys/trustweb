@@ -11,7 +11,7 @@
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -113,20 +113,28 @@ function bumpBuildCounter(branch) {
 // Dev only: "HH:MM" when this branch at this commit was approved in the overlay, else null.
 const approvedAt = (branch, sha) => (existsSync(approvalFile(branch, sha)) ? readFileSync(approvalFile(branch, sha), 'utf8').trim().split(' ').pop() : null)
 
-// Dev only: POST /__tw/approve (the overlay's amber button) writes the approval note tw_approve.sh and the reviewer look for.
+// Dev only: POST /__tw/approve (the overlay's amber button) writes the approval note, then starts the whole check flow detached
+// (O/bin/tw_approve_local.sh: tag, push task/<name>, PR, CI, slot); GET /__tw/status is that flow's progress for this branch.
 function approveApi() {
+  const loopback = (req) => /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '') && (!req.headers.origin || new URL(req.headers.origin).host === req.headers.host)
   return {
     name: 'trustweb-approve-api',
     configureServer(server) {
+      const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim()
+      const json = (res, o) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
+      server.middlewares.use('/__tw/status', (req, res) => {
+        if (!loopback(req)) { res.statusCode = 403; res.end(); return }
+        const file = path.join(CACHE, 'approvals', slug(git('rev-parse', '--abbrev-ref', 'HEAD')) + '.json')
+        json(res, existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { step: 'none' })
+      })
       server.middlewares.use('/__tw/approve', (req, res) => {
-        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
-        const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim()
+        if (req.method !== 'POST' || !loopback(req)) { res.statusCode = req.method !== 'POST' ? 405 : 403; res.end(); return }
         const [branch, sha] = [git('rev-parse', '--abbrev-ref', 'HEAD'), git('rev-parse', '--short', 'HEAD')]
         const at = hhmm(new Date())
         mkdirSync(path.dirname(approvalFile(branch, sha)), { recursive: true })
         writeFileSync(approvalFile(branch, sha), `approved personal preview ${branch} @ ${sha} ${at}\n`)
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ at }))
+        spawn(path.join(process.env.TW_OPS ?? '', 'bin/tw_approve_local.sh'), [path.join(here, '../..')], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
+        json(res, { at })
       })
     },
   }

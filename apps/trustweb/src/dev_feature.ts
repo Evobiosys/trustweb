@@ -14,8 +14,11 @@ const CSS = `
 .twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
 .twf-rx{position:absolute;top:-13px;right:-13px;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#ff715b;color:#fff;font:700 14px/20px system-ui;cursor:pointer;pointer-events:auto}
-.twf-ok{position:fixed;right:8px;bottom:96px;z-index:99999;display:flex;gap:6px;align-items:center;padding:6px 8px;border-radius:10px;background:#241b2e;box-shadow:0 2px 12px rgba(0,0,0,.4);font:600 11px system-ui,sans-serif;color:#ffbf47}
-.twf-ok button{margin:0;border:0;border-radius:6px;padding:4px 8px;font:700 11px system-ui;cursor:pointer;background:#ffbf47;color:#241b2e}.twf-ok button+button{background:none;color:#ffbf47;border:1px solid #ffbf47}
+.twf-ok{position:fixed;right:12px;bottom:96px;z-index:99999;width:min(320px,calc(100vw - 24px));font:13px/1.4 system-ui,sans-serif;color:#1d2a2e;background:#fff;border:1.5px solid #b8650a;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);touch-action:none}
+.twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
+.twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
+.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
+.twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}
 .twf-line{position:fixed;inset:0;z-index:99997;pointer-events:none;width:100%;height:100%}
 @keyframes twf{50%{box-shadow:0 0 0 8px rgba(255,113,91,.35)}}`
@@ -91,20 +94,47 @@ export function initDevFeature(): void {
   show(!hidden)
 }
 
-/** Bottom right, amber: the owner's yes for this build (written to ~/.cache/trustweb-dev/approvals by the dev server), and the stock twin one tap away. */
+/** Bottom right, amber, shaped like the dev slot's approve box (controller/overlay.js): the owner's yes for this build, the stock twin one tap away.
+ *  A press starts the check flow on the dev server (POST /__tw/approve); the box then turns grey "IN PROGRESS" and polls /__tw/status every 5 s. */
 function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLElement {
   const bar = Object.assign(document.createElement('div'), { className: 'twf-ok' })
-  const say = (at: string): void => { bar.firstChild!.textContent = 'approved ' + at }
-  const ok = Object.assign(document.createElement('button'), { textContent: 'Approve personal preview' })
-  ok.addEventListener('click', () => {
-    void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.json()).then((j: { at: string }) => { ok.remove(); say(j.at) })
-  })
-  bar.append(document.createElement('span'))
-  if (bld.approved) say(bld.approved); else bar.append(ok)
-  if (bld.stockUrl) {
-    const open = Object.assign(document.createElement('button'), { textContent: 'Open stock preview' })
-    open.addEventListener('click', () => window.open(bld.stockUrl, '_blank'))
-    bar.append(open)
+  bar.innerHTML = '<header></header><div class="body"></div>'
+  const [head, body] = [bar.children[0] as HTMLElement, bar.children[1] as HTMLElement]
+  const btn = (text: string, cls: string, on: () => void): HTMLButtonElement => {
+    const b = Object.assign(document.createElement('button'), { textContent: text, className: cls })
+    b.addEventListener('click', on)
+    return b
   }
+  const poll = (): void => {
+    bar.classList.add('prog'); head.textContent = 'IN PROGRESS'
+    const tick = (): void => {
+      void fetch('/__tw/status').then((r) => r.json()).then((j: { step: string; text?: string; url?: string }) => {
+        body.textContent = j.text ?? 'starting'
+        if (j.step === 'failed') { body.className = 'body warn'; return }
+        if (j.step === 'ready' && j.url) {
+          body.textContent = `${j.text}. Opening dev in 3 s`
+          setTimeout(() => { location.href = j.url! }, 3000)
+          return
+        }
+        setTimeout(tick, 5000)
+      }).catch(() => setTimeout(tick, 5000))
+    }
+    tick()
+  }
+  head.textContent = 'Personal preview'
+  if (bld.approved) poll()
+  else {
+    body.append(btn('Approve personal preview', 'go', () => {
+      void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.ok && poll())
+    }))
+    if (bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
+  }
+  head.addEventListener('pointerdown', (down) => {
+    const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop
+    head.setPointerCapture(down.pointerId)
+    const move = (e: PointerEvent): void => { Object.assign(bar.style, { left: e.clientX - dx + 'px', top: e.clientY - dy + 'px', right: 'auto', bottom: 'auto' }) }
+    head.addEventListener('pointermove', move)
+    head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true })
+  })
   return bar
 }

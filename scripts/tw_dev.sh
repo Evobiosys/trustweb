@@ -33,6 +33,10 @@ export TW_DEV_RECORD="${TW_DEV_RECORD:-}"
 # Feature overlay (dev_feature.ts): TW_FEATURE, else feature.json at the worktree root.
 if [ -z "${TW_FEATURE:-}" ] && [ -f "$REPO/feature.json" ]; then export TW_FEATURE="$(cat "$REPO/feature.json")"; fi
 
+# The ops checkout (bin/tw_approve_local.sh, started by the overlay's Approve): next to the worktrees folder unless TW_OPS says otherwise.
+[ -n "${TW_OPS:-}" ] || { [ -d "$REPO/../../trustweb-ops/bin" ] && TW_OPS="$(cd "$REPO/../../trustweb-ops" && pwd)"; }
+export TW_OPS="${TW_OPS:-}"
+
 for arg in "$@"; do
   case "$arg" in
     --lan) HOST=0.0.0.0 ;;
