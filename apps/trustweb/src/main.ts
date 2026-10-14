@@ -124,6 +124,7 @@ import { createPastMeetings, whenLabel } from './past_meetings_view'
 import { createSwissContext, readHosting } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
+import { createSyncView } from './sync_view'
 import { importGroup } from './import_view'
 import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
@@ -2953,6 +2954,9 @@ const hosting = createHostingView({
   redrawSettings: () => { if (sheet.dataset.kind === 'settings' && sheet.classList.contains('on')) settingsSheet() },
   openSettings: () => settingsSheet(),
 })
+const devices = createSyncView({
+  persona, storeCtx, state: st, save, sheet, openSheet, toast, when: whenLabel, changed: render, openSettings: () => settingsSheet(),
+})
 const images = new ImageStore(persona, storeCtx)
 const curator = createCurator({
   record: () => (state ? structuredClone(state) : null),
@@ -4721,6 +4725,7 @@ function settingsSheet(): void {
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
+    ...(connectEligible() ? devices.settingsGroup() : []),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     ...feed.settingsGroup(),
     notificationsCard(s),
@@ -5226,6 +5231,7 @@ if (state && !state.testOf?.handedOverAt) {
     if (transcription.anyConsent() || transcriptionChoice(st()) === TranscriptionChoice.Server || readHosting(st())?.on === true) void swiss.probe()
     hosting.boot()
   }
+  if (connectEligible()) devices.start()
   packs.checkLate()
   // Resume the approve step after a reload while a phone still waits.
   const pending = demoAccounts().find((t) => t.pending)
