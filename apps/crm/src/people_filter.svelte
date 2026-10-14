@@ -25,6 +25,7 @@
   <label class="fld check"><input type="checkbox" data-filter="deceased" bind:checked={prefs.filters.hideDeceased} onchange={savePrefs} /><span>{S.hideDeceased}</span></label>
   <label class="fld check"><input type="checkbox" data-filter="famous" bind:checked={prefs.filters.hideFamous} onchange={savePrefs} /><span>{S.hideFamous}</span></label>
   <label class="fld check"><input type="checkbox" data-filter="connection" bind:checked={prefs.filters.onlyConnection} onchange={savePrefs} /><span>{S.onlyConnection}</span></label>
+  <label class="fld check"><input type="checkbox" data-filter="close" bind:checked={prefs.filters.onlyClose} onchange={savePrefs} /><span>{S.closeChip}</span></label>
   <div class="row-filter">
     <select class="field" aria-label={S.filterBy} bind:value={ruleKey}>
       <option value="">{S.filterBy}</option>

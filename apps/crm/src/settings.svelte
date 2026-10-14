@@ -1,6 +1,7 @@
 <script lang="ts">
   import Curate from './curate.svelte'
   import FieldsEditor from './fields_editor.svelte'
+  import { PLACE_FIELDS } from './close'
   import { PKMS, Pkm, prefs, savePrefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
@@ -11,6 +12,19 @@
 
   function togglePkm(p: Pkm, on: boolean): void {
     prefs.pkms = on ? [...prefs.pkms, p] : prefs.pkms.filter((x) => x !== p)
+    savePrefs()
+  }
+
+  let place = $state('')
+
+  function addPlace(): void {
+    const p = place.trim()
+    if (p && !prefs.close.places.includes(p)) { prefs.close.places = [...prefs.close.places, p]; savePrefs() }
+    place = ''
+  }
+
+  function togglePlaceField(id: string, on: boolean): void {
+    prefs.close.fields = on ? [...prefs.close.fields, id] : prefs.close.fields.filter((x) => x !== id)
     savePrefs()
   }
 
@@ -56,6 +70,22 @@
   <p class="muted">{S.activityHint}</p>
   <label class="fld"><span>{S.activityDays}</span>
     <input class="field" type="number" min="1" data-field="activity-days" value={prefs.activityDays} onchange={setDays} /></label>
+
+  <h3 class="screen-title">{S.closeTitle}</h3>
+  <p class="muted">{S.closeHint}</p>
+  <div class="row-filter">
+    <input class="field" type="text" data-field="close-place" aria-label={S.closePlace} placeholder={S.closePlace} bind:value={place}
+      onkeydown={(e): void => { if (e.key === 'Enter') addPlace() }} />
+    <button class="btn small" data-action="add-place" onclick={addPlace}>{S.closeAdd}</button>
+  </div>
+  {#each prefs.close.places as p (p)}
+    <button class="quiet" aria-label={S.closeRemove(p)} onclick={(): void => { prefs.close.places = prefs.close.places.filter((x) => x !== p); savePrefs() }}>{p} ✕</button>
+  {/each}
+  <p class="muted">{S.closeFields}</p>
+  {#each PLACE_FIELDS as f (f.id)}
+    <label class="fld check"><input type="checkbox" data-close-field={f.id} checked={prefs.close.fields.includes(f.id)}
+      onchange={(e): void => togglePlaceField(f.id, e.currentTarget.checked)} /><span>{f.label}</span></label>
+  {/each}
 
   <FieldsEditor />
   <Curate />

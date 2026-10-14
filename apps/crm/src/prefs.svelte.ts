@@ -3,6 +3,8 @@
  * knowledge-management sync options, where fields sit for me, the activity window.
  */
 import { DEFAULT_ACTIVITY_DAYS } from './person_view'
+import { emptyClose } from './close'
+import type { Close } from './close'
 import { emptyPlacements } from './placement'
 import type { Placements } from './placement'
 
@@ -20,6 +22,8 @@ export interface Filters {
   hideDeceased: boolean
   hideFamous: boolean
   onlyConnection: boolean
+  /** Show only people close to me (Settings > Close to me). */
+  onlyClose: boolean
   /** All must hold (AND): the field's text contains `text`, case-insensitive. */
   rules: { key: string; text: string }[]
 }
@@ -28,6 +32,7 @@ export interface Prefs {
   filters: Filters
   /** Field placement "for me". */
   placement: Placements
+  close: Close
   /** Networks a placement edit goes to; empty = for me. */
   scope: string[]
   /** Systems my people sync with; none by default. */
@@ -49,8 +54,8 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { placement: emptyPlacements(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, rules: [] }, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
+  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined

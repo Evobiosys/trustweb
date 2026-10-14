@@ -7,6 +7,7 @@
   import type { FieldValues } from './fields'
   import { matches } from './contacts'
   import { openContact, openEnvironment, openImport, openPerson } from './nav.svelte'
+  import { isClose } from './close'
   import { Kind, layout } from './placement'
   import { placementFor } from './placement.svelte'
   import { effectivePerson, entityValues, favLink, presence } from './person_view'
@@ -34,7 +35,7 @@
     const p = store.app.people.find((x) => x.id === id)
     return p ? entityValues(p, baseFields(p), edits(id)) : {}
   }
-  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters))))
+  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))))
   const environments = $derived(((store.app as { environments?: EnvEntity[] }).environments ?? [])
     .map((e) => effectivePerson(e, edits(e.id))).filter((e) => matches(e as never, query)))
   const onRow = $derived((kind: Kind) => layout(kind, placementFor(kind), {}).collapsed)
