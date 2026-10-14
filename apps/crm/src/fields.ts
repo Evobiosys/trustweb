@@ -14,6 +14,8 @@ export type FieldValues = Record<string, FieldValue>
 export const ADHOC = 'adhoc:'
 
 export const FAMOUS_KEY = '6QzDHIfrlmSz'
+/** The Tana checkbox "hide in trustweb". */
+export const HIDE_KEY = '4J9bhDw1UdTj'
 export const INTENDING_KEY = 'FcZJGS5EH2on'
 export const DECEASED_KEY = '__XNQ42Dtiwx'
 export const CONNECTION_KEY = 'ConGRasNilsz'

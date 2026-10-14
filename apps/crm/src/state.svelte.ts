@@ -6,7 +6,7 @@
  *
  * Never writes TrustWeb's key (see storage.ts for why).
  */
-import type { AppState } from '../../trustweb/src/model'
+import type { AppState, Person } from '../../trustweb/src/model'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
 import type { FieldValue } from './fields'
@@ -52,8 +52,16 @@ function start(): Store {
     crm = sampleCrm(now)
     saveCrm(persona, crm)
   }
+  const gone = new Set((crm.hiddenPeople ?? []).map((h) => h.id))
+  if (gone.size > 0) {
+    for (const p of app.people) if (gone.has(p.id)) hidden.set(p.id, p)
+    app.people = app.people.filter((p) => !gone.has(p.id))
+  }
   return { app, crm, source, persona }
 }
+
+/** People taken out of the in-memory record, so "unhide" can put them back without a reload. */
+const hidden = new Map<string, Person>()
 
 export const store: Store = $state(start())
 
@@ -119,6 +127,24 @@ export function removeContactPoint(personId: string, index: number): void {
 export function setField(personId: string, key: string, value: FieldValue): void {
   const all = store.crm.personFields ?? (store.crm.personFields = {})
   all[personId] = { ...all[personId], [key]: value }
+  persist()
+}
+
+/** Takes the person out of every list at once and remembers them for Settings. */
+export function hidePerson(personId: string): void {
+  const p = store.app.people.find((x) => x.id === personId)
+  if (!p) return
+  hidden.set(personId, $state.snapshot(p) as Person)
+  store.app.people = store.app.people.filter((x) => x.id !== personId)
+  store.crm.hiddenPeople = [...(store.crm.hiddenPeople ?? []), { id: personId, name: p.name }]
+  persist()
+}
+
+export function unhidePerson(personId: string): void {
+  const p = hidden.get(personId)
+  if (p) store.app.people.push(p)
+  hidden.delete(personId)
+  store.crm.hiddenPeople = (store.crm.hiddenPeople ?? []).filter((h) => h.id !== personId)
   persist()
 }
 

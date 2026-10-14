@@ -123,6 +123,7 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 
 /* person */
 .person-head{display:flex; gap:12px; align-items:center; margin:6px 0}
+.hide-btn{margin-left:auto; font-size:18px}
 .person h2{font-size:26px; margin-top:2px}
 .person .meta-line{font-size:13.5px; color:var(--ink-soft); margin:2px 0 4px}
 .person h3,.screen-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin:22px 2px 8px; font-family:inherit; font-weight:700}

@@ -1,8 +1,8 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
-import { mergedFields, baseFields } from './fields'
+import { mergedFields, baseFields, HIDE_KEY } from './fields'
 import type { FieldValue } from './fields'
 import { prefs, savePrefs, tanaOn } from './prefs.svelte'
-import { setField, store } from './state.svelte'
+import { hidePerson, setField, store, unhidePerson } from './state.svelte'
 import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 
@@ -39,6 +39,17 @@ export function saveField(personId: string, key: string, value: FieldValue): voi
   timers.set(id, setTimeout(() => { timers.delete(id); enqueue(personId, key) }, DEBOUNCE_MS))
 }
 
+/** "Hide from TrustWeb": ticks the Tana checkbox through the sync and takes the person out of the lists at once. */
+export function hideFromTrustweb(personId: string): void {
+  saveField(personId, HIDE_KEY, true)
+  hidePerson(personId)
+}
+
+export function unhideInTrustweb(personId: string): void {
+  saveField(personId, HIDE_KEY, false)
+  unhidePerson(personId)
+}
+
 async function nodeFor(call: ToolCall, personId: string): Promise<string> {
   if (personId.startsWith(TANA_PREFIX)) return personId.slice(TANA_PREFIX.length)
   const known = prefs.nodeIds[personId]
@@ -58,13 +69,14 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
 
 async function push(call: ToolCall, item: { personId: string; key: string }): Promise<void> {
   const person = store.app.people.find((p) => p.id === item.personId)
+  const name = person?.name ?? store.crm.hiddenPeople?.find((h) => h.id === item.personId)?.name ?? item.personId
   const value = mergedFields(person ? baseFields(person) : undefined, store.crm.personFields?.[item.personId])[item.key]
   const op = planFieldSync(item.key, value)
   if ('manual' in op) return
   const nodeId = await nodeFor(call, item.personId)
   await call(op.tool, { nodeId, ...op.args })
   const checkbox = typeof value === 'boolean' ? ' (checkbox via text, unverified)' : ''
-  log(`${person?.name ?? item.personId}: ${item.key} -> Tana ok${checkbox}`)
+  log(`${name}: ${item.key} -> Tana ok${checkbox}`)
 }
 
 /** Pushes the queue. An unreachable API keeps it; a refused edit is logged and dropped (never retried blind). */

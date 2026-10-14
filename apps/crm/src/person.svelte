@@ -17,6 +17,7 @@
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { editLine, store } from './state.svelte'
+  import { hideFromTrustweb } from './sync.svelte'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
   import { personTimeline } from './timeline'
@@ -62,6 +63,11 @@
     editing = null
   }
 
+  function hide(): void {
+    hideFromTrustweb(personId)
+    closePerson()
+  }
+
   function closeForm(): void {
     form = PersonForm.None
   }
@@ -77,6 +83,7 @@
         <p class="meta-line"><RingLabel personId={person.id} ring={person.ring} /> · {meta}</p>
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
       </div>
+      <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
 
     <ContactInfo {person} />

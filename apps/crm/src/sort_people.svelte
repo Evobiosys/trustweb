@@ -10,6 +10,7 @@
   import type { Undo } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
+  import { hideFromTrustweb } from './sync.svelte'
 
   const ids = unsortedIds()
   const history: { index: number; undo: Undo }[] = $state([])
@@ -21,6 +22,11 @@
 
   function choose(c: Choice): void {
     history.push({ index, undo: c === UNSORTED ? [] : fileUnder(ids[index], c) })
+    index++
+  }
+
+  function hide(): void {
+    hideFromTrustweb(ids[index])
     index++
   }
 
@@ -43,6 +49,7 @@
       {#if person.context}<p class="ctx">{person.context}</p>{/if}
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
       <RingChips onchoose={choose} />
+      <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>
   {:else}
     <p class="empty" data-part="done">{S.sortDone}</p>

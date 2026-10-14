@@ -7,7 +7,7 @@
   import { unsortedIds } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
-  import { flush, sync } from './sync.svelte'
+  import { flush, sync, unhideInTrustweb } from './sync.svelte'
   import { manualItems } from './tana_sync'
 
   const manual = $derived(manualItems(store.app.people, store.crm.personFields))
@@ -71,6 +71,14 @@
   {/each}
 
   {#if toSort > 0}<button class="btn small sort-banner" data-action="sort-settings" onclick={openSort}>{S.sortBanner(toSort)}</button>{/if}
+
+  {#if store.crm.hiddenPeople?.length}
+    <h3 class="screen-title" data-part="hidden-title">{S.hiddenTitle(store.crm.hiddenPeople.length)}</h3>
+    <p class="muted">{S.hiddenHint}</p>
+    {#each store.crm.hiddenPeople as h (h.id)}
+      <p class="line" data-part="hidden">{h.name.trim() || h.id} <button class="quiet" data-action="unhide" onclick={(): void => unhideInTrustweb(h.id)}>{S.unhide}</button></p>
+    {/each}
+  {/if}
 
   <h3 class="screen-title">{S.activityTitle}</h3>
   <p class="muted">{S.activityHint}</p>
