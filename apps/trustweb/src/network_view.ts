@@ -5,7 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, TIER_COLOUR } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphNode, Pins } from './network_graph'
 import { S } from './strings'
 
@@ -107,7 +107,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ]),
   ])
   const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
-  const root = el('div', { class: 'net' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas])
+  const root = el('div', { class: 'net', 'data-view': 'network' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas])
 
   const fit = (): Camera => {
     const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
@@ -128,6 +128,8 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
 
   const colour = (v: GraphNode): string =>
     v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : TIER_COLOUR[v.tier]
+
+  const label = (v: GraphNode): string => (v.desire === undefined ? v.name : `${v.name} · ${S.netWants(v.desire)}`)
 
   const draw = (): void => {
     if (!ctx) return
@@ -168,6 +170,11 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       ctx.globalAlpha = lit ? (!lq && v.faint ? 0.4 : 1) : 0.15
       ctx.fillStyle = lq ? (v === hover || matches.has(v.id) ? LOGSEQ.lit : LOGSEQ.node) : colour(v)
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
+      if (v.family) {
+        ctx.strokeStyle = FAMILY_COLOUR; ctx.lineWidth = 2.5; ctx.setLineDash([])
+        ctx.beginPath(); ctx.arc(x, y, rad + 3, 0, Math.PI * 2); ctx.stroke()
+        ctx.lineWidth = lq ? 0.6 : 1
+      }
       if (v.pinned && v.tier !== undefined) {
         ctx.globalAlpha = 1
         ctx.fillStyle = lq ? LOGSEQ.lit : ink
@@ -179,11 +186,11 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
         ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
         ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
-        ctx.fillText(v.name, x, y + rad + 10)
+        ctx.fillText(label(v), x, y + rad + 10)
       } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
         ctx.globalAlpha = 1
         ctx.fillStyle = ink
-        ctx.fillText(v.name, x, y + rad + 12)
+        ctx.fillText(label(v), x, y + rad + 12)
       }
     })
     ctx.globalAlpha = 1

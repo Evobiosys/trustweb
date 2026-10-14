@@ -221,6 +221,7 @@ export const S = {
   netSearchPh: 'Find someone in the network',
   netShake: 'Shake',
   netMenu: 'Graph options',
+  netWants: (n: number) => `wants ${n}/10`,
   netLogseq: 'Logseq style',
   netShowAll: 'Show people not in my web',
   netForces: 'Forces',
