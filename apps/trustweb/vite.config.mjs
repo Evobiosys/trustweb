@@ -87,8 +87,11 @@ function devRecord(command) {
   return command === 'serve' && file ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
 }
 
+// Dev only (scripts/tw_dev.sh, feature.json): the feature overlay text. Never in a build.
+const devFeature = (command) => (command === 'serve' && process.env.TW_FEATURE ? process.env.TW_FEATURE : 'null')
+
 export default ({ command }) => ({
-  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command) },
+  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command) },
   plugins: [pwaFiles(), releaseFile()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
