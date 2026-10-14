@@ -174,6 +174,8 @@ export const S = {
 
   navWeb: 'Web',
   navInventory: 'My Resources',
+  navCurator: 'Web Curator',
+  curatorLoading: 'Opening the Web Curator ...',
   navRecord: 'Record',
 
   // The top-right pill: no "Online" text any more (owner, 2026-10-05). It is a

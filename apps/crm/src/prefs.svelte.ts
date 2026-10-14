@@ -2,6 +2,7 @@
  * This device's settings and view choices, in their own localStorage key (never TrustWeb's, never the CRM record):
  * knowledge-management sync options, where fields sit for me, the activity window.
  */
+import { host } from './bridge'
 import { DEFAULT_ACTIVITY_DAYS } from './person_view'
 import { DEV_CLOSE, emptyClose } from './close'
 import type { Close } from './close'
@@ -80,7 +81,7 @@ function load(): Prefs {
 export const prefs: Prefs = $state(load())
 
 export function applyTheme(): void {
-  document.documentElement.dataset.theme = prefs.light ? 'light' : 'dark'
+  (host.root ?? document.documentElement).dataset.theme = prefs.light ? 'light' : 'dark'
 }
 applyTheme()
 

@@ -7,6 +7,8 @@
  * Never writes TrustWeb's key (see storage.ts for why).
  */
 import type { AppState, Person } from '../../trustweb/src/model'
+import { host } from './bridge'
+import { RING_KEY } from './rings'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
 import type { FieldValue } from './fields'
@@ -49,6 +51,8 @@ function start(): Store {
   const source = record ? Source.Record : trustweb ? Source.TrustWeb : imported ? Source.Imported : Source.Sample
   const app = record ?? trustweb ?? imported ?? sampleApp(now)
   let crm = loadCrm(persona)
+  // Hosted: a ring edit the host's record no longer agrees with (changed in the Web view since) is stale; the record wins.
+  if (host.record) for (const p of app.people) if (crm.personFields?.[p.id]?.[RING_KEY] !== undefined && crm.personFields[p.id][RING_KEY] !== p.ring) delete crm.personFields[p.id][RING_KEY]
   if (source === Source.Sample && crmIsEmpty(crm)) {
     crm = sampleCrm(now)
     saveCrm(persona, crm)
@@ -76,6 +80,14 @@ function addLines(people: Person[], from: string, into: string): string[] {
 const hidden = new Map<string, Person>()
 
 export const store: Store = $state(start())
+
+/** Hosted as a tab: the host's record is read again on every visit, and its rings win (every ring set here was lent to it too). */
+export function reloadRecord(): void {
+  const s = start()
+  store.app = s.app
+  store.source = s.source
+  store.crm = s.crm
+}
 
 function persist(): void {
   saveCrm(store.persona, store.crm)
@@ -138,6 +150,7 @@ export function removeContactPoint(personId: string, index: number): void {
 /** Saves one #person field edit in the CRM's own record (never TrustWeb's). */
 export function setField(personId: string, key: string, value: FieldValue): void {
   // Assign first, then write through the store: a local taken before the assignment would be the raw object, not the reactive one, and the edit would never be saved.
+  if (key === RING_KEY && typeof value === 'string') host.setRing?.(personId, value)
   store.crm.personFields ??= {}
   store.crm.personFields[personId] = { ...store.crm.personFields[personId], [key]: value }
   persist()

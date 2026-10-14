@@ -8,13 +8,19 @@
 //
 // ABSOLUTE base, like apps/demo (see its vite.config.ts): a relative base
 // 404s every asset when the page is opened without its trailing slash.
-import { fileURLToPath } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
+const crm = path.resolve(here, '../crm')
+
+// The Web Curator (apps/crm, Svelte 5) is mounted as a tab of this app. This app has no node_modules, so the Svelte plugin
+// is loaded from the Curator's own, by path. css 'injected': the component styles travel with the lazy chunk (into its shadow root).
+const { svelte } = await import(pathToFileURL(path.join(crm, 'node_modules/@sveltejs/vite-plugin-svelte/src/index.js')).href)
 
 // The install files (wave 1733, item 5): the web app manifest and its icons,
 // kept in pwa/ and served at the app's root under fixed names, in dev and in
@@ -90,18 +96,65 @@ function devRecord(command) {
 // Dev only (scripts/tw_dev.sh, feature.json): the feature overlay text. Never in a build.
 const devFeature = (command) => (command === 'serve' && process.env.TW_FEATURE ? process.env.TW_FEATURE : 'null')
 
+const hhmm = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+const CACHE = path.join(os.homedir(), '.cache/trustweb-dev')
+const slug = (branch) => branch.replace(/[^A-Za-z0-9._-]+/g, '-')
+const approvalFile = (branch, sha) => path.join(CACHE, 'approvals', `${slug(branch)}-${sha}.txt`)
+
+// Dev only: the build counter of this branch, up by one at every serve start (the overlay shows it as "NEW <n>").
+function bumpBuildCounter(branch) {
+  const file = path.join(CACHE, `build-counter-${slug(branch)}`)
+  const n = (Number(existsSync(file) ? readFileSync(file, 'utf8') : 0) || 0) + 1
+  mkdirSync(CACHE, { recursive: true })
+  writeFileSync(file, n + '\n')
+  return n
+}
+
+// Dev only: "HH:MM" when this branch at this commit was approved in the overlay, else null.
+const approvedAt = (branch, sha) => (existsSync(approvalFile(branch, sha)) ? readFileSync(approvalFile(branch, sha), 'utf8').trim().split(' ').pop() : null)
+
+// Dev only: POST /__tw/approve (the overlay's amber button) writes the approval note tw_approve.sh and the reviewer look for.
+function approveApi() {
+  return {
+    name: 'trustweb-approve-api',
+    configureServer(server) {
+      server.middlewares.use('/__tw/approve', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        const git = (...a) => execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim()
+        const [branch, sha] = [git('rev-parse', '--abbrev-ref', 'HEAD'), git('rev-parse', '--short', 'HEAD')]
+        const at = hhmm(new Date())
+        mkdirSync(path.dirname(approvalFile(branch, sha)), { recursive: true })
+        writeFileSync(approvalFile(branch, sha), `approved personal preview ${branch} @ ${sha} ${at}\n`)
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ at }))
+      })
+    },
+  }
+}
+
 // Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
 function devBuild(command) {
   if (command !== 'serve') return 'null'
   const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
-  const d = new Date()
-  const time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
-  return JSON.stringify({ branch: git('rev-parse', '--abbrev-ref', 'HEAD'), sha: git('rev-parse', '--short', 'HEAD'), time, mode: process.env.TW_STOCK ? 'stock' : 'personal', stockUrl: process.env.TW_STOCK_URL ?? '' })
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+  const sha = git('rev-parse', '--short', 'HEAD')
+  return JSON.stringify({ branch, sha, time: hhmm(new Date()), n: bumpBuildCounter(branch), approved: approvedAt(branch, sha), mode: process.env.TW_STOCK ? 'stock' : 'personal', stockUrl: process.env.TW_STOCK_URL ?? '' })
+}
+
+// Dev only: ring-suggestions.json next to the dev record (the Curator's sort cards), else null.
+function devSuggestions(command) {
+  const file = process.env.TW_DEV_RECORD && !process.env.TW_STOCK && path.join(path.dirname(process.env.TW_DEV_RECORD), 'ring-suggestions.json')
+  return command === 'serve' && file && existsSync(file) ? readFileSync(file, 'utf8') : null
 }
 
 export default ({ command }) => ({
-  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_BUILD__: devBuild(command) },
-  plugins: [pwaFiles(), releaseFile()],
+  resolve: { alias: { '@web-curator': path.join(crm, 'src/embed.ts') } },
+  define: {
+    // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
+    __TW_RECORD__: 'null',
+    __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

@@ -18,6 +18,7 @@
  * the fictional sample set, so the app always has something to show.
  */
 import type { AppState } from '../../trustweb/src/model'
+import { host } from './bridge'
 import { emptyCrm, isAppState, isCrmState } from './model'
 import type { CrmState } from './model'
 
@@ -53,7 +54,7 @@ function parse(raw: string | null): unknown {
 
 /** TrustWeb's own record on this origin, if the browser has one. */
 export function readTrustWeb(): AppState | null {
-  const s = parse(getItem(TRUSTWEB_KEY))
+  const s = host.record ? host.record() : parse(getItem(TRUSTWEB_KEY))
   return isAppState(s) ? s : null
 }
 

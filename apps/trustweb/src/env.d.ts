@@ -3,6 +3,12 @@
 /// <reference path="../../demo/node_modules/vite/client.d.ts" />
 /// <reference path="../../demo/src/env.d.ts" />
 
+/** The Web Curator (apps/crm/src/embed.ts, a Svelte app): aliased in vite.config.mjs, loaded lazily, type-checked by the Curator's own `npm run check`. */
+declare module '@web-curator' {
+  export function mountCurator(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }): Promise<void>
+  export function refreshCurator(): Promise<void>
+}
+
 /** The git short sha this build was made from (vite.config.mjs `define`); absent outside Vite (unit tests). */
 declare const __APP_VERSION__: string
 

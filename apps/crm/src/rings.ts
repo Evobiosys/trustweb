@@ -8,7 +8,8 @@ import type { FieldValue, FieldValues } from './fields'
 
 export const UNSORTED = 'unsorted'
 export const FAMILY_KEY = 'LNlpliq4GdNI'
-export type RingId = Ring | typeof UNSORTED
+/** This app's model also has None (not in my web) and Family (a tag here); neither is a ring the Curator files under. */
+export type RingId = Exclude<Ring, Ring.None | Ring.Family> | typeof UNSORTED
 
 /** Tana's "ring" options field and its "ring approved" checkbox (the ring sync writes both), with the option id per ring. */
 export const RING_KEY = 'tw-ring'

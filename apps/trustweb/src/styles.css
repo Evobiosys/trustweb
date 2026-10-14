@@ -734,6 +734,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 
 /* The Feed (wave 1733 round B): posts, pictures; four tabs when it is on. */
 .tabs.four .tab{width:58px}
+.tabs .tab[data-go=curator]{width:72px; white-space:nowrap}
+.screen.curator{background:var(--linen)}
 .posts{display:flex; flex-direction:column; gap:10px}
 .post{background:var(--card); border-radius:16px; padding:12px 14px; box-shadow:0 2px 12px rgba(36,27,46,.06)}
 .post-main{display:flex; gap:12px; width:100%; border:0; background:none; text-align:left; cursor:pointer; padding:0; color:inherit; font:inherit}

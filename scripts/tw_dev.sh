@@ -67,7 +67,7 @@ else
   echo "starting the dev server on $HOST:$PORT (log: $LOG)"
   # A simple command in the background, so $! is Vite itself (for --stop) and nothing holds this script's stdout.
   cd "$REPO/apps/trustweb"
-  TW_PORT="$PORT" nohup ../demo/node_modules/.bin/vite --host "$HOST" --strictPort >"$LOG" 2>&1 </dev/null &
+  TW_PORT="$PORT" nohup ../crm/node_modules/.bin/vite --host "$HOST" --strictPort >"$LOG" 2>&1 </dev/null &
   echo $! >"$PIDFILE"
   cd - >/dev/null
   for _ in $(seq 1 60); do
@@ -79,7 +79,7 @@ else
 fi
 if [ "$TWIN" = 1 ] && ! curl -fsS -m 2 -o /dev/null "$TW_STOCK_URL" 2>/dev/null; then
   cd "$REPO/apps/trustweb"
-  TW_STOCK=1 TW_STOCK_URL= TW_PORT="$STOCK_PORT" nohup ../demo/node_modules/.bin/vite --host "$HOST" --strictPort >"$STATE/vite-$PORT-stock.log" 2>&1 </dev/null &
+  TW_STOCK=1 TW_STOCK_URL= TW_PORT="$STOCK_PORT" nohup ../crm/node_modules/.bin/vite --host "$HOST" --strictPort >"$STATE/vite-$PORT-stock.log" 2>&1 </dev/null &
   echo $! >"$STOCKPID"
   cd - >/dev/null
   for _ in $(seq 1 60); do curl -fsS -m 2 -o /dev/null "$TW_STOCK_URL" 2>/dev/null && break; sleep 0.5; done

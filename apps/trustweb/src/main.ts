@@ -122,6 +122,7 @@ import { createSwissContext, readHosting } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { importGroup } from './import_view'
+import { createCurator } from './curator'
 import { createFeedView } from './feed_view'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
@@ -149,6 +150,8 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
+  /** The Web Curator (apps/crm), mounted lazily on the first visit. */
+  Curator = 'curator',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -671,8 +674,8 @@ function renderTabs(): void {
   const invLeft = state?.tabOrder === TabOrder.InventoryLeft
   // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
   const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv)
-  tabs.classList.toggle('four', feedTab.length > 0)
+  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv, tabButton(Screen.Curator, S.navCurator, 'curator'))
+  tabs.classList.add('four')
 }
 renderTabs()
 
@@ -741,6 +744,7 @@ function go(s: Screen): void {
   }
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
+  if (s === Screen.Curator && screen !== s) curator.open()
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -904,6 +908,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
+      case Screen.Curator: return [curator.el]
     }
   })()
   host.replaceChildren(...body)
@@ -2591,6 +2596,10 @@ const hosting = createHostingView({
   openSettings: () => settingsSheet(),
 })
 const images = new ImageStore(persona, storeCtx)
+const curator = createCurator({
+  record: () => (state ? structuredClone(state) : null),
+  setRing: (id, ring) => { const p = state?.people.find((x) => x.id === id); if (p) { p.ring = ring; save() } },
+})
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },

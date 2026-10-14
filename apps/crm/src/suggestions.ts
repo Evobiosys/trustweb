@@ -2,9 +2,10 @@
 import { Ring } from '../../trustweb/src/model'
 import { MAX_INTENDING } from './fields'
 import { UNSORTED } from './rings'
+import type { RingId } from './rings'
 
 export interface Suggestion {
-  ring: Ring | typeof UNSORTED
+  ring: RingId
   family: boolean
   /** 0 to 10 */
   intending: number
