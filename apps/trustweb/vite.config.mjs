@@ -3,7 +3,7 @@
 // (it imports apps/demo's modules directly), so a bare 'vite' import would not
 // resolve from here. Build and dev:
 //
-//   ../demo/node_modules/.bin/vite build          (from apps/trustweb/)
+//   ../demo/node_modules/.bin/vite build          (from apps/trustweb/); Vite 8 now: ../crm/node_modules/.bin/vite
 //   ../demo/node_modules/.bin/vite                (dev server, :5190)
 //
 // ABSOLUTE base, like apps/demo (see its vite.config.ts): a relative base

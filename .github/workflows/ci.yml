@@ -26,12 +26,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: build the workspace packages apps/demo imports (their main is dist/)
         run: pnpm --filter "@ew/demo^..." build
-      - name: build (base /, app.trustweb.one)
+      - name: build (base /, app.trustweb.one; apps/crm Vite 8, its Svelte plugin needs it)
         working-directory: apps/trustweb
         env:
           TW_BASE: /
           TW_RELEASE: ${{ github.sha }}
-        run: ../demo/node_modules/.bin/vite build --outDir dist --emptyOutDir
+        run: ../crm/node_modules/.bin/vite build --outDir dist --emptyOutDir
       - name: private-line scan
         run: node apps/trustweb/test/scan_bundle_for_private_lines.mjs apps/trustweb/dist
       - uses: actions/upload-artifact@v4
