@@ -70,6 +70,8 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
+import { defaultsToNetwork } from './network_graph'
+import { createNetworkView } from './network_view'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -1453,6 +1455,28 @@ function searchPanel(s: AppState): HTMLElement {
   return el('div', { class: 'scroll pad search' }, [input, el('p', { class: 'meta search-not-ask', 'data-search-not-ask': '1' }, [S.searchNotAsk]), askInstead, curate, results, web.el])
 }
 
+const WEB_VIEW_KEY = 'trustweb.ui.webView'
+
+/** Rings or Network: the device's own choice, else Network once the web is too big for the rings. */
+function networkChosen(people: number): boolean {
+  try {
+    const v = window.localStorage.getItem(WEB_VIEW_KEY)
+    if (v === 'network' || v === 'rings') return v === 'network'
+  } catch { /* storage blocked: the default */ }
+  return defaultsToNetwork(people)
+}
+
+function webViewToggle(network: boolean): HTMLElement {
+  const pick = (value: 'rings' | 'network'): void => {
+    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
+    render()
+  }
+  return el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
+    el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
+    el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+  ])
+}
+
 function screenWeb(): Node[] {
   const s = st()
   // Call style: a contact search top right (the magnifier is free). Query
@@ -1467,13 +1491,17 @@ function screenWeb(): Node[] {
         return b
       })()
   if (searchOpen) return [header(S.webTitle, { right: search, more: true }), searchPanel(s)]
+  const network = s.people.length > 0 && networkChosen(s.people.length)
   return [
     header(S.webTitle, { right: search, more: true }),
     el('div', { class: 'scroll' }, [
       // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
       queryOpen ? null : cardStackEl,
       s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-      ringsView(s, askMarks()),
+      s.people.length === 0 ? null : webViewToggle(network),
+      network
+        ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+        : ringsView(s, askMarks()),
       isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
     ]),
     queryOpen ? queryDock(s) : queryFab(),
