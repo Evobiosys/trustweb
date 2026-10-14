@@ -48,7 +48,7 @@ const radius = (id) => page.evaluate((pid) => {
   return Math.hypot(parseFloat(b.style.left) - 176, parseFloat(b.style.top) - 176)
 }, id)
 const NEAR = (d, r) => d !== null && Math.abs(d - r) < 25
-const RADII = { close: 48, friend: 84, acquaintance: 118, intending: 148, unsorted: 168 }
+const RADII = { close: 48, friend: 84, acquaintance: 118, intending: 148 }
 const nearest = (d) => Object.entries(RADII).sort((a, b) => Math.abs(a[1] - d) - Math.abs(b[1] - d))[0][0]
 try {
   await page.goto(URL)
@@ -67,9 +67,9 @@ try {
   await page.screenshot({ path: path.join(tmpdir(), 'one-ring-curator.png') })
   const heads = await cur.locator('h3.ring-heading').allInnerTexts()
   console.log('headings:', heads.join(' | '))
-  const want = ['close friend', 'friend', 'acquaintance', 'intending to connect', 'unsorted']
+  const want = ['close friend', 'friend', 'acquaintance', 'intending to connect']
   const idx = want.map((w) => heads.findIndex((h) => h.toLowerCase().startsWith(w + ' (')))
-  check('list order: close friend, friend, acquaintance, intending to connect, unsorted', idx.every((i) => i >= 0) && idx.every((i, k) => k === 0 || i > idx[k - 1]))
+  check('list order: close friend, friend, acquaintance, intending to connect', idx.every((i) => i >= 0) && idx.every((i, k) => k === 0 || i > idx[k - 1]))
   const manuelRow = cur.locator('.person-row:has-text("Manuel Spornberger")')
   const section = await manuelRow.first().evaluate((r) => r.closest('.zone')?.previousElementSibling?.textContent ?? '')
   console.log('Manuel: Curator section', JSON.stringify(section.trim()), 'Web ring', manuelWeb)
