@@ -36,6 +36,14 @@ DEV RECORD (dev server only; a build ignores it)
   Ring sync                      every ring set (or suggested) goes to Tana's "ring" options field; "ring approved" is [X] when the ring was set or
                                  confirmed in the CRM, [ ] while it is only a suggestion (prefs.ringQueued: once per suggested person). The converter
                                  reads the field back: a ring: line > Tana ring (dashed while not approved) > suggestion > derived.
+  Ring chooser                   tap a ring label: the chips, an X (close without changing), "Show advanced" (Deceased, famous, hide, family, desire
+                                 and every other schema field in place), Delete (hide in trustweb + gone here) and Untag #person (Tana tag tool,
+                                 then gone here), both behind a confirm sheet. The 0-10 desire is offered only while the person has no contact
+                                 (no met through, first-met date, interaction or note line); the converter marks first-met persons (firstMet).
+  Merge contacts                 person card > "Merge with…": search all people, pick one, a side-by-side sheet (keep which person, a radio per
+                                 differing field: the non-empty value, the newer person's on conflict). Note lines, interactions, follow-ups and
+                                 contact points move to the survivor (crm.merges re-adds the lines on load); the other node gets hide in trustweb
+                                 + the note line "merged into <name>". Undo toast for 30 s.
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
 
