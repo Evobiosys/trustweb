@@ -11,6 +11,9 @@ describe('ring suggestions', () => {
       b: { ring: 'unsorted', family: false, intending: 10, reason: '' },
     })
   })
+  it('close_friend reads as close', () => {
+    expect(parseSuggestions('{"a":{"ring":"close_friend"}}').a.ring).toBe('close')
+  })
   it('a missing or broken file is no suggestions', () => {
     expect(parseSuggestions(null)).toEqual({})
     expect(parseSuggestions('{nope')).toEqual({})

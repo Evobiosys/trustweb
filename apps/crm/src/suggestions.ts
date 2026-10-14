@@ -14,6 +14,11 @@ export interface Suggestion {
 export type Suggestions = Record<string, Suggestion>
 
 const RINGS: readonly string[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, UNSORTED]
+/** The suggestion file writes "close_friend" for the ring the CRM calls close. */
+const ring = (v: unknown): Suggestion['ring'] => {
+  const r = v === 'close_friend' ? Ring.Close : v
+  return RINGS.includes(r as string) ? (r as Suggestion['ring']) : UNSORTED
+}
 
 /** Entries that are not objects are dropped; a missing or odd field takes its neutral value. Never throws. */
 export function parseSuggestions(text: string | null): Suggestions {
@@ -27,7 +32,7 @@ export function parseSuggestions(text: string | null): Suggestions {
     const s = v as Partial<Record<keyof Suggestion, unknown>>
     const intending = Math.round(Number(s.intending))
     out[id] = {
-      ring: RINGS.includes(s.ring as string) ? (s.ring as Suggestion['ring']) : UNSORTED,
+      ring: ring(s.ring),
       family: s.family === true,
       intending: intending >= 1 ? Math.min(intending, MAX_INTENDING) : 0,
       reason: typeof s.reason === 'string' ? s.reason : '',
