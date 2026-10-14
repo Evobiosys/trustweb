@@ -12,6 +12,13 @@ export const LAYOUT_ITERATIONS = 300
 
 const REST: Record<Ring, number> = { [Ring.Close]: 60, [Ring.Friend]: 100, [Ring.Acquaintance]: 150, [Ring.Intending]: 200 }
 const PEER_REST = 40
+const LINK_REST = 50
+/** Tana attribute ids on a person's `fields` (a record imported from Tana). */
+const F_MET_THROUGH = 'X3aA3ndYjClT'
+const F_COMMUNITY = 'yHXufuk2A7rt'
+const F_WORKS_FOR = 'zHVsAk7dqNyT'
+/** A shared "workspace: x" line links people only below this many; more would be a hairball. */
+const WORKSPACE_MAX = 40
 
 export interface GraphNode {
   id: string
@@ -26,9 +33,13 @@ export interface GraphNode {
   /** Draw radius at zoom 1. */
   r: number
   pinned: boolean
+  /** Has a person-to-person edge (drawn a little larger). */
+  linked?: boolean
+  /** No fields and no notes: a name-only entry (drawn dimmer). */
+  faint?: boolean
 }
 
-export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean }
+export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean }
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[] }
 
 export function defaultsToNetwork(people: number): boolean {
@@ -47,6 +58,41 @@ function radiusOf(p: Person): number {
   return 4 + Math.min(6, Math.sqrt(n) * 1.5)
 }
 
+type FieldValue = string | { label?: string; tanaId?: string }[] | undefined
+const fieldsOf = (p: Person): Record<string, FieldValue> => (p as Person & { fields?: Record<string, FieldValue> }).fields ?? {}
+
+function refIds(v: FieldValue): string[] {
+  return Array.isArray(v) ? v.flatMap((r) => (r && typeof r.tanaId === 'string' ? [r.tanaId] : [])) : []
+}
+
+/** Person-to-person links from the imported fields: [index, index, thin] over `people`. */
+export function personLinks(people: readonly Person[]): [number, number, boolean][] {
+  const index = new Map(people.map((p, i) => [p.id, i]))
+  const seen = new Set<string>()
+  const out: [number, number, boolean][] = []
+  const add = (a: number, b: number, thin: boolean): void => {
+    const k = a < b ? `${a}|${b}` : `${b}|${a}`
+    if (a === b || seen.has(k)) return
+    seen.add(k)
+    out.push([a, b, thin])
+  }
+  const groups = new Map<string, number[]>()
+  const group = (key: string, i: number): void => { const g = groups.get(key); if (g) g.push(i); else groups.set(key, [i]) }
+  people.forEach((p, i) => {
+    const f = fieldsOf(p)
+    for (const key of [F_MET_THROUGH, F_WORKS_FOR]) {
+      for (const id of refIds(f[key])) { const j = index.get('tana-' + id); if (j !== undefined) add(i, j, false) }
+    }
+    for (const id of refIds(f[F_COMMUNITY])) group('c:' + id, i)
+    for (const l of p.lines) if (l.text?.startsWith('workspace:')) group('w:' + l.text.trim().toLowerCase(), i)
+  })
+  for (const [key, members] of groups) {
+    if (key.startsWith('w:') && members.length >= WORKSPACE_MAX) continue
+    for (let m = 1; m < members.length; m++) add(members[m - 1], members[m], true)
+  }
+  return out
+}
+
 export function buildGraph(me: { id: string; displayName: string }, people: readonly Person[]): Graph {
   const nodes: GraphNode[] = [{ id: me.id, name: me.displayName, context: '', x: 0, y: 0, vx: 0, vy: 0, r: 12, pinned: true }]
   const edges: GraphEdge[] = []
@@ -54,7 +100,7 @@ export function buildGraph(me: { id: string; displayName: string }, people: read
   for (const p of people) {
     const angle = (hash(p.id) / 4294967296) * Math.PI * 2
     const i = nodes.length
-    nodes.push({ id: p.id, name: p.name, context: p.context, ring: p.ring, x: Math.cos(angle) * REST[p.ring], y: Math.sin(angle) * REST[p.ring], vx: 0, vy: 0, r: radiusOf(p), pinned: false })
+    nodes.push({ id: p.id, name: p.name, context: p.context, ring: p.ring, x: Math.cos(angle) * REST[p.ring], y: Math.sin(angle) * REST[p.ring], vx: 0, vy: 0, r: radiusOf(p), pinned: false, faint: p.lines.length === 0 && Object.keys(fieldsOf(p)).length === 0 })
     edges.push({ a: 0, b: i, rest: REST[p.ring], dashed: p.ring === Ring.Intending })
     const key = p.context.trim().toLowerCase()
     if (!key) continue
@@ -62,6 +108,11 @@ export function buildGraph(me: { id: string; displayName: string }, people: read
     if (prev !== undefined) edges.push({ a: prev, b: i, rest: PEER_REST, dashed: false })
     lastInContext.set(key, i)
   }
+  for (const [a, b, thin] of personLinks(people)) {
+    edges.push({ a: a + 1, b: b + 1, rest: thin ? PEER_REST : LINK_REST, dashed: false, thin })
+    nodes[a + 1].linked = nodes[b + 1].linked = true
+  }
+  for (const v of nodes) if (v.linked) v.r += 2
   return { nodes, edges }
 }
 

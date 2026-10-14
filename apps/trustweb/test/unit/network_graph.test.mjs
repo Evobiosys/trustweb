@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step } from '../../src/network_graph.ts'
+import { personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -53,5 +53,30 @@ describe('network graph', () => {
     expect(g.nodes[0].x).toBe(0)
     expect([...matchIds(g, 'LIN')]).toEqual(['a'])
     expect(matchIds(g, ' ').size).toBe(0)
+  })
+
+  describe('person links from fields', () => {
+    const ref = (id) => [{ label: id, tanaId: id }]
+    const withF = (id, fields, texts = []) => ({ ...person('tana-' + id, Ring.Friend), fields, lines: texts.map((text) => ({ status: 'current', text })) })
+    it('met through / works for link directly; community and small workspaces link thin; text values link nobody', () => {
+      const ps = [
+        withF('A', { X3aA3ndYjClT: ref('B') }), withF('B', {}), withF('C', { zHVsAk7dqNyT: ref('B') }),
+        withF('D', { yHXufuk2A7rt: ref('K') }), withF('E', { yHXufuk2A7rt: ref('K') }),
+        withF('F', { X3aA3ndYjClT: 'Minerva' }, ['workspace: w']), withF('G', {}, ['workspace: w']),
+      ]
+      expect(personLinks(ps)).toEqual([[0, 1, false], [2, 1, false], [3, 4, true], [5, 6, true]])
+    })
+    it('skips a workspace shared by 40 or more', () => {
+      const many = (n) => Array.from({ length: n }, (_, i) => withF('p' + i, {}, ['workspace: big']))
+      expect(personLinks(many(39)).length).toBe(38)
+      expect(personLinks(many(40)).length).toBe(0)
+    })
+    it('enlarges linked nodes and marks name-only entries faint', () => {
+      const ps = [withF('A', { X3aA3ndYjClT: ref('B') }), { ...withF('B', {}), lines: [{ status: 'current', text: 'x' }] }, { ...withF('C', {}), lines: [] }]
+      const g = buildGraph(me, ps)
+      expect(g.nodes[1].linked).toBe(true)
+      expect(g.nodes[3].faint).toBe(true)
+      expect(g.nodes[2].faint).toBe(false)
+    })
   })
 })

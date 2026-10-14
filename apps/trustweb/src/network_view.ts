@@ -87,7 +87,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       const b = g.nodes[e.b]
       const lit = !filtering || matches.has(a.id) || matches.has(b.id)
       ctx.strokeStyle = colour(b.ring !== undefined ? b : a)
-      ctx.globalAlpha = lit ? 0.28 : 0.05
+      ctx.globalAlpha = lit ? (e.thin ? 0.14 : 0.28) : 0.05
       ctx.setLineDash(e.dashed ? [3, 4] : [])
       ctx.beginPath()
       ctx.moveTo(a.x * c.k + c.x, a.y * c.k + c.y)
@@ -103,7 +103,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       const y = v.y * c.k + c.y
       if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue
       const rad = v.r * Math.sqrt(c.k) * (matches.has(v.id) ? 1.5 : 1)
-      ctx.globalAlpha = lit ? 1 : 0.15
+      ctx.globalAlpha = lit ? (v.faint ? 0.4 : 1) : 0.15
       ctx.fillStyle = colour(v)
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
       if (v === hover || matches.has(v.id) || v.ring === undefined || (c.k >= LABEL_ZOOM && lit)) {
