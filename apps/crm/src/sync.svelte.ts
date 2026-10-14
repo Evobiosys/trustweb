@@ -33,8 +33,11 @@ function log(text: string): void {
 const DEBOUNCE_MS = 2000
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
-function queueOnce(personId: string, key: string): void {
-  if (!prefs.queue.some((q) => q.personId === personId && q.key === key && !q.append)) prefs.queue.push({ personId, key })
+/** `approved` = the person set or confirmed this value (a ring then goes to Tana with "ring approved" ticked). */
+function queueOnce(personId: string, key: string, approved = false): void {
+  const queued = prefs.queue.find((q) => q.personId === personId && q.key === key && !q.append)
+  if (queued) queued.approved ||= approved
+  else prefs.queue.push({ personId, key, ...(approved ? { approved } : {}) })
   savePrefs()
 }
 
@@ -43,7 +46,7 @@ export function saveField(personId: string, key: string, value: FieldValue): voi
   setField(personId, key, value)
   if (!tanaOn() || 'manual' in planFieldSync(key, value)) return
   // Queued (and persisted) at once, so a window killed inside the 2 s still replays the edit on the next boot.
-  queueOnce(personId, key)
+  queueOnce(personId, key, true)
   if (!prefs.autoSync) return
   const id = `${personId}|${key}`
   clearTimeout(timers.get(id))
@@ -128,7 +131,7 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
   return made
 }
 
-async function push(call: ToolCall, item: { personId: string; key: string; append?: string; into?: string; rename?: { from: string; to: string } }): Promise<void> {
+async function push(call: ToolCall, item: { personId: string; key: string; approved?: boolean; append?: string; into?: string; rename?: { from: string; to: string } }): Promise<void> {
   if (item.key === RENAME_KEY && item.rename) {
     await call('edit_node', { nodeId: await nodeFor(call, item.personId), name: { old_string: item.rename.from, new_string: item.rename.to } })
     log(`${item.rename.from}: renamed to ${item.rename.to} in Tana`)
@@ -158,13 +161,13 @@ async function push(call: ToolCall, item: { personId: string; key: string; appen
   if ('manual' in op) return
   const nodeId = await nodeFor(call, item.personId)
   // A suggestion never replaces a ring Jakob approved in Tana.
-  if (item.key === RING_KEY && edits?.[RING_KEY] === undefined && APPROVED_RE.test(await call('read_node', { nodeId }))) {
+  if (item.key === RING_KEY && !item.approved && APPROVED_RE.test(await call('read_node', { nodeId }))) {
     log(`${name}: ring already approved in Tana, suggestion skipped`)
     return
   }
   await call(op.tool, { nodeId, ...op.args })
-  // "ring approved" is ticked when the person set or confirmed the ring (an edit exists), open while it is only a suggestion.
-  if (item.key === RING_KEY) await call('set_field_content', { nodeId, attributeId: RING_APPROVED_KEY, content: edits?.[RING_KEY] !== undefined ? '[X]' : '[ ]', mode: 'replace' })
+  // "ring approved" is ticked when the person set or confirmed the ring (an approved item), open while it is only a suggestion.
+  if (item.key === RING_KEY) await call('set_field_content', { nodeId, attributeId: RING_APPROVED_KEY, content: item.approved ? '[X]' : '[ ]', mode: 'replace' })
   const checkbox = typeof value === 'boolean' ? ' (checkbox via text, unverified)' : ''
   log(`${name}: ${item.key} -> Tana ok${checkbox}`)
 }
@@ -212,12 +215,12 @@ function queueSuggested(): void {
   savePrefs()
 }
 
-/** Local wins: a ring edit that differs from the record's ring goes to Tana again on every boot until the record catches up. */
+/** Standalone only (hosted, the ring is the record's): local wins, a ring edit that differs from the record's ring goes to Tana again on every boot until the record catches up. */
 function queueLocalRings(): void {
   if (!tanaOn()) return
   for (const p of store.app.people) {
     const ring = store.crm.personFields?.[p.id]?.[RING_KEY]
-    if (typeof ring === 'string' && ring !== p.ring) queueOnce(p.id, RING_KEY)
+    if (typeof ring === 'string' && ring !== p.ring) queueOnce(p.id, RING_KEY, true)
   }
 }
 

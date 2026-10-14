@@ -54,7 +54,7 @@ export interface Prefs {
   /** Tana node new people are created under; empty = today's day node. */
   parentNodeId: string
   /** Edits waiting for Tana: coalesced per person and field; the value is read at sync time. `append` = one line to add to a multi-line field (notes), never coalesced. */
-  queue: { personId: string; key: string; append?: string; into?: string; rename?: { from: string; to: string } }[]
+  queue: { personId: string; key: string; approved?: boolean; append?: string; into?: string; rename?: { from: string; to: string } }[]
   /** People whose suggested family tag / desire were queued for Tana once. */
   suggestedQueued: string[]
   /** People whose suggested ring was queued for Tana once (approved [ ]). */

@@ -1,17 +1,17 @@
 /**
- * The one reactive holder: TrustWeb's record (read only), the CRM's own
+ * The one reactive holder: TrustWeb's record (rings and family tag are written through the host), the CRM's own
  * records, where the record came from, and every change to the CRM's records.
  * Each mutator saves through storage.ts; when the browser refuses to store,
  * saveCrm returns false and the app keeps working in memory.
  *
- * Never writes TrustWeb's key (see storage.ts for why).
+ * Never writes TrustWeb's key itself (see storage.ts for why): hosted, the host does, through bridge.ts.
  */
 import type { AppState, Person } from '../../trustweb/src/model'
 import { host } from './bridge'
-import { RING_KEY } from './rings'
+import { FAMILY_KEY, RING_KEY } from './rings'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
-import type { FieldValue } from './fields'
+import type { FieldValue, FieldValues } from './fields'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import type { CrmState, Curation } from './model'
 import { emptyCuration } from './curation'
@@ -51,8 +51,15 @@ function start(): Store {
   const source = record ? Source.Record : trustweb ? Source.TrustWeb : imported ? Source.Imported : Source.Sample
   const app = record ?? trustweb ?? imported ?? sampleApp(now)
   let crm = loadCrm(persona)
-  // Hosted: a ring edit the host's record no longer agrees with (changed in the Web view since) is stale; the record wins.
-  if (host.record) for (const p of app.people) if (crm.personFields?.[p.id]?.[RING_KEY] !== undefined && crm.personFields[p.id][RING_KEY] !== p.ring) delete crm.personFields[p.id][RING_KEY]
+  // Hosted: the ring and the family tag live in the host's record only; edits an older build kept in the Curator's own key are moved over (family) or dropped (ring: the record is newer).
+  if (host.record) {
+    for (const [id, edits] of Object.entries(crm.personFields ?? {})) {
+      const person = app.people.find((p) => p.id === id)
+      if (typeof edits[FAMILY_KEY] === 'boolean' && person && (person.fields as FieldValues | undefined)?.[FAMILY_KEY] !== edits[FAMILY_KEY]) setFamilyIn(person, edits[FAMILY_KEY])
+      delete edits[RING_KEY]
+      delete edits[FAMILY_KEY]
+    }
+  }
   if (source === Source.Sample && crmIsEmpty(crm)) {
     crm = sampleCrm(now)
     saveCrm(persona, crm)
@@ -64,6 +71,11 @@ function start(): Store {
     app.people = app.people.filter((p) => !gone.has(p.id))
   }
   return { app, crm, source, persona }
+}
+
+function setFamilyIn(person: Person, on: FieldValue): void {
+  person.fields = { ...person.fields, [FAMILY_KEY]: on } as Person['fields']
+  if (host.setFamily) host.setFamily(person.id, on === true)
 }
 
 /** Adds the note lines of `from` that `into` lacks; returns their ids. */
@@ -149,8 +161,19 @@ export function removeContactPoint(personId: string, index: number): void {
 
 /** Saves one #person field edit in the CRM's own record (never TrustWeb's). */
 export function setField(personId: string, key: string, value: FieldValue): void {
+  // Hosted, the ring and the family tag are person.ring / person.fields in the host's record (also the Web view's), never in the Curator's key.
+  const person = host.setRing ? store.app.people.find((p) => p.id === personId) : undefined
+  if (person && key === RING_KEY && typeof value === 'string') {
+    person.ring = value as Person['ring']
+    delete (person as { ringSuggested?: boolean }).ringSuggested
+    host.setRing?.(personId, value)
+    return
+  }
+  if (person && key === FAMILY_KEY && typeof value === 'boolean') {
+    setFamilyIn(person, value)
+    return
+  }
   // Assign first, then write through the store: a local taken before the assignment would be the raw object, not the reactive one, and the edit would never be saved.
-  if (key === RING_KEY && typeof value === 'string') host.setRing?.(personId, value)
   store.crm.personFields ??= {}
   store.crm.personFields[personId] = { ...store.crm.personFields[personId], [key]: value }
   persist()

@@ -1,6 +1,6 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, dotSize, inContact, placeOnRing, ringAt } from '../../src/rings_layout.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, inContact, placeOnRing, ringAt, ringLayout, trackRadius } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -14,8 +14,10 @@ describe('rings drag', () => {
     expect(ringAt(500)).toBe(Ring.Unsorted)
   })
   it('shrinks the circles on a crowded ring, never below 4 px', () => {
-    expect(dotSize(3, Ring.Close)).toBe(18)
-    expect(dotSize(514, Ring.Unsorted)).toBe(4)
+    expect(ringLayout(3, Ring.Close)).toEqual({ dot: 18, tracks: 1 })
+    expect(ringLayout(237, Ring.Unsorted)).toEqual({ dot: 6, tracks: 2 })
+    expect(ringLayout(262, Ring.Acquaintance).tracks).toBe(3)
+    expect(trackRadius(Ring.Unsorted, 1, 6)).toBe(RING_RADIUS[Ring.Unsorted] - 7)
   })
   it('a drop sets the ring; intending carries a clamped 0..10 value and a date, leaving it clears both', () => {
     const p = person(Ring.Friend)

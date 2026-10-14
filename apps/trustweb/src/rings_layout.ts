@@ -15,10 +15,23 @@ export function ringAt(dist: number): Ring {
   return WEB_RINGS.reduce((best, r) => (Math.abs(RING_RADIUS[r] - dist) < Math.abs(RING_RADIUS[best] - dist) ? r : best))
 }
 
-/** Avatar diameter in px (at most 18) for n people on one ring, shrinking so a crowded ring never overlaps into a blob. */
-export function dotSize(n: number, ring: Ring): number {
-  return Math.max(4, Math.min(18, Math.floor((2 * Math.PI * RING_RADIUS[ring] * 0.9) / Math.max(n, 1))))
+/** Smallest avatar (px) on a crowded ring; below the full size the avatars show no letter (styles.css `--d`). */
+const CROWDED_DOT = 6
+const RING_FILL = 0.9
+
+/** How n people sit on one ring: the avatar diameter (at most 18) and the number of concentric tracks (inward from the ring's radius) a crowded ring needs, so the dots never overlap into a blob. */
+export function ringLayout(n: number, ring: Ring): { dot: number; tracks: number } {
+  const fit = Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / Math.max(n, 1))
+  if (fit >= CROWDED_DOT) return { dot: Math.min(18, fit), tracks: 1 }
+  return { dot: CROWDED_DOT, tracks: Math.ceil(n / Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / CROWDED_DOT)) }
 }
+
+/** Radius of one track of a ring: the first sits on the ring, the others just inside it. */
+export const trackRadius = (ring: Ring, track: number, dot: number): number => RING_RADIUS[ring] - track * (dot + 1)
+
+/** The person-field id of Tana's "family" checkbox: a purple accent on the avatar, no ring of its own. */
+export const FAMILY_FIELD = 'LNlpliq4GdNI'
+export const isFamily = (p: Pick<Person, 'ring' | 'fields'>): boolean => p.ring === Ring.Family || String(p.fields?.[FAMILY_FIELD]) === 'true'
 
 /** Puts a person on a ring; family keeps its tag and moves by closeness. `desire` (0..10) belongs to Intending only. */
 export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_DEFAULT): void {

@@ -1,7 +1,7 @@
 /**
  * The Web Curator tab (apps/crm, Svelte 5). Its code is a lazy chunk: nothing of it loads until the tab is first opened.
  * The element lives as long as the page, so the Curator keeps its place (open person, scroll) between visits.
- * It reads a copy of this app's record on every visit, and a ring set there is set here too.
+ * It reads a copy of this app's record on every visit; rings and the family tag are this record's (one store): set there, set here.
  */
 import { el } from '../../demo/src/ui/dom'
 import type { AppState, Ring } from './model'
@@ -14,10 +14,10 @@ export interface Curator {
   person(personId: string, onclose: () => void): HTMLElement
 }
 
-export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void }): Curator {
+export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void }): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
-  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring) }
+  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily }
   return {
     el: root,
     open() {

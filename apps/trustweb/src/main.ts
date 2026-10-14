@@ -20,7 +20,7 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, inContact, placeOnRing, ringAt } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, inContact, isFamily, placeOnRing, ringAt, ringLayout, trackRadius } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1331,13 +1331,17 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   wrap.appendChild(svg)
   for (const ring of WEB_RINGS) {
     const inRing = s.people.filter((p) => ringSlot(p) === ring)
-    const dot = dotSize(inRing.length, ring)
+    const { dot, tracks } = ringLayout(inRing.length, ring)
     inRing.forEach((p, i) => {
-      const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10)
+      const track = i % tracks
+      const onTrack = Math.ceil((inRing.length - track) / tracks)
+      const deg = (360 / onTrack) * Math.floor(i / tracks) + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10) + track * (180 / onTrack)
       const a = ((deg - 90) * Math.PI) / 180
-      const x = C + RING_RADIUS[ring] * Math.cos(a)
-      const y = C + RING_RADIUS[ring] * Math.sin(a)
-      if (ring !== Ring.Unsorted) {
+      const radius = trackRadius(ring, track, dot)
+      const x = C + radius * Math.cos(a)
+      const y = C + radius * Math.sin(a)
+      // A crowded web (compact) draws a spoke only for people connected here: hundreds of dashed spokes read as dozens of rings.
+      if (ring !== Ring.Unsorted && (p.peerId || s.people.length <= RINGS_LABEL_CAP)) {
         const path = document.createElementNS(NS, 'path')
         const mx = (C + x) / 2 + (y - C) * 0.12
         const my = (C + y) / 2 + (C - x) * 0.12
@@ -1350,7 +1354,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       }
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const b = el('button', {
-        class: 'node' + (mark ? ' ' + mark : '') + (p.ring === Ring.Family ? ' fam' : '') + (ring === Ring.Unsorted ? ' uns' : ''), 'data-pid': p.id,
+        class: 'node' + (mark ? ' ' + mark : '') + (isFamily(p) ? ' fam' : '') + (ring === Ring.Unsorted ? ' uns' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
       }, [
         avatar(p.name, p.id),
@@ -2409,7 +2413,21 @@ const hosting = createHostingView({
 const images = new ImageStore(persona, storeCtx)
 const curator = createCurator({
   record: () => (state ? structuredClone(state) : null),
-  setRing: (id, ring) => { const p = state?.people.find((x) => x.id === id); if (p) { p.ring = ring; save() } },
+  setRing: (id, ring) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p) return
+    p.ring = ring
+    delete (p as { ringSuggested?: boolean }).ringSuggested
+    save()
+    if (screen === Screen.Web) render()
+  },
+  setFamily: (id, on) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p) return
+    p.fields = { ...p.fields, [FAMILY_FIELD]: on as unknown as string }
+    save()
+    if (screen === Screen.Web) render()
+  },
 })
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
