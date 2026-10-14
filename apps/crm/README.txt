@@ -27,7 +27,7 @@ DEV RECORD (dev server only; a build ignores it)
                                  Order from the centre: close friend, friend, acquaintance, intending to connect, unsorted. "Met through" holds person refs
                                  ([Name #person](tana:id), a Content field accepts them): the converter keeps them as links, no Tana change.
   ring-suggestions.json          also read by the converter (next to the nodes file): for a person with no manual ring the suggested ring is
-                                 the ring, the family tag and desire (number + since = conversion day) become fields, and the person gets the note
+                                 the ring (a person who already has a desire of 1 or more keeps the ring that desire gives), the family tag and desire (number + since = conversion day) become fields, and the person gets the note
                                  "ring: suggested" (not "derived"). The ring chip shows dashed until tapped once (that tap files the ring as an edit);
                                  the family / desire writes go to Tana once through the sync queue (prefs.suggestedQueued).
                                  Dev server, next to the record: { "<person id>": { "ring", "family": bool, "intending": 0-10,

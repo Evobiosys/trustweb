@@ -136,7 +136,7 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i, ids[i] ? { tanaId: ids[i] } : {}))
     const explicit = ringOf(texts, fields)
-    const s = derive && !explicit ? suggestions[`tana-${n.id}`] : undefined
+    const s = derive && !explicit && desire(fields) < 1 ? suggestions[`tana-${n.id}`] : undefined
     const sRing = RINGS[s?.ring === 'close_friend' ? 'close' : s?.ring]
     const suggested = s && (sRing !== 'unsorted' || s.family || s.intending >= 1) ? s : undefined
     if (suggested) {
