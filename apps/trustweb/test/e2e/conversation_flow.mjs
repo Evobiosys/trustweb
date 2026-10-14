@@ -127,9 +127,9 @@ async function openCard(page, name) {
 
 async function setRing(page, name, label) {
   await openCard(page, name)
-  await page.locator('.sheet.on').getByRole('button', { name: 'Change ring' }).click()
-  await page.locator('.sheet.on .radio').filter({ has: page.locator('b', { hasText: new RegExp(`^${label}$`) }) }).click()
-  await page.locator('.sheet.on .meta', { hasText: new RegExp(`^${label} ·`) }).first().waitFor({ timeout: 5_000 })
+  await page.locator('.sheet.on .rlabel').click()
+  await page.locator('.sheet.on .rchip', { hasText: new RegExp(`^${label}$`) }).click()
+  await page.locator('.sheet.on .rlabel', { hasText: new RegExp(`^${label}$`) }).waitFor({ timeout: 5_000 })
   await closeSheets(page)
 }
 

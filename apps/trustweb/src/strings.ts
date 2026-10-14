@@ -201,6 +201,7 @@ export const S = {
   olNoContext: 'intending to connect',
   olTwActive: 'Active on TrustWeb lately',
   olTwQuiet: 'Connected on TrustWeb, quiet lately',
+  ringLeaveUnsorted: 'Leave unsorted',
   olNotInWeb: (n: number) => `Not in my web (${n})`,
   olAdvanced: 'Advanced',
   olMore: 'More fields',
@@ -319,8 +320,6 @@ export const S = {
   sheetNoNotes: 'No notes yet.',
   sheetStillTrue: 'Still true?',
   sheetAddNote: 'Add a note',
-  sheetChangeRing: 'Change ring',
-  sheetRingPick: (name: string) => `${name} is my...`,
 
   recTitle: 'Record',
   recMeeting: 'Meeting',

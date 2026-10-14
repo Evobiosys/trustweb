@@ -8,6 +8,7 @@ import { Presence, favouriteLink, loadLayout, moveField, presence, saveLayout, s
 import type { Layout, Slot } from './outliner_fields'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { Ring } from './model'
+import { ringChips } from './ring_chips'
 import type { AppState, Person } from './model'
 import { S } from './strings'
 
@@ -15,8 +16,8 @@ export interface OutlinerDeps {
   s: AppState
   people: Person[]
   save: () => void
-  /** The app's ring picker for this person (it owns the ask-again rule of a tighter ring). */
-  pickRing: (p: Person) => void
+  /** The app's ring change for this person (it owns the ask-again rule of a tighter ring). */
+  setRing: (p: Person, r: Ring) => void
   /** The person's full card. */
   openCard: (p: Person) => void
   /** Row of ring, then name, as the old list ordered it. */
@@ -49,7 +50,7 @@ export function outlinerView(d: OutlinerDeps): HTMLElement {
 
   const input = (p: Person, x: Slot): HTMLElement => {
     const commit = (v: string): void => { setValue(p, x.id, v); d.save() }
-    if (x.kind === 'ring') return el('button', { class: 'ofield-ring shield ring-' + p.ring, onclick: () => d.pickRing(p) }, [S.ringLabel[p.ring]])
+    if (x.kind === 'ring') return ringChips(p, (r) => { d.setRing(p, r); draw() })
     if (x.kind === 'checkbox') return el('input', { type: 'checkbox', 'aria-label': x.label, checked: value(p, x.id) === 'true', onchange: (e) => commit((e.target as HTMLInputElement).checked ? 'true' : '') })
     if (x.kind === 'options') {
       const sel = el('select', { class: 'field', 'aria-label': x.label, onchange: () => { commit(sel.value); draw() } }, [el('option', { value: '' }, ['—']), ...(x.options ?? []).map((o) => el('option', { value: o.id }, [o.label]))])
@@ -78,6 +79,7 @@ export function outlinerView(d: OutlinerDeps): HTMLElement {
         el('b', { title: shown.title }, [shown.glyph ? shown.glyph + ' ' + shown.text : shown.text]),
         el('i', {}, [p.context || (p.ring === Ring.Intending ? S.olNoContext : '')]),
       ]),
+      ringChips(p, (r) => { d.setRing(p, r); draw() }),
       tw ? el('span', { class: 'otw ' + tw, role: 'img', 'aria-label': tw === Presence.Active ? S.olTwActive : S.olTwQuiet }) : null,
       fav ? el('a', { class: 'ofav', href: fav.href, 'aria-label': fav.label, title: fav.id === 'email' ? fav.href.replace('mailto:', '') : fav.label }, [fav.glyph]) : null,
     ])

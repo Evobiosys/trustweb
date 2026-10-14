@@ -846,3 +846,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .obody .btn{margin-top:8px; margin-right:8px}
 .onotweb{margin-top:14px}
 .onotweb>summary{font-size:13px; color:var(--ink-soft); cursor:pointer; padding:6px 0}
+
+.rchip-wrap{display:inline-block; vertical-align:middle}
+.rlabel,.rchip{border:0; border-radius:999px; padding:3px 10px; font:inherit; font-size:12px; font-weight:600; color:#fff; background:var(--rc); cursor:pointer}
+.rchips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.rchips[hidden]{display:none}
+.rchip{opacity:.55}
+.rchip.on{opacity:1; box-shadow:0 0 0 2px var(--ink)}
+.prow .rchip-wrap{flex-shrink:0}

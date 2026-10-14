@@ -21,6 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { outlinerView } from './outliner_view'
+import { ringChips } from './ring_chips'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1386,7 +1387,7 @@ function peopleView(s: AppState, only?: Person[]): HTMLElement {
   return outlinerView({
     s, people: only ?? s.people, save,
     order: (a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name),
-    pickRing: (p) => ringSheet(p),
+    setRing: (p, r) => changeRing(p, r),
     openCard: (p) => personSheet(p.id),
   })
 }
@@ -1724,7 +1725,7 @@ function personSheet(personId: string): void {
   const metaLine = p.ring === Ring.Intending ? S.sheetPlanned(p.context) : S.sheetMet(p.context, coarseWhen(p.metAt))
   openSheet([
     el('h3', { class: 'sheet-name', title: displayName(p.name).title }, [displayName(p.name).text, isDemoPerson(st(), p.id) ? dummyChip() : null, signalTop(p)]),
-    el('div', { class: 'meta' }, [S.ringLabel[p.ring] + ' · ' + metaLine]),
+    el('div', { class: 'meta' }, [ringChips(p, (r) => { changeRing(p, r); personSheet(p.id); render() }), ' · ' + metaLine]),
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     current.length
       ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline', 'data-line': l.id }, [
@@ -1738,7 +1739,6 @@ function personSheet(personId: string): void {
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
     // Wave 6e: the General note, under "Advanced", collapsed unless it was open in the last two minutes (general_notes.ts, person_general_view.ts).
     generalNoteSection(p),
-    el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     sharedReachRow(p),
@@ -2119,20 +2119,6 @@ function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (ed
     label,
     el('a', { class: 'ch-open', href: channelLink(ch, value), target: '_blank', rel: 'noopener noreferrer' }, [S.chOpen(chName(ch))]),
     el('button', { class: 'mini', 'aria-label': S.chEdit(S.chLabel[ch]), onclick: () => redraw(ch) }, [S.chEditShort]),
-  ])
-}
-
-function ringSheet(p: Person): void {
-  openSheet([
-    el('h3', {}, [S.sheetRingPick(p.name)]),
-    ...RINGS.map((r) => el('button', {
-      class: 'radio' + (p.ring === r ? ' on' : ''),
-      onclick: () => {
-        changeRing(p, r)
-        personSheet(p.id)
-        render()
-      },
-    }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])),
   ])
 }
 
