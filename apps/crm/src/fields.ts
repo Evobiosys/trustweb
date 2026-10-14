@@ -51,3 +51,11 @@ export function mergedFields(base: FieldValues | undefined, edits: FieldValues |
 export function baseFields(person: Person): FieldValues | undefined {
   return (person as Person & { fields?: FieldValues }).fields
 }
+
+/** Whether a person (their merged values) passes the People filters. */
+export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[] }): boolean {
+  if (f.hideDeceased && values[DECEASED_KEY] === true) return false
+  if (f.hideFamous && values[FAMOUS_KEY] === true) return false
+  if (f.onlyConnection && values[CONNECTION_KEY] !== true) return false
+  return f.rules.every((r) => valueText(values[r.key]).toLowerCase().includes(r.text.toLowerCase()))
+}

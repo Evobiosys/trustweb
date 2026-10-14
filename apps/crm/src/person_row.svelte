@@ -14,9 +14,11 @@
   interface Props {
     person: Person
     meta: string
+    /** Extra lines from the fields chosen under Fields on cards. */
+    extra?: string[]
     onopen: (personId: string) => void
   }
-  const { person, meta, onopen }: Props = $props()
+  const { person, meta, extra = [], onopen }: Props = $props()
 </script>
 
 <button class="person-row" onclick={(): void => onopen(person.id)}>
@@ -25,5 +27,6 @@
     <strong>{person.name}</strong>
     {#if person.context}<span class="ctx">{person.context}</span>{/if}
     <span class="meta">{meta}</span>
+    {#each extra as line (line)}<span class="meta">{line}</span>{/each}
   </span>
 </button>

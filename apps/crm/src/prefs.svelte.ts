@@ -14,7 +14,18 @@ export enum Pkm {
 
 export const PKMS: readonly Pkm[] = [Pkm.None, Pkm.AppleNotes, Pkm.Tana]
 
+export interface Filters {
+  hideDeceased: boolean
+  hideFamous: boolean
+  onlyConnection: boolean
+  /** Field keys shown as lines on the people cards. */
+  visible: string[]
+  /** All must hold (AND): the field's text contains `text`, case-insensitive. */
+  rules: { key: string; text: string }[]
+}
+
 export interface Prefs {
+  filters: Filters
   mandatory: string[]
   optionalOpen: boolean
   pkm: Pkm
@@ -32,9 +43,11 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { mandatory: [...DEFAULT_MANDATORY], optionalOpen: false, pkm: Pkm.None, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
+  const base: Prefs = { mandatory: [...DEFAULT_MANDATORY], optionalOpen: false,
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, visible: [], rules: [] }, pkm: Pkm.None, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }
+    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
+    return { ...base, ...saved, filters: { ...base.filters, ...saved.filters } }
   } catch {
     return base
   }
