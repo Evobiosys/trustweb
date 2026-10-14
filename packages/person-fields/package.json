@@ -4,6 +4,6 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "private": true,
-  "exports": { ".": "./src/fields.ts" },
+  "exports": { ".": "./src/fields.ts", "./display_name": "./src/display_name.ts" },
   "scripts": { "generate": "node scripts/tana_schema_to_fields.mjs /Users/personal/Documents/SingularStructure/assets/tana-persons/person-schema.md" }
 }
