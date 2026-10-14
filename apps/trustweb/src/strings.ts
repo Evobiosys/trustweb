@@ -199,6 +199,10 @@ export const S = {
   searchOpen: 'Manage and search contacts',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
+  olWants: (n: number) => `wants ${n}/10`,
+  desireAsk: (name: string) => `How much do you want to connect with ${name}? (0 to 10)`,
+  desireMove: 'Move here',
+  desireCancel: 'Cancel',
   olTwActive: 'Active on TrustWeb lately',
   olTwQuiet: 'Connected on TrustWeb, quiet lately',
   tanaOpen: 'Edit here; tap again to open in Tana',

@@ -26,6 +26,7 @@
  * even that copy cannot be written (storage full), this visit never writes
  * that key at all and runs from memory, so the only copy survives.
  */
+import { Ring } from './model'
 import type { AppState } from './model'
 
 const PREFIX = 'trustweb.v1.'
@@ -67,7 +68,10 @@ export function unreadableKey(persona: string, context?: string): string {
 export function parseRecord(raw: string): AppState | null {
   try {
     const s = JSON.parse(raw) as AppState | null
-    return s && typeof s === 'object' && s.v === 1 && s.me && typeof s.me === 'object' ? s : null
+    if (!(s && typeof s === 'object' && s.v === 1 && s.me && typeof s.me === 'object')) return null
+    // The ring value of the outliner and the CRM spells close_friend; the record keeps 'close'.
+    for (const p of [...(s.people ?? []), ...(s.peers ?? [])]) if ((p.ring as string) === 'close_friend') p.ring = Ring.Close
+    return s
   } catch {
     return null
   }

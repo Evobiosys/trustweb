@@ -77,7 +77,7 @@ export function outlinerView(d: OutlinerDeps): HTMLElement {
     const head = el('div', { class: 'prow' }, [
       el('button', { class: 'who', 'aria-expanded': String(!!mode), onclick: toggle }, [
         el('b', { title: shown.title }, [shown.glyph ? shown.glyph + ' ' + shown.text : shown.text]),
-        el('i', {}, [p.context || (p.ring === Ring.Intending ? S.olNoContext : '')]),
+        el('i', {}, [[p.intending ? S.olWants(p.intending.value) : '', p.context || (p.ring === Ring.Intending ? S.olNoContext : '')].filter(Boolean).join(' · ')]),
       ]),
       ringChips(p, (r) => { d.setRing(p, r); draw() }),
       tw ? el('span', { class: 'otw ' + tw, role: 'img', 'aria-label': tw === Presence.Active ? S.olTwActive : S.olTwQuiet }) : null,

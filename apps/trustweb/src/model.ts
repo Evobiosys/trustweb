@@ -298,6 +298,8 @@ export interface Person {
    * (packages/person-fields). Strings; a ticked box is 'true'. This phone only, like `channels`. Absent: none; older records keep working.
    */
   fields?: Record<string, string>
+  /** Ring Intending only: how much I want to connect (0..10) and since when (rings_layout.ts). Absent: not stated. */
+  intending?: { value: number; since: number }
 }
 
 /**

@@ -22,6 +22,7 @@ import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { outlinerView } from './outliner_view'
 import { ringChips } from './ring_chips'
+import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, placeOnRing, ringAt } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -58,7 +59,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, Provenance, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, Provenance, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1304,7 +1305,6 @@ function takeOverScreen(h: HandoverLink): Node[] {
 // ---------------------------------------------------------------------------
 
 const NS = 'http://www.w3.org/2000/svg'
-const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168, [Ring.None]: 168, [Ring.Family]: 72, [Ring.Unsorted]: 168 }
 const GRADS = [
   'linear-gradient(135deg,#FF715B,#9A37F0)', 'linear-gradient(135deg,#4FD7A0,#12A8E3)',
   'linear-gradient(135deg,#12A8E3,#9A37F0)', 'linear-gradient(135deg,#F2B544,#FF715B)',
@@ -1323,13 +1323,11 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
-/** More people than this on the rings: initials only, the name shows on hover or focus (and the card on tap). */
-const RINGS_LABEL_CAP = 24
-
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
-  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), title: S.hintText[HintId.WebTap] })
-  wrap.addEventListener('click', (e) => onRingsTap(e as MouseEvent, wrap))
+  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
+  let dragged = false
+  wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
   if (touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
@@ -1339,33 +1337,39 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('viewBox', '0 0 352 352')
   svg.innerHTML = '<defs><linearGradient id="th" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4FD7A0"/><stop offset="1" stop-color="#12A8E3"/></linearGradient></defs>'
-  for (const r of RINGS) {
+  for (const r of WEB_RINGS) {
     const c = document.createElementNS(NS, 'circle')
-    c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(RADIUS[r]))
-    c.setAttribute('fill', 'none'); c.setAttribute('stroke', 'rgba(154,55,240,.22)')
+    c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(RING_RADIUS[r])); c.setAttribute('data-ring', r)
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', '.55')
     c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
     c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
     svg.appendChild(c)
   }
   wrap.appendChild(svg)
-  for (const ring of RINGS) {
+  for (const ring of WEB_RINGS) {
     const inRing = s.people.filter((p) => ringSlot(p) === ring)
+    const dot = dotSize(inRing.length, ring)
     inRing.forEach((p, i) => {
       const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10)
       const a = ((deg - 90) * Math.PI) / 180
-      const x = C + RADIUS[ring] * Math.cos(a)
-      const y = C + RADIUS[ring] * Math.sin(a)
-      const path = document.createElementNS(NS, 'path')
-      const mx = (C + x) / 2 + (y - C) * 0.12
-      const my = (C + y) / 2 + (C - x) * 0.12
-      path.setAttribute('d', `M${C} ${C} Q${mx} ${my} ${x} ${y}`)
-      path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'url(#th)')
-      path.setAttribute('stroke-width', ring === Ring.Close ? '2.6' : ring === Ring.Friend ? '1.8' : ring === Ring.Acquaintance ? '1.2' : '0.8')
-      path.setAttribute('opacity', p.peerId ? '0.85' : '0.35')
-      if (!p.peerId) path.setAttribute('stroke-dasharray', '3 4')
-      svg.appendChild(path)
+      const x = C + RING_RADIUS[ring] * Math.cos(a)
+      const y = C + RING_RADIUS[ring] * Math.sin(a)
+      if (ring !== Ring.Unsorted) {
+        const path = document.createElementNS(NS, 'path')
+        const mx = (C + x) / 2 + (y - C) * 0.12
+        const my = (C + y) / 2 + (C - x) * 0.12
+        path.setAttribute('d', `M${C} ${C} Q${mx} ${my} ${x} ${y}`)
+        path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'url(#th)')
+        path.setAttribute('stroke-width', ring === Ring.Close ? '2.6' : ring === Ring.Friend ? '1.8' : ring === Ring.Acquaintance ? '1.2' : '0.8')
+        path.setAttribute('opacity', p.peerId ? '0.85' : '0.35')
+        if (!p.peerId) path.setAttribute('stroke-dasharray', '3 4')
+        svg.appendChild(path)
+      }
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
-      const b = el('button', { class: 'node' + (mark ? ' ' + mark : ''), onclick: () => personSheet(p.id) }, [
+      const b = el('button', {
+        class: 'node' + (mark ? ' ' + mark : '') + (p.ring === Ring.Family ? ' fam' : '') + (ring === Ring.Unsorted ? ' uns' : ''), 'data-pid': p.id,
+        onclick: () => { if (!dragged) personSheet(p.id) },
+      }, [
         avatar(p.name, p.id),
         el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
@@ -1373,6 +1377,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       ])
       b.style.left = x + 'px'
       b.style.top = y + 'px'
+      if (dot < 18) b.style.setProperty('--d', dot + 'px')
       wrap.appendChild(b)
     })
   }
@@ -1380,7 +1385,92 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
+  dragOnRings(wrap, s, (v) => { dragged = v })
   return wrap
+}
+
+/**
+ * Drag a person's circle to another ring (mouse: after 4 px; touch: after a 300 ms hold, so the page still scrolls). The drop is read
+ * from the distance to the centre; "intending to connect" first asks how much (0..10, default 5). The ring is the same value the outliner
+ * and the CRM use (changeRing / placeOnRing).
+ */
+function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void): void {
+  let lifted = false
+  wrap.addEventListener('touchmove', (e) => { if (lifted) e.preventDefault() }, { passive: false })
+  wrap.addEventListener('pointerdown', (down) => {
+    const node = (down.target as HTMLElement).closest<HTMLElement>('.node:not(.you)')
+    const p = s.people.find((x) => x.id === node?.dataset.pid)
+    if (!node || !p) return
+    let ring = ringSlot(p)
+    const place = (e: PointerEvent): void => {
+      const box = wrap.getBoundingClientRect()
+      const k = box.width / RINGS_SIZE
+      const x = (e.clientX - box.left) / k
+      const y = (e.clientY - box.top) / k
+      node.style.left = x + 'px'
+      node.style.top = y + 'px'
+      ring = ringAt(Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2))
+      wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', c.getAttribute('data-ring') === ring))
+    }
+    const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
+    const timer = down.pointerType === 'mouse' ? 0 : window.setTimeout(lift, 300)
+    const move = (e: PointerEvent): void => {
+      if (!lifted) {
+        if (Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < (timer ? 8 : 4)) return
+        if (timer) { end(); return }
+        lift()
+      }
+      place(e)
+    }
+    const end = (): void => {
+      clearTimeout(timer)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
+    }
+    const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) render() }
+    const up = (): void => {
+      const was = lifted
+      end(); lifted = false
+      setTimeout(() => setDragged(false), 0)
+      if (!was) return
+      if (ring === ringSlot(p)) { render(); return }
+      if (ring === Ring.Intending) askDesire(wrap, p, () => render(), (v) => dropOn(p, ring, v))
+      else dropOn(p, ring)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+  })
+}
+
+function dropOn(p: Person, ring: Ring, desire?: number): void {
+  if (p.ring === Ring.Family) save()
+  else changeRing(p, ring)
+  placeOnRing(p, ring, Date.now(), desire)
+  save()
+  toast(`${displayName(p.name).text}: ${S.ringLabel[ring].toLowerCase()}`)
+  render()
+}
+
+/** The 0 to 10 chip row for "intending to connect" (default 5); nothing changes until "Move here". */
+function askDesire(wrap: HTMLElement, p: Person, cancel: () => void, done: (value: number) => void): void {
+  let value = DESIRE_DEFAULT
+  const row = el('div', { class: 'desire', role: 'group', 'aria-label': S.desireAsk(displayName(p.name).text) })
+  const draw = (): void => row.replaceChildren(
+    el('p', {}, [S.desireAsk(displayName(p.name).text)]),
+    el('div', { class: 'rchips' }, Array.from({ length: 11 }, (_, n) => el('button', {
+      class: 'rchip' + (n === value ? ' on' : ''), style: `--rc:${ringColor({ ring: Ring.Intending })}`, 'aria-pressed': String(n === value),
+      onclick: () => { value = n; draw() },
+    }, [String(n)]))),
+    el('div', { class: 'desire-go' }, [
+      el('button', { class: 'btn btn-sm', onclick: () => done(value) }, [S.desireMove]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: cancel }, [S.desireCancel]),
+    ]),
+  )
+  draw()
+  wrap.appendChild(row)
 }
 
 function peopleView(s: AppState, only?: Person[]): HTMLElement {
@@ -1497,7 +1587,7 @@ function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
   const dx = (e.clientX - box.left) / scale - RINGS_SIZE / 2
   const dy = (e.clientY - box.top) / scale - RINGS_SIZE / 2
   const dist = Math.hypot(dx, dy)
-  const ring = RINGS.reduce((best, r) => (Math.abs(RADIUS[r] - dist) < Math.abs(RADIUS[best] - dist) ? r : best), Ring.Acquaintance)
+  const ring = RINGS.reduce((best, r) => (Math.abs(RING_RADIUS[r] - dist) < Math.abs(RING_RADIUS[best] - dist) ? r : best), Ring.Acquaintance)
   // Let the ripple show before the sheet rises over it.
   setTimeout(() => addPersonSheet(ring), RIPPLE_LEAD_MS)
 }

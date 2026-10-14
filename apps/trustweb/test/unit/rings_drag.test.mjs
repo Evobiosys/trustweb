@@ -1,0 +1,42 @@
+/** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
+import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, dotSize, placeOnRing, ringAt } from '../../src/rings_layout.ts'
+import { parseRecord } from '../../src/store.ts'
+
+const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
+
+describe('rings drag', () => {
+  it('orders the rings from the centre and reads a drop from the distance', () => {
+    expect(RING_RADIUS.close < RING_RADIUS.friend && RING_RADIUS.friend < RING_RADIUS.acquaintance).toBe(true)
+    expect(RING_RADIUS.acquaintance < RING_RADIUS.intending && RING_RADIUS.intending < RING_RADIUS.unsorted).toBe(true)
+    expect(ringAt(0)).toBe(Ring.Close)
+    expect(ringAt(RING_RADIUS.intending + 3)).toBe(Ring.Intending)
+    expect(ringAt(500)).toBe(Ring.Unsorted)
+  })
+  it('shrinks the circles on a crowded ring, never below 4 px', () => {
+    expect(dotSize(3, Ring.Close)).toBe(18)
+    expect(dotSize(514, Ring.Unsorted)).toBe(4)
+  })
+  it('a drop sets the ring; intending carries a clamped 0..10 value and a date, leaving it clears both', () => {
+    const p = person(Ring.Friend)
+    placeOnRing(p, Ring.Intending, 7)
+    expect(p).toMatchObject({ ring: Ring.Intending, intending: { value: DESIRE_DEFAULT, since: 7 } })
+    placeOnRing(p, Ring.Intending, 8, 40)
+    expect(p.intending).toEqual({ value: 10, since: 8 })
+    placeOnRing(p, Ring.Close, 9)
+    expect(p.ring).toBe(Ring.Close)
+    expect(p.intending).toBeUndefined()
+  })
+  it('family keeps its tag and moves by closeness; unsorted ends it', () => {
+    const p = person(Ring.Family)
+    placeOnRing(p, Ring.Acquaintance, 1)
+    expect(p.ring).toBe(Ring.Family)
+    expect(p.fields[CLOSENESS_KEY]).toBe(Ring.Acquaintance)
+    placeOnRing(p, Ring.Unsorted, 2)
+    expect(p.ring).toBe(Ring.Unsorted)
+  })
+  it('reads the older close_friend value as close', () => {
+    const rec = { v: 1, me: { id: 'm' }, people: [person('close_friend')], peers: [] }
+    expect(parseRecord(JSON.stringify(rec)).people[0].ring).toBe(Ring.Close)
+  })
+})
