@@ -1,5 +1,5 @@
 /**
- * Wave 7 proof: tapping a person in the app's Web view (outliner) opens the Web Curator's own person page in the sheet.
+ * Wave 7 proof: the outliner glyph opens the Web Curator (People list) in the sheet, the bottom bar has three tabs, and a person opens the Curator's own page.
  * Needs the personal preview (Jakob's record, Andrew Hasse in it):  PORT=5192 node test/e2e/person_view_exact.mjs
  */
 import { mkdtempSync } from 'node:fs'
@@ -15,9 +15,15 @@ page.on('pageerror', (e) => errors.push(e.message))
 let failed = false
 const ok = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 await page.goto(url)
-await page.getByRole('button', { name: 'Manage and search contacts' }).click()
-await page.locator('.operson', { hasText: 'Andrew Hasse' }).locator('.who').click()
-const page_ = page.locator('.curator-person')
+ok('bottom bar: three tabs', (await page.locator('.tabs [data-go]').count()) === 3)
+ok('no Web Curator tab', (await page.locator('.tabs [data-go=curator]').count()) === 0)
+await page.getByRole('button', { name: 'Web Curator' }).click()
+const people = page.locator('.sheet[data-kind=curator] .curator')
+await people.getByText('Andrew Hasse').first().waitFor({ timeout: 15_000 })
+ok('glyph: People list with Andrew Hasse', true)
+await page.screenshot({ path: (process.env.SHOT ?? path.join(tmpdir(), 'pv-exact.png')).replace(/\.png$/, '-people.png') })
+await people.getByText('Andrew Hasse').first().click()
+const page_ = page.locator('.sheet[data-kind=curator] .curator, .curator-person')
 await page_.getByText('Merge with').first().waitFor({ timeout: 15_000 })
 ok('Curator page: Merge with', true)
 for (const t of ['Contact info', 'Notes', 'What happened']) ok(`Curator page: ${t}`, (await page_.getByText(t, { exact: false }).count()) > 0)
