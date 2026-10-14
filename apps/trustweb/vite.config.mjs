@@ -149,6 +149,8 @@ function devSuggestions(command) {
 
 export default ({ command }) => ({
   resolve: { alias: { '@web-curator': path.join(crm, 'src/embed.ts') } },
+  // Svelte lives in apps/crm/node_modules: pre-bundled it would be a second runtime next to the one the Curator's own modules import.
+  optimizeDeps: { exclude: ['svelte'] },
   define: {
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
