@@ -77,6 +77,8 @@ export interface ContactOrigin {
   source: ContactSource
   file: string
   sourceRef: string
+  /** What makes a re-import "already here": the record's UID, or for "#n" positions its content (rows shift between exports). */
+  key: string
 }
 
 /**
