@@ -8,10 +8,13 @@ describe('tana sync plan', () => {
     expect(planFieldSync('__XNQ42Dtiwx', true)).toMatchObject({ args: { content: '[X]' } })
     expect(planFieldSync('Bxw7k4FWptqp', 'a@example.org')).toMatchObject({ tool: 'set_field_content' })
   })
+  it('maps a ring to the Tana ring option', () => {
+    expect(planFieldSync('tw-ring', 'close')).toEqual({ tool: 'set_field_option', args: { attributeId: 'rVfw62lb7BYD', optionId: 'ODC_KVcWiMTS' } })
+    expect(planFieldSync('tw-ring', 'bogus')).toMatchObject({ args: { optionId: 'THYXz_h9_MSf' } })
+  })
   it('flags what a human must do in Tana', () => {
     expect(planFieldSync('yHXufuk2A7rt', 'Some org')).toHaveProperty('manual')
     expect(planFieldSync('57duUT9M7ZmS', 'ISFJ')).toHaveProperty('manual')
-    expect(planFieldSync('tw-ring', 'close')).toHaveProperty('manual')
     expect(planFieldSync('adhoc:Date', 'x')).toHaveProperty('manual')
     expect(manualItems([{ id: 'p1', name: 'Anna Beispiel' }], { p1: { yHXufuk2A7rt: 'x', xu0y_4Pu3sOL: 'Graz' } })).toHaveLength(1)
   })

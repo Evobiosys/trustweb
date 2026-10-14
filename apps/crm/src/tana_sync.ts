@@ -5,6 +5,7 @@
  */
 import { ADHOC, fieldById, valueText } from './fields'
 import type { FieldValue, FieldValues } from './fields'
+import { RING_FIELD, RING_KEY, TANA_RING_OPTIONS, ringOf } from './rings'
 
 export const TANA_URL = 'http://127.0.0.1:8262/mcp'
 const EMAIL_KEY = 'Bxw7k4FWptqp'
@@ -17,6 +18,7 @@ export type SyncOp =
 
 /** What a field edit becomes in Tana, or why a human has to do it there. */
 export function planFieldSync(key: string, value: FieldValue | undefined): SyncOp {
+  if (key === RING_KEY) return { tool: 'set_field_option', args: { attributeId: RING_FIELD, optionId: TANA_RING_OPTIONS[ringOf(valueText(value))] } }
   const field = fieldById(key)
   if (key.startsWith(ADHOC) || !field) return { manual: 'ad hoc field, no Tana attribute known' }
   const attributeId = field.tanaAttributeId

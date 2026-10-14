@@ -2,10 +2,11 @@
 import { dayKey } from './dates'
 import { mergedFields, baseFields, HIDE_KEY, INTENDING_KEY, NOTES_KEY, SINCE_KEY } from './fields'
 import { InteractionKind } from './model'
+import { entityValues } from './person_view'
 import type { FieldValue } from './fields'
 import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
-import { FAMILY_KEY, SUGGESTED_NOTE } from './rings'
+import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY, SUGGESTED_NOTE } from './rings'
 import { parseSuggestions } from './suggestions'
 import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
@@ -95,11 +96,15 @@ async function push(call: ToolCall, item: { personId: string; key: string; appen
     log(`${name}: note -> Tana ok`)
     return
   }
-  const value = mergedFields(person ? baseFields(person) : undefined, store.crm.personFields?.[item.personId])[item.key]
+  const edits = store.crm.personFields?.[item.personId]
+  if (item.key === RING_KEY && !person) return
+  const value = (item.key === RING_KEY && person ? entityValues(person, baseFields(person), edits) : mergedFields(person ? baseFields(person) : undefined, edits))[item.key]
   const op = planFieldSync(item.key, value)
   if ('manual' in op) return
   const nodeId = await nodeFor(call, item.personId)
   await call(op.tool, { nodeId, ...op.args })
+  // "ring approved" is ticked when the person set or confirmed the ring (an edit exists), open while it is only a suggestion.
+  if (item.key === RING_KEY) await call('set_field_content', { nodeId, attributeId: RING_APPROVED_KEY, content: edits?.[RING_KEY] !== undefined ? '[X]' : '[ ]', mode: 'replace' })
   const checkbox = typeof value === 'boolean' ? ' (checkbox via text, unverified)' : ''
   log(`${name}: ${item.key} -> Tana ok${checkbox}`)
 }
@@ -127,17 +132,22 @@ export async function flush(): Promise<void> {
   }
 }
 
-/** Once per person whose ring came from a suggestion: queues the suggested family tag and desire (number + since date) for Tana. */
+/** Once per person whose ring came from a suggestion: queues the suggested ring (approved [ ]), family tag and desire (number + since date) for Tana. */
 function queueSuggested(): void {
   if (!tanaOn()) return
   const suggestions = parseSuggestions(__TW_SUGGESTIONS__)
   for (const p of store.app.people) {
     const s = suggestions[p.id]
-    if (!s || prefs.suggestedQueued.includes(p.id) || !p.lines.some((l) => l.text === SUGGESTED_NOTE)) continue
-    for (const key of [...(s.family ? [FAMILY_KEY] : []), ...(s.intending > 0 ? [INTENDING_KEY, SINCE_KEY] : [])]) {
+    if (!s || !p.lines.some((l) => l.text === SUGGESTED_NOTE)) continue
+    const keys = [
+      ...(prefs.ringQueued.includes(p.id) ? [] : [RING_KEY]),
+      ...(prefs.suggestedQueued.includes(p.id) ? [] : [...(s.family ? [FAMILY_KEY] : []), ...(s.intending > 0 ? [INTENDING_KEY, SINCE_KEY] : [])]),
+    ]
+    for (const key of keys) {
       if (!prefs.queue.some((q) => q.personId === p.id && q.key === key && !q.append)) prefs.queue.push({ personId: p.id, key })
     }
-    prefs.suggestedQueued.push(p.id)
+    if (!prefs.suggestedQueued.includes(p.id)) prefs.suggestedQueued.push(p.id)
+    if (!prefs.ringQueued.includes(p.id)) prefs.ringQueued.push(p.id)
   }
   savePrefs()
 }

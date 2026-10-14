@@ -13,6 +13,10 @@ const GOOGLE = 'Google Calendar Contacts'
 const MAX_LINE = 200
 const MAX_VALUE = 500
 const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', intending: 'intending', family: 'unsorted', unsorted: 'unsorted' }
+/** Tana's "ring" options field (its option label -> ring) and the "ring approved" checkbox. */
+const RING_FIELD = 'rVfw62lb7BYD'
+const RING_APPROVED = '_7wgarGd90ZR'
+const TANA_RINGS = { 'close friend': 'close', close: 'close', friend: 'friend', acquaintance: 'acquaintance', 'intending to connect': 'intending', unsorted: 'unsorted' }
 const CONNECTION = 'ConGRasNilsz'
 const INTENDING = 'UAfC4PcYo2po'
 const SINCE = '6A0Y1jShWqIg'
@@ -135,16 +139,21 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     })
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i, ids[i] ? { tanaId: ids[i] } : {}))
+    // The ring, strongest first: a "ring:" line, the Tana ring field (shown dashed while "ring approved" is off), the suggestion, the derived one.
+    const tanaRing = derive ? TANA_RINGS[String(fields[RING_FIELD] ?? '').toLowerCase()] : undefined
+    const approved = fields[RING_APPROVED] === true
+    delete fields[RING_FIELD]
+    delete fields[RING_APPROVED]
     const explicit = ringOf(texts, fields)
-    const s = derive && !explicit && desire(fields) < 1 ? suggestions[`tana-${n.id}`] : undefined
+    const s = derive && !explicit && !tanaRing && desire(fields) < 1 ? suggestions[`tana-${n.id}`] : undefined
     const sRing = RINGS[s?.ring === 'close_friend' ? 'close' : s?.ring]
     const suggested = s && (sRing !== 'unsorted' || s.family || s.intending >= 1) ? s : undefined
     if (suggested) {
       if (suggested.family) fields[FAMILY] = true
       if (suggested.intending >= 1 && !fields[INTENDING]) Object.assign(fields, { [INTENDING]: String(Math.min(10, Math.round(suggested.intending))), ...(today ? { [SINCE]: today } : {}) })
     }
-    const ring = withDesire(explicit ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
-    if (!explicit && derive) all.push(mk(suggested ? SUGGESTED : DERIVED, all.length))
+    const ring = withDesire(explicit ?? tanaRing ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
+    if (!explicit && derive && !(tanaRing && approved)) all.push(mk(suggested || tanaRing ? SUGGESTED : DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))

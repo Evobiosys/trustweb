@@ -52,6 +52,8 @@ export interface Prefs {
   queue: { personId: string; key: string; append?: string }[]
   /** People whose suggested family tag / desire were queued for Tana once. */
   suggestedQueued: string[]
+  /** People whose suggested ring was queued for Tana once (approved [ ]). */
+  ringQueued: string[]
   /** Tana node ids of people created from TrustWeb. */
   nodeIds: Record<string, string>
   log: string[]
@@ -59,7 +61,7 @@ export interface Prefs {
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], nodeIds: {}, log: [] }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined

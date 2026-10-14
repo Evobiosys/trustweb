@@ -10,10 +10,18 @@ export const UNSORTED = 'unsorted'
 export const FAMILY_KEY = 'LNlpliq4GdNI'
 /** The converter's marker line for a ring that came from ring-suggestions.json; the ring shows dashed until tapped once. */
 export const SUGGESTED_NOTE = 'ring: suggested'
+export type RingId = Ring | typeof UNSORTED
+
+/** Tana's "ring" options field and its "ring approved" checkbox (the ring sync writes both), with the option id per ring. */
+export const RING_KEY = 'tw-ring'
+export const RING_FIELD = 'rVfw62lb7BYD'
+export const RING_APPROVED_KEY = '_7wgarGd90ZR'
+export const TANA_RING_OPTIONS: Record<RingId, string> = {
+  close: 'ODC_KVcWiMTS', friend: 'L3O_fhbzNg3H', acquaintance: '5g0_ijoSfbqA', intending: 'RK_7xKgGfWYB', unsorted: 'THYXz_h9_MSf',
+}
 /** A choice that files a person under famous (filtered out of the web); it is no ring. */
 export const OUT_OF_WEB = 'outofweb'
 
-export type RingId = Ring | typeof UNSORTED
 /** What the ring chips offer: "intending to connect" comes from the 0 to 10 scale, not from a chip. */
 export type Choice = Exclude<RingId, Ring.Intending> | typeof OUT_OF_WEB
 

@@ -33,6 +33,9 @@ DEV RECORD (dev server only; a build ignores it)
                                  Dev server, next to the record: { "<person id>": { "ring", "family": bool, "intending": 0-10,
                                  "reason" } }. The Sort cards pre-select the suggested chip (outlined, "suggested: <reason>"): one tap
                                  on it files the whole suggestion; "Confirm all suggestions" files every card at once.
+  Ring sync                      every ring set (or suggested) goes to Tana's "ring" options field; "ring approved" is [X] when the ring was set or
+                                 confirmed in the CRM, [ ] while it is only a suggestion (prefs.ringQueued: once per suggested person). The converter
+                                 reads the field back: a ring: line > Tana ring (dashed while not approved) > suggestion > derived.
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
 

@@ -77,6 +77,22 @@ describe('tana converter: derived rings', () => {
     expect(r[3].lines.at(-1)?.text).toBe('ring: derived')
     expect(r[5].lines.some((l) => l.text === 'ring: suggested')).toBe(false)
   })
+  it('the Tana ring field is the ring (dashed while "ring approved" is off, confirmed when on); a ring: line and the field beat a suggestion', () => {
+    const schema = [...PERSON_FIELDS, { id: 'rVfw62lb7BYD', tanaAttributeId: 'rVfw62lb7BYD', label: 'ring', type: 'options' as const, description: '' },
+      { id: '_7wgarGd90ZR', tanaAttributeId: '_7wgarGd90ZR', label: 'ring approved', type: 'checkbox' as const, description: '' }]
+    const i = ['U', 'A', 'M'].map((name, k) => ({ id: `t${k}`, name, breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }))
+    const n = {
+      t0: '- U\n  - **ring**: friend\n  - **ring approved**: [ ]\n', t1: '- A\n  - **ring**: close friend\n  - **ring approved**: [X]\n',
+      t2: '- M\n  - ring: acquaintance\n  - **ring**: close friend\n',
+    }
+    const sg = { 'tana-t0': { ring: 'close_friend', family: true, intending: 0, reason: 'x' } }
+    const r = convert(i, n, schema, [], undefined, {}, new Set(), {}, sg, '2026-10-14').record.people
+    expect(r.map((p) => p.ring)).toEqual(['friend', 'close', 'acquaintance'])
+    expect(r[0].lines.at(-1)?.text).toBe('ring: suggested')
+    expect(r[0].fields).not.toHaveProperty('LNlpliq4GdNI')
+    expect(r[1].lines.some((l) => l.text.startsWith('ring:'))).toBe(false)
+    expect(Object.keys(r[1].fields)).toEqual([])
+  })
   it('a manual ring wins and carries no derived note', () => {
     expect(record.people[5].lines.some((l) => l.text === 'ring: derived')).toBe(false)
   })
