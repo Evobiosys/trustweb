@@ -39,6 +39,7 @@ const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`
 const row = page.locator(`.person-row:has-text("${NAME}")`)
 try {
   await page.goto(URL)
+  await page.locator('[data-action="toggle-filters"]').click()
   await page.locator('[data-filter="deceased"]').uncheck()
   await page.locator('[data-filter="famous"]').uncheck()
   await page.getByRole('searchbox').fill(NAME)

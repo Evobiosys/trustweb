@@ -41,6 +41,7 @@ let failed = false
 const check = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); if (!cond) failed = true }
 try {
   await page.goto(URL)
+  await page.locator('[data-action="toggle-filters"]').click()
   await page.locator('[data-filter="deceased"]').uncheck()
   await page.locator('[data-filter="famous"]').uncheck()
   await page.getByRole('searchbox').fill(NAME)

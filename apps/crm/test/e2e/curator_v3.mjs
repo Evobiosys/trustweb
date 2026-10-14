@@ -70,6 +70,7 @@ try {
   check('Alexander Large on the map under Intending to connect', await page.locator('.person-row:has-text("Alexander Large")').count() > 0 && heads.some((h) => /intending to connect \(1\)/i.test(h)))
   check('ring order close/friend/acquaintance/intending/unsorted', ['Friend', 'Intending to connect', 'Unsorted'].every((x, i) => heads.findIndex((h) => h.toLowerCase().startsWith(x.toLowerCase())) >= 0 && (i === 0 || heads.findIndex((h) => h.toLowerCase().startsWith(x.toLowerCase())) > heads.findIndex((h) => h.toLowerCase().startsWith(['friend', 'intending to connect', 'unsorted'][i - 1])))))
 
+  await page.locator('[data-action="toggle-filters"]').click()
   await page.locator('[data-filter="deceased"]').uncheck()
   await page.locator('[data-filter="famous"]').uncheck()
   await page.getByRole('searchbox').fill(NAME)
