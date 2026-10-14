@@ -1,5 +1,4 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
-import { dayKey } from './dates'
 import { mergedFields, baseFields, HIDE_KEY, INTENDING_KEY, NOTES_KEY, SINCE_KEY } from './fields'
 import { InteractionKind } from './model'
 import { entityValues, splitName } from './person_view'
@@ -68,10 +67,10 @@ export function renamePerson(personId: string, from: string, to: string): void {
   if (prefs.autoSync) void flush()
 }
 
-/** Queues one note line ("2026-10-14 text") for Tana's "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
-export function noteToTana(personId: string, text: string, at: number = Date.now()): void {
+/** Queues one note line (the text only, Tana stamps the time itself) for "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
+export function noteToTana(personId: string, text: string): void {
   if (!tanaOn()) return
-  prefs.queue.push({ personId, key: NOTES_KEY, append: `${dayKey(at)} ${text.replace(/\s+/g, ' ').trim()}` })
+  prefs.queue.push({ personId, key: NOTES_KEY, append: text.replace(/\s+/g, ' ').trim() })
   savePrefs()
   if (prefs.autoSync) void flush()
 }
@@ -95,10 +94,10 @@ export function untagPerson(personId: string): void {
   hidePerson(personId)
 }
 
-/** After a merge: the loser's Tana node moves under the survivor's (queued behind the note and the hide). */
-export function moveUnder(personId: string, intoId: string): void {
+/** After a merge: the loser's Tana node moves under the survivor's and is renamed "merged duplicate: <name>" (queued behind the note and the hide). */
+export function moveUnder(personId: string, intoId: string, name: string): void {
   if (!tanaOn() || !knownNode(personId) || !knownNode(intoId)) return
-  prefs.queue.push({ personId, key: MOVE_KEY, into: intoId })
+  prefs.queue.push({ personId, key: MOVE_KEY, into: intoId }, { personId, key: RENAME_KEY, rename: { from: name, to: `merged duplicate: ${name}` } })
   savePrefs()
   if (prefs.autoSync) void flush()
 }
