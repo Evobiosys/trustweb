@@ -3,7 +3,7 @@
 //   node scripts/tana_persons_to_record.mjs <persons-index.json> <persons-nodes.json> <out.json> [person-schema.md]
 // Next to the nodes file the converter also reads person-schema.md, workspaces.json (persons outside the first workspace get a
 // "workspace: <name>" tag line) and, when present, environment-index-all.json + environment-nodes.json + environment-schema.md
-// (written as record.environments). Field lines become person.fields (see src/fields.ts), plain bullets note lines.
+// (written as record.environments), and first-met.json (scripts/tana_first_met.mjs) for metAt and a context line. Field lines become person.fields (see src/fields.ts), plain bullets note lines.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -16,6 +16,7 @@ const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', 
 const FAMILY = 'LNlpliq4GdNI'
 const CONNECTION = 'ConGRasNilsz'
 const INTENDING = 'FcZJGS5EH2on'
+const MET_THROUGH = 'X3aA3ndYjClT'
 const DERIVED = 'ring: derived'
 
 function clean(s) {
@@ -99,7 +100,7 @@ const WORKSPACE = 'workspace'
  * One entity list. Duplicate node ids collapse to the first. `workspaces` (id -> name, first = home) adds the tag line to entities outside home.
  * @returns {{ entities: object[], lines: number, withoutFields: number }}
  */
-function convertList(index, nodes, schema, workspaces, derive = false) {
+function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}) {
   const byLabel = new Map(schema.map((f) => [f.label.toLowerCase(), f]))
   const home = workspaces[0]?.id
   const names = new Map(workspaces.map((w) => [w.id, workspaceName(w.name)]))
@@ -123,14 +124,15 @@ function convertList(index, nodes, schema, workspaces, derive = false) {
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))
     lines += texts.length
     delete fields['tw-ring']
-    return { id: `tana-${n.id}`, name: n.name, context: '', ring, metAt: at, lines: all, fields }
+    const met = firstMet[n.id]
+    return { id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, lines: all, fields }
   })
   return { entities, lines, withoutFields }
 }
 
 /** @returns {{ record: object, stats: { persons: number, lines: number, withoutFields: number, environments: number } }} */
-export function convert(index, nodes, schema, workspaces = [], env) {
-  const p = convertList(index, nodes, schema, workspaces, true)
+export function convert(index, nodes, schema, workspaces = [], env, firstMet = {}) {
+  const p = convertList(index, nodes, schema, workspaces, true, firstMet)
   const e = env ? convertList(env.index, env.nodes, env.schema, workspaces) : { entities: [] }
   const record = {
     v: 1, me: { id: 'me', displayName: `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,
@@ -155,6 +157,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     JSON.parse(readFileSync(indexPath, 'utf8')), JSON.parse(readFileSync(nodesPath, 'utf8')),
     parseSchema(schemaArg ? readFileSync(schemaArg, 'utf8') : read('person-schema.md')),
     has('workspaces.json') ? JSON.parse(read('workspaces.json')) : [], env,
+    has('first-met.json') ? JSON.parse(read('first-met.json')) : {},
   )
   writeFileSync(outPath, JSON.stringify(record))
   console.log(`persons ${stats.persons}, environments ${stats.environments}, note lines ${stats.lines}, persons without any field ${stats.withoutFields}`)

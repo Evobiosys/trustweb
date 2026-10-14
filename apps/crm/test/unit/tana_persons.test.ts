@@ -77,3 +77,24 @@ describe('tana converter: workspaces, duplicates, environments', () => {
     expect(record.environments?.[0]).not.toHaveProperty('ring')
   })
 })
+
+describe('tana first met', () => {
+  it('reads the day from the breadcrumb forms and takes the earliest, context = last crumb under the day', async () => {
+    const { dayOf, earliest } = await import('../../scripts/tana_first_met.mjs')
+    expect(dayOf(['2025', 'Week 41', 'Tue, Oct 7 2025', 'Bhutan'], '2026-01-01')).toBe(Date.UTC(2025, 9, 7))
+    expect(dayOf(['2025', 'Week 23', 'Tue, Jun 2', 'Gathering'], '2026-01-01')).toBe(Date.UTC(2025, 5, 2))
+    expect(dayOf(['x', '📅Daily Notes', 'Wed, Mar 5, 2025 '], '2026-01-01')).toBe(Date.UTC(2025, 2, 5))
+    expect(dayOf(['Library'], '2025-01-01')).toBeNull()
+    expect(earliest([
+      { breadcrumb: ['2026', 'Week 19', 'Wed, May 6', 'Kat post Tiger'], created: '2026-05-06' },
+      { breadcrumb: ['2025', 'Week 41', 'Tue, Oct 7 2025', 'Bhutan', 'people already going there'], created: '2025-10-07' },
+    ])).toEqual({ metAt: Date.UTC(2025, 9, 7), context: 'people already going there' })
+  })
+  it('the converter takes metAt and context from first-met, context only without "met through"', () => {
+    const idx = [{ id: 'm1', name: 'Mia', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }, { id: 'm2', name: 'Moe', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }]
+    const ns = { m1: '- Mia\n', m2: '- Moe\n  - **met through**: Dora\n' }
+    const fm = { m1: { metAt: 5, context: 'Gathering' }, m2: { metAt: 6, context: 'Gathering' } }
+    const { record } = convert(idx, ns, [...PERSON_FIELDS], [], undefined, fm)
+    expect(record.people.map((p) => [p.metAt, p.context])).toEqual([[5, 'Gathering'], [6, '']])
+  })
+})
