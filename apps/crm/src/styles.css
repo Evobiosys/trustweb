@@ -175,6 +175,7 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .card .field{min-height:40px; padding:6px 10px}
 
 /* follow-ups */
+.fu-fold>summary{cursor:pointer; font-weight:700; min-height:44px; display:flex; align-items:center}
 .followups section{margin-bottom:6px}
 .followups h3{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin:20px 2px 8px; font-family:inherit; font-weight:700}
 .followup{background:var(--card); border-radius:14px; padding:10px 12px; margin-bottom:8px; display:flex; flex-direction:column; gap:2px}

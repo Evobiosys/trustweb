@@ -1,6 +1,7 @@
 <script lang="ts">
   import { byStage, pipeline } from './contacts'
   import type { PipelineCard } from './contacts'
+  import Followups from './followups.svelte'
   import EmptyState from './empty_state.svelte'
   import { shownName } from './display'
   import KanbanBoard from './kanban_board.svelte'
@@ -11,12 +12,15 @@
   import { setStage, store } from './state.svelte'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
+  import { dueFollowUps } from './timeline'
 
   /** A card keyed by its NoteLine id, the key the stage map uses. */
   interface Item extends PipelineCard {
     id: string
   }
 
+  const now = Date.now()
+  const due = $derived(dueFollowUps(store.crm, now).length)
   const cards = $derived(pipeline({ app: store.app, crm: store.crm }))
   const columns = $derived<KanbanColumn<Item>[]>(STAGES.map((stage) => ({
     id: stage,
@@ -38,6 +42,10 @@
 </script>
 
 <section data-screen="pipeline">
+  <details class="fu-fold" data-part="followups" open>
+    <summary>{S.followUpsHeading(due)}</summary>
+    <Followups />
+  </details>
   {#if cards.length === 0}
     <EmptyState title={S.noPipeline} description={S.noPipelineHint} />
   {:else}

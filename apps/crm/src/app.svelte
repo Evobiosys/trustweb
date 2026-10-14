@@ -1,7 +1,6 @@
 <script lang="ts">
   import ContactPage from './contact_page.svelte'
   import Environment from './environment.svelte'
-  import Followups from './followups.svelte'
   import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS } from './nav'
   import { nav, showTab } from './nav.svelte'
@@ -19,7 +18,6 @@
     [Tab.People]: S.tabs.people,
     [Tab.Timeline]: S.tabs.timeline,
     [Tab.Pipeline]: S.tabs.pipeline,
-    [Tab.FollowUps]: S.tabs.followUps,
     [Tab.Settings]: S.tabs.settings,
   }
 </script>
@@ -47,10 +45,8 @@
       <Timeline />
     {:else if nav.tab === Tab.Pipeline}
       <Pipeline />
-    {:else if nav.tab === Tab.Settings}
-      <Settings />
     {:else}
-      <Followups />
+      <Settings />
     {/if}
   </main>
 

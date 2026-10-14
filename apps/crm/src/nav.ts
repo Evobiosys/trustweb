@@ -4,11 +4,10 @@ export enum Tab {
   People = 'people',
   Timeline = 'timeline',
   Pipeline = 'pipeline',
-  FollowUps = 'followups',
   Settings = 'settings',
 }
 
-export const TABS: readonly Tab[] = [Tab.People, Tab.Timeline, Tab.Pipeline, Tab.FollowUps, Tab.Settings]
+export const TABS: readonly Tab[] = [Tab.People, Tab.Timeline, Tab.Pipeline, Tab.Settings]
 
 export enum Section {
   Overdue = 'overdue',

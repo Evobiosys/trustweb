@@ -12,7 +12,7 @@ import { SortOrder } from './contacts'
 
 export const S = {
   appName: 'Web Curator',
-  tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', followUps: 'Follow-ups', settings: 'Settings' },
+  tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', settings: 'Settings' },
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,
   noPeople: 'Nobody matches.',
@@ -52,6 +52,7 @@ export const S = {
   overdue: 'Overdue',
   upcoming: 'Upcoming',
   finished: 'Finished',
+  followUpsHeading: (n: number) => `Follow-ups (${n})`,
   noFollowUps: 'No follow-ups. Add one from a person\'s page.',
   save: 'Save',
   cancel: 'Cancel',

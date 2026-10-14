@@ -102,8 +102,7 @@ try {
   ok('stage change moves the card', (await page.locator('[data-stage="agreed"] .card').count()) === 2)
   await shot('05-pipeline')
 
-  await page.click('[data-tab="followups"]')
-  await page.waitForSelector('[data-screen="followups"]')
+  await page.waitForSelector('[data-part="followups"] [data-screen="followups"]')
   ok('overdue follow-up listed', (await page.locator('[data-section="overdue"] .followup').count()) === 1)
   await page.locator('[data-section="overdue"] .followup button', { hasText: 'Done' }).first().click()
   ok('done moves it to finished', (await page.locator('[data-section="finished"] .followup').count()) === 2)
