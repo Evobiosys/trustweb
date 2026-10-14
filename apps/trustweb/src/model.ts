@@ -262,6 +262,11 @@ export interface Person {
    * one person. Absent: none.
    */
   doorPeerId?: string
+  /**
+   * Wave 7 (outliner_fields.ts): the values of the person fields of the Manage outliner, keyed by attribute id
+   * (packages/person-fields). Strings; a ticked box is 'true'. This phone only, like `channels`. Absent: none; older records keep working.
+   */
+  fields?: Record<string, string>
 }
 
 /**

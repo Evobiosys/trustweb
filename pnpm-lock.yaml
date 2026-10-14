@@ -334,6 +334,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@26.1.1)(jsdom@25.0.1)(lightningcss@1.32.0)(terser@5.49.0)
 
+  packages/person-fields: {}
+
   packages/protocol:
     dependencies:
       zod:
