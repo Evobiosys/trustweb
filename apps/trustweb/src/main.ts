@@ -58,7 +58,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, Provenance, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1634,6 +1634,39 @@ function dummyChip(): HTMLElement {
 }
 
 /** An item's or a note's source, linked to the past meeting it came from where that is still stored (provenance_view.ts). */
+/**
+ * A note line that came from Tana: text and a glyph with the short node id. The first tap edits the text in place; a tap on the glyph
+ * while it is being edited opens the node in Tana (tana://?nodeid=<id>, the desktop app handles it).
+ */
+function tanaNodeId(l: NoteLine): string {
+  return l.source?.kind === Provenance.Tana ? l.source.nodeId ?? '' : ''
+}
+
+function tanaLine(personId: string, l: NoteLine): Node[] {
+  const id = tanaNodeId(l)
+  const text = el('span', { class: 'tana-text' }, [l.text])
+  const glyph = el('button', { class: 'tana-glyph', type: 'button', title: S.tanaOpen, 'aria-label': S.tanaOpen }, ['⬡ tana-' + id.slice(0, 4)])
+  let input: HTMLInputElement | null = null
+  const edit = (): void => {
+    if (input) return
+    input = el('input', { class: 'field tana-edit', value: l.text })
+    input.value = l.text
+    const done = (): void => {
+      const v = input?.value.trim()
+      if (v && v !== l.text) { l.text = v; save() }
+      personSheet(personId)
+    }
+    input.addEventListener('blur', done)
+    input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') input?.blur() })
+    text.replaceWith(input)
+    input.focus()
+  }
+  text.addEventListener('click', edit)
+  glyph.addEventListener('pointerdown', (e) => { if (input) e.preventDefault() })
+  glyph.addEventListener('click', () => { if (input) window.location.href = 'tana://?nodeid=' + encodeURIComponent(id); else edit() })
+  return [text, glyph]
+}
+
 function sourceFor(source: ItemSource | undefined, text: string): HTMLElement | null {
   const m = source?.meetingId ? pastMeetings(st()).find((x) => x.id === source.meetingId) : undefined
   return sourceView(source, {
@@ -1730,8 +1763,8 @@ function personSheet(personId: string): void {
     el('div', { class: 'path' }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     current.length
       ? el('div', { class: 'sheet-lines' }, current.map((l) => el('div', { class: 'sline', 'data-line': l.id }, [
-          tagChip(l.tag, l.customTag), el('span', {}, [l.text]), el('em', {}, [S.audienceLabel[l.audience]]),
-          sourceFor(l.source, l.text),
+          tagChip(l.tag, l.customTag), ...(tanaNodeId(l) ? tanaLine(p.id, l) : [el('span', {}, [l.text])]), el('em', {}, [S.audienceLabel[l.audience]]),
+          tanaNodeId(l) ? null : sourceFor(l.source, l.text),
         ])))
       : el('p', { class: 'meta' }, [S.sheetNoNotes]),
     current.length ? el('button', { class: 'still-icon', 'aria-label': S.sheetStillTrue, title: S.sheetStillTrue, onclick: () => startReview(p.id) }, ['✓']) : null,

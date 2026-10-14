@@ -228,6 +228,8 @@ export interface ItemSource {
   fromName?: string
   /** Tana: the source node's reference. Local only, NEVER sent to anyone. */
   ref?: string
+  /** Tana: the line's own node id (the CRM converter writes it); opens the node in Tana. Local only, NEVER sent to anyone. */
+  nodeId?: string
   /** Imported: when the person opened it and kept it ("Reviewed", wave 2, B4). Absent: unreviewed. Local only. */
   reviewedAt?: number
 }

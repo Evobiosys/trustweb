@@ -201,6 +201,7 @@ export const S = {
   olNoContext: 'intending to connect',
   olTwActive: 'Active on TrustWeb lately',
   olTwQuiet: 'Connected on TrustWeb, quiet lately',
+  tanaOpen: 'Edit here; tap again to open in Tana',
   ringLeaveUnsorted: 'Leave unsorted',
   olNotInWeb: (n: number) => `Not in my web (${n})`,
   olAdvanced: 'Advanced',
