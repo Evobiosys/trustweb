@@ -81,8 +81,14 @@ function releaseFile() {
   }
 }
 
+// Dev only (scripts/tw_dev.sh): a record file every fresh preview origin opens with, instead of the welcome screen. Never in a build.
+function devRecord(command) {
+  const file = process.env.TW_DEV_RECORD
+  return command === 'serve' && file ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
+}
+
 export default ({ command }) => ({
-  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command) },
   plugins: [pwaFiles(), releaseFile()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).

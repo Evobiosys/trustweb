@@ -10,6 +10,9 @@
 #   scripts/tw_dev.sh --stop     stop the dev server this script started
 #   TW_PORT=5191 scripts/tw_dev.sh   another port (default 5190)
 #
+# All local previews open as Jakob with his record: TW_DEV_RECORD (a record file, outside the repo) or, when unset, the
+# path in ~/.cache/trustweb-dev/dev-record.path seeds every fresh origin instead of the welcome screen (About shows "dev record: <file>").
+#
 # Local only: no relay or backup proxy is set, so nothing here talks to production services.
 set -euo pipefail
 
@@ -23,6 +26,8 @@ URL="http://127.0.0.1:$PORT/"
 HOST=127.0.0.1
 OPEN=1
 mkdir -p "$STATE"
+if [ -z "${TW_DEV_RECORD:-}" ] && [ -f "$STATE/dev-record.path" ]; then TW_DEV_RECORD="$(cat "$STATE/dev-record.path")"; fi
+export TW_DEV_RECORD="${TW_DEV_RECORD:-}"
 
 for arg in "$@"; do
   case "$arg" in

@@ -97,6 +97,7 @@ import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
+import { seedDevRecord } from './dev_record'
 import { setUpInstall } from './install'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -252,6 +253,7 @@ const wantInstall = params.get('install') === '1'
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
+if (!solo) seedDevRecord(persona)
 let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);
 // nothing is merged over it, and the person is told.
