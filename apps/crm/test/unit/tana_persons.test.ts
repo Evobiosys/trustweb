@@ -64,6 +64,19 @@ describe('tana converter: derived rings', () => {
     expect(r[2].fields).not.toHaveProperty('FcZJGS5EH2on')
     expect(r[3].fields).toMatchObject({ UAfC4PcYo2po: '7', '6A0Y1jShWqIg': '2026-10-13' })
   })
+  it('a suggestion becomes the ring of a person with no manual ring (family tag, desire, marker line); a manual ring wins', () => {
+    const sg = {
+      'tana-r4': { ring: 'close_friend', family: true, intending: 0, reason: 'x' }, 'tana-r1': { ring: 'unsorted', family: false, intending: 3, reason: 'y' },
+      'tana-r3': { ring: 'unsorted', family: false, intending: 0, reason: 'z' }, 'tana-r5': { ring: 'close_friend', family: false, intending: 0, reason: 'w' },
+    }
+    const r = convert(idx, ns, [...PERSON_FIELDS], [], undefined, {}, new Set(), {}, sg, '2026-10-14').record.people
+    expect(r.map((p) => p.ring)).toEqual(['unsorted', 'intending', 'unsorted', 'unsorted', 'close', 'friend'])
+    expect(r[4].fields['LNlpliq4GdNI']).toBe(true)
+    expect(r[4].lines.at(-1)?.text).toBe('ring: suggested')
+    expect(r[1].fields).toMatchObject({ UAfC4PcYo2po: '3', '6A0Y1jShWqIg': '2026-10-14' })
+    expect(r[3].lines.at(-1)?.text).toBe('ring: derived')
+    expect(r[5].lines.some((l) => l.text === 'ring: suggested')).toBe(false)
+  })
   it('a manual ring wins and carries no derived note', () => {
     expect(record.people[5].lines.some((l) => l.text === 'ring: derived')).toBe(false)
   })

@@ -50,6 +50,8 @@ export interface Prefs {
   parentNodeId: string
   /** Edits waiting for Tana: coalesced per person and field; the value is read at sync time. `append` = one line to add to a multi-line field (notes), never coalesced. */
   queue: { personId: string; key: string; append?: string }[]
+  /** People whose suggested family tag / desire were queued for Tana once. */
+  suggestedQueued: string[]
   /** Tana node ids of people created from TrustWeb. */
   nodeIds: Record<string, string>
   log: string[]
@@ -57,7 +59,7 @@ export interface Prefs {
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined

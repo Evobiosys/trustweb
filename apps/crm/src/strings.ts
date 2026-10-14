@@ -116,6 +116,7 @@ export const S = {
   manualPlacement: 'Where a field sits (row, simple, advanced, hidden): Tana has no such setting. It stays in TrustWeb only.',
   manualNone: 'No edits waiting for a manual step.',
   lightTheme: 'Light theme (dark is the default)',
+  ringSuggestedTip: 'Suggested ring: tap to confirm it or change it',
   filtersToggle: (n: number) => `Filters (${n} active)`,
   hideDeceased: 'Hide deceased',
   hideFamous: 'Hide famous',

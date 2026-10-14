@@ -1,10 +1,12 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
 import { dayKey } from './dates'
-import { mergedFields, baseFields, HIDE_KEY, NOTES_KEY } from './fields'
+import { mergedFields, baseFields, HIDE_KEY, INTENDING_KEY, NOTES_KEY, SINCE_KEY } from './fields'
 import { InteractionKind } from './model'
 import type { FieldValue } from './fields'
 import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
+import { FAMILY_KEY, SUGGESTED_NOTE } from './rings'
+import { parseSuggestions } from './suggestions'
 import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 
@@ -125,4 +127,20 @@ export async function flush(): Promise<void> {
   }
 }
 
+/** Once per person whose ring came from a suggestion: queues the suggested family tag and desire (number + since date) for Tana. */
+function queueSuggested(): void {
+  if (!tanaOn()) return
+  const suggestions = parseSuggestions(__TW_SUGGESTIONS__)
+  for (const p of store.app.people) {
+    const s = suggestions[p.id]
+    if (!s || prefs.suggestedQueued.includes(p.id) || !p.lines.some((l) => l.text === SUGGESTED_NOTE)) continue
+    for (const key of [...(s.family ? [FAMILY_KEY] : []), ...(s.intending > 0 ? [INTENDING_KEY, SINCE_KEY] : [])]) {
+      if (!prefs.queue.some((q) => q.personId === p.id && q.key === key && !q.append)) prefs.queue.push({ personId: p.id, key })
+    }
+    prefs.suggestedQueued.push(p.id)
+  }
+  savePrefs()
+}
+
+queueSuggested()
 if (prefs.autoSync && prefs.queue.length > 0) void flush()

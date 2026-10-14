@@ -19,7 +19,10 @@ const SINCE = '6A0Y1jShWqIg'
 const OLD_INTENDING = 'FcZJGS5EH2on'
 export const HIDE = '4J9bhDw1UdTj'
 const MET_THROUGH = 'X3aA3ndYjClT'
+const FAMILY = 'LNlpliq4GdNI'
 const DERIVED = 'ring: derived'
+/** The marker line of a person whose ring came from ring-suggestions.json (the UI shows the ring dashed until it is tapped once). */
+export const SUGGESTED = 'ring: suggested'
 
 function clean(s) {
   return s
@@ -107,7 +110,7 @@ const WORKSPACE = 'workspace'
  * Persons with "hide in trustweb" ticked (in the outline, or listed in `hidden`) and persons with no name are left out and counted.
  * @returns {{ entities: object[], lines: number, withoutFields: number, hidden: number, blank: number }}
  */
-function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}, hiddenIds = new Set(), intending = {}) {
+function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}, hiddenIds = new Set(), intending = {}, suggestions = {}, today = '') {
   const byLabel = new Map(schema.map((f) => [f.label.toLowerCase(), f]))
   const home = workspaces[0]?.id
   const names = new Map(workspaces.map((w) => [w.id, workspaceName(w.name)]))
@@ -133,8 +136,15 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i, ids[i] ? { tanaId: ids[i] } : {}))
     const explicit = ringOf(texts, fields)
-    const ring = withDesire(explicit ?? (derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
-    if (!explicit && derive) all.push(mk(DERIVED, all.length))
+    const s = derive && !explicit ? suggestions[`tana-${n.id}`] : undefined
+    const sRing = RINGS[s?.ring === 'close_friend' ? 'close' : s?.ring]
+    const suggested = s && (sRing !== 'unsorted' || s.family || s.intending >= 1) ? s : undefined
+    if (suggested) {
+      if (suggested.family) fields[FAMILY] = true
+      if (suggested.intending >= 1 && !fields[INTENDING]) Object.assign(fields, { [INTENDING]: String(Math.min(10, Math.round(suggested.intending))), ...(today ? { [SINCE]: today } : {}) })
+    }
+    const ring = withDesire(explicit ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
+    if (!explicit && derive) all.push(mk(suggested ? SUGGESTED : DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))
@@ -147,8 +157,8 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
 }
 
 /** @returns {{ record: object, stats: { persons: number, lines: number, withoutFields: number, environments: number, hidden: number, blank: number } }} */
-export function convert(index, nodes, schema, workspaces = [], env, firstMet = {}, hiddenIds = new Set(), intending = {}) {
-  const p = convertList(index, nodes, schema, workspaces, true, firstMet, hiddenIds, intending)
+export function convert(index, nodes, schema, workspaces = [], env, firstMet = {}, hiddenIds = new Set(), intending = {}, suggestions = {}, today = '') {
+  const p = convertList(index, nodes, schema, workspaces, true, firstMet, hiddenIds, intending, suggestions, today)
   const e = env ? convertList(env.index, env.nodes, env.schema, workspaces) : { entities: [] }
   const record = {
     v: 1, me: { id: 'me', displayName: `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,
@@ -176,6 +186,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     has('first-met.json') ? JSON.parse(read('first-met.json')) : {},
     new Set(has('hidden.json') ? JSON.parse(read('hidden.json')) : []),
     has('intending.json') ? JSON.parse(read('intending.json')) : {},
+    has('ring-suggestions.json') ? JSON.parse(read('ring-suggestions.json')) : {},
+    new Date().toISOString().slice(0, 10),
   )
   writeFileSync(outPath, JSON.stringify(record))
   console.log(`persons ${stats.persons}, environments ${stats.environments}, note lines ${stats.lines}, persons without any field ${stats.withoutFields}, hidden ${stats.hidden}, blank ${stats.blank}`)

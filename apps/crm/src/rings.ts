@@ -8,6 +8,8 @@ import type { FieldValue, FieldValues } from './fields'
 
 export const UNSORTED = 'unsorted'
 export const FAMILY_KEY = 'LNlpliq4GdNI'
+/** The converter's marker line for a ring that came from ring-suggestions.json; the ring shows dashed until tapped once. */
+export const SUGGESTED_NOTE = 'ring: suggested'
 /** A choice that files a person under famous (filtered out of the web); it is no ring. */
 export const OUT_OF_WEB = 'outofweb'
 
