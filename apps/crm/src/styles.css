@@ -254,6 +254,10 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .merge-hit{display:block; width:100%; min-height:44px; text-align:left; border:0; border-bottom:1px solid var(--line); background:none; color:var(--ink); font-size:15px}
 .merge-row{display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; padding:6px 0; border-bottom:1px solid var(--line)}
 .merge-row > strong{grid-column:1 / -1; font-size:13px}
+.merge-side{display:flex; align-items:center; justify-content:space-between; gap:4px}
+.merge-side .quiet{min-height:32px; padding:0 8px; text-decoration:none; font-size:18px}
+.merge-both{grid-column:1 / -1}
+.dropped{text-decoration:line-through; opacity:.55}
 .merge-row label{display:flex; gap:6px; align-items:center; font-size:14px}
 .toast{position:fixed; left:12px; right:12px; bottom:72px; z-index:30; display:flex; align-items:center; gap:12px; padding:8px 14px; border-radius:12px; background:#241B2E; color:#F4EDF9; border:1px solid var(--ink-soft)}
 .toast .quiet{color:inherit}

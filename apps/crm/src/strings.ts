@@ -236,6 +236,8 @@ export const S = {
   mergeKeep: (name: string) => `Keep ${name}`,
   mergeAdds: (lines: number, events: number) => `Added to the survivor: ${lines} note line(s), ${events} interaction(s) and follow-up(s).`,
   mergeGo: 'Merge',
+  mergeBoth: 'Add both',
+  mergeDismiss: 'Use neither side for this value',
   mergeToast: (name: string) => `Merged ${name}.`,
   mergeUndo: 'Undo',
   renameName: 'Rename (Enter saves, Esc cancels)',
