@@ -203,6 +203,8 @@ export const S = {
   olNoContext: 'intending to connect',
   olWants: (n: number) => `wants ${n}/10`,
   desireAsk: (name: string) => `How much do you want to connect with ${name}? (0 to 10)`,
+  alreadyHaveDetails: (name: string, ways: string) => `You already have contact details for ${name} (${ways})`,
+  alreadyMessaged: (name: string, date: string) => `You already messaged ${name} here (${date})`,
   ringsHidden: (name: string) => `${name} hidden`,
   ringsHiddenBody: 'Hidden in TrustWeb. Curator > Settings lists them, with unhide.',
   ringsHiddenUndo: 'Undo',

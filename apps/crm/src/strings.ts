@@ -189,6 +189,7 @@ export const S = {
   sortUndo: 'Undo last',
   sortDone: 'All sorted.',
   sortSkip: 'Not now',
+  reminderOk: 'OK',
   notPlaced: (n: number) => `Not placed yet (${n})`,
   sortNoField: 'No details on this person.',
   hideFromTrustweb: 'Hide from TrustWeb',

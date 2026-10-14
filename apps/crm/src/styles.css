@@ -260,3 +260,6 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .ring-sheet{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--tint-warn); color:var(--warn-ink); font-size:13px}
 .rchip.num{min-width:36px; padding:0 8px}
 .rchip.suggested,.ring-label.suggested{border-style:dashed; border-width:2.5px}
+
+.reminder{margin:6px 0; font-size:13.5px; color:var(--ink-soft)}
+.not-placed>summary{cursor:pointer}

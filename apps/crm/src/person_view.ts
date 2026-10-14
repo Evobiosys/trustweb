@@ -2,7 +2,7 @@
 import { channelLink } from '../../trustweb/src/channel'
 import { Channel } from '../../trustweb/src/model'
 import type { Person, Ring } from '../../trustweb/src/model'
-import { MET_THROUGH_KEY, baseFields, isSet, mergedFields, valueText } from './fields'
+import { baseFields, mergedFields, valueText } from './fields'
 import type { FieldValues } from './fields'
 import { ContactPointKind } from './model'
 import type { ContactPoint } from './model'
@@ -31,12 +31,6 @@ export function effectivePerson<T extends Pick<Person, 'name' | 'context'> & { r
   const v = entityValues(p, baseFields(p), edits)
   const name = 'tw-first' in edits || LAST_NAME_KEY in edits ? [valueText(v['tw-first']), valueText(v[LAST_NAME_KEY])].filter(Boolean).join(' ') : p.name
   return { ...p, name: name || p.name, context: valueText(v['tw-context']), ...(p.ring ? { ring: (v['tw-ring'] === 'family' ? 'unsorted' : v['tw-ring']) as Ring } : {}) }
-}
-
-/** Any contact so far: met through someone, a first-met date, an interaction or a note line (the ring markers are no notes). */
-export function inContact(person: Pick<Person, 'id' | 'lines'>, values: FieldValues, interactions: readonly { personId: string }[]): boolean {
-  return isSet(values[MET_THROUGH_KEY]) || (person as { firstMet?: boolean }).firstMet === true
-    || interactions.some((i) => i.personId === person.id) || person.lines.some((l) => l.tag === 'note' && !l.text.startsWith('ring: '))
 }
 
 export enum Presence {

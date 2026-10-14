@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { Ring } from '../../trustweb/src/model'
   import { closePerson } from './nav.svelte'
   import RingAdvanced from './ring_advanced.svelte'
   import RingChips from './ring_chips.svelte'
   import { FAMILY_KEY, RING_COLORS, ringColor } from './rings'
-  import { fileUnder, setFamily, valuesOf } from './sorting.svelte'
+  import { fileUnder, intendingNotice, setFamily, valuesOf } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
   import { hideFromTrustweb, saveField, untagPerson } from './sync.svelte'
@@ -17,6 +18,8 @@
 
   let open = $state(false)
   let more = $state(false)
+  /** The reminder after picking intending to connect (the chooser stays open until it is read). */
+  let reminder = $state<string[]>([])
   /** The action waiting for its confirm sheet. */
   let asking = $state<'delete' | 'untag' | null>(null)
   /** The ring came from a suggestion and has not been tapped yet: a first tap confirms it (a ring edit is the confirmation). */
@@ -43,8 +46,9 @@
 {#if family}<span class="family-dot" data-part="family" style:background={RING_COLORS.family} title={S.familyTag} role="img" aria-label={S.familyTag}></span>{/if}
 {#if open}
   <div class="ring-pop" data-part="ring-pop">
-    <button class="icon-btn ring-x" data-action="ring-close" aria-label={S.ringClose} title={S.ringClose} onclick={(): void => { open = false; more = false; asking = null }}>✕</button>
-    <RingChips current={ring} {family} onchoose={(c): void => { fileUnder(personId, c); open = false }} onfamily={(on): void => { setFamily(personId, on) }} />
+    <button class="icon-btn ring-x" data-action="ring-close" aria-label={S.ringClose} title={S.ringClose} onclick={(): void => { open = false; more = false; asking = null; reminder = [] }}>✕</button>
+    <RingChips current={ring} {family} onchoose={(c): void => { fileUnder(personId, c); reminder = c === Ring.Intending ? intendingNotice(personId) : []; open = reminder.length > 0 }} onfamily={(on): void => { setFamily(personId, on) }} />
+    {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
     <button class="link" data-action="ring-advanced" aria-expanded={more} onclick={(): void => { more = !more }}>{more ? S.ringAdvancedHide : S.ringAdvanced}</button>
     {#if more}<RingAdvanced {personId} ongone={gone} />{/if}
     <div class="add-actions">

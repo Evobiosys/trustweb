@@ -6,7 +6,7 @@
   import { baseFields, fieldLabelOf, passesFilters, valueText } from './fields'
   import type { FieldValues } from './fields'
   import { matches } from './contacts'
-  import { unsortedIds } from './sorting.svelte'
+  import { fileUnder, intendingNotice, unsortedIds } from './sorting.svelte'
   import { openContact, openSort, openEnvironment, openImport, openPerson } from './nav.svelte'
   import { isClose } from './close'
   import { Kind, layout } from './placement'
@@ -16,7 +16,9 @@
   import PersonRow from './person_row.svelte'
   import { drag } from './drag.svelte'
   import { prefs, savePrefs } from './prefs.svelte'
-  import { UNSORTED, ringColor, ringOf } from './rings'
+  import { Ring } from '../../trustweb/src/model'
+  import { RING_ORDER, UNSORTED, ringColor, ringOf } from './rings'
+  import type { Choice } from './rings'
   import { store, undoLastImport } from './state.svelte'
   import { S } from './strings'
   import { timeline } from './timeline'
@@ -53,9 +55,18 @@
     order = next
   }
 
-  /** A row dropped before another in its ring section: that section keeps the order from now on, on this device. */
-  function reorder(ring: string, ids: string[]): (id: string, _s: unknown, before: string | null) => void {
-    return (id, _s, before) => {
+  /** The reminder after a row was dropped onto intending to connect. */
+  let reminder = $state<string[]>([])
+
+  /** A row dropped before another in its ring section: that section keeps the order from now on, on this device. Dropped on another ring's section: filed there. */
+  function reorder(ring: string, ids: string[]): (id: string, zone: string, before: string | null) => void {
+    return (id, zone, before) => {
+      if (zone !== ring) {
+        if (!(RING_ORDER as readonly string[]).includes(zone)) return
+        fileUnder(id, zone as Choice)
+        reminder = zone === Ring.Intending ? intendingNotice(id) : []
+        return
+      }
       prefs.customOrder[ring] = moveInOrder(ids, id, before)
       order = SortOrder.Recent
       savePrefs()
@@ -95,6 +106,7 @@
       <button aria-pressed={order === s} onclick={(): void => pick(s)}>{s === SortOrder.Recent && hasCustom ? S.sortCustom : S.sort[s]}</button>
     {/each}
   </div>
+  {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
   {#each groups as g (g.ring)}
     <h3 class="ring-heading"><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</h3>
     <div class="zone" class:over={drag.key !== null && drag.zone === g.ring} data-zone={g.ring}>
@@ -111,10 +123,14 @@
   {#if notPlaced.length}
     <details class="not-placed" data-part="not-placed">
       <summary class="ring-heading">{S.notPlaced(notPlaced.length)}</summary>
+      <div class="zone" data-zone={UNSORTED}>
       {#each notPlaced as row (row.person.id)}
+        <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
         <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
-          ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} onopen={openPerson} />
+          ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
+        </div>
       {/each}
+      </div>
     </details>
   {/if}
   {#if imported.length}

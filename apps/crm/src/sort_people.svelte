@@ -8,9 +8,8 @@
   import RingChips from './ring_chips.svelte'
   import { FAMILY_KEY, UNSORTED } from './rings'
   import type { Choice } from './rings'
-  import { applySuggestion, fileUnder, restore, setFamily, setIntending, unsortedIds, valuesOf } from './sorting.svelte'
+  import { applySuggestion, fileUnder, intendingNotice, restore, setFamily, setIntending, unsortedIds, valuesOf } from './sorting.svelte'
   import type { Undo } from './sorting.svelte'
-  import { inContact } from './person_view'
   import { store } from './state.svelte'
   import { parseSuggestions } from './suggestions'
   import { S } from './strings'
@@ -21,6 +20,8 @@
   const suggestable = ids.filter((id) => suggestions[id])
   const history: { index: number; undo: Undo }[] = $state([])
   let index = $state(0)
+  /** The reminder of the person just put on intending to connect: the card waits for "OK" so it can be read. */
+  let reminder = $state<string[]>([])
 
   const suggestion = $derived(suggestions[ids[index] ?? ''])
   const person = $derived(store.app.people.find((p) => p.id === ids[index]))
@@ -30,11 +31,19 @@
   function choose(c: Choice): void {
     const whole = suggestion && c === suggestion.ring
     history.push({ index, undo: whole ? applySuggestion(ids[index], suggestion) : fileUnder(ids[index], c) })
+    advance(c === Ring.Intending)
+  }
+
+  function advance(remind = false): void {
+    const lines = remind ? intendingNotice(ids[index]) : []
+    if (lines.length > 0) { reminder = lines; return }
+    reminder = []
     index++
   }
 
   function skip(): void {
     history.push({ index, undo: [] })
+    reminder = []
     index++
   }
 
@@ -45,11 +54,12 @@
   function desire(n: number): void {
     if (n === 0) return
     history.push({ index, undo: suggestion && n === suggestion.intending && suggestion.ring === Ring.Intending ? applySuggestion(ids[index], suggestion) : setIntending(ids[index], n) })
-    index++
+    advance(true)
   }
 
   function hide(): void {
     hideFromTrustweb(ids[index])
+    reminder = []
     index++
   }
 
@@ -57,6 +67,7 @@
     const last = history.pop()
     if (!last) return
     restore(ids[last.index], last.undo)
+    reminder = []
     index = last.index
   }
 </script>
@@ -74,7 +85,9 @@
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
       <RingChips suggested={suggestion?.ring === UNSORTED ? undefined : suggestion?.ring} family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
       {#if suggestion}<p class="muted" data-part="suggested">{S.suggestedBecause(suggestion.reason)}{suggestion.family ? ` · ${S.familyTag}` : ''}</p>{/if}
-      {#if !inContact(person, valuesOf(person.id), store.crm.interactions)}<IntendingChips suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />{/if}
+      <IntendingChips suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />
+      {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
+      {#if reminder.length > 0}<button class="btn small" data-action="reminder-ok" onclick={(): void => { reminder = []; index++ }}>{S.reminderOk}</button>{/if}
       <button class="quiet" data-action="skip-person" onclick={skip}>{S.sortSkip}</button>
       <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>

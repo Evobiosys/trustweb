@@ -1,7 +1,10 @@
 /** Filing people under a ring: the edits go through saveField (CRM record first, Tana for the checkboxes that have a field there). */
+import { EMAIL_FIELD, intendingReminder, knownWays, lastMessagedAt } from '../../trustweb/src/intending_reminder'
 import { Ring } from '../../trustweb/src/model'
 import { dayKey } from './dates'
-import { baseFields, passesFilters } from './fields'
+import { shownName } from './display'
+import { baseFields, isSet, passesFilters } from './fields'
+import { InteractionKind } from './model'
 import type { FieldValue, FieldValues } from './fields'
 import { effectivePerson, entityValues } from './person_view'
 import { prefs } from './prefs.svelte'
@@ -22,6 +25,15 @@ export function unsortedIds(): string[] {
     .filter((p) => ringOf(effectivePerson(p, store.crm.personFields?.[p.id]).ring) === UNSORTED
       && !p.name.includes('@') && passesFilters(valuesOf(p.id), prefs.filters))
     .map((p) => p.id)
+}
+
+/** The plain reminder for "intending to connect": contact details already here and a message already sent (none when neither is true). */
+export function intendingNotice(personId: string): string[] {
+  const p = store.app.people.find((x) => x.id === personId)
+  if (!p) return []
+  const points = [...(store.crm.contactPoints[personId] ?? []), ...(isSet(valuesOf(personId)[EMAIL_FIELD]) ? [{ kind: 'email' }] : [])]
+  const sent = store.crm.interactions.filter((i) => i.personId === personId && i.kind === InteractionKind.Message).map((i) => i.at)
+  return intendingReminder(shownName(p.name), knownWays(p, points), Math.max(lastMessagedAt(p.peerId ? store.app.chats?.[p.peerId] : undefined), ...sent))
 }
 
 export type Undo = [string, FieldValue][]

@@ -133,6 +133,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}
 .desire{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); z-index:6; width:min(340px,96%); background:var(--card); border-radius:16px; padding:10px 12px; box-shadow:0 4px 20px rgba(36,27,46,.3); text-align:center}
 .desire p{margin:0 0 6px; font-size:13px; font-weight:600}
+.desire p.reminder{font-weight:400; color:var(--ink-soft,inherit)}
 .desire .rchips{justify-content:center}
 .desire-go{display:flex; gap:8px; justify-content:center}
 .node.you .ava{width:54px; height:54px; box-shadow:0 0 0 3px #fff, 0 0 22px rgba(154,55,240,.55)}

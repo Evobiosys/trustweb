@@ -120,6 +120,7 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { importGroup } from './import_view'
 import { createCurator } from './curator'
+import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
@@ -1447,7 +1448,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       if (!was) return
       if (out) { hideOnRings(p); return }
       if (ring === ringSlot(p)) { render(); return }
-      if (ring === Ring.Intending) askDesire(wrap, p, () => render(), (v) => dropOn(p, ring, v))
+      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => dropOn(p, ring, v))
       else dropOn(p, ring)
     }
     window.addEventListener('pointermove', move)
@@ -1476,11 +1477,12 @@ function dropOn(p: Person, ring: Ring, desire?: number): void {
 }
 
 /** The 0 to 10 chip row for "intending to connect" (default 5); nothing changes until "Move here". */
-function askDesire(wrap: HTMLElement, p: Person, cancel: () => void, done: (value: number) => void): void {
+function askDesire(wrap: HTMLElement, p: Person, reminder: string[], cancel: () => void, done: (value: number) => void): void {
   let value = DESIRE_DEFAULT
   const row = el('div', { class: 'desire', role: 'group', 'aria-label': S.desireAsk(displayName(p.name).text) })
   const draw = (): void => row.replaceChildren(
     el('p', {}, [S.desireAsk(displayName(p.name).text)]),
+    ...reminder.map((line) => el('p', { class: 'reminder', 'data-intending-reminder': '' }, [line])),
     el('div', { class: 'rchips' }, Array.from({ length: 11 }, (_, n) => el('button', {
       class: 'rchip' + (n === value ? ' on' : ''), style: `--rc:${ringColor({ ring: Ring.Intending })}`, 'aria-pressed': String(n === value),
       onclick: () => { value = n; draw() },

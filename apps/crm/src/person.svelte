@@ -16,13 +16,13 @@
   import { norm } from './contacts'
   import { SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
   import { Kind } from './placement'
-  import { effectivePerson, entityValues, inContact } from './person_view'
+  import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { editLine, store } from './state.svelte'
   import { setIntending } from './sorting.svelte'
   import { hideFromTrustweb, renamePerson } from './sync.svelte'
-  import { UNSORTED, ringOf } from './rings'
+  import { ringOf } from './rings'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
   import { personTimeline } from './timeline'
@@ -110,7 +110,7 @@
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
 
-    {#if raw !== undefined && (ringOf(person.ring) === Ring.Intending || ringOf(person.ring) === UNSORTED) && !inContact(raw, values, store.crm.interactions)}
+    {#if raw !== undefined && ringOf(person.ring) === Ring.Intending}
     <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
     {/if}
 
