@@ -35,6 +35,8 @@ export interface Prefs {
   close: Close
   /** Networks a placement edit goes to; empty = for me. */
   scope: string[]
+  /** Order of the fields in a ring chooser's advanced list (drag to reorder); unknown ids keep schema order after these. */
+  advancedOrder: string[]
   /** Systems my people sync with; none by default. */
   pkms: Pkm[]
   /** A connected person counts as active (filled circle) if something happened within this many days. */
@@ -60,7 +62,7 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
+  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
     filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
