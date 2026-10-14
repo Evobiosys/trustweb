@@ -99,7 +99,7 @@ import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
-import { seedDevRecord } from './dev_record'
+import { devRecordFile, seedDevRecord } from './dev_record'
 import { setUpInstall } from './install'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -1028,7 +1028,7 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  */
 function offerDemoContent(): void {
   const s = state
-  if (!s || solo || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth() || runsAsInstalledApp()) return
+  if (!s || solo || s.testOf || s.demoOffered || devRecordFile() || s.demo || window.top !== window || !isPhoneWidth() || runsAsInstalledApp()) return
   const answer = (yes: boolean): void => {
     document.removeEventListener('pointerdown', onElsewhere, true)
     st().demoOffered = true
