@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAppState } from '../../src/model'
 import { convert } from '../../scripts/tana_persons_to_record.mjs'
+import { PERSON_FIELDS } from '../../src/person_fields'
 
 const index = [
   { id: 'a1', name: 'Anna Beispiel', breadcrumb: ['Library', 'Google Calendar Contacts'], created: '2025-02-20T18:05:49.444Z' },
@@ -14,16 +15,17 @@ const nodes = {
 }
 
 describe('tana persons converter', () => {
-  const { record, stats } = convert(index, nodes)
+  const { record, stats } = convert(index, nodes, [...PERSON_FIELDS])
   const [anna, ben, cara] = record.people
 
   it('emits an AppState the CRM accepts', () => {
     expect(isAppState(record)).toBe(true)
-    expect(stats).toEqual({ persons: 3, lines: 5, withoutFields: 1 })
+    expect(stats).toEqual({ persons: 3, lines: 2, withoutFields: 1 })
   })
-  it('turns fields and children into note lines, drops links, empties and truncation markers', () => {
-    expect(anna.lines.map((l) => l.text).slice(0, 2)).toEqual(['Email: anna@example.org', 'Met via: Dora Demo'])
-    expect(ben.lines[2].text.length).toBe(200)
+  it('turns fields into structured values, plain bullets into note lines, drops empties and truncation markers', () => {
+    expect(anna.fields).toEqual({ Bxw7k4FWptqp: 'anna@example.org', 'adhoc:Met via': 'Dora Demo' })
+    expect(ben.lines.map((l) => l.text)[0]).toBe('Plays chess')
+    expect(ben.lines[1].text.length).toBe(200)
   })
   it('keeps node id, created date, ring, and the Google tag', () => {
     expect(anna.id).toBe('tana-a1')
