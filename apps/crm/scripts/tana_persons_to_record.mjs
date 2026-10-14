@@ -25,8 +25,6 @@ export const HIDE = '4J9bhDw1UdTj'
 const MET_THROUGH = 'X3aA3ndYjClT'
 const FAMILY = 'LNlpliq4GdNI'
 const DERIVED = 'ring: derived'
-/** The marker line of a person whose ring came from ring-suggestions.json (the UI shows the ring dashed until it is tapped once). */
-export const SUGGESTED = 'ring: suggested'
 
 function clean(s) {
   return s
@@ -116,6 +114,7 @@ const WORKSPACE = 'workspace'
  */
 function convertList(index, nodes, schema, workspaces, derive = false, firstMet = {}, hiddenIds = new Set(), intending = {}, suggestions = {}, today = '') {
   const byLabel = new Map(schema.map((f) => [f.label.toLowerCase(), f]))
+  byLabel.set('ring', byLabel.get('ring in trustweb') ?? byLabel.get('ring')) // cached Tana exports from before the rename
   const home = workspaces[0]?.id
   const names = new Map(workspaces.map((w) => [w.id, workspaceName(w.name)]))
   let lines = 0
@@ -153,14 +152,15 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
       if (suggested.intending >= 1 && !fields[INTENDING]) Object.assign(fields, { [INTENDING]: String(Math.min(10, Math.round(suggested.intending))), ...(today ? { [SINCE]: today } : {}) })
     }
     const ring = withDesire(explicit ?? tanaRing ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
-    if (!explicit && derive && !(tanaRing && approved)) all.push(mk(suggested || tanaRing ? SUGGESTED : DERIVED, all.length))
+    const dashed = !explicit && derive && !(tanaRing && approved) && (suggested || tanaRing)
+    if (!explicit && derive && !(tanaRing && approved) && !dashed) all.push(mk(DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))
     lines += texts.length
     delete fields['tw-ring']
     const met = firstMet[n.id]
-    return [{ id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, metAt: met?.metAt ?? at, ...(met?.metAt ? { firstMet: true } : {}), lines: all, fields }]
+    return [{ id: `tana-${n.id}`, name: n.name, context: fields[MET_THROUGH] ? '' : met?.context ?? '', ring, ...(dashed ? { ringSuggested: true } : {}), metAt: met?.metAt ?? at, ...(met?.metAt ? { firstMet: true } : {}), lines: all, fields }]
   })
   return { entities, lines, withoutFields, hidden, blank }
 }

@@ -21,7 +21,7 @@
   import { closePerson } from './nav.svelte'
   import { editLine, store } from './state.svelte'
   import { setIntending } from './sorting.svelte'
-  import { hideFromTrustweb } from './sync.svelte'
+  import { hideFromTrustweb, renamePerson } from './sync.svelte'
   import { UNSORTED, ringOf } from './rings'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
@@ -37,6 +37,10 @@
   let searching = $state(false)
   let find = $state('')
   let fieldsOpen = $state(false)
+  let renaming = $state(false)
+
+  // A person opens at its top, never at the scroll position of the list it came from.
+  $effect(() => { void personId; window.scrollTo(0, 0) })
 
   const raw = $derived(store.app.people.find((p) => p.id === personId))
   const edits = $derived(store.crm.personFields?.[personId])
@@ -74,6 +78,11 @@
     closePerson()
   }
 
+  function rename(from: string, to: string): void {
+    renamePerson(personId, from, to)
+    renaming = false
+  }
+
   function closeForm(): void {
     form = PersonForm.None
   }
@@ -85,7 +94,14 @@
     <div class="person-head">
       <Avatar id={person.id} name={shownName(person.name)} />
       <div>
-        <h2>{shownName(person.name)}</h2>
+        {#if renaming}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="field name-edit" data-field="name-edit" aria-label={S.renameName} autofocus value={person.name}
+            onblur={(e): void => { if (renaming) rename(person.name, e.currentTarget.value) }}
+            onkeydown={(e): void => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') renaming = false }} />
+        {:else}
+          <h2><button class="name-btn" data-action="name-edit" title={S.renameName} onclick={(): void => { renaming = true }}>{shownName(person.name)}</button></h2>
+        {/if}
         <p class="meta-line"><RingLabel personId={person.id} ring={person.ring} /> · {meta}</p>
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
       </div>

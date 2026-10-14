@@ -2,11 +2,12 @@
 import { dayKey } from './dates'
 import { mergedFields, baseFields, HIDE_KEY, INTENDING_KEY, NOTES_KEY, SINCE_KEY } from './fields'
 import { InteractionKind } from './model'
-import { entityValues } from './person_view'
+import { entityValues, splitName } from './person_view'
+import { LAST_NAME_KEY } from './placement'
 import type { FieldValue } from './fields'
 import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
-import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY, SUGGESTED_NOTE } from './rings'
+import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY } from './rings'
 import { parseSuggestions } from './suggestions'
 import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
@@ -17,6 +18,8 @@ const TANA_PREFIX = 'tana-'
 const UNTAG_KEY = '#untag'
 /** The queue key of "move this node under another person's node" (a merge); `into` is the survivor. */
 const MOVE_KEY = '#move'
+/** The queue key of "rename the node"; `rename` holds the full old and new name. */
+const RENAME_KEY = '#rename'
 /** read_node shows the checkbox as `**ring approved**: [X]`. */
 const APPROVED_RE = /ring approved\**:\s*\[X\]/i
 
@@ -45,6 +48,19 @@ export function saveField(personId: string, key: string, value: FieldValue): voi
   const id = `${personId}|${key}`
   clearTimeout(timers.get(id))
   timers.set(id, setTimeout(() => { timers.delete(id); void flush() }, DEBOUNCE_MS))
+}
+
+/** Inline name edit: the CRM's own record at once (given + last name), the Tana node name through the queue. */
+export function renamePerson(personId: string, from: string, to: string): void {
+  const next = to.trim()
+  if (!next || next === from) return
+  const { first, last } = splitName(next)
+  setField(personId, 'tw-first', first)
+  setField(personId, LAST_NAME_KEY, last)
+  if (!tanaOn() || !knownNode(personId)) return
+  prefs.queue.push({ personId, key: RENAME_KEY, rename: { from, to: next } })
+  savePrefs()
+  if (prefs.autoSync) void flush()
 }
 
 /** Queues one note line ("2026-10-14 text") for Tana's "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
@@ -112,7 +128,12 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
   return made
 }
 
-async function push(call: ToolCall, item: { personId: string; key: string; append?: string; into?: string }): Promise<void> {
+async function push(call: ToolCall, item: { personId: string; key: string; append?: string; into?: string; rename?: { from: string; to: string } }): Promise<void> {
+  if (item.key === RENAME_KEY && item.rename) {
+    await call('edit_node', { nodeId: await nodeFor(call, item.personId), name: { old_string: item.rename.from, new_string: item.rename.to } })
+    log(`${item.rename.from}: renamed to ${item.rename.to} in Tana`)
+    return
+  }
   if (item.key === UNTAG_KEY) {
     await call('tag', { nodeId: await nodeFor(call, item.personId), action: 'remove', tagIds: [PERSON_TAG_ID] })
     log(`${item.personId}: #person removed in Tana`)
@@ -177,7 +198,7 @@ function queueSuggested(): void {
   const suggestions = parseSuggestions(__TW_SUGGESTIONS__)
   for (const p of store.app.people) {
     const s = suggestions[p.id]
-    if (!s || !p.lines.some((l) => l.text === SUGGESTED_NOTE)) continue
+    if (!s || !(p as { ringSuggested?: boolean }).ringSuggested) continue
     const keys = [
       ...(prefs.ringQueued.includes(p.id) ? [] : [RING_KEY]),
       ...(prefs.suggestedQueued.includes(p.id) ? [] : [...(s.family ? [FAMILY_KEY] : []), ...(s.intending > 0 ? [INTENDING_KEY, SINCE_KEY] : [])]),

@@ -120,6 +120,8 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 /* person */
 .person-head{display:flex; gap:12px; align-items:center; margin:6px 0}
 .hide-btn{margin-left:auto; font-size:18px}
+.name-btn{border:0; background:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:text}
+.name-edit{font-size:22px; font-weight:600}
 .person h2{font-size:26px; margin-top:2px}
 .person .meta-line{font-size:13.5px; color:var(--ink-soft); margin:2px 0 4px}
 .person h3,.screen-title{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin:22px 2px 8px; font-family:inherit; font-weight:700}
@@ -247,7 +249,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .merge-row{display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; padding:6px 0; border-bottom:1px solid var(--line)}
 .merge-row > strong{grid-column:1 / -1; font-size:13px}
 .merge-row label{display:flex; gap:6px; align-items:center; font-size:14px}
-.toast{position:fixed; left:12px; right:12px; bottom:72px; z-index:30; display:flex; align-items:center; gap:12px; padding:8px 14px; border-radius:12px; background:var(--ink); color:var(--bg)}
+.toast{position:fixed; left:12px; right:12px; bottom:72px; z-index:30; display:flex; align-items:center; gap:12px; padding:8px 14px; border-radius:12px; background:#241B2E; color:#F4EDF9; border:1px solid var(--ink-soft)}
 .toast .quiet{color:inherit}
 .ring-pop{flex-basis:100%; position:relative; padding-right:36px}
 .ring-x{position:absolute; top:4px; right:0; font-size:18px}

@@ -72,13 +72,14 @@ describe('tana converter: derived rings', () => {
     const r = convert(idx, ns, [...PERSON_FIELDS], [], undefined, {}, new Set(), {}, sg, '2026-10-14').record.people
     expect(r.map((p) => p.ring)).toEqual(['unsorted', 'intending', 'unsorted', 'unsorted', 'close', 'friend'])
     expect(r[4].fields['LNlpliq4GdNI']).toBe(true)
-    expect(r[4].lines.at(-1)?.text).toBe('ring: suggested')
+    expect(r[4]).toMatchObject({ ringSuggested: true })
+    expect(r[4].lines.some((l) => l.text.startsWith('ring:'))).toBe(false)
     expect(r[1].fields).toMatchObject({ UAfC4PcYo2po: '3', '6A0Y1jShWqIg': '2026-10-14' })
     expect(r[3].lines.at(-1)?.text).toBe('ring: derived')
-    expect(r[5].lines.some((l) => l.text === 'ring: suggested')).toBe(false)
+    expect(r[5]).not.toHaveProperty('ringSuggested')
   })
   it('the Tana ring field is the ring (dashed while "ring approved" is off, confirmed when on); a ring: line and the field beat a suggestion', () => {
-    const schema = [...PERSON_FIELDS, { id: 'rVfw62lb7BYD', tanaAttributeId: 'rVfw62lb7BYD', label: 'ring', type: 'options' as const, description: '' },
+    const schema = [...PERSON_FIELDS, { id: 'rVfw62lb7BYD', tanaAttributeId: 'rVfw62lb7BYD', label: 'ring in TrustWeb', type: 'options' as const, description: '' },
       { id: '_7wgarGd90ZR', tanaAttributeId: '_7wgarGd90ZR', label: 'ring approved', type: 'checkbox' as const, description: '' }]
     const i = ['U', 'A', 'M'].map((name, k) => ({ id: `t${k}`, name, breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }))
     const n = {
@@ -88,7 +89,8 @@ describe('tana converter: derived rings', () => {
     const sg = { 'tana-t0': { ring: 'close_friend', family: true, intending: 0, reason: 'x' } }
     const r = convert(i, n, schema, [], undefined, {}, new Set(), {}, sg, '2026-10-14').record.people
     expect(r.map((p) => p.ring)).toEqual(['friend', 'close', 'acquaintance'])
-    expect(r[0].lines.at(-1)?.text).toBe('ring: suggested')
+    expect(r[0]).toMatchObject({ ringSuggested: true })
+    expect(r[0].lines).toEqual([])
     expect(r[0].fields).not.toHaveProperty('LNlpliq4GdNI')
     expect(r[1].lines.some((l) => l.text.startsWith('ring:'))).toBe(false)
     expect(Object.keys(r[1].fields)).toEqual([])

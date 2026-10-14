@@ -2,7 +2,7 @@
   import { closePerson } from './nav.svelte'
   import RingAdvanced from './ring_advanced.svelte'
   import RingChips from './ring_chips.svelte'
-  import { FAMILY_KEY, RING_COLORS, SUGGESTED_NOTE, ringColor } from './rings'
+  import { FAMILY_KEY, RING_COLORS, ringColor } from './rings'
   import { fileUnder, setFamily, valuesOf } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
@@ -20,7 +20,7 @@
   /** The action waiting for its confirm sheet. */
   let asking = $state<'delete' | 'untag' | null>(null)
   /** The ring came from a suggestion and has not been tapped yet: a first tap confirms it (a ring edit is the confirmation). */
-  const suggested = $derived(store.app.people.find((x) => x.id === personId)?.lines.some((l) => l.text === SUGGESTED_NOTE) === true
+  const suggested = $derived((store.app.people.find((x) => x.id === personId) as { ringSuggested?: boolean } | undefined)?.ringSuggested === true
     && store.crm.personFields?.[personId]?.['tw-ring'] === undefined)
   const family = $derived(valuesOf(personId)[FAMILY_KEY] === true)
   const name = $derived(store.app.people.find((x) => x.id === personId)?.name ?? '')
