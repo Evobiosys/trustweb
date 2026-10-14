@@ -45,7 +45,8 @@ export function setIntending(personId: string, n: number): Undo {
 
 /** The family tag: a purple accent on top of any closeness. */
 export function setFamily(personId: string, on: boolean): Undo {
-  return apply(personId, [[FAMILY_KEY, on]], valuesOf(personId))
+  const before = valuesOf(personId)
+  return (before[FAMILY_KEY] === true) === on ? [] : apply(personId, [[FAMILY_KEY, on]], before)
 }
 
 /** Files the whole suggestion (ring, family tag, desire); returns what puts it all back (last change first). */
