@@ -21,7 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, beyondRings, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -1407,6 +1407,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     const p = s.people.find((x) => x.id === node?.dataset.pid)
     if (!node || !p) return
     let ring = ringSlot(p)
+    let out = false
     const place = (e: PointerEvent): void => {
       const box = wrap.getBoundingClientRect()
       const k = box.width / RINGS_SIZE
@@ -1414,8 +1415,11 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       const y = (e.clientY - box.top) / k
       node.style.left = x + 'px'
       node.style.top = y + 'px'
-      ring = ringAt(Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK, ringsGeo.radius)
-      wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', c.getAttribute('data-ring') === ring))
+      const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK
+      out = beyondRings(dist, ringsGeo)
+      ring = ringAt(dist, ringsGeo.radius)
+      wrap.classList.toggle('hide-zone', out)
+      wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
     }
     const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
     const timer = down.pointerType === 'mouse' ? 0 : window.setTimeout(lift, 300)
@@ -1433,6 +1437,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
       wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
+      wrap.classList.remove('hide-zone')
     }
     const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) render() }
     const up = (): void => {
@@ -1440,6 +1445,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       end(); lifted = false
       setTimeout(() => setDragged(false), 0)
       if (!was) return
+      if (out) { hideOnRings(p); return }
       if (ring === ringSlot(p)) { render(); return }
       if (ring === Ring.Intending) askDesire(wrap, p, () => render(), (v) => dropOn(p, ring, v))
       else dropOn(p, ring)
@@ -1447,6 +1453,16 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
+  })
+}
+
+/** A person dragged beyond the outermost ring: hidden like "hide in trustweb" (Curator Settings lists them, with unhide); Undo for 30 s. */
+function hideOnRings(p: Person): void {
+  const name = displayName(p.name).text
+  void curator.hide(p.id).then(() => {
+    showNotice(S.ringsHidden(name), S.ringsHiddenBody, [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-hide': p.id, onclick: () => { hideNotice(); void curator.unhide(p.id) } }, [S.ringsHiddenUndo]),
+    ], 30000)
   })
 }
 
@@ -2463,6 +2479,18 @@ const curator = createCurator({
     const p = state?.people.find((x) => x.id === id)
     if (!p) return
     p.fields = { ...p.fields, [FAMILY_FIELD]: on as unknown as string }
+    save()
+    if (screen === Screen.Web) render()
+  },
+  removePerson: (id) => {
+    if (!state) return
+    state.people = state.people.filter((x) => x.id !== id)
+    save()
+    if (screen === Screen.Web) render()
+  },
+  restorePerson: (person) => {
+    if (!state || state.people.some((x) => x.id === person.id)) return
+    state.people.push(person)
     save()
     if (screen === Screen.Web) render()
   },

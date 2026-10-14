@@ -8,6 +8,8 @@ declare module '@web-curator' {
   export function mountCurator(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }): Promise<void>
   export function mountCuratorPerson(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }, personId: string, onclose: () => void): Promise<void>
   export function refreshCurator(): Promise<void>
+  export function hideFromRings(lent: unknown, personId: string): Promise<void>
+  export function unhideFromRings(lent: unknown, personId: string): Promise<void>
 }
 
 /** The git short sha this build was made from (vite.config.mjs `define`); absent outside Vite (unit tests). */

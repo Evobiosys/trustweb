@@ -47,6 +47,21 @@ export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root
   mount(Person, { target: shadowTarget(el), props: { personId, onclose } })
 }
 
+/** A drag out of the Web view's rings: the same "hide in trustweb" as the Curator's own (Tana checkbox through the sync, local removal). */
+export async function hideFromRings(lent: Omit<Host, 'root'>, personId: string): Promise<void> {
+  Object.assign(host, lent)
+  const [{ reloadRecord }, { hideFromTrustweb }] = await Promise.all([import('./state.svelte'), import('./sync.svelte')])
+  reloadRecord()
+  hideFromTrustweb(personId)
+}
+
+/** The Undo of that drag. */
+export async function unhideFromRings(lent: Omit<Host, 'root'>, personId: string): Promise<void> {
+  Object.assign(host, lent)
+  const { unhideInTrustweb } = await import('./sync.svelte')
+  unhideInTrustweb(personId)
+}
+
 /** Back on the tab: read the host's record again (Web-view changes show up) and let it win over older ring edits. */
 export async function refreshCurator(): Promise<void> {
   (await import('./state.svelte')).reloadRecord()

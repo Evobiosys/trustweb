@@ -1,5 +1,5 @@
 /** What the app hosting the Curator as one of its tabs lends it (apps/trustweb); empty when the Curator runs on its own. */
-import type { AppState } from '../../trustweb/src/model'
+import type { AppState, Person } from '../../trustweb/src/model'
 
 export interface Host {
   /** A copy of the host's live record (the Curator edits its copy: merges, hidden people). */
@@ -8,6 +8,9 @@ export interface Host {
   setRing(personId: string, ring: string): void
   /** Same for the family tag (purple accent on the Web view). */
   setFamily(personId: string, on: boolean): void
+  /** A person hidden in the Curator leaves the host's record too (and comes back with `restorePerson`), so the Web view drops them at once. */
+  removePerson(personId: string): void
+  restorePerson(person: Person): void
   /** The element the Curator lives in (its theme switch goes there). */
   root: HTMLElement
 }

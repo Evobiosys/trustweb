@@ -183,15 +183,17 @@ export function setField(personId: string, key: string, value: FieldValue): void
 export function hidePerson(personId: string): void {
   const p = store.app.people.find((x) => x.id === personId)
   if (!p) return
-  hidden.set(personId, $state.snapshot(p) as Person)
+  const snapshot = $state.snapshot(p) as Person
+  hidden.set(personId, snapshot)
   store.app.people = store.app.people.filter((x) => x.id !== personId)
-  store.crm.hiddenPeople = [...(store.crm.hiddenPeople ?? []), { id: personId, name: p.name }]
+  store.crm.hiddenPeople = [...(store.crm.hiddenPeople ?? []), { id: personId, name: p.name, person: snapshot }]
+  host.removePerson?.(personId)
   persist()
 }
 
 export function unhidePerson(personId: string): void {
-  const p = hidden.get(personId)
-  if (p) store.app.people.push(p)
+  const p = hidden.get(personId) ?? store.crm.hiddenPeople?.find((h) => h.id === personId)?.person
+  if (p) { store.app.people.push(p); host.restorePerson?.(p) }
   hidden.delete(personId)
   store.crm.hiddenPeople = (store.crm.hiddenPeople ?? []).filter((h) => h.id !== personId)
   persist()

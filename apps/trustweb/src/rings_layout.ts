@@ -15,6 +15,10 @@ export function ringAt(dist: number, radius: Record<Ring, number> = RING_RADIUS)
   return WEB_RINGS.reduce((best, r) => (Math.abs(radius[r] - dist) < Math.abs(radius[best] - dist) ? r : best))
 }
 
+/** A drop this far from the centre, beyond the outermost avatar, hides the person (same as "hide in trustweb"). */
+const HIDE_MARGIN = 12
+export const beyondRings = (dist: number, g: RingsGeometry): boolean => dist > g.extent + HIDE_MARGIN
+
 /** Avatar diameter (px): at most FULL, shrinking to LEAST before a ring takes a second lap. */
 const FULL_DOT = 42
 const LEAST_DOT = 14

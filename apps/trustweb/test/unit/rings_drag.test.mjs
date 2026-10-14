@@ -1,7 +1,7 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry } from '../../src/rings_layout.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, beyondRings, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -44,6 +44,11 @@ describe('rings drag', () => {
     placeOnRing(p, Ring.Acquaintance, 1)
     expect(p.ring).toBe(Ring.Family)
     expect(p.fields[CLOSENESS_KEY]).toBe(Ring.Acquaintance)
+  })
+  it('a drop beyond the outermost avatar hides, one on the outer ring does not', () => {
+    const g = ringsGeometry({ close: 3, intending: 2 })
+    expect(beyondRings(RING_RADIUS.intending, g)).toBe(false)
+    expect(beyondRings(g.extent + 13, g)).toBe(true)
   })
   it('reads the older close_friend value as close', () => {
     const rec = { v: 1, me: { id: 'm' }, people: [person('close_friend')], peers: [] }

@@ -18,7 +18,7 @@
  * matcher (model.ts threadsForRing) reads only `people[].lines` and
  * `inventory`, so nothing in CrmState can ever be matched, relayed or shared.
  */
-import type { AppState } from '../../trustweb/src/model'
+import type { AppState, Person } from '../../trustweb/src/model'
 import type { FieldValues } from './fields'
 import type { Placements } from './placement'
 import type { ContactSource, ImportedContact } from './import/types'
@@ -122,7 +122,7 @@ export interface CrmState {
   /** Person id -> the person's own edits to #person fields, keyed by field id; laid over the record's values. */
   personFields?: Record<string, FieldValues>
   /** People hidden from TrustWeb here (Tana's "hide in trustweb" ticked): taken out of the record on load, listed in Settings to unhide. */
-  hiddenPeople?: { id: string; name: string }[]
+  hiddenPeople?: { id: string; name: string; /** What "unhide" puts back when the host's record no longer holds them. */ person?: Person }[]
   curation?: Curation
   /** NoteLine id -> the person's own edit of the line's text, and when they last said it is still true. */
   lineEdits?: Record<string, { text?: string; checkedAt?: number }>
