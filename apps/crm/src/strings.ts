@@ -243,6 +243,7 @@ export const S = {
   ringClose: 'Close without changing',
   ringAdvanced: '▸ Show advanced',
   ringAdvancedHide: '▾ Hide advanced',
+  ringCloseness: 'Closeness: close friend > friend > acquaintance > intending to connect > unsorted; family is a tag on top of any of them.',
   ringDelete: 'Delete',
   ringUntag: 'Untag #person',
   ringDeleteAsk: (name: string) => `Delete ${name}? They are hidden in Tana ("hide in trustweb") and leave every list here.`,
