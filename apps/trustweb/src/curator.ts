@@ -17,6 +17,12 @@ export interface Curator {
   unhide(personId: string): Promise<void>
 }
 
+/** A lazy chunk that will not load (usually a page older than a new deploy, whose chunks are gone): say so, offer a reload, never a blank sheet. */
+function loadFailed(target: HTMLElement, err: unknown): void {
+  console.error('Web Curator', err)
+  target.replaceChildren(el('p', { class: 'curator-error' }, [S.curatorLoadFailed]), el('button', { class: 'btn btn-sm', onclick: () => location.reload() }, [S.curatorReload]))
+}
+
 export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void }): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
@@ -29,11 +35,11 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
         mounted = true
         root.replaceChildren()
         await m.mountCurator(root, lent)
-      })
+      }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
     },
     person(personId, onclose) {
       const page = el('div', { class: 'curator-person' }, [S.curatorLoading])
-      void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose) })
+      void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose) }).catch((e: unknown) => loadFailed(page, e))
       return page
     },
     hide: async (personId) => { await (await import('@web-curator')).hideFromRings(lent, personId) },

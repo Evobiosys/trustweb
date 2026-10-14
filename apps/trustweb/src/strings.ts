@@ -176,6 +176,8 @@ export const S = {
   navInventory: 'My Resources',
   navCurator: 'Web Curator',
   curatorLoading: 'Opening the Web Curator ...',
+  curatorLoadFailed: 'The Web Curator could not load: this page is older than the build on the server.',
+  curatorReload: 'Reload',
   navRecord: 'Record',
 
   // The top-right pill: no "Online" text any more (owner, 2026-10-05). It is a
