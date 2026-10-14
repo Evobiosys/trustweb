@@ -15,7 +15,7 @@ export enum SortOrder {
   Name = 'name',
 }
 
-function norm(s: string): string {
+export function norm(s: string): string {
   return s.toLocaleLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
 }
 

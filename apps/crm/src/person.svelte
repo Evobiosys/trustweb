@@ -10,12 +10,13 @@
   import RingLabel from './ring_label.svelte'
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
+  import { norm } from './contacts'
   import { baseFields } from './fields'
   import { Kind } from './placement'
   import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
-  import { store } from './state.svelte'
+  import { editLine, store } from './state.svelte'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
   import { personTimeline } from './timeline'
@@ -26,12 +27,16 @@
   const { personId }: Props = $props()
 
   let form = $state<PersonForm>(PersonForm.None)
+  let editing = $state<string | null>(null)
+  let searching = $state(false)
+  let find = $state('')
 
   const raw = $derived(store.app.people.find((p) => p.id === personId))
   const edits = $derived(store.crm.personFields?.[personId])
   const person = $derived(raw && effectivePerson(raw, edits))
   const values = $derived(raw ? entityValues(raw, baseFields(raw), edits) : {})
-  const lines = $derived((person?.lines ?? []).filter((l) => l.status === LineStatus.Current))
+  const textOf = (l: { id: string; text: string }): string => store.crm.lineEdits?.[l.id]?.text ?? l.text
+  const lines = $derived((person?.lines ?? []).filter((l) => l.status === LineStatus.Current && norm(textOf(l)).includes(norm(find.trim()))))
   const events = $derived(person ? personTimeline({ app: store.app, crm: store.crm }, person.id) : [])
   const meta = $derived(
     person === undefined ? '' : person.ring === Ring.Intending
@@ -41,6 +46,20 @@
 
   function show(next: PersonForm): void {
     form = form === next ? PersonForm.None : next
+  }
+
+  const tanaId = (l: object): string | undefined => (l as { tanaId?: string }).tanaId
+
+  /** First press edits the line here; the glyph pressed again (already editing) opens the node in Tana. */
+  function glyph(l: { id: string }): void {
+    if (editing !== l.id) editing = l.id
+    else window.location.href = `tana://?nodeid=${tanaId(l)}`
+  }
+
+  function save(l: { id: string; text: string }, text: string): void {
+    const t = text.trim()
+    if (t && t !== textOf(l)) editLine(l.id, { text: t })
+    editing = null
   }
 
   function closeForm(): void {
@@ -64,11 +83,26 @@
 
     <EntityFields kind={Kind.Person} id={person.id} {values} />
 
-    <h3>{S.notes}</h3>
+    <h3>{S.notes}
+      <button class="icon-btn" data-action="note-search" aria-label={S.noteSearch} title={S.noteSearch} aria-expanded={searching}
+        onclick={(): void => { searching = !searching; find = '' }}>🔍</button></h3>
+    {#if searching}<input class="field" type="search" data-field="note-search" placeholder={S.noteSearchPh} aria-label={S.noteSearch} bind:value={find} />{/if}
     {#each lines as line (line.id)}
+      {@const checked = store.crm.lineEdits?.[line.id]?.checkedAt}
       <div class="line">
-        <p>{line.text}</p>
+        {#if tanaId(line)}
+          <button class="icon-btn tana-glyph" data-action="tana-glyph" title={editing === line.id ? S.tanaOpen : tanaId(line)} onclick={(): void => glyph(line)}>{S.tanaGlyph}<small>tana-{tanaId(line)?.slice(0, 4)}</small></button>
+        {/if}
+        {#if editing === line.id}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="field" data-field="line-edit" autofocus value={textOf(line)} onblur={(e): void => save(line, e.currentTarget.value)}
+            onkeydown={(e): void => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') editing = null }} />
+        {:else}
+          <button class="line-text" data-action="line-edit" onclick={(): void => { editing = line.id }}>{textOf(line)}</button>
+        {/if}
         <TagChip {line} /><em>{S.audienceLabel[line.audience]}</em>
+        <button class="icon-btn still" data-action="still-true" aria-label={S.stillTrueTip}
+          title={checked ? S.stillTrueOn(fmtDate(checked)) : S.stillTrueTip} onclick={(): void => editLine(line.id, { checkedAt: Date.now() })}>{checked ? '✔' : '✓'}</button>
       </div>
     {:else}
       <p class="muted">{S.sheetNoNotes}</p>

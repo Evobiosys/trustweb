@@ -122,6 +122,8 @@ export interface CrmState {
   /** Person id -> the person's own edits to #person fields, keyed by field id; laid over the record's values. */
   personFields?: Record<string, FieldValues>
   curation?: Curation
+  /** NoteLine id -> the person's own edit of the line's text, and when they last said it is still true. */
+  lineEdits?: Record<string, { text?: string; checkedAt?: number }>
 }
 
 export function emptyCrm(): CrmState {

@@ -122,6 +122,13 @@ export function setField(personId: string, key: string, value: FieldValue): void
   persist()
 }
 
+/** Saves the person's own wording of a note line (the record's line stays as it was) or the time they said it is still true. */
+export function editLine(lineId: string, change: { text?: string; checkedAt?: number }): void {
+  const all = store.crm.lineEdits ?? (store.crm.lineEdits = {})
+  all[lineId] = { ...all[lineId], ...change }
+  persist()
+}
+
 /** Changes the curation (networks, who curates when, their placements) in the CRM's own record. */
 export function curate(change: (c: Curation) => void): void {
   const c = store.crm.curation ?? (store.crm.curation = emptyCuration())

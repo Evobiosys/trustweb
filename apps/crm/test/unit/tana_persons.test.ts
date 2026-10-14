@@ -26,6 +26,8 @@ describe('tana persons converter', () => {
     expect(anna.fields).toEqual({ Bxw7k4FWptqp: 'anna@example.org', 'adhoc:Met via': 'Dora Demo' })
     expect(ben.lines.map((l) => l.text)[0]).toBe('Plays chess')
     expect(ben.lines[1].text.length).toBe(200)
+    expect(ben.lines[0]).toMatchObject({ tanaId: 'y' })
+    expect(ben.lines[1]).not.toHaveProperty('tanaId')
   })
   it('keeps node id, created date, ring, and the Google tag', () => {
     expect(anna.id).toBe('tana-a1')

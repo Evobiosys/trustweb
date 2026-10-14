@@ -240,3 +240,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .person-row.with-ring{flex-wrap:wrap}
 .pr-ring{flex:0 0 auto; order:3}
 .pr-ring:has(.ring-chips){flex-basis:100%}
+.icon-btn{border:0; background:none; min-width:28px; min-height:28px; padding:0 4px; font-size:15px; color:var(--ink-soft); cursor:pointer}
+.icon-btn.still{font-size:13px; min-width:24px; min-height:24px; opacity:.7}
+.tana-glyph small{font-size:10px; margin-left:3px}
+.line .line-text{display:block; margin-bottom:6px; border:0; background:none; text-align:left; color:inherit; font:inherit; padding:0}

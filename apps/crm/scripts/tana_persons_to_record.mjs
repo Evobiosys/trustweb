@@ -48,6 +48,7 @@ function addValue(fields, key, v) {
 /** Top-level bullets of one node outline: plain bullets become note texts, `**Field**: value` bullets structured values; nested and truncated bullets are skipped. */
 function parseOutline(outline, byLabel) {
   const texts = []
+  const ids = []
   const fields = {}
   for (const raw of outline.split('\n').slice(1)) {
     const m = /^ {2}- (.*)$/.exec(raw)
@@ -55,7 +56,10 @@ function parseOutline(outline, byLabel) {
     const f = /^\*\*(.+?)\*\*:\s*(.*)$/.exec(m[1])
     if (!f) {
       const text = clean(m[1])
-      if (text) texts.push(text.slice(0, MAX_LINE))
+      if (text) {
+        texts.push(text.slice(0, MAX_LINE))
+        ids.push(/<!-- node-id: (\S+) -->/.exec(m[1])?.[1])
+      }
       continue
     }
     const label = fieldLabel(f[1])
@@ -64,7 +68,7 @@ function parseOutline(outline, byLabel) {
     if (v === '' || (Array.isArray(v) && v.length === 0)) continue
     addValue(fields, field ? field.id : `adhoc:${label}`, v)
   }
-  return { texts, fields }
+  return { texts, ids, fields }
 }
 
 function ringOf(texts, fields) {
@@ -104,13 +108,13 @@ function convertList(index, nodes, schema, workspaces, derive = false) {
   const seen = new Set()
   const entities = index.filter((n) => !seen.has(n.id) && seen.add(n.id)).map((n) => {
     const at = Date.parse(n.created)
-    const { texts, fields } = parseOutline(nodes[n.id] ?? '', byLabel)
+    const { texts, ids, fields } = parseOutline(nodes[n.id] ?? '', byLabel)
     if (texts.length === 0 && Object.keys(fields).length === 0) withoutFields++
     const mk = (text, i, extra = {}) => ({
       id: `tana-${n.id}-${i}`, text, tag: 'note', audience: 'me', status: 'current', notedAt: at, checkedAt: at, ...extra,
     })
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
-    const all = texts.map((t, i) => mk(t, i))
+    const all = texts.map((t, i) => mk(t, i, ids[i] ? { tanaId: ids[i] } : {}))
     const explicit = ringOf(texts, fields)
     const ring = explicit ?? (derive ? deriveRing(n.name, fields) : 'unsorted')
     if (!explicit && derive) all.push(mk(DERIVED, all.length))
