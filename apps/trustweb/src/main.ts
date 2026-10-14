@@ -20,7 +20,7 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours } from './colour_tags'
+import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, inContact, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -456,6 +456,7 @@ const net = new Net({
   onLogChanged: () => { if (screen === Screen.Inventory) render() },
   // A demo account asks: while demo content is on this phone it is matched
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
+  askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
   onText: (peer, text, ts, re) => onIncomingText(peer, text, ts, re),
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
@@ -1740,7 +1741,27 @@ function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
       class: 'radio' + (item.audience === a ? ' on' : ''), 'aria-pressed': String(item.audience === a), 'data-item-audience': a,
       onclick: () => { item.audience = a; save(); render(); itemSheet(item.id) },
     }, [el('b', {}, [S.audienceLabel[a]]), el('small', {}, [S.audienceHint[a]])])),
+    el('h4', { class: 'eyebrow' }, [S.itemTagsTitle]),
+    ...itemTagChips(item),
   ]
+}
+
+/** Multi-select of the colour tags next to the rings: each chip toggles one tag id in the item's `tagAudience`. */
+function itemTagChips(item: InventoryItem): HTMLElement[] {
+  const tags = loadColourTags()
+  if (!tags.length) return [el('p', { class: 'meta' }, [S.itemTagsNone])]
+  return [el('div', { class: 'rchips' }, tags.map((t) => {
+    const on = item.tagAudience?.includes(t.id) ?? false
+    return el('button', {
+      class: 'rchip' + (on ? ' on' : ''), style: `--rc:${t.colour}`, 'aria-pressed': String(on), 'data-item-tag': t.id,
+      onclick: () => {
+        const rest = (item.tagAudience ?? []).filter((x) => x !== t.id)
+        const next = on ? rest : [...rest, t.id]
+        if (next.length) item.tagAudience = next; else delete item.tagAudience
+        save(); itemSheet(item.id)
+      },
+    }, [t.label ?? t.id])
+  }))]
 }
 
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */

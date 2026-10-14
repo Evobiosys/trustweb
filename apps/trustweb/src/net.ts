@@ -177,6 +177,8 @@ export interface NetHooks {
   onLogChanged(): void
   /** What this asker may be matched against; undefined = everything their ring admits. */
   askScope(peer: Peer): MatchScope | undefined
+  /** Ids of the colour tags the person behind this peer holds (colour_tags.ts): an item shared with "selected tags" answers them. */
+  askerTags?(peer: Peer): string[]
   /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). `re` (wave 6i): the ask a chat message answers. */
   onText(peer: Peer, text: string, ts: number, re?: ChatRe): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
@@ -570,7 +572,7 @@ export class Net {
     // ONE answer moment, fixed by the envelope before anything is decided (hops.ts answerDelayMs).
     const deadline = receivedAt + answerDelayMs(info, windowMs)
     const silent = repeat || cycle || quietEarlier || !surfacesHere(q)
-    const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer))
+    const { threads, refs } = askSources(s, peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = text && !silent ? matchAsk(text, threads) : { hits: [], distinctAuthors: 0, aboveThreshold: false }
     const { surface } = classifyIncomingQuery(match, false, Boolean(text))
     const key = await this.pairKey(peer)
@@ -819,7 +821,7 @@ export class Net {
   private async handleLateArrival(q: QueryEnvelope, peer: Peer, info: HopInfo, text: string, receivedAt: number, earlier: EarlierAsk | null = null): Promise<void> {
     if (!text || !surfacesHere(q)) return
     if (!this.straightFromAsker(q, info, peer)) { this.handleAwayAsk(q, peer, info, text); return }
-    const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
+    const { threads, refs } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     const match = matchAsk(text, threads)
     if (!classifyIncomingQuery(match, false, true).surface) {
       // Wave 6i: an earlier ask that came again and still matches nothing stays silent (no log row, no card).
@@ -850,7 +852,7 @@ export class Net {
     entry.away = true
     this.hooks.save()
     if (!this.straightFromAsker(q, info, peer)) return
-    const { threads } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer))
+    const { threads } = askSources(this.hooks.state(), peer.ring, info.hop, this.hooks.askScope(peer), this.hooks.askerTags?.(peer))
     if (!surfacesFor(text, threads)) { this.noteUnmatched(q, peer, info, text, Date.now()); return }
     this.hooks.onAwayAsk?.({ id: q.qid, at: Date.now(), peerId: peer.id, from: peer.displayName, text: [...text].slice(0, AWAY_TEXT_MAX).join('') }, peer)
   }

@@ -92,8 +92,8 @@ export function admitsAtHop(audience: Audience, degrees: number, ring: Ring, hop
 }
 
 /** May this item answer an ask at `hop` from `ring`? */
-export function itemAdmits(item: Pick<InventoryItem, 'audience' | 'degrees'>, ring: Ring, hop: number): boolean {
-  return admitsAtHop(item.audience, itemDegrees(item), ring, hop)
+export function itemAdmits(item: Pick<InventoryItem, 'audience' | 'degrees' | 'tagAudience'>, ring: Ring, hop: number, askerTags: readonly string[] = []): boolean {
+  return admitsAtHop(item.audience, itemDegrees(item), ring, hop) || (hop <= 0 && !!item.tagAudience?.some((t) => askerTags.includes(t)))
 }
 
 /** May this note line answer an ask at `hop` from `ring`? */
@@ -107,14 +107,14 @@ export function lineAdmits(line: Pick<NoteLine, 'audience' | 'degrees'>, ring: R
  * this step admits. THE function the incoming-ask matchers call (net.ts and
  * services/trustweb-peer). The notes of stored meetings join here too (notes_source.ts, wave 6 U4).
  */
-export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchScope): { threads: ChatThread[]; refs: Map<string, LineRef> } {
+export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchScope, askerTags: readonly string[] = []): { threads: ChatThread[]; refs: Map<string, LineRef> } {
   const admitted: AppState = {
     ...s,
-    inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop)),
+    inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop, askerTags)),
     // The General note (general_notes.ts) is Only me: this copy of the record holds the admitted lines, never a person's free-text note.
     people: s.people.map(({ generalNote: _private, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
   }
-  const base = threadsForRing(admitted, ring, scope)
+  const base = threadsForRing(admitted, ring, scope, askerTags)
   const notes = meetingNoteThreads(s, ring, hop, scope)
   notes.refs.forEach((ref, id) => base.refs.set(id, ref))
   return { threads: [...base.threads, ...notes.threads], refs: base.refs }

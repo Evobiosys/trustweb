@@ -305,6 +305,8 @@ export const S = {
     [Audience.OnlyMe]: 'Nobody can ask about it. A note for yourself.',
   } as Record<Audience, string>,
   itemAudienceTitle: 'Who can ask about it',
+  itemTagsTitle: 'And people with these tags',
+  itemTagsNone: 'No colour tags chosen yet (Curator > Settings > Colour tags).',
   tagLabel: {
     [Tag.Looking]: 'Looking for',
     [Tag.Offer]: 'Can offer',

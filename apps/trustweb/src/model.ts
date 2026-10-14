@@ -388,6 +388,11 @@ export interface InventoryItem {
   context?: InventoryContext[]
   /** Wave 6: how many degrees past my direct contacts it may answer (cascade.ts). Absent: by audience (acquaintances 1, else 0). */
   degrees?: number
+  /**
+   * "Selected tags" next to the rings: ids of colour tags (colour_tags.ts). Someone who holds any of them may ask about this item even where
+   * their ring would not admit them, direct asks only. Absent or empty: the rings alone decide (conservative default, I9).
+   */
+  tagAudience?: string[]
 }
 
 /** One note added as context to an inventory item. */
@@ -1138,7 +1143,7 @@ export interface LineRef {
  * matcher input: one synthetic single-message thread per line, source 'self'
  * (owner-declared, B-08), exactly like apps/demo's inventoryThreads().
  */
-export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { threads: ChatThread[]; refs: Map<string, LineRef> } {
+export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope, askerTags: readonly string[] = []): { threads: ChatThread[]; refs: Map<string, LineRef> } {
   const refs = new Map<string, LineRef>()
   const threads: ChatThread[] = []
   // `matchText` (wave 6h): what the matcher reads, when it is more than the line (its category's words); the line itself is what is shared.
@@ -1147,7 +1152,7 @@ export function threadsForRing(s: AppState, ring: Ring, scope?: MatchScope): { t
     threads.push(lineThread(s.me.displayName, threadId, matchText, context, at))
   }
   for (const item of s.inventory) {
-    if (!item.included || !audienceAdmits(item.audience, ring)) continue
+    if (!item.included || !(audienceAdmits(item.audience, ring) || item.tagAudience?.some((t) => askerTags.includes(t)))) continue
     if (scope?.inventory && !scope.inventory.has(item.id)) continue
     push(`inv:${item.id}`, item.text, INVENTORY_CONTEXT, item.createdAt)
   }

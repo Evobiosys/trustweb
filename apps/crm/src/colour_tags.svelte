@@ -10,7 +10,7 @@
 
   function set(next: typeof tags): void { tags = next; saveColourTags(next) }
   const colourOf = (id: string): string | undefined => tags.find((t) => t.id === id)?.colour
-  const toggle = (id: string, on: boolean): void => set(on ? [...tags, { id, colour: FRESH[tags.length % FRESH.length] }] : tags.filter((t) => t.id !== id))
+  const toggle = (id: string, on: boolean): void => set(on ? [...tags, { id, colour: FRESH[tags.length % FRESH.length], label: PERSON_FIELDS.find((f) => f.id === id)?.label }] : tags.filter((t) => t.id !== id))
   const recolour = (id: string, colour: string): void => set(tags.map((t) => (t.id === id ? { ...t, colour } : t)))
 </script>
 

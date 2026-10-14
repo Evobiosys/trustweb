@@ -6,10 +6,10 @@ export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
 export const PERSON_GREEN = '#2e7d32'
 
-export interface ColourTag { id: string; colour: string }
+export interface ColourTag { id: string; colour: string; label?: string }
 
 /** Family is the preset: purple. */
-export const FAMILY_PRESET: readonly ColourTag[] = [{ id: FAMILY_FIELD, colour: '#7b1fa2' }]
+export const FAMILY_PRESET: readonly ColourTag[] = [{ id: FAMILY_FIELD, colour: '#7b1fa2', label: 'family' }]
 
 export function loadColourTags(): ColourTag[] {
   try {
@@ -27,8 +27,10 @@ export function saveColourTags(tags: readonly ColourTag[]): void {
 
 const has = (p: Pick<Person, 'ring' | 'fields'>, id: string): boolean => (id === FAMILY_FIELD ? isFamily(p) : String(p.fields?.[id]) === 'true')
 
-/** The colours of the colour tags a person has, in the order the tags were chosen. */
-export const tagColours = (p: Pick<Person, 'ring' | 'fields'>, tags: readonly ColourTag[]): string[] => tags.filter((t) => has(p, t.id)).map((t) => t.colour)
+/** The colour tags a person has, in the order the tags were chosen. */
+export const tagsOf = (p: Pick<Person, 'ring' | 'fields'>, tags: readonly ColourTag[]): ColourTag[] => tags.filter((t) => has(p, t.id))
+
+export const tagColours = (p: Pick<Person, 'ring' | 'fields'>, tags: readonly ColourTag[]): string[] => tagsOf(p, tags).map((t) => t.colour)
 
 /** Side-by-side arcs (never blended): a conic gradient of hard stops with a small gap, or null for an untagged person. */
 export function arcsGradient(colours: readonly string[]): string | null {
