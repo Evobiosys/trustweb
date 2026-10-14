@@ -1,7 +1,7 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
 import { mergedFields, baseFields } from './fields'
 import type { FieldValue } from './fields'
-import { Pkm, prefs, savePrefs } from './prefs.svelte'
+import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { setField, store } from './state.svelte'
 import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
@@ -16,13 +16,27 @@ function log(text: string): void {
   savePrefs()
 }
 
-/** The edit goes to the CRM's own record first; Tana only hears about it afterwards, and only on request or with auto sync. */
-export function saveField(personId: string, key: string, value: FieldValue): void {
-  setField(personId, key, value)
-  if (prefs.pkm !== Pkm.Tana || 'manual' in planFieldSync(key, value)) return
+const DEBOUNCE_MS = 2000
+const timers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function enqueue(personId: string, key: string): void {
   if (!prefs.queue.some((q) => q.personId === personId && q.key === key)) prefs.queue.push({ personId, key })
   savePrefs()
-  if (prefs.autoSync) void flush()
+  void flush()
+}
+
+/** The edit goes to the CRM's own record first; Tana hears about it 2 s after the last keystroke of that field (auto sync), or on "Sync now". */
+export function saveField(personId: string, key: string, value: FieldValue): void {
+  setField(personId, key, value)
+  if (!tanaOn() || 'manual' in planFieldSync(key, value)) return
+  if (!prefs.autoSync) {
+    if (!prefs.queue.some((q) => q.personId === personId && q.key === key)) prefs.queue.push({ personId, key })
+    savePrefs()
+    return
+  }
+  const id = `${personId}|${key}`
+  clearTimeout(timers.get(id))
+  timers.set(id, setTimeout(() => { timers.delete(id); enqueue(personId, key) }, DEBOUNCE_MS))
 }
 
 async function nodeFor(call: ToolCall, personId: string): Promise<string> {
@@ -55,7 +69,7 @@ async function push(call: ToolCall, item: { personId: string; key: string }): Pr
 
 /** Pushes the queue. An unreachable API keeps it; a refused edit is logged and dropped (never retried blind). */
 export async function flush(): Promise<void> {
-  if (sync.running || prefs.pkm !== Pkm.Tana || prefs.queue.length === 0) return
+  if (sync.running || !tanaOn() || prefs.queue.length === 0) return
   sync.running = true
   try {
     const call = await connect(prefs.token.trim())

@@ -11,7 +11,8 @@ import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
 import type { FieldValue } from './fields'
 import { ContactPointKind, InteractionKind, Stage } from './model'
-import type { CrmState } from './model'
+import type { CrmState, Curation } from './model'
+import { emptyCuration } from './curation'
 import { sampleApp, sampleCrm } from './sample'
 import {
   Source, clearImported, loadCrm, parseImport, readImported, readTrustWeb, saveCrm, saveImported,
@@ -118,6 +119,13 @@ export function removeContactPoint(personId: string, index: number): void {
 export function setField(personId: string, key: string, value: FieldValue): void {
   const all = store.crm.personFields ?? (store.crm.personFields = {})
   all[personId] = { ...all[personId], [key]: value }
+  persist()
+}
+
+/** Changes the curation (networks, who curates when, their placements) in the CRM's own record. */
+export function curate(change: (c: Curation) => void): void {
+  const c = store.crm.curation ?? (store.crm.curation = emptyCuration())
+  change(c)
   persist()
 }
 

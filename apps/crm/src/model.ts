@@ -20,6 +20,7 @@
  */
 import type { AppState } from '../../trustweb/src/model'
 import type { FieldValues } from './fields'
+import type { Placements } from './placement'
 import type { ContactSource, ImportedContact } from './import/types'
 
 export enum InteractionKind {
@@ -100,6 +101,13 @@ export interface LastImport {
   before: Contact[]
 }
 
+/** Field placement curated for networks, and who may curate when. */
+export interface Curation {
+  byNetwork: Record<string, Placements>
+  /** `personId` absent = me. Period in ms since epoch (an event, say). */
+  admins: { networkId: string; personId?: string; from: number; to: number }[]
+}
+
 export interface CrmState {
   v: 1
   interactions: Interaction[]
@@ -113,6 +121,7 @@ export interface CrmState {
   lastImport?: LastImport
   /** Person id -> the person's own edits to #person fields, keyed by field id; laid over the record's values. */
   personFields?: Record<string, FieldValues>
+  curation?: Curation
 }
 
 export function emptyCrm(): CrmState {

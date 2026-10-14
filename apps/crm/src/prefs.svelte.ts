@@ -1,34 +1,40 @@
 /**
  * This device's settings and view choices, in their own localStorage key (never TrustWeb's, never the CRM record):
- * which fields are mandatory, whether the optional section is open.
+ * knowledge-management sync options, where fields sit for me, the activity window.
  */
-import { DEFAULT_MANDATORY } from './fields'
+import { DEFAULT_ACTIVITY_DAYS } from './person_view'
+import { emptyPlacements } from './placement'
+import type { Placements } from './placement'
 
 export const PREFS_KEY = 'trustweb-crm.v1.prefs'
 
 export enum Pkm {
-  None = 'none',
-  AppleNotes = 'apple-notes',
   Tana = 'tana',
+  AppleNotes = 'apple-notes',
+  Obsidian = 'obsidian-logseq',
 }
 
-export const PKMS: readonly Pkm[] = [Pkm.None, Pkm.AppleNotes, Pkm.Tana]
+export const PKMS: readonly Pkm[] = [Pkm.Tana, Pkm.AppleNotes, Pkm.Obsidian]
 
 export interface Filters {
   hideDeceased: boolean
   hideFamous: boolean
   onlyConnection: boolean
-  /** Field keys shown as lines on the people cards. */
-  visible: string[]
   /** All must hold (AND): the field's text contains `text`, case-insensitive. */
   rules: { key: string; text: string }[]
 }
 
 export interface Prefs {
   filters: Filters
-  mandatory: string[]
-  optionalOpen: boolean
-  pkm: Pkm
+  /** Field placement "for me". */
+  placement: Placements
+  /** Networks a placement edit goes to; empty = for me. */
+  scope: string[]
+  /** Systems my people sync with; none by default. */
+  pkms: Pkm[]
+  /** A connected person counts as active (filled circle) if something happened within this many days. */
+  activityDays: number
+  /** Sync an edit 2 s after it was entered. */
   autoSync: boolean
   /** Tana API token: this device only, never part of the CRM record. */
   token: string
@@ -43,11 +49,14 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { mandatory: [...DEFAULT_MANDATORY], optionalOpen: false,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, visible: [], rules: [] }, pkm: Pkm.None, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
+  const base: Prefs = { placement: emptyPlacements(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, rules: [] }, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
-    return { ...base, ...saved, filters: { ...base.filters, ...saved.filters } }
+    const first = saved.pkms === undefined
+    // Developer's own device (dev server with TW_CRM_TANA_TOKEN): Tana sync preloaded ON until the choice was saved once.
+    const preload = first && __TW_TANA_TOKEN__ ? { pkms: [Pkm.Tana], token: __TW_TANA_TOKEN__, autoSync: true } : {}
+    return { ...base, ...preload, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
   } catch {
     return base
   }
@@ -58,3 +67,5 @@ export const prefs: Prefs = $state(load())
 export function savePrefs(): void {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch { /* browser refused: kept in memory */ }
 }
+
+export const tanaOn = (): boolean => prefs.pkms.includes(Pkm.Tana)

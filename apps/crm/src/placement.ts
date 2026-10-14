@@ -3,7 +3,7 @@
  * A placement is data (this device's, or a network's under Curate); the layout is derived from it and the values. Pure.
  */
 import { ENVIRONMENT_FIELDS } from './environment_fields'
-import { INTENDING_KEY, isSet } from './fields'
+import { ADHOC, INTENDING_KEY, fieldLabelOf, isSet } from './fields'
 import type { FieldValues } from './fields'
 import { PERSON_FIELDS } from './person_fields'
 import type { PersonField } from './person_fields'
@@ -36,6 +36,12 @@ const DEFAULT_SIMPLE: Record<Kind, readonly string[]> = {
   [Kind.Environment]: ['tw-context'],
 }
 
+export type Placements = Record<Kind, Placement>
+
+export function emptyPlacements(): Placements {
+  return { person: emptyPlacement(), environment: emptyPlacement() }
+}
+
 export function emptyPlacement(): Placement {
   return { sections: {}, order: [] }
 }
@@ -60,7 +66,9 @@ export type Layout = Record<Section, PersonField[]>
 
 /** The four sections with their fields in order. A filled field nobody placed shows in simple; an empty one waits in advanced. */
 export function layout(kind: Kind, placement: Placement, values: FieldValues): Layout {
-  const fields = fieldsOf(kind)
+  const adhoc: PersonField[] = Object.keys(values).filter((k) => k.startsWith(ADHOC) && isSet(values[k]))
+    .map((id) => ({ id, tanaAttributeId: null, label: fieldLabelOf(id), type: 'content', description: '' }))
+  const fields = [...fieldsOf(kind), ...adhoc]
   const base = [...DEFAULT_SIMPLE[kind], ...fields.map((f) => f.id)]
   const rank = (id: string): number => {
     const i = placement.order.indexOf(id)

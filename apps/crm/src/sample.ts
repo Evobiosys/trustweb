@@ -7,6 +7,7 @@
 import type { AppState, NoteLine, Person } from '../../trustweb/src/model'
 import { Audience, Channel, LineStatus, LogOutcome, Ring, Tag } from '../../trustweb/src/model'
 import type { CrmState } from './model'
+import { Section } from './placement'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 
 const DAY = 86_400_000
@@ -109,6 +110,15 @@ export function sampleCrm(now: number): CrmState {
       'l-tomas-1': Stage.Talking,
       'l-marta-2': Stage.Idea,
       'l-aisha-1': Stage.Agreed,
+    },
+    curation: {
+      byNetwork: {
+        'EA community': {
+          person: { sections: { haKj_SUXuNqZ: Section.Simple, _aHDRrSrMROz: Section.Simple }, order: [] },
+          environment: { sections: {}, order: [] },
+        },
+      },
+      admins: [{ networkId: 'EA community', from: now - DAY, to: now + 30 * DAY }],
     },
     contactPoints: {
       'p-lena': [{ kind: ContactPointKind.Phone, value: '+43 660 000 0001' }, { kind: ContactPointKind.Email, value: 'lena@example.org' }],

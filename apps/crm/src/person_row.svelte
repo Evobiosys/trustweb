@@ -8,25 +8,37 @@
   type badge became the notes count and last activity.
 -->
 <script lang="ts">
-  import type { Person } from '../../trustweb/src/model'
   import Avatar from './avatar.svelte'
+  import { Presence } from './person_view'
+  import type { FavLink } from './person_view'
+  import { S } from './strings'
 
   interface Props {
-    person: Person
-    meta: string
-    /** Extra lines from the fields chosen under Fields on cards. */
+    id: string
+    name: string
+    context: string
+    meta?: string
+    /** Extra lines from the fields placed On the row. */
     extra?: string[]
-    onopen: (personId: string) => void
+    presence?: Presence
+    fav?: FavLink | null
+    onopen: (id: string) => void
   }
-  const { person, meta, extra = [], onopen }: Props = $props()
+  const { id, name, context, meta = '', extra = [], presence = Presence.None, fav = null, onopen }: Props = $props()
 </script>
 
-<button class="person-row" onclick={(): void => onopen(person.id)}>
-  <Avatar id={person.id} name={person.name} />
-  <span class="pr-main">
-    <strong>{person.name}</strong>
-    {#if person.context}<span class="ctx">{person.context}</span>{/if}
-    <span class="meta">{meta}</span>
-    {#each extra as line (line)}<span class="meta">{line}</span>{/each}
-  </span>
-</button>
+<div class="person-row">
+  <button class="pr-open" onclick={(): void => onopen(id)}>
+    <Avatar {id} {name} />
+    <span class="pr-main">
+      <strong>{name}</strong>
+      {#if context}<span class="ctx">{context}</span>{/if}
+      {#if meta}<span class="meta">{meta}</span>{/if}
+      {#each extra as line (line)}<span class="meta">{line}</span>{/each}
+    </span>
+  </button>
+  {#if presence !== Presence.None}
+    <span class="presence" data-presence={presence} role="img" aria-label={presence === Presence.Active ? S.presenceActive : S.presenceIdle}>{presence === Presence.Active ? '●' : '○'}</span>
+  {/if}
+  {#if fav}<a class="fav" href={fav.href} aria-label={fav.label} data-fav={fav.label}>{fav.symbol}</a>{/if}
+</div>

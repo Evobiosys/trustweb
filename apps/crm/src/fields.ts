@@ -13,9 +13,6 @@ export type FieldValues = Record<string, FieldValue>
 
 export const ADHOC = 'adhoc:'
 
-/** TrustWeb default; editable in Settings. */
-export const DEFAULT_MANDATORY: readonly string[] = ['c3Pw_bHcTIj6', 'Bxw7k4FWptqp', 'xu0y_4Pu3sOL', 'ConGRasNilsz', '__XNQ42Dtiwx']
-
 export const FAMOUS_KEY = '6QzDHIfrlmSz'
 export const INTENDING_KEY = 'FcZJGS5EH2on'
 export const DECEASED_KEY = '__XNQ42Dtiwx'

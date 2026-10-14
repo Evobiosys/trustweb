@@ -7,7 +7,10 @@
   import FollowUpForm from './followup_form.svelte'
   import InteractionForm from './interaction_form.svelte'
   import LogNow from './log_now.svelte'
-  import PersonFields from './person_field_list.svelte'
+  import EntityFields from './entity_fields.svelte'
+  import { baseFields } from './fields'
+  import { Kind } from './placement'
+  import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { store } from './state.svelte'
@@ -22,7 +25,10 @@
 
   let form = $state<PersonForm>(PersonForm.None)
 
-  const person = $derived(store.app.people.find((p) => p.id === personId))
+  const raw = $derived(store.app.people.find((p) => p.id === personId))
+  const edits = $derived(store.crm.personFields?.[personId])
+  const person = $derived(raw && effectivePerson(raw, edits))
+  const values = $derived(raw ? entityValues(raw, baseFields(raw), edits) : {})
   const lines = $derived((person?.lines ?? []).filter((l) => l.status === LineStatus.Current))
   const events = $derived(person ? personTimeline({ app: store.app, crm: store.crm }, person.id) : [])
   const meta = $derived(
@@ -54,7 +60,7 @@
 
     <ContactInfo {person} />
 
-    <PersonFields {person} />
+    <EntityFields kind={Kind.Person} id={person.id} {values} />
 
     <h3>{S.notes}</h3>
     {#each lines as line (line.id)}

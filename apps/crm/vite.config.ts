@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => ({
   // Dev only: TW_CRM_RECORD=<AppState json> replaces the sample set (README.txt). A build gets null.
   define: {
     __TW_RECORD__: JSON.stringify(command === 'serve' && process.env.TW_CRM_RECORD ? readFileSync(process.env.TW_CRM_RECORD, 'utf8') : null),
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null),
   },
   publicDir: false,
   build: {

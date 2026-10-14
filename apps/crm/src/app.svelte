@@ -1,5 +1,6 @@
 <script lang="ts">
   import ContactPage from './contact_page.svelte'
+  import Environment from './environment.svelte'
   import Followups from './followups.svelte'
   import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS } from './nav'
@@ -62,6 +63,8 @@
       <ImportContacts />
     {:else if nav.contactId !== null}
       <ContactPage contactId={nav.contactId} />
+    {:else if nav.environmentId !== null}
+      <Environment environmentId={nav.environmentId} />
     {:else if nav.personId !== null}
       <Person personId={nav.personId} />
     {:else if nav.tab === Tab.People}
