@@ -1,6 +1,7 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, inContact, placeOnRing, ringAt, lapRadius, ringsGeometry } from '../../src/rings_layout.ts'
+import { S } from '../../src/strings.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, inContact, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -23,6 +24,11 @@ describe('rings drag', () => {
     expect(lapRadius(g, Ring.Acquaintance, 2)).toBeGreaterThan(g.radius.acquaintance)
     expect(g.radius.intending).toBeGreaterThan(lapRadius(g, Ring.Acquaintance, Math.ceil(255 / g.perLap.acquaintance) - 1))
     expect(g.radius.unsorted).toBeGreaterThan(g.radius.intending)
+  })
+  it('the rings are close friend, friend, acquaintance, intending to connect, unsorted: no contact tier', () => {
+    expect(WEB_RINGS).toEqual([Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted])
+    expect(Object.values(Ring).some((r) => /contact/i.test(r))).toBe(false)
+    expect(Object.values(S.ringLabel).some((l) => /contact/i.test(l.replace('Intending to connect', '')))).toBe(false)
   })
   it('a drop sets the ring; intending carries a clamped 0..10 value and a date, leaving it clears both', () => {
     const p = person(Ring.Friend)
