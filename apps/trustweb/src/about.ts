@@ -60,6 +60,7 @@ export function aboutGroup(): (HTMLElement | null)[] {
   return [
     el('h4', { class: 'eyebrow' }, [S.aboutGroup]),
     el('p', { class: 'meta about-by' }, [S.aboutBy, outLink(EVOBIOSYS_URL, S.aboutEvoBioSys, 'about-org')]),
+    el('p', { class: 'meta about-steward' }, [S.aboutSteward]),
     el('div', { class: 'about-links' }, ABOUT_PAGES.map((p) => outLink(aboutUrl(p), S.aboutPage[p], 'about-link'))),
     // Smooth updates are the hosted version's promise (P20): which build this is, and which data format it keeps.
     el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), RECORD_FORMAT)]),
