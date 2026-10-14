@@ -19,6 +19,7 @@
  * `inventory`, so nothing in CrmState can ever be matched, relayed or shared.
  */
 import type { AppState } from '../../trustweb/src/model'
+import type { FieldValues } from './fields'
 import type { ContactSource, ImportedContact } from './import/types'
 
 export enum InteractionKind {
@@ -110,6 +111,8 @@ export interface CrmState {
   /** Imported contacts; absent on records saved before the contacts import. */
   contacts?: Contact[]
   lastImport?: LastImport
+  /** Person id -> the person's own edits to #person fields, keyed by field id; laid over the record's values. */
+  personFields?: Record<string, FieldValues>
 }
 
 export function emptyCrm(): CrmState {

@@ -7,6 +7,7 @@
   import FollowUpForm from './followup_form.svelte'
   import InteractionForm from './interaction_form.svelte'
   import LogNow from './log_now.svelte'
+  import PersonFields from './person_field_list.svelte'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { store } from './state.svelte'
@@ -52,6 +53,8 @@
     </div>
 
     <ContactInfo {person} />
+
+    <PersonFields {person} />
 
     <h3>{S.notes}</h3>
     {#each lines as line (line.id)}

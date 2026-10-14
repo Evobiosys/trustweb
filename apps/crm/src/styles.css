@@ -193,3 +193,11 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .note-text{white-space:pre-wrap; overflow-wrap:anywhere}
 [data-screen="import"] .card{margin:10px 0}
 [data-screen="import"] > .btn{margin:14px 0}
+
+/* #person fields */
+.fields{display:flex; flex-direction:column; gap:10px}
+.fld{display:flex; flex-direction:column; gap:4px; font-size:13.5px}
+.fld > span{font-weight:600}
+.fld small,.fld em{font-size:12px; color:var(--ink-soft); font-weight:400}
+.fld.check{flex-direction:row; align-items:center; gap:10px; min-height:44px}
+.fld.check input{width:22px; height:22px}

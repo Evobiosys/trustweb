@@ -9,6 +9,7 @@
 import type { AppState } from '../../trustweb/src/model'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
+import type { FieldValue } from './fields'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import type { CrmState } from './model'
 import { sampleApp, sampleCrm } from './sample'
@@ -110,6 +111,13 @@ export function removeContactPoint(personId: string, index: number): void {
   const next = list.filter((_, i) => i !== index)
   if (next.length > 0) store.crm.contactPoints[personId] = next
   else delete store.crm.contactPoints[personId]
+  persist()
+}
+
+/** Saves one #person field edit in the CRM's own record (never TrustWeb's). */
+export function setField(personId: string, key: string, value: FieldValue): void {
+  const all = store.crm.personFields ?? (store.crm.personFields = {})
+  all[personId] = { ...all[personId], [key]: value }
   persist()
 }
 

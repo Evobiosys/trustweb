@@ -1,4 +1,5 @@
 /** The #person fields as the CRM uses them: lookup, the mandatory default, and what counts as "set". */
+import type { Person } from '../../trustweb/src/model'
 import { PERSON_FIELDS } from './person_fields'
 import type { PersonField } from './person_fields'
 
@@ -44,4 +45,9 @@ export function valueText(v: FieldValue | undefined): string {
 /** The record's values with the person's own edits laid over them. */
 export function mergedFields(base: FieldValues | undefined, edits: FieldValues | undefined): FieldValues {
   return { ...base, ...edits }
+}
+
+/** The #person field values the record carries (the Tana converter writes them on the person). */
+export function baseFields(person: Person): FieldValues | undefined {
+  return (person as Person & { fields?: FieldValues }).fields
 }
