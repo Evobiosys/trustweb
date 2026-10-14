@@ -138,7 +138,7 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
     })
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i, ids[i] ? { tanaId: ids[i] } : {}))
-    // The ring, strongest first: a "ring:" line, the Tana ring field (shown dashed while "ring approved" is off), the suggestion, the derived one.
+    // The ring, strongest first: the Tana ring field (Tana is the source of truth; shown dashed while "ring approved" is off, and an approved one is never overridden), a local "ring:" line, the suggestion, the derived one.
     const tanaRing = derive ? TANA_RINGS[String(fields[RING_FIELD] ?? '').toLowerCase()] : undefined
     const approved = fields[RING_APPROVED] === true
     delete fields[RING_FIELD]
@@ -151,9 +151,10 @@ function convertList(index, nodes, schema, workspaces, derive = false, firstMet 
       if (suggested.family) fields[FAMILY] = true
       if (suggested.intending >= 1 && !fields[INTENDING]) Object.assign(fields, { [INTENDING]: String(Math.min(10, Math.round(suggested.intending))), ...(today ? { [SINCE]: today } : {}) })
     }
-    const ring = withDesire(explicit ?? tanaRing ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted'), fields)
-    const dashed = !explicit && derive && !(tanaRing && approved) && (suggested || tanaRing)
-    if (!explicit && derive && !(tanaRing && approved) && !dashed) all.push(mk(DERIVED, all.length))
+    const base = tanaRing ?? explicit ?? (suggested ? sRing : derive ? deriveRing(n.name, fields) : 'unsorted')
+    const ring = tanaRing && approved ? base : withDesire(base, fields)
+    const dashed = derive && !(tanaRing ? approved : explicit) && (suggested || tanaRing)
+    if (derive && !tanaRing && !explicit && !suggested) all.push(mk(DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))

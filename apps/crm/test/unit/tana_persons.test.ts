@@ -78,17 +78,18 @@ describe('tana converter: derived rings', () => {
     expect(r[3].lines.at(-1)?.text).toBe('ring: derived')
     expect(r[5]).not.toHaveProperty('ringSuggested')
   })
-  it('the Tana ring field is the ring (dashed while "ring approved" is off, confirmed when on); a ring: line and the field beat a suggestion', () => {
+  it('the Tana ring field is the ring (dashed while "ring approved" is off, confirmed when on); the field beats a local ring: line, which beats a suggestion; an approved ring is never overridden', () => {
     const schema = [...PERSON_FIELDS, { id: 'rVfw62lb7BYD', tanaAttributeId: 'rVfw62lb7BYD', label: 'ring in TrustWeb', type: 'options' as const, description: '' },
       { id: '_7wgarGd90ZR', tanaAttributeId: '_7wgarGd90ZR', label: 'ring approved', type: 'checkbox' as const, description: '' }]
-    const i = ['U', 'A', 'M'].map((name, k) => ({ id: `t${k}`, name, breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }))
+    const i = ['U', 'A', 'M', 'L'].map((name, k) => ({ id: `t${k}`, name, breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }))
     const n = {
       t0: '- U\n  - **ring**: friend\n  - **ring approved**: [ ]\n', t1: '- A\n  - **ring**: close friend\n  - **ring approved**: [X]\n',
-      t2: '- M\n  - ring: acquaintance\n  - **ring**: close friend\n',
+      t2: '- M\n  - ring: acquaintance\n  - **ring**: close friend\n', t3: '- L\n  - ring: friend\n  - **ring**: unsorted\n  - **ring approved**: [X]\n  - **intending to connect (0-10)**: 7\n',
     }
     const sg = { 'tana-t0': { ring: 'close_friend', family: true, intending: 0, reason: 'x' } }
     const r = convert(i, n, schema, [], undefined, {}, new Set(), {}, sg, '2026-10-14').record.people
-    expect(r.map((p) => p.ring)).toEqual(['friend', 'close', 'acquaintance'])
+    expect(r.map((p) => p.ring)).toEqual(['friend', 'close', 'close', 'unsorted'])
+    expect(r[3]).not.toHaveProperty('ringSuggested')
     expect(r[0]).toMatchObject({ ringSuggested: true })
     expect(r[0].lines).toEqual([])
     expect(r[0].fields).not.toHaveProperty('LNlpliq4GdNI')
