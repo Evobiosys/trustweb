@@ -3,7 +3,7 @@ import { mergedFields, baseFields } from './fields'
 import type { FieldValue } from './fields'
 import { Pkm, prefs, savePrefs } from './prefs.svelte'
 import { setField, store } from './state.svelte'
-import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
+import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 
 const MAX_LOG = 100
@@ -73,17 +73,6 @@ export async function flush(): Promise<void> {
     log(`Tana not reachable (${e instanceof Error ? e.message : String(e)}); ${prefs.queue.length} edit(s) kept`)
   } finally {
     sync.running = false
-  }
-}
-
-/** Asks Tana to add the TrustWeb-only "famous" checkbox to #person. Off by default; outcome goes to the log. */
-export async function createFamousField(): Promise<void> {
-  try {
-    const call = await connect(prefs.token.trim())
-    const out = await call('add_field_to_tag', { tagId: PERSON_TAG_ID, name: 'famous, no intent to connect', dataType: 'checkbox' })
-    log(`add_field_to_tag: ${out.slice(0, 120)}`)
-  } catch (e) {
-    log(`add_field_to_tag failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 

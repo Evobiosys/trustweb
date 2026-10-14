@@ -13,6 +13,20 @@ export interface PersonField {
 
 export const PERSON_FIELDS: readonly PersonField[] = [
   {
+    "id": "FcZJGS5EH2on",
+    "tanaAttributeId": "FcZJGS5EH2on",
+    "label": "intending to connect",
+    "type": "checkbox",
+    "description": "on: I intend to connect with this person (TrustWeb CRM); off: not in my network"
+  },
+  {
+    "id": "6QzDHIfrlmSz",
+    "tanaAttributeId": "6QzDHIfrlmSz",
+    "label": "famous",
+    "type": "checkbox",
+    "description": "public figure I do not know personally (TrustWeb CRM filter)"
+  },
+  {
     "id": "ConGRasNilsz",
     "tanaAttributeId": "ConGRasNilsz",
     "label": "personal connection",
@@ -360,22 +374,29 @@ export const PERSON_FIELDS: readonly PersonField[] = [
     }
   },
   {
-    "id": "tw-famous",
+    "id": "tw-first",
     "tanaAttributeId": null,
-    "label": "famous, no intent to connect",
-    "type": "checkbox",
-    "description": "TrustWeb only: no Tana field yet"
+    "label": "First name",
+    "type": "content",
+    "description": "TrustWeb only: from the Tana name until typed"
+  },
+  {
+    "id": "tw-context",
+    "tanaAttributeId": null,
+    "label": "Context",
+    "type": "content",
+    "description": "TrustWeb only: met in which context, or intending to connect"
   },
   {
     "id": "tw-ring",
     "tanaAttributeId": null,
-    "label": "relationship",
+    "label": "Ring",
     "type": "options",
-    "description": "TrustWeb only: the ring",
+    "description": "TrustWeb only",
     "options": [
       {
         "id": "close",
-        "label": "Close"
+        "label": "Close friend"
       },
       {
         "id": "friend",
@@ -387,7 +408,40 @@ export const PERSON_FIELDS: readonly PersonField[] = [
       },
       {
         "id": "intending",
-        "label": "Intending"
+        "label": "Intending to connect only"
+      }
+    ]
+  },
+  {
+    "id": "tw-fav",
+    "tanaAttributeId": null,
+    "label": "Favourite way to connect",
+    "type": "options",
+    "description": "TrustWeb only",
+    "options": [
+      {
+        "id": "email",
+        "label": "Email"
+      },
+      {
+        "id": "phone",
+        "label": "Phone call"
+      },
+      {
+        "id": "sms",
+        "label": "SMS"
+      },
+      {
+        "id": "signal",
+        "label": "Signal"
+      },
+      {
+        "id": "whatsapp",
+        "label": "WhatsApp"
+      },
+      {
+        "id": "matrix",
+        "label": "Matrix"
       }
     ]
   }

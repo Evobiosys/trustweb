@@ -20,7 +20,7 @@ describe('tana persons converter', () => {
 
   it('emits an AppState the CRM accepts', () => {
     expect(isAppState(record)).toBe(true)
-    expect(stats).toEqual({ persons: 3, lines: 2, withoutFields: 1 })
+    expect(stats).toEqual({ persons: 3, lines: 2, withoutFields: 1, environments: 0 })
   })
   it('turns fields into structured values, plain bullets into note lines, drops empties and truncation markers', () => {
     expect(anna.fields).toEqual({ Bxw7k4FWptqp: 'anna@example.org', 'adhoc:Met via': 'Dora Demo' })
@@ -34,5 +34,28 @@ describe('tana persons converter', () => {
     expect(anna.ring).toBe('acquaintance')
     expect(ben.ring).toBe('close')
     expect(cara.lines).toEqual([])
+  })
+})
+
+describe('tana converter: workspaces, duplicates, environments', () => {
+  const ws = [{ id: 'w1', name: 'Home' }, { id: 'w2', name: 'Club &lt;&gt; <span data-inlineref-node="x"></span>Friends' }]
+  const idx = [
+    { id: 'a1', name: 'Anna Beispiel', breadcrumb: [], created: '2025-02-20T18:05:49.444Z', workspaceId: 'w1' },
+    { id: 'a1', name: 'Anna Beispiel', breadcrumb: [], created: '2025-02-20T18:05:49.444Z', workspaceId: 'w2' },
+    { id: 'b2', name: 'Ben Muster', breadcrumb: [], created: '2025-03-01T10:00:00.000Z', workspaceId: 'w2' },
+  ]
+  const env = { index: [{ id: 'e1', name: 'matrix', breadcrumb: [], created: '2026-03-13T09:09:15.175Z', workspaceId: 'w1' }], nodes: {}, schema: [] }
+  const { record, stats } = convert(idx, nodes, [...PERSON_FIELDS], ws, env)
+
+  it('collapses duplicate node ids and tags persons outside the first workspace', () => {
+    expect(record.people.map((p) => p.id)).toEqual(['tana-a1', 'tana-b2'])
+    expect(record.people[0].lines.some((l) => l.text.startsWith('workspace:'))).toBe(false)
+    expect(record.people[1].lines.at(-1)?.text).toBe('workspace: Club <> Friends')
+    expect(record.me.displayName).toBe('Tana persons (2)')
+  })
+  it('writes environments without a ring', () => {
+    expect(stats.environments).toBe(1)
+    expect(record.environments?.[0]).toMatchObject({ id: 'tana-e1', name: 'matrix' })
+    expect(record.environments?.[0]).not.toHaveProperty('ring')
   })
 })

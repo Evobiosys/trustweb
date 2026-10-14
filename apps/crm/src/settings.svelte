@@ -3,7 +3,7 @@
   import { PKMS, Pkm, prefs, savePrefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
-  import { createFamousField, flush, sync } from './sync.svelte'
+  import { flush, sync } from './sync.svelte'
   import { manualItems } from './tana_sync'
 
   const FIELDS = PERSON_FIELDS.filter((f) => f.id !== 'tw-ring')
@@ -40,7 +40,6 @@
     <button class="btn small" data-action="sync-now" disabled={sync.running} onclick={flush}>
       {sync.running ? S.syncing : S.syncNow(prefs.queue.length)}
     </button>
-    <button class="btn small ghost" data-action="create-famous" onclick={createFamousField}>{S.createFamous}</button>
     <h3 class="screen-title">{S.syncLog}</h3>
     {#each prefs.log as line (line)}<p class="muted">{line}</p>{:else}<p class="muted">{S.syncLogEmpty}</p>{/each}
   {/if}

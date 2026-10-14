@@ -11,7 +11,7 @@ describe('tana sync plan', () => {
   it('flags what a human must do in Tana', () => {
     expect(planFieldSync('yHXufuk2A7rt', 'Some org')).toHaveProperty('manual')
     expect(planFieldSync('57duUT9M7ZmS', 'ISFJ')).toHaveProperty('manual')
-    expect(planFieldSync('tw-famous', true)).toHaveProperty('manual')
+    expect(planFieldSync('tw-ring', 'close')).toHaveProperty('manual')
     expect(planFieldSync('adhoc:Date', 'x')).toHaveProperty('manual')
     expect(manualItems([{ id: 'p1', name: 'Anna Beispiel' }], { p1: { yHXufuk2A7rt: 'x', xu0y_4Pu3sOL: 'Graz' } })).toHaveLength(1)
   })
