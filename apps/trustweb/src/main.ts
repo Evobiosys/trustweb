@@ -31,6 +31,8 @@ import { createNamesView } from './names_view'
 import { repairGeneralNotes, setGeneralNote, generalNoteOf } from './general_notes'
 import { createAdvancedMemory, localStorageCell } from './notes_advanced_memory'
 import { createGeneralSection } from './person_general_view'
+import { createTimelineSection } from './timeline_view'
+import { addEntries, parseTimelineImport, timelineOf } from './timeline'
 import { pendingTranscripts } from './person_notes'
 import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 import { safetyLink, safetySheetNodes } from './reassurance_view'
@@ -1734,6 +1736,7 @@ function personSheet(personId: string): void {
     past.personSection(p.id, { label: p.name, go: () => personSheet(p.id) }),
     // Wave 6e: the General note, under "Advanced", collapsed unless it was open in the last two minutes (general_notes.ts, person_general_view.ts).
     generalNoteSection(p),
+    timelineSection(p),
     el('button', { class: 'btn btn-ghost', onclick: () => ringSheet(p) }, [S.sheetChangeRing]),
     passOnRowFor(p),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -1768,6 +1771,23 @@ function generalNoteSection(p: Person): HTMLElement {
     extra: askAgainRow(p),
   })
   return section.el
+}
+
+/** The Timeline of a person (timeline.ts, timeline_view.ts): typed and imported entries live on the person; TrustWeb's own are derived. */
+function timelineSection(p: Person): HTMLElement {
+  // The record may have been replaced since the card opened: write into the person as the record holds it now.
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  return createTimelineSection({
+    entries: () => timelineOf(st(), now()),
+    add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
+    importText: (text) => {
+      const r = parseTimelineImport(text)
+      if (r.unreadable) return S.tlImportBad
+      const n = addEntries(now(), r.entries)
+      if (n) save()
+      return S.tlImported(n, r.skipped, r.entries.length - n)
+    },
+  }, toast)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
