@@ -125,7 +125,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .rings-wrap.compact .node:not(.you):hover,.rings-wrap.compact .node:not(.you):focus-visible{z-index:2}
 .rings-wrap.compact .node:not(.you):hover span,.rings-wrap.compact .node:not(.you):focus-visible span{display:block; position:absolute; top:100%; white-space:nowrap; background:var(--card); padding:1px 6px; border-radius:8px; box-shadow:0 2px 8px rgba(36,27,46,.2)}
 .node.nl .ava{font-size:0}
-.node.fam .ava{box-shadow:0 0 0 2.5px #7b1fa2}
+.node:not(.you) .ava{position:relative}
+.node.tagged .ava::after{content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--arcs); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px))}
 .node.lifted{z-index:5; cursor:grabbing; touch-action:none}
 .node.lifted .ava{transform:scale(1.25)}
 .rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}

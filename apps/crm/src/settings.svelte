@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ColourTags from './colour_tags.svelte'
   import Curate from './curate.svelte'
   import FieldsEditor from './fields_editor.svelte'
   import ImportExport from './import_export.svelte'
@@ -105,6 +106,8 @@
     <label class="fld check"><input type="checkbox" data-close-field={f.id} checked={prefs.close.fields.includes(f.id)}
       onchange={(e): void => togglePlaceField(f.id, e.currentTarget.checked)} /><span>{f.label}</span></label>
   {/each}
+
+  <ColourTags />
 
   <ImportExport />
 

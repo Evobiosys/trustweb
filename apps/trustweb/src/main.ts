@@ -20,7 +20,8 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, inContact, isFamily, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
+import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours } from './colour_tags'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, inContact, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -1317,6 +1318,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   for (const p of s.people) counts[ringSlot(p)] = (counts[ringSlot(p)] ?? 0) + 1
   ringsGeo = ringsGeometry(counts)
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
+  const colourTags = loadColourTags()
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
   let dragged = false
   wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -1363,17 +1365,21 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         svg.appendChild(path)
       }
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
+      const arcs = arcsGradient(tagColours(p, colourTags))
+      const face = avatar(p.name, p.id)
+      face.style.background = PERSON_GREEN
       const b = el('button', {
-        class: 'node' + (mark ? ' ' + mark : '') + (isFamily(p) ? ' fam' : '') + (ring === Ring.Unsorted ? ' uns' : ''), 'data-pid': p.id,
+        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
       }, [
-        avatar(p.name, p.id),
+        face,
         el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
       b.style.left = x + 'px'
       b.style.top = y + 'px'
+      if (arcs) b.style.setProperty('--arcs', arcs)
       b.style.setProperty('--d', dot * k + 'px')
       if (dot * k < 11) b.classList.add('nl')
       wrap.appendChild(b)
@@ -1627,6 +1633,7 @@ function fitRings(): void {
   scroll.scrollTop = 0
 }
 window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() })
+window.addEventListener(COLOUR_TAGS_EVENT, () => { if (screen === Screen.Web) render() })
 
 /** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
 function openQuery(): void {
