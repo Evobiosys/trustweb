@@ -14,20 +14,20 @@ const asShadowCss = (text: string): string => text
   .replace(/:root\b/g, ':host')
   .replace(/^(html|body)\b/gm, ':host')
 
-/** The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The gear rides on the sheet's × row (the host puts the × at the top right), just left of it. */
-const EMBED_CSS = `:host{all:initial; display:block; height:100%}
-.shell{height:100%; min-height:0; max-width:none; box-shadow:none}
+/** Applied after the page stylesheet, so its `.tabbar{position:fixed}` cannot pull the tab bar out of the sheet. The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The gear rides on the sheet's × row (the host puts the × at the top right), just left of it. */
+const HOST_CSS = ':host{all:initial; display:block; height:100%}'
+const EMBED_CSS = `.shell{height:100%; min-height:0; max-width:none; box-shadow:none}
 main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
 .tabbar{position:static; transform:none; max-width:none}
 .shell .top{position:relative; padding-top:4px}
-.shell .gear{position:absolute; top:0; right:92px}`
+.shell .top .gear{position:absolute; top:0; right:92px}`
 
 function shadowTarget(el: HTMLElement): HTMLElement {
   const root = el.attachShadow({ mode: 'open' })
   const target = document.createElement('div')
   target.style.height = '100%'
-  root.append(Object.assign(document.createElement('style'), { textContent: EMBED_CSS + asShadowCss(css) }), target)
+  root.append(Object.assign(document.createElement('style'), { textContent: HOST_CSS + asShadowCss(css) + EMBED_CSS }), target)
   return target
 }
 

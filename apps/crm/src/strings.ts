@@ -117,7 +117,6 @@ export const S = {
   manualHint: 'Edits Tana cannot take by itself. Do these in Tana by hand:',
   manualPlacement: 'Where a field sits (row, simple, advanced, hidden): Tana has no such setting. It stays in TrustWeb only.',
   manualNone: 'No edits waiting for a manual step.',
-  lightTheme: 'Light theme (dark is the default)',
   themeToLight: 'Switch to light theme',
   themeToDark: 'Switch to dark theme',
   colourTagsTitle: 'Colour tags',
