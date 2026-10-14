@@ -13,6 +13,7 @@ const CSS = `
 .twf .twf-x{position:absolute;top:2px;right:4px;margin:0;padding:0 5px;background:none;color:#fff;font-size:14px}
 .twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
+.twf-rx{position:absolute;top:-13px;right:-13px;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#ff715b;color:#fff;font:700 14px/20px system-ui;cursor:pointer;pointer-events:auto}
 .twf-line{position:fixed;inset:0;z-index:99997;pointer-events:none;width:100%;height:100%}
 @keyframes twf{50%{box-shadow:0 0 0 8px rgba(255,113,91,.35)}}`
 
@@ -34,6 +35,9 @@ export function initDevFeature(): void {
     box.appendChild(open)
   }
   const ring = Object.assign(document.createElement('div'), { className: 'twf-ring' })
+  const rx = Object.assign(document.createElement('button'), { className: 'twf-rx', textContent: '×', title: 'Remove pointer' })
+  ring.appendChild(rx)
+  let pointerOff = false
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('class', 'twf-line')
   const line = document.createElementNS(NS, 'line')
@@ -46,9 +50,11 @@ export function initDevFeature(): void {
   box.appendChild(x)
   const show = (on: boolean): void => {
     box.hidden = !on; dot.hidden = on
+    if (on) pointerOff = false
     try { sessionStorage.setItem('twf-hidden', on ? '' : '1') } catch { /* private mode: not remembered */ }
     point()
   }
+  rx.addEventListener('click', () => { pointerOff = true; point() })
   x.addEventListener('click', () => show(false))
   dot.addEventListener('click', () => show(true))
   box.addEventListener('keydown', (e) => { if (e.key === 'Escape') show(false) })
@@ -58,7 +64,7 @@ export function initDevFeature(): void {
     const target = f.selector ? document.querySelector(f.selector) : null
     const r = target?.getBoundingClientRect()
     const gone = !r || (r.width === 0 && r.height === 0)
-    const off = gone || box.hidden
+    const off = gone || box.hidden || pointerOff
     ring.hidden = off; svg.style.display = off ? 'none' : ''
     if (off) return
     Object.assign(ring.style, { left: r.left - 4 + 'px', top: r.top - 4 + 'px', width: r.width + 8 + 'px', height: r.height + 8 + 'px' })
