@@ -5,8 +5,8 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, buildGraph, matchIds, shake, step, tierOf, TIER_COLOUR } from './network_graph'
-import type { Forces, Graph, GraphNode } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, TIER_COLOUR } from './network_graph'
+import type { Forces, Graph, GraphNode, Pins } from './network_graph'
 import { S } from './strings'
 
 export interface NetworkOptions {
@@ -17,6 +17,9 @@ export interface NetworkOptions {
 }
 
 const SETTINGS_KEY = 'trustweb.ui.netSettings'
+const PINS_KEY = 'trustweb.ui.netPins'
+const LONG_PRESS_MS = 500
+const DOUBLE_TAP_MS = 320
 const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7', label: '#c5d6d9' }
 const STEPS_PER_FRAME = 20
 const TAP_SLOP = 6
@@ -31,6 +34,14 @@ function loadSettings(): Settings {
 }
 function saveSettings(v: Settings): void {
   try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)) } catch { /* not remembered */ }
+}
+
+/** Pins per device, by person id: they survive reloads and "Shake". */
+function loadPins(): Pins {
+  try { return JSON.parse(window.localStorage.getItem(PINS_KEY) ?? '{}') as Pins } catch { return {} }
+}
+function savePins(g: Graph): void {
+  try { window.localStorage.setItem(PINS_KEY, JSON.stringify(pinsOf(g))) } catch { /* not remembered */ }
 }
 
 function download(name: string, blob: Blob): void {
@@ -53,6 +64,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const people = settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')
   const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
   if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
+  if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
   const g = state.graph
   const near = g.nodes.map(() => new Set<number>())
@@ -77,12 +89,14 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       oninput: (e: Event) => { settings.forces[k] = Number((e.target as HTMLInputElement).value); reheat() } })])
   const exportPng = (): void => { draw(); canvas.toBlob((b) => { if (b) download('network.png', b) }, 'image/png') }
   const exportJson = (): void => {
-    const data = { nodes: g.nodes.map((v) => ({ id: v.id, name: v.name, tier: v.tier ?? null })), edges: g.edges.map((e) => ({ a: g.nodes[e.a].id, b: g.nodes[e.b].id })) }
+    const data = { positions: Object.fromEntries(g.nodes.map((v) => [v.id, { x: Math.round(v.x), y: Math.round(v.y) }])), anchors: pinsOf(g), layoutMode: 'dynamic',
+      nodes: g.nodes.map((v) => ({ id: v.id, name: v.name, tier: v.tier ?? null })), edges: g.edges.map((e) => ({ a: g.nodes[e.a].id, b: g.nodes[e.b].id })) }
     download('network.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }))
   }
   const menu = el('div', { class: 'net-menu', hidden: '' }, [
     check(S.netLogseq, settings.logseq, (v) => { settings.logseq = v; saveSettings(settings); dirty = true }),
     check(S.netShowAll, settings.showAll, (v) => { settings.showAll = v; rebuild() }),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { for (const v of g.nodes) if (v.tier !== undefined) v.pinned = false; savePins(g); reheat() } }, [S.netUnpinAll]),
     el('strong', {}, [S.netForces]),
     slider(S.netLink, 'link', 0.3, 3, 0.1), slider(S.netCharge, 'charge', 20, 2000, 20), slider(S.netGravity, 'gravity', 0, 0.02, 0.0005),
     slider(S.netCollide, 'collide', 0, 60, 2), slider(S.netLabels, 'labelZoom', 0.3, 4, 0.1),
@@ -154,6 +168,12 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       ctx.globalAlpha = lit ? (!lq && v.faint ? 0.4 : 1) : 0.15
       ctx.fillStyle = lq ? (v === hover || matches.has(v.id) ? LOGSEQ.lit : LOGSEQ.node) : colour(v)
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
+      if (v.pinned && v.tier !== undefined) {
+        ctx.globalAlpha = 1
+        ctx.fillStyle = lq ? LOGSEQ.lit : ink
+        ctx.beginPath(); ctx.arc(x + rad * 0.8, y - rad * 0.8, 2.5, 0, Math.PI * 2); ctx.fill()
+        ctx.globalAlpha = lit ? 1 : 0.15
+      }
       if (lq) {
         const a = lit ? fade : fade * 0.15
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
@@ -204,7 +224,26 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     c.x = px - (px - c.x) * (k / c.k); c.y = py - (py - c.y) * (k / c.k); c.k = k
     dirty = true
   }
-  canvas.addEventListener('pointerdown', (e) => { touched = true; canvas.setPointerCapture(e.pointerId); down.set(e.pointerId, local(e)); travelled = 0 })
+  // A node dragged becomes pinned; double-tap or long-press a pinned node unpins it.
+  let drag: GraphNode | null = null
+  let dragPinned = false
+  let press = 0
+  let opening = 0
+  let lastTap = { id: '', at: 0 }
+  const unpin = (v: GraphNode): void => { v.pinned = false; savePins(g); state.iteration = Math.min(state.iteration, LAYOUT_ITERATIONS - 60); dirty = true }
+  const endDrag = (): void => { clearTimeout(press); drag = null }
+  canvas.addEventListener('pointerdown', (e) => {
+    touched = true
+    canvas.setPointerCapture(e.pointerId)
+    const p = local(e)
+    down.set(e.pointerId, p)
+    travelled = 0
+    if (down.size > 1) { if (drag) drag.pinned = dragPinned; endDrag(); return }
+    const v = hit(p.x, p.y)
+    if (!v || v.tier === undefined) return
+    drag = v; dragPinned = v.pinned
+    if (v.pinned) press = window.setTimeout(() => { if (drag === v && travelled <= TAP_SLOP) { endDrag(); unpin(v); travelled = Infinity } }, LONG_PRESS_MS)
+  })
   canvas.addEventListener('pointermove', (e) => {
     const p = local(e)
     const prev = down.get(e.pointerId)
@@ -214,6 +253,15 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       return
     }
     const c = cam()
+    travelled += Math.hypot(p.x - prev.x, p.y - prev.y)
+    down.set(e.pointerId, p)
+    if (drag) {
+      if (travelled <= TAP_SLOP) return
+      clearTimeout(press)
+      drag.x = (p.x - c.x) / c.k; drag.y = (p.y - c.y) / c.k; drag.pinned = true
+      state.iteration = Math.min(state.iteration, LAYOUT_ITERATIONS - 30); dirty = true
+      return
+    }
     if (down.size === 2) {
       const other = [...down.entries()].find(([id]) => id !== e.pointerId)?.[1] ?? prev
       const before = Math.hypot(prev.x - other.x, prev.y - other.y) || 1
@@ -222,16 +270,24 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     } else {
       c.x += p.x - prev.x; c.y += p.y - prev.y; dirty = true
     }
-    travelled += Math.hypot(p.x - prev.x, p.y - prev.y)
-    down.set(e.pointerId, p)
   })
   const release = (e: PointerEvent, tap: boolean): void => {
     const was = down.size
     down.delete(e.pointerId)
+    const dragged = drag
+    endDrag()
+    if (dragged && travelled > TAP_SLOP && tap) { savePins(g); return }
+    if (dragged) dragged.pinned = dragPinned
     if (!tap || was !== 1 || travelled > TAP_SLOP) return
-    const p = local(e)
-    const v = hit(p.x, p.y)
-    if (v) (v.tier === undefined ? o.openMe() : o.openPerson(v.id))
+    const v = hit(local(e).x, local(e).y)
+    if (!v) return
+    if (v.pinned && v.tier !== undefined) {
+      if (lastTap.id === v.id && e.timeStamp - lastTap.at < DOUBLE_TAP_MS) { clearTimeout(opening); lastTap = { id: '', at: 0 }; unpin(v); return }
+      lastTap = { id: v.id, at: e.timeStamp }
+      opening = window.setTimeout(() => o.openPerson(v.id), DOUBLE_TAP_MS)
+      return
+    }
+    if (v.tier === undefined) o.openMe(); else o.openPerson(v.id)
   }
   canvas.addEventListener('pointerup', (e) => release(e, true))
   canvas.addEventListener('pointercancel', (e) => release(e, false))

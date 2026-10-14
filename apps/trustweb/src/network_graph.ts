@@ -175,7 +175,7 @@ export function step(g: Graph, alpha: number, f: Forces = DEFAULT_FORCES): void 
     b.vx -= dx * pull; b.vy -= dy * pull
   }
   for (const v of nodes) {
-    if (v.pinned) { v.x = 0; v.y = 0; v.vx = 0; v.vy = 0; continue }
+    if (v.pinned) { v.vx = 0; v.vy = 0; continue }
     v.vx -= v.x * f.gravity * alpha; v.vy -= v.y * f.gravity * alpha
     v.x += v.vx; v.y += v.vy
     v.vx *= 0.6; v.vy *= 0.6
@@ -184,6 +184,22 @@ export function step(g: Graph, alpha: number, f: Forces = DEFAULT_FORCES): void 
 
 export function alphaAt(iteration: number, total = LAYOUT_ITERATIONS): number {
   return Math.max(0, 1 - iteration / total)
+}
+
+/** Pinned positions by person id (the centre node is always fixed and never listed). Same shape as the reference map's anchors. */
+export type Pins = Record<string, { x: number; y: number; a: true }>
+
+export function applyPins(g: Graph, pins: Pins): void {
+  for (const v of g.nodes) {
+    const p = v.tier === undefined ? undefined : pins[v.id]
+    if (p) { v.x = p.x; v.y = p.y; v.pinned = true }
+  }
+}
+
+export function pinsOf(g: Graph): Pins {
+  const out: Pins = {}
+  for (const v of g.nodes) if (v.pinned && v.tier !== undefined) out[v.id] = { x: Math.round(v.x * 10) / 10, y: Math.round(v.y * 10) / 10, a: true }
+  return out
 }
 
 /** Scatter every free node a little, so a new run can find another resting place ("shake"). */

@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step, tierOf } from '../../src/network_graph.ts'
+import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step, tierOf, applyPins, pinsOf } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -118,5 +118,14 @@ describe('forces', () => {
   it('lays family at its closeness, unsorted farthest', () => {
     const g = buildGraph(me, [{ ...person('f', 'family'), closeness: Ring.Friend }, person('u', 'none'), person('c', Ring.Close)])
     expect(g.edges.map((e) => e.rest)).toEqual([100, 250, 60])
+  })
+
+  it('keeps pinned nodes where they are through settle and shake, and lists them', () => {
+    const g = buildGraph(me, [person('a', Ring.Friend), person('b', Ring.Close), person('c', Ring.Close)])
+    applyPins(g, { a: { x: 300, y: -40, a: true }, me: { x: 9, y: 9, a: true } })
+    settle(g); shake(g, 1)
+    expect(g.nodes[1]).toMatchObject({ x: 300, y: -40, pinned: true })
+    expect(g.nodes[0]).toMatchObject({ x: 0, y: 0 })
+    expect(pinsOf(g)).toEqual({ a: { x: 300, y: -40, a: true } })
   })
 })
