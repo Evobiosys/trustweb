@@ -43,7 +43,8 @@ const TYPE_DECL = `export interface PersonField {
 }
 `
 
-const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect only']]
+const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect'], ['family', 'Family'], ['unsorted', 'Unsorted']]
+const CLOSENESS_LABELS = RING_LABELS.slice(0, 4)
 const FAV_LABELS = [['email', 'Email'], ['phone', 'Phone call'], ['sms', 'SMS'], ['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['matrix', 'Matrix']]
 const opts = (pairs) => pairs.map(([id, label]) => ({ id, label }))
 const tw = (id, label, type, description, options) => ({ id, tanaAttributeId: null, label, type, description, ...(options ? { options: opts(options) } : {}) })
@@ -54,6 +55,7 @@ const TRUSTWEB_ONLY = {
     tw('tw-first', 'First name', 'content', 'TrustWeb only: from the Tana name until typed'),
     tw('tw-context', 'Context', 'content', 'TrustWeb only: met in which context, or intending to connect'),
     tw('tw-ring', 'Ring', 'options', 'TrustWeb only', RING_LABELS),
+    tw('tw-closeness', 'Family closeness', 'options', 'TrustWeb only: how close a family member is (default close friend)', CLOSENESS_LABELS),
     tw('tw-fav', 'Favourite way to connect', 'options', 'TrustWeb only', FAV_LABELS),
   ],
   environment: [tw('tw-context', 'Context', 'content', 'TrustWeb only')],

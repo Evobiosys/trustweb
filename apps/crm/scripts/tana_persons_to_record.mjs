@@ -12,10 +12,10 @@ import { fieldLabel, parseSchema } from './tana_schema_to_fields.mjs'
 const GOOGLE = 'Google Calendar Contacts'
 const MAX_LINE = 200
 const MAX_VALUE = 500
-const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', intending: 'intending', none: 'none' }
+const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', intending: 'intending', family: 'family', unsorted: 'unsorted' }
 const FAMILY = 'LNlpliq4GdNI'
 const CONNECTION = 'ConGRasNilsz'
-const OUT_OF_WEB = ['6QzDHIfrlmSz', '__XNQ42Dtiwx'] // famous, Deceased
+const INTENDING = 'FcZJGS5EH2on'
 const DERIVED = 'ring: derived'
 
 function clean(s) {
@@ -75,13 +75,13 @@ function ringOf(texts, fields) {
   return undefined
 }
 
-/** First structure from the person's own marks; an email or calendar id as name stays out of the web. */
+/** First structure from the person's own marks: family, personal connection and intending to connect are rings; everyone else (famous, deceased, an email id included) is unsorted. */
 function deriveRing(name, fields) {
-  if (name.includes('@')) return 'none'
-  if (fields[FAMILY] === true) return 'close'
+  if (name.includes('@')) return 'unsorted'
+  if (fields[FAMILY] === true) return 'family'
   if (fields[CONNECTION] === true) return 'friend'
-  if (OUT_OF_WEB.some((k) => fields[k] === true)) return 'none'
-  return 'acquaintance'
+  if (fields[INTENDING] === true) return 'intending'
+  return 'unsorted'
 }
 
 /** Workspace name as plain text: inline-ref spans and tags dropped, entities decoded. */
@@ -112,7 +112,7 @@ function convertList(index, nodes, schema, workspaces, derive = false) {
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i))
     const explicit = ringOf(texts, fields)
-    const ring = explicit ?? (derive ? deriveRing(n.name, fields) : 'acquaintance')
+    const ring = explicit ?? (derive ? deriveRing(n.name, fields) : 'unsorted')
     if (!explicit && derive) all.push(mk(DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined

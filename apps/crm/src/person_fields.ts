@@ -408,7 +408,40 @@ export const PERSON_FIELDS: readonly PersonField[] = [
       },
       {
         "id": "intending",
-        "label": "Intending to connect only"
+        "label": "Intending to connect"
+      },
+      {
+        "id": "family",
+        "label": "Family"
+      },
+      {
+        "id": "unsorted",
+        "label": "Unsorted"
+      }
+    ]
+  },
+  {
+    "id": "tw-closeness",
+    "tanaAttributeId": null,
+    "label": "Family closeness",
+    "type": "options",
+    "description": "TrustWeb only: how close a family member is (default close friend)",
+    "options": [
+      {
+        "id": "close",
+        "label": "Close friend"
+      },
+      {
+        "id": "friend",
+        "label": "Friend"
+      },
+      {
+        "id": "acquaintance",
+        "label": "Acquaintance"
+      },
+      {
+        "id": "intending",
+        "label": "Intending to connect"
       }
     ]
   },

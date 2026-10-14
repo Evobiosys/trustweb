@@ -31,7 +31,7 @@ describe('tana persons converter', () => {
     expect(anna.id).toBe('tana-a1')
     expect(anna.metAt).toBe(Date.parse('2025-02-20T18:05:49.444Z'))
     expect(anna.lines.at(-1)).toMatchObject({ tag: 'custom', customTag: 'Google Calendar Contacts' })
-    expect(anna.ring).toBe('acquaintance')
+    expect(anna.ring).toBe('unsorted')
     expect(ben.ring).toBe('close')
     expect(cara.lines.map((l) => l.text)).toEqual(['ring: derived'])
   })
@@ -44,8 +44,8 @@ describe('tana converter: derived rings', () => {
     r2: '- Star\n  - **famous**: [X]\n', r3: '- lena@x.org\n', r4: '- Plain\n', r5: '- Own\n  - **Ring**: Friend\n  - **famous**: [X]\n',
   }
   const { record } = convert(idx, ns, [...PERSON_FIELDS])
-  it('derives close / friend / none / none / acquaintance and notes it', () => {
-    expect(record.people.map((p) => p.ring)).toEqual(['close', 'friend', 'none', 'none', 'acquaintance', 'friend'])
+  it('derives family / friend / unsorted and notes it', () => {
+    expect(record.people.map((p) => p.ring)).toEqual(['family', 'friend', 'unsorted', 'unsorted', 'unsorted', 'friend'])
     expect(record.people[0].lines.at(-1)?.text).toBe('ring: derived')
   })
   it('a manual ring wins and carries no derived note', () => {

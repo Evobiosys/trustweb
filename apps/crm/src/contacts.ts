@@ -3,9 +3,11 @@
  * the pipeline (lines tagged opportunity / looking / offer by stage). Pure.
  */
 import type { NoteLine, Person } from '../../trustweb/src/model'
-import { LineStatus, RINGS, Ring, Tag } from '../../trustweb/src/model'
+import { LineStatus, Tag } from '../../trustweb/src/model'
 import type { Contact, CrmView } from './model'
 import { ContactPointKind, Stage } from './model'
+import { RING_ORDER, ringOf } from './rings'
+import type { RingId } from './rings'
 import { lastActivity } from './timeline'
 
 export enum SortOrder {
@@ -43,13 +45,10 @@ export function contactRows(view: CrmView, query: string, order: SortOrder): Con
     : b.lastAt - a.lastAt || a.person.name.localeCompare(b.person.name))
 }
 
-/** A person kept out of the web (famous, deceased, an email id): still in the CRM list, last. */
-export const NO_RING = 'none'
-
-/** Rows grouped by ring in ring order (close first, then the out-of-web group), empty rings left out. */
-export function groupByRing(rows: ContactRow[]): { ring: Ring | typeof NO_RING; rows: ContactRow[] }[] {
-  return ([...RINGS, NO_RING] as (Ring | typeof NO_RING)[])
-    .map((ring) => ({ ring, rows: rows.filter((r) => (r.person.ring as string) === ring) }))
+/** Rows grouped by ring in ring order (closest first, family, then unsorted), empty rings left out. */
+export function groupByRing(rows: ContactRow[]): { ring: RingId; rows: ContactRow[] }[] {
+  return RING_ORDER
+    .map((ring) => ({ ring, rows: rows.filter((r) => ringOf(r.person.ring) === ring) }))
     .filter((g) => g.rows.length > 0)
 }
 

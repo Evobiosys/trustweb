@@ -230,3 +230,4 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .flabel{flex:1; min-width:0; font-size:13.5px}
 .frow .field{width:auto; flex:0 0 40%}
 .scope{display:flex; flex-direction:column; gap:2px; margin:8px 0}
+.ring-dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:-1px}

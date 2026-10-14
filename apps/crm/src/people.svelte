@@ -14,6 +14,7 @@
   import PeopleFilter from './people_filter.svelte'
   import PersonRow from './person_row.svelte'
   import { prefs } from './prefs.svelte'
+  import { ringColor } from './rings'
   import { store, undoLastImport } from './state.svelte'
   import { S } from './strings'
   import { timeline } from './timeline'
@@ -79,7 +80,7 @@
     {/each}
   </div>
   {#each groups as g (g.ring)}
-    <h3 class="ring-heading">{S.ringLabel[g.ring]}</h3>
+    <h3 class="ring-heading"><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</h3>
     {#each g.rows as row (row.person.id)}
       {@const values = valuesOf(row.person.id)}
       <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
