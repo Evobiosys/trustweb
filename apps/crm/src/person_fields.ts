@@ -27,6 +27,13 @@ export const PERSON_FIELDS: readonly PersonField[] = [
     "description": "public figure I do not know personally (TrustWeb CRM filter)"
   },
   {
+    "id": "4J9bhDw1UdTj",
+    "tanaAttributeId": "4J9bhDw1UdTj",
+    "label": "hide in trustweb",
+    "type": "checkbox",
+    "description": "on: never shown in TrustWeb / the CRM (deleted there on next sync)"
+  },
+  {
     "id": "ConGRasNilsz",
     "tanaAttributeId": "ConGRasNilsz",
     "label": "personal connection",
