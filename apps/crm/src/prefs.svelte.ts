@@ -39,6 +39,8 @@ export interface Prefs {
   pkms: Pkm[]
   /** A connected person counts as active (filled circle) if something happened within this many days. */
   activityDays: number
+  /** Light theme chosen in Settings; dark is the default, whatever the OS theme is. */
+  light: boolean
   /** Sync an edit 2 s after it was entered. */
   autoSync: boolean
   /** Tana API token: this device only, never part of the CRM record. */
@@ -55,7 +57,7 @@ export interface Prefs {
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined
@@ -70,6 +72,11 @@ function load(): Prefs {
 }
 
 export const prefs: Prefs = $state(load())
+
+export function applyTheme(): void {
+  document.documentElement.dataset.theme = prefs.light ? 'light' : 'dark'
+}
+applyTheme()
 
 export function savePrefs(): void {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch { /* browser refused: kept in memory */ }

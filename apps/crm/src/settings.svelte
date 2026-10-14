@@ -3,7 +3,7 @@
   import FieldsEditor from './fields_editor.svelte'
   import ImportExport from './import_export.svelte'
   import { PLACE_FIELDS } from './close'
-  import { PKMS, Pkm, prefs, savePrefs } from './prefs.svelte'
+  import { PKMS, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
   import { store } from './state.svelte'
@@ -41,6 +41,10 @@
 
 <section data-screen="settings">
   <h2 class="screen-title">{S.settingsTitle}</h2>
+  <label class="fld check">
+    <input type="checkbox" data-field="light-theme" bind:checked={prefs.light} onchange={(): void => { applyTheme(); savePrefs() }} />
+    <span>{S.lightTheme}</span>
+  </label>
   <p class="muted">{S.pkmQuestion}</p>
   {#each PKMS as p (p)}
     <label class="fld check">

@@ -13,18 +13,16 @@
   --tint-blue:#E0F1F8; --tint-sand:#F3ECDD; --ok-ink:#0E6B49; --warn-ink:#B4410F;
   color-scheme:light;
 }
-/* Dark: a warm plum night instead of a darkened beige, with the same accents. */
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --page-bg:#120C1A; --page-ink:#EDE6F2;
-    --linen:#1F1729; --card:#2B2139; --mist:#3A2D4C; --ink:#F4EDF9; --ink-soft:#BBAACD;
-    --line:rgba(244,237,249,.13); --tab-bg:rgba(31,23,41,.94);
-    --tint-teal:#163A38; --tint-ok:#173A2C; --tint-warn:#45231F; --tint-violet:#36214F;
-    --tint-blue:#15344A; --tint-sand:#35302A; --ok-ink:#7BE0B0; --warn-ink:#FF9C8A;
-    --electric-deep:#7CCBEF; --violet-deep:#D9B8FF; --warm-deep:#FFA37F;
-    --start-end:#3B2459;
-    color-scheme:dark;
-  }
+/* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A warm plum night instead of a darkened beige, with the same accents. */
+:root:not([data-theme="light"]){
+  --page-bg:#120C1A; --page-ink:#EDE6F2;
+  --linen:#1F1729; --card:#2B2139; --mist:#3A2D4C; --ink:#F4EDF9; --ink-soft:#BBAACD;
+  --line:rgba(244,237,249,.13); --tab-bg:rgba(31,23,41,.94);
+  --tint-teal:#163A38; --tint-ok:#173A2C; --tint-warn:#45231F; --tint-violet:#36214F;
+  --tint-blue:#15344A; --tint-sand:#35302A; --ok-ink:#7BE0B0; --warn-ink:#FF9C8A;
+  --electric-deep:#7CCBEF; --violet-deep:#D9B8FF; --warm-deep:#FFA37F;
+  --start-end:#3B2459;
+  color-scheme:dark;
 }
 
 *{box-sizing:border-box; margin:0}
@@ -104,22 +102,20 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .tag-talent{background:var(--tint-violet); color:var(--violet-deep)}
 .tag-resource{background:#E0F1F8; color:var(--electric-deep)}
 .tag-note,.tag-custom{background:var(--tint-sand); color:var(--ink-soft)}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]) .tag-looking{background:#262A55; color:#B9C0FF}
-  :root:not([data-theme="light"]) .tag-offer{background:#173A2C; color:#7BE0B0}
-  :root:not([data-theme="light"]) .tag-meet{background:#3D3015; color:#F2C66B}
-  :root:not([data-theme="light"]) .tag-opportunity{background:#45231F; color:#FF9C8A}
-  :root:not([data-theme="light"]) .tag-resource{background:#15344A; color:#8FD3F2}
-  :root:not([data-theme="light"]) .file-btn,
-  :root:not([data-theme="light"]) .btn.ghost,
-  :root:not([data-theme="light"]) .link,
-  :root:not([data-theme="light"]) .back,
-  :root:not([data-theme="light"]) .tab[aria-current="page"],
-  :root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#5FD3C4}
-  :root:not([data-theme="light"]) .btn.ghost,
-  :root:not([data-theme="light"]) .file-btn{border-color:#5FD3C4}
-  :root:not([data-theme="light"]) .tab[aria-current="page"]{box-shadow:inset 0 3px 0 #5FD3C4}
-}
+:root:not([data-theme="light"]) .tag-looking{background:#262A55; color:#B9C0FF}
+:root:not([data-theme="light"]) .tag-offer{background:#173A2C; color:#7BE0B0}
+:root:not([data-theme="light"]) .tag-meet{background:#3D3015; color:#F2C66B}
+:root:not([data-theme="light"]) .tag-opportunity{background:#45231F; color:#FF9C8A}
+:root:not([data-theme="light"]) .tag-resource{background:#15344A; color:#8FD3F2}
+:root:not([data-theme="light"]) .file-btn,
+:root:not([data-theme="light"]) .btn.ghost,
+:root:not([data-theme="light"]) .link,
+:root:not([data-theme="light"]) .back,
+:root:not([data-theme="light"]) .tab[aria-current="page"],
+:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#5FD3C4}
+:root:not([data-theme="light"]) .btn.ghost,
+:root:not([data-theme="light"]) .file-btn{border-color:#5FD3C4}
+:root:not([data-theme="light"]) .tab[aria-current="page"]{box-shadow:inset 0 3px 0 #5FD3C4}
 
 /* person */
 .person-head{display:flex; gap:12px; align-items:center; margin:6px 0}
@@ -130,7 +126,7 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .contact-row{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; justify-content:space-between; min-height:44px; padding:6px 12px; margin-bottom:6px; background:var(--card); border-radius:14px}
 .contact-label{font-weight:600; font-size:13.5px}
 .contact-row a{color:var(--teal); font-weight:600; min-height:32px; display:inline-flex; align-items:center}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .contact-row a{color:#5FD3C4} }
+:root:not([data-theme="light"]) .contact-row a{color:#5FD3C4}
 .contact-actions{display:flex; flex-wrap:wrap; gap:8px; margin:8px 0}
 .inline-form{display:flex; flex-direction:column; gap:8px; background:var(--card); border-radius:16px; padding:12px; margin:10px 0}
 .inline-form .row{display:flex; gap:8px}
