@@ -2,8 +2,8 @@
   import { CHANNELS } from '../../trustweb/src/model'
   import type { Person } from '../../trustweb/src/model'
   import { channelLink } from '../../trustweb/src/channel'
+  import { pointHref } from './contacts'
   import { ContactPointKind } from './model'
-  import type { ContactPoint } from './model'
   import { addContactPoint, removeContactPoint, store } from './state.svelte'
   import { S } from './strings'
 
@@ -23,12 +23,6 @@
   const shown = $derived(expanded ? CHANNELS : known)
   const points = $derived(store.crm.contactPoints[person.id] ?? [])
   const nothing = $derived(!expanded && known.length === 0 && points.length === 0)
-
-  function href(point: ContactPoint): string {
-    return point.kind === ContactPointKind.Phone
-      ? `tel:${point.value.replace(/[^\d+]/g, '')}`
-      : `mailto:${encodeURI(point.value)}`
-  }
 
   function isValid(kind: ContactPointKind, value: string): boolean {
     if (kind === ContactPointKind.Phone) return value.replace(/\D/g, '').length >= MIN_PHONE_DIGITS
@@ -80,7 +74,7 @@
 {#each points as point, i (i)}
   <div class="contact-row">
     <span class="contact-label">{S.contactPointLabel[point.kind]}</span>
-    <a href={href(point)}>{point.value}</a>
+    <a href={pointHref(point.kind, point.value)}>{point.value}</a>
     {#if expanded}
       <button class="quiet" aria-label={S.removeNamed(point.value)} onclick={(): void => removeContactPoint(person.id, i)}>{S.remove}</button>
     {/if}

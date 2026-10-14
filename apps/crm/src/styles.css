@@ -183,3 +183,13 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .actions{display:flex; gap:8px; align-items:center; margin-top:4px}
 
 @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto!important; transition:none!important} }
+
+/* contacts import */
+.members{list-style:none; padding:0; display:flex; flex-direction:column; gap:6px}
+.member{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center}
+.summary{list-style:none; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13.5px}
+.totals{font-weight:600; margin:10px 0}
+.sure-group{display:flex; flex-direction:column; gap:8px; padding:10px 0; border-top:1px solid var(--line)}
+.note-text{white-space:pre-wrap; overflow-wrap:anywhere}
+[data-screen="import"] .card{margin:10px 0}
+[data-screen="import"] > .btn{margin:14px 0}

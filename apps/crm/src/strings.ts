@@ -4,6 +4,7 @@
  * are TrustWeb's own, so the two apps never disagree on a word.
  */
 import { S as TW } from '../../trustweb/src/strings'
+import { ContactSource } from './import/types'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import { EventKind } from './timeline'
 import { Source } from './storage'
@@ -121,4 +122,46 @@ export const S = {
   dueOn: (date: string) => `Due ${date}`,
   dueBoth: (rel: string, date: string) => `Due ${rel} (${date})`,
   doneOn: (date: string) => `Done ${date}`,
+  // Contacts import
+  importContacts: 'Import contacts',
+  importTitle: 'Import contacts',
+  importIntro: 'Pick vCard (.vcf), Google CSV (.csv) or Facebook friends (.json) files, or a whole folder. Everything is read on this phone and stays here.',
+  chooseFiles: 'Choose files',
+  chooseFolder: 'Choose a folder',
+  reading: 'Reading...',
+  summaryTitle: 'What was found',
+  fileLine: (name: string, format: string, count: number, skipped: number) =>
+    `${name}: ${format}, ${count === 1 ? '1 contact' : `${count} contacts`}${skipped ? `, ${skipped} skipped` : ''}`,
+  fileUnknown: 'not a contacts file',
+  formatLabel: {
+    [ContactSource.VCard]: 'vCard',
+    [ContactSource.GoogleCsv]: 'Google CSV',
+    [ContactSource.FacebookJson]: 'Facebook friends',
+  } as Record<ContactSource, string>,
+  otherFiles: (n: number) => `${n === 1 ? '1 other file' : `${n} other files`}, not read`,
+  tooBigFiles: (n: number) => `${n === 1 ? '1 file' : `${n} files`} over 100 MB, not read`,
+  totalNew: (n: number) => `${n} new`,
+  totalAlready: (n: number) => `${n} already here`,
+  totalSure: (n: number) => `${n} merged automatically`,
+  totalReview: (n: number) => `${n} to review`,
+  mergedAuto: (n: number) => `${n} merged automatically (same email or phone)`,
+  reviewTitle: 'Same person?',
+  sameBtn: 'Same person',
+  differentBtn: 'Not the same',
+  saveImport: 'Save contacts',
+  importFull: 'This phone has no room left for these contacts. Nothing was saved.',
+  undoImport: (added: number) => `Undo last import (${added} added)`,
+  undoFailed: 'Could not undo: this phone refused to store the change.',
+  contactsHeading: (n: number) => `Contacts (${n})`,
+  contactSource: {
+    [ContactSource.VCard]: 'Phone / vCard',
+    [ContactSource.GoogleCsv]: 'Google',
+    [ContactSource.FacebookJson]: 'Facebook',
+  } as Record<ContactSource, string>,
+  contactFrom: (names: string) => `From: ${names}`,
+  contactInfoShow: 'Show contact info',
+  contactInfoHide: 'Hide contact info',
+  contactBirthday: 'Birthday',
+  contactNote: 'Note',
+  contactNoDetails: 'No phone or email in the file.',
 }

@@ -7,6 +7,8 @@
  * Never writes TrustWeb's key (see storage.ts for why).
  */
 import type { AppState } from '../../trustweb/src/model'
+import { apply } from './import/intake'
+import type { Decision, IntakePlan } from './import/intake'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import type { CrmState } from './model'
 import { sampleApp, sampleCrm } from './sample'
@@ -32,6 +34,7 @@ function newId(): string {
 function crmIsEmpty(crm: CrmState): boolean {
   return crm.interactions.length === 0 && crm.followUps.length === 0
     && Object.keys(crm.stages).length === 0 && Object.keys(crm.contactPoints).length === 0
+    && (crm.contacts ?? []).length === 0
 }
 
 function start(): Store {
@@ -124,4 +127,25 @@ export function forgetImport(): void {
   const next = fallbackApp()
   store.app = next.app
   store.source = next.source
+}
+
+/** Saves `next` first and swaps it in only when the browser took it; false = storage full, nothing changed. */
+function commitCrm(next: CrmState): boolean {
+  if (!saveCrm(store.persona, next)) return false
+  store.crm = next
+  return true
+}
+
+/** Writes the reviewed plan into the CRM's own record. False when the browser refuses to store it. */
+export function importContacts(plan: IntakePlan, decisions: Readonly<Record<number, Decision>>): boolean {
+  const crm = $state.snapshot(store.crm)
+  const before = crm.contacts ?? []
+  const contacts = apply(before, plan, decisions, () => `local:${newId()}`)
+  const files = plan.files.filter((f) => f.format !== null).map((f) => f.name)
+  return commitCrm({ ...crm, contacts, lastImport: { at: Date.now(), files, added: contacts.length - before.length, before } })
+}
+
+export function undoLastImport(): boolean {
+  const { lastImport, ...rest } = $state.snapshot(store.crm)
+  return lastImport ? commitCrm({ ...rest, contacts: lastImport.before }) : false
 }

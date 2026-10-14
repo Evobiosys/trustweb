@@ -4,8 +4,8 @@
  */
 import type { NoteLine, Person } from '../../trustweb/src/model'
 import { LineStatus, RINGS, Ring, Tag } from '../../trustweb/src/model'
-import type { CrmView } from './model'
-import { Stage } from './model'
+import type { Contact, CrmView } from './model'
+import { ContactPointKind, Stage } from './model'
 import { lastActivity } from './timeline'
 
 export enum SortOrder {
@@ -72,4 +72,31 @@ export function pipeline(view: CrmView): PipelineCard[] {
 
 export function byStage(cards: PipelineCard[], stage: Stage): PipelineCard[] {
   return cards.filter((c) => c.stage === stage)
+}
+
+/** Name, organisation, title, email or phone digits. */
+export function contactMatches(c: Contact, query: string): boolean {
+  const q = norm(query.trim())
+  if (!q) return true
+  const text = [c.name, c.org ?? '', c.title ?? '', ...c.emails].map(norm)
+  if (text.some((t) => t.includes(q))) return true
+  const digits = q.replace(/\D/g, '')
+  return digits.length >= 3 && c.phones.some((p) => p.replace(/\D/g, '').includes(digits))
+}
+
+/** Imported contacts matching the search, by name. */
+export function visibleContacts(list: readonly Contact[], query: string): Contact[] {
+  return list.filter((c) => contactMatches(c, query)).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function pointHref(kind: ContactPointKind, value: string): string {
+  return kind === ContactPointKind.Phone ? `tel:${value.replace(/[^\d+]/g, '')}` : `mailto:${encodeURI(value)}`
+}
+
+/** "1985-03-12" -> "12 Mar 1985"; "--07-21" -> "21 Jul"; anything else as written. */
+export function birthdayText(birthday: string, months: readonly string[]): string {
+  const m = /^(?:(\d{4})|-)-(\d{2})-(\d{2})$/.exec(birthday)
+  const month = m ? months[Number(m[2]) - 1] : undefined
+  if (!m || !month) return birthday
+  return `${Number(m[3])} ${month}${m[1] ? ` ${m[1]}` : ''}`
 }

@@ -19,6 +19,7 @@
  * `inventory`, so nothing in CrmState can ever be matched, relayed or shared.
  */
 import type { AppState } from '../../trustweb/src/model'
+import type { ContactSource, ImportedContact } from './import/types'
 
 export enum InteractionKind {
   Met = 'met',
@@ -71,6 +72,31 @@ export interface ContactPoint {
   value: string
 }
 
+/** Where one piece of a contact came from: the file name only (no folder path) and the record in it. */
+export interface ContactOrigin {
+  source: ContactSource
+  file: string
+  sourceRef: string
+}
+
+/**
+ * A person from an imported contacts file (vCard, Google CSV, Facebook JSON).
+ * Not a TrustWeb Person: never part of AppState, so the matcher cannot see it (I1).
+ */
+export type Contact = Omit<ImportedContact, 'source' | 'file' | 'sourceRef'> & {
+  /** 'local:' + uuid */
+  id: string
+  sources: ContactOrigin[]
+}
+
+/** One level of undo for the last contacts import. */
+export interface LastImport {
+  at: number
+  files: string[]
+  added: number
+  before: Contact[]
+}
+
 export interface CrmState {
   v: 1
   interactions: Interaction[]
@@ -79,6 +105,9 @@ export interface CrmState {
   stages: Record<string, Stage>
   /** Person id -> phone / email. */
   contactPoints: Record<string, ContactPoint[]>
+  /** Imported contacts; absent on records saved before the contacts import. */
+  contacts?: Contact[]
+  lastImport?: LastImport
 }
 
 export function emptyCrm(): CrmState {

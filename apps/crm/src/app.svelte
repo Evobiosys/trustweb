@@ -1,5 +1,7 @@
 <script lang="ts">
+  import ContactPage from './contact_page.svelte'
   import Followups from './followups.svelte'
+  import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS } from './nav'
   import { nav, showTab } from './nav.svelte'
   import People from './people.svelte'
@@ -54,7 +56,11 @@
   </header>
 
   <main>
-    {#if nav.personId !== null}
+    {#if nav.importing}
+      <ImportContacts />
+    {:else if nav.contactId !== null}
+      <ContactPage contactId={nav.contactId} />
+    {:else if nav.personId !== null}
       <Person personId={nav.personId} />
     {:else if nav.tab === Tab.People}
       <People />

@@ -29,6 +29,9 @@ LAYOUT
   src/person.svelte              header, collapsed contact info (contact_info.svelte), notes, "just now" one-tap
                                  log (log_now.svelte), note-what-happened and remind-me forms, the person's
                                  timeline (event_row.svelte)
+  src/import_contacts.svelte     Import contacts: files or a folder (vCard, Google CSV, Facebook JSON), summary, duplicate review, save,
+                                 undo (src/import/*: detect, intake, parsers, dedup); contact_page.svelte shows one imported contact;
+                                 contacts live in the CRM key only, never in TrustWeb's record
   src/timeline.svelte            everybody's events by day
   src/pipeline.svelte            kanban over opportunity / looking / offer lines (kanban_board.svelte: drag with a
                                  mouse, or the stage control on each card on a phone)
