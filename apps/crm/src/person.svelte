@@ -13,7 +13,7 @@
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { norm } from './contacts'
-  import { SINCE_KEY, baseFields, intendingOf, valueText } from './fields'
+  import { SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
   import { Kind } from './placement'
   import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
@@ -34,6 +34,7 @@
   let editing = $state<string | null>(null)
   let searching = $state(false)
   let find = $state('')
+  let fieldsOpen = $state(false)
 
   const raw = $derived(store.app.people.find((p) => p.id === personId))
   const edits = $derived(store.crm.personFields?.[personId])
@@ -93,7 +94,8 @@
 
     <ContactInfo {person} />
 
-    <EntityFields kind={Kind.Person} id={person.id} {values} />
+    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
+    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
 
     <h3>{S.notes}
       <button class="icon-btn" data-action="note-search" aria-label={S.noteSearch} title={S.noteSearch} aria-expanded={searching}

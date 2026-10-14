@@ -45,6 +45,7 @@ try {
   await page.locator('[data-filter="famous"]').uncheck()
   await page.getByRole('searchbox').fill(NAME)
   await page.locator(`[data-person="tana-${NODE}"], .person-row:has-text("${NAME}")`).first().click()
+  await page.locator('[data-action="toggle-fields"]').click()
   await page.locator('[data-action="toggle-advanced"]').click()
   const nick = page.locator(`[data-field="${NICK}"] input`)
   await nick.fill(value)

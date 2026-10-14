@@ -31,6 +31,7 @@ export const S = {
   openIn: (channel: string) => `Open in ${channel}`,
   notes: 'Notes',
   addNote: 'Add a note',
+  fieldsToggle: (n: number) => `Fields (${n})`,
   personTimeline: 'What happened',
   addInteraction: 'Note what happened',
   addFollowUp: 'Remind me',
