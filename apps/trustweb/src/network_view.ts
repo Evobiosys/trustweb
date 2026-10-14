@@ -171,7 +171,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (v.pinned && v.tier !== undefined) {
         ctx.globalAlpha = 1
         ctx.fillStyle = lq ? LOGSEQ.lit : ink
-        ctx.beginPath(); ctx.arc(x + rad * 0.8, y - rad * 0.8, 2.5, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(x + rad * 0.8, y - rad * 0.8, 3.2, 0, Math.PI * 2); ctx.fill()
         ctx.globalAlpha = lit ? 1 : 0.15
       }
       if (lq) {
