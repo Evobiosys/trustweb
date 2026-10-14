@@ -13,7 +13,7 @@
 # All local previews open as Jakob with his record: TW_DEV_RECORD (a record file, outside the repo) or, when unset, the
 # path in ~/.cache/trustweb-dev/dev-record.path seeds every fresh origin instead of the welcome screen (About shows "dev record: <file>").
 #
-# Local only: no relay or backup proxy is set, so nothing here talks to production services.
+# Local only: a loopback relay (in memory) is started beside the dev server for device sync; no backup proxy is set, so nothing here talks to production services.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,6 +23,8 @@ LOG="$STATE/vite-$PORT.log"
 PIDFILE="$STATE/vite-$PORT.pid"
 STOCKPID="$STATE/vite-$PORT-stock.pid"
 STOCK_PORT=$((PORT+100))
+RELAY_PORT=$((PORT + 2000))
+RELAY_PIDFILE="$STATE/relay-$PORT.pid"
 PROFILE="$STATE/chrome-profile"
 URL="http://127.0.0.1:$PORT/"
 HOST=127.0.0.1
@@ -43,6 +45,7 @@ for arg in "$@"; do
     --no-open) OPEN=0 ;;
     --stop)
       if [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; then echo "stopped dev server on :$PORT"; else echo "no dev server of this script on :$PORT"; fi
+      if [ -f "$RELAY_PIDFILE" ]; then kill "$(cat "$RELAY_PIDFILE")" 2>/dev/null || true; rm -f "$RELAY_PIDFILE"; fi
       rm -f "$PIDFILE"
       if [ -f "$STOCKPID" ] && kill "$(cat "$STOCKPID")" 2>/dev/null; then echo "stopped stock twin on :$STOCK_PORT"; fi
       rm -f "$STOCKPID"; exit 0 ;;
@@ -71,7 +74,12 @@ else
   echo "starting the dev server on $HOST:$PORT (log: $LOG)"
   # A simple command in the background, so $! is Vite itself (for --stop) and nothing holds this script's stdout.
   cd "$REPO/apps/trustweb"
-  TW_PORT="$PORT" nohup ../crm/node_modules/.bin/vite --host "$HOST" --strictPort >"$LOG" 2>&1 </dev/null &
+  # A local relay (loopback, in memory) behind /relay, so device sync works between two local browsers; nothing reaches a real relay.
+  if ! lsof -nP -iTCP:"$RELAY_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    (cd "$REPO" && nohup node_modules/.bin/tsx scripts/tw_dev_relay.mts "$RELAY_PORT" >"$STATE/relay-$PORT.log" 2>&1 </dev/null & echo $! >"$RELAY_PIDFILE")
+    sleep 1
+  fi
+  TW_RELAY_PROXY="http://127.0.0.1:$RELAY_PORT" TW_PORT="$PORT" nohup ../crm/node_modules/.bin/vite --host "$HOST" --strictPort >"$LOG" 2>&1 </dev/null &
   echo $! >"$PIDFILE"
   cd - >/dev/null
   for _ in $(seq 1 60); do
