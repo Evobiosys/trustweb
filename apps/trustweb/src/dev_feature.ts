@@ -4,9 +4,11 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
+declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string } | null | undefined
 
 const CSS = `
 .twf{position:fixed;left:8px;top:8px;z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
+.twf i{display:block;font-style:normal;font-weight:500;opacity:.8}.twf button{margin-top:4px;font:600 11px system-ui;border:0;border-radius:6px;padding:3px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twf b{display:block;font-size:10px;letter-spacing:.06em;color:#4fd7a0}.twf span{font-weight:500}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
 .twf-line{position:fixed;inset:0;z-index:99997;pointer-events:none;width:100%;height:100%}
@@ -18,9 +20,17 @@ export function initDevFeature(): void {
   const NS = 'http://www.w3.org/2000/svg'
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
   const box = Object.assign(document.createElement('div'), { className: 'twf' })
-  box.innerHTML = '<b></b><span></span>'
-  box.firstElementChild!.textContent = 'FEATURE · ' + f.title
-  box.lastElementChild!.textContent = f.hint
+  const bld = typeof __TW_BUILD__ === 'undefined' ? null : __TW_BUILD__
+  box.innerHTML = '<b></b><i></i><span></span>'
+  box.children[0].textContent = 'FEATURE · ' + f.title
+  box.children[1].textContent = bld ? `${bld.branch} @ ${bld.sha} · ${bld.time} · ${bld.mode}` : ''
+  box.children[2].textContent = f.hint
+  if (bld?.stockUrl && bld.mode === 'personal') {
+    const open = Object.assign(document.createElement('button'), { textContent: 'Open dev preview (no personal data)' })
+    open.addEventListener('pointerdown', (e) => e.stopPropagation())
+    open.addEventListener('click', () => window.open(bld.stockUrl, '_blank'))
+    box.appendChild(open)
+  }
   const ring = Object.assign(document.createElement('div'), { className: 'twf-ring' })
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('class', 'twf-line')

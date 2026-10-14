@@ -84,14 +84,23 @@ function releaseFile() {
 // Dev only (scripts/tw_dev.sh): a record file every fresh preview origin opens with, instead of the welcome screen. Never in a build.
 function devRecord(command) {
   const file = process.env.TW_DEV_RECORD
-  return command === 'serve' && file ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
+  return command === 'serve' && file && !process.env.TW_STOCK ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
 }
 
 // Dev only (scripts/tw_dev.sh, feature.json): the feature overlay text. Never in a build.
 const devFeature = (command) => (command === 'serve' && process.env.TW_FEATURE ? process.env.TW_FEATURE : 'null')
 
+// Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
+function devBuild(command) {
+  if (command !== 'serve') return 'null'
+  const git = (...a) => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
+  const d = new Date()
+  const time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+  return JSON.stringify({ branch: git('rev-parse', '--abbrev-ref', 'HEAD'), sha: git('rev-parse', '--short', 'HEAD'), time, mode: process.env.TW_STOCK ? 'stock' : 'personal', stockUrl: process.env.TW_STOCK_URL ?? '' })
+}
+
 export default ({ command }) => ({
-  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command) },
+  define: { __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_BUILD__: devBuild(command) },
   plugins: [pwaFiles(), releaseFile()],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).

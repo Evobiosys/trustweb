@@ -21,6 +21,8 @@ PORT="${TW_PORT:-5190}"
 STATE="$HOME/.cache/trustweb-dev"
 LOG="$STATE/vite-$PORT.log"
 PIDFILE="$STATE/vite-$PORT.pid"
+STOCKPID="$STATE/vite-$PORT-stock.pid"
+STOCK_PORT=$((PORT+100))
 PROFILE="$STATE/chrome-profile"
 URL="http://127.0.0.1:$PORT/"
 HOST=127.0.0.1
@@ -37,12 +39,17 @@ for arg in "$@"; do
     --no-open) OPEN=0 ;;
     --stop)
       if [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; then echo "stopped dev server on :$PORT"; else echo "no dev server of this script on :$PORT"; fi
-      rm -f "$PIDFILE"; exit 0 ;;
+      rm -f "$PIDFILE"
+      if [ -f "$STOCKPID" ] && kill "$(cat "$STOCKPID")" 2>/dev/null; then echo "stopped stock twin on :$STOCK_PORT"; fi
+      rm -f "$STOCKPID"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
 
 answers() { curl -fsS -m 2 -o /dev/null "$URL" 2>/dev/null; }
+
+# Stock twin (no seed, the welcome screen others see) on PORT+100, unless TW_STOCK_URL names another one or this is itself a stock run.
+if [ -z "${TW_STOCK:-}" ] && [ -z "${TW_STOCK_URL:-}" ]; then export TW_STOCK_URL="http://127.0.0.1:$STOCK_PORT/"; TWIN=1; else TWIN=0; fi
 
 echo "TrustWeb local preview"
 echo "--------"
@@ -69,6 +76,14 @@ else
     sleep 0.5
   done
   answers || { echo "no answer from $URL after 30 s; last lines of the log:" >&2; tail -20 "$LOG" >&2; exit 1; }
+fi
+if [ "$TWIN" = 1 ] && ! curl -fsS -m 2 -o /dev/null "$TW_STOCK_URL" 2>/dev/null; then
+  cd "$REPO/apps/trustweb"
+  TW_STOCK=1 TW_STOCK_URL= TW_PORT="$STOCK_PORT" nohup ../demo/node_modules/.bin/vite --host "$HOST" --strictPort >"$STATE/vite-$PORT-stock.log" 2>&1 </dev/null &
+  echo $! >"$STOCKPID"
+  cd - >/dev/null
+  for _ in $(seq 1 60); do curl -fsS -m 2 -o /dev/null "$TW_STOCK_URL" 2>/dev/null && break; sleep 0.5; done
+  echo "stock twin: $TW_STOCK_URL"
 fi
 echo "ready in $(( $(date +%s) - t0 )) s: $URL"
 if [ "$HOST" = 0.0.0.0 ]; then

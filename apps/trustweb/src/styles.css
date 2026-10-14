@@ -11,9 +11,9 @@
   --tint-teal:var(--tint-teal); --tint-ok:var(--tint-ok); --tint-warn:var(--tint-warn); --tint-violet:var(--tint-violet);
   --tint-blue:var(--tint-blue); --tint-sand:var(--tint-sand); --ok-ink:var(--ok-ink); --warn-ink:var(--warn-ink);
 }
-/* Dark: a warm plum night instead of a darkened beige, with the same accents.
+/* Dark is the default (light only with data-theme="light" on <html>). A warm plum night instead of a darkened beige, with the same accents.
    Real tokens, so the app never depends on a browser's forced dark mode. */
-@media (prefers-color-scheme: dark){
+@media all{
   :root:not([data-theme="light"]){
     --page-bg:#120C1A; --page-ink:#EDE6F2;
     --linen:#1F1729; --card:#2B2139; --mist:#3A2D4C; --ink:#F4EDF9; --ink-soft:#BBAACD;
@@ -573,7 +573,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 @media (prefers-reduced-motion: reduce){ .ripple{display:none} .demo-friends,.stack-card{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
 
 /* dark: the pale pills and tints that are not tokens get night versions */
-@media (prefers-color-scheme: dark){
+@media all{
   :root:not([data-theme="light"]) .tag-looking{background:#262A55; color:#B9C0FF}
   :root:not([data-theme="light"]) .tag-offer{background:#173A2C; color:#7BE0B0}
   :root:not([data-theme="light"]) .tag-meet{background:#3D3015; color:#F2C66B}
@@ -691,7 +691,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .ms-hit:hover{border-left-color:var(--violet)}
 .ms-hit:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .pm-hit{background:#FFF1C2; border-radius:12px; box-shadow:0 0 0 2px #F2B544}
-@media (prefers-color-scheme: dark){
+@media all{
   :root:not([data-theme="light"]) .pm-hit{background:#4A3B12; box-shadow:0 0 0 2px #C99A2E}
   :root:not([data-theme="light"]) .ms-hit mark{background:#5A4A1A}
 }
@@ -720,7 +720,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tr-static .tr-row.playable:hover{background:var(--mist)}
 .tr-static .tr-row.playable:focus-visible{outline:3px solid var(--electric); outline-offset:-3px}
 .tr-static .tr-row.tr-now{background:var(--tint-blue, #DCEFFB); box-shadow:inset 3px 0 0 var(--electric)}
-@media (prefers-color-scheme: dark){
+@media all{
   :root:not([data-theme="light"]) .tr-static .tr-row.tr-now{background:#15344A}
 }
 
