@@ -1,0 +1,54 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-anna
+N:Gruber;Anna;;;
+FN:Anna Gruber
+EMAIL;TYPE=INTERNET:anna.gruber@example.at
+ORG:Alpenbau GmbH
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-bernd
+N:Huber;Bernd;;;
+FN:Bernd Huber
+TEL;TYPE=CELL:0660 555 0103
+BDAY:1979-11-02
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-clara
+N:Wimmer;Clara;;;
+FN:Clara Wimmer
+TEL;TYPE=CELL:+43 (0)660 555 0104
+EMAIL:clara@example.com
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-daniel
+N:Fischer;Daniel;;;
+FN:Daniel Fischer
+EMAIL:d.fischer@example.at
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-dani-work
+N:Fischer;D.;;;
+FN:D. Fischer
+TEL;TYPE=WORK:+43 660 555 0107
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-stefan
+N:Ahrenthal;Stefan;;;
+FN:Stefan Ahrenthal
+TEL;TYPE=CELL:+43 660 5550108
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+UID:demo-eva
+N:Pichler;Eva;;;
+FN:Eva Pichler
+EMAIL:eva.pichler@example.at
+CATEGORIES:Friends
+NOTE:Met at the Linz fair.
+END:VCARD

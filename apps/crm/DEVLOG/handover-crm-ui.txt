@@ -1,0 +1,114 @@
+HANDOVER: Svelte 5 UI for apps/crm (TrustWeb CRM skeleton)
+Written 2026-10-06 by the crm build agent (Fable) for ONE Sonnet subagent.
+
+WORKTREE (work ONLY here, branch v3/crm; never touch the main checkout):
+  /Users/personal/Documents/SingularStructure/PROJECTS/evobiosys/PROJECTS_evobiosys/EvoBioSys-cross/PROJECTS_evobiosys-cross/web-of-trust/Code/worktrees/wt-crm/apps/crm
+Toolchain is installed (node_modules present: svelte 5, @sveltejs/vite-plugin-svelte, vite 8, vitest, svelte-check,
+playwright-core). NO installs of any kind (no npm install, no brew, no global). Call binaries as
+node_modules/.bin/<name> (the shell's npm/pnpm wrappers are broken in this environment; /opt/homebrew/bin/npm
+works if you need `npm run`). No git commits: the orchestrator commits. No deploy. Headless only.
+
+ALREADY WRITTEN, READ FIRST (do not change their exports; small additive fixes are fine, say so in the report):
+  src/model.ts      CrmState, Interaction, FollowUp, Stage, ContactPoint, CrmView, emptyCrm()
+  src/timeline.ts   timeline(), personTimeline(), lastActivity(), dueFollowUps(), upcomingFollowUps(), EventKind
+  src/contacts.ts   contactRows(), groupByRing(), matches(), pipeline(), byStage(), SortOrder, PIPELINE_TAGS
+  src/storage.ts    readTrustWeb(), parseImport(), readImported(), saveImported(), clearImported(), loadCrm(), saveCrm(), Source
+  src/sample.ts     sampleApp(now), sampleCrm(now)  (fictional data)
+  src/strings.ts    S: every user-facing string. ADD strings there; never hardcode text in components.
+  test/e2e/smoke.mjs  THE UI CONTRACT. Every selector, data-attribute and count it checks must exist exactly.
+  ../trustweb/src/model.ts, ../trustweb/src/strings.ts, ../trustweb/src/channel.ts (channelLink(channel, value)
+  gives the "Open in ..." href), ../trustweb/src/styles.css (copy the :root token block and the dark-mode block;
+  do NOT import the whole file, it carries a phone frame and tab bar the CRM does not use).
+  Unit tests: node_modules/.bin/vitest run --config test/unit/vitest.config.ts (18 pass now; keep them passing).
+
+WHAT TO BUILD (Svelte 5, runes: $state/$derived/$props; no stores module, no external UI library, plain CSS):
+  index.html                 <div id="app">, loads src/main.ts; <title>TrustWeb CRM</title>; viewport meta;
+                             theme-color; lang="en".
+  src/main.ts                mount(App, { target: document.getElementById('app')! })
+  src/state.svelte.ts        ONE reactive holder: { app: AppState, crm: CrmState, source: Source, persona: 'me' }.
+                             On start: readTrustWeb() -> Source.TrustWeb; else readImported() -> Source.Imported;
+                             else sampleApp(Date.now()) -> Source.Sample. crm = loadCrm('me'); if source is Sample
+                             AND crm is empty (no interactions, no followUps, no stages, no contactPoints) use
+                             sampleCrm(Date.now()) and save it (so the e2e persistence checks work).
+                             Mutators (each calls saveCrm after the change): addInteraction(personId, kind, text,
+                             place?), addFollowUp(personId, text, dueAt), setFollowUpDone(id, done: boolean),
+                             removeFollowUp(id), setStage(lineId, stage), addContactPoint(personId, kind, value),
+                             removeContactPoint(personId, index), importText(text) -> boolean (parseImport,
+                             saveImported, switch source), forgetImport(). Ids: crypto.randomUUID().
+                             Never write TrustWeb's key (storage.ts explains why).
+  src/app.svelte             Shell: header (app name + source line <p class="source">{S.source[source]}</p> +
+                             import/forget controls: a <label> with <input type="file" accept="application/json">
+                             reading the file as text into importText; show S.importBad on failure), a bottom tab
+                             bar with four buttons carrying data-tab="people|timeline|pipeline|followups", a
+                             <main> that renders the active screen. A person screen replaces the people screen
+                             (back button returns). Each screen root carries data-screen="people|person|timeline|
+                             pipeline|followups". Footer line with S.privacy.
+  src/people.svelte          <input type="search" placeholder={S.search}>, a sort toggle (SortOrder), groups by ring
+                             (groupByRing): ring heading = S.ringLabel[ring]; each row is <button class="person-row">
+                             with avatar initials, name, context, S.openLines(n) and S.lastActivity(ageLabel(...))
+                             (ageLabel from ../trustweb/src/model). Empty: S.noPeople.
+  src/person.svelte          data-screen="person". <h2>{name}</h2>, ring + S.sheetMet-style meta line (use
+                             TrustWeb's S.sheetMet / S.sheetPlanned via the CRM's strings.ts; add re-exports there),
+                             then:
+                             (1) Contact info, COLLAPSED (roadmap wish): heading S.contactInfo; rows
+                                 <div class="contact-row"> for each known messenger channel (person.channels) as an
+                                 <a href={channelLink(ch, value)} target="_blank" rel="noopener">{S.openIn(S.chLabel[ch])}</a>
+                                 plus each ContactPoint (phone -> tel: link, email -> mailto: link, class contact-row).
+                                 A <button class="contact-more"> (S.contactInfoMore) expands to EVERY channel (the
+                                 six, known or empty) plus the phone/email rows plus "Add phone"/"Add email" inline
+                                 forms; the e2e expects >= 8 .contact-row after expanding for Lena (2 messengers
+                                 known + 2 contact points collapsed = 4 rows; expanded: 6 channels + 2 points = 8+).
+                                 A remove control per contact point. S.contactInfoNone when nothing is known and
+                                 not expanded.
+                             (2) Notes: the person's current NoteLines with a tag chip (S.tagLabel) and audience (em).
+                             (3) What happened: personTimeline() as <div class="event" data-at={at}> rows, newest
+                                 first: date (short, e.g. "6 Oct 2026"), kind label S.eventKind[kind], text; a
+                                 follow-up event shows Done/Reopen; an interaction shows its place in small text.
+                             (4) Two buttons: <button data-action="add-interaction">{S.addInteraction}</button> opens
+                                 an inline form: <select> of InteractionKind (S.interactionKind), <input
+                                 data-field="interaction-text">, <input data-field="interaction-place">, date input
+                                 defaulting to today, <button data-action="save-interaction">{S.save}</button>, cancel.
+                                 <button data-action="add-followup">{S.addFollowUp}</button> opens: <input
+                                 data-field="followup-text">, date input defaulting to +7 days, <button
+                                 data-action="save-followup">. Saving closes the form and the event appears.
+  src/timeline.svelte        data-screen="timeline": timeline(view) for everybody, grouped by day heading, each
+                             <div class="event" data-at={at}> with person name (a button that opens the person),
+                             kind label, text, tag chip for notes.
+  src/pipeline.svelte        data-screen="pipeline": one column per Stage in STAGES order, each <section
+                             data-stage={stage}> with heading S.stage[stage] and its cards <div class="card">:
+                             person name, line text, tag chip, and a <select> of stages (changing it calls
+                             setStage). Columns scroll horizontally on a phone (snap). S.noPipeline when empty.
+  src/followups.svelte       data-screen="followups": three sections <section data-section="overdue|upcoming|finished">
+                             (dueFollowUps / upcomingFollowUps / done ones), each item <div class="followup"> with
+                             person name (button -> person), text, due label (S.dueIn(days) or a date), and a
+                             <button>{S.done}</button> or {S.reopen}, plus remove. S.noFollowUps when all empty.
+  src/styles.css             TrustWeb's tokens (copy :root and the dark block verbatim), phone-first layout
+                             (max-width 430px centred on desktop, 16px gutters, no horizontal page scroll), the
+                             teal call-to-action, tag chips, 44px touch targets, prefers-color-scheme dark honoured.
+                             No phone frame. Keep it small.
+  Add a shared src/chips.svelte or helper for the tag chip and the avatar if it avoids repetition.
+  Dates: a src/dates.ts with fmtDate(at) ("6 Oct 2026"), dayKey(at), daysUntil(at, now), todayInputValue(),
+  parseDateInput(value) (local midnight), with 3-5 unit tests in test/unit/dates.test.ts.
+
+RULES
+  - snake_case filenames (.svelte included). Small functions. Explicit return types on every function.
+  - Every visible string from S (strings.ts). Enums, not string literals, for fixed sets.
+  - No network calls at all. No analytics. No external fonts (system font stack from TrustWeb's styles).
+  - Accessibility: buttons are <button>, inputs have aria-label or a <label>, the tab bar is a <nav>.
+  - Edge cases: a person with no channels/no lines/no events; an import that fails; storage blocked (state still
+    works in memory: storage.ts returns false, the UI keeps going).
+  - No em dashes in user-facing copy.
+
+GATES before you report (all must pass; paste the tail of each output in your report):
+  1. node_modules/.bin/svelte-check --tsconfig ./tsconfig.json         -> 0 errors, 0 warnings
+  2. node_modules/.bin/vitest run --config test/unit/vitest.config.ts  -> all pass (18 + your dates tests)
+  3. node_modules/.bin/vite build                                      -> succeeds
+  4. node test/e2e/smoke.mjs                                           -> "all checks passed"; it kills its own
+     dev server. If a check fails, fix the UI (not the test) unless the test is clearly wrong; say which.
+  5. lsof -nP -iTCP -sTCP:LISTEN | grep -E ':519[0-9]' shows nothing you started.
+  Look at the screenshots in test/e2e/shots/ (Read tool shows PNGs) and fix anything that looks broken (overflow,
+  unreadable dark mode, missing content).
+
+RESULT: write apps/crm/DEVLOG/crm-ui_result-report.txt (what you built, file list, gate outputs, anything you
+changed in the pre-written files and why, open points). Then hand back with:
+"crm-ui done. Result at <absolute path of crm-ui_result-report.txt>. Resume: Fable reviews the UI, runs the gates again, commits on v3/crm."

@@ -1,0 +1,8 @@
+﻿First Name,Middle Name,Last Name,Nickname,File As,Organization Name,Organization Title,Birthday,Notes,Labels,E-mail 1 - Label,E-mail 1 - Value,E-mail 2 - Label,E-mail 2 - Value,Phone 1 - Label,Phone 1 - Value
+Anna,,Gruber,,,,,,,* myContacts ::: Family,Home,Anna.Gruber@Example.at,,,,
+Bernd,,Huber,,,,,,,* myContacts,,,,,Mobile,+43 660 5550103
+Clara,,Wimmer,,,,Architektin,,,* myContacts,,,,,Mobile,00436605550104
+Dan,,Fischer,,,,,,,* myContacts,Work,d.fischer@example.at,,,Mobile,+43 660 5550107
+Katarina,,Moser,,,,,1992-04-30,,* myContacts,,katarina.moser@example.com,,,,
+Franz,,Leitner,,,Leitner Holz,,,,* myContacts,,franz@example.at,,,,
+,,,,,,,,Only a note,,,,,,,

@@ -1,0 +1,10 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:Sabine Gruber
+N:Gruber;Sabine;;;
+TEL;VALUE=uri;TYPE="cell,voice":tel:+43-660-5550133
+EMAIL;PREF=1:sabine@example.at
+BDAY:19900101
+CATEGORIES:Familie,Freunde
+UID:urn:uuid:11111111-2222-3333-4444-555555555555
+END:VCARD

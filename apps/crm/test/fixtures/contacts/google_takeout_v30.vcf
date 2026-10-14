@@ -1,0 +1,20 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Maria Huber
+N:Huber;Maria;;;
+EMAIL;TYPE=INTERNET;TYPE=HOME:Maria.Huber@example.at
+EMAIL;TYPE=INTERNET:maria.huber@EXAMPLE.at
+TEL;TYPE=CELL:+43 660 5550111
+ORG:Huber Tischlerei;Werkstatt
+TITLE:Tischlerin
+BDAY:1985-03-12
+NOTE:Line one\nLine two\, with comma
+CATEGORIES:myContacts,Nachbarn,* myContacts
+UID:google-maria-huber
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:;;;;
+ORG:Verein Gruenes Graz
+BDAY:--0704
+END:VCARD
