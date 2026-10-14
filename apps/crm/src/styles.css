@@ -231,3 +231,12 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .frow .field{width:auto; flex:0 0 40%}
 .scope{display:flex; flex-direction:column; gap:2px; margin:8px 0}
 .ring-dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:-1px}
+.ring-chips{display:flex; flex-wrap:wrap; gap:8px; margin:8px 0}
+.rchip,.ring-label{min-height:36px; padding:0 14px; border-radius:999px; border:1.5px solid var(--rc,var(--line)); background:transparent; color:var(--ink); font-size:13.5px; font-weight:600}
+.rchip[aria-pressed="true"]{background:var(--rc); color:#fff}
+.ring-label{min-height:24px; padding:0 10px; font-size:12px}
+.sort-card{background:var(--card); border-radius:16px; padding:16px; margin:10px 0}
+.sort-banner{display:block; width:100%; margin:8px 0}
+.person-row.with-ring{flex-wrap:wrap}
+.pr-ring{flex:0 0 auto; order:3}
+.pr-ring:has(.ring-chips){flex-basis:100%}

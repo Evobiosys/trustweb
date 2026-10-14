@@ -6,7 +6,8 @@
   import { baseFields, fieldLabelOf, passesFilters, valueText } from './fields'
   import type { FieldValues } from './fields'
   import { matches } from './contacts'
-  import { openContact, openEnvironment, openImport, openPerson } from './nav.svelte'
+  import { unsortedIds } from './sorting.svelte'
+  import { openContact, openSort, openEnvironment, openImport, openPerson } from './nav.svelte'
   import { isClose } from './close'
   import { Kind, layout } from './placement'
   import { placementFor } from './placement.svelte'
@@ -41,6 +42,7 @@
     .map((e) => effectivePerson(e, edits(e.id))).filter((e) => matches(e as never, query)))
   const onRow = $derived((kind: Kind) => layout(kind, placementFor(kind), {}).collapsed)
   const imported = $derived(visibleContacts(store.crm.contacts ?? [], query))
+  const toSort = $derived(unsortedIds().length)
   const lastPast = $derived(lastPastByPerson(timeline(view), now))
 
   function pick(next: SortOrder): void {
@@ -73,6 +75,7 @@
       <p class="empty">{S.noEnvironments}</p>
     {/each}
   {:else}
+  {#if toSort > 0}<button class="btn small sort-banner" data-action="sort-banner" onclick={openSort}>{S.sortBanner(toSort)}</button>{/if}
   <PeopleFilter />
   <div class="seg" role="group" aria-label={S.sortLabel}>
     {#each SORTS as s (s)}
@@ -85,7 +88,7 @@
       {@const values = valuesOf(row.person.id)}
       <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
         extra={extraFor(Kind.Person, values)} presence={presence(row.person, lastPast.get(row.person.id), prefs.activityDays, now)}
-        fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} onopen={openPerson} />
+        ring={row.person.ring} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} onopen={openPerson} />
     {/each}
   {/each}
   {#if imported.length}

@@ -7,6 +7,7 @@
   import { nav, showTab } from './nav.svelte'
   import People from './people.svelte'
   import Person from './person.svelte'
+  import SortPeople from './sort_people.svelte'
   import Pipeline from './pipeline.svelte'
   import Settings from './settings.svelte'
   import { forgetImport, importText, store } from './state.svelte'
@@ -59,7 +60,9 @@
   </header>
 
   <main>
-    {#if nav.importing}
+    {#if nav.sorting}
+      <SortPeople />
+    {:else if nav.importing}
       <ImportContacts />
     {:else if nav.contactId !== null}
       <ContactPage contactId={nav.contactId} />

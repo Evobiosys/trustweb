@@ -3,6 +3,8 @@
   import FieldsEditor from './fields_editor.svelte'
   import { PLACE_FIELDS } from './close'
   import { PKMS, Pkm, prefs, savePrefs } from './prefs.svelte'
+  import { openSort } from './nav.svelte'
+  import { unsortedIds } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
   import { flush, sync } from './sync.svelte'
@@ -14,6 +16,8 @@
     prefs.pkms = on ? [...prefs.pkms, p] : prefs.pkms.filter((x) => x !== p)
     savePrefs()
   }
+
+  const toSort = $derived(unsortedIds().length)
 
   let place = $state('')
 
@@ -65,6 +69,8 @@
       {/if}
     {/if}
   {/each}
+
+  {#if toSort > 0}<button class="btn small sort-banner" data-action="sort-settings" onclick={openSort}>{S.sortBanner(toSort)}</button>{/if}
 
   <h3 class="screen-title">{S.activityTitle}</h3>
   <p class="muted">{S.activityHint}</p>

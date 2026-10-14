@@ -10,9 +10,11 @@ export interface Nav {
   contactId: string | null
   /** The Import contacts screen is open on top of the People tab. */
   importing: boolean
+  /** The "Sort my people" cards are open on top of the People tab. */
+  sorting: boolean
 }
 
-export const nav: Nav = $state({ tab: Tab.People, personId: null, environmentId: null, contactId: null, importing: false })
+export const nav: Nav = $state({ tab: Tab.People, personId: null, environmentId: null, contactId: null, importing: false, sorting: false })
 
 /** A tab press always lands on that tab's own screen, closing any open person. */
 export function showTab(tab: Tab): void {
@@ -21,6 +23,7 @@ export function showTab(tab: Tab): void {
   nav.environmentId = null
   nav.contactId = null
   nav.importing = false
+  nav.sorting = false
 }
 
 export function openPerson(personId: string): void {
@@ -57,4 +60,14 @@ export function openImport(): void {
 
 export function closeImport(): void {
   nav.importing = false
+}
+
+export function openSort(): void {
+  nav.tab = Tab.People
+  nav.personId = null
+  nav.sorting = true
+}
+
+export function closeSort(): void {
+  nav.sorting = false
 }

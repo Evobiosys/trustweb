@@ -7,6 +7,7 @@
   import EventRow from './event_row.svelte'
   import FollowUpForm from './followup_form.svelte'
   import InteractionForm from './interaction_form.svelte'
+  import RingLabel from './ring_label.svelte'
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { baseFields } from './fields'
@@ -54,7 +55,7 @@
       <Avatar id={person.id} name={shownName(person.name)} />
       <div>
         <h2>{shownName(person.name)}</h2>
-        <p class="meta-line">{S.ringLabel[person.ring]} · {meta}</p>
+        <p class="meta-line"><RingLabel personId={person.id} ring={person.ring} /> · {meta}</p>
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
       </div>
     </div>
