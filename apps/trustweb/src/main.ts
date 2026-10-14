@@ -38,6 +38,8 @@ import { createNamesView } from './names_view'
 import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
+import { createTimelineSection } from './timeline_view'
+import { addEntries, parseTimelineImport, timelineOf } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -2201,6 +2203,7 @@ function personSheet(personId: string): void {
     askAgainRow(p),
     leanRow(p),
     eventChipsRow(p),
+    timelineSection(p),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
@@ -2254,6 +2257,23 @@ function eventChipsRow(p: Person): HTMLElement | null {
     el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
     ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [tagLabel(e)])),
   ])
+}
+
+/** The Timeline of a person (timeline.ts, timeline_view.ts): typed and imported entries live on the person; TrustWeb's own are derived. */
+function timelineSection(p: Person): HTMLElement {
+  // The record may have been replaced since the card opened: write into the person as the record holds it now.
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  return createTimelineSection({
+    entries: () => timelineOf(st(), now()),
+    add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
+    importText: (text) => {
+      const r = parseTimelineImport(text)
+      if (r.unreadable) return S.tlImportBad
+      const n = addEntries(now(), r.entries)
+      if (n) save()
+      return S.tlImported(n, r.skipped, r.entries.length - n)
+    },
+  }, toast)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
