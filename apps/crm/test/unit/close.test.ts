@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyClose, isClose, stops } from '../../src/close'
+import { DEV_CLOSE, emptyClose, isClose, stops } from '../../src/close'
 
 const RES = 'xu0y_4Pu3sOL'
 const HOST = 'Hy23JQYtvEKW'
@@ -16,6 +16,12 @@ describe('close to me', () => {
     expect(isClose({ [RES]: 'Berlin' }, c)).toBe(false)
     expect(isClose({ 'tw-context': 'Graz' }, c)).toBe(false)
     expect(isClose({ [HOST]: 'Graz' }, { ...c, fields: [RES] })).toBe(false)
+  })
+  it('the dev set drops corridor labels and reads comma lists', () => {
+    expect(stops(DEV_CLOSE.places[2]).slice(0, 2)).toEqual(['wien', 'mödling'])
+    expect(stops(DEV_CLOSE.places[5])).toContain('st. pölten')
+    expect(isClose({ [RES]: 'Feldbach' }, DEV_CLOSE)).toBe(true)
+    expect(isClose({ [RES]: 'Berlin' }, DEV_CLOSE)).toBe(false)
   })
   it('nobody is close without places', () => {
     expect(isClose({ [RES]: 'Graz' }, emptyClose())).toBe(false)

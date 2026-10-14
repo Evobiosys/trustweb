@@ -3,7 +3,7 @@
  * knowledge-management sync options, where fields sit for me, the activity window.
  */
 import { DEFAULT_ACTIVITY_DAYS } from './person_view'
-import { emptyClose } from './close'
+import { DEV_CLOSE, emptyClose } from './close'
 import type { Close } from './close'
 import { emptyPlacements } from './placement'
 import type { Placements } from './placement'
@@ -61,7 +61,9 @@ function load(): Prefs {
     const first = saved.pkms === undefined
     // Developer's own device (dev server with TW_CRM_TANA_TOKEN): Tana sync preloaded ON until the choice was saved once.
     const preload = first && __TW_TANA_TOKEN__ ? { pkms: [Pkm.Tana], token: __TW_TANA_TOKEN__, autoSync: true } : {}
-    return { ...base, ...preload, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
+    // Same dev path: Jakob's "Close to me" set until he saved his own.
+    const near = saved.close === undefined && __TW_RECORD__ ? { close: DEV_CLOSE } : {}
+    return { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
   } catch {
     return base
   }

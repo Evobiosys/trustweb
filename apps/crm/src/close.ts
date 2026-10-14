@@ -17,9 +17,21 @@ export const PLACE_FIELDS: readonly { id: string; label: string; on: boolean }[]
 
 export const emptyClose = (): Close => ({ places: [], fields: PLACE_FIELDS.filter((f) => f.on).map((f) => f.id) })
 
-/** A corridor's stops, or the one name of a plain place. */
+/** Jakob's own set, preloaded only with the dev record (prefs.svelte.ts); never a default. Corridors are Austrian railway stations. */
+export const DEV_CLOSE: Close = {
+  places: [
+    'Vienna', 'Graz',
+    'Südbahn: Wien - Mödling - Baden - Wiener Neustadt - Neunkirchen - Mürzzuschlag - Kapfenberg - Bruck an der Mur - Graz',
+    'Thermenbahn: Wien - Wiener Neustadt - Aspang - Friedberg - Hartberg - Fürstenfeld - Fehring - Feldbach',
+    'Ostbahn: Graz - Gleisdorf - Feldbach',
+    'Vienna direct ≤1 h: St. Pölten, Tulln, Krems, Stockerau, Hollabrunn, Mödling, Baden, Wiener Neustadt, Bratislava',
+  ],
+  fields: emptyClose().fields,
+}
+
+/** A corridor's stops (an optional "Name:" label dropped; separated by spaced dashes, arrows or commas), or the one name of a plain place. */
 export function stops(place: string): string[] {
-  return place.split(/\s+[-–—>→]+\s+|\s*[→>]\s*/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return place.replace(/^[^:]*:\s*/, '').split(/\s+[-–—>→]+\s+|\s*[→>,]\s*/).map((s) => s.trim().toLowerCase()).filter(Boolean)
 }
 
 export function isClose(values: FieldValues, close: Close): boolean {
