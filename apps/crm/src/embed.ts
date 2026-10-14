@@ -6,13 +6,8 @@
 import { mount } from 'svelte'
 import { host } from './bridge'
 import type { Host } from './bridge'
+import { asShadowCss } from './shadow_css'
 import css from './styles.css?inline'
-
-/** The stylesheet was written for a page; in a shadow root :root, html and body become the host element. */
-const asShadowCss = (text: string): string => text
-  .replace(/:root:not\(\[data-theme="light"\]\)/g, ':host(:not([data-theme="light"]))')
-  .replace(/:root\b/g, ':host')
-  .replace(/^(html|body)\b/gm, ':host')
 
 /** Applied after the page stylesheet, so its `.tabbar{position:fixed}` cannot pull the tab bar out of the sheet. The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The gear rides on the sheet's × row (the host puts the × at the top right), just left of it. */
 const HOST_CSS = ':host{all:initial; display:block; height:100%}'
