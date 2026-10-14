@@ -47,7 +47,7 @@ import {
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
-import { cleanHelloName, helloText, NAMELESS_PEER, parseHelloText, wantsHelloName } from './hello'
+import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
@@ -131,7 +131,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
-import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, sameName, samePersonTarget } from './one_jakob'
+import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 
 enum Screen {
   Start = 'start',
@@ -1796,19 +1796,11 @@ function itemAudienceChooser(item: InventoryItem): HTMLElement[] {
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
 let cardOpenFor: string | null = null
 
-/** Wave 6f: a card whose connection goes by another name says so (" · connected as Ann"), so a card that two connections met on shows it. */
-function connectedAsSuffix(p: Person): string {
-  const linked = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
-  if (!linked || linked.displayName === NAMELESS_PEER || sameName(linked.displayName, p.name)) return ''
-  return ' · ' + S.sheetConnectedAs(linked.displayName)
-}
-
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
-  // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: the TrustWeb connection.
+  // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   openSheet([
-    el('div', { class: 'path', 'data-tw-strip': p.id }, [p.peerId ? S.sheetConnected + connectedAsSuffix(p) : S.sheetNotesOnly]),
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     noMessengerRow(p),
     sharedReachRow(p),
