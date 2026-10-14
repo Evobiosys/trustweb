@@ -21,6 +21,10 @@ DEV RECORD (dev server only; a build ignores it)
                                  id tana-<node id>, "Google Calendar Contacts" kept as a tag; file-only, no network.
                                  Keep the output outside the repo (private data). Next to the nodes file it also reads
                                  workspaces.json and environment-*.json/-schema.md (record.environments).
+                                 Rings are derived once (a ring: line in Tana wins): family -> close, personal connection -> friend,
+                                 famous / Deceased / a name containing "@" -> none (out of the web, still listed), else acquaintance;
+                                 the person gets the note "ring: derived". "Met through" holds person refs
+                                 ([Name #person](tana:id), a Content field accepts them): the converter keeps them as links, no Tana change.
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
 
