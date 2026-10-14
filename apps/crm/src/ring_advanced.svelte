@@ -6,7 +6,7 @@
   import type { PersonField } from './person_fields'
   import { drag, grip } from './drag.svelte'
   import { prefs, savePrefs } from './prefs.svelte'
-  import { RING_KEY } from './rings'
+  import { FAMILY_KEY, RING_KEY } from './rings'
   import { S } from './strings'
   import { setIntending, valuesOf } from './sorting.svelte'
   import { hideFromTrustweb, saveField } from './sync.svelte'
@@ -21,7 +21,7 @@
   const FIRST = [DECEASED_KEY, FAMOUS_KEY, HIDE_KEY, INTENDING_KEY]
   const schema: PersonField[] = [
     ...FIRST.flatMap((k) => fieldById(k) ?? []),
-    ...PERSON_FIELDS.filter((f) => !FIRST.includes(f.id) && f.id !== RING_KEY && f.id !== OLD_INTENDING_KEY),
+    ...PERSON_FIELDS.filter((f) => !FIRST.includes(f.id) && f.id !== RING_KEY && f.id !== FAMILY_KEY && f.id !== OLD_INTENDING_KEY),
   ]
   const rank = (id: string): number => { const i = prefs.advancedOrder.indexOf(id); return i < 0 ? prefs.advancedOrder.length : i }
   const fields = $derived([...schema].sort((a, b) => rank(a.id) - rank(b.id)))
