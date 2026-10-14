@@ -16,6 +16,7 @@ import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
+import type { TimelineEntry } from './timeline'
 
 export enum Ring {
   Close = 'close',
@@ -358,6 +359,8 @@ export interface Person {
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
   reachedOut?: 'sent' | 'received'
+  /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
+  timeline?: TimelineEntry[]
 }
 
 /** The five steps of the lean score on an acquaintance. */

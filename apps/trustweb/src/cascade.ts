@@ -113,8 +113,8 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
     // Events and their tags on people are local only (events.ts, I1).
     events: undefined,
     inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop, askerTags)),
-    // The General note (general_notes.ts) is Only me: this copy of the record holds the admitted lines, never a person's free-text note, event tags, where a dot sits in my Web view or the lean score.
-    people: s.people.map(({ generalNote: _private, angle: _angle, lean: _lean, events: _events, reachedOut: _reachedOut, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
+    // The General note (general_notes.ts) and the timeline (timeline.ts) are Only me: this copy of the record holds the admitted lines, never a person's free-text note, timeline, event tags, where a dot sits in my Web view or the lean score.
+    people: s.people.map(({ generalNote: _private, timeline: _timeline, angle: _angle, lean: _lean, events: _events, reachedOut: _reachedOut, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
   }
   const base = threadsForRing(admitted, ring, scope, askerTags)
   const notes = meetingNoteThreads(s, ring, hop, scope)
