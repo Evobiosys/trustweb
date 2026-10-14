@@ -24,9 +24,36 @@ export enum Ring {
   Intending = 'intending',
   /** Not in my web (famous, deceased, calendar ids): kept for reference, never offered by the ring picker, so not in RINGS. */
   None = 'none',
+  /** Family: its own ring (purple) with a closeness of its own, in `fields[CLOSENESS_KEY]` (a Ring value; Close when unset). */
+  Family = 'family',
+  /** Not sorted yet (grey): replaces what the importers filed as None; never offered by the ring picker. */
+  Unsorted = 'unsorted',
 }
 
 export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
+
+export const CLOSENESS_KEY = 'tw-closeness'
+
+// Plain data, the same table as the CRM's apps/crm/src/rings.ts: four greens (darkest = closest), family in purple keyed by its
+// closeness, unsorted grey.
+export const RING_COLORS = {
+  close: '#1b5e20', friend: '#2e7d32', acquaintance: '#66bb6a', intending: '#a5d6a7',
+  family: { close: '#4a148c', friend: '#7b1fa2', acquaintance: '#ab47bc', intending: '#ce93d8' },
+  unsorted: '#9e9e9e',
+  none: '#9e9e9e',
+}
+
+/** The ring a person sits on in the web: family sits where its closeness says. */
+export function ringSlot(p: Pick<Person, 'ring' | 'fields'>): Ring {
+  if (p.ring !== Ring.Family) return p.ring
+  const c = p.fields?.[CLOSENESS_KEY]
+  return RINGS.includes(c as Ring) ? (c as Ring) : Ring.Close
+}
+
+export function ringColor(p: Pick<Person, 'ring' | 'fields'>): string {
+  if (p.ring !== Ring.Family) return RING_COLORS[p.ring]
+  return RING_COLORS.family[ringSlot(p) as 'close']
+}
 
 /** The web search engines of "Search the web instead" (wave 2, B8; web_search.ts). A fixed set. */
 export enum SearchEngine {
@@ -1071,6 +1098,8 @@ export function audienceAdmits(audience: Audience, ring: Ring): boolean {
   // Someone I only intend to connect with is not yet in my web: they admit
   // nothing, the same as OnlyMe, regardless of what the line's audience says.
   if (ring === Ring.Intending) return false
+  // Family, unsorted and not-in-my-web are not rings a line's audience names: fail closed until the audience model learns them.
+  if (ring === Ring.Family || ring === Ring.Unsorted || ring === Ring.None) return false
   switch (audience) {
     case Audience.OnlyMe:
       return false

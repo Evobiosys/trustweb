@@ -224,7 +224,7 @@ function isNoteLine(v: unknown): v is NoteLine {
 
 /** A carried person with only well-formed notes, never a relay link; null where the person itself is malformed. */
 function cleanPerson(v: unknown): Person | null {
-  if (!isRec(v) || !isId(v.id) || !isStr(v.name) || !isStr(v.context) || !oneOf([...RINGS, Ring.None], v.ring) || !isNum(v.metAt) || !Array.isArray(v.lines)) return null
+  if (!isRec(v) || !isId(v.id) || !isStr(v.name) || !isStr(v.context) || !oneOf([...RINGS, Ring.None, Ring.Family, Ring.Unsorted], v.ring) || !isNum(v.metAt) || !Array.isArray(v.lines)) return null
   const person: Person = { ...(v as unknown as Person), lines: v.lines.filter(isNoteLine) }
   // The General note (wave 6e) is carried cleaned: text only, at most GENERAL_NOTE_MAX, dropped when empty (review 6e).
   const note = cleanGeneralNote(v.generalNote)

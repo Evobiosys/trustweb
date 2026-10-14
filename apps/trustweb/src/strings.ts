@@ -275,6 +275,8 @@ export const S = {
     [Ring.Acquaintance]: 'Acquaintance',
     [Ring.Intending]: 'Intending to connect',
     [Ring.None]: 'Not in my web',
+    [Ring.Family]: 'Family',
+    [Ring.Unsorted]: 'Unsorted',
   } as Record<Ring, string>,
   ringHint: {
     [Ring.Close]: 'the few you would call at 3 am',
@@ -282,6 +284,8 @@ export const S = {
     [Ring.Acquaintance]: 'met in person, still getting to know',
     [Ring.Intending]: 'someone you plan to meet, not yet in your web',
     [Ring.None]: 'kept for reference, not part of your web',
+    [Ring.Family]: 'your family, whatever the closeness',
+    [Ring.Unsorted]: 'not placed yet',
   } as Record<Ring, string>,
   // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {

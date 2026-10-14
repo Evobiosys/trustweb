@@ -57,7 +57,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, coarseWhen, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, signalReachable, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1302,7 +1302,7 @@ function takeOverScreen(h: HandoverLink): Node[] {
 // ---------------------------------------------------------------------------
 
 const NS = 'http://www.w3.org/2000/svg'
-const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168, [Ring.None]: 168 }
+const RADIUS: Record<Ring, number> = { [Ring.Close]: 72, [Ring.Friend]: 114, [Ring.Acquaintance]: 152, [Ring.Intending]: 168, [Ring.None]: 168, [Ring.Family]: 72, [Ring.Unsorted]: 168 }
 const GRADS = [
   'linear-gradient(135deg,#FF715B,#9A37F0)', 'linear-gradient(135deg,#4FD7A0,#12A8E3)',
   'linear-gradient(135deg,#12A8E3,#9A37F0)', 'linear-gradient(135deg,#F2B544,#FF715B)',
@@ -1347,7 +1347,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   }
   wrap.appendChild(svg)
   for (const ring of RINGS) {
-    const inRing = s.people.filter((p) => p.ring === ring)
+    const inRing = s.people.filter((p) => ringSlot(p) === ring)
     inRing.forEach((p, i) => {
       const deg = (360 / inRing.length) * i + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10)
       const a = ((deg - 90) * Math.PI) / 180
