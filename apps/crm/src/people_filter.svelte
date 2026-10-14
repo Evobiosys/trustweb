@@ -4,6 +4,9 @@
   import { prefs, savePrefs } from './prefs.svelte'
   import { S } from './strings'
 
+  let open = $state(false)
+  const active = $derived(
+    [prefs.filters.hideDeceased, prefs.filters.hideFamous, prefs.filters.onlyConnection, prefs.filters.onlyClose].filter(Boolean).length + prefs.filters.rules.length)
   let ruleKey = $state('')
   let ruleText = $state('')
 
@@ -21,6 +24,8 @@
   }
 </script>
 
+<button class="link" data-action="toggle-filters" aria-expanded={open} onclick={(): void => { open = !open }}>{S.filtersToggle(active)}</button>
+{#if open}
 <div class="filters" data-part="filters">
   <label class="fld check"><input type="checkbox" data-filter="deceased" bind:checked={prefs.filters.hideDeceased} onchange={savePrefs} /><span>{S.hideDeceased}</span></label>
   <label class="fld check"><input type="checkbox" data-filter="famous" bind:checked={prefs.filters.hideFamous} onchange={savePrefs} /><span>{S.hideFamous}</span></label>
@@ -40,3 +45,4 @@
     </button>
   {/each}
 </div>
+{/if}

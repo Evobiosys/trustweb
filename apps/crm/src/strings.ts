@@ -115,6 +115,7 @@ export const S = {
   manualHint: 'Edits Tana cannot take by itself. Do these in Tana by hand:',
   manualPlacement: 'Where a field sits (row, simple, advanced, hidden): Tana has no such setting. It stays in TrustWeb only.',
   manualNone: 'No edits waiting for a manual step.',
+  filtersToggle: (n: number) => `Filters (${n} active)`,
   hideDeceased: 'Hide deceased',
   hideFamous: 'Hide famous',
   onlyConnection: 'Only personal connection',
