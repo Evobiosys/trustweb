@@ -10,6 +10,7 @@ import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
 import { ANSWER_WINDOW_MS } from './ask_window'
+import { Norm } from './profile'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 import { ModeSharing, ShareMode } from './share_modes'
 import { ClaimError } from './connect_code'
@@ -1639,4 +1640,36 @@ export const S = {
   // wave 6f: a card made for a connection that had none (peer_cards.ts)
   peerCardRepairedContext: 'Connected on TrustWeb',
   sheetConnectedAs: (name: string) => `connected as ${name}`,
+  // Wave 7: My profile (profile.ts, profile_view.ts)
+  profTitle: 'My profile',
+  profLead: 'What you share about yourself by default: what you can offer, and how you like to be reached. Only people you connect with get it, and only if you tick it.',
+  profOffer: 'What I can offer',
+  profOfferNone: 'Nothing yet. Lines in My Resources that acquaintances may ask about show here.',
+  profOfferEdit: 'Edit in My Resources',
+  profNorms: 'How to reach me',
+  profNormPick: 'Pick a norm',
+  profNormPh: 'Your own words (needed for Custom)',
+  profNormAdd: 'Add',
+  profRemove: 'Remove',
+  profFavourite: 'My favourite way to connect',
+  profFavouritePh: 'For example: a walk, a call on Sundays',
+  profIntro: 'One line about me',
+  profIntroPh: 'One line, in your words',
+  profByMe: 'by me',
+  profByAi: 'by AI',
+  profStale: 'stale, check it still holds',
+  profShareHint: 'Tick “Share my profile when we connect” in the contact box to send the norms, favourite way and one line.',
+  profMine: 'My profile',
+  profShareTick: 'Share my profile when we connect',
+  profSendTo: (name: string) => `Send my profile to ${name}`,
+  profSent: (name: string) => `Profile sent to ${name}`,
+  profTheirs: (name: string) => `How ${name} likes to be reached`,
+  profReceivedToast: (name: string) => `${name} shared their profile`,
+  normLabel: {
+    [Norm.TextFirst]: "Text first, don't call",
+    [Norm.CallMe]: "Call me, I don't read texts",
+    [Norm.NoLate]: 'No messages after 21:00',
+    [Norm.VoiceNotes]: 'Voice notes welcome',
+    [Norm.Custom]: 'Custom',
+  } as Record<Norm, string>,
 } as const

@@ -27,6 +27,8 @@ export interface ContactBoxOptions {
   ticks: (channel: Channel) => HTMLElement
   /** A value was saved or removed. */
   changed?: (channel: Channel) => void
+  /** Wave 7: rows under the box (My profile and its share tick). */
+  extra?: () => HTMLElement
 }
 
 export interface ContactBox {
@@ -112,7 +114,7 @@ export function createContactBox(o: ContactBoxOptions): ContactBox {
     const row = o.mine()[ch] ? savedRow(ch, o.mine()[ch] as string) : emptyRow(ch)
     rows.set(ch, row)
   }
-  root.append(el('h4', { class: 'eyebrow' }, [S.contactBoxTitle]), ...rows.values(), el('p', { class: 'meta' }, [S.contactBoxHint]))
+  root.append(el('h4', { class: 'eyebrow' }, [S.contactBoxTitle]), ...rows.values(), el('p', { class: 'meta' }, [S.contactBoxHint]), ...(o.extra ? [o.extra()] : []))
 
   return {
     el: root,
