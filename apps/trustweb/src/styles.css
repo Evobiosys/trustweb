@@ -844,19 +844,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .operson{margin:0 0 10px}
 .operson .prow{margin:0; gap:10px}
 .operson .prow .who{background:none; border:0; text-align:left; cursor:pointer; padding:0; font:inherit; color:inherit}
-.operson.open .prow{border-radius:16px 16px 0 0}
 .otw{width:14px; height:14px; border-radius:50%; border:2px solid var(--electric); flex-shrink:0}
 .otw.active{background:var(--electric)}
 .ofav{display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:var(--tint-blue); color:var(--electric-deep); font-weight:700; text-decoration:none; flex-shrink:0}
-.obody{background:var(--card); border-radius:0 0 16px 16px; padding:6px 14px 12px; box-shadow:0 2px 12px rgba(36,27,46,.06)}
-.ofield{display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid rgba(36,27,46,.06); position:relative}
-.olabel{flex:0 0 38%; font-size:12px; color:var(--ink-soft); user-select:none; -webkit-user-select:none; -webkit-touch-callout:none}
-.ofield .field{flex:1; min-width:0; margin:0}
-.ofield.lifted{background:var(--tint-blue); border-radius:10px; box-shadow:0 4px 14px rgba(36,27,46,.2)}
-.ofield.drop-before::before{content:''; position:absolute; left:0; right:0; top:-2px; height:3px; border-radius:2px; background:var(--electric)}
-.osection{min-height:12px}
-.oadv{font-size:12px; margin:12px 0 2px; color:var(--ink-soft)}
-.obody .btn{margin-top:8px; margin-right:8px}
 .onotweb{margin-top:14px}
 .onotweb>summary{font-size:13px; color:var(--ink-soft); cursor:pointer; padding:6px 0}
 
