@@ -213,7 +213,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .presence{font-size:16px; color:var(--teal); flex-shrink:0}
 .fav{display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; font-size:20px; text-decoration:none; flex-shrink:0}
 .slot{display:flex; gap:4px; align-items:flex-start; border-radius:12px}
-.slot > :not(.grip){flex:1; min-width:0}
+.slot > :not(.grip):not(.hide-box){flex:1; min-width:0}
+.hide-box{display:flex; align-items:center; gap:4px; font-size:12px; color:var(--ink-soft); min-height:44px}
 .slot.before{box-shadow:0 -3px 0 var(--electric)}
 .slot.lifted{opacity:.45}
 .grip{touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; width:28px; min-height:44px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:18px}

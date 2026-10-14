@@ -1,7 +1,7 @@
 <script lang="ts">
   import { drag, grip } from './drag.svelte'
   import FieldInput from './field_input.svelte'
-  import { fieldLabelOf } from './fields'
+  import { fieldLabelOf, isSet } from './fields'
   import type { FieldValue, FieldValues } from './fields'
   import { Kind, Section, labelOf } from './placement'
   import { layoutFor, placeField } from './placement.svelte'
@@ -19,6 +19,7 @@
   const { kind, id, values }: Props = $props()
 
   let advancedOpen = $state(false)
+  let hiddenOpen = $state(false)
 
   const lay = $derived(layoutFor(kind, values))
   const node = $derived(id.startsWith('tana-') ? id.slice(5) : prefs.nodeIds[id])
@@ -34,6 +35,11 @@
     if (section === Section.Advanced) advancedOpen = true
   }
 
+  /** Ticking "hide" files the field under Hidden; unticking returns it to simple (filled) or advanced (empty). */
+  function hide(key: string, on: boolean): void {
+    placeField(kind, values, key, on ? Section.Hidden : isSet(values[key]) ? Section.Simple : Section.Advanced, null)
+  }
+
   function save(key: string, v: FieldValue): void {
     saveField(id, key, v)
   }
@@ -46,6 +52,8 @@
         <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={drop}>⠿</span>
         <FieldInput field={f.id.startsWith('adhoc:') ? undefined : f} label={f.id.startsWith('adhoc:') ? fieldLabelOf(f.id) : labelOf(f, values)}
           value={values[f.id]} onchange={(v): void => save(f.id, v)} nosync={nosync(f.id)} />
+        <label class="hide-box"><input type="checkbox" data-hide={f.id} checked={section === Section.Hidden}
+          onchange={(e): void => hide(f.id, e.currentTarget.checked)} /><span>{S.hideField}</span></label>
       </div>
     {/each}
   </div>
@@ -71,4 +79,11 @@
   {#each [Section.Collapsed, Section.Hidden] as s (s)}
     <div class="zone drop-only" class:over={drag.zone === s} data-zone={s}>{S.sectionLabel[s]}</div>
   {/each}
+{/if}
+
+{#if lay.hidden.length}
+  <button class="link" data-action="toggle-hidden" aria-expanded={hiddenOpen} onclick={(): void => { hiddenOpen = !hiddenOpen }}>
+    {hiddenOpen ? S.hiddenHide : S.hiddenShow(lay.hidden.length)}
+  </button>
+  {#if hiddenOpen}{@render zone(Section.Hidden)}{/if}
 {/if}
