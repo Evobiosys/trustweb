@@ -30,3 +30,8 @@ export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_
   if (ring === Ring.Intending) p.intending = { value: Math.max(0, Math.min(10, Math.round(desire))), since: now }
   else delete p.intending
 }
+
+/** Established contact: a met date, notes or a recorded meeting. Such a person cannot be dropped on "intending to connect". */
+export function inContact(p: Person, meetings: readonly { personId?: string }[] = []): boolean {
+  return p.metAt > 0 || p.lines.length > 0 || !!p.generalNote?.trim() || meetings.some((m) => m.personId === p.id)
+}

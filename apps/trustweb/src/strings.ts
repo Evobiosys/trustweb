@@ -321,6 +321,7 @@ export const S = {
   sheetConnected: 'Connected on TrustWeb',
   sheetNotesOnly: 'Notes only, not connected on TrustWeb yet',
   sheetMet: (context: string, when: string) => (context ? `Met ${when} · ${context}` : `Met ${when}`),
+  alreadyInContact: 'Already in contact',
   sheetPlanned: (context: string) => (context || 'Not yet met, nothing noted or shared'),
   sheetNoNotes: 'No notes yet.',
   sheetStillTrue: 'Still true?',

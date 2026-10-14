@@ -22,7 +22,7 @@ import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { outlinerView } from './outliner_view'
 import { ringChips } from './ring_chips'
-import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, placeOnRing, ringAt } from './rings_layout'
+import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, inContact, placeOnRing, ringAt } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1438,6 +1438,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       setTimeout(() => setDragged(false), 0)
       if (!was) return
       if (ring === ringSlot(p)) { render(); return }
+      if (ring === Ring.Intending && inContact(p, s.meetings)) { toast(S.alreadyInContact); render(); return }
       if (ring === Ring.Intending) askDesire(wrap, p, () => render(), (v) => dropOn(p, ring, v))
       else dropOn(p, ring)
     }

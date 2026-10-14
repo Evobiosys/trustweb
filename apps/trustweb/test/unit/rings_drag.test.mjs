@@ -1,6 +1,6 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, dotSize, placeOnRing, ringAt } from '../../src/rings_layout.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, dotSize, inContact, placeOnRing, ringAt } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -38,5 +38,12 @@ describe('rings drag', () => {
   it('reads the older close_friend value as close', () => {
     const rec = { v: 1, me: { id: 'm' }, people: [person('close_friend')], peers: [] }
     expect(parseRecord(JSON.stringify(rec)).people[0].ring).toBe(Ring.Close)
+  })
+  it('established contact: a met date, notes or a recorded meeting', () => {
+    expect(inContact(person(Ring.Unsorted))).toBe(false)
+    expect(inContact(person(Ring.Unsorted, { metAt: 5 }))).toBe(true)
+    expect(inContact(person(Ring.Unsorted, { lines: [{}] }))).toBe(true)
+    expect(inContact(person(Ring.Unsorted, { generalNote: ' ' }))).toBe(false)
+    expect(inContact(person(Ring.Unsorted), [{ personId: 'p' }])).toBe(true)
   })
 })

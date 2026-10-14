@@ -10,6 +10,8 @@ const CSS = `
 .twf{position:fixed;left:8px;top:8px;z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
 .twf i{display:block;font-style:normal;font-weight:500;opacity:.8}.twf button{margin-top:4px;font:600 11px system-ui;border:0;border-radius:6px;padding:3px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twf b{display:block;font-size:10px;letter-spacing:.06em;color:#4fd7a0}.twf span{font-weight:500}
+.twf .twf-x{position:absolute;top:2px;right:4px;margin:0;padding:0 5px;background:none;color:#fff;font-size:14px}
+.twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
 .twf-line{position:fixed;inset:0;z-index:99997;pointer-events:none;width:100%;height:100%}
 @keyframes twf{50%{box-shadow:0 0 0 8px rgba(255,113,91,.35)}}`
@@ -37,14 +39,28 @@ export function initDevFeature(): void {
   const line = document.createElementNS(NS, 'line')
   line.setAttribute('stroke', '#ff715b'); line.setAttribute('stroke-width', '2'); line.setAttribute('stroke-dasharray', '6 4')
   svg.appendChild(line)
-  document.body.append(svg, ring, box)
+  const dot = Object.assign(document.createElement('button'), { className: 'twf-dot', textContent: 'ⓘ', title: 'Show feature overlay' })
+  const x = Object.assign(document.createElement('button'), { className: 'twf-x', textContent: '×', title: 'Hide (Esc)' })
+  x.addEventListener('pointerdown', (e) => e.stopPropagation())
+  box.tabIndex = 0
+  box.appendChild(x)
+  const show = (on: boolean): void => {
+    box.hidden = !on; dot.hidden = on
+    try { sessionStorage.setItem('twf-hidden', on ? '' : '1') } catch { /* private mode: not remembered */ }
+    point()
+  }
+  x.addEventListener('click', () => show(false))
+  dot.addEventListener('click', () => show(true))
+  box.addEventListener('keydown', (e) => { if (e.key === 'Escape') show(false) })
+  document.body.append(svg, ring, box, dot)
 
   const point = (): void => {
     const target = f.selector ? document.querySelector(f.selector) : null
     const r = target?.getBoundingClientRect()
     const gone = !r || (r.width === 0 && r.height === 0)
-    ring.hidden = gone; svg.style.display = gone ? 'none' : ''
-    if (gone) return
+    const off = gone || box.hidden
+    ring.hidden = off; svg.style.display = off ? 'none' : ''
+    if (off) return
     Object.assign(ring.style, { left: r.left - 4 + 'px', top: r.top - 4 + 'px', width: r.width + 8 + 'px', height: r.height + 8 + 'px' })
     const b = box.getBoundingClientRect()
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2
@@ -65,5 +81,7 @@ export function initDevFeature(): void {
     box.addEventListener('pointermove', move)
     box.addEventListener('pointerup', () => box.removeEventListener('pointermove', move), { once: true })
   })
-  point()
+  let hidden = false
+  try { hidden = !!sessionStorage.getItem('twf-hidden') } catch { /* ignore */ }
+  show(!hidden)
 }
