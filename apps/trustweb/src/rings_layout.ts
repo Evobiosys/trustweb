@@ -5,29 +5,54 @@ import type { Person } from './model'
 export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
 export const RING_RADIUS: Record<Ring, number> = { [Ring.Close]: 48, [Ring.Friend]: 84, [Ring.Acquaintance]: 118, [Ring.Intending]: 148, [Ring.Unsorted]: 168, [Ring.None]: 168, [Ring.Family]: 48 }
 
-/** More people than this on the rings: initials only, the name on hover, focus or tap. */
+/** More people than this on the rings: the name shows on hover, focus or tap only. */
 export const RINGS_LABEL_CAP = 40
 
 export const DESIRE_DEFAULT = 5
 
 /** The ring whose circle is nearest to a distance from the centre (a drop is read from this). */
-export function ringAt(dist: number): Ring {
-  return WEB_RINGS.reduce((best, r) => (Math.abs(RING_RADIUS[r] - dist) < Math.abs(RING_RADIUS[best] - dist) ? r : best))
+export function ringAt(dist: number, radius: Record<Ring, number> = RING_RADIUS): Ring {
+  return WEB_RINGS.reduce((best, r) => (Math.abs(radius[r] - dist) < Math.abs(radius[best] - dist) ? r : best))
 }
 
-/** Smallest avatar (px) on a crowded ring; below the full size the avatars show no letter (styles.css `--d`). */
-const CROWDED_DOT = 6
+/** Avatar diameter (px): at most FULL, shrinking to LEAST before a ring takes a second lap. */
+const FULL_DOT = 42
+const LEAST_DOT = 14
 const RING_FILL = 0.9
+const GAP = 3
 
-/** How n people sit on one ring: the avatar diameter (at most 18) and the number of concentric tracks (inward from the ring's radius) a crowded ring needs, so the dots never overlap into a blob. */
-export function ringLayout(n: number, ring: Ring): { dot: number; tracks: number } {
-  const fit = Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / Math.max(n, 1))
-  if (fit >= CROWDED_DOT) return { dot: Math.min(18, fit), tracks: 1 }
-  return { dot: CROWDED_DOT, tracks: Math.ceil(n / Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / CROWDED_DOT)) }
+export interface RingsGeometry {
+  radius: Record<Ring, number>
+  dot: Record<Ring, number>
+  /** People per lap; a full ring continues on laps just outside it, never inside. */
+  perLap: Record<Ring, number>
+  /** Outer edge of the outermost avatar: the view scales to fit it. */
+  extent: number
 }
 
-/** Radius of one track of a ring: the first sits on the ring, the others just inside it. */
-export const trackRadius = (ring: Ring, track: number, dot: number): number => RING_RADIUS[ring] - track * (dot + 1)
+/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. */
+export function ringsGeometry(counts: Record<Ring, number>): RingsGeometry {
+  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, extent: 0 }
+  let prev = { r: 0, dot: 0, pushed: false }
+  for (const ring of WEB_RINGS) {
+    const n = Math.max(counts[ring] ?? 0, 1)
+    const around = (r: number, dot: number): number => Math.max(1, Math.floor((2 * Math.PI * r * RING_FILL) / dot))
+    // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it.
+    let r = RING_RADIUS[ring]
+    const dot = Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * r * RING_FILL) / n)))
+    if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
+    const per = around(r, dot)
+    const laps = Math.ceil(n / per)
+    g.radius[ring] = r; g.dot[ring] = dot; g.perLap[ring] = per
+    prev = { r: r + (laps - 1) * (dot + 1), dot, pushed: laps > 1 || r !== RING_RADIUS[ring] }
+  }
+  const edge = prev.r + prev.dot / 2
+  g.extent = edge
+  return g
+}
+
+/** Radius of one lap of a ring: the first sits on the ring, the others just outside it. */
+export const lapRadius = (g: RingsGeometry, ring: Ring, lap: number): number => g.radius[ring] + lap * (g.dot[ring] + 1)
 
 /** The person-field id of Tana's "family" checkbox: a purple accent on the avatar, no ring of its own. */
 export const FAMILY_FIELD = 'LNlpliq4GdNI'

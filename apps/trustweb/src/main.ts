@@ -20,7 +20,8 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, inContact, isFamily, placeOnRing, ringAt, ringLayout, trackRadius } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, inContact, isFamily, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
+import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1306,8 +1307,16 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
+/** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
+let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
+let ringsK = 1
+
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
+  const counts = {} as Record<Ring, number>
+  for (const p of s.people) counts[ringSlot(p)] = (counts[ringSlot(p)] ?? 0) + 1
+  ringsGeo = ringsGeometry(counts)
+  const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
   let dragged = false
   wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -1322,7 +1331,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   svg.innerHTML = '<defs><linearGradient id="th" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4FD7A0"/><stop offset="1" stop-color="#12A8E3"/></linearGradient></defs>'
   for (const r of WEB_RINGS) {
     const c = document.createElementNS(NS, 'circle')
-    c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(RING_RADIUS[r])); c.setAttribute('data-ring', r)
+    c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(ringsGeo.radius[r] * k)); c.setAttribute('data-ring', r)
     c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', '.55')
     c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
     c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
@@ -1331,13 +1340,14 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   wrap.appendChild(svg)
   for (const ring of WEB_RINGS) {
     const inRing = s.people.filter((p) => ringSlot(p) === ring)
-    const { dot, tracks } = ringLayout(inRing.length, ring)
+    const dot = ringsGeo.dot[ring]
+    const per = ringsGeo.perLap[ring]
     inRing.forEach((p, i) => {
-      const track = i % tracks
-      const onTrack = Math.ceil((inRing.length - track) / tracks)
-      const deg = (360 / onTrack) * Math.floor(i / tracks) + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10) + track * (180 / onTrack)
+      const lap = Math.floor(i / per)
+      const inLap = Math.min(per, inRing.length - lap * per)
+      const deg = (360 / inLap) * (i % per) + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10) + lap * (180 / per)
       const a = ((deg - 90) * Math.PI) / 180
-      const radius = trackRadius(ring, track, dot)
+      const radius = lapRadius(ringsGeo, ring, lap) * k
       const x = C + radius * Math.cos(a)
       const y = C + radius * Math.sin(a)
       // A crowded web (compact) draws a spoke only for people connected here: hundreds of dashed spokes read as dozens of rings.
@@ -1364,7 +1374,8 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       ])
       b.style.left = x + 'px'
       b.style.top = y + 'px'
-      if (dot < 18) b.style.setProperty('--d', dot + 'px')
+      b.style.setProperty('--d', dot * k + 'px')
+      if (dot * k < 11) b.classList.add('nl')
       wrap.appendChild(b)
     })
   }
@@ -1396,7 +1407,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       const y = (e.clientY - box.top) / k
       node.style.left = x + 'px'
       node.style.top = y + 'px'
-      ring = ringAt(Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2))
+      ring = ringAt(Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK, ringsGeo.radius)
       wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', c.getAttribute('data-ring') === ring))
     }
     const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
@@ -1527,7 +1538,7 @@ function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
   const dx = (e.clientX - box.left) / scale - RINGS_SIZE / 2
   const dy = (e.clientY - box.top) / scale - RINGS_SIZE / 2
   const dist = Math.hypot(dx, dy)
-  const ring = RINGS.reduce((best, r) => (Math.abs(RING_RADIUS[r] - dist) < Math.abs(RING_RADIUS[best] - dist) ? r : best), Ring.Acquaintance)
+  const ring = RINGS.reduce((best, r) => (Math.abs(ringsGeo.radius[r] * ringsK - dist) < Math.abs(ringsGeo.radius[best] * ringsK - dist) ? r : best), Ring.Acquaintance)
   // Let the ripple show before the sheet rises over it.
   setTimeout(() => addPersonSheet(ring), RIPPLE_LEAD_MS)
 }

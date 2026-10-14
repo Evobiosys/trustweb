@@ -1,6 +1,6 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, inContact, placeOnRing, ringAt, ringLayout, trackRadius } from '../../src/rings_layout.ts'
+import { DESIRE_DEFAULT, RING_RADIUS, inContact, placeOnRing, ringAt, lapRadius, ringsGeometry } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -13,11 +13,16 @@ describe('rings drag', () => {
     expect(ringAt(RING_RADIUS.intending + 3)).toBe(Ring.Intending)
     expect(ringAt(500)).toBe(Ring.Unsorted)
   })
-  it('shrinks the circles on a crowded ring, never below 4 px', () => {
-    expect(ringLayout(3, Ring.Close)).toEqual({ dot: 18, tracks: 1 })
-    expect(ringLayout(237, Ring.Unsorted)).toEqual({ dot: 6, tracks: 2 })
-    expect(ringLayout(262, Ring.Acquaintance).tracks).toBe(3)
-    expect(trackRadius(Ring.Unsorted, 1, 6)).toBe(RING_RADIUS[Ring.Unsorted] - 7)
+  it('a full ring continues on laps outside it and pushes the rings beyond it outward, never inward', () => {
+    const few = ringsGeometry({ close: 3, unsorted: 2 })
+    expect(few.radius.acquaintance).toBe(RING_RADIUS.acquaintance)
+    expect(few.perLap.close).toBeGreaterThanOrEqual(3)
+    const g = ringsGeometry({ close: 7, friend: 15, acquaintance: 255, unsorted: 238 })
+    expect(g.dot.acquaintance).toBe(14)
+    expect(g.radius.close).toBe(RING_RADIUS.close)
+    expect(lapRadius(g, Ring.Acquaintance, 2)).toBeGreaterThan(g.radius.acquaintance)
+    expect(g.radius.intending).toBeGreaterThan(lapRadius(g, Ring.Acquaintance, Math.ceil(255 / g.perLap.acquaintance) - 1))
+    expect(g.radius.unsorted).toBeGreaterThan(g.radius.intending)
   })
   it('a drop sets the ring; intending carries a clamped 0..10 value and a date, leaving it clears both', () => {
     const p = person(Ring.Friend)
