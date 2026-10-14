@@ -1,8 +1,8 @@
-/** The rings view's geometry and the one place a drop changes a person: close in the centre, unsorted (grey) outermost. */
+/** The rings view's geometry and the one place a drop changes a person: four rings, close in the centre; people not placed yet are not on it. */
 import { CLOSENESS_KEY, Ring, RINGS } from './model'
 import type { Person } from './model'
 
-export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
+export const WEB_RINGS: readonly Ring[] = RINGS
 export const RING_RADIUS: Record<Ring, number> = { [Ring.Close]: 48, [Ring.Friend]: 84, [Ring.Acquaintance]: 118, [Ring.Intending]: 148, [Ring.Unsorted]: 168, [Ring.None]: 168, [Ring.Family]: 48 }
 
 /** More people than this on the rings: the name shows on hover, focus or tap only. */
@@ -60,7 +60,7 @@ export const isFamily = (p: Pick<Person, 'ring' | 'fields'>): boolean => p.ring 
 
 /** Puts a person on a ring; family keeps its tag and moves by closeness. `desire` (0..10) belongs to Intending only. */
 export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_DEFAULT): void {
-  if (p.ring === Ring.Family && ring !== Ring.Unsorted) {
+  if (p.ring === Ring.Family) {
     p.fields = { ...p.fields, [CLOSENESS_KEY]: ring }
   } else {
     p.ring = ring
@@ -69,7 +69,3 @@ export function placeOnRing(p: Person, ring: Ring, now: number, desire = DESIRE_
   else delete p.intending
 }
 
-/** Established contact: a met date, notes or a recorded meeting. Such a person cannot be dropped on "intending to connect". */
-export function inContact(p: Person, meetings: readonly { personId?: string }[] = []): boolean {
-  return p.metAt > 0 || p.lines.length > 0 || !!p.generalNote?.trim() || meetings.some((m) => m.personId === p.id)
-}

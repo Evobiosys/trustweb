@@ -437,10 +437,6 @@ export const PERSON_FIELDS: readonly PersonField[] = [
       {
         "id": "intending",
         "label": "Intending to connect"
-      },
-      {
-        "id": "unsorted",
-        "label": "Unsorted"
       }
     ]
   },

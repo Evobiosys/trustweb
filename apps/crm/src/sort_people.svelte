@@ -28,8 +28,13 @@
     .map(([k, v]) => `${fieldLabelOf(k)}: ${valueText(v)}`))
 
   function choose(c: Choice): void {
-    const whole = suggestion && c === (suggestion.ring === Ring.Intending ? UNSORTED : suggestion.ring)
-    history.push({ index, undo: whole ? applySuggestion(ids[index], suggestion) : c === UNSORTED ? [] : fileUnder(ids[index], c) })
+    const whole = suggestion && c === suggestion.ring
+    history.push({ index, undo: whole ? applySuggestion(ids[index], suggestion) : fileUnder(ids[index], c) })
+    index++
+  }
+
+  function skip(): void {
+    history.push({ index, undo: [] })
     index++
   }
 
@@ -67,9 +72,10 @@
       <h3>{shownName(person.name)}</h3>
       {#if person.context}<p class="ctx">{person.context}</p>{/if}
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
-      <RingChips suggested={suggestion?.ring === Ring.Intending ? undefined : suggestion?.ring} family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
+      <RingChips suggested={suggestion?.ring === UNSORTED ? undefined : suggestion?.ring} family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
       {#if suggestion}<p class="muted" data-part="suggested">{S.suggestedBecause(suggestion.reason)}{suggestion.family ? ` · ${S.familyTag}` : ''}</p>{/if}
       {#if !inContact(person, valuesOf(person.id), store.crm.interactions)}<IntendingChips suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />{/if}
+      <button class="quiet" data-action="skip-person" onclick={skip}>{S.sortSkip}</button>
       <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>
   {:else}

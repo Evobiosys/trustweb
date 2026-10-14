@@ -1,8 +1,10 @@
 /**
- * The rings as the CRM shows them, centre outwards: close friend, friend, acquaintance, intending to connect, unsorted.
+ * The rings as the CRM shows them, centre outwards: close friend, friend, acquaintance, intending to connect. UNSORTED is no ring:
+ * it marks people not placed yet, who sit outside the rings.
  * Family is no ring but a tag (checkbox) on top of any closeness. RING_COLORS is plain data on purpose: the outliner branch copies it as is.
  */
 import { Ring } from '../../trustweb/src/model'
+import { DESIRE_DEFAULT } from '../../trustweb/src/rings_layout'
 import { FAMOUS_KEY, INTENDING_KEY, MAX_INTENDING, SINCE_KEY, intendingOf } from './fields'
 import type { FieldValue, FieldValues } from './fields'
 
@@ -21,8 +23,8 @@ export const TANA_RING_OPTIONS: Record<RingId, string> = {
 /** A choice that files a person under famous (filtered out of the web); it is no ring. */
 export const OUT_OF_WEB = 'outofweb'
 
-/** What the ring chips offer: "intending to connect" comes from the 0 to 10 scale, not from a chip. */
-export type Choice = Exclude<RingId, Ring.Intending> | typeof OUT_OF_WEB
+/** What the ring chips offer: the four rings, or out of my web. */
+export type Choice = Exclude<RingId, typeof UNSORTED> | typeof OUT_OF_WEB
 
 export const RING_COLORS = {
   close: '#1b5e20', friend: '#2e7d32', acquaintance: '#66bb6a', intending: '#a5d6a7',
@@ -32,8 +34,8 @@ export const RING_COLORS = {
 }
 
 /** Display order of the groups, from the centre. */
-export const RING_ORDER: readonly RingId[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, UNSORTED]
-export const CHOICES: readonly Choice[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, UNSORTED, OUT_OF_WEB]
+export const RING_ORDER: readonly Exclude<RingId, typeof UNSORTED>[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
+export const CHOICES: readonly Choice[] = [...RING_ORDER, OUT_OF_WEB]
 
 /** The ring a person is filed under: anything unknown (an older "none" or "family") counts as unsorted. */
 export function ringOf(ring: string | undefined): RingId {
@@ -50,10 +52,12 @@ export function ringWithIntending(ring: string | undefined, values: FieldValues)
   return r === UNSORTED || r === Ring.Intending ? (intendingOf(values) >= 1 ? Ring.Intending : UNSORTED) : r
 }
 
-/** The field edits that file a person under `choice`; the famous checkbox follows it. */
-export function choiceEdits(choice: Choice, current: FieldValues): [string, FieldValue][] {
-  const ring = choice === OUT_OF_WEB || choice === UNSORTED ? ringWithIntending(UNSORTED, current) : choice
-  const edits: [string, FieldValue][] = [['tw-ring', ring]]
+/** The field edits that file a person under `choice`; the famous checkbox follows it. Intending to connect starts at the default desire when none is set. */
+export function choiceEdits(choice: Choice, current: FieldValues, today = ''): [string, FieldValue][] {
+  const ring = choice === OUT_OF_WEB ? ringWithIntending(UNSORTED, current) : choice
+  const edits: [string, FieldValue][] = choice === Ring.Intending && intendingOf(current) === 0
+    ? [[INTENDING_KEY, String(DESIRE_DEFAULT)], [SINCE_KEY, today], ['tw-ring', ring]]
+    : [['tw-ring', ring]]
   if ((current[FAMOUS_KEY] === true) !== (choice === OUT_OF_WEB)) edits.push([FAMOUS_KEY, choice === OUT_OF_WEB])
   return edits
 }

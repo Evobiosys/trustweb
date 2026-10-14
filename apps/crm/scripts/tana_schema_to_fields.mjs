@@ -44,7 +44,7 @@ const TYPE_DECL = `export interface PersonField {
 }
 `
 
-const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect'], ['unsorted', 'Unsorted']]
+const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect']]
 const FAV_LABELS = [['email', 'Email'], ['phone', 'Phone call'], ['sms', 'SMS'], ['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['matrix', 'Matrix']]
 const opts = (pairs) => pairs.map(([id, label]) => ({ id, label }))
 const tw = (id, label, type, description, options) => ({ id, tanaAttributeId: null, label, type, description, ...(options ? { options: opts(options) } : {}) })

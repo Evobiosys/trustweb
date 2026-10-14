@@ -34,7 +34,7 @@ export function apply(personId: string, edits: [string, FieldValue][], before: F
 /** Files the person under `choice`; returns what puts the touched fields back. */
 export function fileUnder(personId: string, choice: Choice): Undo {
   const before = valuesOf(personId)
-  return apply(personId, choiceEdits(choice, before), before)
+  return apply(personId, choiceEdits(choice, before, dayKey(Date.now())), before)
 }
 
 /** Sets the desire to connect (0 to 10): the number, the date it changed, and the ring when no closer one holds. */
@@ -52,7 +52,7 @@ export function setFamily(personId: string, on: boolean): Undo {
 /** Files the whole suggestion (ring, family tag, desire); returns what puts it all back (last change first). */
 export function applySuggestion(personId: string, s: Suggestion): Undo {
   const undo = [
-    fileUnder(personId, s.ring === Ring.Intending ? UNSORTED : s.ring),
+    ...(s.ring === UNSORTED || (s.ring === Ring.Intending && s.intending > 0) ? [] : [fileUnder(personId, s.ring)]),
     setFamily(personId, s.family),
     ...(s.intending > 0 ? [setIntending(personId, s.intending)] : []),
   ]

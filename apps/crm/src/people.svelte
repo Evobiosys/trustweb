@@ -16,7 +16,7 @@
   import PersonRow from './person_row.svelte'
   import { drag } from './drag.svelte'
   import { prefs, savePrefs } from './prefs.svelte'
-  import { ringColor } from './rings'
+  import { UNSORTED, ringColor, ringOf } from './rings'
   import { store, undoLastImport } from './state.svelte'
   import { S } from './strings'
   import { timeline } from './timeline'
@@ -41,6 +41,7 @@
   const hasCustom = $derived(Object.keys(prefs.customOrder).length > 0)
   const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))).map((g) =>
     order === SortOrder.Recent && hasCustom ? { ...g, rows: inCustomOrder(g.rows, (r) => r.person.id, prefs.customOrder[g.ring]) } : g))
+  const notPlaced = $derived(contactRows(view, query, order).filter((r) => ringOf(r.person.ring) === UNSORTED && passesFilters(valuesOf(r.person.id), prefs.filters)))
   const environments = $derived(((store.app as { environments?: EnvEntity[] }).environments ?? [])
     .map((e) => effectivePerson(e, edits(e.id))).filter((e) => matches(e as never, query)))
   const onRow = $derived((kind: Kind) => layout(kind, placementFor(kind), {}).collapsed)
@@ -107,6 +108,15 @@
     {/each}
     </div>
   {/each}
+  {#if notPlaced.length}
+    <details class="not-placed" data-part="not-placed">
+      <summary class="ring-heading">{S.notPlaced(notPlaced.length)}</summary>
+      {#each notPlaced as row (row.person.id)}
+        <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+          ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} onopen={openPerson} />
+      {/each}
+    </details>
+  {/if}
   {#if imported.length}
     <h3 class="ring-heading" data-part="contacts-heading">{S.contactsHeading(imported.length)}</h3>
     {#each imported as c (c.id)}
@@ -118,7 +128,7 @@
         </span>
       </button>
     {/each}
-  {:else if groups.length === 0}
+  {:else if groups.length === 0 && notPlaced.length === 0}
     <EmptyState title={S.noPeople} description={query ? S.noPeopleHint : ''} />
     <button class="btn" data-action="import-contacts-empty" onclick={openImport}>{S.importContacts}</button>
   {/if}

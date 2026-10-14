@@ -21,7 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, inContact, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -1316,7 +1316,7 @@ let ringsK = 1
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
-  for (const p of s.people) counts[ringSlot(p)] = (counts[ringSlot(p)] ?? 0) + 1
+  for (const p of s.people) if (WEB_RINGS.includes(ringSlot(p))) counts[ringSlot(p)] = (counts[ringSlot(p)] ?? 0) + 1
   ringsGeo = ringsGeometry(counts)
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const colourTags = loadColourTags()
@@ -1354,7 +1354,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const x = C + radius * Math.cos(a)
       const y = C + radius * Math.sin(a)
       // A crowded web (compact) draws a spoke only for people connected here: hundreds of dashed spokes read as dozens of rings.
-      if (ring !== Ring.Unsorted && (p.peerId || s.people.length <= RINGS_LABEL_CAP)) {
+      if (p.peerId || s.people.length <= RINGS_LABEL_CAP) {
         const path = document.createElementNS(NS, 'path')
         const mx = (C + x) / 2 + (y - C) * 0.12
         const my = (C + y) / 2 + (C - x) * 0.12
@@ -1441,7 +1441,6 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       setTimeout(() => setDragged(false), 0)
       if (!was) return
       if (ring === ringSlot(p)) { render(); return }
-      if (ring === Ring.Intending && inContact(p, s.meetings)) { toast(S.alreadyInContact); render(); return }
       if (ring === Ring.Intending) askDesire(wrap, p, () => render(), (v) => dropOn(p, ring, v))
       else dropOn(p, ring)
     }

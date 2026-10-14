@@ -208,7 +208,6 @@ export const S = {
   olTwActive: 'Active on TrustWeb lately',
   olTwQuiet: 'Connected on TrustWeb, quiet lately',
   tanaOpen: 'Edit here; tap again to open in Tana',
-  ringLeaveUnsorted: 'Leave unsorted',
   olNotInWeb: (n: number) => `Not in my web (${n})`,
   searchClose: 'Close search',
   searchPh: 'Search your contacts',
@@ -280,7 +279,7 @@ export const S = {
     [Ring.Intending]: 'Intending to connect',
     [Ring.None]: 'Not in my web',
     [Ring.Family]: 'Family',
-    [Ring.Unsorted]: 'Unsorted',
+    [Ring.Unsorted]: 'Not placed yet',
   } as Record<Ring, string>,
   ringHint: {
     [Ring.Close]: 'the few you would call at 3 am',
@@ -289,7 +288,7 @@ export const S = {
     [Ring.Intending]: 'someone you plan to meet, not yet in your web',
     [Ring.None]: 'kept for reference, not part of your web',
     [Ring.Family]: 'your family, whatever the closeness',
-    [Ring.Unsorted]: 'not placed yet',
+    [Ring.Unsorted]: 'not on a ring yet',
   } as Record<Ring, string>,
   // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {
@@ -321,7 +320,6 @@ export const S = {
   sheetConnected: 'Connected on TrustWeb',
   sheetNotesOnly: 'Notes only, not connected on TrustWeb yet',
   sheetMet: (context: string, when: string) => (context ? `Met ${when} · ${context}` : `Met ${when}`),
-  alreadyInContact: 'Already in contact',
   sheetPlanned: (context: string) => (context || 'Not yet met, nothing noted or shared'),
   sheetNoNotes: 'No notes yet.',
   sheetStillTrue: 'Still true?',
