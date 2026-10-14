@@ -93,7 +93,7 @@
   {#if plan}
     <h3 class="screen-title">{S.summaryTitle}</h3>
     <ul class="summary" data-part="files">
-      {#each plan.files as f (f.name)}
+      {#each plan.files as f, i (i)}
         <li>{S.fileLine(f.name, f.format ? S.formatLabel[f.format] : S.fileUnknown, f.count, f.skipped)}</li>
       {/each}
     </ul>
