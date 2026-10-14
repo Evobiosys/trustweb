@@ -22,6 +22,7 @@
   import { editLine, store } from './state.svelte'
   import { setIntending } from './sorting.svelte'
   import { hideFromTrustweb } from './sync.svelte'
+  import { UNSORTED, ringOf } from './rings'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
   import { personTimeline } from './timeline'
@@ -91,7 +92,9 @@
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
 
-    <IntendingChips locked={raw !== undefined && inContact(raw, values, store.crm.interactions)} value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
+    {#if raw !== undefined && (ringOf(person.ring) === Ring.Intending || ringOf(person.ring) === UNSORTED) && !inContact(raw, values, store.crm.interactions)}
+    <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
+    {/if}
 
     <MergeSheet personId={person.id} />
 

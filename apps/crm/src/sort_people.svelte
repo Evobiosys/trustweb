@@ -69,7 +69,7 @@
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
       <RingChips suggested={suggestion?.ring === Ring.Intending ? undefined : suggestion?.ring} family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
       {#if suggestion}<p class="muted" data-part="suggested">{S.suggestedBecause(suggestion.reason)}{suggestion.family ? ` · ${S.familyTag}` : ''}</p>{/if}
-      <IntendingChips locked={inContact(person, valuesOf(person.id), store.crm.interactions)} suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />
+      {#if !inContact(person, valuesOf(person.id), store.crm.interactions)}<IntendingChips suggested={suggestion?.intending || undefined} value={intendingOf(valuesOf(person.id))} onchoose={desire} />{/if}
       <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>
   {:else}

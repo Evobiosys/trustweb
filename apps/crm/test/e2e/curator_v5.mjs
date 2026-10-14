@@ -68,8 +68,7 @@ try {
   // Intending lock: a person with a note line / first-met sees no 0-10 scale.
   await page.getByRole('searchbox').fill('')
   await page.locator('.person-row strong').first().click()
-  const lockedOrScale = (await page.locator('[data-part="intending-locked"]').count()) + (await page.locator('[data-part="intending"]').count())
-  check('intending block shows either the scale or the "already in contact" line', lockedOrScale === 1)
+  check('intending shows the scale or nothing (no "already in contact" line)', (await page.locator('[data-part="intending-locked"]').count()) === 0 && (await page.locator('[data-part="intending"]').count()) <= 1)
 
   // Merge: two people, sheet, merge, undo.
   await page.locator('.back').click()
