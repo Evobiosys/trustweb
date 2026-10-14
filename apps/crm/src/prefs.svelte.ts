@@ -24,10 +24,15 @@ export interface Prefs {
   workspaceId: string
   /** Tana node new people are created under; empty = today's day node. */
   parentNodeId: string
+  /** Edits waiting for Tana: coalesced per person and field; the value is read at sync time. */
+  queue: { personId: string; key: string }[]
+  /** Tana node ids of people created from TrustWeb. */
+  nodeIds: Record<string, string>
+  log: string[]
 }
 
 function load(): Prefs {
-  const base: Prefs = { mandatory: [...DEFAULT_MANDATORY], optionalOpen: false, pkm: Pkm.None, autoSync: false, token: '', workspaceId: '', parentNodeId: '' }
+  const base: Prefs = { mandatory: [...DEFAULT_MANDATORY], optionalOpen: false, pkm: Pkm.None, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], nodeIds: {}, log: [] }
   try {
     return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }
   } catch {

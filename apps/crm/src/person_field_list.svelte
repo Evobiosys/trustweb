@@ -5,8 +5,9 @@
   import type { FieldValue } from './fields'
   import { PERSON_FIELDS } from './person_fields'
   import { prefs, savePrefs } from './prefs.svelte'
-  import { setField, store } from './state.svelte'
+  import { store } from './state.svelte'
   import { S } from './strings'
+  import { saveField } from './sync.svelte'
 
   interface Props {
     person: Person
@@ -38,7 +39,7 @@
   }
 
   function save(key: string, v: FieldValue): void {
-    setField(person.id, key, v)
+    saveField(person.id, key, v)
   }
 </script>
 
