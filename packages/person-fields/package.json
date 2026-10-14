@@ -1,0 +1,9 @@
+{
+  "name": "@resource-web/person-fields",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/fields.ts" },
+  "scripts": { "generate": "node scripts/tana_schema_to_fields.mjs /Users/personal/Documents/SingularStructure/assets/tana-persons/person-schema.md" }
+}
