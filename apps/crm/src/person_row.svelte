@@ -9,6 +9,8 @@
 -->
 <script lang="ts">
   import Avatar from './avatar.svelte'
+  import { grip } from './drag.svelte'
+  import type { Drop } from './drag.svelte'
   import { shownName } from './display'
   import RingLabel from './ring_label.svelte'
   import { Presence } from './person_view'
@@ -25,12 +27,15 @@
     presence?: Presence
     fav?: FavLink | null
     ring?: string
+    /** Drops the row's grip lands on: reorders it within its section. */
+    ondrop?: Drop
     onopen: (id: string) => void
   }
-  const { id, name, context, meta = '', extra = [], presence = Presence.None, fav = null, ring, onopen }: Props = $props()
+  const { id, name, context, meta = '', extra = [], presence = Presence.None, fav = null, ring, ondrop, onopen }: Props = $props()
 </script>
 
 <div class="person-row" class:with-ring={ring}>
+  {#if ondrop}<span class="grip" role="presentation" data-key={id} aria-label={S.dragRow} use:grip={ondrop}>⋮⋮</span>{/if}
   <button class="pr-open" onclick={(): void => onopen(id)}>
     <Avatar {id} name={shownName(name)} />
     <span class="pr-main">

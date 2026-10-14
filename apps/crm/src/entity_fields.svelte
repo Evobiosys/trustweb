@@ -51,7 +51,7 @@
   <div class="zone" class:over={drag.key !== null && drag.zone === section} data-zone={section} data-part={section}>
     {#each lay[section] as f (f.id)}
       <div class="slot" class:before={drag.key !== null && drag.before === f.id} class:lifted={drag.key === f.id} data-slot={f.id}>
-        <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={drop}>⠿</span>
+        <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={drop}>⋮⋮</span>
         <FieldInput field={f.id.startsWith('adhoc:') ? undefined : f} label={f.id.startsWith('adhoc:') ? fieldLabelOf(f.id) : labelOf(f, values)}
           value={values[f.id]} onchange={(v): void => save(f.id, v)} nosync={nosync(f.id)} />
         <label class="hide-box"><input type="checkbox" data-hide={f.id} checked={section === Section.Hidden}

@@ -15,6 +15,8 @@ export const S = {
   tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', settings: 'Settings' },
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,
+  sortCustom: 'Custom order',
+  dragRow: 'Drag to reorder',
   noPeople: 'Nobody matches.',
   openLines: (n: number) => (n === 1 ? '1 note' : `${n} notes`),
   lastActivity: (when: string) => `Last: ${when}`,

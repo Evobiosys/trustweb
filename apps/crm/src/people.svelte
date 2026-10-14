@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SortOrder, contactRows, groupByRing, visibleContacts } from './contacts'
+  import { SortOrder, contactRows, groupByRing, inCustomOrder, moveInOrder, visibleContacts } from './contacts'
   import { lastActivityText, lastPastByPerson } from './display'
   import Avatar from './avatar.svelte'
   import EmptyState from './empty_state.svelte'
@@ -14,7 +14,8 @@
   import { effectivePerson, entityValues, favLink, presence } from './person_view'
   import PeopleFilter from './people_filter.svelte'
   import PersonRow from './person_row.svelte'
-  import { prefs } from './prefs.svelte'
+  import { drag } from './drag.svelte'
+  import { prefs, savePrefs } from './prefs.svelte'
   import { ringColor } from './rings'
   import { store, undoLastImport } from './state.svelte'
   import { S } from './strings'
@@ -37,7 +38,9 @@
     const p = store.app.people.find((x) => x.id === id)
     return p ? entityValues(p, baseFields(p), edits(id)) : {}
   }
-  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))))
+  const hasCustom = $derived(Object.keys(prefs.customOrder).length > 0)
+  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))).map((g) =>
+    order === SortOrder.Recent && hasCustom ? { ...g, rows: inCustomOrder(g.rows, (r) => r.person.id, prefs.customOrder[g.ring]) } : g))
   const environments = $derived(((store.app as { environments?: EnvEntity[] }).environments ?? [])
     .map((e) => effectivePerson(e, edits(e.id))).filter((e) => matches(e as never, query)))
   const onRow = $derived((kind: Kind) => layout(kind, placementFor(kind), {}).collapsed)
@@ -47,6 +50,15 @@
 
   function pick(next: SortOrder): void {
     order = next
+  }
+
+  /** A row dropped before another in its ring section: that section keeps the order from now on, on this device. */
+  function reorder(ring: string, ids: string[]): (id: string, _s: unknown, before: string | null) => void {
+    return (id, _s, before) => {
+      prefs.customOrder[ring] = moveInOrder(ids, id, before)
+      order = SortOrder.Recent
+      savePrefs()
+    }
   }
 
   function extraFor(kind: Kind, values: FieldValues): string[] {
@@ -79,17 +91,21 @@
   <PeopleFilter />
   <div class="seg" role="group" aria-label={S.sortLabel}>
     {#each SORTS as s (s)}
-      <button aria-pressed={order === s} onclick={(): void => pick(s)}>{S.sort[s]}</button>
+      <button aria-pressed={order === s} onclick={(): void => pick(s)}>{s === SortOrder.Recent && hasCustom ? S.sortCustom : S.sort[s]}</button>
     {/each}
   </div>
   {#each groups as g (g.ring)}
     <h3 class="ring-heading"><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</h3>
+    <div class="zone" class:over={drag.key !== null && drag.zone === g.ring} data-zone={g.ring}>
     {#each g.rows as row (row.person.id)}
       {@const values = valuesOf(row.person.id)}
+      <div class="slot" class:before={drag.key !== null && drag.before === row.person.id} class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
       <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
         extra={extraFor(Kind.Person, values)} presence={presence(row.person, lastPast.get(row.person.id), prefs.activityDays, now)}
-        ring={row.person.ring} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} onopen={openPerson} />
+        ring={row.person.ring} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
+      </div>
     {/each}
+    </div>
   {/each}
   {#if imported.length}
     <h3 class="ring-heading" data-part="contacts-heading">{S.contactsHeading(imported.length)}</h3>

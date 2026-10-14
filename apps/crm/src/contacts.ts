@@ -45,6 +45,20 @@ export function contactRows(view: CrmView, query: string, order: SortOrder): Con
     : b.lastAt - a.lastAt || a.person.name.localeCompare(b.person.name))
 }
 
+/** Ids in the stored order; ids it lacks follow in their current order. */
+export function inCustomOrder<T>(items: T[], idOf: (t: T) => string, stored: string[] | undefined): T[] {
+  const at = (t: T): number => { const i = (stored ?? []).indexOf(idOf(t)); return i < 0 ? Infinity : i }
+  return [...items].sort((a, b) => (at(a) === at(b) ? 0 : at(a) - at(b)))
+}
+
+/** The stored order of a section after `id` was dropped before `before` (the end when null). */
+export function moveInOrder(current: string[], id: string, before: string | null): string[] {
+  const rest = current.filter((x) => x !== id)
+  const at = before === null ? -1 : rest.indexOf(before)
+  rest.splice(at < 0 ? rest.length : at, 0, id)
+  return rest
+}
+
 /** Rows grouped by ring in ring order (closest first, family, then unsorted), empty rings left out. */
 export function groupByRing(rows: ContactRow[]): { ring: RingId; rows: ContactRow[] }[] {
   return RING_ORDER

@@ -45,7 +45,7 @@
 <div class="ring-more zone" class:over={drag.key !== null && drag.zone === 'ring-advanced'} data-zone="ring-advanced" data-part="ring-advanced">
   {#each fields as f (f.id)}
     <div class="slot" class:before={drag.key !== null && drag.before === f.id} class:lifted={drag.key === f.id} data-slot={f.id}>
-      <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={reorder}>⠿</span>
+      <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={reorder}>⋮⋮</span>
       <FieldInput field={f} label={f.label} value={values[f.id]} onchange={(v): void => save(f.id, v)} />
     </div>
   {/each}
