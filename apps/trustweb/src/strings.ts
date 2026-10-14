@@ -215,6 +215,12 @@ export const S = {
 
   webTitle: 'Your TrustWeb',
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
+  netRings: 'Rings',
+  netNetwork: 'Network',
+  netViewAria: 'How your web is drawn',
+  netSearchPh: 'Find someone in the network',
+  netShake: 'Shake',
+  netAria: (people: number) => `Network of ${people} ${people === 1 ? 'person' : 'people'}: tap a dot to open them, drag to move, pinch to zoom`,
   webEmpty: 'Nobody here yet. Tap anywhere in the web to add someone.',
   webQuery: 'Query',
   webCall: 'Call into your web',
