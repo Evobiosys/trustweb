@@ -11,7 +11,7 @@
  * Everything received is untrusted: bounded, stripped of control and bidi characters, unknown norms dropped. A build that does not
  * know the text shows it as one chat line, as with hello.ts. Pure and DOM-free.
  */
-import { fingerprint, stripUnsafe } from './safe_text'
+import { stripUnsafe } from './safe_text'
 
 export enum Norm {
   TextFirst = 'text-first',
@@ -122,11 +122,6 @@ export function receiveProfileText(appUrl: string, person: ProfileCarrier, text:
   if (!next || JSON.stringify(person.theirProfile) === JSON.stringify(next)) return false
   person.theirProfile = next
   return true
-}
-
-export const profileFingerprint = (appUrl: string, p: MyProfile | undefined): string | null => {
-  const t = buildProfileText(appUrl, p)
-  return t === null ? null : fingerprint(t)
 }
 
 /** Boot repair: a stored profile that is not the expected shape is dropped. True when the state changed. Never throws. */

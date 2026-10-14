@@ -48,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -58,7 +58,7 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
-import { stripUnsafe } from './safe_text'
+import { fingerprint, stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
@@ -111,7 +111,7 @@ import { devRecordFile, seedDevRecord } from './dev_record'
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
-import { addNorm, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { setUpInstall } from './install'
@@ -529,6 +529,7 @@ const net = new Net({
     if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
+    if (mayAnswerRequest(peer, person) && mayShareContact(shareModeNow())) sendProfileTo(peer, false)
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -2214,6 +2215,7 @@ function personSheet(personId: string): void {
     eventChipsRow(p),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
+    p.peerId ? sendProfileRow(p) : null,
     agreementsFor(p),
     curator.person(p.id, closeSheet),
   ])
@@ -2446,8 +2448,15 @@ function profileSheet(): void {
   sheet.dataset.kind = 'profile'
 }
 
+/** Under the contact box: "My profile" and the tick that shares it (norms, favourite way, intro) the same way the links go, in the same share modes. */
 function profileRow(): HTMLElement {
-  return el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine])
+  const tick = el('input', { type: 'checkbox', 'data-share-profile': '1' })
+  tick.checked = st().profileShare === true
+  tick.addEventListener('change', () => { if (tick.checked) st().profileShare = true; else delete st().profileShare; save() })
+  return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
+    el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
+    el('label', { class: 'chat-row' }, [tick, el('span', {}, [S.profShareTick])]),
+  ])
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -2466,6 +2475,24 @@ function chatIo(): ChatIo {
 
 // Messenger links leave this phone ONLY as the answer to an explicit request (onContactRequest), never at connect time
 // (Jakob 2026-10-15 22:25: a reach-out via trustweb.one/<name> must not be able to get them).
+
+/**
+ * Wave 7 (profile.ts): sends my profile to one connected peer in a chat text: on connect when the "share my profile" tick is on and the
+ * share mode allows it (the caller checks the mode), once per change (profileSent); `force` is the owner's own "Send my profile" tap.
+ */
+function sendProfileTo(peer: Peer, force: boolean): void {
+  const s = st()
+  if (!force && !s.profileShare) return
+  const text = buildProfileText(APP_URL, s.profile)
+  if (!text) { if (force) toast(S.profEmpty); return }
+  const fp = fingerprint(text)
+  if (!force && s.profileSent?.[peer.id] === fp) return
+  net.sendText(peer, text).then(() => {
+    s.profileSent = { ...s.profileSent, [peer.id]: fp }
+    save()
+    if (force) toast(S.profSent(peer.displayName))
+  }).catch(() => { if (force) toast(S.agrSendFailed) })
+}
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -2576,6 +2603,11 @@ function onContactRequest(peer: Peer, text: string): void {
     ])
   }
   next(plan.ask)
+}
+
+function sendProfileRow(p: Person): HTMLElement | null {
+  const peer = st().peers.find((x) => x.id === p.peerId)
+  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer, true) }, [S.profSendTo(p.name)]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
