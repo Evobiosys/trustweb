@@ -177,10 +177,18 @@ export function findDuplicates(list: readonly ImportedContact[], defaultCountry 
   const sets = new UnionFind(list.length)
   const reasonsByRoot = new Map<number, Set<MatchReason>>()
   const used: Link[] = []
+  // sets already joined by a similar name (those links come last): one each, so "Maier ~ Mayer ~ Meier" never chains
+  const similar = new Set<number>()
   for (const link of links) {
     const strong = link.reason === MatchReason.Email || link.reason === MatchReason.Phone
+    if (link.reason === MatchReason.SimilarName) {
+      const ra = sets.find(link.a)
+      const rb = sets.find(link.b)
+      if (ra === rb || similar.has(ra) || similar.has(rb)) continue
+    }
     // a name link only counts when it joins two sets that email/phone had not already joined
     if (sets.union(link.a, link.b) || strong) used.push(link)
+    if (link.reason === MatchReason.SimilarName) similar.add(sets.find(link.a))
   }
   for (const link of used) {
     const root = sets.find(link.a)
@@ -191,7 +199,9 @@ export function findDuplicates(list: readonly ImportedContact[], defaultCountry 
   const members = new Map<number, number[]>()
   list.forEach((_, i) => {
     const root = sets.find(i)
-    members.set(root, [...(members.get(root) ?? []), i])
+    const m = members.get(root)
+    if (m) m.push(i)
+    else members.set(root, [i])
   })
   return [...members]
     .filter(([, m]) => m.length > 1)
