@@ -161,7 +161,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill()
       if (lq) {
         const a = lit ? fade : fade * 0.15
-        if (a < 0.12 && v !== hover && !matches.has(v.id)) return
+        if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
         ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
         ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
         ctx.fillText(v.name, x, y + rad + 10)
