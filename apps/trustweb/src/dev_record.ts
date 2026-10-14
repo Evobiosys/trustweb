@@ -16,12 +16,13 @@ export function devRecordFile(): string | null {
   return devRecord()?.file ?? null
 }
 
-/** Stores the dev record as this origin's record when none is there yet. Call before the first loadState. */
+/** Stores the dev record as this origin's record when none is there yet, or when the one there carries demo people (an earlier "add demo friends"): a record preview shows only the record's people. Call before the first loadState. */
 export function seedDevRecord(persona: string): void {
   const rec = devRecord()
   if (!rec || !parseRecord(rec.text)) return
   try {
     const key = storageKey(persona)
-    if (localStorage.getItem(key) === null) localStorage.setItem(key, rec.text)
+    const had = localStorage.getItem(key)
+    if (had === null || parseRecord(had)?.demo) localStorage.setItem(key, rec.text)
   } catch { /* storage blocked: the welcome screen shows as usual */ }
 }
