@@ -17,6 +17,12 @@ export function initials(name: string): string {
   return (first + last).toLocaleUpperCase()
 }
 
+/** A name that is an email address or calendar id shows its local part with the envelope glyph, never the address. */
+export function shownName(name: string): string {
+  const at = name.indexOf('@')
+  return at < 0 ? name : `✉ ${name.slice(0, at)}`
+}
+
 /** A stable avatar colour slot (0..5) per person id. */
 export function avatarHue(id: string): number {
   let h = 0

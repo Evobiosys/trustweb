@@ -2,6 +2,7 @@
   import { byStage, pipeline } from './contacts'
   import type { PipelineCard } from './contacts'
   import EmptyState from './empty_state.svelte'
+  import { shownName } from './display'
   import KanbanBoard from './kanban_board.svelte'
   import type { KanbanColumn } from './kanban_board.svelte'
   import { STAGES } from './model'
@@ -43,7 +44,7 @@
     <KanbanBoard {columns} onmove={move}>
       {#snippet card(item: Item)}
         <div class="card">
-          <button class="link" onclick={(): void => openPerson(item.person.id)}>{item.person.name}</button>
+          <button class="link" onclick={(): void => openPerson(item.person.id)}>{shownName(item.person.name)}</button>
           <p>{item.line.text}</p>
           <div><TagChip line={item.line} /></div>
           <select class="field" aria-label={S.stageLabel} value={item.stage} onchange={(e: Event): void => change(item, e)}>

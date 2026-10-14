@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
   import Avatar from './avatar.svelte'
+  import { shownName } from './display'
   import { Presence } from './person_view'
   import type { FavLink } from './person_view'
   import { S } from './strings'
@@ -29,9 +30,9 @@
 
 <div class="person-row">
   <button class="pr-open" onclick={(): void => onopen(id)}>
-    <Avatar {id} {name} />
+    <Avatar {id} name={shownName(name)} />
     <span class="pr-main">
-      <strong>{name}</strong>
+      <strong>{shownName(name)}</strong>
       {#if context}<span class="ctx">{context}</span>{/if}
       {#if meta}<span class="meta">{meta}</span>{/if}
       {#each extra as line (line)}<span class="meta">{line}</span>{/each}
@@ -40,5 +41,5 @@
   {#if presence !== Presence.None}
     <span class="presence" data-presence={presence} role="img" aria-label={presence === Presence.Active ? S.presenceActive : S.presenceIdle}>{presence === Presence.Active ? '●' : '○'}</span>
   {/if}
-  {#if fav}<a class="fav" href={fav.href} aria-label={fav.label} data-fav={fav.label}>{fav.symbol}</a>{/if}
+  {#if fav}<a class="fav" href={fav.href} aria-label={fav.label} title={fav.title} data-fav={fav.label}>{fav.symbol}</a>{/if}
 </div>

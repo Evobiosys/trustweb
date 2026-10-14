@@ -49,6 +49,8 @@ export interface FavLink {
   href: string
   symbol: string
   label: string
+  /** The address or number behind the symbol: tooltip only. */
+  title: string
 }
 
 const SYMBOL: Record<string, string> = { email: '✉', phone: '☎', sms: '💬', signal: '🔒', whatsapp: '🟢', matrix: '🔷' }
@@ -64,5 +66,5 @@ export function favLink(person: Pick<Person, 'channels'>, values: FieldValues, p
     : way === 'phone' ? phone && `tel:${phone}`
       : way === 'sms' ? phone && `sms:${phone}`
         : handle && channelLink(CHANNEL[way], handle)
-  return href ? { href, symbol: SYMBOL[way], label: way } : null
+  return href ? { href, symbol: SYMBOL[way], label: way, title: href.replace(/^\w+:/, '') } : null
 }

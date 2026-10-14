@@ -3,6 +3,7 @@
   import Avatar from './avatar.svelte'
   import ContactInfo from './contact_info.svelte'
   import { fmtDate } from './dates'
+  import { shownName } from './display'
   import EventRow from './event_row.svelte'
   import FollowUpForm from './followup_form.svelte'
   import InteractionForm from './interaction_form.svelte'
@@ -50,9 +51,9 @@
   <button class="back" onclick={closePerson}>&larr; {S.back}</button>
   {#if person}
     <div class="person-head">
-      <Avatar id={person.id} name={person.name} />
+      <Avatar id={person.id} name={shownName(person.name)} />
       <div>
-        <h2>{person.name}</h2>
+        <h2>{shownName(person.name)}</h2>
         <p class="meta-line">{S.ringLabel[person.ring]} · {meta}</p>
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
       </div>
