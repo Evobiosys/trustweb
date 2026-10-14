@@ -15,6 +15,7 @@ import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
+import type { MyProfile, SharedProfile } from './profile'
 
 export enum Ring {
   Close = 'close',
@@ -251,6 +252,8 @@ export interface Person {
   /** Wave 6e: no longer stored from the wire; an older record may still hold it, ignored. */
   theirSignalProvider?: SignalProvider
   theirChannelsAt?: number
+  /** Wave 7: what this person shared of their profile (profile.ts): norms, favourite way, intro. From the wire, validated. This phone only. */
+  theirProfile?: SharedProfile
   /**
    * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
    * they ask further than one step. Absent: the default (passesAsksOn).
@@ -704,6 +707,12 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only when `profileShare` is on, to a connected peer, in a chat text. */
+  profile?: MyProfile
+  /** Wave 7: the "share my profile when we connect" tick. Absent: off. */
+  profileShare?: boolean
+  /** peer id -> fingerprint of the profile text already sent to that peer. */
+  profileSent?: Record<string, string>
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
   /**

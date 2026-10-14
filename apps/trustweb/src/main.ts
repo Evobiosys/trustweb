@@ -97,6 +97,9 @@ import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
+import { addNorm, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import type { MyProfile } from './profile'
+import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { setUpInstall } from './install'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -307,7 +310,9 @@ try {
     const modesFixed = repairShareFields(state)
     // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
     const notesFixed = repairGeneralNotes(state)
-    if (codeFixed || modesFixed || notesFixed) save()
+    // Wave 7 (profile.ts): a stored profile of the wrong shape is dropped.
+    const profileFixed = repairProfile(state)
+    if (codeFixed || modesFixed || notesFixed || profileFixed) save()
   }
 } catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
@@ -1739,6 +1744,7 @@ function personSheet(personId: string): void {
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     sharedReachRow(p),
     noMessengerRow(p),
+    theirProfileBlock(p.name, p.theirProfile, Date.now()),
     channelsView(personChannels(p), { title: S.chTitle, add: S.chAddOther, hint: S.chHint }),
     safetyLink(SafetyPlace.PersonCard, () => openSheet(safetySheetNodes({ place: SafetyPlace.PersonCard, back: { label: p.name || S.safeBackCard, go: () => personSheet(p.id) } }))),
     // Their Mastodon or Pixelfed address only feeds the Feed: shown while the Feed is on (wave 2, P9).
@@ -1909,8 +1915,29 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
     normalize: normalizeHandle,
     ticks,
     changed: hooks.changed,
+    extra: profileRow,
   })
   return box
+}
+
+/** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
+function profileSheet(): void {
+  const s = st()
+  const mine = (): MyProfile => s.profile ?? { norms: [] }
+  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); s.profile = p }
+  openSheet(profileSheetNodes({
+    profile: mine, inventory: () => s.inventory, now: Date.now,
+    commit: () => { save(); profileSheet() },
+    addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
+    removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
+    setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
+    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+  }))
+  sheet.dataset.kind = 'profile'
+}
+
+function profileRow(): HTMLElement {
+  return el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine])
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -2024,6 +2051,15 @@ function onContactText(peer: Peer, text: string): void {
   else holdContact(heldContacts, peer.id, text)
 }
 
+/** Net: a connected phone shared its profile; it lands on their card (profile.ts). Nothing is held for a card that does not exist yet. */
+function onProfileText(peer: Peer, text: string): void {
+  const person = st().people.find((p) => p.peerId === peer.id)
+  if (!person || !receiveProfileText(APP_URL, person, text, Date.now())) return
+  save()
+  toast(S.profReceivedToast(peer.displayName))
+  render()
+}
+
 function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const s = st()
   const now = Date.now()
@@ -2080,6 +2116,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
     case TextKind.Contact: onContactText(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
+    case TextKind.Profile: onProfileText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
