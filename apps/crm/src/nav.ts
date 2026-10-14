@@ -7,7 +7,8 @@ export enum Tab {
   Settings = 'settings',
 }
 
-export const TABS: readonly Tab[] = [Tab.People, Tab.Timeline, Tab.Pipeline, Tab.Settings]
+/** The bottom bar; Settings sits behind the gear at the top right. */
+export const TABS: readonly Tab[] = [Tab.People, Tab.Timeline, Tab.Pipeline]
 
 export enum Section {
   Overdue = 'overdue',

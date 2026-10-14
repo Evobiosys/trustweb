@@ -33,6 +33,13 @@ describe('contacts', () => {
     expect(all.map((g) => g.ring)).toEqual([Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending])
   })
 
+  it('lists Close friend, Friend, Acquaintance, Intending to connect, Unsorted, whatever the input order', () => {
+    const v = view()
+    const order = [Ring.Unsorted, Ring.Intending, Ring.Acquaintance, Ring.Friend, Ring.Close]
+    v.app.people = order.map((ring, i) => ({ ...v.app.people[0], id: `r${i}`, name: `R${i}`, ring }))
+    expect(groupByRing(contactRows(v, '', SortOrder.Name)).map((g) => g.ring)).toEqual([...order].reverse())
+  })
+
   it('counts only current lines', () => {
     const v = view()
     v.app.people[0].lines[0] = { ...v.app.people[0].lines[0], status: 'gone' as never }

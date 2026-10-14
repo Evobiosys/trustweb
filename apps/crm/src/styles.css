@@ -41,7 +41,9 @@ h1,h2,h3{font-family:Optima,Candara,"Gill Sans","Segoe UI",sans-serif; font-weig
 .shell{max-width:430px; min-height:100dvh; margin:0 auto; background:var(--linen); color:var(--ink);
   display:flex; flex-direction:column; position:relative}
 @media (min-width:480px){ .shell{box-shadow:0 0 0 1px var(--line), 0 24px 60px rgba(36,27,46,.18)} }
-.top{padding:20px 16px 8px}
+.top{padding:20px 16px 8px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px}
+.gear{width:44px; height:44px; border:0; border-radius:50%; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex-shrink:0}
+.gear[aria-current="page"]{color:var(--teal)}
 .top h1{font-size:24px}
 .source{font-size:12.5px; color:var(--ink-soft); margin-top:2px}
 .import-row{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px}
@@ -53,7 +55,7 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .privacy{font-size:12px; color:var(--ink-soft); padding:0 16px 88px; text-align:center}
 
 .tabbar{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; z-index:5;
-  display:grid; grid-template-columns:repeat(4,1fr); background:var(--tab-bg); border-top:1px solid var(--line);
+  display:grid; grid-template-columns:repeat(3,1fr); background:var(--tab-bg); border-top:1px solid var(--line);
   backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding-bottom:env(safe-area-inset-bottom)}
 .tab{min-height:56px; border:0; background:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:0 2px}
 .tab[aria-current="page"]{color:var(--teal); box-shadow:inset 0 3px 0 var(--teal)}

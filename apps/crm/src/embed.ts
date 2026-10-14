@@ -19,7 +19,8 @@ const EMBED_CSS = `:host{all:initial; display:block; height:100%}
 .shell{height:100%; min-height:0; max-width:none; box-shadow:none}
 main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
-.tabbar{position:static; transform:none; max-width:none}`
+.tabbar{position:static; transform:none; max-width:none}
+.top{padding-top:0; padding-right:104px}`
 
 function shadowTarget(el: HTMLElement): HTMLElement {
   const root = el.attachShadow({ mode: 'open' })
