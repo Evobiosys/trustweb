@@ -5,7 +5,7 @@ export interface PersonField {
   id: string
   tanaAttributeId: string | null
   label: string
-  type: 'content' | 'checkbox' | 'options' | 'url' | 'instance'
+  type: 'content' | 'checkbox' | 'options' | 'url' | 'instance' | 'number' | 'date'
   options?: { id: string; label: string }[]
   instanceTag?: { id: string; name: string }
   description: string
@@ -32,6 +32,27 @@ export const PERSON_FIELDS: readonly PersonField[] = [
     "label": "hide in trustweb",
     "type": "checkbox",
     "description": "on: never shown in TrustWeb / the CRM (deleted there on next sync)"
+  },
+  {
+    "id": "UAfC4PcYo2po",
+    "tanaAttributeId": "UAfC4PcYo2po",
+    "label": "intending to connect (0-10)",
+    "type": "number",
+    "description": "desire to connect, 0 none .. 10 strongly (TrustWeb Web Curator)"
+  },
+  {
+    "id": "6A0Y1jShWqIg",
+    "tanaAttributeId": "6A0Y1jShWqIg",
+    "label": "intending since",
+    "type": "date",
+    "description": "date the intention was set (TrustWeb)"
+  },
+  {
+    "id": "IVe9VSySDcS1",
+    "tanaAttributeId": "IVe9VSySDcS1",
+    "label": "Notes from TrustWeb",
+    "type": "content",
+    "description": "notes typed in TrustWeb Web Curator"
   },
   {
     "id": "ConGRasNilsz",
@@ -418,37 +439,8 @@ export const PERSON_FIELDS: readonly PersonField[] = [
         "label": "Intending to connect"
       },
       {
-        "id": "family",
-        "label": "Family"
-      },
-      {
         "id": "unsorted",
         "label": "Unsorted"
-      }
-    ]
-  },
-  {
-    "id": "tw-closeness",
-    "tanaAttributeId": null,
-    "label": "Family closeness",
-    "type": "options",
-    "description": "TrustWeb only: how close a family member is (default close friend)",
-    "options": [
-      {
-        "id": "close",
-        "label": "Close friend"
-      },
-      {
-        "id": "friend",
-        "label": "Friend"
-      },
-      {
-        "id": "acquaintance",
-        "label": "Acquaintance"
-      },
-      {
-        "id": "intending",
-        "label": "Intending to connect"
       }
     ]
   },

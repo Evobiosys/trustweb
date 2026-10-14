@@ -30,7 +30,7 @@ export function effectivePerson<T extends Pick<Person, 'name' | 'context'> & { r
   if (!edits) return p
   const v = entityValues(p, baseFields(p), edits)
   const name = 'tw-first' in edits || LAST_NAME_KEY in edits ? [valueText(v['tw-first']), valueText(v[LAST_NAME_KEY])].filter(Boolean).join(' ') : p.name
-  return { ...p, name: name || p.name, context: valueText(v['tw-context']), ...(p.ring ? { ring: v['tw-ring'] as Ring } : {}) }
+  return { ...p, name: name || p.name, context: valueText(v['tw-context']), ...(p.ring ? { ring: (v['tw-ring'] === 'family' ? 'unsorted' : v['tw-ring']) as Ring } : {}) }
 }
 
 export enum Presence {

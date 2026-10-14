@@ -3,7 +3,7 @@
  * A placement is data (this device's, or a network's under Curate); the layout is derived from it and the values. Pure.
  */
 import { ENVIRONMENT_FIELDS } from './environment_fields'
-import { ADHOC, INTENDING_KEY, fieldLabelOf, isSet } from './fields'
+import { ADHOC, fieldLabelOf, intendingOf, isSet } from './fields'
 import type { FieldValues } from './fields'
 import { PERSON_FIELDS } from './person_fields'
 import type { PersonField } from './person_fields'
@@ -59,7 +59,7 @@ export function mergePlacements(layers: readonly Placement[]): Placement {
 /** "Met in which context", or "Intending to connect" while the person is not met yet. */
 export function labelOf(field: PersonField, values: FieldValues): string {
   if (field.id !== 'tw-context') return field.label
-  return values['tw-ring'] === 'intending' || values[INTENDING_KEY] === true ? 'Intending to connect' : 'Met in which context'
+  return values['tw-ring'] === 'intending' || intendingOf(values) >= 1 ? 'Intending to connect' : 'Met in which context'
 }
 
 export type Layout = Record<Section, PersonField[]>

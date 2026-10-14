@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const TYPES = { Content: 'content', Checkbox: 'checkbox', Options: 'options', URL: 'url' }
+const TYPES = { Content: 'content', Checkbox: 'checkbox', Options: 'options', URL: 'url', Date: 'date' }
 
 /** Field label without markup: trailing colon and spaces dropped. */
 export const fieldLabel = (s) => s.replace(/:\s*$/, '').trim()
@@ -17,8 +17,9 @@ export function parseSchema(md) {
     const f = /^- \*\*(.+?)\*\* \(id:([^)]+)\):: (.+)$/.exec(line)
     if (f) {
       const inst = /^Instance of #(.+?) \(id:([^)]+)\)$/.exec(f[3])
-      cur = { id: f[2], tanaAttributeId: f[2], label: fieldLabel(f[1]), type: inst ? 'instance' : TYPES[f[3].trim()] ?? 'content', description: '' }
-      if (inst) cur.instanceTag = { id: inst[2], name: inst[1] }
+      const num = inst?.[1] === 'Number'
+      cur = { id: f[2], tanaAttributeId: f[2], label: fieldLabel(f[1]), type: num ? 'number' : inst ? 'instance' : TYPES[f[3].trim()] ?? 'content', description: '' }
+      if (inst && !num) cur.instanceTag = { id: inst[2], name: inst[1] }
       if (cur.type === 'options') cur.options = []
       fields.push(cur)
       continue
@@ -36,15 +37,14 @@ const TYPE_DECL = `export interface PersonField {
   id: string
   tanaAttributeId: string | null
   label: string
-  type: 'content' | 'checkbox' | 'options' | 'url' | 'instance'
+  type: 'content' | 'checkbox' | 'options' | 'url' | 'instance' | 'number' | 'date'
   options?: { id: string; label: string }[]
   instanceTag?: { id: string; name: string }
   description: string
 }
 `
 
-const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect'], ['family', 'Family'], ['unsorted', 'Unsorted']]
-const CLOSENESS_LABELS = RING_LABELS.slice(0, 4)
+const RING_LABELS = [['close', 'Close friend'], ['friend', 'Friend'], ['acquaintance', 'Acquaintance'], ['intending', 'Intending to connect'], ['unsorted', 'Unsorted']]
 const FAV_LABELS = [['email', 'Email'], ['phone', 'Phone call'], ['sms', 'SMS'], ['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['matrix', 'Matrix']]
 const opts = (pairs) => pairs.map(([id, label]) => ({ id, label }))
 const tw = (id, label, type, description, options) => ({ id, tanaAttributeId: null, label, type, description, ...(options ? { options: opts(options) } : {}) })
@@ -55,7 +55,6 @@ const TRUSTWEB_ONLY = {
     tw('tw-first', 'First name', 'content', 'TrustWeb only: from the Tana name until typed'),
     tw('tw-context', 'Context', 'content', 'TrustWeb only: met in which context, or intending to connect'),
     tw('tw-ring', 'Ring', 'options', 'TrustWeb only', RING_LABELS),
-    tw('tw-closeness', 'Family closeness', 'options', 'TrustWeb only: how close a family member is (default close friend)', CLOSENESS_LABELS),
     tw('tw-fav', 'Favourite way to connect', 'options', 'TrustWeb only', FAV_LABELS),
   ],
   environment: [tw('tw-context', 'Context', 'content', 'TrustWeb only')],

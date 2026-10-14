@@ -245,3 +245,5 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .icon-btn.still{font-size:13px; min-width:24px; min-height:24px; opacity:.7}
 .tana-glyph small{font-size:10px; margin-left:3px}
 .line .line-text{display:block; margin-bottom:6px; border:0; background:none; text-align:left; color:inherit; font:inherit; padding:0}
+.family-dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:6px; vertical-align:middle}
+.rchip.num{min-width:36px; padding:0 8px}

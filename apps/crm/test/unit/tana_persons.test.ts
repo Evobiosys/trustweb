@@ -46,9 +46,23 @@ describe('tana converter: derived rings', () => {
     r2: '- Star\n  - **famous**: [X]\n', r3: '- lena@x.org\n', r4: '- Plain\n', r5: '- Own\n  - **Ring**: Friend\n  - **famous**: [X]\n',
   }
   const { record } = convert(idx, ns, [...PERSON_FIELDS])
-  it('derives family / friend / unsorted and notes it', () => {
-    expect(record.people.map((p) => p.ring)).toEqual(['family', 'friend', 'unsorted', 'unsorted', 'unsorted', 'friend'])
+  it('derives friend / unsorted and notes it; family is a tag, no ring', () => {
+    expect(record.people.map((p) => p.ring)).toEqual(['unsorted', 'friend', 'unsorted', 'unsorted', 'unsorted', 'friend'])
+    expect(record.people[0].fields['LNlpliq4GdNI']).toBe(true)
     expect(record.people[0].lines.at(-1)?.text).toBe('ring: derived')
+  })
+  it('a desire of 1 or more with no closer ring is intending; the old checkbox is ignored', () => {
+    const i = [{ id: 'a', name: 'A', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }, { id: 'b', name: 'B', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' },
+      { id: 'c', name: 'C', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }, { id: 'd', name: 'D', breadcrumb: [], created: '2025-02-20T18:05:49.444Z' }]
+    const n = {
+      a: '- A\n  - **intending to connect (0-10)**: 4\n  - **intending since**: 2026-10-14\n', b: '- B\n  - **intending to connect (0-10)**: 4\n  - **personal connection**: [X]\n',
+      c: '- C\n  - **intending to connect**: [X]\n', d: '- D\n',
+    }
+    const r = convert(i, n, [...PERSON_FIELDS], [], undefined, {}, new Set(), { d: { n: 7, since: '2026-10-13' } }).record.people
+    expect(r.map((p) => p.ring)).toEqual(['intending', 'friend', 'unsorted', 'intending'])
+    expect(r[0].fields).toMatchObject({ UAfC4PcYo2po: '4', '6A0Y1jShWqIg': '2026-10-14' })
+    expect(r[2].fields).not.toHaveProperty('FcZJGS5EH2on')
+    expect(r[3].fields).toMatchObject({ UAfC4PcYo2po: '7', '6A0Y1jShWqIg': '2026-10-13' })
   })
   it('a manual ring wins and carries no derived note', () => {
     expect(record.people[5].lines.some((l) => l.text === 'ring: derived')).toBe(false)

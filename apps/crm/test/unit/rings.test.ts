@@ -1,21 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { Ring } from '../../../trustweb/src/model'
-import { OUT_OF_WEB, RING_COLORS, choiceEdits, ringColor, ringOf } from '../../src/rings'
+import { passesFilters } from '../../src/fields'
+import { OUT_OF_WEB, RING_ORDER, choiceEdits, intendingEdits, ringColor, ringOf } from '../../src/rings'
 
 describe('rings', () => {
-  it('an unknown or older "none" ring is unsorted', () => {
+  it('an unknown, older "none" or "family" ring is unsorted; the order runs from the centre out', () => {
     expect(ringOf('none')).toBe('unsorted')
+    expect(ringOf('family')).toBe('unsorted')
     expect(ringOf('friend')).toBe('friend')
+    expect(RING_ORDER).toEqual(['close', 'friend', 'acquaintance', 'intending', 'unsorted'])
+    expect(ringColor('intending')).toBe('#a5d6a7')
   })
-  it('family takes its purple from the closeness, close friend by default', () => {
-    expect(ringColor('family')).toBe(RING_COLORS.family.close)
-    expect(ringColor('family', { 'tw-closeness': 'friend' })).toBe(RING_COLORS.family.friend)
-    expect(ringColor('close')).toBe(RING_COLORS.close)
-  })
-  it('a choice sets the ring and the checkboxes that follow it, only where they change', () => {
-    expect(choiceEdits('family', {})).toEqual([['tw-ring', 'family'], ['LNlpliq4GdNI', true], ['tw-closeness', 'close']])
-    expect(choiceEdits(Ring.Friend, { LNlpliq4GdNI: true, 'tw-closeness': 'friend' })).toEqual([['tw-ring', 'friend'], ['LNlpliq4GdNI', false]])
-    expect(choiceEdits(Ring.Intending, {})).toEqual([['tw-ring', 'intending'], ['FcZJGS5EH2on', true]])
+  it('a choice sets the ring, and the famous checkbox only where it changes', () => {
+    expect(choiceEdits(Ring.Friend, {})).toEqual([['tw-ring', 'friend']])
     expect(choiceEdits(OUT_OF_WEB, {})).toEqual([['tw-ring', 'unsorted'], ['6QzDHIfrlmSz', true]])
+    expect(choiceEdits(Ring.Close, { '6QzDHIfrlmSz': true })).toEqual([['tw-ring', 'close'], ['6QzDHIfrlmSz', false]])
+  })
+  it('leaving someone unsorted keeps them in intending when they have a desire', () => {
+    expect(choiceEdits('unsorted', { UAfC4PcYo2po: '4' })).toEqual([['tw-ring', 'intending']])
+  })
+  it('a desire sets number, date and the intending ring unless a closer ring holds', () => {
+    expect(intendingEdits(4, { 'tw-ring': 'unsorted' }, '2026-10-14')).toEqual([['UAfC4PcYo2po', '4'], ['6A0Y1jShWqIg', '2026-10-14'], ['tw-ring', 'intending']])
+    expect(intendingEdits(4, { 'tw-ring': 'friend' }, '2026-10-14')).toEqual([['UAfC4PcYo2po', '4'], ['6A0Y1jShWqIg', '2026-10-14']])
+    expect(intendingEdits(0, { 'tw-ring': 'intending', UAfC4PcYo2po: '4' }, '2026-10-15')).toEqual([['UAfC4PcYo2po', '0'], ['6A0Y1jShWqIg', '2026-10-15'], ['tw-ring', 'unsorted']])
+    expect(intendingEdits(4, { UAfC4PcYo2po: '4' }, '2026-10-15')).toEqual([])
+    expect(intendingEdits(99, {}, 'd')[0]).toEqual(['UAfC4PcYo2po', '10'])
+  })
+  it('a famous person with a desire to connect still shows', () => {
+    const f = { hideDeceased: true, hideFamous: true, onlyConnection: false, rules: [] }
+    expect(passesFilters({ '6QzDHIfrlmSz': true }, f)).toBe(false)
+    expect(passesFilters({ '6QzDHIfrlmSz': true, UAfC4PcYo2po: '4' }, f)).toBe(true)
   })
 })

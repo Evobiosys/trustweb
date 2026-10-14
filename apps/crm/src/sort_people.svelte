@@ -1,12 +1,13 @@
 <script lang="ts">
   import Avatar from './avatar.svelte'
   import { shownName } from './display'
-  import { fieldLabelOf, valueText } from './fields'
+  import { fieldLabelOf, intendingOf, valueText } from './fields'
   import { closeSort } from './nav.svelte'
+  import IntendingChips from './intending_chips.svelte'
   import RingChips from './ring_chips.svelte'
-  import { UNSORTED } from './rings'
+  import { FAMILY_KEY, UNSORTED } from './rings'
   import type { Choice } from './rings'
-  import { fileUnder, restore, unsortedIds, valuesOf } from './sorting.svelte'
+  import { fileUnder, restore, setFamily, setIntending, unsortedIds, valuesOf } from './sorting.svelte'
   import type { Undo } from './sorting.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
@@ -22,6 +23,12 @@
 
   function choose(c: Choice): void {
     history.push({ index, undo: c === UNSORTED ? [] : fileUnder(ids[index], c) })
+    index++
+  }
+
+  function desire(n: number): void {
+    if (n === 0) return
+    history.push({ index, undo: setIntending(ids[index], n) })
     index++
   }
 
@@ -48,7 +55,8 @@
       <h3>{shownName(person.name)}</h3>
       {#if person.context}<p class="ctx">{person.context}</p>{/if}
       {#each details as d (d)}<p class="meta">{d}</p>{:else}<p class="muted">{S.sortNoField}</p>{/each}
-      <RingChips onchoose={choose} />
+      <RingChips family={valuesOf(person.id)[FAMILY_KEY] === true} onchoose={choose} onfamily={(on): void => { setFamily(person.id, on) }} />
+      <IntendingChips value={intendingOf(valuesOf(person.id))} onchoose={desire} />
       <button class="quiet" data-action="hide-person" onclick={hide}>🗑 {S.hideFromTrustweb}</button>
     </div>
   {:else}

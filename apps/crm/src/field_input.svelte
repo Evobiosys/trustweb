@@ -14,6 +14,7 @@
     nosync?: { reason: string; href?: string }
   }
   const EMAIL_KEY = 'Bxw7k4FWptqp'
+  const INPUT_TYPE: Record<string, string> = { url: 'url', number: 'number', date: 'date' }
   const { field, label, value, onchange, nosync }: Props = $props()
 
   let why = $state(false)
@@ -49,7 +50,7 @@
       {:else if field?.id === EMAIL_KEY && text}
         <a class="fav" href={`mailto:${text}`} title={text} aria-label={label} data-email>✉</a>
       {:else}
-        <input class="field" type={field?.type === 'url' ? 'url' : 'text'} value={text} onchange={(e): void => onchange(str(e))} />
+        <input class="field" type={INPUT_TYPE[field?.type ?? ''] ?? 'text'} value={text} onchange={(e): void => onchange(str(e))} />
       {/if}
     </label>
   {/if}

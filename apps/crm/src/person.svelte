@@ -7,16 +7,18 @@
   import EventRow from './event_row.svelte'
   import FollowUpForm from './followup_form.svelte'
   import InteractionForm from './interaction_form.svelte'
+  import IntendingChips from './intending_chips.svelte'
   import RingLabel from './ring_label.svelte'
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { norm } from './contacts'
-  import { baseFields } from './fields'
+  import { SINCE_KEY, baseFields, intendingOf, valueText } from './fields'
   import { Kind } from './placement'
   import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { editLine, store } from './state.svelte'
+  import { setIntending } from './sorting.svelte'
   import { hideFromTrustweb } from './sync.svelte'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
@@ -85,6 +87,8 @@
       </div>
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
+
+    <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
 
     <ContactInfo {person} />
 

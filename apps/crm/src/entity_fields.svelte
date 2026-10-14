@@ -1,11 +1,12 @@
 <script lang="ts">
   import { drag, grip } from './drag.svelte'
   import FieldInput from './field_input.svelte'
-  import { fieldLabelOf, isSet } from './fields'
+  import { INTENDING_KEY, fieldLabelOf, isSet, valueText } from './fields'
   import type { FieldValue, FieldValues } from './fields'
   import { Kind, Section, labelOf } from './placement'
   import { layoutFor, placeField } from './placement.svelte'
   import { prefs, savePrefs, tanaOn } from './prefs.svelte'
+  import { setIntending } from './sorting.svelte'
   import { S } from './strings'
   import { saveField } from './sync.svelte'
   import { planFieldSync } from './tana_sync'
@@ -41,7 +42,8 @@
   }
 
   function save(key: string, v: FieldValue): void {
-    saveField(id, key, v)
+    if (key === INTENDING_KEY) setIntending(id, Number(valueText(v)))
+    else saveField(id, key, v)
   }
 </script>
 

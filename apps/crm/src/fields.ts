@@ -16,7 +16,11 @@ export const ADHOC = 'adhoc:'
 export const FAMOUS_KEY = '6QzDHIfrlmSz'
 /** The Tana checkbox "hide in trustweb". */
 export const HIDE_KEY = '4J9bhDw1UdTj'
-export const INTENDING_KEY = 'FcZJGS5EH2on'
+/** "Intending to connect (0-10)", "intending since" and "Notes from TrustWeb" (the old checkbox FcZJGS5EH2on is ignored). */
+export const INTENDING_KEY = 'UAfC4PcYo2po'
+export const SINCE_KEY = '6A0Y1jShWqIg'
+export const NOTES_KEY = 'IVe9VSySDcS1'
+export const MAX_INTENDING = 10
 export const DECEASED_KEY = '__XNQ42Dtiwx'
 export const CONNECTION_KEY = 'ConGRasNilsz'
 
@@ -51,10 +55,16 @@ export function baseFields(person: object): FieldValues | undefined {
   return (person as { fields?: FieldValues }).fields
 }
 
+/** The desire to connect, 0 to 10; anything unreadable is 0. */
+export function intendingOf(values: FieldValues): number {
+  const n = Math.round(Number(valueText(values[INTENDING_KEY])))
+  return n >= 1 ? Math.min(n, MAX_INTENDING) : 0
+}
+
 /** Whether a person (their merged values) passes the People filters. */
 export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[] }): boolean {
   if (f.hideDeceased && values[DECEASED_KEY] === true) return false
-  if (f.hideFamous && values[FAMOUS_KEY] === true) return false
+  if (f.hideFamous && values[FAMOUS_KEY] === true && intendingOf(values) === 0) return false
   if (f.onlyConnection && values[CONNECTION_KEY] !== true) return false
   return f.rules.every((r) => valueText(values[r.key]).toLowerCase().includes(r.text.toLowerCase()))
 }
