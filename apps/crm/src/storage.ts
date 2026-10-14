@@ -29,6 +29,8 @@ const PERSONA_RE = /^[a-z0-9-]{1,24}$/
 export enum Source {
   TrustWeb = 'trustweb',
   Imported = 'imported',
+  /** Dev server started with TW_CRM_RECORD: that file is the record. */
+  Record = 'record',
   Sample = 'sample',
 }
 

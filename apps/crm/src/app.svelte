@@ -42,7 +42,7 @@
 <div class="shell">
   <header class="top">
     <h1>{S.appName}</h1>
-    <p class="source">{S.source[store.source]}</p>
+    <p class="source">{S.source[store.source]}{store.source === Source.Record ? ` (${store.app.people.length})` : ''}</p>
     <div class="import-row">
       <label class="file-btn">
         {S.importFile}

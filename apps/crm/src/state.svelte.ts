@@ -40,10 +40,11 @@ function crmIsEmpty(crm: CrmState): boolean {
 function start(): Store {
   const persona = 'me'
   const now = Date.now()
-  const trustweb = readTrustWeb()
-  const imported = trustweb ? null : readImported()
-  const source = trustweb ? Source.TrustWeb : imported ? Source.Imported : Source.Sample
-  const app = trustweb ?? imported ?? sampleApp(now)
+  const record = __TW_RECORD__ ? parseImport(__TW_RECORD__) : null
+  const trustweb = record ? null : readTrustWeb()
+  const imported = record || trustweb ? null : readImported()
+  const source = record ? Source.Record : trustweb ? Source.TrustWeb : imported ? Source.Imported : Source.Sample
+  const app = record ?? trustweb ?? imported ?? sampleApp(now)
   let crm = loadCrm(persona)
   if (source === Source.Sample && crmIsEmpty(crm)) {
     crm = sampleCrm(now)

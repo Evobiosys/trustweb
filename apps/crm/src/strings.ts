@@ -88,6 +88,7 @@ export const S = {
   source: {
     [Source.TrustWeb]: 'Reading TrustWeb\'s record on this phone',
     [Source.Imported]: 'Reading an imported export',
+    [Source.Record]: 'Tana persons',
     [Source.Sample]: 'Sample data (fictional)',
   } as Record<Source, string>,
   importFile: 'Import a TrustWeb export',

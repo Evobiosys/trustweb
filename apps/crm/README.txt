@@ -13,6 +13,14 @@ WHAT IT READS AND WRITES
   Model   src/model.ts adds Interaction, FollowUp, Stage, ContactPoint on top of apps/trustweb/src/model.ts, which
           is imported as types and not changed.
 
+DEV RECORD (dev server only; a build ignores it)
+  TW_CRM_RECORD=<path to an AppState json> npm run dev   loads that file as the record instead of the sample set; the
+                                 header says "Tana persons (n)". Convert a Tana #person export first:
+  node scripts/tana_persons_to_record.mjs <persons-index.json> <persons-nodes.json> <out.json>
+                                 per person: name, one note line per field / child bullet, met date = node created,
+                                 id tana-<node id>, "Google Calendar Contacts" kept as a tag; file-only, no network.
+                                 Keep the output outside the repo (private data).
+
 RUN (from this directory; the toolchain is project-local, node >= 20)
   /opt/homebrew/bin/npm install          once; installs into apps/crm/node_modules only
   npm run dev                            http://127.0.0.1:5195/

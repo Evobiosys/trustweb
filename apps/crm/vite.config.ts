@@ -6,6 +6,7 @@
 //   npm run build    svelte-check, then dist/ (base /crm/ like /trustweb/)
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
@@ -15,6 +16,10 @@ const repo = path.resolve(here, '../..')
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? (process.env.CRM_BASE ?? '/crm/') : '/',
   plugins: [svelte()],
+  // Dev only: TW_CRM_RECORD=<AppState json> replaces the sample set (README.txt). A build gets null.
+  define: {
+    __TW_RECORD__: JSON.stringify(command === 'serve' && process.env.TW_CRM_RECORD ? readFileSync(process.env.TW_CRM_RECORD, 'utf8') : null),
+  },
   publicDir: false,
   build: {
     target: 'es2022',
