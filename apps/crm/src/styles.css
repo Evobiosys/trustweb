@@ -243,5 +243,9 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .tana-glyph small{font-size:10px; margin-left:3px}
 .line .line-text{display:block; margin-bottom:6px; border:0; background:none; text-align:left; color:inherit; font:inherit; padding:0}
 .family-dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:6px; vertical-align:middle}
+.ring-pop{flex-basis:100%; position:relative; padding-right:36px}
+.ring-x{position:absolute; top:4px; right:0; font-size:18px}
+.ring-more{display:grid; gap:8px; margin:8px 0}
+.ring-sheet{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--tint-warn); color:var(--warn-ink); font-size:13px}
 .rchip.num{min-width:36px; padding:0 8px}
 .rchip.suggested,.ring-label.suggested{border-style:dashed; border-width:2.5px}

@@ -8,11 +8,13 @@ import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
 import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY, SUGGESTED_NOTE } from './rings'
 import { parseSuggestions } from './suggestions'
-import { connect, nodeIdIn, planFieldSync } from './tana_sync'
+import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 
 const MAX_LOG = 100
 const TANA_PREFIX = 'tana-'
+/** The queue key of "take #person off the node" (not a field). */
+const UNTAG_KEY = '#untag'
 
 export const sync = $state({ running: false })
 
@@ -60,6 +62,16 @@ export function addNote(personId: string, text: string): void {
   noteToTana(personId, t)
 }
 
+/** Takes #person off the node in Tana (a queued edit, like the others) and the person out of every list here. */
+export function untagPerson(personId: string): void {
+  if (tanaOn() && knownNode(personId)) {
+    prefs.queue.push({ personId, key: UNTAG_KEY })
+    savePrefs()
+    if (prefs.autoSync) void flush()
+  }
+  hidePerson(personId)
+}
+
 /** "Hide from TrustWeb": ticks the Tana checkbox through the sync and takes the person out of the lists at once. */
 export function hideFromTrustweb(personId: string): void {
   saveField(personId, HIDE_KEY, true)
@@ -71,9 +83,12 @@ export function unhideInTrustweb(personId: string): void {
   unhidePerson(personId)
 }
 
+function knownNode(personId: string): string | undefined {
+  return personId.startsWith(TANA_PREFIX) ? personId.slice(TANA_PREFIX.length) : prefs.nodeIds[personId]
+}
+
 async function nodeFor(call: ToolCall, personId: string): Promise<string> {
-  if (personId.startsWith(TANA_PREFIX)) return personId.slice(TANA_PREFIX.length)
-  const known = prefs.nodeIds[personId]
+  const known = knownNode(personId)
   if (known) return known
   const person = store.app.people.find((p) => p.id === personId)
   if (!person) throw new Error('person not found')
@@ -89,6 +104,11 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
 }
 
 async function push(call: ToolCall, item: { personId: string; key: string; append?: string }): Promise<void> {
+  if (item.key === UNTAG_KEY) {
+    await call('tag', { nodeId: await nodeFor(call, item.personId), action: 'remove', tagIds: [PERSON_TAG_ID] })
+    log(`${item.personId}: #person removed in Tana`)
+    return
+  }
   const person = store.app.people.find((p) => p.id === item.personId)
   const name = person?.name ?? store.crm.hiddenPeople?.find((h) => h.id === item.personId)?.name ?? item.personId
   if (item.append) {
