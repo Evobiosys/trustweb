@@ -10,7 +10,15 @@ import type { Person } from './model'
 export const NETWORK_DEFAULT_ABOVE = 60
 export const LAYOUT_ITERATIONS = 300
 
-const REST: Record<Ring, number> = { [Ring.Close]: 60, [Ring.Friend]: 100, [Ring.Acquaintance]: 150, [Ring.Intending]: 200 }
+/** Ring values the record may carry beyond `Ring` (rings v2): family (purple), unsorted (grey, old "none"), outside ("not in my web"). */
+export type Tier = Ring | 'family' | 'unsorted' | 'outside'
+const REST: Record<Tier, number> = { [Ring.Close]: 60, [Ring.Friend]: 100, [Ring.Acquaintance]: 150, [Ring.Intending]: 200, family: 60, unsorted: 250, outside: 250 }
+/** Four greens (darkest = closest), family purple, unsorted grey. */
+export const TIER_COLOUR: Record<Tier, string> = {
+  [Ring.Close]: '#0b5d2a', [Ring.Friend]: '#2e8b4a', [Ring.Acquaintance]: '#6fbf73', [Ring.Intending]: '#a9dca0', family: '#7a3fc4', unsorted: '#9a9aa6', outside: '#9a9aa6',
+}
+const F_FAMOUS = '6QzDHIfrlmSz'
+const F_DECEASED = '__XNQ42Dtiwx'
 const PEER_REST = 40
 const LINK_REST = 50
 /** Tana attribute ids on a person's `fields` (a record imported from Tana). */
@@ -25,7 +33,7 @@ export interface GraphNode {
   name: string
   context: string
   /** Absent on the centre node (me). */
-  ring?: Ring
+  tier?: Tier
   x: number
   y: number
   vx: number
@@ -97,6 +105,23 @@ export function personLinks(people: readonly Person[]): [number, number, boolean
   return out
 }
 
+/** The tier a person is drawn in. Family sits at the distance of its `closeness` ring (default close). */
+export function tierOf(p: Person): Tier {
+  const ring = p.ring as string
+  if (ring === 'outside') return 'outside'
+  if (ring === 'family' || ring === 'unsorted') return ring
+  if ((Object.values(Ring) as string[]).includes(ring)) return p.ring
+  // old "none": calendar ids (an "@" in the name), famous and deceased people are not in my web
+  const f = fieldsOf(p)
+  return p.name.includes('@') || f[F_FAMOUS] || f[F_DECEASED] ? 'outside' : 'unsorted'
+}
+
+function restOf(p: Person, t: Tier): number {
+  if (t !== 'family') return REST[t]
+  const c = (p as Person & { closeness?: Tier }).closeness
+  return REST[c && c !== 'family' && c in REST ? c : Ring.Close]
+}
+
 export function buildGraph(me: { id: string; displayName: string }, people: readonly Person[]): Graph {
   const nodes: GraphNode[] = [{ id: me.id, name: me.displayName, context: '', x: 0, y: 0, vx: 0, vy: 0, r: 12, pinned: true }]
   const edges: GraphEdge[] = []
@@ -104,8 +129,10 @@ export function buildGraph(me: { id: string; displayName: string }, people: read
   for (const p of people) {
     const angle = (hash(p.id) / 4294967296) * Math.PI * 2
     const i = nodes.length
-    nodes.push({ id: p.id, name: p.name, context: p.context, ring: p.ring, x: Math.cos(angle) * REST[p.ring], y: Math.sin(angle) * REST[p.ring], vx: 0, vy: 0, r: radiusOf(p), pinned: false, faint: p.lines.length === 0 && Object.keys(fieldsOf(p)).length === 0 })
-    edges.push({ a: 0, b: i, rest: REST[p.ring], dashed: p.ring === Ring.Intending })
+    const tier = tierOf(p)
+    const rest = restOf(p, tier)
+    nodes.push({ id: p.id, name: p.name, context: p.context, tier, x: Math.cos(angle) * rest, y: Math.sin(angle) * rest, vx: 0, vy: 0, r: radiusOf(p), pinned: false, faint: p.lines.length === 0 && Object.keys(fieldsOf(p)).length === 0 })
+    edges.push({ a: 0, b: i, rest, dashed: tier === Ring.Intending })
     const key = p.context.trim().toLowerCase()
     if (!key) continue
     const prev = lastInContext.get(key)

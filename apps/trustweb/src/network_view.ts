@@ -4,9 +4,8 @@
  * a tap on a person opens their card. Everything local (I1): the record never leaves this phone.
  */
 import { el } from '../../demo/src/ui/dom'
-import { Ring } from './model'
 import type { Person } from './model'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, buildGraph, matchIds, shake, step } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, buildGraph, matchIds, shake, step, tierOf, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphNode } from './network_graph'
 import { S } from './strings'
 
@@ -21,9 +20,8 @@ const SETTINGS_KEY = 'trustweb.ui.netSettings'
 const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7', label: '#c5d6d9' }
 const STEPS_PER_FRAME = 20
 const TAP_SLOP = 6
-const RING_VAR: Record<Ring, string> = { [Ring.Close]: '--violet', [Ring.Friend]: '--electric', [Ring.Acquaintance]: '--ink-soft', [Ring.Intending]: '' }
 
-/** Per device: the Logseq look, the forces, and whether people outside my web (ring "intending") are drawn. */
+/** Per device: the Logseq look, the forces, and whether people outside my web (tier "outside") are drawn. */
 interface Settings { logseq: boolean; showAll: boolean; forces: Forces }
 function loadSettings(): Settings {
   try {
@@ -47,12 +45,12 @@ interface Cached { key: string; graph: Graph; iteration: number; camera: Camera 
 let cached: Cached | null = null
 
 function keyOf(o: NetworkOptions): string {
-  return o.me.id + '|' + o.people.map((p) => p.id + p.ring + p.context + p.name).join('|')
+  return o.me.id + '|' + o.people.map((p) => p.id + p.ring + tierOf(p) + p.context + p.name).join('|')
 }
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
-  const people = settings.showAll ? o.people : o.people.filter((p) => p.ring !== Ring.Intending)
+  const people = settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')
   const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
   if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
   const state = cached
@@ -79,7 +77,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       oninput: (e: Event) => { settings.forces[k] = Number((e.target as HTMLInputElement).value); reheat() } })])
   const exportPng = (): void => { draw(); canvas.toBlob((b) => { if (b) download('network.png', b) }, 'image/png') }
   const exportJson = (): void => {
-    const data = { nodes: g.nodes.map((v) => ({ id: v.id, name: v.name, ring: v.ring ?? null })), edges: g.edges.map((e) => ({ a: g.nodes[e.a].id, b: g.nodes[e.b].id })) }
+    const data = { nodes: g.nodes.map((v) => ({ id: v.id, name: v.name, tier: v.tier ?? null })), edges: g.edges.map((e) => ({ a: g.nodes[e.a].id, b: g.nodes[e.b].id })) }
     download('network.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }))
   }
   const menu = el('div', { class: 'net-menu', hidden: '' }, [
@@ -114,11 +112,8 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     return best
   }
 
-  const colour = (v: GraphNode): string => {
-    const css = getComputedStyle(document.documentElement)
-    if (v.ring === undefined) return css.getPropertyValue('--coral').trim() || '#FF715B'
-    return RING_VAR[v.ring] ? css.getPropertyValue(RING_VAR[v.ring]).trim() : '#D8B978'
-  }
+  const colour = (v: GraphNode): string =>
+    v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : TIER_COLOUR[v.tier]
 
   const draw = (): void => {
     if (!ctx) return
@@ -132,13 +127,13 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (lq) { ctx.fillStyle = LOGSEQ.bg; ctx.fillRect(0, 0, w, h) }
     const filtering = matches.size > 0 || search.value.trim() !== ''
     const focus = hover ? new Set<number>([g.nodes.indexOf(hover), ...near[g.nodes.indexOf(hover)]]) : null
-    const inFocus = (i: number): boolean => (!focus || focus.has(i)) && (!filtering || matches.has(g.nodes[i].id) || g.nodes[i].ring === undefined)
+    const inFocus = (i: number): boolean => (!focus || focus.has(i)) && (!filtering || matches.has(g.nodes[i].id) || g.nodes[i].tier === undefined)
     ctx.lineWidth = lq ? 0.6 : 1
     for (const e of g.edges) {
       const a = g.nodes[e.a]
       const b = g.nodes[e.b]
       const lit = lq ? !focus || (focus.has(e.a) && focus.has(e.b)) : !filtering || matches.has(a.id) || matches.has(b.id)
-      ctx.strokeStyle = lq ? LOGSEQ.edge : colour(b.ring !== undefined ? b : a)
+      ctx.strokeStyle = lq ? LOGSEQ.edge : colour(b.tier !== undefined ? b : a)
       ctx.globalAlpha = lit ? (lq ? (focus ? 0.8 : 0.3) : e.thin ? 0.14 : 0.28) : 0.05
       ctx.setLineDash(e.dashed ? [3, 4] : [])
       ctx.beginPath()
@@ -151,7 +146,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
     g.nodes.forEach((v, i) => {
-      const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.ring === undefined
+      const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
       const x = v.x * c.k + c.x
       const y = v.y * c.k + c.y
       if (x < -20 || y < -20 || x > w + 20 || y > h + 20) return
@@ -165,7 +160,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
         ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
         ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
         ctx.fillText(v.name, x, y + rad + 10)
-      } else if (v === hover || matches.has(v.id) || v.ring === undefined || (c.k >= settings.forces.labelZoom && lit)) {
+      } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
         ctx.globalAlpha = 1
         ctx.fillStyle = ink
         ctx.fillText(v.name, x, y + rad + 12)
@@ -236,7 +231,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (!tap || was !== 1 || travelled > TAP_SLOP) return
     const p = local(e)
     const v = hit(p.x, p.y)
-    if (v) (v.ring === undefined ? o.openMe() : o.openPerson(v.id))
+    if (v) (v.tier === undefined ? o.openMe() : o.openPerson(v.id))
   }
   canvas.addEventListener('pointerup', (e) => release(e, true))
   canvas.addEventListener('pointercancel', (e) => release(e, false))

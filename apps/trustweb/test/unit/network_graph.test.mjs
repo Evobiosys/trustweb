@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step } from '../../src/network_graph.ts'
+import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step, tierOf } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -38,7 +38,7 @@ describe('network graph', () => {
     settle(g)
     expect(g.nodes.every((v) => Number.isFinite(v.x) && Number.isFinite(v.y))).toBe(true)
     expect(g.nodes[0]).toMatchObject({ x: 0, y: 0 })
-    const mean = (ring) => { const v = g.nodes.filter((n) => n.ring === ring); return v.reduce((s, n) => s + Math.hypot(n.x, n.y), 0) / v.length }
+    const mean = (ring) => { const v = g.nodes.filter((n) => n.tier === ring); return v.reduce((s, n) => s + Math.hypot(n.x, n.y), 0) / v.length }
     expect(mean(Ring.Close)).toBeLessThan(mean(Ring.Intending))
     const g2 = buildGraph(me, people)
     settle(g2)
@@ -103,5 +103,20 @@ describe('forces', () => {
     const g = buildGraph(me, people)
     for (let i = 0; i < LAYOUT_ITERATIONS; i++) step(g, alphaAt(i), { ...DEFAULT_FORCES, collide: 30 })
     expect(g.nodes.every((v) => Number.isFinite(v.x))).toBe(true)
+  })
+
+  it('reads tiers: new values, old none as unsorted, famous/deceased/calendar ids outside', () => {
+    const p = (ring, extra = {}) => ({ ...person('x', ring), ...extra })
+    expect(tierOf(p('family'))).toBe('family')
+    expect(tierOf(p('unsorted'))).toBe('unsorted')
+    expect(tierOf(p('none'))).toBe('unsorted')
+    expect(tierOf(p('none', { fields: { __XNQ42Dtiwx: true } }))).toBe('outside')
+    expect(tierOf(p('none', { name: 'a@b.c' }))).toBe('outside')
+    expect(tierOf(p(Ring.Intending))).toBe(Ring.Intending)
+  })
+
+  it('lays family at its closeness, unsorted farthest', () => {
+    const g = buildGraph(me, [{ ...person('f', 'family'), closeness: Ring.Friend }, person('u', 'none'), person('c', Ring.Close)])
+    expect(g.edges.map((e) => e.rest)).toEqual([100, 250, 60])
   })
 })
