@@ -1,0 +1,17 @@
+garbage before the first card
+BEGIN:VCARD
+VERSION:3.0
+FN:No End Card
+TEL:+43 660 5550144
+BEGIN:VCARD
+VERSION:3.0
+FN:Valid After Broken
+EMAIL:valid@example.at
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+NOTE:only a note, no name
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Truncated At End
