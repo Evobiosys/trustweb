@@ -14,13 +14,14 @@ const asShadowCss = (text: string): string => text
   .replace(/:root\b/g, ':host')
   .replace(/^(html|body)\b/gm, ':host')
 
-/** The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. */
+/** The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The gear rides on the sheet's × row (the host puts the × at the top right), just left of it. */
 const EMBED_CSS = `:host{all:initial; display:block; height:100%}
 .shell{height:100%; min-height:0; max-width:none; box-shadow:none}
 main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
 .tabbar{position:static; transform:none; max-width:none}
-.top{padding-top:0; padding-right:104px}`
+.shell .top{position:relative; padding-top:4px}
+.shell .gear{position:absolute; top:0; right:92px}`
 
 function shadowTarget(el: HTMLElement): HTMLElement {
   const root = el.attachShadow({ mode: 'open' })
