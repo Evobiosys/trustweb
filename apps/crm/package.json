@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
-  "description": "TrustWeb CRM: contacts, timeline, pipeline and follow-ups over TrustWeb's own record, local-first",
+  "description": "Web Curator: contacts, timeline, pipeline and follow-ups over TrustWeb's own record, local-first",
   "type": "module",
   "scripts": {
     "dev": "vite",

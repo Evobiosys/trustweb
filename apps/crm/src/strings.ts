@@ -11,7 +11,7 @@ import { Source } from './storage'
 import { SortOrder } from './contacts'
 
 export const S = {
-  appName: 'TrustWeb CRM',
+  appName: 'Web Curator',
   tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', followUps: 'Follow-ups', settings: 'Settings' },
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,

@@ -1,4 +1,4 @@
-TrustWeb CRM (apps/crm)  -  skeleton, 2026-10-06
+Web Curator (apps/crm, was TrustWeb CRM)  -  skeleton, 2026-10-06
 
 A personal CRM over TrustWeb's own record: the people in your rings, their note lines, a timeline of when you
 met someone and what happened since, follow-ups, and a pipeline over the lines tagged opportunity, looking or
