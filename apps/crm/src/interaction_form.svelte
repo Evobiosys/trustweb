@@ -2,6 +2,7 @@
   import { INTERACTION_KINDS, InteractionKind } from './model'
   import { inputToAt, todayInputValue } from './dates'
   import { addInteraction } from './state.svelte'
+  import { noteToTana } from './sync.svelte'
   import { S } from './strings'
 
   interface Props {
@@ -19,7 +20,9 @@
   function submit(e: SubmitEvent): void {
     e.preventDefault()
     if (!ready) return
-    addInteraction(personId, kind, text, place, inputToAt(date, Date.now()))
+    const at = inputToAt(date, Date.now())
+    addInteraction(personId, kind, text, place, at)
+    if (kind === InteractionKind.Note) noteToTana(personId, text, at)
     onclose()
   }
 </script>

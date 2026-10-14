@@ -46,8 +46,8 @@ export interface Prefs {
   workspaceId: string
   /** Tana node new people are created under; empty = today's day node. */
   parentNodeId: string
-  /** Edits waiting for Tana: coalesced per person and field; the value is read at sync time. */
-  queue: { personId: string; key: string }[]
+  /** Edits waiting for Tana: coalesced per person and field; the value is read at sync time. `append` = one line to add to a multi-line field (notes), never coalesced. */
+  queue: { personId: string; key: string; append?: string }[]
   /** Tana node ids of people created from TrustWeb. */
   nodeIds: Record<string, string>
   log: string[]

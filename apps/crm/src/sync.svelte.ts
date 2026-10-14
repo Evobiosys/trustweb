@@ -1,8 +1,10 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
-import { mergedFields, baseFields, HIDE_KEY } from './fields'
+import { dayKey } from './dates'
+import { mergedFields, baseFields, HIDE_KEY, NOTES_KEY } from './fields'
+import { InteractionKind } from './model'
 import type { FieldValue } from './fields'
 import { prefs, savePrefs, tanaOn } from './prefs.svelte'
-import { hidePerson, setField, store, unhidePerson } from './state.svelte'
+import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
 import { connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 
@@ -20,7 +22,7 @@ const DEBOUNCE_MS = 2000
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function enqueue(personId: string, key: string): void {
-  if (!prefs.queue.some((q) => q.personId === personId && q.key === key)) prefs.queue.push({ personId, key })
+  if (!prefs.queue.some((q) => q.personId === personId && q.key === key && !q.append)) prefs.queue.push({ personId, key })
   savePrefs()
   void flush()
 }
@@ -30,13 +32,29 @@ export function saveField(personId: string, key: string, value: FieldValue): voi
   setField(personId, key, value)
   if (!tanaOn() || 'manual' in planFieldSync(key, value)) return
   if (!prefs.autoSync) {
-    if (!prefs.queue.some((q) => q.personId === personId && q.key === key)) prefs.queue.push({ personId, key })
+    if (!prefs.queue.some((q) => q.personId === personId && q.key === key && !q.append)) prefs.queue.push({ personId, key })
     savePrefs()
     return
   }
   const id = `${personId}|${key}`
   clearTimeout(timers.get(id))
   timers.set(id, setTimeout(() => { timers.delete(id); enqueue(personId, key) }, DEBOUNCE_MS))
+}
+
+/** Queues one note line ("2026-10-14 text") for Tana's "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
+export function noteToTana(personId: string, text: string, at: number = Date.now()): void {
+  if (!tanaOn()) return
+  prefs.queue.push({ personId, key: NOTES_KEY, append: `${dayKey(at)} ${text.replace(/\s+/g, ' ').trim()}` })
+  savePrefs()
+  if (prefs.autoSync) void flush()
+}
+
+/** A typed note: saved at once as a Note on the timeline, and queued for Tana. */
+export function addNote(personId: string, text: string): void {
+  const t = text.trim()
+  if (!t) return
+  addInteraction(personId, InteractionKind.Note, t)
+  noteToTana(personId, t)
 }
 
 /** "Hide from TrustWeb": ticks the Tana checkbox through the sync and takes the person out of the lists at once. */
@@ -67,9 +85,14 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
   return made
 }
 
-async function push(call: ToolCall, item: { personId: string; key: string }): Promise<void> {
+async function push(call: ToolCall, item: { personId: string; key: string; append?: string }): Promise<void> {
   const person = store.app.people.find((p) => p.id === item.personId)
   const name = person?.name ?? store.crm.hiddenPeople?.find((h) => h.id === item.personId)?.name ?? item.personId
+  if (item.append) {
+    await call('set_field_content', { nodeId: await nodeFor(call, item.personId), attributeId: item.key, content: item.append, mode: 'append' })
+    log(`${name}: note -> Tana ok`)
+    return
+  }
   const value = mergedFields(person ? baseFields(person) : undefined, store.crm.personFields?.[item.personId])[item.key]
   const op = planFieldSync(item.key, value)
   if ('manual' in op) return

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { LineStatus, Ring } from '../../trustweb/src/model'
   import Avatar from './avatar.svelte'
+  import AddNote from './add_note.svelte'
   import ContactInfo from './contact_info.svelte'
   import { fmtDate } from './dates'
   import { shownName } from './display'
@@ -118,6 +119,8 @@
     {:else}
       <p class="muted">{S.sheetNoNotes}</p>
     {/each}
+
+    <AddNote personId={person.id} />
 
     <h3>{S.personTimeline}</h3>
     <LogNow personId={person.id} />

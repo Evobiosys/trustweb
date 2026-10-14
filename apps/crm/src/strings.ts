@@ -30,6 +30,7 @@ export const S = {
   contactPointLabel: { [ContactPointKind.Phone]: 'Phone', [ContactPointKind.Email]: 'Email' } as Record<ContactPointKind, string>,
   openIn: (channel: string) => `Open in ${channel}`,
   notes: 'Notes',
+  addNote: 'Add a note',
   personTimeline: 'What happened',
   addInteraction: 'Note what happened',
   addFollowUp: 'Remind me',
