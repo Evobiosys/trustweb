@@ -6,6 +6,7 @@
 //   npm run build    svelte-check, then dist/ (base /crm/ like /trustweb/)
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
@@ -19,6 +20,14 @@ function suggestionsText(): string | null {
   return file && existsSync(file) ? readFileSync(file, 'utf8') : null
 }
 
+/** Dev only: where the overlay is built from (git at serve start) and whether Jakob's record is loaded. */
+function devBuild(): string {
+  const git = (...a: string[]): string => { try { return execFileSync('git', a, { cwd: here, encoding: 'utf8' }).trim() } catch { return '?' } }
+  const d = new Date()
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return JSON.stringify({ branch: git('rev-parse', '--abbrev-ref', 'HEAD'), sha: git('rev-parse', '--short', 'HEAD'), time, mode: process.env.TW_CRM_RECORD ? 'personal' : 'stock', stockUrl: '' })
+}
+
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? (process.env.CRM_BASE ?? '/crm/') : '/',
   plugins: [svelte()],
@@ -26,6 +35,8 @@ export default defineConfig(({ command }) => ({
   define: {
     __TW_RECORD__: JSON.stringify(command === 'serve' && process.env.TW_CRM_RECORD ? readFileSync(process.env.TW_CRM_RECORD, 'utf8') : null),
     __TW_SUGGESTIONS__: JSON.stringify(command === 'serve' ? suggestionsText() : null),
+    __TW_FEATURE__: command === 'serve' ? JSON.stringify({ title: 'Web Curator: people, rings, sort, Tana sync', hint: '' }) : 'null',
+    __TW_BUILD__: command === 'serve' ? devBuild() : 'null',
     __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null),
   },
   publicDir: false,
