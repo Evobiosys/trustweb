@@ -17,6 +17,7 @@ import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
+import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
 
 export enum Ring {
@@ -336,6 +337,8 @@ export interface Person {
   contactAsked?: number
   /** Wave 7: what this person shared of their profile (profile.ts): norms, favourite way, intro. From the wire, validated. This phone only. */
   theirProfile?: SharedProfile
+  /** Wave 7: explicit agreements with this person (agreements.ts). This phone only; never matched, relayed, exported or shared except as a proposal in a chat text. */
+  agreements?: Agreement[]
   /**
    * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
    * they ask further than one step. Absent: the default (passesAsksOn).

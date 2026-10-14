@@ -20,6 +20,7 @@
  * Pure and DOM-free; every function returns a new book and never throws on bad
  * input, so a corrupted record cannot take the app down.
  */
+import { isAgreementText, parseAgreementText } from './agreements'
 import { isKeepText, parseKeepText } from './account_keep'
 import { sanitizeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -223,6 +224,8 @@ export enum TextKind {
   Hello = 'hello',
   /** Wave 7 (profile.ts): a connected phone shares its profile. */
   Profile = 'profile',
+  /** Wave 7 (agreements.ts): a proposed agreement, or the yes to mine. */
+  Agreement = 'agreement',
   Chat = 'chat',
   Ignore = 'ignore',
 }
@@ -234,6 +237,7 @@ export function routeText(appUrl: string, text: string): TextKind {
   if (isRequestText(appUrl, text)) return parseRequestText(appUrl, text) ? TextKind.ContactRequest : TextKind.Ignore
   if (isKeepText(appUrl, text)) return parseKeepText(appUrl, text) ? TextKind.Keep : TextKind.Ignore
   if (isHelloText(appUrl, text)) return parseHelloText(appUrl, text) ? TextKind.Hello : TextKind.Ignore
+  if (isAgreementText(appUrl, text)) return parseAgreementText(appUrl, text) ? TextKind.Agreement : TextKind.Ignore
   if (isProfileText(appUrl, text)) return parseProfileText(appUrl, text, Date.now()) ? TextKind.Profile : TextKind.Ignore
   return text.startsWith(`${appUrl}?${SHARE_PARAM}=1#`) ? TextKind.Ignore : TextKind.Chat
 }

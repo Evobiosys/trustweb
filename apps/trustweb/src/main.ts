@@ -109,6 +109,8 @@ import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devRecordFile, seedDevRecord } from './dev_record'
 import { initDevFeature } from './dev_feature'
+import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
+import { agreementsSection } from './agreements_view'
 import { addNorm, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
@@ -369,7 +371,9 @@ try {
     const notesFixed = repairGeneralNotes(state)
     // Wave 7 (profile.ts): a stored profile of the wrong shape is dropped.
     const profileFixed = repairProfile(state)
-    if (codeFixed || modesFixed || notesFixed || profileFixed) save()
+    // Wave 7 (agreements.ts): stored agreements that are not well formed are dropped.
+    const agreementsFixed = repairAgreements(state)
+    if (codeFixed || modesFixed || notesFixed || profileFixed || agreementsFixed) save()
   }
 } catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
@@ -2210,6 +2214,7 @@ function personSheet(personId: string): void {
     eventChipsRow(p),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
+    agreementsFor(p),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
@@ -2573,6 +2578,43 @@ function onContactRequest(peer: Peer, text: string): void {
   next(plan.ask)
 }
 
+/** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
+function agreementsFor(p: Person): HTMLElement {
+  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  const find = (id: string) => p.agreements?.find((a) => a.id === id)
+  const redraw = (): void => { save(); personSheet(p.id) }
+  const send = (text: string, onFail: () => void): void => {
+    if (!peer) { onFail(); return }
+    net.sendText(peer, text).catch(() => { onFail(); toast(S.agrSendFailed) })
+  }
+  return agreementsSection({
+    name: p.name, agreements: () => p.agreements ?? [], now: Date.now, canPropose: !!peer,
+    add: (text, expiresAt, propose) => {
+      const a = addAgreement(p, randomId(8), text, Date.now(), { proposed: propose && !!peer, expiresAt })
+      if (a?.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
+      redraw()
+    },
+    remove: (id) => { removeAgreement(p, id); redraw() },
+    accept: (id) => {
+      if (!acceptAgreement(p, id)) return
+      send(acceptText(APP_URL, id), () => { const a = find(id); if (a) { a.status = AgreementStatus.Incoming; redraw() } })
+      redraw()
+    },
+    resend: (id) => { const a = find(id); if (a) send(proposalText(APP_URL, a), () => { /* the toast says so */ }) },
+  })
+}
+
+/** Net: a connected phone proposed an agreement, or said yes to mine. */
+function onAgreementText(peer: Peer, text: string): void {
+  const person = st().people.find((p) => p.peerId === peer.id)
+  const msg = parseAgreementText(APP_URL, text)
+  if (!person || !msg || !receiveAgreement(person, msg, Date.now())) return
+  save()
+  toast(msg.kind === 'accept' ? S.agrAccepted(peer.displayName) : S.agrProposedToast(peer.displayName))
+  if (cardOpenFor === person.id && sheet.classList.contains('on') && !sheet.contains(document.activeElement)) personSheet(person.id)
+  render()
+}
+
 /** Net: a connected phone shared its profile; it lands on their card (profile.ts). Nothing is held for a card that does not exist yet. */
 function onProfileText(peer: Peer, text: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
@@ -2640,6 +2682,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
     case TextKind.Profile: onProfileText(peer, text); return
+    case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
