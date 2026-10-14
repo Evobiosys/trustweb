@@ -14,7 +14,8 @@ const CSS = `
 .twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ring{position:fixed;z-index:99998;pointer-events:none;border:3px solid #ff715b;border-radius:12px;animation:twf 1.2s ease-in-out infinite}
 .twf-rx{position:absolute;top:-13px;right:-13px;width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#ff715b;color:#fff;font:700 14px/20px system-ui;cursor:pointer;pointer-events:auto}
-.twf-ok{position:fixed;right:12px;bottom:96px;z-index:99999;width:min(320px,calc(100vw - 24px));font:13px/1.4 system-ui,sans-serif;color:#1d2a2e;background:#fff;border:1.5px solid #b8650a;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);touch-action:none}
+.twf-ok{position:fixed;right:16px;bottom:16px;z-index:99999;width:320px;max-width:calc(100vw - 32px);font:13px/1.4 system-ui,sans-serif;color:#1d2a2e;background:#fff;border:1.5px solid #b8650a;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);touch-action:none}
+@media (max-width:600px){.twf-ok{bottom:96px}}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
@@ -132,7 +133,9 @@ function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLEl
   head.addEventListener('pointerdown', (down) => {
     const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop
     head.setPointerCapture(down.pointerId)
-    const move = (e: PointerEvent): void => { Object.assign(bar.style, { left: e.clientX - dx + 'px', top: e.clientY - dy + 'px', right: 'auto', bottom: 'auto' }) }
+    // Dragged, but never out of the viewport: the box stays fully visible.
+    const clamp = (v: number, size: number, room: number): number => Math.max(0, Math.min(v, room - size))
+    const move = (e: PointerEvent): void => { Object.assign(bar.style, { left: clamp(e.clientX - dx, bar.offsetWidth, innerWidth) + 'px', top: clamp(e.clientY - dy, bar.offsetHeight, innerHeight) + 'px', right: 'auto', bottom: 'auto' }) }
     head.addEventListener('pointermove', move)
     head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true })
   })
