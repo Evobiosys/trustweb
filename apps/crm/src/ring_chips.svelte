@@ -8,15 +8,17 @@
     current?: string
     /** The family tag; the chip shows only when `onfamily` is given. */
     family?: boolean
+    /** The suggested choice: shown outlined; its tap files the whole suggestion. */
+    suggested?: string
     onchoose: (choice: Choice) => void
     onfamily?: (on: boolean) => void
   }
-  const { current, family = false, onchoose, onfamily }: Props = $props()
+  const { current, family = false, suggested, onchoose, onfamily }: Props = $props()
 </script>
 
 <div class="ring-chips" role="group" aria-label={S.sortTitle}>
   {#each CHOICES as c (c)}
-    <button class="rchip" data-choice={c} aria-pressed={current !== undefined && c !== OUT_OF_WEB && ringOf(current) === c}
+    <button class="rchip" class:suggested={c === suggested} data-choice={c} aria-pressed={current !== undefined && c !== OUT_OF_WEB && ringOf(current) === c}
       style:--rc={c === OUT_OF_WEB ? 'transparent' : ringColor(c)} onclick={(): void => onchoose(c)}>{S.ringChoice[c]}</button>
   {/each}
   {#if onfamily}

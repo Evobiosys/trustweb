@@ -26,6 +26,9 @@ DEV RECORD (dev server only; a build ignores it)
                                  checkbox is ignored); else unsorted. Family is a tag (checkbox), no ring. The person gets the note "ring: derived".
                                  Order from the centre: close friend, friend, acquaintance, intending to connect, unsorted. "Met through" holds person refs
                                  ([Name #person](tana:id), a Content field accepts them): the converter keeps them as links, no Tana change.
+  ring-suggestions.json          dev server only, next to the record: { "<person id>": { "ring", "family": bool, "intending": 0-10,
+                                 "reason" } }. The Sort cards pre-select the suggested chip (outlined, "suggested: <reason>"): one tap
+                                 on it files the whole suggestion; "Confirm all suggestions" files every card at once.
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
 

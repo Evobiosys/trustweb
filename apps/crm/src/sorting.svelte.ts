@@ -1,4 +1,5 @@
 /** Filing people under a ring: the edits go through saveField (CRM record first, Tana for the checkboxes that have a field there). */
+import { Ring } from '../../trustweb/src/model'
 import { dayKey } from './dates'
 import { baseFields, passesFilters } from './fields'
 import type { FieldValue, FieldValues } from './fields'
@@ -7,6 +8,7 @@ import { prefs } from './prefs.svelte'
 import { FAMILY_KEY, UNSORTED, choiceEdits, intendingEdits, ringOf } from './rings'
 import type { Choice } from './rings'
 import { store } from './state.svelte'
+import type { Suggestion } from './suggestions'
 import { saveField } from './sync.svelte'
 
 export function valuesOf(personId: string): FieldValues {
@@ -44,6 +46,16 @@ export function setIntending(personId: string, n: number): Undo {
 /** The family tag: a purple accent on top of any closeness. */
 export function setFamily(personId: string, on: boolean): Undo {
   return apply(personId, [[FAMILY_KEY, on]], valuesOf(personId))
+}
+
+/** Files the whole suggestion (ring, family tag, desire); returns what puts it all back (last change first). */
+export function applySuggestion(personId: string, s: Suggestion): Undo {
+  const undo = [
+    fileUnder(personId, s.ring === Ring.Intending ? UNSORTED : s.ring),
+    setFamily(personId, s.family),
+    ...(s.intending > 0 ? [setIntending(personId, s.intending)] : []),
+  ]
+  return undo.reverse().flat()
 }
 
 export function restore(personId: string, undo: Undo): void {

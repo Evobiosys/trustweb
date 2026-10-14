@@ -6,12 +6,18 @@
 //   npm run build    svelte-check, then dist/ (base /crm/ like /trustweb/)
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
+
+/** Dev only: ring-suggestions.json next to the dev record (README.txt), else null. */
+function suggestionsText(): string | null {
+  const file = process.env.TW_CRM_RECORD && path.join(path.dirname(process.env.TW_CRM_RECORD), 'ring-suggestions.json')
+  return file && existsSync(file) ? readFileSync(file, 'utf8') : null
+}
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? (process.env.CRM_BASE ?? '/crm/') : '/',
@@ -19,6 +25,7 @@ export default defineConfig(({ command }) => ({
   // Dev only: TW_CRM_RECORD=<AppState json> replaces the sample set (README.txt). A build gets null.
   define: {
     __TW_RECORD__: JSON.stringify(command === 'serve' && process.env.TW_CRM_RECORD ? readFileSync(process.env.TW_CRM_RECORD, 'utf8') : null),
+    __TW_SUGGESTIONS__: JSON.stringify(command === 'serve' ? suggestionsText() : null),
     __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null),
   },
   publicDir: false,

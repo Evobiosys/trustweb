@@ -186,6 +186,8 @@ export const S = {
   unhide: 'unhide',
   ringChoice: { ...TW.ringLabel, unsorted: 'Leave unsorted', outofweb: 'Not in my web' } as Record<string, string>,
   familyTag: 'Family',
+  suggestedBecause: (reason: string) => `suggested: ${reason}`,
+  confirmAll: (n: number) => `Confirm all suggestions (${n})`,
   intendingTitle: 'Intending to connect (0 = not at all, 10 = strongly)',
   intendingSince: (date: string) => `since ${date}`,
   ringOpen: (ring: string) => `Ring: ${ring}. Tap to change`,
