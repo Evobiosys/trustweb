@@ -167,7 +167,7 @@ export const S = {
   curateRemove: 'Remove',
   adhocBadge: 'ad hoc',
   optionNone: '—',
-  ringLabel: TW.ringLabel,
+  ringLabel: { ...TW.ringLabel, none: 'Not in my web' } as Record<string, string>,
   tagLabel: TW.tagLabel,
   audienceLabel: TW.audienceLabel,
   chLabel: TW.chLabel,

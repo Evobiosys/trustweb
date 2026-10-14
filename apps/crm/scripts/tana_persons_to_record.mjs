@@ -12,7 +12,11 @@ import { fieldLabel, parseSchema } from './tana_schema_to_fields.mjs'
 const GOOGLE = 'Google Calendar Contacts'
 const MAX_LINE = 200
 const MAX_VALUE = 500
-const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', intending: 'intending' }
+const RINGS = { close: 'close', friend: 'friend', acquaintance: 'acquaintance', intending: 'intending', none: 'none' }
+const FAMILY = 'LNlpliq4GdNI'
+const CONNECTION = 'ConGRasNilsz'
+const OUT_OF_WEB = ['6QzDHIfrlmSz', '__XNQ42Dtiwx'] // famous, Deceased
+const DERIVED = 'ring: derived'
 
 function clean(s) {
   return s
@@ -68,6 +72,15 @@ function ringOf(texts, fields) {
     const m = /^ring: (\w+)/i.exec(t)
     if (m && RINGS[m[1].toLowerCase()]) return RINGS[m[1].toLowerCase()]
   }
+  return undefined
+}
+
+/** First structure from the person's own marks; an email or calendar id as name stays out of the web. */
+function deriveRing(name, fields) {
+  if (name.includes('@')) return 'none'
+  if (fields[FAMILY] === true) return 'close'
+  if (fields[CONNECTION] === true) return 'friend'
+  if (OUT_OF_WEB.some((k) => fields[k] === true)) return 'none'
   return 'acquaintance'
 }
 
@@ -82,7 +95,7 @@ const WORKSPACE = 'workspace'
  * One entity list. Duplicate node ids collapse to the first. `workspaces` (id -> name, first = home) adds the tag line to entities outside home.
  * @returns {{ entities: object[], lines: number, withoutFields: number }}
  */
-function convertList(index, nodes, schema, workspaces) {
+function convertList(index, nodes, schema, workspaces, derive = false) {
   const byLabel = new Map(schema.map((f) => [f.label.toLowerCase(), f]))
   const home = workspaces[0]?.id
   const names = new Map(workspaces.map((w) => [w.id, workspaceName(w.name)]))
@@ -98,11 +111,13 @@ function convertList(index, nodes, schema, workspaces) {
     })
     const google = (n.breadcrumb ?? []).includes(GOOGLE)
     const all = texts.map((t, i) => mk(t, i))
+    const explicit = ringOf(texts, fields)
+    const ring = explicit ?? (derive ? deriveRing(n.name, fields) : 'acquaintance')
+    if (!explicit && derive) all.push(mk(DERIVED, all.length))
     if (google) all.push(mk(GOOGLE, all.length, { tag: 'custom', customTag: GOOGLE }))
     const ws = n.workspaceId && n.workspaceId !== home ? names.get(n.workspaceId) : undefined
     if (ws) all.push(mk(`${WORKSPACE}: ${ws}`, all.length, { tag: 'custom', customTag: WORKSPACE }))
     lines += texts.length
-    const ring = ringOf(texts, fields)
     delete fields['tw-ring']
     return { id: `tana-${n.id}`, name: n.name, context: '', ring, metAt: at, lines: all, fields }
   })
@@ -111,7 +126,7 @@ function convertList(index, nodes, schema, workspaces) {
 
 /** @returns {{ record: object, stats: { persons: number, lines: number, withoutFields: number, environments: number } }} */
 export function convert(index, nodes, schema, workspaces = [], env) {
-  const p = convertList(index, nodes, schema, workspaces)
+  const p = convertList(index, nodes, schema, workspaces, true)
   const e = env ? convertList(env.index, env.nodes, env.schema, workspaces) : { entities: [] }
   const record = {
     v: 1, me: { id: 'me', displayName: `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,

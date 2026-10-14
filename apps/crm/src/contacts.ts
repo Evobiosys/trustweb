@@ -43,10 +43,13 @@ export function contactRows(view: CrmView, query: string, order: SortOrder): Con
     : b.lastAt - a.lastAt || a.person.name.localeCompare(b.person.name))
 }
 
-/** Rows grouped by ring in ring order (close first), empty rings left out. */
-export function groupByRing(rows: ContactRow[]): { ring: Ring; rows: ContactRow[] }[] {
-  return RINGS
-    .map((ring) => ({ ring, rows: rows.filter((r) => r.person.ring === ring) }))
+/** A person kept out of the web (famous, deceased, an email id): still in the CRM list, last. */
+export const NO_RING = 'none'
+
+/** Rows grouped by ring in ring order (close first, then the out-of-web group), empty rings left out. */
+export function groupByRing(rows: ContactRow[]): { ring: Ring | typeof NO_RING; rows: ContactRow[] }[] {
+  return ([...RINGS, NO_RING] as (Ring | typeof NO_RING)[])
+    .map((ring) => ({ ring, rows: rows.filter((r) => (r.person.ring as string) === ring) }))
     .filter((g) => g.rows.length > 0)
 }
 
