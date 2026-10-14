@@ -15,6 +15,7 @@ import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
+import type { TimelineEntry } from './timeline'
 
 export enum Ring {
   Close = 'close',
@@ -262,6 +263,8 @@ export interface Person {
    * one person. Absent: none.
    */
   doorPeerId?: string
+  /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
+  timeline?: TimelineEntry[]
 }
 
 /**
