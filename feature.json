@@ -1,1 +1,1 @@
-{"title":"Web Curator inside the app","hint":"Bottom bar > Web Curator; set a ring there, switch to Web: it moved.","selector":"[data-view=curator]"}
+{"title":"Web Curator inside the app","hint":"Top right outliner glyph > Web Curator; tap a person: the Curator page.","selector":"[data-view=curator]"}

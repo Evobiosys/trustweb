@@ -32,7 +32,7 @@ export function initDevFeature(): void {
   const bld = typeof __TW_BUILD__ === 'undefined' ? null : __TW_BUILD__
   box.innerHTML = '<b></b><i></i><span></span>'
   box.children[0].textContent = 'FEATURE · ' + f.title
-  if (bld?.n) box.children[0].prepend(Object.assign(document.createElement('span'), { className: 'twf-new', textContent: 'NEW ' + bld.n }))
+  if (bld?.n && bld.n >= 2) box.children[0].prepend(Object.assign(document.createElement('span'), { className: 'twf-new', textContent: 'NEW ' + bld.n }))
   box.children[1].textContent = bld ? `${bld.branch} @ ${bld.sha} · ${bld.time} · ${bld.mode}` : ''
   box.children[2].textContent = f.hint
   const ring = Object.assign(document.createElement('div'), { className: 'twf-ring' })

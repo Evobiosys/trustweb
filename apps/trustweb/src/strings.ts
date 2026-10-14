@@ -198,7 +198,7 @@ export const S = {
   webCallTop: 'Call into',
   webCallBottom: 'your web',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
-  searchOpen: 'Manage and search contacts',
+  searchOpen: 'Web Curator',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
   olWants: (n: number) => `wants ${n}/10`,

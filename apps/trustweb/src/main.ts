@@ -20,7 +20,6 @@
  */
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { outlinerView } from './outliner_view'
 import { DESIRE_DEFAULT, RING_RADIUS, RINGS_LABEL_CAP, WEB_RINGS, dotSize, inContact, placeOnRing, ringAt } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -136,7 +135,6 @@ import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer
 enum Screen {
   Start = 'start',
   Web = 'web',
-  Curate = 'curate',
   Inventory = 'inventory',
   Record = 'record',
   Meeting = 'meeting',
@@ -146,8 +144,6 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
-  /** The Web Curator (apps/crm), mounted lazily on the first visit. */
-  Curator = 'curator',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -347,8 +343,6 @@ let relayStatus: RelayStatus = 'connecting'
 let draft: Draft = freshDraft()
 let review: Review | null = null
 let queryOpen = false
-let searchOpen = false
-let searchText = ''
 // The magnifier on Record and Meeting: past meetings and memos (search.ts).
 let pastSearchOpen = false
 let pastSearchText = ''
@@ -670,8 +664,8 @@ function renderTabs(): void {
   const invLeft = state?.tabOrder === TabOrder.InventoryLeft
   // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
   const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv, tabButton(Screen.Curator, S.navCurator, 'curator'))
-  tabs.classList.add('four')
+  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv)
+  tabs.classList.toggle('four', feedTab.length > 0)
 }
 renderTabs()
 
@@ -684,7 +678,6 @@ function recordScreen(): Screen {
 function recordOriginOf(s: Screen): RecordOrigin {
   switch (s) {
     case Screen.Web:
-    case Screen.Curate:
     case Screen.StillTrue:
       return RecordOrigin.Web
     case Screen.Inventory:
@@ -730,7 +723,6 @@ function go(s: Screen): void {
   }
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
-  if (s === Screen.Curator && screen !== s) curator.open()
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -777,7 +769,7 @@ function moreMenu(): void {
   }
   openSheet([
     item('settings', S.moreSettings, settingsSheet),
-    item('users', S.searchCurate, () => go(Screen.Curate)),
+    item('users', S.searchCurate, curatorSheet),
   ])
 }
 
@@ -875,7 +867,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Curate))
+      || (target === Screen.Web && (screen === Screen.StillTrue))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -885,7 +877,6 @@ function render(): void {
     switch (screen) {
       case Screen.Start: return screenStart()
       case Screen.Web: return screenWeb()
-      case Screen.Curate: return screenCurate()
       case Screen.Inventory: return screenInventory()
       case Screen.Record: return screenRecord()
       case Screen.Meeting: return screenMeeting()
@@ -894,7 +885,6 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Curator: return [curator.el]
     }
   })()
   host.replaceChildren(...body)
@@ -1467,16 +1457,6 @@ function askDesire(wrap: HTMLElement, p: Person, cancel: () => void, done: (valu
   wrap.appendChild(row)
 }
 
-function peopleView(s: AppState, only?: Person[]): HTMLElement {
-  const order = (r: Ring): number => RINGS.indexOf(r)
-  return outlinerView({
-    s, people: only ?? s.people, save,
-    order: (a, b) => order(a.ring) - order(b.ring) || a.name.localeCompare(b.name),
-    setRing: (p, r) => changeRing(p, r),
-    openCard: (p) => personSheet(p.id),
-  })
-}
-
 function notificationsCard(s: AppState): HTMLElement {
   const toggle = async (): Promise<void> => {
     if (!s.notificationsOn && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
@@ -1507,54 +1487,16 @@ function askMarks(): Map<string, 'asked' | 'shared'> {
   return marks
 }
 
-function toggleSearch(): void {
-  searchOpen = !searchOpen
-  if (searchOpen) queryOpen = false
-  else searchText = ''
-  render()
-  if (searchOpen) document.querySelector<HTMLInputElement>('.search-field')?.focus()
-}
-
-function matchesSearch(p: Person, q: string): boolean {
-  const needle = q.trim().toLowerCase()
-  return !needle || p.name.toLowerCase().includes(needle) || p.context.toLowerCase().includes(needle)
-}
-
-/** Search: contacts only, filtered live in place (a re-render would wipe the typing). */
-function searchPanel(s: AppState): HTMLElement {
-  const input = el('input', { class: 'field search-field', type: 'search', placeholder: S.searchPh, 'aria-label': S.searchPh, value: searchText, autocomplete: 'off' })
-  const results = el('div', { id: 'search-results', 'aria-live': 'polite' })
-  const fill = (): void => {
-    const hits = s.people.filter((p) => matchesSearch(p, searchText))
-    results.replaceChildren(hits.length ? peopleView(s, hits) : el('p', { class: 'empty' }, [S.searchNone]))
-  }
-  // Below the results, always: the same words on the web, as links (wave 2, B8; nothing sent before a tap).
-  const web = webSearchRow(searchText, webResults)
-  input.addEventListener('input', () => { searchText = input.value; fill(); web.update(searchText) })
-  input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Escape') toggleSearch() })
-  fill()
-  const curate = el('button', { class: 'menu-item curate-row', onclick: () => go(Screen.Curate) })
-  curate.innerHTML = icon('users')
-  curate.append(el('span', {}, [el('b', {}, [S.searchCurate]), el('small', {}, [S.searchCurateSub])]))
-  // Wave 6 (N8a): this field looks through the people already held; an ask lives in the dock, one tap away.
-  const askInstead = el('button', { class: 'btn btn-ghost btn-sm search-ask-instead', 'data-search-ask-instead': '1', onclick: openQuery }, [S.searchAskInstead])
-  return el('div', { class: 'scroll pad search' }, [input, el('p', { class: 'meta search-not-ask', 'data-search-not-ask': '1' }, [S.searchNotAsk]), askInstead, curate, results, web.el])
+/** The top-right glyph: the Web Curator (apps/crm, a lazy chunk) in a sheet, its own tabs inside; × closes back to the Web view. */
+function curatorSheet(): void {
+  openSheet([curator.el])
+  sheet.dataset.kind = 'curator'
+  curator.open()
 }
 
 function screenWeb(): Node[] {
   const s = st()
-  // Call style: a contact search top right (the magnifier is free). Query
-  // style: the magnifier means querying, so the top shows the Curate list.
-  const search = queryStyle() === QueryStyle.Call
-    ? iconButton(searchOpen ? 'x' : 'list', searchOpen ? S.searchClose : S.searchOpen, toggleSearch, 'search-btn' + (searchOpen ? ' on' : ''))
-    : ((): HTMLElement => {
-        // "the list item like you had with Manage": icon plus label
-        const b = el('button', { class: 'hdr-btn', onclick: () => go(Screen.Curate) })
-        b.innerHTML = icon('list')
-        b.append(S.curateTitle)
-        return b
-      })()
-  if (searchOpen) return [header(S.webTitle, { right: search, more: true }), searchPanel(s)]
+  const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
   return [
     header(S.webTitle, { right: search, more: true }),
     el('div', { class: 'scroll' }, [
@@ -1674,7 +1616,6 @@ window.addEventListener('resize', () => { if (screen === Screen.Web) fitRings() 
 /** Opens the query on Web from anywhere: querying is the one thing (Jakob, wave 2, P6/P9), one tap away from Web and Inventory. */
 function openQuery(): void {
   queryOpen = true
-  searchOpen = false
   if (screen === Screen.Web) render()
   else go(Screen.Web)
 }
@@ -1693,19 +1634,6 @@ function queryFab(): HTMLElement {
   const wrapped = withHint(b, HintId.CallWeb)
   if (wrapped !== b) wrapped.classList.add('fab-hint')
   return wrapped
-}
-
-function screenCurate(): Node[] {
-  const s = st()
-  const add = el('button', { class: 'btn btn-ghost', onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+ ' + S.curateAdd])
-  return [
-    header(S.curateTitle, { back: () => go(Screen.Web) }),
-    el('div', { class: 'scroll' }, [
-      el('p', { class: 'sub' }, [S.curateLead + ' ' + S.webCount(s.people.length, s.people.filter((p) => p.peerId).length)]),
-      el('div', { class: 'manage-actions' }, [add]),
-      s.people.length === 0 ? el('p', { class: 'empty' }, [S.curateEmpty]) : peopleView(s),
-    ]),
-  ]
 }
 
 function tagChip(tag: Tag, custom?: string): HTMLElement {
@@ -4151,7 +4079,7 @@ function settingsSheet(): void {
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
-      onclick: () => { s.queryStyle = q; searchOpen = false; save(); render(); settingsSheet() },
+      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
