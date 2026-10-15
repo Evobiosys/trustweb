@@ -89,6 +89,9 @@
      join section it moved into */
   .herocta{position:relative; z-index:1; margin:22px 0 0}
   .herocta a.joinbtn{display:inline-block; text-decoration:none}
+  .herocta a.ghost{background:transparent; color:var(--indigo); border:1.5px solid var(--indigo); margin-left:8px}
+  .herocta-note{margin-left:8px}
+  .nameblock code{display:block; margin:10px 0 0; font-size:.95rem}
   .joinbottom{margin:44px 0 0}
   .joinbottom .sechead{margin-bottom:14px}
   /* the newsletter checkbox, on the SAME form as the join button -- one
