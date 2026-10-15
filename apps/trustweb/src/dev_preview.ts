@@ -7,13 +7,13 @@
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prRunning, rowPlan, setMap, stepText, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prNeedsUpdate, prRunning, rowPlan, setMap, stepText, tapped, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
-  pr: { number: number; url: string } | null
+  pr: { number: number; url: string; branch?: string; at?: string; sha?: string } | null
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
@@ -37,6 +37,7 @@ const CSS = `
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
 const POS = 'twp-pos'
+const THEN_PR = 'twp-then-pr'
 const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
 const setFolded = (id: string, keys: string[]): void => { try { sessionStorage.setItem('twp-tree-' + id, JSON.stringify(keys)) } catch { /* not remembered */ } }
 const store = {
@@ -183,7 +184,9 @@ export function initDevPreview(): void {
     go.addEventListener('click', () => { void reassemble(a.draft, a.last) })
     const no = h('button', { className: 'alt', textContent: 'Cancel' })
     no.addEventListener('click', () => { ask = null; render() })
-    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length), h('div', {}, go, no))
+    const then = p!.pr ? h('button', { textContent: `Reload, then update PR #${p!.pr.number}` }) : null
+    then?.addEventListener('click', () => { try { sessionStorage.setItem(THEN_PR, p!.id) } catch { /* not remembered: update by hand */ } void reassemble(a.draft, a.last) })
+    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length, p!.pr?.number), h('div', {}, go, ...(then ? [then] : []), no))
   }
 
   function slow(): HTMLElement {
@@ -224,18 +227,22 @@ export function initDevPreview(): void {
     return h('div', {}, 'Opening dev in 3 s (', stay, ')')
   }
 
+  function pushPr(): void {
+    void call('POST', '/pr', {}).then(() => {
+      prText = stepText('none', undefined, p!.short); prStep = ''; begin(); render()
+      watchPr()
+    }).catch((e: Error) => { error = e.message; render() })
+  }
+
   function prPart(n: number): HTMLElement {
-    if (p!.pr) return h('div', { className: 'btns' }, ...(opening ? [staying()] : []))
-    const go = h('button', { textContent: `Create PR with ${n} checked`, disabled: loading() || n === 0 })
-    go.addEventListener('click', () => {
-      void call('POST', '/pr', {}).then(() => {
-        prText = stepText('none', undefined, p!.short); prStep = ''; begin(); render()
-        watchPr()
-      }).catch((e: Error) => { error = e.message; render() })
-    })
+    const label = prButton(p!.pr, n, p!.assembled?.sha)
+    const stay = opening ? [staying()] : []
+    if (p!.pr && !label && !prText) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr.number} holds this set` }), ...stay)
+    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 })
+    go.addEventListener('click', pushPr)
     const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
-    const status = prText ? h('div', {}, prText, ...(opening ? [staying()] : []), eta) : ''
-    return h('div', { className: 'btns' }, go, status)
+    const status = prText ? h('div', {}, prText, ...stay, eta) : ''
+    return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), status)
   }
 
   function render(): void {
@@ -256,7 +263,7 @@ export function initDevPreview(): void {
       drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
-      const n = q.features.filter((f) => f.checked).length
+      const n = visible(q.features).filter((f) => f.checked).length
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -266,7 +273,7 @@ export function initDevPreview(): void {
       })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
-        h('div', { className: 'row' }, ...tree(shown).map((n) => row(n, shown, grey))),
+        h('div', { className: 'row' }, ...tree(visible(shown)).map((n) => row(n, shown, grey))),
         ...(ask ? [askBox(ask)] : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
@@ -289,5 +296,11 @@ export function initDevPreview(): void {
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
     if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
   }).catch(() => { /* no status: no flow to show */ })
-  void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* the file is gone: keep what the serve start saw */ })
+  void call('GET', '').then((q) => {
+    p = q
+    let then = false
+    try { then = sessionStorage.getItem(THEN_PR) === q.id; if (then) sessionStorage.removeItem(THEN_PR) } catch { /* not remembered */ }
+    if (then && !q.assembled?.error && prNeedsUpdate(q.pr, q.assembled?.sha)) pushPr()
+    render()
+  }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }

@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -135,5 +135,33 @@ describe('dev preview collapse store and PR status', () => {
     store.hide()
     expect(store.hidden()).toBe(true)
     expect(store.get()).toBe(false)
+  })
+})
+
+describe('dev preview PR update', () => {
+  it('prNeedsUpdate: only with a PR that has no sha or another sha', () => {
+    expect(prNeedsUpdate(null, 'abc')).toBe(false)
+    expect(prNeedsUpdate({}, 'abc')).toBe(true)
+    expect(prNeedsUpdate({ sha: 'abc' }, 'def')).toBe(true)
+    expect(prNeedsUpdate({ sha: 'abc' }, undefined)).toBe(true)
+    expect(prNeedsUpdate({ sha: 'abc' }, 'abc')).toBe(false)
+  })
+  it('prButton: create, update or nothing', () => {
+    expect(prButton(null, 9, 'abc')).toBe('Create PR with 9 checked')
+    expect(prButton({ number: 8, sha: 'x' }, 9, 'abc')).toBe('Update PR #8 with 9 checked')
+    expect(prButton({ number: 8 }, 9, 'abc')).toBe('Update PR #8 with 9 checked')
+    expect(prButton({ number: 8, sha: 'abc' }, 9, 'abc')).toBe('')
+  })
+  it('confirmText names the PR only when there is one', () => {
+    expect(confirmText('Events', false, 1, 8)).toBe('Re-assemble preview without Events? The page reloads. PR #8 keeps its current set until you update it.')
+    expect(confirmText('X', true, 2, null)).toBe('Re-assemble preview with these 2 changes? The page reloads.')
+  })
+})
+
+describe('merged features', () => {
+  it('visible() drops features whose branch is on main already', async () => {
+    const { visible } = await import('../../src/dev_preview_rules.ts')
+    const list = [{ key: 'a', branch: 'x/a', title: 'A', requires: [], checked: true, merged: true }, { key: 'b', branch: 'x/b', title: 'B', requires: ['a'], checked: true }]
+    expect(visible(list).map((f) => f.key)).toEqual(['b'])
   })
 })
