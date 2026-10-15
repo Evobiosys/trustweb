@@ -1,5 +1,5 @@
 /**
- * Event link (E2, wave 7): `<origin>/#ev=<base64url(JSON)>` carries the event itself and nothing about people (I1): only the
+ * Event link (E2, wave 7): `<origin>/#ev=<base64url(JSON)>` (`#ev_host=` for the host's` carries the event itself and nothing about people (I1): only the
  * public fields the organizer chose to send. The fragment never reaches a server. Pure and DOM-free.
  */
 import { newEvent } from './events'
@@ -26,12 +26,13 @@ function fromBase64Url(b64: string): string {
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind): string {
   const { id, name, from, to, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
   const payload: LinkedEvent = { kind, id, name, from, where, ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
-  return `${origin}/#ev=${toBase64Url(JSON.stringify(payload))}`
+  return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}`
 }
 
-/** The event in a location.hash ("#ev=..."), or null for anything missing, mangled, invalid or over 4 KB. */
+/** The event in a location.hash ("#ev=..." or the host link's "#ev_host=..."), or null for anything missing, mangled, invalid or over 4 KB. */
 export function decodeEventLink(hash: string): LinkedEvent | null {
-  const raw = new URLSearchParams(hash.replace(/^#/, '')).get('ev')
+  const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const raw = params.get('ev') ?? params.get('ev_host')
   if (!raw || raw.length > MAX_BYTES) return null
   try {
     const o: unknown = JSON.parse(fromBase64Url(raw))

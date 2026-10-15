@@ -15,9 +15,18 @@ describe('event link', () => {
     })
   })
 
+  it('a host link rides in #ev_host= and a peer link in #ev=; both decode', () => {
+    const host = encodeEventLink(ev, ORIGIN, 'host')
+    const peer = encodeEventLink(ev, ORIGIN, 'peer')
+    expect(host.startsWith(`${ORIGIN}/#ev_host=`)).toBe(true)
+    expect(peer.startsWith(`${ORIGIN}/#ev=`)).toBe(true)
+    expect(decodeEventLink(host.slice(ORIGIN.length + 1))?.kind).toBe('host')
+    expect(decodeEventLink(peer.slice(ORIGIN.length + 1))?.kind).toBe('peer')
+  })
+
   it('carries no attendance, tag or person data', () => {
     const tagged = { ...ev, attended: true, fromLink: true, people: ['p1'], attendees: [{ name: 'Ben Huber' }] }
-    const json = Buffer.from(encodeEventLink(tagged, ORIGIN, 'peer').split('#ev=')[1], 'base64url').toString()
+    const json = Buffer.from(encodeEventLink(tagged, ORIGIN, 'peer').split(/#ev=/)[1], 'base64url').toString()
     expect(Object.keys(JSON.parse(json)).sort()).toEqual(['conditions', 'from', 'id', 'kind', 'name', 'organizer', 'themes', 'to', 'where'])
   })
 

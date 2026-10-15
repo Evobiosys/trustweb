@@ -262,4 +262,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .rchip.suggested,.ring-label.suggested{border-style:dashed; border-width:2.5px}
 
 .reminder{margin:6px 0; font-size:13.5px; color:var(--ink-soft)}
-.not-placed>summary{cursor:pointer}
+.not-placed>summary,.suggest-section>summary{cursor:pointer}
+.suggest-section{margin:6px 0 6px 8px}
+
+.suggest-row{flex:1; min-width:0}
+.suggest-actions{display:flex; gap:16px; padding:0 14px 6px}

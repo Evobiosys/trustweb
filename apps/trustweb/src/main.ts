@@ -124,6 +124,7 @@ import { intendingReminder, knownWays, lastMessagedAt } from './intending_remind
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
+import { contextPress } from './context_press'
 import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
@@ -1396,6 +1397,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
+      contextPress(b, () => curatorPerson(p.id))
       b.style.left = x + 'px'
       b.style.top = y + 'px'
       if (arcs) b.style.setProperty('--arcs', arcs)
@@ -2649,7 +2651,7 @@ const curator = createCurator({
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
-  newId: () => randomId(8), copyLink, origin: APP_URL.replace(/\/$/, ''),
+  newId: () => randomId(8), copyLink, joinLink, origin: APP_URL.replace(/\/$/, ''),
 })
 
 const feed = createFeedView({
@@ -2892,6 +2894,15 @@ function maybeOpenPendingShare(): void {
   const link = pendingShare
   pendingShare = null
   void openShare(link)
+}
+
+/** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
+function joinLink(text: string): boolean {
+  const ev = decodeEventLink(text.slice(Math.max(0, text.indexOf('#'))))
+  if (!ev) return false
+  pendingEvent = ev
+  maybeOpenPendingEvent()
+  return true
 }
 
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
