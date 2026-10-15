@@ -137,6 +137,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .desire p{margin:0 0 6px; font-size:13px; font-weight:600}
 .desire p.reminder{font-weight:400; color:var(--ink-soft,inherit)}
 .desire .rchips{justify-content:center}
+.lean{margin:8px 0}
+.lean .rchips{align-items:center}
+.lean small{font-size:12px}
 .desire-go{display:flex; gap:8px; justify-content:center}
 .node.you .ava{width:54px; height:54px; box-shadow:0 0 0 3px #fff, 0 0 22px rgba(154,55,240,.55)}
 .node.asked .ava{animation:asked 1.6s ease-in-out infinite}

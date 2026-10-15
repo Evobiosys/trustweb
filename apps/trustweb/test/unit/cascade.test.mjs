@@ -104,6 +104,11 @@ describe('askSources: only lines this step admits ever reach the matcher', () =>
     expect(JSON.stringify([...out.threads, ...out.refs.values()])).not.toContain('123.456')
     expect(out.threads.map((x) => x.id).sort()).toEqual(ids(R.Close, 0))
   })
+  it('the lean score on an acquaintance never reaches the matcher input', () => {
+    const withLean = { ...state, people: state.people.map((p) => ({ ...p, lean: -2 })) }
+    const out = askSources(withLean, R.Close, 0)
+    expect(JSON.stringify([...out.threads, ...out.refs.values()])).not.toContain('"lean"')
+  })
   it('a line that may not answer never takes the top score away from one that may (filter before the match)', () => {
     const { threads } = askSources(state, R.Acquaintance, 1)
     const m = matchTemplate(askTemplate('ladder'), threads)

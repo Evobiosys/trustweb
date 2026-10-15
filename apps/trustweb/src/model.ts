@@ -335,7 +335,13 @@ export interface Person {
   ringSuggested?: boolean
   /** Degrees (0 = top, clockwise) where the dot sits on its ring in the Web view: where it was dropped. Local only, never sent. */
   angle?: number
+  /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
+  lean?: Lean
 }
+
+/** The five steps of the lean score on an acquaintance. */
+export type Lean = -2 | -1 | 0 | 1 | 2
+export const LEANS: readonly Lean[] = [-2, -1, 0, 1, 2]
 
 /**
  * Do this person's asks go on through me? Yes unless I switched it off for them (Jakob 2026-10-09: "make the default yes", after a
