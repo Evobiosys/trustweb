@@ -15,6 +15,8 @@ export interface Curator {
   /** Hide in trustweb (Tana checkbox through the Curator's sync, removed from this record) and its Undo. */
   hide(personId: string): Promise<void>
   unhide(personId: string): Promise<void>
+  /** A Web view ring change on to Tana (the Curator's ring sync); a no-op when the CRM is not set to Tana. */
+  ring(personId: string, ring: Ring): Promise<void>
 }
 
 /** A lazy chunk that will not load (usually a page older than a new deploy, whose chunks are gone): say so, offer a reload, never a blank sheet. */
@@ -44,5 +46,6 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
     },
     hide: async (personId) => { await (await import('@web-curator')).hideFromRings(lent, personId) },
     unhide: async (personId) => { await (await import('@web-curator')).unhideFromRings(lent, personId) },
+    ring: async (personId, ring) => { await (await import('@web-curator')).ringFromRings(lent, personId, ring) },
   }
 }

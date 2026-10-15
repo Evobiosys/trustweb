@@ -23,6 +23,11 @@ export const TANA_RING_OPTIONS: Record<RingId, string> = {
 /** A choice that files a person under famous (filtered out of the web); it is no ring. */
 export const OUT_OF_WEB = 'outofweb'
 
+/** The value the ring field takes for a ring of the host's record; null for the ones that are no ring here (family is a tag, none is out of the web). */
+export function ringSyncValue(ring: string): RingId | null {
+  return ring === UNSORTED || (RING_ORDER as readonly string[]).includes(ring) ? (ring as RingId) : null
+}
+
 /** What the ring chips offer: the four rings, or out of my web. */
 export type Choice = Exclude<RingId, typeof UNSORTED> | typeof OUT_OF_WEB
 
