@@ -171,6 +171,8 @@ export interface NetHooks {
    * allows it (admitPeer) or drops it. False: the ordinary one-scan flow.
    */
   holdPeer(peer: Peer): boolean
+  /** A new peer came in through a reach-out (public link): true drops it unanswered (over the hourly cap, or paused; reach_out_guard.ts). */
+  refuseReachOut?(): boolean
   /** The other side of the hold: a peer we already hold sent its ack again, i.e. the owner allowed us. */
   onPeerConfirmed(peer: Peer): void
   /** Ring for a peer who just scanned this device's code. */
@@ -470,6 +472,7 @@ export class Net {
       return true
     }
     if (this.hooks.holdPeer(incoming)) return true
+    if (env.reachOut && this.hooks.refuseReachOut?.()) return true
     const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)

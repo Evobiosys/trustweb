@@ -43,8 +43,9 @@ export const RING_COLORS = {
   none: '#9e9e9e',
 }
 
-/** Green-blue face and stroke of a person who reached out (Person.reachedOut): on the Intending ring, in place of its amber/green. */
-export const REACH_OUT = '#2E9CA6'
+/** Yellow face of a person who reached out (Person.reachedOut): on the Intending ring, in place of its amber/green. REACH_OUT_INK = initials and text on it. */
+export const REACH_OUT = '#F2C200'
+export const REACH_OUT_INK = '#5C4300'
 
 /** The ring a person sits on in the web: family sits where its closeness says. */
 export function ringSlot(p: Pick<Person, 'ring' | 'fields'>): Ring {
@@ -785,6 +786,10 @@ export const RECORD_FORMAT = 1
 
 export interface AppState {
   v: typeof RECORD_FORMAT
+  /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
+  reachOutLog?: number[]
+  reachOutHeld?: number
+  reachOutsPaused?: true
   me: Me
   identity?: SerializedIdentityV1
   people: Person[]

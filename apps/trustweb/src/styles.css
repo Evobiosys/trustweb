@@ -203,6 +203,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .sheet.on{bottom:0; visibility:visible; transition:bottom .3s cubic-bezier(.2,.8,.2,1)}
 .grab{width:44px; height:5px; border-radius:3px; background:rgba(36,27,46,.18); margin:0 auto 14px}
 .sheet h3{font-size:20px; margin-bottom:4px}
+.reached-out{color:#5C4300}
+:root:not([data-theme="light"]) .reached-out{color:#F2C200}
 .sheet .meta{font-size:13px; color:var(--ink-soft); line-height:1.55}
 .sheet .path{margin:12px 0; padding:10px 14px; background:var(--card); border-radius:14px; font-size:13px; border-left:3px solid var(--mint)}
 .sheet .btn{width:100%; margin-top:8px}

@@ -7,8 +7,8 @@ const me = { id: 'a1', displayName: 'Anna Berger' }
 const did = { did: 'did:peer:2.abc' }
 
 describe('reach-out colour', () => {
-  it('is green-blue on the intending ring only while reachedOut is set', () => {
-    expect(REACH_OUT).toBe('#2E9CA6')
+  it('is yellow on the intending ring only while reachedOut is set', () => {
+    expect(REACH_OUT).toBe('#F2C200')
     expect(ringColor({ ring: Ring.Intending, reachedOut: 'sent' })).toBe(REACH_OUT)
     expect(ringColor({ ring: Ring.Intending, reachedOut: 'received' })).toBe(REACH_OUT)
     expect(ringColor({ ring: Ring.Intending })).toBe(RING_COLORS.intending)
