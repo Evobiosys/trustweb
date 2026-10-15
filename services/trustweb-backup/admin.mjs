@@ -3,6 +3,7 @@
 //   POST   /admin/name   {code, name, alias?}   grant a name to an existing code (reserved names allowed)
 //   DELETE /admin/name   {code, name}           remove a name from a code (a locked one too)
 //   GET    /admin/names                         who holds the env RESERVED_NAMES
+//   POST   /admin/org    {org, plan}            wave 8: switch an organizer to plan "free" or "hosted" (the paid tier; money changes hands outside the server)
 //
 // These routes are for the operator, on this machine only, and are NEVER in Caddy. The guard has five steps:
 //   1 the socket peer is loopback;   2 the Host header is exactly 127.0.0.1 / localhost (with or without the bound port), never a public app host
@@ -18,13 +19,14 @@ import { CODE_RE, isNameShape, squash } from './connect_names.mjs'
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'
 import { ipKey } from './limits.mjs'
 import { readJsonObject } from './links.mjs'
+import { limitsFor, PLANS } from './organizer_store.mjs'
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const FAILED_TOKENS_PER_MINUTE = 5
 const MINUTE_MS = 60_000
 
 /** Is `pathname` one of the admin routes? (exact, no trailing slash) */
-export const isAdminPath = (pathname) => pathname === '/admin/name' || pathname === '/admin/names'
+export const isAdminPath = (pathname) => pathname === '/admin/name' || pathname === '/admin/names' || pathname === '/admin/org'
 
 /** Does this header name betray a proxy hop or a browser? (Forwarded, X-Forwarded-*, X-Real-IP, Origin) */
 const isProxyOrBrowserHeader = (header) => header === 'forwarded' || header === 'x-real-ip' || header === 'origin' || header.startsWith('x-forwarded-')
@@ -62,7 +64,7 @@ function createFailureGate({ limit, now }) {
   }
 }
 
-export function createAdmin({ cfg, store, clientOf, now = Date.now }) {
+export function createAdmin({ cfg, store, orgStore = null, clientOf, now = Date.now }) {
   const gate = createFailureGate({ limit: FAILED_TOKENS_PER_MINUTE, now })
 
   const bodyOf = (result) => ({ name: result.name, aliases: result.aliases, locked: result.locked })
@@ -104,6 +106,23 @@ export function createAdmin({ cfg, store, clientOf, now = Date.now }) {
     return 200
   }
 
+  async function changePlan(req, res) {
+    const got = await receive(req, res)
+    if (got.body === undefined) return got.status
+    const { org, plan } = got.body
+    if (typeof org !== 'string' || !CODE_RE.test(org)) return jsonError(res, 400, 'bad_request', { field: 'org' })
+    if (!PLANS.includes(plan)) return jsonError(res, 400, 'bad_request', { field: 'plan' })
+    let result
+    try {
+      result = await orgStore.setPlan(org, plan)
+    } catch {
+      return jsonError(res, 500, 'server_error')
+    }
+    if (result.kind !== 'ok') return jsonError(res, 404, 'unknown_org')
+    sendJson(res, 200, { org, plan, limits: limitsFor(cfg, plan) })
+    return 200
+  }
+
   /** One row per env reserved name with the code that holds it (null: nobody), plus any held name that only matches after squashing (contract C8). */
   function reservedRows() {
     const rows = []
@@ -117,7 +136,7 @@ export function createAdmin({ cfg, store, clientOf, now = Date.now }) {
 
   /** Guard steps 4 and 5, then the route. `permits` must have said yes. Returns the status it answered. */
   async function handle(req, res, pathname) {
-    if (store === null || cfg.adminToken === '') return jsonError(res, 503, 'not_configured')
+    if ((pathname === '/admin/org' ? orgStore : store) === null || cfg.adminToken === '') return jsonError(res, 503, 'not_configured')
     const key = ipKey(clientOf(req))
     const wait = gate.retryAfter(key)
     if (wait > 0) return tooManyRequests(res, 'rate_limited', wait)
@@ -130,6 +149,7 @@ export function createAdmin({ cfg, store, clientOf, now = Date.now }) {
       sendJson(res, 200, { reserved: reservedRows() })
       return 200
     }
+    if (pathname === '/admin/org') return req.method === 'POST' ? changePlan(req, res) : jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST' })
     if (req.method !== 'POST' && req.method !== 'DELETE') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, DELETE' })
     return changeName(req, res)
   }

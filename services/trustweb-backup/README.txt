@@ -67,11 +67,20 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   X-Admin-Token from the systemd credential admin = /etc/trustweb/admin.json), dispatched before the Host gate, NEVER in Caddy. Operator:
                   scripts/trustweb_name_grant.sh --host questhub --list | --code <22> --name <n> [--alias <n2>] | --remove <n>. admin.mjs, connect_aliases.mjs.
 
+  /org/*          (wave 8) organizer accounts, the paying side: POST /org {"name"} -> 201 {"org","secret","plan":"free","limits":{"events":3,"invitees":25}} (same
+                  code/secret generator as /connect, only sha256 of the secret kept); POST /org/me {"org","secret"} -> name, plan, limits, events with counters;
+                  POST /org/event {"org","secret","event","link","invitees"[,"id"]} -> 201 create / 200 update (counters kept), {..."id","delete":true} -> 204.
+                  The link must be an https LINK_HOSTS url with a #ev_host= fragment; a wrong secret and an unknown org give the identical 403. 409 limit_events /
+                  limit_invitees (free 3 events x 25 invitees, hosted 50 x 500). POST /org/hit {"event","kind":"opened|joined|tagged"} is the one route attendee
+                  phones touch: 204 always (unknown id too), +1 on the counter, no identity and no request data kept. 16 KB bodies, own-host Origin, 6/min+30/h (create),
+                  20/min+200/h (me, event), 60/min (hit) per address. POST /admin/org {"org","plan":"free|hosted"} is loopback-only like /admin/name (paid tier switch).
+                  Store <BACKUP_DIR>/organizers.json (0600). Never logged. ORG_* settings (config.mjs). organizer.mjs, organizer_store.mjs. Contract: section 11.
+
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).
 One real call against questhub: scripts/trustweb_transcribe_probe.sh staging <audio> <mime> <seconds> (synthetic audio only).
 Modules: server.mjs (guard, routing, /backup), http_util.mjs, limits.mjs, quota.mjs (the allowance as pure arithmetic),
-hosted_store.mjs + hosted.mjs, links.mjs + link_store.mjs, connect.mjs + connect_store.mjs + connect_names.mjs + connect_aliases.mjs, admin.mjs (wave 6e), status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_chain.mjs, transcribe_berget.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
+hosted_store.mjs + hosted.mjs, links.mjs + link_store.mjs, connect.mjs + connect_store.mjs + connect_names.mjs + connect_aliases.mjs, organizer.mjs + organizer_store.mjs (wave 8), admin.mjs (wave 6e, + /admin/org), status.mjs (the /hosted/status body), transcribe.mjs (+ transcribe_provider.mjs, transcribe_chain.mjs, transcribe_berget.mjs, transcribe_openrouter.mjs, transcribe_infomaniak.mjs), feedback.mjs + newsletter.mjs, config.mjs, sweep_hosted.mjs.
 
 RUN (local)
   BACKUP_DIR=/tmp/twbackup HOSTED_DIR=/tmp/twhosted PORT=8960 node server.mjs

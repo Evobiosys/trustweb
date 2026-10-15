@@ -29,7 +29,13 @@ export const newCode = () => crypto.randomBytes(16).toString('base64url')
 /** 32 random bytes as 43 base64url characters. */
 export const newSecret = () => crypto.randomBytes(32).toString('base64url')
 
-const hashSecret = (secret) => crypto.createHash('sha256').update(secret, 'utf8').digest()
+export const hashSecret = (secret) => crypto.createHash('sha256').update(secret, 'utf8').digest()
+
+/** Does `secret` match the sha256 hex `hash`? Always hashes and compares (an undefined hash against a dummy), so unknown and wrong take the same work. */
+export function hashMatches(hash, secret) {
+  const equal = crypto.timingSafeEqual(hashSecret(secret), hash === undefined ? DUMMY_HASH : Buffer.from(hash, 'hex'))
+  return hash !== undefined && equal
+}
 
 const isEntry = (code, e) =>
   CODE_RE.test(code) && e !== null && typeof e === 'object' && typeof e.h === 'string' && HASH_RE.test(e.h) && typeof e.url === 'string' && Number.isFinite(e.seen)
@@ -130,10 +136,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
   }
 
   /** Does `secret` open `entry`? Always hashes and compares, whether or not the code exists. */
-  function secretOpens(entry, secret) {
-    const equal = crypto.timingSafeEqual(hashSecret(secret), entry === undefined ? DUMMY_HASH : Buffer.from(entry.h, 'hex'))
-    return entry !== undefined && equal
-  }
+  const secretOpens = (entry, secret) => hashMatches(entry?.h, secret)
 
   function dropExpired() {
     let n = 0

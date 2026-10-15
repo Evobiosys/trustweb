@@ -22,6 +22,8 @@
 //   POST|DELETE /admin/name + GET /admin/names (admin.mjs; loopback, a loopback Host, no proxy headers, X-Admin-Token; NEVER in Caddy). The admin routes are
 //   dispatched BEFORE the Host gate below (production ALLOWED_HOSTS has no 127.0.0.1); a request that fails the guard falls through and looks like any
 //   unknown path. A successful change logs the single line "admin grant".
+// Added 2026-10-15 (wave 8): organizer accounts, POST /org, /org/me, /org/event, /org/hit (organizer.mjs, organizer_store.mjs; ORG_* settings, store
+//   <BACKUP_DIR>/organizers.json) and the operator-only POST /admin/org (plan switch). Never logged either: the modules have no logger.
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -66,6 +68,8 @@ import { createHostedStore } from './hosted_store.mjs'
 import { createConnect } from './connect.mjs'
 import { createConnectStore } from './connect_store.mjs'
 import { reservedChecker } from './connect_names.mjs'
+import { createOrganizer, isOrgPath } from './organizer.mjs'
+import { createOrgStore, limitsFor } from './organizer_store.mjs'
 import { createAdmin, isAdminPath, permits as adminPermits } from './admin.mjs'
 import { createLinkStore } from './link_store.mjs'
 import { createLinks, notFoundPage } from './links.mjs'
@@ -164,7 +168,17 @@ export async function startServer(options = {}) {
   const connect = connectStore === null ? null : createConnect({ cfg, store: connectStore, clientOf, now: cfg.now })
   const connectSweep = connectStore === null ? null : setInterval(() => connectStore.prune().catch(() => undefined), cfg.connectSweepMs)
   connectSweep?.unref()
-  const admin = createAdmin({ cfg, store: connectStore, clientOf, now: cfg.now })
+
+  // Organizer accounts (wave 8): same rule, a store that cannot open turns the feature off (503 not_configured).
+  let orgStore = null
+  try {
+    orgStore = await createOrgStore({ file: path.join(cfg.dir, 'organizers.json'), max: cfg.orgMax, limitsOf: (plan) => limitsFor(cfg, plan), now: cfg.now })
+    if (orgStore.recovered) cfg.log('organizer store unreadable: moved aside, organizers start empty')
+  } catch {
+    cfg.log('organizer store unavailable: organizers off')
+  }
+  const organizer = orgStore === null ? null : createOrganizer({ cfg, store: orgStore, clientOf, now: cfg.now })
+  const admin = createAdmin({ cfg, store: connectStore, orgStore, clientOf, now: cfg.now })
   let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
 
   const hits = new Map() // client -> timestamps within the window
@@ -362,7 +376,7 @@ export async function startServer(options = {}) {
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name'
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || isOrgPath(pathname)
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -404,6 +418,7 @@ export async function startServer(options = {}) {
     if (pathname === '/name') return connect === null ? jsonError(res, 503, 'not_configured') : connect.name(req, res)
     if (pathname.startsWith('/c/')) return connect === null ? notFoundPage(res) : connect.open(req, res, pathname)
     if (pathname.startsWith('/who/')) return connect === null ? notFoundPage(res) : connect.who(req, res, pathname)
+    if (isOrgPath(pathname)) return organizer === null ? jsonError(res, 503, 'not_configured') : organizer.handle(req, res, pathname)
     if (pathname === '/feedback') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST, OPTIONS' })
     if (pathname === '/transcribe') return transcriber === null ? jsonError(res, 503, 'not_configured') : transcriber.handle(req, res)
     if (pathname === '/hosted/status' && hosted === null && req.method === 'GET') {
@@ -437,7 +452,7 @@ export async function startServer(options = {}) {
       })
       return
     }
-    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0])
+    const quiet = isLinkPath((req.url ?? '').split('?')[0]) || isConnectPath((req.url ?? '').split('?')[0]) || isOrgPath((req.url ?? '').split('?')[0])
     route(req, res)
       .then((status) => {
         if (!quiet) cfg.log(`${req.method} ${status}`)
