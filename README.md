@@ -63,14 +63,10 @@ The rule behind that choice, so it does not have to be re-decided each time:
 - A project he does not lead defaults to **AMPL 1.0** instead. That text is kept at
   [`LICENSE-AMPL-1.0`](LICENSE-AMPL-1.0) and no longer governs this repository.
 
-This repository is licensed under **AGPL-3.0-or-later**. An AMPL 1.0 license for this code is
-available on request from Jakob directly, at **connect@japossert.com**; it is not granted
-automatically. That reach-out is meant to happen in a web of trust manner, through direct
-contact, so he knows who is asking and why before terms outside AGPL copyleft are agreed.
-
-Need terms outside AGPL copyleft? Write to **connect@japossert.com**. That route is deliberate: the
-point is to know who is building on this outside a copyleft or commons frame, and to have that
-conversation directly. See [`NOTICE`](NOTICE).
+Need terms outside AGPL copyleft, such as [AMPL 1.0](https://evobiosys.org/evobiosys/AMPL)? Write to
+Jakob at **connect@japossert.com**. Nothing is granted automatically: the ask goes through direct
+contact, web of trust style, so he knows who builds on this outside a copyleft or commons frame and
+why, before other terms are agreed. See [`NOTICE`](NOTICE).
 
 ## Where this lives
 
@@ -79,6 +75,3 @@ EvoBioSys in the long run, and not under a personal account either: it is waitin
 own. Once that name exists, it gets its own organisation and moves there. Treat the current
 location as a placeholder, not as the project identity.
 
-## Licensing beyond AGPL
-
-Jakob is willing to publish TrustWeb under AMPL (see https://evobiosys.org/evobiosys/AMPL) for projects that reach out: connect@japossert.com. The existing route in [`NOTICE`](NOTICE) stays.

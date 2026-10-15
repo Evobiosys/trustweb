@@ -29,3 +29,6 @@ cloud-handover/
 # Rust build output (rebuildable, >100 MB files) and Python caches.
 openvtc-sidecar/
 __pycache__/
+
+# Session roadmaps (pi theonething extension writes $PWD/roadmaps): private notes, live in Evobiosys/trustweb-private.
+roadmaps/
