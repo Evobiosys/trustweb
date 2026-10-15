@@ -171,7 +171,7 @@ export function convert(index, nodes, schema, workspaces = [], env, firstMet = {
   const p = convertList(index, nodes, schema, workspaces, true, firstMet, hiddenIds, intending, suggestions, today)
   const e = env ? convertList(env.index, env.nodes, env.schema, workspaces) : { entities: [] }
   const record = {
-    v: 1, me: { id: 'me', displayName: `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,
+    v: 1, me: { id: 'me', displayName: process.env.TW_ME_NAME || `Tana persons (${p.entities.length})` }, people: p.entities, peers: [], inventory: [], log: [], notificationsOn: false,
     ...(e.entities.length ? { environments: e.entities.map(({ ring, ...rest }) => rest) } : {}),
   }
   return { record, stats: { persons: p.entities.length, lines: p.lines, withoutFields: p.withoutFields, environments: e.entities.length, hidden: p.hidden, blank: p.blank } }
