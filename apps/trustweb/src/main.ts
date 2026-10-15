@@ -27,6 +27,7 @@ import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
+import { linkOrigin } from './link_origin'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
 import { createConnectKeeper, repairConnectRecord } from './connect_code'
@@ -235,6 +236,8 @@ interface Review {
 // ---------------------------------------------------------------------------
 
 const APP_URL = location.origin + import.meta.env.BASE_URL
+/** Connect links name the live app on a local, LAN or dev-slot page, so they open on any device. */
+const CONNECT_URL = linkOrigin(location.origin) + import.meta.env.BASE_URL
 const params = new URLSearchParams(location.search)
 const personaParam = params.get('persona')
 // A demo account opened on the owner's own phone runs under its own persona
@@ -1091,7 +1094,7 @@ function createMe(name: string): void {
 /** In the side-by-side demo, the first phone hands its connect link to the page for the others. */
 function announceLink(): void {
   if (solo && persona === Persona.Holder && window.parent !== window) {
-    window.parent.postMessage({ type: 'trustweb-connect-link', url: net.connectLink(APP_URL) }, location.origin)
+    window.parent.postMessage({ type: 'trustweb-connect-link', url: net.connectLink(CONNECT_URL) }, location.origin)
   }
 }
 
@@ -3496,7 +3499,7 @@ async function ensureConnectCode(): Promise<void> {
   if (!connectEligible()) return
   try {
     await net.start()
-    await codeKeeper().ensure(net.connectLink(APP_URL))
+    await codeKeeper().ensure(net.connectLink(CONNECT_URL))
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
 
@@ -3601,7 +3604,7 @@ function meetTrustWebPage(): HTMLElement {
   if (st().connectCode) void namesSync().refresh()
   void (async () => {
     await net.start()
-    const link = net.connectLink(APP_URL)
+    const link = net.connectLink(CONNECT_URL)
     // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only,
     // which a browser never sends to a server, and which the redirect of /c/<code> keeps.
     let frag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
@@ -3911,7 +3914,7 @@ function demoCodePage(acct: DemoAccount): HTMLElement {
   const linkExpiresAt = isKept(acct) ? undefined : expiresAt
   void (async () => {
     const [peer] = await Promise.all([probeDemoPeer(), net.start()])
-    const base = net.connectLink(APP_URL)
+    const base = net.connectLink(CONNECT_URL)
     const frag = { account: acct.name, accountId: acct.id, expiresAt: linkExpiresAt, peer: peer ?? undefined }
     const link = base + '#' + demoFragment(frag)
     const ownUrl = new URL(base)

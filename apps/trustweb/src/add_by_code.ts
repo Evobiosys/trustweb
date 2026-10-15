@@ -59,10 +59,15 @@ export type Parsed =
 
 const fail = (error: ParseError): Parsed => ({ ok: false, error })
 
-/** The origins whose urls are read at all: the two app origins, and this page's own (a local or preview build). */
+/** Is this a loopback http origin (127.0.0.1 or localhost, any port)? */
+const isLoopback = (origin: string): boolean => /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin)
+
+/** The origins whose urls are read at all: the app origins, this page's own (a local or preview build), and, on a loopback page only, any loopback origin. */
 function ownOrigins(origin: string): string[] {
   return [...SHORT_LINK_ORIGINS, origin]
 }
+
+const readsOrigin = (u: URL, origin: string): boolean => ownOrigins(origin).includes(u.origin) || (isLoopback(origin) && isLoopback(u.origin))
 
 function nameOf(raw: string): Parsed {
   const name = raw.replace(/^@/, '').trim().toLowerCase()
@@ -80,8 +85,8 @@ function didOf(raw: string): Parsed {
 }
 
 function fromUrl(u: URL, origin: string): Parsed {
-  if (u.protocol !== 'https:' && u.origin !== origin) return fail(ParseError.OtherHost)
-  if (!ownOrigins(origin).includes(u.origin) || u.username || u.password) return fail(ParseError.OtherHost)
+  if (u.protocol !== 'https:' && u.origin !== origin && !(isLoopback(origin) && isLoopback(u.origin))) return fail(ParseError.OtherHost)
+  if (!readsOrigin(u, origin) || u.username || u.password) return fail(ParseError.OtherHost)
   const code = /^\/c\/([A-Za-z0-9_-]+)\/?$/.exec(u.pathname)?.[1]
   if (code !== undefined) return CONNECT_CODE_RE.test(code) ? { ok: true, kind: AddKind.Code, code } : fail(ParseError.NotAConnectLink)
   const who = /^\/who\/([^/]+)\/?$/.exec(u.pathname)?.[1]
@@ -141,7 +146,7 @@ export interface ResolveDeps {
 export function linkFromFinalUrl(finalUrl: string, origin: string): ConnectLinkParams | null {
   let u: URL
   try { u = new URL(finalUrl) } catch { return null }
-  if (!ownOrigins(origin).includes(u.origin) || u.username || u.password) return null
+  if (!readsOrigin(u, origin) || u.username || u.password) return null
   return parseConnectLinkParams(u.search)
 }
 
