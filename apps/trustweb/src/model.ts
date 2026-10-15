@@ -272,6 +272,10 @@ export interface TwEvent {
   tagName?: string
   /** I keep my own tag name even if the host renames it. */
   tagLocked?: boolean
+  /** The organizer page's 16 hex id for this event (org_hits.ts): the only thing a counter hit carries. */
+  srv?: string
+  /** The 'tagged' hit went out once already. */
+  hitTagged?: boolean
 }
 
 export interface Person {
