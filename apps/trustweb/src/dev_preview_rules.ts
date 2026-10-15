@@ -48,3 +48,14 @@ export function cascaded(features: PreviewFeature[], key: string, checked: boole
   const after = toggled(features, key, checked)
   return features.filter((f, i) => f.key !== key && f.checked !== after[i].checked).map((f) => f.key)
 }
+
+/** Self-contained (also inlined into the waiting page via toString()): true once the last three answers are 200 and the server started after `since`. */
+export function readyToGo(answers: { status: number; serverStarted?: number }[], since: number): boolean {
+  const last = answers.slice(-3)
+  return last.length === 3 && last.every((a) => a.status === 200 && (a.serverStarted ?? 0) > since)
+}
+
+/** Number of features below `node` (what "(n hidden)" counts). */
+export function descendants(node: TreeNode): number {
+  return node.children.reduce((n, c) => n + 1 + descendants(c), 0)
+}

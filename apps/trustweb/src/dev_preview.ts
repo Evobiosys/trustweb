@@ -7,12 +7,12 @@
  */
 import { pollStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { cascaded, confirmText, needsHint, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, confirmText, descendants, needsHint, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
-  assembled: { sha: string; at: string; error: string | null } | null
+  assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
   pr: { number: number; url: string } | null
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
@@ -25,6 +25,7 @@ const CSS = `
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
+.twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
 .twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
@@ -34,6 +35,8 @@ const CSS = `
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
 const POS = 'twp-pos', COLLAPSED = 'twp-collapsed'
+const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
+const setFolded = (id: string, keys: string[]): void => { try { sessionStorage.setItem('twp-tree-' + id, JSON.stringify(keys)) } catch { /* not remembered */ } }
 const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
@@ -134,7 +137,8 @@ export function initDevPreview(): void {
     for (;;) {
       const q = await call('GET', '').catch(() => null)
       if (q?.assembled && Date.parse(q.assembled.at) > start) {
-        if (!q.assembled.error) { location.reload(); return }
+        // Never reload into a dead server: the waiting page polls until a server that started after the POST (none when no restart is coming) answers.
+        if (!q.assembled.error) { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${q.assembled.restart === false ? 0 : start}`; return }
         p = q; busy = null; waiting = false; render(); return
       }
       await new Promise((r) => setTimeout(r, 500))
@@ -147,9 +151,12 @@ export function initDevPreview(): void {
     const off = loading() || hint !== null || grey.includes(f.key)
     const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
     box.addEventListener('change', () => { ask = { key: f.key, checked: box.checked }; render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : ''))), lit === f.key ? h('i') : '')
-    label.addEventListener('click', (e) => { if (e.target !== box) tap(f) })
-    return h('div', {}, label, ...(n.children.length ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
+    const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
+    const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
+    chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : [])), lit === f.key ? h('i') : '')
+    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
+    return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
   function askBox(a: { key: string; checked: boolean }): HTMLElement {

@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
+import { readyToGo } from './src/dev_preview_rules.ts'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
@@ -148,6 +149,42 @@ function devPreview(command) {
 }
 
 // Dev only: GET/POST /__tw/preview* (the preview panel, src/dev_preview.ts) drive the `preview` CLI: $TW_PREVIEW_BIN, else $TW_OPS/bin/preview, else PATH.
+const serverStarted = Date.now()
+
+// The waiting page: self-contained (no module imports), so it needs nothing from vite while vite restarts. Polls /__tw/preview and goes to `to`
+// once readyToGo (three 200s in a row from a server started after `since`).
+function waitPage(id) {
+  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>restarting</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-content:center;gap:10px;text-align:center;background:#241b2e;color:#fff;font:15px system-ui}
+b{font:700 18px ui-monospace,monospace;color:#4fd7a0}i{width:22px;height:22px;margin:auto;border:3px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+button{font:600 14px system-ui;border:0;border-radius:6px;padding:8px 14px;background:#4fd7a0;color:#241b2e}</style>
+<b id=id></b><i id=spin></i><div id=msg></div>
+<script>
+const readyToGo = ${readyToGo.toString()}
+const q = new URLSearchParams(location.search), since = Number(q.get('since')) || 0, t0 = Date.now()
+const to = /^\\/(?!\\/)/.test(q.get('to') ?? '') ? q.get('to') : '/'
+document.getElementById('id').textContent = ${JSON.stringify(id).replace(/</g, '\\u003c')}
+const msg = document.getElementById('msg'), answers = []
+async function poll() {
+  const s = Math.floor((Date.now() - t0) / 1000)
+  if (s >= 120) {
+    document.getElementById('spin').remove()
+    msg.textContent = 'server did not come back '
+    const b = msg.appendChild(document.createElement('button')); b.textContent = 'Retry'; b.onclick = () => location.reload()
+    return
+  }
+  msg.textContent = 'server restarting... ' + s + ' s'
+  try {
+    const r = await fetch('/__tw/preview', { cache: 'no-store' })
+    answers.push({ status: r.status, serverStarted: r.ok ? (await r.json()).serverStarted : undefined })
+  } catch { answers.push({ status: 0 }) }
+  if (readyToGo(answers, since)) { location.replace(to); return }
+  setTimeout(poll, 500)
+}
+poll()
+</script>`
+}
+
 function previewApi() {
   const loopback = (req) => /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '') && (!req.headers.origin || new URL(req.headers.origin).host === req.headers.host)
   const bin = () => process.env.TW_PREVIEW_BIN ?? (process.env.TW_OPS ? path.join(process.env.TW_OPS, 'bin/preview') : 'preview')
@@ -167,10 +204,16 @@ function previewApi() {
           return null
         } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
       }
+      server.middlewares.use('/__tw/wait', (req, res) => {
+        if (!loopback(req)) { res.statusCode = 403; res.end(); return }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(waitPage(readPreview().id))
+      })
       server.middlewares.use('/__tw/preview', async (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
         const sub = (req.url ?? '/').split('?')[0]
-        if (req.method === 'GET' && sub === '/') { json(res, readPreview()); return }
+        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted }); return }
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         if (sub === '/pr') {
           spawn(bin(), [readPreview().id, 'pr'], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()

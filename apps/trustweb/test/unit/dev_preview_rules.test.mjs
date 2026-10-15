@@ -1,5 +1,5 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
-import { cascaded, confirmText, needsHint, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, confirmText, descendants, needsHint, readyToGo, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -53,5 +53,21 @@ describe('dev preview outliner tree and cascade preview', () => {
     expect(cascaded(set, 'events', false)).toEqual(['event-link', 'deep'])
     expect(cascaded(set, 'overlay', false)).toEqual([])
     expect(cascaded(toggled(set, 'events', false), 'deep', true)).toEqual(['events', 'event-link'])
+  })
+
+  it('readyToGo needs three 200s in a row from a server started after since', () => {
+    const ok = { status: 200, serverStarted: 2000 }
+    expect(readyToGo([ok, ok, ok], 1000)).toBe(true)
+    expect(readyToGo([{ status: 0 }, ok, ok], 1000)).toBe(false)
+    expect(readyToGo([ok, ok], 1000)).toBe(false)
+    expect(readyToGo([ok, ok, ok], 2000)).toBe(false)
+    expect(readyToGo([{ status: 200 }, ok, ok, ok], 1000)).toBe(true)
+    expect(readyToGo([ok, ok, { status: 200, serverStarted: 500 }], 1000)).toBe(false)
+  })
+
+  it('descendants counts every feature below a node', () => {
+    const [events, overlay] = tree(set)
+    expect(descendants(events)).toBe(2)
+    expect(descendants(overlay)).toBe(0)
   })
 })
