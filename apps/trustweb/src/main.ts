@@ -1348,8 +1348,11 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const members: Partial<Record<Ring, Person[]>> = {}
   for (const p of s.people) (members[webSlot(p)] ??= []).push(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
-  ringsGeo = ringsGeometry(counts, Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)])))
-  const k = ringsK = Math.min(1, C / ringsGeo.extent)
+  const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)]))
+  // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
+  let k = 1
+  for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
+  ringsK = k
   const colourTags = loadColourTags()
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
   let dragged = false
