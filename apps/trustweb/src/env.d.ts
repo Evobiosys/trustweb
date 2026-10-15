@@ -10,6 +10,7 @@ declare module '@web-curator' {
   export function refreshCurator(): Promise<void>
   export function hideFromRings(lent: unknown, personId: string): Promise<void>
   export function unhideFromRings(lent: unknown, personId: string): Promise<void>
+  export function ringFromRings(lent: unknown, personId: string, ring: string): Promise<void>
 }
 
 /** The git short sha this build was made from (vite.config.mjs `define`); absent outside Vite (unit tests). */

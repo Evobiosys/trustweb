@@ -4,7 +4,9 @@
  * the app's modules load, because the store reads the record when it is first imported.
  */
 import { mount } from 'svelte'
+import type { Ring } from '../../trustweb/src/model'
 import { host } from './bridge'
+import { RING_KEY, ringSyncValue } from './rings'
 import type { Host } from './bridge'
 import { asShadowCss } from './shadow_css'
 import css from './styles.css?inline'
@@ -55,6 +57,16 @@ export async function unhideFromRings(lent: Omit<Host, 'root'>, personId: string
   Object.assign(host, lent)
   const { unhideInTrustweb } = await import('./sync.svelte')
   unhideInTrustweb(personId)
+}
+
+/** A dot dropped on another ring in the Web view: the same Tana ring edit (queue, 2 s debounce, "ring approved") as one made in the Curator. */
+export async function ringFromRings(lent: Omit<Host, 'root'>, personId: string, ring: Ring | 'unsorted'): Promise<void> {
+  const value = ringSyncValue(ring)
+  if (!value) return
+  Object.assign(host, lent)
+  const [{ reloadRecord }, { saveField }] = await Promise.all([import('./state.svelte'), import('./sync.svelte')])
+  reloadRecord()
+  saveField(personId, RING_KEY, value)
 }
 
 /** Back on the tab: read the host's record again (Web-view changes show up) and let it win over older ring edits. */

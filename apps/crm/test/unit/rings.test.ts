@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Ring } from '../../../trustweb/src/model'
 import { passesFilters } from '../../src/fields'
-import { OUT_OF_WEB, RING_ORDER, choiceEdits, intendingEdits, ringColor, ringOf } from '../../src/rings'
+import { OUT_OF_WEB, RING_ORDER, choiceEdits, intendingEdits, ringColor, ringOf, ringSyncValue } from '../../src/rings'
 
 describe('rings', () => {
   it('an unknown, older "none" or "family" ring is unsorted; the order runs from the centre out', () => {
@@ -9,7 +9,7 @@ describe('rings', () => {
     expect(ringOf('family')).toBe('unsorted')
     expect(ringOf('friend')).toBe('friend')
     expect(RING_ORDER).toEqual(['close', 'friend', 'acquaintance', 'intending'])
-    expect(ringColor('intending')).toBe('#a5d6a7')
+    expect(ringColor('intending')).toBe('#EFC978')
   })
   it('a choice sets the ring, and the famous checkbox only where it changes', () => {
     expect(choiceEdits(Ring.Friend, {})).toEqual([['tw-ring', 'friend']])
@@ -32,5 +32,15 @@ describe('rings', () => {
     const f = { hideDeceased: true, hideFamous: true, onlyConnection: false, rules: [] }
     expect(passesFilters({ '6QzDHIfrlmSz': true }, f)).toBe(false)
     expect(passesFilters({ '6QzDHIfrlmSz': true, UAfC4PcYo2po: '4' }, f)).toBe(true)
+  })
+})
+
+describe('ringSyncValue (Web view ring change to Tana)', () => {
+  it('maps the four rings and unsorted to the ring field value', () => {
+    for (const r of ['close', 'friend', 'acquaintance', 'intending', 'unsorted']) expect(ringSyncValue(r)).toBe(r)
+  })
+  it('sends nothing for family or none', () => {
+    expect(ringSyncValue('family')).toBeNull()
+    expect(ringSyncValue('none')).toBeNull()
   })
 })

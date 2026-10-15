@@ -1644,23 +1644,30 @@ function hideOnRings(p: Person): void {
   })
 }
 
+/** A Web view ring change goes on to Tana through the Curator's sync; the real record only (no solo, demo persona or test account). */
+function ringToTana(p: Person, ring: Ring): void {
+  if (demoPhone()) return
+  curator.ring(p.id, ring).catch((e: unknown) => console.warn('ring to Tana', e))
+}
+
 /** A placed person dragged out to the unsorted ring: back to "not placed yet"; Undo for 30 s restores the ring (and its intending value). */
 function unplaceOnRings(p: Person): void {
   const name = displayName(p.name).text
   const { ring, intending } = p
   changeRing(p, Ring.Unsorted)
+  ringToTana(p, Ring.Unsorted)
   placeOnRing(p, Ring.Unsorted, Date.now())
   save()
   render()
   showNotice(S.ringsUnplaced(name), S.ringsUnplacedBody, [
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-unplace': p.id, onclick: () => { hideNotice(); changeRing(p, ring); p.intending = intending; if (!intending) delete p.intending; save(); render() } }, [S.ringsHiddenUndo]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-unplace': p.id, onclick: () => { hideNotice(); changeRing(p, ring); ringToTana(p, ring); p.intending = intending; if (!intending) delete p.intending; save(); render() } }, [S.ringsHiddenUndo]),
   ], 30000)
 }
 
 function dropOn(p: Person, ring: Ring, desire?: number): void {
   const { ring: was, intending, ringSuggested } = p
   if (p.ring === Ring.Family) save()
-  else changeRing(p, ring)
+  else { changeRing(p, ring); ringToTana(p, ring) }
   placeOnRing(p, ring, Date.now(), desire)
   delete p.ringSuggested
   save()
@@ -1669,7 +1676,7 @@ function dropOn(p: Person, ring: Ring, desire?: number): void {
   // A grey (suggested) dot dropped on a ring confirms it; Undo for 30 s puts the suggestion back.
   showNotice(S.ringsConfirmed(displayName(p.name).text, S.ringLabel[ring].toLowerCase()), '', [
     el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-confirm': p.id, onclick: () => {
-      hideNotice(); changeRing(p, was); p.intending = intending; if (!intending) delete p.intending; p.ringSuggested = true; save(); render()
+      hideNotice(); changeRing(p, was); ringToTana(p, was); p.intending = intending; if (!intending) delete p.intending; p.ringSuggested = true; save(); render()
     } }, [S.ringsHiddenUndo]),
   ], 30000)
 }
