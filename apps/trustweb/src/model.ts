@@ -245,6 +245,35 @@ export enum ProvenanceState {
   StepByStep = 'step-by-step',
 }
 
+/**
+ * An event I was at or will be at (E1, wave 7). Local only: never sent in a share, pack, answer or cascade
+ * (cascade.ts askSources strips it). from/to are "YYYY-MM-DD", optionally with "THH:MM".
+ */
+export interface TwEvent {
+  id: string
+  name: string
+  from: string
+  to?: string
+  where: string
+  /** What was shared with participants: arriving, on what conditions. */
+  conditions?: string
+  themes?: string[]
+  organizer?: string
+  createdAt: number
+  /** My own attendance, set when I add or join it. */
+  attended: boolean
+  /** Came in through an event link (event_link.ts): shows the organizer and the tag nudge. */
+  fromLink?: true
+  /** Who hosted it: names the organizer typed about themselves. One by default, co-hosts the exception. */
+  hosts?: string[]
+  /** Default true: the host may name this event's tag for everyone (event_link.ts host link). */
+  hostNamesTags?: boolean
+  /** What the tag is called on my device; absent = the event name. */
+  tagName?: string
+  /** I keep my own tag name even if the host renames it. */
+  tagLocked?: boolean
+}
+
 export interface Person {
   id: string
   name: string
@@ -254,6 +283,8 @@ export interface Person {
   lines: NoteLine[]
   /** Set once this person is also connected on TrustWeb (a paired peer). */
   peerId?: string
+  /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
+  events?: string[]
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
    * this phone only: never matched, relayed or put into a shared code.
@@ -743,6 +774,8 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Events I know (events.ts). Absent in older records. Local only. */
+  events?: TwEvent[]
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */

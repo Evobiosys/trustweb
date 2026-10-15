@@ -122,6 +122,10 @@ import { importGroup } from './import_view'
 import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
+import { createEventsView } from './events_view'
+import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
+import { decodeEventLink } from './event_link'
+import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
@@ -147,6 +151,8 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
+  /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
+  Events = 'events',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -251,6 +257,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 // A meeting sent inside TrustWeb (?share=1#k=...&t=...), or riding in a Meet
 // code after a meeting (#n=...&k=...&t=...): opened once the app is up (share.ts).
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
+// An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
+let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 const wantInstall = params.get('install') === '1'
 // Keep only what a reload needs; the connect parameters are consumed once.
@@ -683,6 +691,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
   switch (s) {
     case Screen.Web:
     case Screen.StillTrue:
+    case Screen.Events:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -871,7 +880,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Events))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -889,6 +898,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
+      case Screen.Events: return eventsView.body()
     }
   })()
   host.replaceChildren(...body)
@@ -1212,6 +1222,7 @@ function screenStart(): Node[] {
     void net.start().then(announceLink)
     void completePendingConnect()
     maybeOpenPendingShare()
+    maybeOpenPendingEvent()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -1614,11 +1625,20 @@ function curatorSheet(): void {
   curator.open()
 }
 
+/** The Events screen: the list, or one event's page (from a chip on a person). */
+function openEvents(eventId?: string): void {
+  eventsView.open(eventId)
+  go(Screen.Events)
+}
+
 function screenWeb(): Node[] {
   const s = st()
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
+  const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
+  const right = document.createDocumentFragment()
+  right.append(events, search)
   return [
-    header(S.webTitle, { right: search, more: true }),
+    header(S.webTitle, { right, more: true }),
     el('div', { class: 'scroll' }, [
       // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
       queryOpen ? null : cardStackEl,
@@ -1875,9 +1895,25 @@ function personSheet(personId: string): void {
     sharedReachRow(p),
     passOnRowFor(p),
     askAgainRow(p),
+    eventChipsRow(p),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
+}
+
+/** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
+function curatorPerson(personId: string): void {
+  openSheet([curator.person(personId, closeSheet)])
+}
+
+/** The events this person is tagged with (E1): a chip each, tap opens the event page. */
+function eventChipsRow(p: Person): HTMLElement | null {
+  const evs = (st().events ?? []).filter((e) => p.events?.includes(e.id))
+  if (!evs.length) return null
+  return el('div', { class: 'chips', 'data-person-events': p.id }, [
+    el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
+    ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [tagLabel(e)])),
+  ])
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -2578,6 +2614,12 @@ const curator = createCurator({
     if (screen === Screen.Web) render()
   },
 })
+const eventsView = createEventsView({
+  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
+  undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
+  newId: () => randomId(8), copyLink, origin: APP_URL.replace(/\/$/, ''),
+})
+
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
@@ -2818,6 +2860,23 @@ function maybeOpenPendingShare(): void {
   const link = pendingShare
   pendingShare = null
   void openShare(link)
+}
+
+/** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
+function maybeOpenPendingEvent(): void {
+  if (!pendingEvent || !state) return
+  const ev = pendingEvent
+  pendingEvent = null
+  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
+  const add = (): void => { const id = joinEvent(st(), ev, Date.now()); save(); closeSheet(); openEvents(id) }
+  openSheet([
+    el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
+    ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
+    ev.conditions ? el('p', {}, [ev.conditions]) : null,
+    ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
+    el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
+    el('button', { class: 'btn btn-ghost wide', 'data-event-notme': '', onclick: closeSheet }, [S.eventLinkNotMe]),
+  ])
 }
 
 function discardDraft(): void {
@@ -3217,8 +3276,8 @@ function screenMeet(): Node[] {
 let shortLinker: ShortLinker | null = null
 
 /** Copies a link and says so (the toast shows the link itself where the clipboard is refused). */
-function copyLink(text: string): void {
-  void navigator.clipboard?.writeText(text).then(() => toast(S.meetCopied), () => toast(text))
+function copyLink(text: string, done: string = S.meetCopied): void {
+  void navigator.clipboard?.writeText(text).then(() => toast(done), () => toast(text))
 }
 
 /** The short-link choice for a connect code: its QR follows the choice, as do Copy, Send and NFC (chooser.current()). Not offered in an embedded demo phone. */
@@ -4709,6 +4768,7 @@ if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
   void completePendingConnect()
   maybeOpenPendingShare()
+  maybeOpenPendingEvent()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
