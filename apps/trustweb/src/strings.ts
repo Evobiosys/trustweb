@@ -233,6 +233,12 @@ export const S = {
   eventsUntag: (name: string) => `Remove the tag from ${name}`,
   eventsOrganizedBy: (name: string) => `Organized by ${name}`,
   eventsPersonChips: 'Events',
+  eventLinkShare: 'Share event link',
+  eventLinkHint: 'Send it to the organizer or to everyone who was there: each of them gets the event in their TrustWeb and can tag the people they met.',
+  eventLinkJoinTitle: (name: string, when: string, where: string) => `You were at ${name}, ${when}, ${where}`,
+  eventLinkAdd: 'Add to my events',
+  eventLinkNotMe: 'Not me',
+  eventLinkNudge: 'Tag the people you met here',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
   searchOpen: 'Web Curator',
   // Wave 7: the outliner's rows and views.

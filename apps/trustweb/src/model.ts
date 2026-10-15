@@ -262,6 +262,8 @@ export interface TwEvent {
   createdAt: number
   /** My own attendance, set when I add or join it. */
   attended: boolean
+  /** Came in through an event link (event_link.ts): shows the organizer and the tag nudge. */
+  fromLink?: true
 }
 
 export interface Person {
