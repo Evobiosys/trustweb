@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prButton, prGate, prNeedsUpdate, testLine, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -172,23 +172,23 @@ describe('merged features', () => {
   })
 })
 
-describe('dev preview PR gate', () => {
-  const a = { sha: 'abc1234' }
-  const t = (o) => ({ sha: 'abc1234', at: '2026-10-15T19:00:00Z', ok: null, running: false, ...o })
-  it('four states, same sha only', () => {
-    expect(prGate({ assembled: a })).toBe('untested')
-    expect(prGate({ assembled: a, tested: t({ running: true }) })).toBe('running')
-    expect(prGate({ assembled: a, tested: t({ ok: false }) })).toBe('failed')
-    expect(prGate({ assembled: a, tested: t({ ok: true }) })).toBe('passed')
+describe('dev preview PR count, block and reviewed rows', () => {
+  const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
+  it('prCount counts the checked boxes that show', () => {
+    expect(prCount(list)).toBe(1)
+    expect(prCount(toggled(list, 'b', true))).toBe(2)
+    expect(prCount([])).toBe(0)
   })
-  it('a run on another sha is untested', () => {
-    for (const o of [{ ok: true }, { ok: false }, { running: true }]) expect(prGate({ assembled: a, tested: t({ ...o, sha: 'old0000' }) })).toBe('untested')
-    expect(prGate({ assembled: null, tested: t({ ok: true }) })).toBe('untested')
+  it('prBlocked only while a draft differs from the assembled set', () => {
+    expect(prBlocked(null, list)).toBe(false)
+    expect(prBlocked(list, list)).toBe(false)
+    expect(prBlocked(toggled(list, 'a', false), list)).toBe(true)
+    expect(prBlocked(toggled(list, 'a', false), toggled(list, 'a', false))).toBe(false)
   })
-  it('lines', () => {
-    expect(testLine('untested')).toBe('Tests not run for this selection')
-    expect(testLine('running')).toBe('Running the checks (about 40 s)...')
-    expect(testLine('failed')).toBe('Checks failed: see below')
-    expect(testLine('passed', t({}))).toBe('Checks passed for abc1234')
+  it('toggleSeen marks, then unmarks, without mutating', () => {
+    const seen = ['x']
+    expect(toggleSeen(seen, 'a')).toEqual(['x', 'a'])
+    expect(toggleSeen(['x', 'a'], 'a')).toEqual(['x'])
+    expect(seen).toEqual(['x'])
   })
 })

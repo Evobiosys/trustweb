@@ -28,6 +28,21 @@ export function toggled(features: PreviewFeature[], key: string, checked: boolea
   return features.map((f) => (set.has(f.key) ? { ...f, checked } : f))
 }
 
+/** How many checked boxes the user sees (merged features are not rows). */
+export function prCount(features: PreviewFeature[]): number {
+  return visible(features).filter((f) => f.checked).length
+}
+
+/** True while the boxes on screen (a draft) differ from the assembled set: a PR takes the assembled set, so it waits for the reload. */
+export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeature[]): boolean {
+  return draft !== null && draft.some((f) => f.checked !== assembled.find((a) => a.key === f.key)?.checked)
+}
+
+/** The reviewed keys after a tap on `key`: in = marked, again = unmarked. */
+export function toggleSeen(seen: string[], key: string): string[] {
+  return seen.includes(key) ? seen.filter((k) => k !== key) : [...seen, key]
+}
+
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
 export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
@@ -48,27 +63,6 @@ export function prNeedsUpdate(pr: { sha?: string } | null, assembledSha: string 
 export function prButton(pr: { number: number; sha?: string } | null, n: number, assembledSha: string | undefined): string {
   if (!pr) return `Create PR with ${n} checked`
   return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
-}
-
-export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
-export type PrGate = 'untested' | 'running' | 'failed' | 'passed'
-
-/** What the checks say about the assembled set: only a run on the same sha counts; anything else is untested. */
-export function prGate(p: { assembled?: { sha: string } | null; tested?: Tested | null }): PrGate {
-  const t = p.tested
-  if (!t || !p.assembled || t.sha !== p.assembled.sha) return 'untested'
-  if (t.running) return 'running'
-  return t.ok === true ? 'passed' : t.ok === false ? 'failed' : 'untested'
-}
-
-/** The gate's one-line state. */
-export function testLine(gate: PrGate, tested?: Tested | null): string {
-  switch (gate) {
-    case 'untested': return 'Tests not run for this selection'
-    case 'running': return 'Running the checks (about 40 s)...'
-    case 'failed': return 'Checks failed: see below'
-    case 'passed': return `Checks passed for ${tested?.sha ?? '?'}`
-  }
 }
 
 export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }

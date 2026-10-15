@@ -8,14 +8,13 @@
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prGate, prRunning, testLine, rowPlan, setMap, stepText, tapped, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string } | null
-  tested?: Tested | null
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
@@ -25,7 +24,7 @@ const CSS = `
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
-.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
@@ -34,20 +33,22 @@ const CSS = `
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
-.twp button:disabled{opacity:.45;cursor:not-allowed}.twp .gate{display:grid;gap:4px}
+.twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
 const POS = 'twp-pos'
-const THEN_TEST = 'twp-then-test'
 const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
 const setFolded = (id: string, keys: string[]): void => { try { sessionStorage.setItem('twp-tree-' + id, JSON.stringify(keys)) } catch { /* not remembered */ } }
+const seenKey = (id: string): string => 'twp-seen-' + id
 const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
 }
+
+const seen = (id: string): string[] => { try { return JSON.parse(store.get(seenKey(id)) ?? '[]') as string[] } catch { return [] } }
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props)
@@ -84,7 +85,6 @@ export function initDevPreview(): void {
   let prStarted = ''
   let opening: ReturnType<typeof setTimeout> | null = null
   let pointing = false
-  let testing = false
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
@@ -140,6 +140,7 @@ export function initDevPreview(): void {
   }
 
   function tap(f: PreviewFeature): void {
+    store.set(seenKey(p!.id), JSON.stringify(toggleSeen(seen(p!.id), f.key)))
     lit = tapped(lit, f.key)
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
@@ -184,7 +185,7 @@ export function initDevPreview(): void {
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (seen(p!.id).includes(f.key) ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
@@ -194,9 +195,7 @@ export function initDevPreview(): void {
     go.addEventListener('click', () => { void reassemble(a.draft, a.last) })
     const no = h('button', { className: 'alt', textContent: 'Cancel' })
     no.addEventListener('click', () => { ask = null; render() })
-    const then = p!.pr ? h('button', { textContent: 'Reload, then run tests' }) : null
-    then?.addEventListener('click', () => { try { sessionStorage.setItem(THEN_TEST, p!.id) } catch { /* not remembered: run them by hand */ } void reassemble(a.draft, a.last) })
-    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length, p!.pr?.number), h('div', {}, go, ...(then ? [then] : []), no))
+    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length, p!.pr?.number), h('div', {}, go, no))
   }
 
   function slow(): HTMLElement {
@@ -244,36 +243,15 @@ export function initDevPreview(): void {
     }).catch((e: Error) => { error = e.message; render() })
   }
 
-  // Runs the CLI's checks (no vite touched, the preview keeps showing) and polls until a run newer than this click is done.
-  function runTests(post = true): void {
-    const click = post ? Date.now() : 0
-    testing = true; begin(); render()
-    void (post ? call('POST', '/test', {}) : Promise.resolve(p!)).then(async () => {
-      for (;;) {
-        await new Promise((r) => setTimeout(r, 2000))
-        const q = await call('GET', '').catch(() => null)
-        if (q?.tested && !q.tested.running && Date.parse(q.tested.at) >= click) { p = q; break }
-      }
-    }).catch((e: Error) => { error = e.message }).finally(() => { testing = false; render() })
-  }
-
-  function gate(): HTMLElement {
-    const g = prGate(p!), running = testing || g === 'running'
-    const run = h('button', { className: 'alt', textContent: 'Run tests for a PR with this selection', disabled: running || loading() })
-    run.addEventListener('click', () => { runTests() })
-    return h('div', { className: 'gate' }, h('div', {}, testLine(running ? 'running' : g, p!.tested), ...(running ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), run, ...(g === 'failed' && p!.tested?.tail ? [h('pre', { className: 'log', textContent: p!.tested.tail })] : []))
-  }
-
-  function prPart(n: number): HTMLElement {
+  function prPart(n: number, blocked: boolean): HTMLElement {
     const label = prButton(p!.pr, n, p!.assembled?.sha)
     const stay = opening ? [staying()] : []
     if (p!.pr && !label && !prText) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr.number} holds this set` }), ...stay)
-    const passed = prGate(p!) === 'passed'
-    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || !passed })
+    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || blocked })
     go.addEventListener('click', pushPr)
     const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
     const status = prText ? h('div', {}, prText, ...stay, eta) : ''
-    return h('div', { className: 'btns' }, gate(), ...(p!.pr && !label ? [] : [go]), ...(passed ? [] : [h('small', { textContent: 'Run the tests first' })]), status)
+    return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), ...(blocked ? [h('small', { textContent: 'Reload first: the PR takes the assembled set' })] : []), status)
   }
 
   function render(): void {
@@ -294,7 +272,7 @@ export function initDevPreview(): void {
       drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
-      const n = visible(q.features).filter((f) => f.checked).length
+      const n = prCount(shown)
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -309,7 +287,7 @@ export function initDevPreview(): void {
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        prPart(n), h('div', { className: 'btns' }, sw),
+        prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
       )
     }
     const pos = store.get(POS)
@@ -330,10 +308,6 @@ export function initDevPreview(): void {
   }).catch(() => { /* no status: no flow to show */ })
   void call('GET', '').then((q) => {
     p = q
-    let then = false
-    try { then = sessionStorage.getItem(THEN_TEST) === q.id; if (then) sessionStorage.removeItem(THEN_TEST) } catch { /* not remembered */ }
-    if (then && !q.assembled?.error) runTests()
-    else if (prGate(q) === 'running') runTests(false)
-    else render()
+    render()
   }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
