@@ -8,8 +8,9 @@ export const drag = $state({ key: null as string | null, zone: null as string | 
 
 export type Drop = (key: string, section: Section, before: string | null) => void
 
-function whereAt(x: number, y: number): { zone: string; before: string | null } | null {
-  const el = document.elementFromPoint(x, y)
+/** `root` is the grip's own root: the Curator runs in a shadow root inside the phone sheet, where `document.elementFromPoint` stops at the host. */
+function whereAt(root: Document | ShadowRoot, x: number, y: number): { zone: string; before: string | null } | null {
+  const el = root.elementFromPoint(x, y)
   const slot = el?.closest<HTMLElement>('[data-slot]')
   const zone = (slot ?? el)?.closest<HTMLElement>('[data-zone]')
   if (!zone?.dataset.zone) return null
@@ -44,14 +45,14 @@ export function grip(node: HTMLElement, onDrop: Drop): { update: (d: Drop) => vo
       if (timer && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > SLOP_PX) reset()
       return
     }
-    const at = whereAt(e.clientX, e.clientY)
+    const at = whereAt(node.getRootNode() as Document | ShadowRoot, e.clientX, e.clientY)
     drag.zone = at?.zone ?? null
     drag.before = at?.before ?? null
   }
 
   function up(e: PointerEvent): void {
     const key = drag.key
-    const at = key === null ? null : whereAt(e.clientX, e.clientY)
+    const at = key === null ? null : whereAt(node.getRootNode() as Document | ShadowRoot, e.clientX, e.clientY)
     reset()
     if (key !== null && at && at.before !== key) drop(key, at.zone as Section, at.before)
   }
