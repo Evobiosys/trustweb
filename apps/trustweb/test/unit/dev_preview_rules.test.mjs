@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prButton, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -169,5 +169,26 @@ describe('merged features', () => {
     const { visible } = await import('../../src/dev_preview_rules.ts')
     const list = [{ key: 'a', branch: 'x/a', title: 'A', requires: [], checked: true, merged: true }, { key: 'b', branch: 'x/b', title: 'B', requires: ['a'], checked: true }]
     expect(visible(list).map((f) => f.key)).toEqual(['b'])
+  })
+})
+
+describe('dev preview PR count, block and reviewed rows', () => {
+  const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
+  it('prCount counts the checked boxes that show', () => {
+    expect(prCount(list)).toBe(1)
+    expect(prCount(toggled(list, 'b', true))).toBe(2)
+    expect(prCount([])).toBe(0)
+  })
+  it('prBlocked only while a draft differs from the assembled set', () => {
+    expect(prBlocked(null, list)).toBe(false)
+    expect(prBlocked(list, list)).toBe(false)
+    expect(prBlocked(toggled(list, 'a', false), list)).toBe(true)
+    expect(prBlocked(toggled(list, 'a', false), toggled(list, 'a', false))).toBe(false)
+  })
+  it('toggleSeen marks, then unmarks, without mutating', () => {
+    const seen = ['x']
+    expect(toggleSeen(seen, 'a')).toEqual(['x', 'a'])
+    expect(toggleSeen(['x', 'a'], 'a')).toEqual(['x'])
+    expect(seen).toEqual(['x'])
   })
 })

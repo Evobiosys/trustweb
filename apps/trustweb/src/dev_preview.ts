@@ -8,7 +8,7 @@
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prRunning, rowPlan, setMap, stepText, tapped, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -24,7 +24,7 @@ const CSS = `
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
-.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
@@ -42,10 +42,13 @@ const CSS = `
 const POS = 'twp-pos'
 const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
 const setFolded = (id: string, keys: string[]): void => { try { sessionStorage.setItem('twp-tree-' + id, JSON.stringify(keys)) } catch { /* not remembered */ } }
+const seenKey = (id: string): string => 'twp-seen-' + id
 const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
 }
+
+const seen = (id: string): string[] => { try { return JSON.parse(store.get(seenKey(id)) ?? '[]') as string[] } catch { return [] } }
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props)
@@ -137,6 +140,7 @@ export function initDevPreview(): void {
   }
 
   function tap(f: PreviewFeature): void {
+    store.set(seenKey(p!.id), JSON.stringify(toggleSeen(seen(p!.id), f.key)))
     lit = tapped(lit, f.key)
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
@@ -181,7 +185,7 @@ export function initDevPreview(): void {
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (seen(p!.id).includes(f.key) ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
@@ -239,15 +243,15 @@ export function initDevPreview(): void {
     }).catch((e: Error) => { error = e.message; render() })
   }
 
-  function prPart(n: number): HTMLElement {
+  function prPart(n: number, blocked: boolean): HTMLElement {
     const label = prButton(p!.pr, n, p!.assembled?.sha)
     const stay = opening ? [staying()] : []
     if (p!.pr && !label && !prText) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr.number} holds this set` }), ...stay)
-    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 })
+    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || blocked })
     go.addEventListener('click', pushPr)
     const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
     const status = prText ? h('div', {}, prText, ...stay, eta) : ''
-    return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), status)
+    return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), ...(blocked ? [h('small', { textContent: 'Reload first: the PR takes the assembled set' })] : []), status)
   }
 
   function render(): void {
@@ -268,7 +272,7 @@ export function initDevPreview(): void {
       drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
-      const n = visible(q.features).filter((f) => f.checked).length
+      const n = prCount(shown)
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -283,7 +287,7 @@ export function initDevPreview(): void {
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        prPart(n), h('div', { className: 'btns' }, sw),
+        prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
       )
     }
     const pos = store.get(POS)

@@ -28,6 +28,21 @@ export function toggled(features: PreviewFeature[], key: string, checked: boolea
   return features.map((f) => (set.has(f.key) ? { ...f, checked } : f))
 }
 
+/** How many checked boxes the user sees (merged features are not rows). */
+export function prCount(features: PreviewFeature[]): number {
+  return visible(features).filter((f) => f.checked).length
+}
+
+/** True while the boxes on screen (a draft) differ from the assembled set: a PR takes the assembled set, so it waits for the reload. */
+export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeature[]): boolean {
+  return draft !== null && draft.some((f) => f.checked !== assembled.find((a) => a.key === f.key)?.checked)
+}
+
+/** The reviewed keys after a tap on `key`: in = marked, again = unmarked. */
+export function toggleSeen(seen: string[], key: string): string[] {
+  return seen.includes(key) ? seen.filter((k) => k !== key) : [...seen, key]
+}
+
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
 export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
