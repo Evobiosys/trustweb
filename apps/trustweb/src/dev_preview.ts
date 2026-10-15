@@ -5,9 +5,9 @@
  * preview, the personal/stock switch and "Create PR". The FEATURE box (dev_feature.ts) sits below it via --twp-h.
  * A tap on a row points at the UI the feature adds (its `selector`); a tap on a checkbox asks first, then re-assembles and reloads.
  */
-import { pollStatus } from './dev_feature'
+import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { cascaded, confirmText, descendants, needsHint, setMap, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, collapseStore, confirmText, descendants, needsHint, prRunning, setMap, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -34,7 +34,7 @@ const CSS = `
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
-const POS = 'twp-pos', COLLAPSED = 'twp-collapsed'
+const POS = 'twp-pos'
 const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
 const setFolded = (id: string, keys: string[]): void => { try { sessionStorage.setItem('twp-tree-' + id, JSON.stringify(keys)) } catch { /* not remembered */ } }
 const store = {
@@ -78,13 +78,17 @@ export function initDevPreview(): void {
   document.body.appendChild(root)
   const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() })
 
-  const collapsed = (): boolean => store.get(COLLAPSED) === '1'
-  const setCollapsed = (on: boolean): void => { store.set(COLLAPSED, on ? '1' : ''); render() }
+  const tab = collapseStore(sessionStorage)
+  const collapsed = tab.get
+  const setCollapsed = (on: boolean): void => { tab.set(on); render() }
   const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
   const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
   const begin = (): void => { since = Date.now() }
   setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
-  const sync = (): void => { document.documentElement.style.setProperty('--twp-h', root.offsetHeight + 'px') }
+  const sync = (): void => {
+    const { left, top } = root.getBoundingClientRect(), style = document.documentElement.style
+    style.setProperty('--twp-h', root.offsetHeight + 'px'); style.setProperty('--twp-l', left + 'px'); style.setProperty('--twp-t', top + 'px')
+  }
 
   // Drag by `handle`; a pointer that moved less than 4 px is a click.
   function drag(handle: HTMLElement): { moved: boolean } {
@@ -96,7 +100,7 @@ export function initDevPreview(): void {
       handle.setPointerCapture(down.pointerId)
       const move = (e: PointerEvent): void => {
         if (Math.abs(e.clientX - down.clientX) + Math.abs(e.clientY - down.clientY) > 3) state.moved = true
-        place(e.clientX - dx, e.clientY - dy)
+        place(e.clientX - dx, e.clientY - dy); sync()
       }
       handle.addEventListener('pointermove', move)
       handle.addEventListener('pointerup', () => { handle.removeEventListener('pointermove', move); if (state.moved) store.set(POS, JSON.stringify({ x: root.offsetLeft, y: root.offsetTop })) }, { once: true })
@@ -178,17 +182,21 @@ export function initDevPreview(): void {
     return h('div', { className: 'row warn slow' }, 'taking long: reload by hand ', re)
   }
 
+  function watchPr(): void {
+    pollStatus((j) => {
+      prStep = j.step; prText = j.text ?? j.step; prUrl = j.url ?? ''
+      if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() })
+      render()
+    })
+  }
+
   function prPart(n: number): HTMLElement {
     if (p!.pr) return h('div', { className: 'btns' }, h('a', { href: p!.pr.url, target: '_blank', textContent: 'PR #' + p!.pr.number }))
     const go = h('button', { textContent: `Create PR with ${n} checked`, disabled: loading() || n === 0 })
     go.addEventListener('click', () => {
       void call('POST', '/pr', {}).then(() => {
         prText = 'starting'; prStep = ''; begin(); render()
-        pollStatus((j) => {
-          prStep = j.step; prText = j.text ?? j.step; prUrl = j.url ?? ''
-          if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() })
-          render()
-        })
+        watchPr()
       }).catch((e: Error) => { error = e.message; render() })
     })
     const status = prText ? h('div', {}, prText, ' ', prUrl ? h('a', { href: prUrl, target: '_blank', textContent: 'open' }) : '') : ''
@@ -239,5 +247,9 @@ export function initDevPreview(): void {
     if (lit) { lit = null; render() } else if (!collapsed()) setCollapsed(true)
   })
   render()
+  // A reload while "Create PR" runs: show the spinner and text again.
+  void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
+    if (prRunning(j.step)) { prStep = j.step; prText = j.text ?? j.step; begin(); render(); watchPr() }
+  }).catch(() => { /* no status: no flow to show */ })
   void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }

@@ -6,10 +6,11 @@
 import { createPointer } from './dev_pointer'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
+declare const __TW_PREVIEW__: object | null | undefined
 declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string; n?: number; approved?: string | null } | null | undefined
 
 const CSS = `
-.twf{position:fixed;left:8px;top:calc(8px + var(--twp-h,0px));z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
+.twf{position:fixed;left:var(--twp-l,8px);top:calc(var(--twp-t,8px) + var(--twp-h,0px));z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
 .twf i{display:block;font-style:normal;font-weight:500;opacity:.8}.twf button{margin-top:4px;font:600 11px system-ui;border:0;border-radius:6px;padding:3px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twf b{display:block;font-size:10px;letter-spacing:.06em;color:#4fd7a0}.twf span{font-weight:500}
 .twf .twf-x{position:absolute;top:2px;right:4px;margin:0;padding:0 5px;background:none;color:#fff;font-size:14px}
@@ -24,7 +25,7 @@ const CSS = `
 
 export function initDevFeature(): void {
   const f = typeof __TW_FEATURE__ === 'undefined' ? null : __TW_FEATURE__
-  if (!f) return
+  if (!f || (f as unknown) === 'null' || !f.title) return
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
   const box = Object.assign(document.createElement('div'), { className: 'twf' })
   const bld = typeof __TW_BUILD__ === 'undefined' ? null : __TW_BUILD__
@@ -60,7 +61,7 @@ export function initDevFeature(): void {
     box.addEventListener('pointermove', move)
     box.addEventListener('pointerup', () => box.removeEventListener('pointermove', move), { once: true })
   })
-  if (bld?.mode === 'personal') document.body.append(approveBar(bld))
+  if (bld?.mode === 'personal') document.body.append(approveBar(bld, typeof __TW_PREVIEW__ === 'undefined' || !__TW_PREVIEW__))
   let hidden = false
   try { hidden = !!sessionStorage.getItem('twf-hidden') } catch { /* ignore */ }
   show(!hidden)
@@ -81,7 +82,7 @@ export function pollStatus(on: (j: ApprovalStatus) => void): void {
 
 /** Bottom right, amber, shaped like the dev slot's approve box (controller/overlay.js): the owner's yes for this build, the stock twin one tap away.
  *  A press starts the check flow on the dev server (POST /__tw/approve); the box then turns grey "IN PROGRESS" and polls /__tw/status every 5 s. */
-function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLElement {
+function approveBar(bld: { stockUrl: string; approved?: string | null }, stockLink: boolean): HTMLElement {
   const bar = Object.assign(document.createElement('div'), { className: 'twf-ok' })
   bar.innerHTML = '<header></header><div class="body"></div>'
   const [head, body] = [bar.children[0] as HTMLElement, bar.children[1] as HTMLElement]
@@ -107,7 +108,7 @@ function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLEl
     body.append(btn('Approve personal preview', 'go', () => {
       void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.ok && poll())
     }))
-    if (bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
+    if (stockLink && bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
   }
   head.addEventListener('pointerdown', (down) => {
     const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop

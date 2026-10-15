@@ -1,4 +1,6 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
+export { readyToGo } from '../dev_preview_rules.mjs'
+
 export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string }
 
 /** "needs <title>" for the first required feature that is unchecked, else null (the box is usable). */
@@ -49,12 +51,6 @@ export function cascaded(features: PreviewFeature[], key: string, checked: boole
   return features.filter((f, i) => f.key !== key && f.checked !== after[i].checked).map((f) => f.key)
 }
 
-/** Self-contained (also inlined into the waiting page via toString()): true once the last three answers are 200 and the server started after `since`. */
-export function readyToGo(answers: { status: number; serverStarted?: number }[], since: number): boolean {
-  const last = answers.slice(-3)
-  return last.length === 3 && last.every((a) => a.status === 200 && (a.serverStarted ?? 0) > since)
-}
-
 /** Number of features below `node` (what "(n hidden)" counts). */
 export function descendants(node: TreeNode): number {
   return node.children.reduce((n, c) => n + 1 + descendants(c), 0)
@@ -63,4 +59,18 @@ export function descendants(node: TreeNode): number {
 /** The exact state of every box, as POSTed to the server: key -> checked. */
 export function setMap(features: PreviewFeature[]): Record<string, boolean> {
   return Object.fromEntries(features.map((f) => [f.key, f.checked]))
+}
+
+/** The panel's collapsed flag in a per-tab store (sessionStorage): a new tab or a fresh load starts expanded. Unavailable storage = not remembered. */
+export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { get(): boolean; set(on: boolean): void } {
+  const key = 'twp-collapsed'
+  return {
+    get: () => { try { return storage.getItem(key) === '1' } catch { return false } },
+    set: (on) => { try { storage.setItem(key, on ? '1' : '') } catch { /* not remembered */ } },
+  }
+}
+
+/** True while the "Create PR" flow works: its /__tw/status step is neither none, ready nor failed. */
+export function prRunning(step: string): boolean {
+  return !['none', 'ready', 'failed'].includes(step)
 }

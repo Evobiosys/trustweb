@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
-import { readyToGo } from './src/dev_preview_rules.ts'
+import { readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')

@@ -1,5 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
-import { cascaded, confirmText, descendants, needsHint, readyToGo, setMap, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
+import { cascaded, collapseStore, confirmText, descendants, needsHint, prRunning, readyToGo, setMap, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -74,5 +75,28 @@ describe('dev preview outliner tree and cascade preview', () => {
     const [events, overlay] = tree(set)
     expect(descendants(events)).toBe(2)
     expect(descendants(overlay)).toBe(0)
+  })
+})
+
+describe('dev preview collapse store and PR status', () => {
+  const mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v) } } }
+  it('starts expanded, remembers per storage, and the re-export is the plain-ESM function', () => {
+    const a = mem(), b = mem()
+    expect(collapseStore(a).get()).toBe(false)
+    collapseStore(a).set(true)
+    expect(collapseStore(a).get()).toBe(true)
+    expect(collapseStore(b).get()).toBe(false)
+    collapseStore(a).set(false)
+    expect(collapseStore(a).get()).toBe(false)
+    expect(readyToGo).toBe(readyToGoSource)
+  })
+  it('unavailable storage is not remembered and never throws', () => {
+    const dead = { getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') } }
+    expect(collapseStore(dead).get()).toBe(false)
+    expect(() => collapseStore(dead).set(true)).not.toThrow()
+  })
+  it('a PR flow runs while the step is none of none, ready, failed', () => {
+    expect(['none', 'ready', 'failed'].map(prRunning)).toEqual([false, false, false])
+    expect(prRunning('ci')).toBe(true)
   })
 })
