@@ -300,6 +300,8 @@ export interface Person {
   fields?: Record<string, string>
   /** Ring Intending only: how much I want to connect (0..10) and since when (rings_layout.ts). Absent: not stated. */
   intending?: { value: number; since: number }
+  /** The ring is a suggestion (ring-suggestions file), not confirmed: the Web view keeps the person on the unsorted ring until a drop or the Curator confirms it. */
+  ringSuggested?: boolean
 }
 
 /**

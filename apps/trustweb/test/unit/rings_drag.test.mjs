@@ -46,6 +46,14 @@ describe('rings drag', () => {
     expect(webSlot(person(Ring.Friend))).toBe(Ring.Friend)
     expect(webSlot(person(Ring.Family))).toBe(Ring.Close)
   })
+  it('only a confirmed ring places a person: a suggested ring (any of the four, or family) stays on the unsorted ring', () => {
+    for (const r of [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Family]) {
+      expect(webSlot(person(r, { ringSuggested: true }))).toBe(Ring.Unsorted)
+      expect(webSlot(person(r, { ringSuggested: false }))).not.toBe(Ring.Unsorted)
+    }
+    expect(webSlot(person(Ring.Acquaintance))).toBe(Ring.Acquaintance)
+    expect(webSlot(person(Ring.Unsorted, { ringSuggested: true }))).toBe(Ring.Unsorted)
+  })
   it('a drop sets the ring; intending carries a clamped 0..10 value and a date, leaving it clears both', () => {
     const p = person(Ring.Friend)
     placeOnRing(p, Ring.Intending, 7)

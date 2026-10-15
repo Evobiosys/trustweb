@@ -1489,12 +1489,20 @@ function unplaceOnRings(p: Person): void {
 }
 
 function dropOn(p: Person, ring: Ring, desire?: number): void {
+  const { ring: was, intending, ringSuggested } = p
   if (p.ring === Ring.Family) save()
   else changeRing(p, ring)
   placeOnRing(p, ring, Date.now(), desire)
+  delete p.ringSuggested
   save()
-  toast(`${displayName(p.name).text}: ${S.ringLabel[ring].toLowerCase()}`)
   render()
+  if (!ringSuggested) { toast(`${displayName(p.name).text}: ${S.ringLabel[ring].toLowerCase()}`); return }
+  // A grey (suggested) dot dropped on a ring confirms it; Undo for 30 s puts the suggestion back.
+  showNotice(S.ringsConfirmed(displayName(p.name).text, S.ringLabel[ring].toLowerCase()), '', [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-confirm': p.id, onclick: () => {
+      hideNotice(); changeRing(p, was); p.intending = intending; if (!intending) delete p.intending; p.ringSuggested = true; save(); render()
+    } }, [S.ringsHiddenUndo]),
+  ], 30000)
 }
 
 /** The 0 to 10 chip row for "intending to connect" (default 5); nothing changes until "Move here". */
@@ -2494,7 +2502,7 @@ const curator = createCurator({
     const p = state?.people.find((x) => x.id === id)
     if (!p) return
     p.ring = ring
-    delete (p as { ringSuggested?: boolean }).ringSuggested
+    delete p.ringSuggested
     save()
     if (screen === Screen.Web) render()
   },

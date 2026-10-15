@@ -4,10 +4,10 @@ import type { Person } from './model'
 
 export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
 
-/** Where a person is drawn: their ring slot, or the unsorted ring for none / unsorted / no ring at all. */
-export function webSlot(p: Pick<Person, 'ring' | 'fields'>): Ring {
+/** Where a person is drawn: their ring only when confirmed; a suggested ring, none, unsorted and no ring at all sit on the unsorted ring. */
+export function webSlot(p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'>): Ring {
   const r = ringSlot(p)
-  return WEB_RINGS.includes(r) ? r : Ring.Unsorted
+  return WEB_RINGS.includes(r) && !p.ringSuggested ? r : Ring.Unsorted
 }
 export const RING_RADIUS: Record<Ring, number> = { [Ring.Close]: 48, [Ring.Friend]: 84, [Ring.Acquaintance]: 118, [Ring.Intending]: 148, [Ring.Unsorted]: 168, [Ring.None]: 168, [Ring.Family]: 48 }
 

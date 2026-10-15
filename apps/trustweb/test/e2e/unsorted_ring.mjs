@@ -63,5 +63,19 @@ try {
   await dragTo('u1', { x: box.x + 3, y: box.y + 3 })
   await page.locator('[data-undo-hide]').waitFor({ timeout: 10_000 })
   check('dragging past the outer ring still hides', !(await record()).people.some((p) => p.id === 'u1'))
+
+  // Round 2: only a confirmed ring places a dot; a suggested one is grey on the unsorted ring until a drop confirms it.
+  await seed([P('f1', 'Franz Bauer', 'friend'), { ...P('s1', 'Sophie Wagner', 'acquaintance'), ringSuggested: true }, P('z1', 'Zita Pichler', undefined)])
+  await page.reload(); await page.locator('.rings-wrap').waitFor()
+  await page.addStyleTag({ content: '.demo-friends { position: fixed !important; top: auto !important; bottom: 0 !important; left: 0; right: 0; z-index: 99 }' })
+  check('confirmed friend coloured, suggested acquaintance and ring-less person grey', (await bg('f1')) !== 'rgb(158, 158, 158)' && (await bg('s1')) === 'rgb(158, 158, 158)' && (await bg('z1')) === 'rgb(158, 158, 158)')
+  await dragTo('s1', { x: c.x, y: c.y - (await rad('acquaintance')) * k })
+  await page.locator('[data-undo-confirm]').waitFor({ timeout: 10_000 })
+  const s1 = (await record()).people.find((p) => p.id === 's1')
+  check('dropping a suggested dot on a ring confirms it (ringSuggested removed), dot turns coloured', s1.ring === 'acquaintance' && !('ringSuggested' in s1) && (await bg('s1')) !== 'rgb(158, 158, 158)')
+  await page.locator('[data-undo-confirm]').click()
+  await page.waitForTimeout(300)
+  const s2 = (await record()).people.find((p) => p.id === 's1')
+  check('Undo restores the suggestion: grey again', s2.ringSuggested === true && (await bg('s1')) === 'rgb(158, 158, 158)')
 } finally { await browser.close() }
 process.exit(failed ? 1 : 0)
