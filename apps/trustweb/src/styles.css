@@ -92,6 +92,7 @@ body:has(.phone.embedded){padding:0}
 .logo{width:64px; height:64px; border-radius:50%; display:grid; place-items:center; font-size:34px; color:#fff; background:linear-gradient(135deg,var(--coral),var(--violet))}
 .start h1{font-size:34px; font-weight:600}
 .tagline{color:var(--violet-deep); font-weight:600}
+.invite-name{color:var(--violet-deep)}
 .lead{font-size:14.5px; color:var(--ink-soft); line-height:1.6; max-width:300px}
 .invite{background:var(--card); border-radius:16px; padding:14px 16px; font-size:14.5px; line-height:1.5; max-width:320px}
 .invite p{margin-top:6px; color:var(--ink-soft); font-size:13.5px}

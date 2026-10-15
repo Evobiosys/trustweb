@@ -1264,7 +1264,7 @@ function screenStart(): Node[] {
         ])
       : invite
         ? el('div', { class: 'invite' }, [
-            el('b', {}, [solo ? S.connectInvite(inviter) : S.reachOutStart(inviter)]),
+            el('b', {}, solo ? [S.connectInvite(inviter)] : [S.reachOutStartBefore, el('span', { class: 'invite-name' }, [inviter]), S.reachOutStartAfter]),
             solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
           ])
