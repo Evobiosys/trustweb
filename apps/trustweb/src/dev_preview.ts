@@ -72,7 +72,7 @@ export function initDevPreview(): void {
   if (window.top !== window) return // an iframe (the second device) is never the reviewer's page
   let p = typeof __TW_PREVIEW__ === 'undefined' ? null : __TW_PREVIEW__
   if (!p) return
-  let seen = readSeen(store.get(seenKey(p.id)), p.features)
+  let seen = readSeen(store.get(seenKey(p.id)))
   // The serve-start copy of the registry can be stale: refs are compared only once the server has answered.
   let fresh = false
   let busy: string | null = null

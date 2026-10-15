@@ -199,11 +199,12 @@ describe('dev preview PR count, block and reviewed rows', () => {
     expect(seenState(again, 'a', 'r3')).toMatchObject({ italic: true, prefix: '' })
     expect(tapSeen(again, 'a', 'r3')).toEqual({})
   })
-  it('readSeen migrates an old key list to the current refs', () => {
+  it('readSeen migrates an old key list to an unknown ref (shows Update: until tapped)', () => {
     const fs = [{ key: 'a', ref: 'r1' }, { key: 'b', ref: 'r2' }]
-    expect(readSeen('["b"]', fs)).toEqual({ b: { ref: 'r2', updates: 0 } })
-    expect(readSeen('{"a":{"ref":"x","updates":2}}', fs)).toEqual({ a: { ref: 'x', updates: 2 } })
-    expect(readSeen('nope', fs)).toEqual({})
+    expect(readSeen('["b"]')).toEqual({ b: { ref: '', updates: 0 } })
+    expect(seenState(readSeen('["b"]'), 'b', 'r2')).toMatchObject({ italic: false, prefix: 'Update: ' })
+    expect(readSeen('{"a":{"ref":"x","updates":2}}')).toEqual({ a: { ref: 'x', updates: 2 } })
+    expect(readSeen('nope')).toEqual({})
   })
   it('sections: vanilla, private, ops; empty ones dropped; a child of another repo starts its own top level', () => {
     const f = (key, repo, requires = []) => ({ key, repo, requires, branch: key, title: key, checked: true })
