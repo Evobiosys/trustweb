@@ -306,7 +306,8 @@ export default ({ command }) => ({
       // The same server answers the hosted recordings, transcription and feedback (wave 1733 round B),
       // same-origin as on app.idea2.site, so the app sends no Origin the server would refuse.
       ...(process.env.TW_BACKUP_PROXY
-        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback', '^/org(/|$)'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true }]))
+        // Origin dropped (dev only, loopback): the service's own-host gate wants https + its own hostname, which a local http origin never is.
+        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback', '^/org(/|$)'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true, configure: (proxy) => { proxy.on('proxyReq', (req) => req.removeHeader('origin')) } }]))
         : {}),
       // Only the mic routes and the availability probe: TalkWeave's other
       // routes (sessions, ask) have no auth and must not be reachable here.
