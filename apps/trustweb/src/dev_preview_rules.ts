@@ -1,5 +1,5 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
-export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean }
+export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string }
 
 /** "needs <title>" for the first required feature that is unchecked, else null (the box is usable). */
 export function needsHint(features: PreviewFeature[], key: string): string | null {
@@ -19,4 +19,14 @@ export function toggled(features: PreviewFeature[], key: string, checked: boolea
     }
   }
   return features.map((f) => (set.has(f.key) ? { ...f, checked } : f))
+}
+
+/** The highlighted row after a tap on `key`: the same row again switches it off. */
+export function tapped(lit: string | null, key: string): string | null {
+  return lit === key ? null : key
+}
+
+/** Wording of the confirm box for a checkbox tap. */
+export function confirmText(title: string, checked: boolean): string {
+  return `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
 }

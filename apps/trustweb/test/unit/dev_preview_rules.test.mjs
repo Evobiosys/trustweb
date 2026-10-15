@@ -1,5 +1,5 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
-import { needsHint, toggled } from '../../src/dev_preview_rules.ts'
+import { confirmText, needsHint, tapped, toggled } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -23,5 +23,18 @@ describe('dev preview rules', () => {
   it('does not mutate its input', () => {
     toggled(set, 'events', false)
     expect(on(set)).toHaveLength(4)
+  })
+})
+
+describe('dev preview row tap and confirm', () => {
+  it('one row lit at a time; the same row again switches it off', () => {
+    let lit = null
+    lit = tapped(lit, 'a'); expect(lit).toBe('a')
+    lit = tapped(lit, 'b'); expect(lit).toBe('b')
+    lit = tapped(lit, 'b'); expect(lit).toBeNull()
+  })
+  it('confirm wording follows the direction of the toggle', () => {
+    expect(confirmText('Events', false)).toBe('Re-assemble preview without Events? The page reloads.')
+    expect(confirmText('Events', true)).toBe('Re-assemble preview with Events? The page reloads.')
   })
 })

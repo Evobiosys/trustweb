@@ -3,9 +3,11 @@
  * previews-interface.txt) only for `vite serve` with TW_PREVIEW set; in every build it is null and nothing below runs.
  * Top-left, draggable by its header (twp-pos), collapsible to a pill with the id (twp-collapsed): the feature checkboxes of this
  * preview, the personal/stock switch and "Create PR". The FEATURE box (dev_feature.ts) sits below it via --twp-h.
+ * A tap on a row points at the UI the feature adds (its `selector`); a tap on a checkbox asks first, then re-assembles and reloads.
  */
 import { pollStatus } from './dev_feature'
-import { needsHint, toggled, type PreviewFeature } from './dev_preview_rules'
+import { createPointer } from './dev_pointer'
+import { confirmText, needsHint, tapped, type PreviewFeature } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -21,7 +23,9 @@ const CSS = `
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
-.twp label{display:flex;gap:6px;align-items:baseline;padding:2px 0}.twp label.off{opacity:.55}
+.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
+.twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
@@ -39,10 +43,12 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEle
   return e
 }
 
+class ApiError extends Error {}
+
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Preview> {
   const r = await fetch('/__tw/preview' + path, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) })
   const j = (await r.json()) as Preview & { error?: string }
-  if (!r.ok) throw new Error(j.error ?? 'HTTP ' + r.status)
+  if (!r.ok) throw new ApiError(j.error ?? 'HTTP ' + r.status)
   return j
 }
 
@@ -52,6 +58,9 @@ export function initDevPreview(): void {
   let p = typeof __TW_PREVIEW__ === 'undefined' ? null : __TW_PREVIEW__
   if (!p) return
   let busy: string | null = null
+  let waiting = false
+  let lit: string | null = null
+  let ask: { key: string; checked: boolean } | null = null
   let error = ''
   let prText = ''
   let prUrl = ''
@@ -59,6 +68,7 @@ export function initDevPreview(): void {
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
   document.body.appendChild(root)
+  const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() })
 
   const collapsed = (): boolean => store.get(COLLAPSED) === '1'
   const setCollapsed = (on: boolean): void => { store.set(COLLAPSED, on ? '1' : ''); render() }
@@ -93,15 +103,47 @@ export function initDevPreview(): void {
     busy = null; render()
   }
 
+  const toast = (text: string): void => {
+    const t = document.body.appendChild(h('div', { className: 'twp-toast', textContent: text }))
+    setTimeout(() => { t.remove() }, 2500)
+  }
+
+  function tap(f: PreviewFeature): void {
+    lit = tapped(lit, f.key)
+    if (lit && !pointer.set(f.selector)) { lit = null; toast('nothing to point at for this feature') }
+    render()
+  }
+
+  // The toggle restarts vite (the worktree's vite.config.mjs changes), so the answer may never arrive: wait until the server answers, then reload.
+  async function reassemble(a: { key: string; checked: boolean }): Promise<void> {
+    ask = null; busy = a.key; error = ''; render()
+    try { await call('POST', '', { feature: a.key, checked: a.checked }) } catch (e) {
+      if (e instanceof ApiError) { error = e.message; busy = null; render(); return }
+    }
+    waiting = true; render()
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 500))
+      if (await fetch('/__tw/preview').then((r) => r.ok, () => false)) { location.reload(); return }
+    }
+    busy = null; waiting = false; error = 'server did not come back: reload by hand'; render()
+  }
+
   function row(f: PreviewFeature): HTMLElement {
     const hint = needsHint(p!.features, f.key)
     const box = h('input', { type: 'checkbox', checked: f.checked, disabled: busy !== null || hint !== null })
-    box.addEventListener('change', () => {
-      const prev = p!
-      p = { ...prev, features: toggled(prev.features, f.key, box.checked) }
-      void act(f.key, () => call('POST', '', { feature: f.key, checked: box.checked })).then(() => { if (error) p = prev; render() })
-    })
-    return h('label', { className: busy !== null || hint ? 'off' : '' }, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : ''))))
+    box.addEventListener('change', () => { ask = { key: f.key, checked: box.checked }; render() })
+    const off = busy !== null || hint !== null
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : ''))), lit === f.key ? h('i') : '')
+    label.addEventListener('click', (e) => { if (e.target !== box) tap(f) })
+    return label
+  }
+
+  function askBox(a: { key: string; checked: boolean }): HTMLElement {
+    const go = h('button', { textContent: 'Reload' })
+    go.addEventListener('click', () => { void reassemble(a) })
+    const no = h('button', { className: 'alt', textContent: 'Cancel' })
+    no.addEventListener('click', () => { ask = null; render() })
+    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.key)!.title, a.checked), h('div', {}, go, no))
   }
 
   function prPart(n: number): HTMLElement {
@@ -133,7 +175,7 @@ export function initDevPreview(): void {
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       x.addEventListener('click', () => setCollapsed(true))
-      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), h('span', { textContent: busy ? 'assembling...' : mode + ' preview' }), x)))
+      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), h('span', { textContent: waiting ? 'server restarting...' : busy ? 'assembling...' : mode + ' preview' }), x)))
       const n = q.features.filter((f) => f.checked).length
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: busy !== null })
@@ -145,6 +187,7 @@ export function initDevPreview(): void {
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
         h('div', { className: 'row' }, ...q.features.map(row)),
+        ...(ask ? [askBox(ask)] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
         prPart(n), h('div', { className: 'btns' }, sw),
@@ -153,9 +196,13 @@ export function initDevPreview(): void {
     const pos = store.get(POS)
     if (pos) { const { x, y } = JSON.parse(pos) as { x: number; y: number }; place(x, y) }
     sync()
+    pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
   }
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !collapsed()) setCollapsed(true) })
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    if (lit) { lit = null; render() } else if (!collapsed()) setCollapsed(true)
+  })
   render()
   void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
