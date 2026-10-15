@@ -98,9 +98,15 @@ export function prNeedsUpdate(pr: { sha?: string } | null, assembledSha: string 
   return pr !== null && (!pr.sha || pr.sha !== assembledSha)
 }
 
-/** The PR button label: create without a PR, update when the PR is behind, '' when it holds this set. */
-export function prButton(pr: { number: number; sha?: string } | null, n: number, assembledSha: string | undefined): string {
+/** True once the PR's branch is contained in main (set by the CLI): the PR can only be left behind, never updated. */
+export function prMerged(p: { pr: { merged?: boolean } | null }): boolean {
+  return p.pr?.merged === true
+}
+
+/** The PR button label: create without a PR, a new preview for a merged PR, update when the PR is behind, '' when it holds this set. `unshipped` = checked boxes not yet merged. */
+export function prButton(pr: { number: number; sha?: string; merged?: boolean } | null, n: number, assembledSha: string | undefined, unshipped: number): string {
   if (!pr) return `Create PR with ${n} checked`
+  if (pr.merged) return `PR #${pr.number} shipped. New preview with ${unshipped} checked`
   return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
 }
 

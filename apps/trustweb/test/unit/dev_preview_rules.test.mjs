@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -153,10 +153,17 @@ describe('dev preview PR update', () => {
     expect(prNeedsUpdate({ sha: 'abc' }, 'abc')).toBe(false)
   })
   it('prButton: create, update or nothing', () => {
-    expect(prButton(null, 9, 'abc')).toBe('Create PR with 9 checked')
-    expect(prButton({ number: 8, sha: 'x' }, 9, 'abc')).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8 }, 9, 'abc')).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8, sha: 'abc' }, 9, 'abc')).toBe('')
+    expect(prButton(null, 9, 'abc', 9)).toBe('Create PR with 9 checked')
+    expect(prButton({ number: 8, sha: 'x' }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
+    expect(prButton({ number: 8 }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
+    expect(prButton({ number: 8, sha: 'abc' }, 9, 'abc', 9)).toBe('')
+  })
+  it('prButton and prMerged: a merged PR never offers Update, whatever the sha', () => {
+    expect(prButton({ number: 14, sha: 'x', merged: true }, 3, 'abc', 1)).toBe('PR #14 shipped. New preview with 1 checked')
+    expect(prButton({ number: 14, sha: 'abc', merged: true }, 3, 'abc', 2)).toBe('PR #14 shipped. New preview with 2 checked')
+    expect(prMerged({ pr: { merged: true } })).toBe(true)
+    expect(prMerged({ pr: {} })).toBe(false)
+    expect(prMerged({ pr: null })).toBe(false)
   })
   it('confirmText names the PR only when there is one', () => {
     expect(confirmText('Events', false, 1, 8)).toBe('Re-assemble preview without Events? The page reloads. PR #8 keeps its current set until you update it.')
