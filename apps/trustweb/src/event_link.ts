@@ -56,7 +56,7 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const name = text(f.name)
     const from = text(f.from)
     const where = text(f.where)
-    if (!id || !name || !from || !where) return null
+    if (!id || !name || !from || where === undefined) return null
     const ev = newEvent({ name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
     if (typeof ev === 'string') return null
     const tagName = text(f.tagName)?.trim()

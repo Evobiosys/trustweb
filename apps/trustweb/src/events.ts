@@ -8,7 +8,7 @@ import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
 import type { AppState, Person, TwEvent } from './model'
 
-/** What the form hands over; name, from and where are mandatory. */
+/** What the form hands over; name and from are mandatory, where may be empty. */
 export interface EventFields {
   name: string
   from: string
@@ -23,7 +23,7 @@ export interface EventFields {
 }
 
 /** The first field that fails, in form order. */
-export type EventError = 'name' | 'from' | 'where' | 'to'
+export type EventError = 'name' | 'from' | 'to'
 
 const DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -49,7 +49,6 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   const to = f.to?.trim()
   if (!name) return 'name'
   if (!validDate(from)) return 'from'
-  if (!where) return 'where'
   if (to && (!validDate(to) || stamp(to, true) < stamp(from, false))) return 'to'
   const conditions = f.conditions?.trim()
   const organizer = f.organizer?.trim()
@@ -176,9 +175,15 @@ export function whenLabel(ev: Pick<TwEvent, 'from' | 'to'>): string {
   return ev.to && ev.to !== ev.from ? `${dateLabel(ev.from)} to ${dateLabel(ev.to)}` : dateLabel(ev.from)
 }
 
-/** "Name · 12 Oct 2026, Vienna" */
+/** "Name · 12 Oct 2026, Vienna" (no place: "Name · 12 Oct 2026") */
 export function eventLabel(ev: TwEvent): string {
-  return `${ev.name} · ${dateLabel(ev.from)}, ${ev.where}`
+  return `${ev.name} · ${dateLabel(ev.from)}${ev.where ? `, ${ev.where}` : ''}`
+}
+
+/** Today's date in the device's own time zone, YYYY-MM-DD (never the UTC day). */
+export function todayIso(now: Date): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
 }
 
 /** People whose name has a word like one of the query's words (fuzzy.ts), best first; the first few when the query is empty. */

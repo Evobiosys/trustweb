@@ -4,7 +4,7 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from './events'
+import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
 import { PERSON_GREEN } from './colour_tags'
@@ -44,7 +44,7 @@ export interface EventsView {
 
 type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string }
 
-const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, where: S.eventsErrWhere, to: S.eventsErrTo }
+const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo }
 
 export function createEventsView(h: EventsViewHooks): EventsView {
   let view: View = { kind: 'list' }
@@ -60,7 +60,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   function row(ev: TwEvent): HTMLElement {
     const n = attendees(h.state(), ev.id).length
     return el('button', { class: 'prow', 'data-event': ev.id, onclick: () => show({ kind: 'page', id: ev.id }) }, [
-      el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [`${whenLabel(ev)} · ${ev.where} · ${S.eventsPeople(n)}`])]),
+      el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[whenLabel(ev), ev.where, S.eventsPeople(n)].filter(Boolean).join(' · ')])]),
     ])
   }
 
@@ -110,9 +110,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const showSame = (): void => { tag.placeholder = name.value.trim() || S.eventsTagNameSame }
     name.addEventListener('input', showSame)
     showSame()
-    const from = date(existing?.from)
+    const from = date(existing?.from ?? todayIso(new Date()))
+    if (!existing) {
+      from.classList.add('default')
+      from.addEventListener('input', () => from.classList.remove('default'))
+    }
     const to = date(existing?.to)
     const where = text(existing?.where)
+    where.placeholder = S.eventWherePlaceholder
     const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
     const themes = text(existing?.themes?.join(', '))
     const organizer = text(existing?.organizer)
@@ -262,7 +267,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     }, [S.eventsAttended])
     return [h.header(ev.name, { back: () => show({ kind: 'list' }) }), el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
-      el('p', {}, [ev.where]),
+      ev.where ? el('p', {}, [ev.where]) : null,
       ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
       ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
       ev.conditions ? el('p', {}, [ev.conditions]) : null,

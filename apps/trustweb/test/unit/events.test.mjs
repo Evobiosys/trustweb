@@ -1,7 +1,7 @@
 /** Events (E1, wave 7): the model, the per-event tag on a person, and that nothing of it leaves the phone. */
 import { Audience, LineStatus, Ring, Tag } from '../../src/model.ts'
 import { askSources } from '../../src/cascade.ts'
-import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, isPast, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
+import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, isPast, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from '../../src/events.ts'
 
 const NOW = new Date('2026-10-15T12:00').getTime()
 const ev = (over = {}) => newEvent({ name: 'Forum Alpbach', from: '2026-10-12', where: 'Vienna', ...over }, over.id ?? 'e1', NOW)
@@ -9,12 +9,17 @@ const person = (id, name, extra = {}) => ({ id, name, context: '', ring: Ring.Fr
 const state = (extra = {}) => ({ v: 1, me: { id: 'me', displayName: 'Jakob' }, peers: [], log: [], notificationsOn: false, inventory: [], people: [person('p1', 'Anna Gruber'), person('p2', 'Ben Huber')], ...extra })
 
 describe('newEvent', () => {
-  it('name, from and where are mandatory, in form order', () => {
+  it('name and from are mandatory, in form order; where is optional', () => {
     expect(newEvent({ name: ' ', from: '', where: '' }, 'x', NOW)).toBe('name')
     expect(newEvent({ name: 'A', from: '', where: 'B' }, 'x', NOW)).toBe('from')
     expect(newEvent({ name: 'A', from: '2026-13-40', where: 'B' }, 'x', NOW)).toBe('from')
-    expect(newEvent({ name: 'A', from: '2026-10-12', where: ' ' }, 'x', NOW)).toBe('where')
+    expect(newEvent({ name: 'A', from: '2026-10-12', where: ' ' }, 'x', NOW)).toMatchObject({ where: '' })
   })
+  it('todayIso is the local date, not the UTC day', () => {
+    expect(todayIso(new Date(2026, 9, 5, 0, 30))).toBe('2026-10-05')
+    expect(todayIso(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31')
+  })
+  it('eventLabel leaves out an empty place', () => expect(eventLabel(ev({ where: '' }))).toBe('Forum Alpbach · 12 Oct 2026'))
   it('to may not be before from; a date-only end lasts the whole day', () => {
     expect(ev({ to: '2026-10-11' })).toBe('to')
     expect(ev({ to: 'soon' })).toBe('to')
