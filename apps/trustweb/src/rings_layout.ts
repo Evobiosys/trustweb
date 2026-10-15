@@ -28,10 +28,22 @@ export const beyondRings = (dist: number, g: RingsGeometry): boolean => dist > g
 /** Avatar diameter (px): at most FULL, shrinking to LEAST before a ring takes a second lap. */
 const FULL_DOT = 42
 const LEAST_DOT = 14
-/** Close dots stay small so the close circle shows between them and the "you" avatar (20 px radius). */
-const CLOSE_DOT = 32
+/** The "you" avatar's outer edge (r 20 + 2 px white ring) and the gap a close dot keeps from it. */
+export const YOU_EDGE = 22
+export const CLOSE_GAP = 2
 const RING_FILL = 0.9
 const GAP = 3
+const around = (r: number, dot: number): number => Math.max(1, Math.floor((2 * Math.PI * r * RING_FILL) / dot))
+
+/** The largest close dot that fits `n` on one lap, with the ring just far enough out that its inner edge sits CLOSE_GAP from the "you" avatar. The view draws everything at scale `k` but the avatar at full size, so the avatar's edge is YOU_EDGE / k in these units. */
+function closeFit(n: number, k: number): { r: number; dot: number } {
+  const inner = (YOU_EDGE + CLOSE_GAP) / k
+  for (let dot = FULL_DOT; dot > LEAST_DOT; dot--) {
+    const r = inner + dot / 2
+    if (around(r, dot) >= n) return { r, dot }
+  }
+  return { r: inner + LEAST_DOT / 2, dot: LEAST_DOT }
+}
 
 export interface RingsGeometry {
   radius: Record<Ring, number>
@@ -98,16 +110,14 @@ export function restoreAngles(s: Pick<AppState, 'people'>, before: ReadonlyMap<s
   }
 }
 
-/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. */
-export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}): RingsGeometry {
+/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. `k` is the view scale (see closeFit). */
+export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1): RingsGeometry {
   const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, extent: 0 }
   let prev = { r: 0, dot: 0, pushed: false }
   for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
-    const around = (r: number, dot: number): number => Math.max(1, Math.floor((2 * Math.PI * r * RING_FILL) / dot))
-    // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it.
-    let r = RING_RADIUS[ring]
-    const dot = Math.max(LEAST_DOT, Math.min(ring === Ring.Close ? CLOSE_DOT : FULL_DOT, Math.floor((2 * Math.PI * r * RING_FILL) / n)))
+    // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it; the close ring hugs the "you" avatar.
+    let { r, dot } = ring === Ring.Close ? closeFit(n, k) : { r: RING_RADIUS[ring], dot: Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / n))) }
     if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
     const mine = angles[ring]
@@ -115,7 +125,7 @@ export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Reco
     if (lapOf) g.lapOf[ring] = lapOf
     const laps = lapOf ? Math.max(0, ...lapOf) + 1 : Math.ceil(n / per)
     g.radius[ring] = r; g.dot[ring] = dot; g.perLap[ring] = per
-    prev = { r: r + (laps - 1) * (dot + 1), dot, pushed: laps > 1 || r !== RING_RADIUS[ring] }
+    prev = { r: r + (laps - 1) * (dot + 1), dot, pushed: laps > 1 || r > RING_RADIUS[ring] }
   }
   const edge = prev.r + prev.dot / 2
   g.extent = edge

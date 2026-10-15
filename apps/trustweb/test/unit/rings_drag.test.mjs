@@ -1,17 +1,16 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
-import { DESIRE_DEFAULT, RING_RADIUS, beyondRings, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry, webSlot, angleFromCentre, angleOf, packLaps, restoreAngles, spaceOut } from '../../src/rings_layout.ts'
+import { YOU_EDGE, CLOSE_GAP, DESIRE_DEFAULT, RING_RADIUS, beyondRings, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry, webSlot, angleFromCentre, angleOf, packLaps, restoreAngles, spaceOut } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
 
 describe('rings drag', () => {
-  it('close dots leave a clear gap (>= 4 px) to the you avatar (r 20 + 2 px ring) for 1, 3 and 8 people', () => {
-    for (const n of [1, 3, 8]) {
-      const g = ringsGeometry({ close: n })
-      expect(g.radius.close - g.dot.close / 2 - 22).toBeGreaterThanOrEqual(4)
-      expect(g.dot.close).toBeLessThanOrEqual(32)
+  it('close dots sit 2 px (+-1) off the you avatar edge for 1, 3, 8 and 40 people at any view scale', () => {
+    for (const k of [1, 0.6, 0.3]) for (const n of [1, 3, 8, 40]) {
+      const g = ringsGeometry({ close: n }, {}, k)
+      expect(Math.abs((g.radius.close - g.dot.close / 2) * k - YOU_EDGE - CLOSE_GAP)).toBeLessThanOrEqual(1)
     }
   })
   it('orders the rings from the centre and reads a drop from the distance', () => {
@@ -28,7 +27,7 @@ describe('rings drag', () => {
     expect(few.perLap.close).toBeGreaterThanOrEqual(3)
     const g = ringsGeometry({ close: 7, friend: 15, acquaintance: 255, intending: 238 })
     expect(g.dot.acquaintance).toBe(14)
-    expect(g.radius.close).toBe(RING_RADIUS.close)
+    expect(g.radius.close).toBeLessThanOrEqual(RING_RADIUS.close) // the close ring hugs the you avatar
     expect(lapRadius(g, Ring.Acquaintance, 2)).toBeGreaterThan(g.radius.acquaintance)
     expect(g.radius.intending).toBeGreaterThan(lapRadius(g, Ring.Acquaintance, Math.ceil(255 / g.perLap.acquaintance) - 1))
   })
