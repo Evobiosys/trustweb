@@ -274,6 +274,7 @@ export default ({ command }) => ({
       input: {
         main: path.resolve(here, 'index.html'),
         solo: path.resolve(here, 'solo.html'),
+        organizer: path.resolve(here, 'organizer.html'),
         // Three demo-context entries, one build, context chosen by path
         // (solo.ts detectContext() reads location.pathname at runtime; all
         // three load the same compiled src/solo.ts, deduped by Rollup).
@@ -305,7 +306,7 @@ export default ({ command }) => ({
       // The same server answers the hosted recordings, transcription and feedback (wave 1733 round B),
       // same-origin as on app.idea2.site, so the app sends no Origin the server would refuse.
       ...(process.env.TW_BACKUP_PROXY
-        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true }]))
+        ? Object.fromEntries(['/backup', '/hosted', '/transcribe', '/feedback', '^/org(/|$)'].map((prefix) => [prefix, { target: process.env.TW_BACKUP_PROXY, changeOrigin: true }]))
         : {}),
       // Only the mic routes and the availability probe: TalkWeave's other
       // routes (sessions, ask) have no auth and must not be reachable here.
