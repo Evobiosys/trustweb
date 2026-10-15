@@ -2,6 +2,8 @@
 import {
   CONTACT_REQ_PARAM, CONTACT_TEXT_MAX, REQ_AGAIN_MS, answerPlan, isRequestText, mayAskAgain, parseRequestText, requestText,
 } from '../../src/contact_share.ts'
+import { mayAnswerRequest } from '../../src/contact_share.ts'
+import { Ring } from '../../src/model.ts'
 import { routeText, TextKind } from '../../src/chat.ts'
 import { Channel } from '../../src/model.ts'
 
@@ -58,5 +60,14 @@ describe('the answer plan', () => {
   })
   it('a saved value that is not sendable is not asked about', () => {
     expect(answerPlan({ [Channel.Signal]: 'not a link' }, undefined, [Channel.Signal])).toEqual({ auto: [], ask: [] })
+  })
+})
+
+describe('mayAnswerRequest: a reach-out or an Intending-ring person is never answered', () => {
+  it('refuses reach-out peers, reached-out persons and the Intending ring; allows a confirmed friend', () => {
+    expect(mayAnswerRequest({ reachOut: true }, { ring: Ring.Friend })).toBe(false)
+    expect(mayAnswerRequest({}, { ring: Ring.Intending })).toBe(false)
+    expect(mayAnswerRequest({}, { ring: Ring.Friend, reachedOut: 'received' })).toBe(false)
+    expect(mayAnswerRequest({}, { ring: Ring.Acquaintance })).toBe(true)
   })
 })

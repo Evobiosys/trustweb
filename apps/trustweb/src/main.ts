@@ -45,7 +45,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isShareMode, mayShareContact, modeSharing, narrowMine, repairShareFields,
+  ShareMode, channelOf, defaultModes, effectiveMode, isShareMode, modeSharing, repairShareFields,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -60,7 +60,7 @@ import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import {
-  REQUESTABLE, answerPlan, buildContactPayload, contactText, contactToSend, holdContact, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
+  REQUESTABLE, answerPlan, buildContactPayload, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
@@ -459,7 +459,6 @@ const net = new Net({
     if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
-    sendContactTo(peer)
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -1145,8 +1144,6 @@ async function completePendingConnect(): Promise<void> {
     }
   }
   save()
-  // Both phones exchange what each ticked on the Meet page (the inviter's side is onPeerConnected); never to a demo account.
-  if (!demoLink) sendContactTo(peer)
   applyHeldContact(peer, person)
   // A demo account: also connect to the demo inventory peer the link names,
   // then open the ask right away (that is what the account is for).
@@ -1186,7 +1183,6 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
     s.people.push(person)
   }
   save()
-  sendContactTo(peer)
   applyHeldContact(peer, person)
   return { person, existed }
 }
@@ -2264,23 +2260,8 @@ function chatIo(): ChatIo {
   }
 }
 
-/** Sends what the owner ticked to one newly connected peer. Never to demo accounts or demo phones; once per change (contactSent). */
-function sendContactTo(peer: Peer): void {
-  if (isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
-  // Wave 6e: the mode shown on Meet last (it is remembered, so a scan that arrives late over the relay is judged by it) NARROWS what goes:
-  // TrustWeb+X sends channel X only, Only TrustWeb sends nothing and leaves the tick and the sent record alone. The tick still applies
-  // afterwards (contact_share.ts), so a mode never sends a link that is not ticked.
-  const mode = shareModeNow()
-  if (!mayShareContact(mode)) return
-  const s = st()
-  const out = contactToSend(APP_URL, narrowMine(mode, s.myChannels), s.contactShare, s.contactSent?.[peer.id], s.contactSentChannels?.[peer.id])
-  if (!out) return
-  net.sendText(peer, out.text).then(() => {
-    s.contactSent = { ...s.contactSent, [peer.id]: out.fingerprint }
-    s.contactSentChannels = { ...s.contactSentChannels, [peer.id]: out.channels }
-    save()
-  }).catch(() => { /* the relay was down: it is tried again at the next connect */ })
-}
+// Messenger links leave this phone ONLY as the answer to an explicit request (onContactRequest), never at connect time
+// (Jakob 2026-10-15 22:25: a reach-out via trustweb.one/<name> must not be able to get them).
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -2376,6 +2357,8 @@ function onContactRequest(peer: Peer, text: string): void {
   const wanted = parseRequestText(APP_URL, text)
   const person = s.people.find((p) => p.peerId === peer.id)
   if (!wanted || !person || isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  // Someone who came in through the public link stays on Intending until I move them: until then a request is dropped, not answered.
+  if (!mayAnswerRequest(peer, person)) return
   const plan = answerPlan(s.myChannels, s.contactShare, wanted)
   if (plan.auto.length) sendLinksTo(peer, plan.auto)
   const next = (rest: Channel[]): void => {
