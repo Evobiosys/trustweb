@@ -45,9 +45,9 @@ style.textContent = `
 :root{--bg:#F4EFF7;--ink:#241B2E;--soft:#6b5d7a;--violet:#9A37F0;--card:#fff}
 @media (prefers-color-scheme: dark){:root{--bg:#120C1A;--ink:#EDE6F2;--soft:#BBAACD;--card:#2B2139}}
 *{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--ink);font-family:"Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;padding:24px 16px 120px}
+body{background:var(--bg);color:var(--ink);font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;padding:24px 16px 120px}
 .head{max-width:900px;margin:0 auto 18px;text-align:center}
-.head h1{font-family:Optima,Candara,"Gill Sans",sans-serif;font-weight:600;font-size:clamp(22px,4vw,30px)}
+.head h1{font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;font-weight:600;font-size:clamp(22px,4vw,30px)}
 .head p{color:var(--soft);font-size:14px;margin-top:6px;line-height:1.55}
 .action-slot{max-width:1100px;margin:0 auto 24px}
 .action-slot[hidden]{display:none}
