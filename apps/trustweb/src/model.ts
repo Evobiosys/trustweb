@@ -34,10 +34,10 @@ export const RINGS: readonly Ring[] = [Ring.Close, Ring.Friend, Ring.Acquaintanc
 
 export const CLOSENESS_KEY = 'tw-closeness'
 
-// Plain data, the same table as the CRM's apps/crm/src/rings.ts: four greens (darkest = closest), family in purple keyed by its
+// Plain data, the same table as the CRM's apps/crm/src/rings.ts: four warm ambers (darkest = closest; warm by default, not green: Jakob 2026-10-15 16:10), family in purple keyed by its
 // closeness, unsorted grey.
 export const RING_COLORS = {
-  close: '#1b5e20', friend: '#2e7d32', acquaintance: '#66bb6a', intending: '#a5d6a7',
+  close: '#8C4A00', friend: '#B8700A', acquaintance: '#D99A2B', intending: '#EFC978',
   family: { close: '#4a148c', friend: '#7b1fa2', acquaintance: '#ab47bc', intending: '#ce93d8' },
   unsorted: '#9e9e9e',
   none: '#9e9e9e',
