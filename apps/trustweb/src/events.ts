@@ -3,6 +3,7 @@
  * Local only: cascade.ts askSources strips AppState.events and Person.events (I1).
  */
 import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
+import type { LinkedEvent } from './event_link'
 import type { AppState, Person, TwEvent } from './model'
 
 /** What the form hands over; name, from and where are mandatory. */
@@ -90,6 +91,12 @@ export function untagPerson(s: AppState, personId: string, eventId: string): voi
   else delete p.events
 }
 
+/** Adds a linked event as attended and returns its id; an event with that id already held is left as it is. */
+export function joinEvent(s: AppState, linked: LinkedEvent, now: number): string {
+  if (!s.events?.some((e) => e.id === linked.id)) s.events = [...(s.events ?? []), { ...linked, createdAt: now, attended: true, fromLink: true }]
+  return linked.id
+}
+
 /** What deleteEvent took out, to put back (Undo). */
 export interface DeletedEvent { event: TwEvent; tagged: string[] }
 
@@ -114,7 +121,7 @@ export function dateLabel(v: string): string {
 }
 
 /** The date span: "12 Oct 2026" or "12 Oct 2026 to 14 Oct 2026". */
-export function whenLabel(ev: TwEvent): string {
+export function whenLabel(ev: Pick<TwEvent, 'from' | 'to'>): string {
   return ev.to && ev.to !== ev.from ? `${dateLabel(ev.from)} to ${dateLabel(ev.to)}` : dateLabel(ev.from)
 }
 

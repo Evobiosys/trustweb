@@ -123,7 +123,9 @@ import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { eventLabel } from './events'
+import { eventLabel, joinEvent, whenLabel as eventWhen } from './events'
+import { decodeEventLink } from './event_link'
+import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
@@ -255,6 +257,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 // A meeting sent inside TrustWeb (?share=1#k=...&t=...), or riding in a Meet
 // code after a meeting (#n=...&k=...&t=...): opened once the app is up (share.ts).
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
+// An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
+let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 const wantInstall = params.get('install') === '1'
 // Keep only what a reload needs; the connect parameters are consumed once.
@@ -1218,6 +1222,7 @@ function screenStart(): Node[] {
     void net.start().then(announceLink)
     void completePendingConnect()
     maybeOpenPendingShare()
+    maybeOpenPendingEvent()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -2526,7 +2531,7 @@ const curator = createCurator({
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, personSheet, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
-  newId: () => randomId(8),
+  newId: () => randomId(8), copyLink, origin: APP_URL.replace(/\/$/, ''),
 })
 
 const feed = createFeedView({
@@ -2769,6 +2774,22 @@ function maybeOpenPendingShare(): void {
   const link = pendingShare
   pendingShare = null
   void openShare(link)
+}
+
+/** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
+function maybeOpenPendingEvent(): void {
+  if (!pendingEvent || !state) return
+  const ev = pendingEvent
+  pendingEvent = null
+  if (st().events?.some((e) => e.id === ev.id)) { openEvents(ev.id); return }
+  const add = (): void => { const id = joinEvent(st(), ev, Date.now()); save(); closeSheet(); openEvents(id) }
+  openSheet([
+    el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
+    ev.conditions ? el('p', {}, [ev.conditions]) : null,
+    ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
+    el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
+    el('button', { class: 'btn btn-ghost wide', 'data-event-notme': '', onclick: closeSheet }, [S.eventLinkNotMe]),
+  ])
 }
 
 function discardDraft(): void {
@@ -4654,6 +4675,7 @@ if (state && !state.testOf?.handedOverAt) {
   void net.start().then(announceLink).then(() => net.restoreHeldAsks())
   void completePendingConnect()
   maybeOpenPendingShare()
+  maybeOpenPendingEvent()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.

@@ -4,6 +4,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { attendees, deleteEvent, eventsSorted, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
+import { encodeEventLink } from './event_link'
 import type { EventError, EventFields } from './events'
 import type { AppState, Person, TwEvent } from './model'
 import { S } from './strings'
@@ -21,6 +22,9 @@ export interface EventsViewHooks {
   /** A card with an Undo button. */
   undoNotice: (title: string, onUndo: () => void) => void
   newId: () => string
+  /** Copies a text and says so (the app's toast). */
+  copyLink: (text: string) => void
+  origin: string
 }
 
 export interface EventsView {
@@ -142,8 +146,11 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
       ev.conditions ? el('p', {}, [ev.conditions]) : null,
       el('div', { class: 'chips' }, [attended]),
+      el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => h.copyLink(encodeEventLink(ev, h.origin)) }, [S.eventLinkShare]),
+      el('p', { class: 'meta' }, [S.eventLinkHint]),
       el('h3', {}, [S.eventsAttendees]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty' }, [S.eventsNoAttendees]),
+      ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),
