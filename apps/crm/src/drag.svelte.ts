@@ -31,13 +31,17 @@ export function grip(node: HTMLElement, onDrop: Drop): { update: (d: Drop) => vo
     drag.key = drag.zone = drag.before = null
   }
 
+  function start(): void {
+    node.setPointerCapture(origin.id)
+    drag.key = node.dataset.key ?? null
+    navigator.vibrate?.(15)
+  }
+
+  /** A mouse drags at once (Jakob 2026-10-15 21:48: a hold-then-move felt broken); a finger or pen holds HOLD_MS first, so the sheet can still scroll. */
   function down(e: PointerEvent): void {
     origin = { x: e.clientX, y: e.clientY, id: e.pointerId }
-    timer = setTimeout(() => {
-      node.setPointerCapture(origin.id)
-      drag.key = node.dataset.key ?? null
-      navigator.vibrate?.(15)
-    }, HOLD_MS)
+    if (e.pointerType === 'mouse') { e.preventDefault(); start(); return }
+    timer = setTimeout(start, HOLD_MS)
   }
 
   function move(e: PointerEvent): void {
