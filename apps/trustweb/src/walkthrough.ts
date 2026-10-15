@@ -334,7 +334,7 @@ const CSS = `
 .wt-strip .nd.on{fill:#9A37F0;stroke:#9A37F0}
 .wt-banner{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;min-height:7.5em;border-left:4px solid #9A37F0;padding:2px 0 2px 12px}
 .wt-banner .wt-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9A37F0;font-weight:700}
-.wt-banner h3{font-family:Optima,Candara,"Gill Sans",sans-serif;font-size:20px;font-weight:600;margin:0}
+.wt-banner h3{font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;font-size:20px;font-weight:600;margin:0}
 .wt-banner p{font-size:14px;color:var(--soft);line-height:1.5;margin:0}
 .wt-devices{display:grid;gap:18px}
 .wt-dev{display:flex;flex-direction:column;gap:16px;align-items:stretch;min-width:0}
@@ -345,7 +345,7 @@ const CSS = `
 .wt-screen.changed{box-shadow:0 0 0 6px #17111e,0 0 0 7px #3a2f47,0 0 0 9px rgba(154,55,240,.6)}
 .wt-screen.idle{opacity:.7}
 .wt-tag{position:absolute;right:8px;top:8px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:#9A37F0;color:#fff;border-radius:999px;padding:2px 7px;z-index:2}
-.wt-h{font-family:Optima,Candara,"Gill Sans",sans-serif;font-weight:600;font-size:15px;margin-bottom:8px}
+.wt-h{font-family:"Inter","Seravek","Avenir Next","Segoe UI",system-ui,sans-serif;font-weight:600;font-size:15px;margin-bottom:8px}
 .wt-rings{display:flex;flex-wrap:wrap;gap:6px}
 .wt-rings span{background:#fff;border-radius:999px;padding:3px 9px;font-weight:600}
 .wt-card{background:#fff;border-radius:10px;padding:8px 10px;margin:6px 0}

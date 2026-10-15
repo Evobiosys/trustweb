@@ -2,26 +2,26 @@
    the two apps read as one family; the phone frame and the tab bar of that
    file are not used here. */
 :root{
-  --violet:#9A37F0; --electric:#12A8E3; --coral:#FF715B; --mint:#4FD7A0; --teal:#127A6F;
-  --mist:#EDE6F2; --linen:#F2EBDC; --ink:#241B2E; --ink-soft:#5C4F6B;
-  --page-bg:#F4EFF7; --page-ink:#241B2E; --panel:#fff;
-  --violet-deep:#3B1163; --electric-deep:#0B5E80; --warm-deep:#B4410F;
+  --violet:#2F6F74; --electric:#1A9AA6; --coral:#C2573A; --mint:#3FBFA0; --teal:#13867E;
+  --mist:#ECE7DC; --linen:#F5F0E8; --ink:#1F2A28; --ink-soft:#5A6B66;
+  --page-bg:#FAFAF7; --page-ink:#1F2A28; --panel:#fff;
+  --violet-deep:#174A4F; --electric-deep:#0E5A63; --warm-deep:#B58A2E;
   /* surface tokens: --linen is the screen, --card the raised panels */
-  --card:#fff; --line:rgba(36,27,46,.12); --tab-bg:rgba(255,255,255,.94);
+  --card:#fff; --line:rgba(31,42,40,.14); --tab-bg:rgba(255,255,255,.94);
   /* TrustWeb's light block defines these as var() of themselves (invalid), so the CRM carries real light values */
-  --tint-teal:#E3F2EF; --tint-ok:#DDF3EC; --tint-warn:#FDE3DC; --tint-violet:#EEE0FB;
-  --tint-blue:#E0F1F8; --tint-sand:#F3ECDD; --ok-ink:#0E6B49; --warn-ink:#B4410F;
+  --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
+  --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
   color-scheme:light;
 }
-/* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A warm plum night instead of a darkened beige, with the same accents. */
+/* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A deep teal night instead of a darkened beige, with the same accents. */
 :root:not([data-theme="light"]){
-  --page-bg:#120C1A; --page-ink:#EDE6F2;
-  --linen:#1F1729; --card:#2B2139; --mist:#3A2D4C; --ink:#F4EDF9; --ink-soft:#BBAACD;
-  --line:rgba(244,237,249,.13); --tab-bg:rgba(31,23,41,.94);
-  --tint-teal:#163A38; --tint-ok:#173A2C; --tint-warn:#45231F; --tint-violet:#36214F;
-  --tint-blue:#15344A; --tint-sand:#35302A; --ok-ink:#7BE0B0; --warn-ink:#FF9C8A;
-  --electric-deep:#7CCBEF; --violet-deep:#D9B8FF; --warm-deep:#FFA37F;
-  --start-end:#3B2459;
+  --page-bg:#0E1716; --page-ink:#EAF2EF;
+  --linen:#15201F; --card:#1D2B2A; --mist:#27383A; --ink:#EAF2EF; --ink-soft:#A9BDB8;
+  --line:rgba(234,242,239,.13); --tab-bg:rgba(21,32,31,.94);
+  --tint-teal:#12383A; --tint-ok:#153A30; --tint-warn:#3F2A1E; --tint-violet:#1A3A3F;
+  --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
+  --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;
+  --start-end:#1E3A3C;
   color-scheme:dark;
 }
 

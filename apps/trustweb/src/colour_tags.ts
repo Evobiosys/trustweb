@@ -4,7 +4,7 @@ import { FAMILY_FIELD, isFamily } from './rings_layout'
 
 export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
-export const PERSON_GREEN = '#2e7d32'
+export const PERSON_GREEN = '#B8700A'   // warm amber by default, not green (Jakob 2026-10-15 16:10); the name stays for the callers
 
 export interface ColourTag { id: string; colour: string; label?: string }
 
