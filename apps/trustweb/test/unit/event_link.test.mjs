@@ -1,5 +1,5 @@
 /** Event link (E2, wave 7): round trip, malformed input, size cap, and no person data in the payload. */
-import { decodeEventLink, encodeEventLink } from '../../src/event_link.ts'
+import { decodeEventLink, encodeEventLink, linkOrigin } from '../../src/event_link.ts'
 import { applyHostLink, joinEvent, newEvent } from '../../src/events.ts'
 
 const ORIGIN = 'https://app.trustweb.one'
@@ -106,5 +106,20 @@ describe('host link', () => {
     const closed = held({ hostNamesTags: false })
     applyHostLink(closed, decode({ ...hosted, tagName: 'Forum 26' }, 'host'))
     expect(closed.events[0].tagName).toBeUndefined()
+  })
+})
+
+describe('link origin', () => {
+  it('keeps the three production hosts', () => {
+    for (const o of ['https://app.idea2.site', 'https://app.trustintheweb.org', 'https://app.trustweb.one']) expect(linkOrigin(o)).toBe(o)
+  })
+
+  it('sends local, dev slot and LAN pages to the live app', () => {
+    for (const o of ['http://127.0.0.1:5196', 'https://dev2.trustweb.one', 'http://192.168.1.23:5196']) expect(linkOrigin(o)).toBe('https://app.trustweb.one')
+  })
+
+  it('decoding ignores the origin', () => {
+    const link = encodeEventLink(ev, 'http://127.0.0.1:5196', 'peer')
+    expect(decodeEventLink(link.slice(link.indexOf('/#') + 1))).toEqual(decodeEventLink(encodeEventLink(ev, ORIGIN, 'peer').slice(ORIGIN.length + 1)))
   })
 })
