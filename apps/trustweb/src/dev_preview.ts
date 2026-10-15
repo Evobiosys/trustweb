@@ -7,7 +7,7 @@
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { cascaded, collapseStore, confirmText, descendants, needsHint, prRunning, setMap, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prRunning, rowPlan, setMap, stepText, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -32,6 +32,8 @@ const CSS = `
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
+.twp .where{display:block;color:#9a9aa6;font-size:10px}.twp .steps{margin:2px 0 4px 18px;color:#ffd24a;font-weight:600}.twp .steps div{padding:1px 0}
+.see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
 const POS = 'twp-pos'
@@ -72,11 +74,16 @@ export function initDevPreview(): void {
   let error = ''
   let prText = ''
   let prUrl = ''
+  let prNum: number | null = null
+  let prEta = 0
+  let prStarted = ''
+  let opening: ReturnType<typeof setTimeout> | null = null
+  let pointing = false
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
   document.body.appendChild(root)
-  const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() })
+  const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() }, (seen) => { pointing = seen; if (lit) render() })
 
   const tab = collapseStore(sessionStorage)
   const collapsed = tab.get
@@ -84,9 +91,10 @@ export function initDevPreview(): void {
   const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
   const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
   const begin = (): void => { since = Date.now() }
-  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
+  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; const e = root.querySelector('.eta'); if (e && prEta) e.textContent = ciLine(prEta, prStarted, Date.now()); if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
   const sync = (): void => {
     const { left, top } = root.getBoundingClientRect(), style = document.documentElement.style
+    if (root.hidden) { for (const v of ['--twp-h', '--twp-l', '--twp-t']) style.removeProperty(v); return }
     style.setProperty('--twp-h', root.offsetHeight + 'px'); style.setProperty('--twp-l', left + 'px'); style.setProperty('--twp-t', top + 'px')
   }
 
@@ -126,7 +134,8 @@ export function initDevPreview(): void {
 
   function tap(f: PreviewFeature): void {
     lit = tapped(lit, f.key)
-    if (lit && !pointer.set(f.selector)) { lit = null; toast('nothing to point at for this feature') }
+    // The ring shows when the selector matches; else the yellow steps show the way, and the pointer stays armed until the view opens.
+    if (lit && rowPlan(pointer.set(f.selector), f.steps) === 'none') { lit = null; toast('nothing to point at for this feature') }
     render()
   }
 
@@ -163,9 +172,10 @@ export function initDevPreview(): void {
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : [])), lit === f.key ? h('i') : '')
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
-    return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
+    const way = lit === f.key && !pointing && f.steps?.length ? [h('div', { className: 'steps' }, ...f.steps.map((t) => h('div', { textContent: '👣 ' + t })))] : []
+    return h('div', {}, label, ...way, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
   function askBox(a: NonNullable<typeof ask>): HTMLElement {
@@ -182,29 +192,55 @@ export function initDevPreview(): void {
     return h('div', { className: 'row warn slow' }, 'taking long: reload by hand ', re)
   }
 
+  // The status file's answer as panel state. On the ready step the tab opens dev after 3 s (once per PR: a reload only shows the links).
+  function applyStatus(j: ApprovalStatus, live: boolean): void {
+    prStep = j.step; prText = stepText(j.step, j.text, p!.short, j.pr); prUrl = j.url ?? ''; prNum = j.pr ?? null
+    prEta = j.etaSeconds ?? 0; prStarted = j.started ?? ''
+    if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* links come from the status */ })
+    if (j.step === 'ready' && j.url) {
+      const flag = 'twp-dev-opened-' + (j.pr ?? p!.short)
+      let done = false
+      try { done = !!sessionStorage.getItem(flag); sessionStorage.setItem(flag, '1') } catch { /* not remembered: opens once per load */ }
+      if (live && !done && !opening) opening = setTimeout(() => { location.href = devUrl(j.url!, location) }, 3000)
+    }
+    render()
+  }
+
   function watchPr(): void {
-    pollStatus((j) => {
-      prStep = j.step; prText = j.text ?? j.step; prUrl = j.url ?? ''
-      if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() })
-      render()
-    })
+    pollStatus((j) => { applyStatus(j, true) })
+  }
+
+  /** "PR #8 · dev2" for the header line: the PR (registry, else the status) and, once the slot is ready, the dev link. */
+  function links(): (Node | string)[] {
+    const num = p!.pr?.number ?? prNum
+    if (num === null) return []
+    const pr = h('a', { href: p!.pr?.url ?? `https://github.com/Evobiosys/trustweb/pull/${num}`, target: '_blank', textContent: 'PR #' + num })
+    return prStep === 'ready' && prUrl ? [pr, ' · ', h('a', { href: prUrl, target: '_blank', textContent: devLabel(prUrl) })] : [pr]
+  }
+
+  function staying(): HTMLElement {
+    const stay = h('a', { href: '#', textContent: 'stay' })
+    stay.addEventListener('click', (e) => { e.preventDefault(); if (opening) clearTimeout(opening); opening = null; render() })
+    return h('div', {}, 'Opening dev in 3 s (', stay, ')')
   }
 
   function prPart(n: number): HTMLElement {
-    if (p!.pr) return h('div', { className: 'btns' }, h('a', { href: p!.pr.url, target: '_blank', textContent: 'PR #' + p!.pr.number }))
+    if (p!.pr) return h('div', { className: 'btns' }, ...(opening ? [staying()] : []))
     const go = h('button', { textContent: `Create PR with ${n} checked`, disabled: loading() || n === 0 })
     go.addEventListener('click', () => {
       void call('POST', '/pr', {}).then(() => {
-        prText = 'starting'; prStep = ''; begin(); render()
+        prText = stepText('none', undefined, p!.short); prStep = ''; begin(); render()
         watchPr()
       }).catch((e: Error) => { error = e.message; render() })
     })
-    const status = prText ? h('div', {}, prText, ' ', prUrl ? h('a', { href: prUrl, target: '_blank', textContent: 'open' }) : '') : ''
+    const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
+    const status = prText ? h('div', {}, prText, ...(opening ? [staying()] : []), eta) : ''
     return h('div', { className: 'btns' }, go, status)
   }
 
   function render(): void {
     const q = p!
+    root.hidden = tab.hidden()
     const pill = collapsed()
     root.className = 'twp' + (pill ? ' pill' : '')
     root.replaceChildren()
@@ -214,8 +250,10 @@ export function initDevPreview(): void {
       tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
+      const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
+      close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
-      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), x)))
+      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
       const n = q.features.filter((f) => f.checked).length
@@ -249,7 +287,7 @@ export function initDevPreview(): void {
   render()
   // A reload while "Create PR" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
-    if (prRunning(j.step)) { prStep = j.step; prText = j.text ?? j.step; begin(); render(); watchPr() }
+    if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
   }).catch(() => { /* no status: no flow to show */ })
   void call('GET', '').then((q) => { p = q; render() }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
