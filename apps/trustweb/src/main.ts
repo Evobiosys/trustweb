@@ -124,7 +124,7 @@ import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
+import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
 import { decodeEventLink, linkOrigin } from './event_link'
 import { sendHit } from './org_hits'
@@ -2776,6 +2776,7 @@ const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
+  by: () => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined),
 })
 
 const feed = createFeedView({
@@ -3037,13 +3038,21 @@ function maybeOpenPendingEvent(): void {
   pendingEvent = null
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
-  const add = (): void => { const id = joinEvent(st(), ev, Date.now()); save(); closeSheet(); openEvents(id) }
+  const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
+  const add = (): void => {
+    const now = Date.now()
+    const id = joinEvent(st(), ev, now)
+    if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
+    save(); closeSheet(); openEvents(id)
+  }
   openSheet([
     el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
+    ev.by ? el('p', { class: 'meta', 'data-event-invited-by': '' }, [S.eventInvitedBy(ev.by.name)]) : null,
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
     ev.srv ? el('p', { class: 'meta', 'data-org-counts-note': '' }, [S.evOrgCounts]) : null,
     ev.conditions ? el('p', {}, [ev.conditions]) : null,
     ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
+    ev.by ? el('label', { class: 'meta' }, [addBox, ` ${S.eventAddInviter(ev.by.name)}`]) : null,
     el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
     el('button', { class: 'btn btn-ghost wide', 'data-event-notme': '', onclick: closeSheet }, [S.eventLinkNotMe]),
   ])

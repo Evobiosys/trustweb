@@ -3,8 +3,8 @@
  * Local only: cascade.ts askSources strips AppState.events and Person.events (I1).
  */
 import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
-import type { LinkedEvent } from './event_link'
-import { RINGS, ringSlot } from './model'
+import type { EventBy, LinkedEvent } from './event_link'
+import { Ring, RINGS, ringSlot } from './model'
 import { sendHit } from './org_hits'
 import type { AppState, Person, TwEvent } from './model'
 
@@ -130,6 +130,15 @@ export function joinEvent(s: AppState, linked: LinkedEvent, now: number): string
     if (ev.srv) sendHit(ev.srv, 'joined')
   }
   return linked.id
+}
+
+/** The inviter as a person in my web (Acquaintance, tagged with the event); an existing card with that did or exact name is only tagged. */
+export function addInviter(s: AppState, by: EventBy, eventId: string, context: string, id: string, now: number): void {
+  const name = by.name.trim()
+  const known = s.people.find((p) => (by.did && p.did === by.did) || p.name === name)
+  if (known) { if (by.did && !known.did) known.did = by.did; tagPerson(s, known.id, eventId); return }
+  s.people.push({ id, name, context, ring: Ring.Acquaintance, metAt: now, lines: [], ...(by.did ? { did: by.did } : {}) })
+  tagPerson(s, id, eventId)
 }
 
 /** A host link for an event I hold names its tag, unless I keep my own name or do not let the host name it. A peer link never does. */

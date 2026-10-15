@@ -293,6 +293,8 @@ export interface Person {
   peerId?: string
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
   events?: string[]
+  /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
+  did?: string
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
    * this phone only: never matched, relayed or put into a shared code.
