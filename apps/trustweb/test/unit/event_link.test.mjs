@@ -37,7 +37,6 @@ describe('event link', () => {
     ['not an object', hashOf([1])],
     ['missing name', hashOf({ kind: 'peer', id: 'a', from: '2026-10-12', where: 'x' })],
     ['missing from', hashOf({ kind: 'peer', id: 'a', name: 'n', where: 'x' })],
-    ['missing where', hashOf({ kind: 'peer', id: 'a', name: 'n', from: '2026-10-12' })],
     ['missing id', hashOf({ kind: 'peer', name: 'n', from: '2026-10-12', where: 'x' })],
     ['invalid date', hashOf({ kind: 'peer', id: 'a', name: 'n', from: 'soon', where: 'x' })],
     ['missing kind', hashOf({ id: 'a', name: 'n', from: '2026-10-12', where: 'x' })],
@@ -45,6 +44,13 @@ describe('event link', () => {
     ['oversize', hashOf({ kind: 'peer', id: 'a', name: 'n', from: '2026-10-12', where: 'x'.repeat(4100) })],
   ])('rejects %s', (_label, hash) => {
     expect(decodeEventLink(hash)).toBeNull()
+  })
+})
+
+describe('an event without a place', () => {
+  it('survives the link', () => {
+    const e = newEvent({ name: 'Forum', from: '2026-10-12', where: '' }, 'e9', 5)
+    expect(decodeEventLink(encodeEventLink(e, ORIGIN, 'peer').slice(ORIGIN.length + 1))).toMatchObject({ id: 'e9', where: '' })
   })
 })
 
