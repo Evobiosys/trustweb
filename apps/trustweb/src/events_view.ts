@@ -3,9 +3,11 @@
  * Views are screens of their own (Screen.Events); the module keeps which one is showing.
  */
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventsSorted, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
+import { attendees, deleteEvent, eventsSorted, newEvent, restoreEvent, inWeb, splitThemes, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
 import { encodeEventLink } from './event_link'
 import type { EventError, EventFields } from './events'
+import { PERSON_GREEN } from './colour_tags'
+import { ringColor } from './model'
 import type { AppState, Person, TwEvent } from './model'
 import { S } from './strings'
 
@@ -17,7 +19,8 @@ export interface EventsViewHooks {
   leave: () => void
   /** Redraw the screen after a change of view. */
   redraw: () => void
-  personSheet: (personId: string) => void
+  /** The per-person Web Curator page (the default tap on an attendee). */
+  curatorPerson: (personId: string) => void
   avatar: (name: string, id: string) => HTMLElement
   /** A card with an Undo button. */
   undoNotice: (title: string, onUndo: () => void) => void
@@ -98,10 +101,21 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     ])]
   }
 
+  /** The avatar in its ring colour; without a ring: dashed, and a hint beside it. */
+  function personBadge(p: Person): HTMLElement {
+    const web = inWeb(p)
+    return el('span', {
+      class: 'pbadge', 'data-in-web': String(web),
+      style: `border:1.5px ${web ? 'solid' : 'dashed'} ${web ? ringColor(p) : PERSON_GREEN}`,
+    }, [h.avatar(p.name, p.id)])
+  }
+
+  const hint = (p: Person): HTMLElement | null => (inWeb(p) ? null : el('i', { 'data-not-in-web': p.id }, [S.eventsNotInWeb]))
+
   function attendeeRow(ev: TwEvent, p: Person): HTMLElement {
     return el('div', { class: 'prow', 'data-attendee': p.id }, [
-      h.avatar(p.name, p.id),
-      el('button', { class: 'who', onclick: () => h.personSheet(p.id) }, [el('b', {}, [p.name])]),
+      personBadge(p),
+      el('button', { class: 'who', onclick: () => h.curatorPerson(p.id) }, [el('b', {}, [p.name]), hint(p)]),
       el('button', {
         class: 'btn btn-ghost btn-sm', 'aria-label': S.eventsUntag(p.name),
         onclick: () => { untagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
@@ -117,7 +131,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       results.replaceChildren(...matchPeople(open, input.value).map((p) => el('button', {
         class: 'chip', 'data-tag-person': p.id,
         onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
-      }, [p.name])))
+      }, [personBadge(p), el('span', {}, [p.name, hint(p)])])))
     }
     input.addEventListener('input', draw)
     draw()
