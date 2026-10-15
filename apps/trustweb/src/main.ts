@@ -21,6 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
+import { askPeers, isNonResponsive } from './non_responsive'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -1389,7 +1390,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : PERSON_GREEN
       const b = el('button', {
-        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : ''), 'data-pid': p.id,
+        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
       }, [
         face,
@@ -2632,6 +2633,13 @@ const curator = createCurator({
     const p = state?.people.find((x) => x.id === id)
     if (!p) return
     p.fields = { ...p.fields, [FAMILY_FIELD]: on as unknown as string }
+    save()
+    if (screen === Screen.Web) render()
+  },
+  setFlag: (id, key, on) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p) return
+    p.fields = { ...p.fields, [key]: on as unknown as string }
     save()
     if (screen === Screen.Web) render()
   },
@@ -4540,7 +4548,7 @@ function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
 async function runAsk(text: string): Promise<void> {
   const t = text.trim()
   if (!t) return
-  const peers = st().peers
+  const peers = askPeers(st())
   askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: askReachOf(st()) }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {

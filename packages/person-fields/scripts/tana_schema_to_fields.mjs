@@ -43,6 +43,7 @@ const TYPE_DECL = `export interface PersonField {
 `
 
 const TRUSTWEB_ONLY = [
+  { id: 'tw-non-responsive', tanaAttributeId: null, label: 'non-responsive', type: 'checkbox', description: 'does not answer messages or asks; shown greyed in lists, excluded from asks by default' },
   { id: 'tw-phone', tanaAttributeId: null, label: 'Phone', type: 'content', description: 'TrustWeb only: for the call and text links' },
   {
     id: 'tw-favourite', tanaAttributeId: null, label: 'Favourite way to connect', type: 'options', description: 'TrustWeb only: the symbol on the collapsed row',

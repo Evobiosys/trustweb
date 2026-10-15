@@ -56,6 +56,7 @@ const TRUSTWEB_ONLY = {
     tw('tw-context', 'Context', 'content', 'TrustWeb only: met in which context, or intending to connect'),
     tw('tw-ring', 'Ring', 'options', 'TrustWeb only', RING_LABELS),
     tw('tw-fav', 'Favourite way to connect', 'options', 'TrustWeb only', FAV_LABELS),
+    tw('tw-non-responsive', 'non-responsive', 'checkbox', 'does not answer messages or asks; shown greyed in lists, excluded from asks by default'),
   ],
   environment: [tw('tw-context', 'Context', 'content', 'TrustWeb only')],
 }

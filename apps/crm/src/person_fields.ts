@@ -472,5 +472,12 @@ export const PERSON_FIELDS: readonly PersonField[] = [
         "label": "Matrix"
       }
     ]
+  },
+  {
+    "id": "tw-non-responsive",
+    "tanaAttributeId": null,
+    "label": "non-responsive",
+    "type": "checkbox",
+    "description": "does not answer messages or asks; shown greyed in lists, excluded from asks by default"
   }
 ]
