@@ -225,6 +225,8 @@ export interface ConnectAckEnvelope {
   t: 'connect-ack'
   from: Identity
   did: string
+  /** Wave 8: the sender reached out through the receiver's public link (no relationship before). Additive; absent otherwise. */
+  reachOut?: true
 }
 
 /**

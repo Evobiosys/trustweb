@@ -176,6 +176,6 @@ export function parseConnectLinkParams(search: string): ConnectLinkParams | null
  * -- separate from the actual `relayChannel.sendRaw` call, which needs live
  * network state main.ts owns -- so it stays testable without a relay.
  */
-export function buildConnectAck(from: Identity, didIdentity: DidIdentity): ConnectAckEnvelope {
-  return { v: 1, t: 'connect-ack', from, did: didIdentity.did }
+export function buildConnectAck(from: Identity, didIdentity: DidIdentity, reachOut = false): ConnectAckEnvelope {
+  return { v: 1, t: 'connect-ack', from, did: didIdentity.did, ...(reachOut ? { reachOut: true as const } : {}) }
 }

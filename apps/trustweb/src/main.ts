@@ -56,7 +56,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -247,6 +247,8 @@ const ctxParam = params.get('ctx')
 const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
 const storeCtx = solo ? ctx : undefined
 let pendingConnect = parseConnectLinkParams(location.search)
+/** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
+let reachOutPending = false
 // Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
 // browser never sends to the server, so they stay out of access logs.
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
@@ -431,6 +433,7 @@ const net = new Net({
       s.people.push(person)
     }
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
+    if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
     sendContactTo(peer)
@@ -1089,14 +1092,17 @@ async function completePendingConnect(): Promise<void> {
   const link = pendingConnect
   if (!link || !state) return
   pendingConnect = null
-  const ring = solo ? Ring.Friend : Ring.Acquaintance
-  const peer = await net.completeConnect(link, ring)
+  const reachOut = reachOutPending && !solo && !demoLink
+  reachOutPending = false
+  const ring = reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance
+  const peer = await net.completeConnect(link, ring, reachOut)
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
     person = { id: randomId(8), name: peer.displayName, context: '', ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
   }
+  if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -1209,6 +1215,7 @@ function screenStart(): Node[] {
     const typed = demo ? demo.account : name.value
     if (!typed.trim()) { name.focus(); return }
     createMe(typed)
+    reachOutPending = invite !== null
     if (demo) {
       const s = st()
       s.testOf = { name: inviter, createdAt: Date.now(), accountId: demo.accountId, expiresAt: demo.expiresAt, own: demo.own }
@@ -1238,7 +1245,7 @@ function screenStart(): Node[] {
         ])
       : invite
         ? el('div', { class: 'invite' }, [
-            el('b', {}, [S.connectInvite(inviter)]),
+            el('b', {}, [solo ? S.connectInvite(inviter) : S.reachOutStart(inviter)]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
@@ -1250,7 +1257,7 @@ function screenStart(): Node[] {
       : null,
     el('div', { class: 'start-form' }, [
       demo ? el('div', { class: 'field test-name', 'aria-label': S.yourName }, [demo.account]) : name,
-      el('button', { class: 'btn btn-electric', onclick: submit }, [demo ? S.demoStart(demo.account) : invite ? S.connectJoin : S.startOwn]),
+      el('button', { class: 'btn btn-electric', onclick: submit }, [demo ? S.demoStart(demo.account) : invite ? (solo ? S.connectJoin : S.reachOutJoin) : S.startOwn]),
     ]),
     el('p', { class: 'foot' }, [S.startFoot]),
   ])]
@@ -1387,7 +1394,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const arcs = arcsGradient(tagColours(p, colourTags))
       const face = avatar(p.name, p.id)
-      face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : PERSON_GREEN
+      face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
@@ -1895,6 +1902,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   openSheet([
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
+    reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
     passOnRowFor(p),
@@ -1904,6 +1912,12 @@ function personSheet(personId: string): void {
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
+}
+
+/** Wave 8: how this connection began, when it began as a reach-out through a public link. */
+function reachedOutRow(p: Person): HTMLElement | null {
+  if (!p.reachedOut) return null
+  return el('p', { class: 'reached-out', 'data-reached-out': p.reachedOut, style: `color:${REACH_OUT}` }, [p.reachedOut === 'received' ? S.reachedOutToYou(displayName(p.name).text) : S.youReachedOut])
 }
 
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
