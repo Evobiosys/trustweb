@@ -5,7 +5,7 @@
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
 import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
-import { encodeEventLink } from './event_link'
+import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
 import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
@@ -31,6 +31,8 @@ export interface EventsViewHooks {
   /** Opens the join sheet for a pasted event link; false when the text holds none. */
   joinLink: (text: string) => boolean
   origin: string
+  /** Who I am to a link's reader: my name and, when I have one, my relay identity. */
+  by: () => EventBy | undefined
 }
 
 export interface EventsView {
@@ -205,7 +207,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
 
   /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. */
   function copyShown(ev: TwEvent): void {
-    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer')
+    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : h.by())
     h.copyLink(lastLink, hostLink ? S.eventHostLinkCopied : undefined)
     h.redraw()
   }

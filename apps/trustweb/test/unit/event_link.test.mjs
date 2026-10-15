@@ -1,6 +1,6 @@
 /** Event link (E2, wave 7): round trip, malformed input, size cap, and no person data in the payload. */
 import { decodeEventLink, encodeEventLink, linkOrigin } from '../../src/event_link.ts'
-import { applyHostLink, joinEvent, newEvent } from '../../src/events.ts'
+import { addInviter, applyHostLink, joinEvent, newEvent } from '../../src/events.ts'
 
 const ORIGIN = 'https://app.trustweb.one'
 const ev = newEvent({ name: 'Forum Südtirol', from: '2026-10-12', to: '2026-10-14', where: 'Innsbruck', conditions: 'Bring a dish', themes: ['trust', 'commons'], organizer: 'Anna Gruber' }, 'e1', 5)
@@ -127,5 +127,36 @@ describe('link origin', () => {
   it('decoding ignores the origin', () => {
     const link = encodeEventLink(ev, 'http://127.0.0.1:5196', 'peer')
     expect(decodeEventLink(link.slice(link.indexOf('/#') + 1))).toEqual(decodeEventLink(encodeEventLink(ev, ORIGIN, 'peer').slice(ORIGIN.length + 1)))
+  })
+})
+
+describe('event link: who invited you', () => {
+  const by = { name: 'Anna Gruber', did: 'did:peer:abc' }
+  const round = (b) => decodeEventLink(encodeEventLink(ev, ORIGIN, 'peer', b).slice(ORIGIN.length + 1))
+
+  it('carries by in #ev= and #ev_host=; older links without it still decode', () => {
+    expect(round(by)?.by).toEqual(by)
+    expect(round({ name: 'Anna Gruber' })?.by).toEqual({ name: 'Anna Gruber' })
+    expect(decodeEventLink(encodeEventLink(ev, ORIGIN, 'host', by).slice(ORIGIN.length + 1))?.by).toEqual(by)
+    expect(round(undefined)?.by).toBeUndefined()
+  })
+
+  it('addInviter creates the card once, tags on repeat, matches by did or name', () => {
+    const s = { people: [], events: [{ ...ev }] }
+    addInviter(s, by, 'e1', 'invited me to Forum', 'p1', 9)
+    addInviter(s, { name: 'Anna Gruber' }, 'e1', 'x', 'p2', 10)
+    addInviter(s, { name: 'Renamed', did: 'did:peer:abc' }, 'e1', 'x', 'p3', 11)
+    expect(s.people).toHaveLength(1)
+    expect(s.people[0]).toMatchObject({ name: 'Anna Gruber', ring: 'acquaintance', context: 'invited me to Forum', metAt: 9, did: 'did:peer:abc', events: ['e1'] })
+    s.people.push({ id: 'q', name: 'Ben Huber', ring: 'friend', lines: [] })
+    addInviter(s, { name: 'Ben Huber' }, 'e1', 'x', 'p4', 12)
+    expect(s.people).toHaveLength(2)
+    expect(s.people[1].events).toEqual(['e1'])
+  })
+
+  it('opt-out: joinEvent alone creates no card', () => {
+    const s = { people: [] }
+    joinEvent(s, { ...round(by) }, 5)
+    expect(s.people).toHaveLength(0)
   })
 })

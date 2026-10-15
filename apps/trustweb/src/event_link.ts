@@ -10,7 +10,10 @@ import { SHORT_LINK_ORIGINS } from './short_link'
 export type LinkKind = 'peer' | 'host'
 
 /** What travels: the event without my own attendance or when I made it, and the kind of link. */
-export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked'> & { kind: LinkKind }
+export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked'> & { kind: LinkKind; by?: EventBy }
+
+/** Who sent the link: their own name and own identity, nothing about third people (I1). */
+export interface EventBy { name: string; did?: string }
 
 const MAX_BYTES = 4096
 const SRV = /^[0-9a-f]{16}$/
@@ -30,9 +33,9 @@ export function linkOrigin(pageOrigin: string): string {
   return SHORT_LINK_ORIGINS.includes(pageOrigin) ? pageOrigin : 'https://app.trustweb.one'
 }
 
-export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind): string {
+export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind, by?: EventBy): string {
   const { id, name, from, to, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
-  const payload: LinkedEvent = { kind, id, name, from, where, ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(by?.name ? { by: { name: by.name, ...(by.did ? { did: by.did } : {}) } } : {}), ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
   return `${origin}/#${kind === 'host' ? 'ev_host' : 'ev'}=${toBase64Url(JSON.stringify(payload))}${ev.srv ? `&srv=${ev.srv}` : ''}`
 }
 
@@ -57,9 +60,12 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     const ev = newEvent({ name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
     if (typeof ev === 'string') return null
     const tagName = text(f.tagName)?.trim()
+    const b = typeof f.by === 'object' && f.by !== null ? (f.by as Record<string, unknown>) : undefined
+    const byName = text(b?.name)?.trim()
+    const byDid = text(b?.did)
     const { createdAt: _c, attended: _a, ...rest } = ev
     const srv = params.get('srv')
-    return { ...rest, kind, ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}) }
+    return { ...rest, kind, ...(byName ? { by: { name: byName, ...(byDid ? { did: byDid } : {}) } } : {}), ...(srv && SRV.test(srv) ? { srv } : {}), ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}) }
   } catch {
     return null
   }
