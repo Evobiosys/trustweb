@@ -9,7 +9,7 @@ import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -37,6 +37,7 @@ const CSS = `
 .twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
+.twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}
 ${DEVICE2_CSS}`
@@ -49,8 +50,6 @@ const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
 }
-
-const seen = (id: string): string[] => { try { return JSON.parse(store.get(seenKey(id)) ?? '[]') as string[] } catch { return [] } }
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props)
@@ -70,8 +69,12 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promi
 const hhmm = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 
 export function initDevPreview(): void {
+  if (window.top !== window) return // an iframe (the second device) is never the reviewer's page
   let p = typeof __TW_PREVIEW__ === 'undefined' ? null : __TW_PREVIEW__
   if (!p) return
+  let seen = readSeen(store.get(seenKey(p.id)), p.features)
+  // The serve-start copy of the registry can be stale: refs are compared only once the server has answered.
+  let fresh = false
   let busy: string | null = null
   let waiting = false
   let since = 0
@@ -144,7 +147,8 @@ export function initDevPreview(): void {
   createDevice2(p.id, p.stockPort, mode, toast)
 
   function tap(f: PreviewFeature): void {
-    store.set(seenKey(p!.id), JSON.stringify(toggleSeen(seen(p!.id), f.key)))
+    seen = tapSeen(seen, f.key, f.ref ?? '')
+    store.set(seenKey(p!.id), JSON.stringify(seen))
     lit = tapped(lit, f.key)
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
@@ -186,10 +190,12 @@ export function initDevPreview(): void {
       ask = { draft: toggled(from, f.key, box.checked), last: f.key, grey: cascaded(from, f.key, box.checked) }
       render()
     })
+    const mark = seenState(seen, f.key, fresh ? f.ref ?? '' : seen[f.key]?.ref ?? '')
+    if (mark.next !== seen) { seen = mark.next; store.set(seenKey(p!.id), JSON.stringify(seen)) }
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (seen(p!.id).includes(f.key) ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
@@ -286,7 +292,7 @@ export function initDevPreview(): void {
       })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
-        h('div', { className: 'row' }, ...tree(visible(shown)).map((n) => row(n, shown, grey))),
+        ...sections(tree(visible(shown))).map((s) => h('div', { className: 'row' }, h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), ...s.nodes.map((n) => row(n, shown, grey)))),
         ...(ask ? [askBox(ask)] : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
@@ -312,6 +318,7 @@ export function initDevPreview(): void {
   }).catch(() => { /* no status: no flow to show */ })
   void call('GET', '').then((q) => {
     p = q
+    fresh = true
     render()
   }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }

@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -185,10 +185,32 @@ describe('dev preview PR count, block and reviewed rows', () => {
     expect(prBlocked(toggled(list, 'a', false), list)).toBe(true)
     expect(prBlocked(toggled(list, 'a', false), toggled(list, 'a', false))).toBe(false)
   })
-  it('toggleSeen marks, then unmarks, without mutating', () => {
-    const seen = ['x']
-    expect(toggleSeen(seen, 'a')).toEqual(['x', 'a'])
-    expect(toggleSeen(['x', 'a'], 'a')).toEqual(['x'])
-    expect(seen).toEqual(['x'])
+  it('seenState: first mark, same ref, one change, two changes, re-mark', () => {
+    expect(seenState({}, 'a', 'r1')).toEqual({ italic: false, prefix: '', next: {} })
+    const marked = tapSeen({}, 'a', 'r1')
+    expect(marked).toEqual({ a: { ref: 'r1', updates: 0 } })
+    expect(seenState(marked, 'a', 'r1')).toEqual({ italic: true, prefix: '', next: marked })
+    const one = seenState(marked, 'a', 'r2')
+    expect(one).toMatchObject({ italic: false, prefix: 'Update: ', next: { a: { ref: 'r2', updates: 1 } } })
+    expect(seenState(one.next, 'a', 'r2')).toMatchObject({ italic: false, prefix: 'Update: ' })
+    const two = seenState(one.next, 'a', 'r3')
+    expect(two).toMatchObject({ italic: false, prefix: 'Update2: ', next: { a: { ref: 'r3', updates: 2 } } })
+    const again = tapSeen(two.next, 'a', 'r3')
+    expect(seenState(again, 'a', 'r3')).toMatchObject({ italic: true, prefix: '' })
+    expect(tapSeen(again, 'a', 'r3')).toEqual({})
+  })
+  it('readSeen migrates an old key list to the current refs', () => {
+    const fs = [{ key: 'a', ref: 'r1' }, { key: 'b', ref: 'r2' }]
+    expect(readSeen('["b"]', fs)).toEqual({ b: { ref: 'r2', updates: 0 } })
+    expect(readSeen('{"a":{"ref":"x","updates":2}}', fs)).toEqual({ a: { ref: 'x', updates: 2 } })
+    expect(readSeen('nope', fs)).toEqual({})
+  })
+  it('sections: vanilla, private, ops; empty ones dropped; a child of another repo starts its own top level', () => {
+    const f = (key, repo, requires = []) => ({ key, repo, requires, branch: key, title: key, checked: true })
+    const out = sections(tree([f('o', 'ops'), f('v'), f('v2', undefined, ['v']), f('p', 'private', ['v']), f('p2', 'private', ['p'])]))
+    expect(out.map((s) => s.repo)).toEqual(['vanilla', 'private', 'ops'])
+    expect(out[0].nodes.map((n) => [n.feature.key, n.children.map((c) => c.feature.key)])).toEqual([['v', ['v2']]])
+    expect(out[1].nodes.map((n) => [n.feature.key, n.children.map((c) => c.feature.key)])).toEqual([['p', ['p2']]])
+    expect(sections(tree([f('o', 'ops')])).map((s) => s.repo)).toEqual(['ops'])
   })
 })

@@ -25,6 +25,7 @@ const CSS = `
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
 
 export function initDevFeature(): void {
+  if (window.top !== window) return // inside the second-device iframe: not the reviewer's page
   const f = typeof __TW_FEATURE__ === 'undefined' ? null : __TW_FEATURE__
   if (!f || (f as unknown) === 'null' || !f.title) return
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
