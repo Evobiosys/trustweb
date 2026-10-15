@@ -17,6 +17,7 @@ const CSS = `
 .twf-dot{position:fixed;left:8px;top:8px;z-index:99999;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#241b2e;color:#4fd7a0;font:700 11px/18px system-ui;cursor:pointer;opacity:.7}
 .twf-ok{position:fixed;right:16px;bottom:16px;z-index:99999;width:320px;max-width:calc(100vw - 32px);font:13px/1.4 system-ui,sans-serif;color:#1d2a2e;background:#fff;border:1.5px solid #b8650a;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);touch-action:none}
 @media (max-width:600px){.twf-ok{bottom:96px}}
+.twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
@@ -67,7 +68,7 @@ export function initDevFeature(): void {
   show(!hidden)
 }
 
-export interface ApprovalStatus { step: string; text?: string; url?: string }
+export interface ApprovalStatus { step: string; text?: string; url?: string; pr?: number | null; started?: string; etaSeconds?: number }
 
 /** Polls GET /__tw/status every 5 s and hands each answer to `on`, until the flow has 'failed' or is 'ready' with its url. */
 export function pollStatus(on: (j: ApprovalStatus) => void): void {
@@ -103,6 +104,11 @@ function approveBar(bld: { stockUrl: string; approved?: string | null }, stockLi
     })
   }
   head.textContent = 'Personal preview'
+  const hx = Object.assign(document.createElement('button'), { className: 'hx', textContent: '×', title: 'Hide for this tab' })
+  hx.addEventListener('pointerdown', (e) => e.stopPropagation())
+  hx.addEventListener('click', () => { bar.hidden = true; try { sessionStorage.setItem('twf-ok-hidden', '1') } catch { /* not remembered */ } })
+  bar.prepend(hx)
+  try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   if (bld.approved) poll()
   else {
     body.append(btn('Approve personal preview', 'go', () => {
