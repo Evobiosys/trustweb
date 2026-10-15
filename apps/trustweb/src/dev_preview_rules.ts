@@ -1,7 +1,12 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
 export { readyToGo } from '../dev_preview_rules.mjs'
 
-export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[] }
+export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean }
+
+/** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
+export function visible(features: PreviewFeature[]): PreviewFeature[] {
+  return features.filter((f) => !f.merged)
+}
 
 /** "needs <title>" for the first required feature that is unchecked, else null (the box is usable). */
 export function needsHint(features: PreviewFeature[], key: string): string | null {

@@ -157,3 +157,11 @@ describe('dev preview PR update', () => {
     expect(confirmText('X', true, 2, null)).toBe('Re-assemble preview with these 2 changes? The page reloads.')
   })
 })
+
+describe('merged features', () => {
+  it('visible() drops features whose branch is on main already', async () => {
+    const { visible } = await import('../../src/dev_preview_rules.ts')
+    const list = [{ key: 'a', branch: 'x/a', title: 'A', requires: [], checked: true, merged: true }, { key: 'b', branch: 'x/b', title: 'B', requires: ['a'], checked: true }]
+    expect(visible(list).map((f) => f.key)).toEqual(['b'])
+  })
+})
