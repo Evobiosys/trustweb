@@ -1,0 +1,2 @@
+export function connect(token: string, fetcher?: typeof fetch): Promise<{ call: (name: string, args: object) => Promise<string>; rpc: (method: string, params: object, notify?: boolean) => Promise<{ result?: { tools?: { name: string }[] } }> }>
+export function pull(o: { indexPath: string; nodesPath: string; call: (name: string, args: object) => Promise<string>; only?: string[]; since?: string; pause?: number; log?: (m: string) => void }): Promise<{ pulled: number; resumed: number; failed: string[] }>

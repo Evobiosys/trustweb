@@ -47,6 +47,14 @@ DEV RECORD (dev server only; a build ignores it)
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
 
+PULL FROM TANA (the other direction; the CRM only pushes field edits)
+  TW_CRM_TANA_TOKEN=... node scripts/tana_pull_persons.mjs <persons-index.json> <persons-nodes.json> [--only id,...] [--since ISO]
+                                 [--out record.json] [--no-convert] [--list-tools]
+                                 reads each person node (read_node) from the local Tana API, rewrites persons-nodes.json (.bak.<ts> first,
+                                 atomic; unreadable nodes keep their old entry), then runs the converter into --out (default trustweb-record.json
+                                 next to the nodes file, .bak first). 50 ms between calls; <nodes>.pull-progress.json lets an interrupted run resume.
+                                 --only is the one-node refresh. --since compares with the index entry's edited, else created. stderr: counts and ids only.
+
 RUN (from this directory; the toolchain is project-local, node >= 20)
   /opt/homebrew/bin/npm install          once; installs into apps/crm/node_modules only
   npm run dev                            http://127.0.0.1:5195/
