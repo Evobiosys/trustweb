@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, collapseStore, confirmText, descendants, needsHint, prRunning, readyToGo, setMap, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -98,5 +98,42 @@ describe('dev preview collapse store and PR status', () => {
   it('a PR flow runs while the step is none of none, ready, failed', () => {
     expect(['none', 'ready', 'failed'].map(prRunning)).toEqual([false, false, false])
     expect(prRunning('ci')).toBe(true)
+  })
+
+  it('a row tap points when the target shows, else shows the steps, else has nothing to offer', () => {
+    expect(rowPlan(true, ['a'])).toBe('point')
+    expect(rowPlan(true, undefined)).toBe('point')
+    expect(rowPlan(false, ['Web view', 'calendar glyph'])).toBe('steps')
+    expect(rowPlan(false, [])).toBe('none')
+    expect(rowPlan(false, undefined)).toBe('none')
+  })
+  it('PR progress never shows a raw step name', () => {
+    expect(stepText('none', undefined, 's')).toBe('starting...')
+    expect(stepText('start', 'starting', 's')).toBe('tagging and pushing')
+    expect(stepText('pushed', 'pushed as task/s', '261015_1227')).toBe('pushed task/261015_1227')
+    expect(stepText('pr', 'PR #8 opened', 's', 8)).toBe('PR #8 opened, CI running')
+    expect(stepText('ci', 'CI running (PR #8)', 's', 8)).toBe('CI running (PR #8)')
+    expect(stepText('ready', 'slot ready', 's', 8)).toBe('dev ready')
+    expect(stepText('failed', 'CI failed on PR #8', 's')).toBe('CI failed on PR #8')
+  })
+  it('CI estimate in minutes with a countdown from the flow start', () => {
+    const t0 = '2026-10-15T10:00:00Z', at = (s) => Date.parse(t0) + s * 1000
+    expect(ciLine(200, t0, at(0))).toBe('CI usually takes about 3 min · about 3:20 left')
+    expect(ciLine(200, t0, at(140))).toBe('CI usually takes about 3 min · about 1:00 left')
+    expect(ciLine(200, t0, at(300))).toBe('CI usually takes about 3 min · should be done any moment')
+    expect(ciLine(20, t0, at(0))).toContain('about 1 min')
+  })
+  it('dev opens at the same place as the preview, labelled by its host', () => {
+    expect(devUrl('https://dev2.trustweb.one/', { pathname: '/', search: '', hash: '#/web' })).toBe('https://dev2.trustweb.one/#/web')
+    expect(devUrl('https://dev2.trustweb.one/', { pathname: '/x', search: '?a=1', hash: '' })).toBe('https://dev2.trustweb.one/x?a=1')
+    expect(devLabel('https://dev2.trustweb.one/')).toBe('dev2')
+  })
+  it('the x hides the panel for this tab only', () => {
+    const m = new Map()
+    const store = collapseStore({ getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) })
+    expect(store.hidden()).toBe(false)
+    store.hide()
+    expect(store.hidden()).toBe(true)
+    expect(store.get()).toBe(false)
   })
 })

@@ -12,8 +12,9 @@ export interface Pointer {
   update(): void
 }
 
-/** `anchor` is the box the line starts from; the ring's x button calls `onRemove`. Ring and line follow DOM changes, resize and scroll. */
-export function createPointer(anchor: () => DOMRect, onRemove: () => void): Pointer {
+/** `anchor` is the box the line starts from; the ring's x button calls `onRemove`. Ring and line follow DOM changes, resize and scroll;
+ *  `onSeen` fires when the target appears or disappears, so a pointer armed for a view not open yet can announce itself. */
+export function createPointer(anchor: () => DOMRect, onRemove: () => void, onSeen?: (seen: boolean) => void): Pointer {
   const NS = 'http://www.w3.org/2000/svg'
   document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
   const ring = Object.assign(document.createElement('div'), { className: 'twf-ring' })
@@ -27,10 +28,12 @@ export function createPointer(anchor: () => DOMRect, onRemove: () => void): Poin
   svg.appendChild(line)
   document.body.append(svg, ring)
   let selector: string | null = null
+  let seen = false
 
   const update = (): boolean => {
     const r = selector ? document.querySelector(selector)?.getBoundingClientRect() : undefined
     const off = !r || (r.width === 0 && r.height === 0)
+    if (seen === off) { seen = !off; onSeen?.(seen) }
     ring.hidden = off; svg.style.display = off ? 'none' : ''
     if (off) return false
     Object.assign(ring.style, { left: r.left - 4 + 'px', top: r.top - 4 + 'px', width: r.width + 8 + 'px', height: r.height + 8 + 'px' })
