@@ -9,13 +9,14 @@ import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prMerged, prRunning, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
-  pr: { number: number; url: string; branch?: string; at?: string; sha?: string } | null
+  pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
+  next?: { id: string; port: number }
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
@@ -89,6 +90,7 @@ export function initDevPreview(): void {
   let prEta = 0
   let prStarted = ''
   let opening: ReturnType<typeof setTimeout> | null = null
+  let making = false
   let pointing = false
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
@@ -236,14 +238,14 @@ export function initDevPreview(): void {
   function links(): (Node | string)[] {
     const num = p!.pr?.number ?? prNum
     if (num === null) return []
-    const pr = h('a', { href: p!.pr?.url ?? `https://github.com/Evobiosys/trustweb/pull/${num}`, target: '_blank', textContent: 'PR #' + num })
+    const pr = h('a', { href: p!.pr?.url ?? `https://github.com/Evobiosys/trustweb/pull/${num}`, target: '_blank', textContent: 'PR #' + num + (p!.pr && prMerged(p!) ? ' (merged)' : '') })
     return prStep === 'ready' && prUrl ? [pr, ' · ', h('a', { href: prUrl, target: '_blank', textContent: devLabel(prUrl) })] : [pr]
   }
 
-  function staying(): HTMLElement {
+  function staying(what = 'dev'): HTMLElement {
     const stay = h('a', { href: '#', textContent: 'stay' })
     stay.addEventListener('click', (e) => { e.preventDefault(); if (opening) clearTimeout(opening); opening = null; render() })
-    return h('div', {}, 'Opening dev in 3 s (', stay, ')')
+    return h('div', {}, `Opening ${what} in 3 s (`, stay, ')')
   }
 
   function pushPr(): void {
@@ -253,8 +255,36 @@ export function initDevPreview(): void {
     }).catch((e: Error) => { error = e.message; render() })
   }
 
+  /** A merged PR cannot take more: POST /pr makes the CLI create a new preview from main; poll until it names it (90 s), then go there after 3 s. */
+  function newPreview(): void {
+    making = true; render()
+    void call('POST', '/pr', {}).then(async () => {
+      for (let i = 0; i < 45 && !p!.next; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        p = await call('GET', '')
+      }
+      making = false
+      if (p!.next) opening = setTimeout(() => { location.href = `http://127.0.0.1:${p!.next!.port}/` }, 3000)
+      else error = 'No new preview after 90 s'
+      render()
+    }).catch((e: Error) => { making = false; error = e.message; render() })
+  }
+
+  function mergedPart(n: number): HTMLElement {
+    const pr = p!.pr!
+    if (p!.next) {
+      const to = h('a', { href: `http://127.0.0.1:${p!.next.port}/`, textContent: `Continue in ${p!.next.id} (port ${p!.next.port})` })
+      return h('div', { className: 'btns' }, to, ...(opening ? [staying(p!.next.id)] : []))
+    }
+    if (n === 0) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${pr.number} shipped, everything here is live` }))
+    const go = h('button', { textContent: prButton(pr, n, p!.assembled?.sha, n), disabled: loading() || making })
+    go.addEventListener('click', newPreview)
+    return h('div', { className: 'btns' }, go, ...(making ? [h('small', { textContent: 'creating the new preview...' })] : []))
+  }
+
   function prPart(n: number, blocked: boolean): HTMLElement {
-    const label = prButton(p!.pr, n, p!.assembled?.sha)
+    if (prMerged(p!)) return mergedPart(n)
+    const label = prButton(p!.pr, n, p!.assembled?.sha, n)
     const stay = opening ? [staying()] : []
     if (p!.pr && !label && !prText) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr.number} holds this set` }), ...stay)
     const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || blocked })
