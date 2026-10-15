@@ -1,6 +1,6 @@
 /** The rings view's geometry and the one place a drop changes a person: four rings, close in the centre, and a grey "not placed yet" ring outside them (drawn only when someone is on it). */
 import { CLOSENESS_KEY, Ring, RINGS, ringSlot } from './model'
-import type { Person } from './model'
+import type { AppState, Person } from './model'
 
 export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
 
@@ -38,13 +38,67 @@ export interface RingsGeometry {
   perLap: Record<Ring, number>
   /** The rings in play: the unsorted one only when someone is on it. */
   rings: readonly Ring[]
+  /** Lap of each person per ring, in the order their angles were given (only when `angles` was given). */
+  lapOf: Partial<Record<Ring, number[]>>
   /** Outer edge of the outermost avatar: the view scales to fit it. */
   extent: number
 }
 
-/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. */
-export function ringsGeometry(counts: Record<Ring, number>): RingsGeometry {
-  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), extent: 0 }
+/** Degrees (0 = top, clockwise) of a point `dx`, `dy` from the centre, in 0..360. */
+export const angleFromCentre = (dx: number, dy: number): number => ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360
+
+/** Where a dot sits on its ring: where it was dropped, else a fixed spot from its id so it never jumps between renders. */
+export function angleOf(p: Pick<Person, 'id' | 'angle'>): number {
+  if (p.angle !== undefined) return p.angle
+  let h = 2166136261
+  for (let i = 0; i < p.id.length; i++) h = Math.imul(h ^ p.id.charCodeAt(i), 16777619)
+  return (h >>> 0) % 360
+}
+
+const angleGap = (a: number, b: number): number => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d) }
+
+/** The lap of each angle (in the given order): the first lap where it clears every dot already there. Adding one at the end moves no one. */
+export function packLaps(angles: readonly number[], radius: number, dot: number): number[] {
+  const laps: number[][] = []
+  return angles.map((a) => {
+    for (let lap = 0; ; lap++) {
+      const placed = (laps[lap] ??= [])
+      const r = radius + lap * (dot + 1)
+      const sep = (2 * Math.asin(Math.min(1, (dot + 1) / (2 * r))) * 180) / Math.PI
+      if (placed.every((b) => angleGap(a, b) >= sep)) { placed.push(a); return lap }
+    }
+  })
+}
+
+/**
+ * Evenly spaced angles per ring (all rings, or just `ring`), keeping the order around the circle and the first dot where it is.
+ * Returns each touched person's previous stored angle (undefined = none) for Undo.
+ */
+export function spaceOut(s: Pick<AppState, 'people'>, ring?: Ring): Map<string, number | undefined> {
+  const before = new Map<string, number | undefined>()
+  for (const r of WEB_RINGS) {
+    if (ring && r !== ring) continue
+    const around = s.people.filter((p) => webSlot(p) === r).sort((a, b) => angleOf(a) - angleOf(b) || (a.id < b.id ? -1 : 1))
+    if (!around.length) continue
+    const start = angleOf(around[0])
+    around.forEach((p, i) => { before.set(p.id, p.angle); p.angle = (start + (360 * i) / around.length) % 360 })
+  }
+  return before
+}
+
+/** Puts the stored angles back after spaceOut. */
+export function restoreAngles(s: Pick<AppState, 'people'>, before: ReadonlyMap<string, number | undefined>): void {
+  for (const p of s.people) {
+    if (!before.has(p.id)) continue
+    const a = before.get(p.id)
+    if (a === undefined) delete p.angle
+    else p.angle = a
+  }
+}
+
+/** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. */
+export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}): RingsGeometry {
+  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, extent: 0 }
   let prev = { r: 0, dot: 0, pushed: false }
   for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
@@ -54,7 +108,10 @@ export function ringsGeometry(counts: Record<Ring, number>): RingsGeometry {
     const dot = Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * r * RING_FILL) / n)))
     if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
-    const laps = Math.ceil(n / per)
+    const mine = angles[ring]
+    const lapOf = mine && packLaps(mine, r, dot)
+    if (lapOf) g.lapOf[ring] = lapOf
+    const laps = lapOf ? Math.max(0, ...lapOf) + 1 : Math.ceil(n / per)
     g.radius[ring] = r; g.dot[ring] = dot; g.perLap[ring] = per
     prev = { r: r + (laps - 1) * (dot + 1), dot, pushed: laps > 1 || r !== RING_RADIUS[ring] }
   }

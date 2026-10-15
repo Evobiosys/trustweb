@@ -21,7 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, beyondRings, lapRadius, placeOnRing, ringAt, ringsGeometry, webSlot } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -1328,13 +1328,16 @@ let ringsK = 1
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
-  for (const p of s.people) counts[webSlot(p)] = (counts[webSlot(p)] ?? 0) + 1
-  ringsGeo = ringsGeometry(counts)
+  const members: Partial<Record<Ring, Person[]>> = {}
+  for (const p of s.people) (members[webSlot(p)] ??= []).push(p)
+  for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
+  ringsGeo = ringsGeometry(counts, Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)])))
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const colourTags = loadColourTags()
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
   let dragged = false
   wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
+  ringsMenuOn(wrap, (v) => { dragged = v })
   if (touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
@@ -1361,14 +1364,10 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   }
   wrap.appendChild(svg)
   for (const ring of ringsGeo.rings) {
-    const inRing = s.people.filter((p) => webSlot(p) === ring)
     const dot = ringsGeo.dot[ring]
-    const per = ringsGeo.perLap[ring]
-    inRing.forEach((p, i) => {
-      const lap = Math.floor(i / per)
-      const inLap = Math.min(per, inRing.length - lap * per)
-      const deg = (360 / inLap) * (i % per) + (ring === Ring.Close ? 200 : ring === Ring.Friend ? 65 : ring === Ring.Acquaintance ? 30 : 10) + lap * (180 / per)
-      const a = ((deg - 90) * Math.PI) / 180
+    ;(members[ring] ?? []).forEach((p, i) => {
+      const lap = ringsGeo.lapOf[ring]![i]
+      const a = ((angleOf(p) - 90) * Math.PI) / 180
       const radius = lapRadius(ringsGeo, ring, lap) * k
       const x = C + radius * Math.cos(a)
       const y = C + radius * Math.sin(a)
@@ -1405,7 +1404,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet(true) }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
@@ -1427,6 +1426,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     if (!node || !p) return
     let ring = webSlot(p)
     let out = false
+    let angle = angleOf(p)
     const place = (e: PointerEvent): void => {
       const box = wrap.getBoundingClientRect()
       const k = box.width / RINGS_SIZE
@@ -1435,6 +1435,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       node.style.left = x + 'px'
       node.style.top = y + 'px'
       const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK
+      angle = angleFromCentre(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
       out = beyondRings(dist, ringsGeo)
       ring = ringAt(dist, ringsGeo.radius, ringsGeo.rings)
       wrap.classList.toggle('hide-zone', out)
@@ -1465,15 +1466,66 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       setTimeout(() => setDragged(false), 0)
       if (!was) return
       if (out) { hideOnRings(p); return }
-      if (ring === webSlot(p) || (ring === Ring.Unsorted && p.ring === Ring.Family)) { render(); return }
-      if (ring === Ring.Unsorted) { unplaceOnRings(p); return }
-      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => dropOn(p, ring, v))
-      else dropOn(p, ring)
+      if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); return }
+      // The dot keeps the angle it was dropped at.
+      if (ring === webSlot(p)) { p.angle = angle; save(); render(); return }
+      if (ring === Ring.Unsorted) { p.angle = angle; unplaceOnRings(p); return }
+      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => { p.angle = angle; dropOn(p, ring, v) })
+      else { p.angle = angle; dropOn(p, ring) }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
   })
+}
+
+/** Right click, or a 500 ms hold that moved under 6 px, on empty web space or a ring line: a small menu to space the dots out equally. */
+function ringsMenuOn(wrap: HTMLElement, setHeld: (v: boolean) => void): void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let from = { x: 0, y: 0 }
+  const open = (e: MouseEvent): void => {
+    const box = wrap.getBoundingClientRect()
+    const k = box.width / RINGS_SIZE
+    const x = (e.clientX - box.left) / k
+    const y = (e.clientY - box.top) / k
+    const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
+    const near = ringAt(dist / ringsK, ringsGeo.radius, ringsGeo.rings)
+    const onLine = Math.abs(ringsGeo.radius[near] * ringsK - dist) <= RING_LINE_HIT
+    const item = (label: string, ring?: Ring): HTMLElement => el('button', { class: 'btn btn-ghost btn-sm', 'data-space-out': ring ?? 'all', onclick: () => spaceOutWeb(ring) }, [label])
+    wrap.querySelector('.ctx-menu')?.remove()
+    const menu = el('div', { class: 'ctx-menu', role: 'menu' }, [onLine ? item(S.ringsSpaceRing(S.ringLabel[near].toLowerCase()), near) : null, item(S.ringsSpaceAll)])
+    menu.style.left = Math.min(x, RINGS_SIZE - 170) * k + 'px'
+    menu.style.top = Math.min(y, RINGS_SIZE - 70) * k + 'px'
+    wrap.appendChild(menu)
+    document.addEventListener('pointerdown', (d) => { if (!menu.contains(d.target as Node)) menu.remove() }, { once: true })
+  }
+  const stop = (): void => { clearTimeout(timer); timer = undefined }
+  wrap.addEventListener('pointerdown', (e) => {
+    setHeld(false)
+    if ((e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i') || e.pointerType === 'mouse') return
+    from = { x: e.clientX, y: e.clientY }
+    timer = setTimeout(() => { timer = undefined; setHeld(true); navigator.vibrate?.(15); open(e) }, 500)
+  })
+  wrap.addEventListener('pointermove', (e) => { if (timer && Math.hypot(e.clientX - from.x, e.clientY - from.y) > 6) stop() })
+  for (const ev of ['pointerup', 'pointercancel']) wrap.addEventListener(ev, stop)
+  wrap.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    if (!(e.target as HTMLElement).closest('.node')) open(e)
+  })
+}
+
+/** How close (view px) a press must be to a ring's line to count as on it. */
+const RING_LINE_HIT = 10
+
+/** Spaces the dots out equally (one ring, or all); Undo for 30 s restores every angle. */
+function spaceOutWeb(ring?: Ring): void {
+  const s = st()
+  const before = spaceOut(s, ring)
+  save()
+  render()
+  showNotice(S.ringsSpaced, '', [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-space': '', onclick: () => { hideNotice(); restoreAngles(st(), before); save(); render() } }, [S.ringsHiddenUndo]),
+  ], 30000)
 }
 
 /** A person dragged beyond the outermost ring: hidden like "hide in trustweb" (Curator Settings lists them, with unhide); Undo for 30 s. */
@@ -1604,8 +1656,8 @@ function screenWeb(): Node[] {
  * scaled for the query dock, because it measures the rendered box.
  */
 function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
+  if ((e.target as HTMLElement).closest('.node, .ctx-menu')) return
   ripple(e)
-  if ((e.target as HTMLElement).closest('.node')) return
   const box = wrap.getBoundingClientRect()
   const scale = box.width / RINGS_SIZE
   const dx = (e.clientX - box.left) / scale - RINGS_SIZE / 2
@@ -4145,7 +4197,7 @@ function screenStillTrue(): Node[] {
 // ---------------------------------------------------------------------------
 
 /** Change your own name (tap yourself in the web, or Settings). */
-function editNameSheet(): void {
+function editNameSheet(fromWeb = false): void {
   const s = st()
   const name = el('input', { class: 'field', maxlength: '40', autocomplete: 'given-name', 'aria-label': S.meNameTitle, value: s.me.displayName })
   const saveName = (): void => {
@@ -4165,6 +4217,12 @@ function editNameSheet(): void {
     name,
     el('p', { class: 'meta' }, [S.meNameHint]),
     el('button', { class: 'btn btn-electric', onclick: saveName }, [S.meNameSave]),
+    // Tapped in the Web view: a line, then the section for the web itself.
+    ...(fromWeb ? [
+      el('hr', { class: 'sheet-line' }),
+      el('h4', { class: 'eyebrow' }, [S.myWebTitle]),
+      el('button', { class: 'btn btn-ghost', 'data-space-out': 'all', onclick: () => { closeSheet(); spaceOutWeb() } }, [S.ringsSpaceAll]),
+    ] : []),
   ])
   name.focus()
   name.select()

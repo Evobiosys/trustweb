@@ -98,6 +98,12 @@ describe('askSources: only lines this step admits ever reach the matcher', () =>
     [R.Friend, 1, ['inv:i1', 'inv:i3']],
     [R.Close, 2, []],
   ])('handed over by %s at hop %s', (ring, hop, want) => expect(ids(ring, hop)).toEqual(want))
+  it('where a dot sits in my Web view (angle) never reaches the matcher input', () => {
+    const withAngle = { ...state, people: state.people.map((p) => ({ ...p, angle: 123.456 })) }
+    const out = askSources(withAngle, R.Close, 0)
+    expect(JSON.stringify([...out.threads, ...out.refs.values()])).not.toContain('123.456')
+    expect(out.threads.map((x) => x.id).sort()).toEqual(ids(R.Close, 0))
+  })
   it('a line that may not answer never takes the top score away from one that may (filter before the match)', () => {
     const { threads } = askSources(state, R.Acquaintance, 1)
     const m = matchTemplate(askTemplate('ladder'), threads)
