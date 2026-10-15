@@ -140,6 +140,56 @@ function approveApi() {
   }
 }
 
+// Dev only (the `preview` CLI, previews-interface.txt): TW_PREVIEW is the registry file <id>.json of this preview. Never in a build.
+const previewFile = () => process.env.TW_PREVIEW ?? ''
+const readPreview = () => JSON.parse(readFileSync(previewFile(), 'utf8'))
+function devPreview(command) {
+  try { return command === 'serve' && previewFile() ? JSON.stringify(readPreview()) : 'null' } catch { return 'null' }
+}
+
+// Dev only: GET/POST /__tw/preview* (the preview panel, src/dev_preview.ts) drive the `preview` CLI: $TW_PREVIEW_BIN, else $TW_OPS/bin/preview, else PATH.
+function previewApi() {
+  const loopback = (req) => /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '') && (!req.headers.origin || new URL(req.headers.origin).host === req.headers.host)
+  const bin = () => process.env.TW_PREVIEW_BIN ?? (process.env.TW_OPS ? path.join(process.env.TW_OPS, 'bin/preview') : 'preview')
+  const body = (req) => new Promise((resolve) => {
+    let text = ''
+    req.on('data', (c) => { text += c })
+    req.on('end', () => { try { resolve(JSON.parse(text)) } catch { resolve(null) } })
+  })
+  return {
+    name: 'trustweb-preview-api',
+    configureServer(server) {
+      if (!previewFile()) return
+      const json = (res, o, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
+      const run = (args) => {
+        try {
+          execFileSync(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] })
+          return null
+        } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
+      }
+      server.middlewares.use('/__tw/preview', async (req, res) => {
+        if (!loopback(req)) { res.statusCode = 403; res.end(); return }
+        const sub = (req.url ?? '/').split('?')[0]
+        if (req.method === 'GET' && sub === '/') { json(res, readPreview()); return }
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        if (sub === '/pr') {
+          spawn(bin(), [readPreview().id, 'pr'], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
+          json(res, { started: true })
+          return
+        }
+        const b = await body(req)
+        let args = null
+        if (sub === '/' && typeof b?.feature === 'string' && typeof b.checked === 'boolean' && readPreview().features.some((f) => f.key === b.feature)) args = ['toggle', b.feature, b.checked ? 'on' : 'off']
+        if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
+        if (!args) { json(res, { error: 'bad request' }, 400); return }
+        const error = run(args)
+        if (error !== null) json(res, { error }, 500)
+        else json(res, readPreview())
+      })
+    },
+  }
+}
+
 // Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
 function devBuild(command) {
   if (command !== 'serve') return 'null'
@@ -163,8 +213,8 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_BUILD__: devBuild(command) },
-  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi()] : [])],
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

@@ -257,6 +257,9 @@ const wantInstall = params.get('install') === '1'
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
 
 if (!solo) seedDevRecord(persona)
+// Dev only: the define is the literal null in a build, so this branch and the whole panel chunk are dropped from it.
+declare const __TW_PREVIEW__: object | null | undefined
+if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./dev_preview').then((m) => { m.initDevPreview() })
 if (!solo) initDevFeature()
 let state: AppState | null = loadState(persona, storeCtx)
 // A record that is there but unreadable was kept aside untouched (store.ts);

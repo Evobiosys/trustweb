@@ -7,7 +7,7 @@ declare const __TW_FEATURE__: { title: string; hint: string; selector?: string }
 declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string; n?: number; approved?: string | null } | null | undefined
 
 const CSS = `
-.twf{position:fixed;left:8px;top:8px;z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
+.twf{position:fixed;left:8px;top:calc(8px + var(--twp-h,0px));z-index:99999;max-width:240px;padding:6px 10px;border-radius:10px;background:#241b2e;color:#fff;font:600 11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:none;cursor:grab;opacity:.94}
 .twf i{display:block;font-style:normal;font-weight:500;opacity:.8}.twf button{margin-top:4px;font:600 11px system-ui;border:0;border-radius:6px;padding:3px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twf b{display:block;font-size:10px;letter-spacing:.06em;color:#4fd7a0}.twf span{font-weight:500}
 .twf .twf-x{position:absolute;top:2px;right:4px;margin:0;padding:0 5px;background:none;color:#fff;font-size:14px}
@@ -95,6 +95,19 @@ export function initDevFeature(): void {
   show(!hidden)
 }
 
+export interface ApprovalStatus { step: string; text?: string; url?: string }
+
+/** Polls GET /__tw/status every 5 s and hands each answer to `on`, until the flow has 'failed' or is 'ready' with its url. */
+export function pollStatus(on: (j: ApprovalStatus) => void): void {
+  const tick = (): void => {
+    void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
+      on(j)
+      if (j.step !== 'failed' && !(j.step === 'ready' && j.url)) setTimeout(tick, 5000)
+    }).catch(() => setTimeout(tick, 5000))
+  }
+  tick()
+}
+
 /** Bottom right, amber, shaped like the dev slot's approve box (controller/overlay.js): the owner's yes for this build, the stock twin one tap away.
  *  A press starts the check flow on the dev server (POST /__tw/approve); the box then turns grey "IN PROGRESS" and polls /__tw/status every 5 s. */
 function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLElement {
@@ -108,19 +121,14 @@ function approveBar(bld: { stockUrl: string; approved?: string | null }): HTMLEl
   }
   const poll = (): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'
-    const tick = (): void => {
-      void fetch('/__tw/status').then((r) => r.json()).then((j: { step: string; text?: string; url?: string }) => {
-        body.textContent = j.text ?? 'starting'
-        if (j.step === 'failed') { body.className = 'body warn'; return }
-        if (j.step === 'ready' && j.url) {
-          body.textContent = `${j.text}. Opening dev in 3 s`
-          setTimeout(() => { location.href = j.url! }, 3000)
-          return
-        }
-        setTimeout(tick, 5000)
-      }).catch(() => setTimeout(tick, 5000))
-    }
-    tick()
+    pollStatus((j) => {
+      body.textContent = j.text ?? 'starting'
+      if (j.step === 'failed') body.className = 'body warn'
+      if (j.step === 'ready' && j.url) {
+        body.textContent = `${j.text}. Opening dev in 3 s`
+        setTimeout(() => { location.href = j.url! }, 3000)
+      }
+    })
   }
   head.textContent = 'Personal preview'
   if (bld.approved) poll()
