@@ -32,7 +32,7 @@ import { createConnectKeeper, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
-import { repairGeneralNotes } from './general_notes'
+import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import type { ConnectKeeper } from './connect_code'
@@ -56,7 +56,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1572,6 +1572,8 @@ function dropOn(p: Person, ring: Ring, desire?: number): void {
 function askDesire(wrap: HTMLElement, p: Person, reminder: string[], cancel: () => void, done: (value: number) => void): void {
   let value = DESIRE_DEFAULT
   const row = el('div', { class: 'desire', role: 'group', 'aria-label': S.desireAsk(displayName(p.name).text) })
+  // A chip is replaced by draw() and Move here by render() while the click is still bubbling: the web's "add someone" tap must not see it.
+  row.addEventListener('click', (e) => e.stopPropagation())
   const draw = (): void => row.replaceChildren(
     el('p', {}, [S.desireAsk(displayName(p.name).text)]),
     ...reminder.map((line) => el('p', { class: 'reminder', 'data-intending-reminder': '' }, [line])),
@@ -1895,6 +1897,7 @@ function personSheet(personId: string): void {
     sharedReachRow(p),
     passOnRowFor(p),
     askAgainRow(p),
+    leanRow(p),
     eventChipsRow(p),
     curator.person(p.id, closeSheet),
   ])
@@ -1904,6 +1907,35 @@ function personSheet(personId: string): void {
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
 function curatorPerson(personId: string): void {
   openSheet([curator.person(personId, closeSheet)])
+}
+
+/** An acquaintance, confirmed or suggested: a link to the person's general note and a five-step "more friend ... more acquaintance" score. A note to myself; the ring never changes. */
+function leanRow(p: Person): HTMLElement | null {
+  if (p.ring !== Ring.Acquaintance) return null
+  const box = el('div', { class: 'lean', 'data-lean': p.id })
+  const chips = (): HTMLElement => el('div', { class: 'rchips' }, [
+    el('small', {}, [S.leanFriend]),
+    ...LEANS.map((n) => el('button', {
+      class: 'rchip' + (n === (p.lean ?? 0) ? ' on' : ''), style: `--rc:${ringColor({ ring: Ring.Acquaintance })}`, 'data-lean-step': String(n),
+      'aria-label': S.leanAria(n), 'aria-pressed': String(n === (p.lean ?? 0)),
+      onclick: () => { if (n) p.lean = n; else delete p.lean; save(); draw() },
+    }, [String(n)])),
+    el('small', {}, [S.leanAcquaintance]),
+  ])
+  const note = (): HTMLElement => {
+    const area = el('textarea', { class: 'field', rows: '4', maxlength: String(GENERAL_NOTE_MAX), placeholder: S.generalNotePh(p.name), 'aria-label': S.generalNoteTitle, 'data-lean-note': '' })
+    area.value = generalNoteOf(p)
+    const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) save() } })
+    area.addEventListener('input', () => saver.input(area.value))
+    area.addEventListener('blur', () => saver.flush())
+    return area
+  }
+  const draw = (): void => box.replaceChildren(
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-lean-add-note': '', onclick: (e: Event) => { (e.currentTarget as HTMLElement).replaceWith(note()); box.querySelector('textarea')?.focus() } }, [S.leanAddNote]),
+    chips(),
+  )
+  draw()
+  return box
 }
 
 /** The events this person is tagged with (E1): a chip each, tap opens the event page. */
