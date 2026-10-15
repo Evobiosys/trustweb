@@ -21,7 +21,7 @@
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, WEB_RINGS, beyondRings, lapRadius, placeOnRing, ringAt, ringsGeometry } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, beyondRings, lapRadius, placeOnRing, ringAt, ringsGeometry, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
@@ -56,7 +56,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ringSlot, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -1317,7 +1317,7 @@ let ringsK = 1
 function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
-  for (const p of s.people) if (WEB_RINGS.includes(ringSlot(p))) counts[ringSlot(p)] = (counts[ringSlot(p)] ?? 0) + 1
+  for (const p of s.people) counts[webSlot(p)] = (counts[webSlot(p)] ?? 0) + 1
   ringsGeo = ringsGeometry(counts)
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const colourTags = loadColourTags()
@@ -1333,17 +1333,24 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const svg = document.createElementNS(NS, 'svg')
   svg.setAttribute('viewBox', '0 0 352 352')
   svg.innerHTML = '<defs><linearGradient id="th" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4FD7A0"/><stop offset="1" stop-color="#12A8E3"/></linearGradient></defs>'
-  for (const r of WEB_RINGS) {
+  for (const r of ringsGeo.rings) {
     const c = document.createElementNS(NS, 'circle')
     c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(ringsGeo.radius[r] * k)); c.setAttribute('data-ring', r)
-    c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', '.55')
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', r === Ring.Unsorted ? '.35' : '.55')
     c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
     c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
     svg.appendChild(c)
   }
+  if (ringsGeo.rings.includes(Ring.Unsorted)) {
+    const t = document.createElementNS(NS, 'text')
+    t.setAttribute('x', String(C)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'middle')
+    t.setAttribute('font-size', '8'); t.setAttribute('fill', ringColor({ ring: Ring.Unsorted })); t.setAttribute('data-ring-label', Ring.Unsorted)
+    t.textContent = S.ringLabel[Ring.Unsorted]
+    svg.appendChild(t)
+  }
   wrap.appendChild(svg)
-  for (const ring of WEB_RINGS) {
-    const inRing = s.people.filter((p) => ringSlot(p) === ring)
+  for (const ring of ringsGeo.rings) {
+    const inRing = s.people.filter((p) => webSlot(p) === ring)
     const dot = ringsGeo.dot[ring]
     const per = ringsGeo.perLap[ring]
     inRing.forEach((p, i) => {
@@ -1369,7 +1376,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const arcs = arcsGradient(tagColours(p, colourTags))
       const face = avatar(p.name, p.id)
-      face.style.background = PERSON_GREEN
+      face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : PERSON_GREEN
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
@@ -1407,7 +1414,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     const node = (down.target as HTMLElement).closest<HTMLElement>('.node:not(.you)')
     const p = s.people.find((x) => x.id === node?.dataset.pid)
     if (!node || !p) return
-    let ring = ringSlot(p)
+    let ring = webSlot(p)
     let out = false
     const place = (e: PointerEvent): void => {
       const box = wrap.getBoundingClientRect()
@@ -1418,7 +1425,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       node.style.top = y + 'px'
       const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK
       out = beyondRings(dist, ringsGeo)
-      ring = ringAt(dist, ringsGeo.radius)
+      ring = ringAt(dist, ringsGeo.radius, ringsGeo.rings)
       wrap.classList.toggle('hide-zone', out)
       wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
     }
@@ -1447,7 +1454,8 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       setTimeout(() => setDragged(false), 0)
       if (!was) return
       if (out) { hideOnRings(p); return }
-      if (ring === ringSlot(p)) { render(); return }
+      if (ring === webSlot(p) || (ring === Ring.Unsorted && p.ring === Ring.Family)) { render(); return }
+      if (ring === Ring.Unsorted) { unplaceOnRings(p); return }
       if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => dropOn(p, ring, v))
       else dropOn(p, ring)
     }
@@ -1465,6 +1473,19 @@ function hideOnRings(p: Person): void {
       el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-hide': p.id, onclick: () => { hideNotice(); void curator.unhide(p.id) } }, [S.ringsHiddenUndo]),
     ], 30000)
   })
+}
+
+/** A placed person dragged out to the unsorted ring: back to "not placed yet"; Undo for 30 s restores the ring (and its intending value). */
+function unplaceOnRings(p: Person): void {
+  const name = displayName(p.name).text
+  const { ring, intending } = p
+  changeRing(p, Ring.Unsorted)
+  placeOnRing(p, Ring.Unsorted, Date.now())
+  save()
+  render()
+  showNotice(S.ringsUnplaced(name), S.ringsUnplacedBody, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-unplace': p.id, onclick: () => { hideNotice(); changeRing(p, ring); p.intending = intending; if (!intending) delete p.intending; save(); render() } }, [S.ringsHiddenUndo]),
+  ], 30000)
 }
 
 function dropOn(p: Person, ring: Ring, desire?: number): void {

@@ -1,5 +1,5 @@
 /**
- * Wave 7 rings-v4 proof (headless, dev only): four rings, drag-out hides with Undo, the intending reminder, the dark person page in the sheet.
+ * Wave 7 rings-v4 proof (headless, dev only): four rings plus the grey unsorted ring, drag-out hides with Undo, the intending reminder, the dark person page in the sheet.
  *   PORT=5198 node test/e2e/rings_v4.mjs      (start the dev server WITHOUT TW_CRM_TANA_TOKEN: a hide would otherwise queue a write to the real Tana)
  */
 import { tmpdir } from 'node:os'
@@ -20,9 +20,9 @@ try {
   const rec = await record(page)
   const ringed = rec.people.filter((p) => ['close', 'friend', 'acquaintance', 'intending'].includes(p.ring))
   const rings = await page.evaluate(() => [...document.querySelectorAll('.rings-wrap circle')].map((c) => c.getAttribute('data-ring')))
-  check('four rings: close, friend, acquaintance, intending', rings.join() === 'close,friend,acquaintance,intending')
-  check('people not placed yet are not on the rings', rec.people.some((p) => p.ring === 'unsorted' || p.ring === 'none') && (await page.locator('.rings-wrap .node:not(.you)').count()) <= ringed.length)
-  check('no "unsorted" or "in contact" text in the rings view', !/unsorted|in contact/i.test(await page.locator('.rings-wrap').innerText()))
+  check('four rings and the grey unsorted ring: close, friend, acquaintance, intending, unsorted', rings.join() === 'close,friend,acquaintance,intending,unsorted')
+  check('people not placed yet sit on the unsorted ring', rec.people.some((p) => p.ring === 'unsorted' || p.ring === 'none') && (await page.locator('.rings-wrap .node:not(.you)').count()) === rec.people.length)
+  check('no "in contact" text in the rings view; the unsorted ring is labelled "Not placed yet"', !/in contact/i.test(await page.locator('.rings-wrap').innerText()) && (await page.locator('[data-ring-label]').textContent()) === 'Not placed yet')
   await shot(page, 'rings')
 
   const box = await page.locator('.rings-wrap').boundingBox()

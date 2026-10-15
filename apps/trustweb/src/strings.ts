@@ -210,6 +210,8 @@ export const S = {
   ringsHidden: (name: string) => `${name} hidden`,
   ringsHiddenBody: 'Hidden in TrustWeb. Curator > Settings lists them, with unhide.',
   ringsHiddenUndo: 'Undo',
+  ringsUnplaced: (name: string) => `${name} not placed yet`,
+  ringsUnplacedBody: 'Moved to the grey ring. Curator > Not placed yet lists them.',
   desireMove: 'Move here',
   desireCancel: 'Cancel',
   olTwActive: 'Active on TrustWeb lately',
