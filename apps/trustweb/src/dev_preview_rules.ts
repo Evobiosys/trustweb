@@ -50,6 +50,27 @@ export function prButton(pr: { number: number; sha?: string } | null, n: number,
   return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
 }
 
+export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
+export type PrGate = 'untested' | 'running' | 'failed' | 'passed'
+
+/** What the checks say about the assembled set: only a run on the same sha counts; anything else is untested. */
+export function prGate(p: { assembled?: { sha: string } | null; tested?: Tested | null }): PrGate {
+  const t = p.tested
+  if (!t || !p.assembled || t.sha !== p.assembled.sha) return 'untested'
+  if (t.running) return 'running'
+  return t.ok === true ? 'passed' : t.ok === false ? 'failed' : 'untested'
+}
+
+/** The gate's one-line state. */
+export function testLine(gate: PrGate, tested?: Tested | null): string {
+  switch (gate) {
+    case 'untested': return 'Tests not run for this selection'
+    case 'running': return 'Running the checks (about 40 s)...'
+    case 'failed': return 'Checks failed: see below'
+    case 'passed': return `Checks passed for ${tested?.sha ?? '?'}`
+  }
+}
+
 export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }
 
 /** Features nested by `requires`: a feature sits under the first required feature present in the list, else at the root. List order is kept. */
