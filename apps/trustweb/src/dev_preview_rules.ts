@@ -28,9 +28,21 @@ export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
 }
 
-/** Wording of the confirm box: one differing box names it, several count them. */
-export function confirmText(title: string, checked: boolean, changes = 1): string {
-  return changes > 1 ? `Re-assemble preview with these ${changes} changes? The page reloads.` : `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
+/** Wording of the confirm box: one differing box names it, several count them; with a PR, it says the PR keeps its set until updated. */
+export function confirmText(title: string, checked: boolean, changes = 1, pr?: number | null): string {
+  const base = changes > 1 ? `Re-assemble preview with these ${changes} changes? The page reloads.` : `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
+  return typeof pr === 'number' ? `${base} PR #${pr} keeps its current set until you update it.` : base
+}
+
+/** True when a PR exists and may be behind the assembled branch: no recorded sha (older PRs) or a different one. */
+export function prNeedsUpdate(pr: { sha?: string } | null, assembledSha: string | undefined): boolean {
+  return pr !== null && (!pr.sha || pr.sha !== assembledSha)
+}
+
+/** The PR button label: create without a PR, update when the PR is behind, '' when it holds this set. */
+export function prButton(pr: { number: number; sha?: string } | null, n: number, assembledSha: string | undefined): string {
+  if (!pr) return `Create PR with ${n} checked`
+  return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
 }
 
 export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }
