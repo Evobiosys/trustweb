@@ -386,7 +386,7 @@ export class Net {
   }
 
   /** The scanning side of the one-scan ceremony: add the peer, tell them who we are. */
-  async completeConnect(params: ConnectLinkParams, ring: Ring): Promise<Peer> {
+  async completeConnect(params: ConnectLinkParams, ring: Ring, reachOut = false): Promise<Peer> {
     const s = this.hooks.state()
     this.ensureIdentity()
     // A connection this phone already holds under that DID keeps its id and name (a bare-DID add made it up, a scan may bring the real ones).
@@ -397,6 +397,7 @@ export class Net {
       did: params.did,
       ring,
       connectedAt: Date.now(),
+      ...(reachOut ? { reachOut: true as const } : {}),
     })
     this.hooks.save()
     await this.start()
@@ -414,7 +415,7 @@ export class Net {
     try {
       if (!this.channel) return
       this.ackAttempts.set(peer.did, nextAttempts(this.ackAttempts.get(peer.did), Date.now()))
-      await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity())))
+      await this.channel.sendRaw(peer.did, encodeForQr(buildConnectAck(this.hooks.state().me, this.ensureIdentity(), peer.reachOut === true)))
       const stored = this.peerByDid(peer.did)
       if (stored) { noteAckSent(stored, Date.now()); this.hooks.save() }
     } catch {
@@ -469,7 +470,7 @@ export class Net {
       return true
     }
     if (this.hooks.holdPeer(incoming)) return true
-    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now() })
+    const peer = upsertPeer(s, { ...incoming, heardAt: Date.now(), ...(env.reachOut ? { ring: Ring.Intending, reachOut: true as const } : {}) })
     this.hooks.save()
     this.hooks.onPeerConnected(peer)
     return true

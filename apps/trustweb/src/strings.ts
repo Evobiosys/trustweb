@@ -169,6 +169,11 @@ export const S = {
   connectInvite: (name: string) => `${name} wants to connect with you on TrustWeb.`,
   connectInviteNotes: (name: string) => `${name} also shared the notes from your conversation.`,
   connectJoin: 'Connect',
+  reachOutStart: (name: string) => `Reach out to ${name} on TrustWeb`,
+  reachOutJoin: 'Create my web and reach out',
+  reachedOutToYou: (name: string) => `${name} reached out to you via your trustweb.one link`,
+  youReachedOut: 'You reached out',
+  ringReachedOut: 'Reached out',
   storageEphemeral: 'This browser blocks storage, so this visit is not saved.',
   recordKeptAside: 'TrustWeb on this device holds a saved web this version cannot read. It is kept aside, untouched: starting again here does not replace it. Tell us at idea2.site/trustweb/feedback.html and we help you get it back.',
 

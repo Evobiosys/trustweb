@@ -43,6 +43,9 @@ export const RING_COLORS = {
   none: '#9e9e9e',
 }
 
+/** Green-blue face and stroke of a person who reached out (Person.reachedOut): on the Intending ring, in place of its amber/green. */
+export const REACH_OUT = '#2E9CA6'
+
 /** The ring a person sits on in the web: family sits where its closeness says. */
 export function ringSlot(p: Pick<Person, 'ring' | 'fields'>): Ring {
   if (p.ring !== Ring.Family) return p.ring
@@ -50,7 +53,8 @@ export function ringSlot(p: Pick<Person, 'ring' | 'fields'>): Ring {
   return RINGS.includes(c as Ring) ? (c as Ring) : Ring.Close
 }
 
-export function ringColor(p: Pick<Person, 'ring' | 'fields'>): string {
+export function ringColor(p: Pick<Person, 'ring' | 'fields'> & { reachedOut?: Person['reachedOut'] }): string {
+  if (p.reachedOut && p.ring === Ring.Intending) return REACH_OUT
   if (p.ring !== Ring.Family) return RING_COLORS[p.ring]
   return RING_COLORS.family[ringSlot(p) as 'close']
 }
@@ -341,6 +345,8 @@ export interface Person {
   angle?: number
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
+  /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
+  reachedOut?: 'sent' | 'received'
 }
 
 /** The five steps of the lean score on an acquaintance. */
@@ -414,6 +420,8 @@ export interface Peer {
    * read as such only within REASK_ACCEPT_MS of it; absent: never asked again, so a marked ask is an ordinary one.
    */
   askAgainSentAt?: number
+  /** Wave 8: this connection began as a reach-out through a public link (sent in the connect-ack; kept so a resend carries it). */
+  reachOut?: true
 }
 
 export interface InventoryItem {
