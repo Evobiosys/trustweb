@@ -264,6 +264,14 @@ export interface TwEvent {
   attended: boolean
   /** Came in through an event link (event_link.ts): shows the organizer and the tag nudge. */
   fromLink?: true
+  /** Who hosted it: names the organizer typed about themselves. One by default, co-hosts the exception. */
+  hosts?: string[]
+  /** Default true: the host may name this event's tag for everyone (event_link.ts host link). */
+  hostNamesTags?: boolean
+  /** What the tag is called on my device; absent = the event name. */
+  tagName?: string
+  /** I keep my own tag name even if the host renames it. */
+  tagLocked?: boolean
 }
 
 export interface Person {
