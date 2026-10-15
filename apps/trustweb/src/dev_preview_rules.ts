@@ -1,7 +1,9 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
 export { readyToGo } from '../dev_preview_rules.mjs'
 
-export interface PreviewFeature { key: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean }
+export type Repo = 'vanilla' | 'private' | 'ops'
+
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean }
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
 export function visible(features: PreviewFeature[]): PreviewFeature[] {
@@ -38,9 +40,46 @@ export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeat
   return draft !== null && draft.some((f) => f.checked !== assembled.find((a) => a.key === f.key)?.checked)
 }
 
-/** The reviewed keys after a tap on `key`: in = marked, again = unmarked. */
-export function toggleSeen(seen: string[], key: string): string[] {
-  return seen.includes(key) ? seen.filter((k) => k !== key) : [...seen, key]
+/** Reviewed rows: key -> the feature ref last reviewed and how many changes came in since (0 = reviewed as it stands). */
+export type Seen = Record<string, { ref: string; updates: number }>
+
+/** The stored reviewed rows; an old string[] (keys only) becomes entries at the features' current refs. Anything else: nothing reviewed. */
+export function readSeen(raw: string | null, features: PreviewFeature[]): Seen {
+  try {
+    const v = JSON.parse(raw ?? '{}') as unknown
+    if (Array.isArray(v)) return Object.fromEntries((v as string[]).map((k) => [k, { ref: features.find((f) => f.key === k)?.ref ?? '', updates: 0 }]))
+    return v && typeof v === 'object' ? (v as Seen) : {}
+  } catch { return {} }
+}
+
+/** A tap on a row: reviewed as it stands (a row with pending updates too), or, when already reviewed with none pending, unmarked. */
+export function tapSeen(seen: Seen, key: string, ref: string): Seen {
+  if (seen[key]?.updates === 0) return Object.fromEntries(Object.entries(seen).filter(([k]) => k !== key))
+  return { ...seen, [key]: { ref, updates: 0 } }
+}
+
+/** How a row looks: italic = reviewed; a changed ref un-italics it and counts "Update: ", "Update2: " ... until the next tap. `next` is what to store. */
+export function seenState(seen: Seen, key: string, ref: string): { italic: boolean; prefix: string; next: Seen } {
+  const e = seen[key]
+  if (!e) return { italic: false, prefix: '', next: seen }
+  const updates = e.ref === ref ? e.updates : e.updates + 1
+  return { italic: updates === 0, prefix: updates === 0 ? '' : `Update${updates > 1 ? updates : ''}: `, next: updates === e.updates ? seen : { ...seen, [key]: { ref, updates } } }
+}
+
+export const REPO_LABEL: Record<Repo, string> = { vanilla: 'trustweb', private: 'trustweb-private', ops: 'trustweb-ops' }
+
+/** The tree split by repo (order vanilla, private, ops; empty ones left out). A child whose parent sits in another repo starts at the top of its own. */
+export function sections(nodes: TreeNode[]): { repo: Repo; nodes: TreeNode[] }[] {
+  const roots: Record<Repo, TreeNode[]> = { vanilla: [], private: [], ops: [] }
+  const walk = (n: TreeNode, parent: TreeNode | null): void => {
+    const repo = n.feature.repo ?? 'vanilla'
+    const home = parent !== null && (parent.feature.repo ?? 'vanilla') === repo
+    const copy: TreeNode = { feature: n.feature, depth: home ? parent.depth + 1 : 0, children: [] }
+    ;(home ? parent.children : roots[repo]).push(copy)
+    for (const c of n.children) walk(c, copy)
+  }
+  for (const n of nodes) walk(n, null)
+  return (Object.keys(roots) as Repo[]).filter((r) => roots[r].length).map((repo) => ({ repo, nodes: roots[repo] }))
 }
 
 /** The highlighted row after a tap on `key`: the same row again switches it off. */

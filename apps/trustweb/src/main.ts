@@ -234,12 +234,15 @@ interface Review {
 // boot parameters
 // ---------------------------------------------------------------------------
 
+declare const __TW_PREVIEW__: object | null | undefined
 const APP_URL = location.origin + import.meta.env.BASE_URL
 const params = new URLSearchParams(location.search)
 const personaParam = params.get('persona')
 // A demo account opened on the owner's own phone runs under its own persona
 // (demo-<account id>): its own storage record and relay identity, next to his.
-const persona: string = isPersona(personaParam) || isDemoPersona(personaParam) ? personaParam : 'me'
+// Dev preview only: ?dev=1..6 is a second-device frame with its own record (dev_device2.ts); a build ignores it.
+const devParam = typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__ ? /^[1-6]$/.exec(params.get('dev') ?? '')?.[0] : undefined
+const persona: string = isPersona(personaParam) || isDemoPersona(personaParam) ? personaParam : devParam ? 'dev' + devParam : 'me'
 const solo = params.get('solo') === '1' && isPersona(persona)
 // Which of the three seeded demo networks (seed.ts DemoContext) to show,
 // passed in by solo.ts from its own page path. Only meaningful (and only
@@ -268,11 +271,10 @@ let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 const wantInstall = params.get('install') === '1'
 // Keep only what a reload needs; the connect parameters are consumed once.
-history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : ''))
+history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
 if (!solo) seedDevRecord(persona)
 // Dev only: the define is the literal null in a build, so this branch and the whole panel chunk are dropped from it.
-declare const __TW_PREVIEW__: object | null | undefined
 if (!solo && typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) void import('./dev_preview').then((m) => { m.initDevPreview() })
 if (!solo) initDevFeature()
 let state: AppState | null = loadState(persona, storeCtx)
