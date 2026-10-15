@@ -7,6 +7,7 @@
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
+import { createSteps } from './dev_steps'
 import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prNeedsUpdate, prRunning, rowPlan, setMap, stepText, tapped, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
@@ -32,7 +33,7 @@ const CSS = `
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
-.twp .where{display:block;color:#9a9aa6;font-size:10px}.twp .steps{margin:2px 0 4px 18px;color:#ffd24a;font-weight:600}.twp .steps div{padding:1px 0}
+.twp .where{display:block;color:#9a9aa6;font-size:10px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}`
 
@@ -84,7 +85,8 @@ export function initDevPreview(): void {
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
   document.body.appendChild(root)
-  const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() }, (seen) => { pointing = seen; if (lit) render() })
+  const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() }, (seen) => { pointing = seen; steps.seen(seen); if (lit) render() })
+  const steps = createSteps(pointer, () => { lit = null; render() })
 
   const tab = collapseStore(sessionStorage)
   const collapsed = tab.get
@@ -135,8 +137,13 @@ export function initDevPreview(): void {
 
   function tap(f: PreviewFeature): void {
     lit = tapped(lit, f.key)
-    // The ring shows when the selector matches; else the yellow steps show the way, and the pointer stays armed until the view opens.
-    if (lit && rowPlan(pointer.set(f.selector), f.steps) === 'none') { lit = null; toast('nothing to point at for this feature') }
+    steps.close()
+    // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
+    if (lit) {
+      const plan = rowPlan(pointer.set(f.selector), f.steps)
+      if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
+      else if (plan === 'steps') steps.open([...f.steps!, f.selector ? `${f.title} @ ${f.selector}` : f.title])
+    }
     render()
   }
 
@@ -175,8 +182,7 @@ export function initDevPreview(): void {
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
     const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
-    const way = lit === f.key && !pointing && f.steps?.length ? [h('div', { className: 'steps' }, ...f.steps.map((t) => h('div', { textContent: '👣 ' + t })))] : []
-    return h('div', {}, label, ...way, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
+    return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
   function askBox(a: NonNullable<typeof ask>): HTMLElement {
@@ -284,7 +290,8 @@ export function initDevPreview(): void {
     const pos = store.get(POS)
     if (pos) { const { x, y } = JSON.parse(pos) as { x: number; y: number }; place(x, y) }
     sync()
-    pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
+    if (!lit) steps.close()
+    if (!steps.active()) pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
   }
 
   document.addEventListener('keydown', (e) => {

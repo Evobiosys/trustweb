@@ -93,9 +93,15 @@ export function prRunning(step: string): boolean {
   return !['none', 'ready', 'failed'].includes(step)
 }
 
-/** What a row tap does: `visible` = the selector matches on this page now. Point (red ring), show the way (yellow steps, ring arms itself), or nothing to offer. */
+/** What a row tap does: `visible` = the selector matches on this page now. Point (red ring), show the way (the steps overlay on the phone), or nothing to offer. */
 export function rowPlan(visible: boolean, steps: string[] | undefined): 'point' | 'steps' | 'none' {
   return visible ? 'point' : steps?.length ? 'steps' : 'none'
+}
+
+/** A step is "text" or "text @ <css selector>": the selector (null without one) is the element the red ring sits on while the step shows. */
+export function parseStep(s: string): { text: string; selector: string | null } {
+  const i = s.lastIndexOf(' @ ')
+  return i < 0 ? { text: s, selector: null } : { text: s.slice(0, i).trim(), selector: s.slice(i + 3).trim() || null }
 }
 
 /** The Create PR progress line: never a raw step name. `text` is the status file's own wording (used for ci and failed). */

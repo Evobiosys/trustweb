@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prButton, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prButton, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -106,6 +106,12 @@ describe('dev preview collapse store and PR status', () => {
     expect(rowPlan(false, ['Web view', 'calendar glyph'])).toBe('steps')
     expect(rowPlan(false, [])).toBe('none')
     expect(rowPlan(false, undefined)).toBe('none')
+  })
+  it('a step is text, optionally with " @ selector"', () => {
+    expect(parseStep('Web view')).toEqual({ text: 'Web view', selector: null })
+    expect(parseStep('calendar glyph top right @ .events-btn')).toEqual({ text: 'calendar glyph top right', selector: '.events-btn' })
+    expect(parseStep('Web @ .tab[data-go="web"]')).toEqual({ text: 'Web', selector: '.tab[data-go="web"]' })
+    expect(parseStep('odd @ ')).toEqual({ text: 'odd', selector: null })
   })
   it('PR progress never shows a raw step name', () => {
     expect(stepText('none', undefined, 's')).toBe('starting...')
