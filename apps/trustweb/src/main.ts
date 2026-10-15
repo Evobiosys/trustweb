@@ -45,8 +45,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable, modePayload, modeSharing, narrowMine, needsCameraApp, repairShareFields, rowModes, readPins,
-  togglePin,
+  ShareMode, channelOf, defaultModes, effectiveMode, isShareMode, mayShareContact, modeSharing, narrowMine, repairShareFields,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -60,8 +59,11 @@ import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
-import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
-import type { HeldContacts, Reachable } from './contact_share'
+import {
+  REQUESTABLE, answerPlan, buildContactPayload, contactText, contactToSend, holdContact, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
+  receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
+} from './contact_share'
+import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
@@ -2046,6 +2048,7 @@ function personSheet(personId: string): void {
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
+    askLinksRow(p),
     passOnRowFor(p),
     askAgainRow(p),
     leanRow(p),
@@ -2126,6 +2129,27 @@ function sharedReachRow(p: Person): HTMLElement | null {
       class: 'btn btn-ghost', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel,
     }, [S.chatMessageOn(reachLabel(r))])),
     el('p', { class: 'meta' }, [S.chSharedBy(p.name)]),
+  ])
+}
+
+/** The channels I hold nothing for yet from a connected person (typed or shared). */
+const missingLinks = (p: Person): Channel[] => REQUESTABLE.filter((ch) => !reachableChannels(p).some((r) => r.channel === ch))
+
+/** Wave 9: "Ask for their links" on a connected card; shows when I asked, and allows asking again after 24 h. */
+function askLinksRow(p: Person): HTMLElement | null {
+  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  const wants = missingLinks(p)
+  if (!peer || !wants.length || isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return null
+  const wait = !mayAskAgain(p.contactAsked, Date.now())
+  const when = (at: number): string => new Date(at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return el('div', { class: 'ch-row', 'data-ask-links': p.id }, [
+    el('button', {
+      class: 'btn btn-ghost', disabled: wait,
+      onclick: () => {
+        net.sendText(peer, requestText(APP_URL, wants)).then(() => { p.contactAsked = Date.now(); save(); personSheet(p.id) }, () => toast(S.chatOffline))
+      },
+    }, [S.chReqAsk]),
+    p.contactAsked ? el('p', { class: 'meta' }, [S.chReqAsked(when(p.contactAsked))]) : null,
   ])
 }
 
@@ -2337,6 +2361,34 @@ function onContactText(peer: Peer, text: string): void {
   else holdContact(heldContacts, peer.id, text)
 }
 
+/** Sends the given channels (each saved, valid, and either ticked or just agreed to) to one paired peer; nothing is remembered as ticked. */
+function sendLinksTo(peer: Peer, channels: Channel[]): void {
+  const s = st()
+  let settings: ShareSettings | undefined = s.contactShare
+  for (const ch of channels) settings = withTick(settings, ch, true)
+  const built = buildContactPayload(APP_URL, Object.fromEntries(channels.map((ch) => [ch, s.myChannels?.[ch]])), settings)
+  if (built) net.sendText(peer, contactText(APP_URL, built.payload)).catch(() => { /* the person asks again */ })
+}
+
+/** Wave 9: a paired person asks for my links. Ticked ones go at once, saved-unticked ones are asked one by one, the rest is silence. */
+function onContactRequest(peer: Peer, text: string): void {
+  const s = st()
+  const wanted = parseRequestText(APP_URL, text)
+  const person = s.people.find((p) => p.peerId === peer.id)
+  if (!wanted || !person || isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  const plan = answerPlan(s.myChannels, s.contactShare, wanted)
+  if (plan.auto.length) sendLinksTo(peer, plan.auto)
+  const next = (rest: Channel[]): void => {
+    const [ch, ...more] = rest
+    if (!ch) { hideNotice(); return }
+    showNotice(S.chReqNotice(person.name, chName(ch)), '', [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-req-share': ch, onclick: () => { sendLinksTo(peer, [ch]); next(more) } }, [S.chReqShare]),
+      el('button', { class: 'notice-dismiss', 'data-req-not-now': ch, onclick: () => next(more) }, [S.chReqNotNow]),
+    ])
+  }
+  next(plan.ask)
+}
+
 function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const s = st()
   const now = Date.now()
@@ -2391,6 +2443,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
   switch (routeText(APP_URL, text)) {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
+    case TextKind.ContactRequest: onContactRequest(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
@@ -3444,10 +3497,10 @@ enum MeetPage {
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
-/** The share mode in force (share_modes.ts): the remembered one while its link is still saved, else the primary button. */
+/** The share mode in force (share_modes.ts): Only TrustWeb. */
 function shareModeNow(): ShareMode {
   const s = st()
-  return effectiveMode(s.shareMode, s.sharePins, s.myChannels)
+  return effectiveMode(s.shareMode)
 }
 
 function setShareMode(mode: ShareMode): void {
@@ -3571,22 +3624,9 @@ function meetTrustWebPage(): HTMLElement {
   const mine = (): Partial<Record<Channel, string>> => st().myChannels ?? {}
   // The mode in force may change under this page (a link removed in Settings); everything below asks shareModeNow() each time.
   const modeChannel = (): Channel | null => channelOf(shareModeNow())
-  // A mode whose link is not saved yet: tapping it opens the box on that link, and the mode is taken the moment the link is saved.
-  let wanted: ShareMode | null = null
-  const pick = (m: ShareMode): void => {
-    if (modeAvailable(m, st().myChannels)) { wanted = null; setShareMode(m); apply(); return }
-    wanted = m
-    meetAdvancedOpen = true
-    apply()
-    const ch = channelOf(m)
-    if (ch) box.edit(ch)
-  }
+  const pick = (m: ShareMode): void => { setShareMode(m); apply() }
   const box: ContactBox = buildContactBox({
-    // The link just saved is the one a waiting mode wanted: take that mode now.
-    changed: (ch) => {
-      if (wanted && channelOf(wanted) === ch && modeAvailable(wanted, st().myChannels)) { setShareMode(wanted); wanted = null }
-      apply()
-    },
+    changed: () => apply(),
     ticked: () => apply(true),
   })
   const sharing = createSharingLine({
@@ -3596,12 +3636,7 @@ function meetTrustWebPage(): HTMLElement {
     addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
   })
   const apply = (ticksOnly = false): void => {
-    const mode = shareModeNow()
-    const payload = modePayload(mode, view.longLink(), st().myChannels, st().contactShare)
-    // Only Signal / Only WhatsApp replace the connect link in the QR (and Copy, NFC); no QR at all while their link is missing or unticked.
-    if (isOnlyMessenger(mode)) view.setOverride(payload ?? '', payload === null)
-    else view.setOverride(null)
-    copy.disabled = !view.current() || payload === null
+    copy.disabled = !view.current()
     row.refresh()
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
@@ -3609,7 +3644,7 @@ function meetTrustWebPage(): HTMLElement {
     advanced.setOpen(meetAdvancedOpen)
   }
   const row = createShareRow({
-    modes: () => rowModes(st().sharePins, st().myChannels),
+    modes: defaultModes,
     current: shareModeNow,
     pick,
     isOpen: () => meetAdvancedOpen,
@@ -3621,19 +3656,6 @@ function meetTrustWebPage(): HTMLElement {
     release: (name) => namesSync().release(name),
   })
   const advanced = createAdvanced({
-    current: shareModeNow,
-    pins: () => readPins(st().sharePins),
-    pick,
-    togglePin: (m) => {
-      const r = togglePin(readPins(st().sharePins), m)
-      if (r.refused) return false
-      if (r.pins.length) st().sharePins = r.pins; else delete st().sharePins
-      save()
-      apply()
-      return true
-    },
-    available: (m) => modeAvailable(m, st().myChannels),
-    cameraOnly: () => needsCameraApp(shareModeNow(), st().myChannels),
     contactBox: box.el,
     names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })

@@ -4,8 +4,8 @@
  * Fake numbers only.
  */
 import {
-  MAX_PINS, ModeSharing, SHARE_MODES, ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable,
-  modePayload, modeSharing, narrowMine, needsCameraApp, readPins, repairShareFields, rowModes, togglePin,
+  ModeSharing, SHARE_MODES, ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable,
+  modePayload, modeSharing, narrowMine, needsCameraApp, readPins, repairShareFields,
 } from '../../src/share_modes.ts'
 import { Channel } from '../../src/model.ts'
 import { buildContactPayload, contactText, contactToSend, withTick } from '../../src/contact_share.ts'
@@ -51,32 +51,7 @@ describe('the modes', () => {
   })
 })
 
-describe('pins: first pin first, a third refused, unpin promotes', () => {
-  it('pin first -> first, pin second -> second', () => {
-    let r = togglePin([], ShareMode.TrustWebWhatsApp)
-    expect(r).toEqual({ pins: [ShareMode.TrustWebWhatsApp], refused: false })
-    r = togglePin(r.pins, ShareMode.TrustWebSignal)
-    expect(r.pins).toEqual([ShareMode.TrustWebWhatsApp, ShareMode.TrustWebSignal])
-  })
-  it('unpin the first -> the still pinned one becomes the first', () => {
-    const r = togglePin([ShareMode.TrustWebWhatsApp, ShareMode.TrustWebSignal], ShareMode.TrustWebWhatsApp)
-    expect(r.pins).toEqual([ShareMode.TrustWebSignal])
-    expect(rowModes(r.pins, ALL)[0]).toBe(ShareMode.TrustWebSignal)
-  })
-  it('unpin the second leaves the first where it was', () => {
-    expect(togglePin([ShareMode.TrustWebWhatsApp, ShareMode.TrustWebSignal], ShareMode.TrustWebSignal).pins).toEqual([ShareMode.TrustWebWhatsApp])
-  })
-  it('a third pin is refused and changes nothing', () => {
-    const two = [ShareMode.TrustWebSignal, ShareMode.OnlyTrustWeb]
-    const r = togglePin(two, ShareMode.OnlyWhatsApp)
-    expect(r).toEqual({ pins: two, refused: true })
-    expect(MAX_PINS).toBe(2)
-  })
-  it('does not mutate its input', () => {
-    const pins = [ShareMode.TrustWebSignal]
-    togglePin(pins, ShareMode.OnlyTrustWeb)
-    expect(pins).toEqual([ShareMode.TrustWebSignal])
-  })
+describe('pins: older records only', () => {
   it('readPins keeps known modes only, no duplicates, at most two, in order; junk gives none', () => {
     expect(readPins(['only-signal', 'nope', 'only-signal', 'only-trustweb', 'trustweb-signal'])).toEqual([ShareMode.OnlySignal, ShareMode.OnlyTrustWeb])
     expect(readPins('only-signal')).toEqual([])
@@ -85,59 +60,16 @@ describe('pins: first pin first, a third refused, unpin promotes', () => {
   })
 })
 
-describe('the row: pinned in pin order, else the default', () => {
-  it('default: Signal saved -> TrustWeb+Signal first; WhatsApp saved too -> TrustWeb+WhatsApp second', () => {
-    expect(defaultModes({ [Channel.Signal]: SIGNAL_USER, [Channel.WhatsApp]: WA_QR })).toEqual([ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.OnlyTrustWeb])
-    expect(rowModes([], { [Channel.Signal]: SIGNAL_USER, [Channel.WhatsApp]: WA_QR })).toEqual([ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp])
+describe('the one offered mode (wave 9)', () => {
+  it('defaultModes: Only TrustWeb first, whatever links are saved', () => {
+    expect(defaultModes()[0]).toBe(ShareMode.OnlyTrustWeb)
+    expect(defaultModes()).toEqual([ShareMode.OnlyTrustWeb])
   })
-  it('default: no Signal but WhatsApp -> TrustWeb+WhatsApp, then Only TrustWeb', () => {
-    expect(rowModes([], { [Channel.WhatsApp]: WA_NUMBER })).toEqual([ShareMode.TrustWebWhatsApp, ShareMode.OnlyTrustWeb])
-  })
-  it('default: Signal only -> TrustWeb+Signal, then Only TrustWeb', () => {
-    expect(rowModes([], { [Channel.Signal]: SIGNAL_USER })).toEqual([ShareMode.TrustWebSignal, ShareMode.OnlyTrustWeb])
-  })
-  it('default: nothing saved -> Only TrustWeb alone (no secondary)', () => {
-    expect(rowModes([], {})).toEqual([ShareMode.OnlyTrustWeb])
-    expect(rowModes(undefined, undefined)).toEqual([ShareMode.OnlyTrustWeb])
-  })
-  it('two pins are the row, whatever is saved', () => {
-    expect(rowModes([ShareMode.OnlyWhatsApp, ShareMode.TrustWebMatrix], ALL)).toEqual([ShareMode.OnlyWhatsApp, ShareMode.TrustWebMatrix])
-  })
-  it('one pin comes first and the next default that differs fills the second place', () => {
-    expect(rowModes([ShareMode.TrustWebWhatsApp], ALL)).toEqual([ShareMode.TrustWebWhatsApp, ShareMode.TrustWebSignal])
-    expect(rowModes([ShareMode.TrustWebSignal], ALL)).toEqual([ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp])
-    expect(rowModes([ShareMode.OnlySignal], {})).toEqual([ShareMode.OnlySignal, ShareMode.OnlyTrustWeb])
-  })
-  it('a damaged pin list reads as no pins', () => expect(rowModes('junk', ALL)).toEqual(rowModes([], ALL)))
-})
-
-describe('the remembered mode', () => {
-  it('nothing stored -> the primary button', () => {
-    expect(effectiveMode(undefined, [], ALL)).toBe(ShareMode.TrustWebSignal)
-    expect(effectiveMode(undefined, [ShareMode.TrustWebWhatsApp], ALL)).toBe(ShareMode.TrustWebWhatsApp)
-  })
-  it('a stored mode wins while its link is saved, also when it is not one of the two buttons', () => {
-    expect(effectiveMode(ShareMode.TrustWebWhatsApp, [], ALL)).toBe(ShareMode.TrustWebWhatsApp)
-    expect(effectiveMode(ShareMode.OnlySignal, [], ALL)).toBe(ShareMode.OnlySignal)
-    expect(effectiveMode(ShareMode.OnlyTrustWeb, [], ALL)).toBe(ShareMode.OnlyTrustWeb)
-  })
-  it('a stored mode whose link was removed falls back to the default', () => {
-    expect(effectiveMode(ShareMode.TrustWebWhatsApp, [], { [Channel.Signal]: SIGNAL_USER })).toBe(ShareMode.TrustWebSignal)
-    expect(effectiveMode(ShareMode.OnlySignal, [], {})).toBe(ShareMode.OnlyTrustWeb)
-  })
-  it('a PINNED mode whose link was removed stays on its button but is never the mode in force (review 6e)', () => {
-    expect(effectiveMode(undefined, [ShareMode.OnlySignal], {})).toBe(ShareMode.OnlyTrustWeb)
-    expect(effectiveMode(ShareMode.OnlySignal, [ShareMode.OnlySignal, ShareMode.TrustWebWhatsApp], { [Channel.WhatsApp]: WA_QR })).toBe(ShareMode.TrustWebWhatsApp)
-    expect(effectiveMode(undefined, [ShareMode.TrustWebMatrix, ShareMode.OnlyWhatsApp], { [Channel.Signal]: SIGNAL_USER })).toBe(ShareMode.TrustWebSignal)
-    expect(rowModes([ShareMode.OnlySignal], {})).toContain(ShareMode.OnlySignal)
-  })
-  it('togglePin ignores a value that is not a mode', () => {
-    expect(togglePin([], 'zzz')).toEqual({ pins: [], refused: false })
-    expect(togglePin([ShareMode.OnlyTrustWeb], 'zzz').pins).toEqual([ShareMode.OnlyTrustWeb])
-  })
-  it('an unknown stored value (a newer or damaged record) counts as none', () => {
-    expect(effectiveMode('both', [], ALL)).toBe(ShareMode.TrustWebSignal)
-    expect(effectiveMode(42, [], {})).toBe(ShareMode.OnlyTrustWeb)
+  it('effectiveMode: an older messenger mode, an unknown value or nothing falls back to Only TrustWeb', () => {
+    for (const old of [ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.TrustWebMatrix, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp, 'both', 42, undefined]) {
+      expect(effectiveMode(old)).toBe(ShareMode.OnlyTrustWeb)
+    }
+    expect(effectiveMode(ShareMode.OnlyTrustWeb)).toBe(ShareMode.OnlyTrustWeb)
   })
 })
 

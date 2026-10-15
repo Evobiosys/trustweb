@@ -2,10 +2,10 @@
  * The pieces of the Meet page that go with the share modes (share_modes.ts), DOM and words only:
  *   - the share row: THREE buttons, the primary mode, the secondary mode and an arrow that opens Advanced
  *   - the sharing line: one plain sentence saying what a scan hands over in the mode on show, with the tick one tap away
- *   - the Advanced panel: EVERY mode with a pin toggle, the notes of the mode on show, the contact box, then the names block
+ *   - the Advanced panel: the contact box, then the names block
  */
 import { el } from '../../demo/src/ui/dom'
-import { ShareMode, SHARE_MODES, ModeSharing, channelOf } from './share_modes'
+import { ShareMode, ModeSharing } from './share_modes'
 import { Channel } from './model'
 import { S } from './strings'
 
@@ -88,15 +88,6 @@ export function createShareRow(o: ShareRowOptions): ShareRow {
 }
 
 export interface AdvancedOptions {
-  current: () => ShareMode
-  pins: () => ShareMode[]
-  pick: (mode: ShareMode) => void
-  /** Pins or unpins; returns false when a third pin was refused. */
-  togglePin: (mode: ShareMode) => boolean
-  /** Is the channel of this mode saved? (Only TrustWeb needs none.) */
-  available: (mode: ShareMode) => boolean
-  /** Does the code of the mode on show hold a phone number (the QR then needs the camera app)? */
-  cameraOnly: () => boolean
   /** The contact box (one for Meet > Advanced and Settings). */
   contactBox: HTMLElement
   /** The names block (names_view.ts). `available` is false until this phone holds a code on the server. */
@@ -115,36 +106,10 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
   const panel = el('div', { class: 'advanced-panel', role: 'group', 'aria-label': S.advancedLabel, hidden: true, 'data-advanced-panel': '' })
   const root = el('div', { class: 'advanced' }, [panel])
 
-  const pinNote = el('p', { class: 'meta', role: 'status', 'data-pin-note': '' })
-
-  const modeRow = (m: ShareMode): HTMLElement => {
-    const cur = o.current() === m
-    const pinIndex = o.pins().indexOf(m)
-    const channel = channelOf(m)
-    return el('div', { class: 'mode-row', 'data-mode-row': m }, [
-      el('button', {
-        class: 'radio' + (cur ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': String(cur), 'data-mode': m,
-        onclick: () => o.pick(m),
-      }, [el('b', {}, [S.shareMode[m]]), el('small', {}, [S.shareModeHint[m]]), channel && !o.available(m) ? el('small', { 'data-mode-missing': m }, [S.shareModeMissing(S.chLabel[channel])]) : null]),
-      el('button', {
-        class: 'btn btn-ghost btn-sm pin' + (pinIndex >= 0 ? ' on' : ''), type: 'button', 'aria-pressed': String(pinIndex >= 0), 'data-pin': m,
-        onclick: () => { pinNote.textContent = o.togglePin(m) ? '' : S.pinRefused },
-      }, [pinIndex >= 0 ? S.pinPinned(pinIndex + 1) : S.pinPin]),
-    ])
-  }
-
   const refresh = (): void => {
-    const cur = o.current()
-    const notes: HTMLElement[] = []
-    if (o.cameraOnly()) notes.push(el('p', { class: 'meta', 'data-scan': 'camera-only' }, [S.meetScanCameraNote]))
-    else if (cur === ShareMode.OnlySignal || cur === ShareMode.OnlyWhatsApp) notes.push(el('p', { class: 'meta', 'data-adv-note': 'camera' }, [S.advancedOnlyNote]))
-    notes.push(el('p', { class: 'meta' }, [S.advancedFollow]))
     // The contact box and the names block are built once and only moved here, so a redraw never clears what is being typed.
-    panel.replaceChildren(
-      el('p', { class: 'meta' }, [S.pinLead]),
-      // Wave 6h, S3: the settings that are always there come first: your Signal, WhatsApp and Matrix links (Jakob 2026-10-08).
-      linksTitle, o.contactBox, ...SHARE_MODES.map(modeRow), pinNote, ...notes, ...(o.names.available() ? [o.names.el] : []),
-    )
+    // Wave 6h, S3: the settings that are always there come first: your Signal, WhatsApp and Matrix links (Jakob 2026-10-08).
+    panel.replaceChildren(linksTitle, o.contactBox, ...(o.names.available() ? [o.names.el] : []))
   }
   refresh()
   return {

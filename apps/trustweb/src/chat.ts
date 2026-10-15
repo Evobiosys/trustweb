@@ -23,7 +23,7 @@
 import { isKeepText, parseKeepText } from './account_keep'
 import { sanitizeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
-import { parseContactText, isContactText } from './contact_share'
+import { parseContactText, isContactText, isRequestText, parseRequestText } from './contact_share'
 import { isHelloText, parseHelloText } from './hello'
 import { stripUnsafe, fingerprint } from './safe_text'
 import { SHARE_PARAM, parseShareText } from './share'
@@ -212,6 +212,8 @@ export function removeThread(book: ChatBook, peerId: string): ChatBook {
 export enum TextKind {
   Share = 'share',
   Contact = 'contact',
+  /** Wave 9: a connected phone asks for my messenger links (contact_share.ts contactreq). */
+  ContactRequest = 'contact-request',
   /** Wave 6 (N5): a guest account's keep notice (account_keep.ts), in either direction. */
   Keep = 'keep',
   /** Wave 6b (hello.ts): a connected phone tells its name. */
@@ -224,6 +226,7 @@ export function routeText(appUrl: string, text: string): TextKind {
   if (typeof text !== 'string') return TextKind.Ignore
   if (parseShareText(appUrl, text)) return TextKind.Share
   if (isContactText(appUrl, text)) return parseContactText(appUrl, text) ? TextKind.Contact : TextKind.Ignore
+  if (isRequestText(appUrl, text)) return parseRequestText(appUrl, text) ? TextKind.ContactRequest : TextKind.Ignore
   if (isKeepText(appUrl, text)) return parseKeepText(appUrl, text) ? TextKind.Keep : TextKind.Ignore
   if (isHelloText(appUrl, text)) return parseHelloText(appUrl, text) ? TextKind.Hello : TextKind.Ignore
   return text.startsWith(`${appUrl}?${SHARE_PARAM}=1#`) ? TextKind.Ignore : TextKind.Chat
