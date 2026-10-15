@@ -138,6 +138,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
+import { RINGS_ZOOM_HOME, type RingsZoom, panBy, toLocal, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 
 enum Screen {
@@ -737,6 +738,7 @@ function go(s: Screen): void {
   }
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
+  if (s !== Screen.Web) ringsZoom = RINGS_ZOOM_HOME
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -1336,9 +1338,12 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const colourTags = loadColourTags()
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
+  const layer = el('div', { class: 'rings-zoom' })
+  wrap.appendChild(layer)
   let dragged = false
   wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
   ringsMenuOn(wrap, (v) => { dragged = v })
+  zoomOnRings(wrap, layer, (v) => { dragged = v })
   if (touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
@@ -1363,7 +1368,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     t.textContent = S.ringLabel[Ring.Unsorted]
     svg.appendChild(t)
   }
-  wrap.appendChild(svg)
+  layer.appendChild(svg)
   for (const ring of ringsGeo.rings) {
     const dot = ringsGeo.dot[ring]
     ;(members[ring] ?? []).forEach((p, i) => {
@@ -1403,15 +1408,102 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       if (arcs) b.style.setProperty('--arcs', arcs)
       b.style.setProperty('--d', dot * k + 'px')
       if (dot * k < 11) b.classList.add('nl')
-      wrap.appendChild(b)
+      layer.appendChild(b)
     })
   }
   const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet(true) }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
-  wrap.appendChild(you)
+  layer.appendChild(you)
   dragOnRings(wrap, s, (v) => { dragged = v })
   return wrap
+}
+
+/** Zoom and pan of the rings view; survives render() and resets when the Web screen is left. View state only (I1). */
+let ringsZoom: RingsZoom = RINGS_ZOOM_HOME
+
+/** A pointer position in wrap layout px (the wrap may be scaled for the query dock; the zoom layer is not applied). */
+function wrapPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement): { x: number; y: number } {
+  const box = wrap.getBoundingClientRect()
+  const k = box.width / RINGS_SIZE
+  return { x: (e.clientX - box.left) / k, y: (e.clientY - box.top) / k }
+}
+
+/** A pointer position in unzoomed rings content px: what the ring and angle maths reads. */
+function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement): { x: number; y: number } {
+  const p = wrapPoint(e, wrap)
+  return toLocal(ringsZoom, p.x, p.y)
+}
+
+/**
+ * Pinch (trackpad ctrl + wheel, Safari gestures, two fingers), pan (one pointer past 6 px at k > 1) and double tap home, all on the rings
+ * only: outside them the browser zooms as ever. The phone frame stays; only the inner layer moves.
+ */
+function zoomOnRings(wrap: HTMLElement, layer: HTMLElement, setHeld: (v: boolean) => void): void {
+  const apply = (z: RingsZoom): void => {
+    ringsZoom = z
+    layer.style.transform = transformOf(z)
+    wrap.dataset.ringsZoom = String(z.k)
+  }
+  apply(ringsZoom)
+  const zoom = (factor: number, e: { clientX: number; clientY: number }): void => { const p = wrapPoint(e, wrap); apply(zoomAt(ringsZoom, factor, p.x, p.y)) }
+  wrap.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    zoom(Math.exp(-e.deltaY * 0.01), e)
+  }, { passive: false })
+  let last = 1
+  type Gesture = Event & { scale: number; clientX: number; clientY: number }
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+    wrap.addEventListener(ev, (e) => {
+      e.preventDefault()
+      const g = e as Gesture
+      if (ev === 'gesturestart') last = 1
+      else if (ev === 'gesturechange') { zoom(g.scale / last, g); last = g.scale }
+    })
+  }
+  const down = new Map<number, { x: number; y: number }>()
+  const spread = (): number => { const [a, b] = [...down.values()]; return Math.hypot(a.x - b.x, a.y - b.y) }
+  let start: { x: number; y: number } | undefined
+  let panning = false
+  wrap.addEventListener('pointerdown', (e) => {
+    down.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    start = down.size === 1 && !(e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i') ? { x: e.clientX, y: e.clientY } : undefined
+    if (down.size === 2) { start = undefined; wrap.setPointerCapture(e.pointerId) }
+  })
+  wrap.addEventListener('pointermove', (e) => {
+    const was = down.get(e.pointerId)
+    if (!was) return
+    if (down.size === 2) {
+      const before = spread()
+      down.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      const [a, b] = [...down.values()]
+      if (before > 0) zoom(spread() / before, { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 })
+      return
+    }
+    if (!start || ringsZoom.k === 1) return
+    if (!panning) {
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 6) return
+      panning = true
+      setHeld(true)
+      wrap.setPointerCapture(e.pointerId)
+    }
+    const k = wrap.getBoundingClientRect().width / RINGS_SIZE
+    apply(panBy(ringsZoom, (e.clientX - was.x) / k, (e.clientY - was.y) / k, RINGS_SIZE))
+    down.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  })
+  const lift = (e: PointerEvent): void => {
+    down.delete(e.pointerId)
+    start = undefined
+    if (panning && down.size === 0) { panning = false; setTimeout(() => setHeld(false), 0) }
+  }
+  wrap.addEventListener('pointerup', lift)
+  wrap.addEventListener('pointercancel', lift)
+  wrap.addEventListener('dblclick', (e) => {
+    if (ringsZoom.k === 1 || (e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i')) return
+    clearTimeout(addTimer)
+    apply(RINGS_ZOOM_HOME)
+  })
 }
 
 /**
@@ -1430,10 +1522,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     let out = false
     let angle = angleOf(p)
     const place = (e: PointerEvent): void => {
-      const box = wrap.getBoundingClientRect()
-      const k = box.width / RINGS_SIZE
-      const x = (e.clientX - box.left) / k
-      const y = (e.clientY - box.top) / k
+      const { x, y } = localPoint(e, wrap)
       node.style.left = x + 'px'
       node.style.top = y + 'px'
       const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK
@@ -1445,6 +1534,9 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     }
     const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
     const timer = down.pointerType === 'mouse' ? 0 : window.setTimeout(lift, 300)
+    // A second finger is a pinch: the lift ends without moving the dot.
+    const second = (e: PointerEvent): void => { if (!e.isPrimary) cancel() }
+    wrap.addEventListener('pointerdown', second)
     const move = (e: PointerEvent): void => {
       if (!lifted) {
         if (Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < (timer ? 8 : 4)) return
@@ -1458,6 +1550,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
+      wrap.removeEventListener('pointerdown', second)
       wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
       wrap.classList.remove('hide-zone')
     }
@@ -1486,24 +1579,23 @@ function ringsMenuOn(wrap: HTMLElement, setHeld: (v: boolean) => void): void {
   let timer: ReturnType<typeof setTimeout> | undefined
   let from = { x: 0, y: 0 }
   const open = (e: MouseEvent): void => {
-    const box = wrap.getBoundingClientRect()
-    const k = box.width / RINGS_SIZE
-    const x = (e.clientX - box.left) / k
-    const y = (e.clientY - box.top) / k
+    const { x, y } = localPoint(e, wrap)
+    const at = wrapPoint(e, wrap)
     const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
     const near = ringAt(dist / ringsK, ringsGeo.radius, ringsGeo.rings)
     const onLine = Math.abs(ringsGeo.radius[near] * ringsK - dist) <= RING_LINE_HIT
     const item = (label: string, ring?: Ring): HTMLElement => el('button', { class: 'btn btn-ghost btn-sm', 'data-space-out': ring ?? 'all', onclick: () => spaceOutWeb(ring) }, [label])
     wrap.querySelector('.ctx-menu')?.remove()
     const menu = el('div', { class: 'ctx-menu', role: 'menu' }, [onLine ? item(S.ringsSpaceRing(S.ringLabel[near].toLowerCase()), near) : null, item(S.ringsSpaceAll)])
-    menu.style.left = Math.min(x, RINGS_SIZE - 170) * k + 'px'
-    menu.style.top = Math.min(y, RINGS_SIZE - 70) * k + 'px'
+    menu.style.left = Math.min(at.x, RINGS_SIZE - 170) + 'px'
+    menu.style.top = Math.min(at.y, RINGS_SIZE - 70) + 'px'
     wrap.appendChild(menu)
     document.addEventListener('pointerdown', (d) => { if (!menu.contains(d.target as Node)) menu.remove() }, { once: true })
   }
   const stop = (): void => { clearTimeout(timer); timer = undefined }
   wrap.addEventListener('pointerdown', (e) => {
     setHeld(false)
+    if (!e.isPrimary) { stop(); return }
     if ((e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i') || e.pointerType === 'mouse') return
     from = { x: e.clientX, y: e.clientY }
     timer = setTimeout(() => { timer = undefined; setHeld(true); navigator.vibrate?.(15); open(e) }, 500)
@@ -1662,15 +1754,17 @@ function screenWeb(): Node[] {
 function onRingsTap(e: MouseEvent, wrap: HTMLElement): void {
   if ((e.target as HTMLElement).closest('.node, .ctx-menu')) return
   ripple(e)
-  const box = wrap.getBoundingClientRect()
-  const scale = box.width / RINGS_SIZE
-  const dx = (e.clientX - box.left) / scale - RINGS_SIZE / 2
-  const dy = (e.clientY - box.top) / scale - RINGS_SIZE / 2
+  const at = localPoint(e, wrap)
+  const dx = at.x - RINGS_SIZE / 2
+  const dy = at.y - RINGS_SIZE / 2
   const dist = Math.hypot(dx, dy)
   const ring = RINGS.reduce((best, r) => (Math.abs(ringsGeo.radius[r] * ringsK - dist) < Math.abs(ringsGeo.radius[best] * ringsK - dist) ? r : best), Ring.Acquaintance)
   // Let the ripple show before the sheet rises over it.
-  setTimeout(() => addPersonSheet(ring), RIPPLE_LEAD_MS)
+  clearTimeout(addTimer)
+  addTimer = setTimeout(() => addPersonSheet(ring), RIPPLE_LEAD_MS)
 }
+
+let addTimer: ReturnType<typeof setTimeout> | undefined
 
 /** How long the ripple plays on its own before the add-someone sheet opens. */
 const RIPPLE_LEAD_MS = 360
