@@ -22,6 +22,7 @@ import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { askPeers, isNonResponsive } from './non_responsive'
+import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -57,7 +58,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import { contactToSend, holdContact, primaryReachable, receiveContactText, settleDefaultTick, sharedReachables, takeContact } from './contact_share'
 import type { HeldContacts, Reachable } from './contact_share'
@@ -258,6 +259,7 @@ const storeCtx = solo ? ctx : undefined
 let pendingConnect = parseConnectLinkParams(location.search)
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
+let heldToasted = false
 // Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
 // browser never sends to the server, so they stay out of access logs.
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
@@ -460,6 +462,16 @@ const net = new Net({
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
     render()
+  },
+  // A reach-out through the public link: over 10 an hour, or paused, it makes no card and gets no answer (counted, one toast per session).
+  refuseReachOut: () => {
+    const s = st()
+    const r = allowReachOut(s.reachOutLog ?? [], Date.now())
+    if (!s.reachOutsPaused && r.ok) { s.reachOutLog = r.log; save(); return false }
+    s.reachOutHeld = (s.reachOutHeld ?? 0) + 1
+    save()
+    if (!heldToasted) { heldToasted = true; toast(S.reachOutsHeld(s.reachOutHeld)) }
+    return true
   },
   // A phone opened one of this phone's demo-account codes: hold it until the
   // owner allows it in his own view (owner 2026-10-06). Matched by the name
@@ -1266,6 +1278,7 @@ function screenStart(): Node[] {
       : invite
         ? el('div', { class: 'invite' }, [
             el('b', {}, [solo ? S.connectInvite(inviter) : S.reachOutStart(inviter)]),
+            solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
@@ -1418,6 +1431,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const arcs = arcsGradient(tagColours(p, colourTags))
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
+      if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) personSheet(p.id) },
@@ -1774,6 +1788,7 @@ function screenWeb(): Node[] {
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
     ringsView(s, askMarks()),
+    s.people.some((p) => p.reachedOut) ? el('p', { class: 'meta legend', 'data-legend-reach-out': '' }, [S.legendReachedOut]) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
   const clip = el('div', { class: 'scroll' }, [layer])
@@ -2043,7 +2058,7 @@ function personSheet(personId: string): void {
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
 function reachedOutRow(p: Person): HTMLElement | null {
   if (!p.reachedOut) return null
-  return el('p', { class: 'reached-out', 'data-reached-out': p.reachedOut, style: `color:${REACH_OUT}` }, [p.reachedOut === 'received' ? S.reachedOutToYou(displayName(p.name).text) : S.youReachedOut])
+  return el('p', { class: 'reached-out', 'data-reached-out': p.reachedOut }, [p.reachedOut === 'received' ? S.reachedOutToYou(displayName(p.name).text) : S.youReachedOut])
 }
 
 /** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
@@ -4474,6 +4489,12 @@ function audioKeptLine(): HTMLElement {
   return line
 }
 
+/** What the owner's public link reads as in Settings: trustweb.one/<primary name> once claimed. */
+function reachOutLink(): string {
+  const name = namesSync().names().name
+  return name ? `trustweb.one/${name}` : 'your link'
+}
+
 function settingsSheet(): void {
   const s = st()
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
@@ -4495,6 +4516,14 @@ function settingsSheet(): void {
     ]),
     connectionRow(),
     ...(solo || s.testOf ? [] : [
+      el('h4', { class: 'eyebrow' }, [S.reachOutsTitle]),
+      el('button', {
+        class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
+        onclick: () => { if (s.reachOutsPaused) delete s.reachOutsPaused; else s.reachOutsPaused = true; save(); settingsSheet() },
+      }, [el('b', {}, [S.reachOutsPause])]),
+      el('p', { class: 'meta', 'data-reach-outs-held': '' }, [S.reachOutsHeldCount(s.reachOutHeld ?? 0)]),
+      s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
+      el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
       ...(s.testAccounts?.length
         ? s.testAccounts.map((t) => demoAccountRow(t, settingsSheet))
