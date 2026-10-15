@@ -6,7 +6,7 @@
  * A tap on a row points at the UI the feature adds (its `selector`); a tap on a checkbox asks first, then re-assembles and reloads.
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
-import { createDevice2, DEVICE2_CSS, KINDS } from './dev_device2'
+import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prRunning, rowPlan, setMap, stepText, tapped, toggleSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
@@ -39,7 +39,7 @@ const CSS = `
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
 .see-action{display:none!important}
 .twp.pill{width:auto}.twp .tag{padding:5px 10px;cursor:grab;touch-action:none;user-select:none;font:700 13px ui-monospace,monospace;color:#4fd7a0}
-.twp .d2{display:flex;flex-wrap:wrap;gap:4px;align-items:center}${DEVICE2_CSS}`
+${DEVICE2_CSS}`
 
 const POS = 'twp-pos'
 const folded = (id: string): string[] => { try { return JSON.parse(sessionStorage.getItem('twp-tree-' + id) ?? '[]') as string[] } catch { return [] } }
@@ -141,7 +141,7 @@ export function initDevPreview(): void {
     setTimeout(() => { t.remove() }, 2500)
   }
 
-  const device2 = createDevice2(p.id, p.stockPort, toast)
+  createDevice2(p.id, p.stockPort, mode, toast)
 
   function tap(f: PreviewFeature): void {
     store.set(seenKey(p!.id), JSON.stringify(toggleSeen(seen(p!.id), f.key)))
@@ -291,7 +291,7 @@ export function initDevPreview(): void {
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw, h('div', { className: 'd2' }, 'Second device:', ...KINDS.map((k) => { const b = h('button', { className: 'alt', textContent: k.label, disabled: mode === 'stock', title: mode === 'stock' ? 'Open the personal preview first: this origin is the stock twin' : '' }); b.addEventListener('click', () => { device2.open(k.kind) }); return b }))),
+        prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
       )
     }
     const pos = store.get(POS)
