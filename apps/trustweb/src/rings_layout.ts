@@ -1,8 +1,14 @@
-/** The rings view's geometry and the one place a drop changes a person: four rings, close in the centre; people not placed yet are not on it. */
-import { CLOSENESS_KEY, Ring, RINGS } from './model'
+/** The rings view's geometry and the one place a drop changes a person: four rings, close in the centre, and a grey "not placed yet" ring outside them (drawn only when someone is on it). */
+import { CLOSENESS_KEY, Ring, RINGS, ringSlot } from './model'
 import type { Person } from './model'
 
-export const WEB_RINGS: readonly Ring[] = RINGS
+export const WEB_RINGS: readonly Ring[] = [...RINGS, Ring.Unsorted]
+
+/** Where a person is drawn: their ring only when confirmed; a suggested ring, none, unsorted and no ring at all sit on the unsorted ring. */
+export function webSlot(p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'>): Ring {
+  const r = ringSlot(p)
+  return WEB_RINGS.includes(r) && !p.ringSuggested ? r : Ring.Unsorted
+}
 export const RING_RADIUS: Record<Ring, number> = { [Ring.Close]: 48, [Ring.Friend]: 84, [Ring.Acquaintance]: 118, [Ring.Intending]: 148, [Ring.Unsorted]: 168, [Ring.None]: 168, [Ring.Family]: 48 }
 
 /** More people than this on the rings: the name shows on hover, focus or tap only. */
@@ -11,8 +17,8 @@ export const RINGS_LABEL_CAP = 40
 export const DESIRE_DEFAULT = 5
 
 /** The ring whose circle is nearest to a distance from the centre (a drop is read from this). */
-export function ringAt(dist: number, radius: Record<Ring, number> = RING_RADIUS): Ring {
-  return WEB_RINGS.reduce((best, r) => (Math.abs(radius[r] - dist) < Math.abs(radius[best] - dist) ? r : best))
+export function ringAt(dist: number, radius: Record<Ring, number> = RING_RADIUS, rings: readonly Ring[] = WEB_RINGS): Ring {
+  return rings.reduce((best, r) => (Math.abs(radius[r] - dist) < Math.abs(radius[best] - dist) ? r : best))
 }
 
 /** A drop this far from the centre, beyond the outermost avatar, hides the person (same as "hide in trustweb"). */
@@ -30,15 +36,17 @@ export interface RingsGeometry {
   dot: Record<Ring, number>
   /** People per lap; a full ring continues on laps just outside it, never inside. */
   perLap: Record<Ring, number>
+  /** The rings in play: the unsorted one only when someone is on it. */
+  rings: readonly Ring[]
   /** Outer edge of the outermost avatar: the view scales to fit it. */
   extent: number
 }
 
 /** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. */
 export function ringsGeometry(counts: Record<Ring, number>): RingsGeometry {
-  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, extent: 0 }
+  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), extent: 0 }
   let prev = { r: 0, dot: 0, pushed: false }
-  for (const ring of WEB_RINGS) {
+  for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
     const around = (r: number, dot: number): number => Math.max(1, Math.floor((2 * Math.PI * r * RING_FILL) / dot))
     // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it.
