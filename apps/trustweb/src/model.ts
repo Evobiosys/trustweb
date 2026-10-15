@@ -1072,9 +1072,11 @@ export enum HintId {
   AboutWho = 'about-who',
   AboutWhat = 'about-what',
   RecAdvanced = 'rec-advanced',
+  /** The yellow dots on the Intending ring (wave 9): behind an info button, not a legend line (Jakob 2026-10-15 22:52). */
+  ReachOut = 'reach-out',
 }
 export const HINTS: readonly HintId[] = [
-  HintId.Meeting, HintId.Qr, HintId.CallWeb, HintId.WebTap, HintId.AboutWho, HintId.AboutWhat, HintId.RecAdvanced,
+  HintId.Meeting, HintId.Qr, HintId.CallWeb, HintId.WebTap, HintId.AboutWho, HintId.AboutWhat, HintId.RecAdvanced, HintId.ReachOut,
 ]
 
 /** What a recording is about: a person (notes go to them) or a thing (notes go to the inventory). */
