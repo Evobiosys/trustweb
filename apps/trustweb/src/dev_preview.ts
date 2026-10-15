@@ -7,7 +7,7 @@
  */
 import { pollStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { cascaded, confirmText, descendants, needsHint, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, confirmText, descendants, needsHint, setMap, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -67,7 +67,8 @@ export function initDevPreview(): void {
   let since = 0
   let prStep = ''
   let lit: string | null = null
-  let ask: { key: string; checked: boolean } | null = null
+  // The boxes as the user set them while the confirm is open: `last` is the box ticked most recently, `grey` what its cascade flipped.
+  let ask: { draft: PreviewFeature[]; last: string; grey: string[] } | null = null
   let error = ''
   let prText = ''
   let prUrl = ''
@@ -127,10 +128,10 @@ export function initDevPreview(): void {
 
   // The toggle restarts vite (the worktree's vite.config.mjs changes), so the POST may die mid-flight: poll until the server answers
   // with an assembled.at newer than the POST start (the CLI writes assembled{} last), then reload; an assembled.error is shown instead.
-  async function reassemble(a: { key: string; checked: boolean }): Promise<void> {
+  async function reassemble(draft: PreviewFeature[], key: string): Promise<void> {
     const start = Math.floor(Date.now() / 1000) * 1000
-    ask = null; busy = a.key; error = ''; begin(); render()
-    try { await call('POST', '', { feature: a.key, checked: a.checked }) } catch (e) {
+    ask = null; busy = key; error = ''; begin(); render()
+    try { await call('POST', '', { set: setMap(draft) }) } catch (e) {
       if (e instanceof ApiError) { error = e.message; busy = null; render(); return }
       waiting = true; render()
     }
@@ -150,7 +151,11 @@ export function initDevPreview(): void {
     const hint = needsHint(shown, f.key)
     const off = loading() || hint !== null || grey.includes(f.key)
     const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
-    box.addEventListener('change', () => { ask = { key: f.key, checked: box.checked }; render() })
+    box.addEventListener('change', () => {
+      const from = ask?.draft ?? p!.features
+      ask = { draft: toggled(from, f.key, box.checked), last: f.key, grey: cascaded(from, f.key, box.checked) }
+      render()
+    })
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
@@ -159,12 +164,12 @@ export function initDevPreview(): void {
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
-  function askBox(a: { key: string; checked: boolean }): HTMLElement {
+  function askBox(a: NonNullable<typeof ask>): HTMLElement {
     const go = h('button', { textContent: 'Reload' })
-    go.addEventListener('click', () => { void reassemble(a) })
+    go.addEventListener('click', () => { void reassemble(a.draft, a.last) })
     const no = h('button', { className: 'alt', textContent: 'Cancel' })
     no.addEventListener('click', () => { ask = null; render() })
-    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.key)!.title, a.checked), h('div', {}, go, no))
+    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length), h('div', {}, go, no))
   }
 
   function slow(): HTMLElement {
@@ -203,8 +208,8 @@ export function initDevPreview(): void {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       x.addEventListener('click', () => setCollapsed(true))
       drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), x)))
-      const shown = ask ? toggled(q.features, ask.key, ask.checked) : q.features
-      const grey = ask ? cascaded(q.features, ask.key, ask.checked) : []
+      const shown = ask?.draft ?? q.features
+      const grey = ask?.grey ?? []
       const n = q.features.filter((f) => f.checked).length
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })

@@ -1,5 +1,5 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
-import { cascaded, confirmText, descendants, needsHint, readyToGo, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, confirmText, descendants, needsHint, readyToGo, setMap, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -63,6 +63,11 @@ describe('dev preview outliner tree and cascade preview', () => {
     expect(readyToGo([ok, ok, ok], 2000)).toBe(false)
     expect(readyToGo([{ status: 200 }, ok, ok, ok], 1000)).toBe(true)
     expect(readyToGo([ok, ok, { status: 200, serverStarted: 500 }], 1000)).toBe(false)
+  })
+
+  it('setMap maps every key to its checked state, confirmText counts several changes', () => {
+    expect(setMap(toggled(set, 'deep', false))).toEqual({ events: true, 'event-link': true, deep: false, overlay: true })
+    expect(confirmText('X', false, 2)).toBe('Re-assemble preview with these 2 changes? The page reloads.')
   })
 
   it('descendants counts every feature below a node', () => {

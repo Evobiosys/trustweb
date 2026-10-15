@@ -26,9 +26,9 @@ export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
 }
 
-/** Wording of the confirm box for a checkbox tap. */
-export function confirmText(title: string, checked: boolean): string {
-  return `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
+/** Wording of the confirm box: one differing box names it, several count them. */
+export function confirmText(title: string, checked: boolean, changes = 1): string {
+  return changes > 1 ? `Re-assemble preview with these ${changes} changes? The page reloads.` : `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
 }
 
 export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }
@@ -58,4 +58,9 @@ export function readyToGo(answers: { status: number; serverStarted?: number }[],
 /** Number of features below `node` (what "(n hidden)" counts). */
 export function descendants(node: TreeNode): number {
   return node.children.reduce((n, c) => n + 1 + descendants(c), 0)
+}
+
+/** The exact state of every box, as POSTed to the server: key -> checked. */
+export function setMap(features: PreviewFeature[]): Record<string, boolean> {
+  return Object.fromEntries(features.map((f) => [f.key, f.checked]))
 }
