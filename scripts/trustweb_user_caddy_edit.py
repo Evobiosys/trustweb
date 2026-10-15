@@ -26,11 +26,13 @@ SITE_ROUTE = (
 )
 SITE_ANCHOR = "\tredir https://trustintheweb.org{uri} permanent\n"
 
+OLD_NOT_PATH = "\t\tnot path /backup /hosted /transcribe /feedback /websearch /link /connect /name /org /relay /health /who /c /l /admin /organizer /solo\n"
+NOT_PATH = "\t\tnot path /backup /hosted /transcribe /feedback /websearch /link /connect /name /org /relay /health /who /c /l /admin /organizer /solo /demo /emergent-demo /ea-demo /assets /pwa\n"
 APP_ROUTE = (
     "\t# --- a username: app.trustweb.one/<name> -> /who/<name> (wave 8 #one); never an app file, never a service route ---\n"
     "\t@user {\n"
     "\t\tpath_regexp user " + NAME_RE + "\n"
-    "\t\tnot path /backup /hosted /transcribe /feedback /websearch /link /connect /name /org /relay /health /who /c /l /admin /organizer /solo\n"
+    + NOT_PATH +
     "\t\tnot file\n"
     "\t}\n"
     "\tredir @user /who/{re.user.1} 302\n"
@@ -50,6 +52,12 @@ def add(text: str, head: str, anchor: str, route: str, marker: str, before: bool
     start, end = block_span(text, head)
     block = text[start:end]
     if marker in block:
+        # Already routed. An older `not path` line (2026-10-15 16:24: without the app's own folders, so /demo went to /who/demo) is upgraded in place.
+        old = OLD_NOT_PATH if marker == "\t@user {\n" else None
+        if old and old in block:
+            new = block.replace(old, NOT_PATH)
+            print(f"{head.strip()}: username route kept, `not path` line upgraded (app folders excluded)")
+            return text[:start] + new + text[end:]
         print(f"{head.strip()} already has the username route: unchanged")
         return text
     if block.count(anchor) != 1:
