@@ -7,6 +7,13 @@ import { parseRecord } from '../../src/store.ts'
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
 
 describe('rings drag', () => {
+  it('close dots leave a clear gap (>= 4 px) to the you avatar (r 20 + 2 px ring) for 1, 3 and 8 people', () => {
+    for (const n of [1, 3, 8]) {
+      const g = ringsGeometry({ close: n })
+      expect(g.radius.close - g.dot.close / 2 - 22).toBeGreaterThanOrEqual(4)
+      expect(g.dot.close).toBeLessThanOrEqual(32)
+    }
+  })
   it('orders the rings from the centre and reads a drop from the distance', () => {
     expect(RING_RADIUS.close < RING_RADIUS.friend && RING_RADIUS.friend < RING_RADIUS.acquaintance).toBe(true)
     expect(RING_RADIUS.acquaintance < RING_RADIUS.intending).toBe(true)

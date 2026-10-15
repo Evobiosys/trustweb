@@ -28,6 +28,8 @@ export const beyondRings = (dist: number, g: RingsGeometry): boolean => dist > g
 /** Avatar diameter (px): at most FULL, shrinking to LEAST before a ring takes a second lap. */
 const FULL_DOT = 42
 const LEAST_DOT = 14
+/** Close dots stay small so the close circle shows between them and the "you" avatar (20 px radius). */
+const CLOSE_DOT = 32
 const RING_FILL = 0.9
 const GAP = 3
 
@@ -105,7 +107,7 @@ export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Reco
     const around = (r: number, dot: number): number => Math.max(1, Math.floor((2 * Math.PI * r * RING_FILL) / dot))
     // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it.
     let r = RING_RADIUS[ring]
-    const dot = Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * r * RING_FILL) / n)))
+    const dot = Math.max(LEAST_DOT, Math.min(ring === Ring.Close ? CLOSE_DOT : FULL_DOT, Math.floor((2 * Math.PI * r * RING_FILL) / n)))
     if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
     const mine = angles[ring]

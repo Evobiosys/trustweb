@@ -144,7 +144,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .lean .rchips{align-items:center}
 .lean small{font-size:12px}
 .desire-go{display:flex; gap:8px; justify-content:center}
-.node.you .ava{width:54px; height:54px; box-shadow:0 0 0 3px #fff, 0 0 22px rgba(23,143,134,.55)}
+.node.you .ava{width:40px; height:40px; box-shadow:0 0 0 2px #fff, 0 0 12px rgba(23,143,134,.55)}
 .node.asked .ava{animation:asked 1.6s ease-in-out infinite}
 @keyframes asked{50%{box-shadow:0 0 0 7px rgba(18,168,227,.28), 0 2px 10px rgba(36,27,46,.2)}}
 .node.shared .ava{box-shadow:0 0 0 3px #fff, 0 0 0 6px var(--mint), 0 0 18px rgba(79,215,160,.8)}
@@ -591,7 +591,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
   :root:not([data-theme="light"]) .status-pill.rec{background:#3F2A1E; color:#FF9C8A}
   :root:not([data-theme="light"]) .tag-resource{background:#15344A; color:#8FD3F2}
   :root:not([data-theme="light"]) .ring-intending{background:#35301F; color:#E8CB8A; border-color:#8A6A2F}
-  :root:not([data-theme="light"]) .node.you .ava,
+  :root:not([data-theme="light"]) .node.you .ava{box-shadow:0 0 0 2px var(--linen), 0 0 12px rgba(23,143,134,.6)}
   :root:not([data-theme="light"]) .node.shared .ava{box-shadow:0 0 0 3px var(--linen), 0 0 22px rgba(23,143,134,.6)}
   :root:not([data-theme="light"]) .node.shared .ava{box-shadow:0 0 0 3px var(--linen), 0 0 0 6px var(--mint), 0 0 18px rgba(79,215,160,.8)}
   :root:not([data-theme="light"]) .phone{box-shadow:0 24px 80px rgba(0,0,0,.55), 0 0 0 10px #070D0C, 0 0 0 12px #27383A}
