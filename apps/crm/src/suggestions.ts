@@ -41,3 +41,8 @@ export function parseSuggestions(text: string | null): Suggestions {
   }
   return out
 }
+
+/** Not-placed people grouped by suggested ring, in ring order; rings with nobody are left out. Pure. */
+export function groupBySuggestion<T>(items: T[], idOf: (t: T) => string, suggestions: Suggestions): { ring: RingId; items: T[] }[] {
+  return RINGS.map((r) => ({ ring: r as RingId, items: items.filter((t) => (suggestions[idOf(t)]?.ring ?? UNSORTED) === r) })).filter((g) => g.items.length > 0)
+}

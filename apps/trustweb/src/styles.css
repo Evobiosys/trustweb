@@ -880,3 +880,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chip .pbadge{padding:1px; margin-right:6px; vertical-align:middle}
 .chip .pbadge .ava{width:24px; height:24px; font-size:11px}
 .who i{display:block}
+
+.events-page .meta{font-size:13px; color:var(--ink-soft); line-height:1.55}
+.not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
+.chip .pwho{display:inline-block; vertical-align:middle}
+.link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}

@@ -2,6 +2,7 @@
  * The Events screen (E1, wave 7): list, event page, add/edit form. Events and tags stay on this phone (events.ts).
  * Views are screens of their own (Screen.Events); the module keeps which one is showing.
  */
+import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
 import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from './events'
 import { encodeEventLink } from './event_link'
@@ -27,6 +28,8 @@ export interface EventsViewHooks {
   newId: () => string
   /** Copies a text and says so (the app's toast, or `done` as its words). */
   copyLink: (text: string, done?: string) => void
+  /** Opens the join sheet for a pasted event link; false when the text holds none. */
+  joinLink: (text: string) => boolean
   origin: string
 }
 
@@ -47,7 +50,9 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   let hostLink = false
   /** Whether the Advanced disclosure stays open across redraws. */
   let advancedOpen = false
-  const show = (v: View): void => { view = v; hostLink = false; advancedOpen = false; h.redraw() }
+  /** The link copied last on this page, shown under the share button. */
+  let lastLink = ''
+  const show = (v: View): void => { view = v; hostLink = false; advancedOpen = false; lastLink = ''; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -57,10 +62,25 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     ])
   }
 
+  /** A pasted link opens the same join sheet as the address bar does. */
+  function pasteRow(): HTMLElement {
+    const error = el('p', { class: 'warn', 'data-event-paste-error': '', hidden: true })
+    const input = el('input', { class: 'field', placeholder: S.eventsPasteLink, 'aria-label': S.eventsPasteLink, 'data-event-paste': '' })
+    const go = (): void => {
+      const text = input.value.trim()
+      if (!text) return
+      error.hidden = h.joinLink(text)
+      if (error.hidden) input.value = ''; else error.textContent = S.eventsPasteBad
+    }
+    input.addEventListener('paste', () => setTimeout(go))
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go() })
+    return el('div', {}, [input, error])
+  }
+
   function list(): Node[] {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
-    if (!upcoming.length && !past.length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add])]
+    if (!upcoming.length && !past.length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add, pasteRow()])]
     const rows = el('div', {}, [])
     const draw = (q: string): void => {
       const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
@@ -73,7 +93,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const filter = upcoming.length + past.length > 5
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
-    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add])]
+    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add, pasteRow()])]
   }
 
   function field(label: string, input: HTMLElement): Node[] {
@@ -135,10 +155,10 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     }, [h.avatar(p.name, p.id)])
   }
 
-  const hint = (p: Person): HTMLElement | null => (inWeb(p) ? null : el('i', { 'data-not-in-web': p.id }, [S.eventsNotInWeb]))
+  const hint = (p: Person): HTMLElement | null => (inWeb(p) ? null : el('i', { class: 'not-in-web', 'data-not-in-web': p.id }, [S.eventsNotInWeb]))
 
   function attendeeRow(ev: TwEvent, p: Person): HTMLElement {
-    return el('div', { class: 'prow', 'data-attendee': p.id }, [
+    const row = el('div', { class: 'prow', 'data-attendee': p.id }, [
       personBadge(p),
       el('button', { class: 'who', onclick: () => h.curatorPerson(p.id) }, [el('b', {}, [p.name]), hint(p)]),
       el('button', {
@@ -146,6 +166,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         onclick: () => { untagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
       }, ['×']),
     ])
+    contextPress(row, () => h.curatorPerson(p.id))
+    return row
   }
 
   function picker(ev: TwEvent): HTMLElement {
@@ -153,10 +175,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const results = el('div', {})
     const draw = (): void => {
       const open = h.state().people.filter((p) => !p.events?.includes(ev.id))
-      results.replaceChildren(...matchPeople(open, input.value).map((p) => el('button', {
-        class: 'chip', 'data-tag-person': p.id,
-        onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
-      }, [personBadge(p), el('span', {}, [p.name, hint(p)])])))
+      results.replaceChildren(...matchPeople(open, input.value).map((p) => {
+        const chip = el('button', {
+          class: 'chip', 'data-tag-person': p.id,
+          onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
+        }, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])])
+        contextPress(chip, () => h.curatorPerson(p.id))
+        return chip
+      }))
     }
     input.addEventListener('input', draw)
     draw()
@@ -172,9 +198,23 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     h.undoNotice(S.eventsDeleted(ev.name), () => { restoreEvent(h.state(), gone); h.save(); h.redraw() })
   }
 
-  /** Copies the link the toggle now shows; the host one says so in the toast. */
+  /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. */
   function copyShown(ev: TwEvent): void {
-    h.copyLink(encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer'), hostLink ? S.eventHostLinkCopied : undefined)
+    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer')
+    h.copyLink(lastLink, hostLink ? S.eventHostLinkCopied : undefined)
+    h.redraw()
+  }
+
+  /** The copied link, read-only on one line: shortened in the middle, whole (and selected) once tapped. */
+  function linkPreview(): HTMLElement | null {
+    if (!lastLink) return null
+    const full = lastLink
+    const short = full.length > 44 ? `${full.slice(0, 30)}…${full.slice(-12)}` : full
+    const input = el('input', { class: 'field link-preview', readonly: '', value: short, 'aria-label': S.eventLinkPreview, 'data-event-link-preview': '' })
+    input.addEventListener('focus', () => { input.value = full; input.select() })
+    input.addEventListener('click', () => input.select())
+    input.addEventListener('blur', () => { input.value = short })
+    return input
   }
 
   /** Switching copies the matching link at once: host link on, peer link off. */
@@ -184,7 +224,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       onclick: () => {
         hostLink = !hostLink
         copyShown(ev)
-        h.redraw()
       },
     }, [S.eventHostLinkToggle])
   }
@@ -199,7 +238,6 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.tagLocked = true
       h.save()
       copyShown(ev)
-      h.redraw()
     })
     const hostNames = el('input', { type: 'checkbox', 'data-event-host-names': '' })
     hostNames.checked = ev.hostNamesTags !== false
@@ -220,7 +258,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
-    return [h.header(ev.name, { back: () => show({ kind: 'list' }) }), el('div', { class: 'scroll' }, [
+    return [h.header(ev.name, { back: () => show({ kind: 'list' }) }), el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
       el('p', {}, [ev.where]),
       ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
@@ -229,9 +267,10 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       el('div', { class: 'chips' }, [attended]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => copyShown(ev) }, [S.eventLinkShare]),
       hostToggle(ev),
+      linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
       el('h3', {}, [S.eventsTagged(tagLabel(ev))]),
-      people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty' }, [S.eventsNoAttendees]),
+      people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
       advanced(ev),

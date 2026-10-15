@@ -6,7 +6,8 @@
   import { baseFields, fieldLabelOf, passesFilters, valueText } from './fields'
   import type { FieldValues } from './fields'
   import { matches } from './contacts'
-  import { fileUnder, intendingNotice, unsortedIds } from './sorting.svelte'
+  import { applySuggestion, fileUnder, intendingNotice, unsortedIds } from './sorting.svelte'
+  import { groupBySuggestion, parseSuggestions } from './suggestions'
   import { openContact, openSort, openEnvironment, openImport, openPerson } from './nav.svelte'
   import { isClose } from './close'
   import { Kind, layout } from './placement'
@@ -44,6 +45,14 @@
   const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))).map((g) =>
     order === SortOrder.Recent && hasCustom ? { ...g, rows: inCustomOrder(g.rows, (r) => r.person.id, prefs.customOrder[g.ring]) } : g))
   const notPlaced = $derived(contactRows(view, query, order).filter((r) => ringOf(r.person.ring) === UNSORTED && passesFilters(valuesOf(r.person.id), prefs.filters)))
+  const suggestions = parseSuggestions(__TW_SUGGESTIONS__)
+  /** Suggested rows the person set aside for now; they come back on the next visit. */
+  let skipped = $state<string[]>([])
+  /** The sections left open; Close friends to start with. A redraw must not close one the person opened. */
+  let opened = $state<string[]>([Ring.Close])
+  const toggled = (ring: string, on: boolean): void => { opened = on ? [...opened, ring] : opened.filter((r) => r !== ring) }
+  const sections = $derived(groupBySuggestion(notPlaced.filter((r) => !skipped.includes(r.person.id)), (r) => r.person.id, suggestions))
+  const confirmSection = (rows: typeof notPlaced): void => { for (const r of rows) applySuggestion(r.person.id, suggestions[r.person.id]) }
   const environments = $derived(((store.app as { environments?: EnvEntity[] }).environments ?? [])
     .map((e) => effectivePerson(e, edits(e.id))).filter((e) => matches(e as never, query)))
   const onRow = $derived((kind: Kind) => layout(kind, placementFor(kind), {}).collapsed)
@@ -123,14 +132,28 @@
   {#if notPlaced.length}
     <details class="not-placed" data-part="not-placed">
       <summary class="ring-heading">{S.notPlaced(notPlaced.length)}</summary>
-      <div class="zone" data-zone={UNSORTED}>
-      {#each notPlaced as row (row.person.id)}
-        <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
-        <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
-          ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
-        </div>
+      {#each sections as sec (sec.ring)}
+        <details class="suggest-section" data-section={sec.ring} open={opened.includes(sec.ring)} ontoggle={(e): void => toggled(sec.ring, e.currentTarget.open)}>
+          <summary>{S.sectionTitle(S.sectionNames[sec.ring], sec.items.length)}</summary>
+          {#if sec.ring !== UNSORTED}<button class="btn small" data-action="confirm-section" onclick={(): void => confirmSection(sec.items)}>{S.confirmSection}</button>{/if}
+          <div class="zone" data-zone={UNSORTED}>
+          {#each sec.items as row (row.person.id)}
+            <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
+            <div class="suggest-row">
+            <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+              ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
+            {#if sec.ring !== UNSORTED}
+              <div class="suggest-actions">
+              <button class="quiet" data-action="apply-suggestion" onclick={(): void => { applySuggestion(row.person.id, suggestions[row.person.id]) }}>{S.applySuggestion}</button>
+              <button class="quiet" data-action="skip-suggestion" onclick={(): void => { skipped.push(row.person.id) }}>{S.sortSkip}</button>
+              </div>
+            {/if}
+            </div>
+            </div>
+          {/each}
+          </div>
+        </details>
       {/each}
-      </div>
     </details>
   {/if}
   {#if imported.length}
