@@ -4,6 +4,7 @@
  */
 import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { LinkedEvent } from './event_link'
+import { RINGS, ringSlot } from './model'
 import type { AppState, Person, TwEvent } from './model'
 
 /** What the form hands over; name, from and where are mandatory. */
@@ -92,6 +93,11 @@ export function eventsSorted(s: AppState, now: number): { upcoming: TwEvent[]; p
     upcoming: all.filter((e) => !isPast(e, now)).sort((a, b) => a.from.localeCompare(b.from)),
     past: all.filter((e) => isPast(e, now)).sort((a, b) => b.from.localeCompare(a.from)),
   }
+}
+
+/** In my web = sits in one of the four rings (family by its closeness); no ring, unsorted or hidden = not yet. */
+export function inWeb(p: Pick<Person, 'ring' | 'fields'>): boolean {
+  return RINGS.includes(ringSlot(p))
 }
 
 /** The people carrying this event's tag. */

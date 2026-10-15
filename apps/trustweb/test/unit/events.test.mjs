@@ -1,7 +1,7 @@
 /** Events (E1, wave 7): the model, the per-event tag on a person, and that nothing of it leaves the phone. */
 import { Audience, LineStatus, Ring, Tag } from '../../src/model.ts'
 import { askSources } from '../../src/cascade.ts'
-import { attendees, deleteEvent, eventLabel, localSettings, tagLabel, eventMatches, eventsSorted, isPast, matchPeople, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
+import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, isPast, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
 
 const NOW = new Date('2026-10-15T12:00').getTime()
 const ev = (over = {}) => newEvent({ name: 'Forum Alpbach', from: '2026-10-12', where: 'Vienna', ...over }, over.id ?? 'e1', NOW)
@@ -92,6 +92,20 @@ describe('I1: events never leave the phone', () => {
     for (const leak of ['Secret Retreat', 'Hallstatt', 'e1"']) expect(out).not.toContain(leak)
     expect(s.events).toHaveLength(1)
     expect(s.people[0].events).toEqual(['e1'])
+  })
+})
+
+describe('inWeb', () => {
+  it('each of the four rings is in the web', () => {
+    for (const r of [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]) expect(inWeb({ ring: r })).toBe(true)
+  })
+  it('family counts by its closeness', () => {
+    expect(inWeb({ ring: Ring.Family })).toBe(true)
+  })
+  it('no ring, unsorted or hidden is not yet', () => {
+    expect(inWeb({ ring: Ring.None })).toBe(false)
+    expect(inWeb({ ring: Ring.Unsorted })).toBe(false)
+    expect(inWeb({ ring: undefined })).toBe(false)
   })
 })
 

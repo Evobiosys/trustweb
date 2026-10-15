@@ -1820,6 +1820,11 @@ function personSheet(personId: string): void {
   cardOpenFor = p.id
 }
 
+/** The per-person Web Curator page alone in the sheet; closing it returns to the screen underneath. */
+function curatorPerson(personId: string): void {
+  openSheet([curator.person(personId, closeSheet)])
+}
+
 /** The events this person is tagged with (E1): a chip each, tap opens the event page. */
 function eventChipsRow(p: Person): HTMLElement | null {
   const evs = (st().events ?? []).filter((e) => p.events?.includes(e.id))
@@ -2529,7 +2534,7 @@ const curator = createCurator({
   },
 })
 const eventsView = createEventsView({
-  state: st, save, header, leave: () => go(Screen.Web), redraw: render, personSheet, avatar,
+  state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
   newId: () => randomId(8), copyLink, origin: APP_URL.replace(/\/$/, ''),
 })

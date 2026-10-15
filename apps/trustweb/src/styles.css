@@ -871,3 +871,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .prow{flex-wrap:wrap}
 .prow .rchip-wrap{display:contents}
 .prow .rchips{flex-basis:100%; order:9; margin:0}
+.pbadge{display:inline-flex; padding:2px; border-radius:50%; flex-shrink:0}
+.chip .pbadge{padding:1px; margin-right:6px; vertical-align:middle}
+.chip .pbadge .ava{width:24px; height:24px; font-size:11px}
+.who i{display:block}

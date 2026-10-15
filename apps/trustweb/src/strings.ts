@@ -232,6 +232,7 @@ export const S = {
   eventsUntag: (name: string) => `Remove the tag from ${name}`,
   eventsOrganizedBy: (name: string) => `Organized by ${name}`,
   eventsPersonChips: 'Events',
+  eventsNotInWeb: 'not in your web yet',
   eventLinkShare: 'Share event link',
   eventLinkHint: 'Send it to the organizer or to everyone who was there: each of them gets the event in their TrustWeb and can tag the people they met.',
   eventLinkJoinTitle: (name: string, when: string, where: string) => `You were at ${name}, ${when}, ${where}`,
