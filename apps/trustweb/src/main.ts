@@ -123,7 +123,7 @@ import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { eventLabel, joinEvent, whenLabel as eventWhen } from './events'
+import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { decodeEventLink } from './event_link'
 import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
@@ -1831,7 +1831,7 @@ function eventChipsRow(p: Person): HTMLElement | null {
   if (!evs.length) return null
   return el('div', { class: 'chips', 'data-person-events': p.id }, [
     el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
-    ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [e.name])),
+    ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [tagLabel(e)])),
   ])
 }
 
@@ -2786,10 +2786,11 @@ function maybeOpenPendingEvent(): void {
   if (!pendingEvent || !state) return
   const ev = pendingEvent
   pendingEvent = null
-  if (st().events?.some((e) => e.id === ev.id)) { openEvents(ev.id); return }
+  if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
   const add = (): void => { const id = joinEvent(st(), ev, Date.now()); save(); closeSheet(); openEvents(id) }
   openSheet([
     el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
+    ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
     ev.conditions ? el('p', {}, [ev.conditions]) : null,
     ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
     el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
@@ -3194,8 +3195,8 @@ function screenMeet(): Node[] {
 let shortLinker: ShortLinker | null = null
 
 /** Copies a link and says so (the toast shows the link itself where the clipboard is refused). */
-function copyLink(text: string): void {
-  void navigator.clipboard?.writeText(text).then(() => toast(S.meetCopied), () => toast(text))
+function copyLink(text: string, done: string = S.meetCopied): void {
+  void navigator.clipboard?.writeText(text).then(() => toast(done), () => toast(text))
 }
 
 /** The short-link choice for a connect code: its QR follows the choice, as do Copy, Send and NFC (chooser.current()). Not offered in an embedded demo phone. */

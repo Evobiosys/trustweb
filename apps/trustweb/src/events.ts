@@ -16,6 +16,7 @@ export interface EventFields {
   conditions?: string
   themes?: string[]
   organizer?: string
+  hosts?: string[]
   /** Default true: I add or join it. */
   attended?: boolean
 }
@@ -51,6 +52,7 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
   if (to && (!validDate(to) || stamp(to, true) < stamp(from, false))) return 'to'
   const conditions = f.conditions?.trim()
   const organizer = f.organizer?.trim()
+  const hosts = f.hosts?.map((t) => t.trim()).filter(Boolean)
   const themes = f.themes?.map((t) => t.trim()).filter(Boolean)
   return {
     id, name, from, where, createdAt: now, attended: f.attended ?? true,
@@ -58,7 +60,19 @@ export function newEvent(f: EventFields, id: string, now: number): TwEvent | Eve
     ...(conditions ? { conditions } : {}),
     ...(themes?.length ? { themes } : {}),
     ...(organizer ? { organizer } : {}),
+    ...(hosts?.length ? { hosts } : {}),
   }
+}
+
+/** What the tag is called on my device. */
+export function tagLabel(ev: Pick<TwEvent, 'name' | 'tagName'>): string {
+  return ev.tagName ?? ev.name
+}
+
+/** The device-local settings an edit of the form must not drop. */
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked } = ev
+  return { ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}) }
 }
 
 export function isPast(ev: TwEvent, now: number): boolean {
@@ -97,10 +111,17 @@ export function untagPerson(s: AppState, personId: string, eventId: string): voi
   else delete p.events
 }
 
-/** Adds a linked event as attended and returns its id; an event with that id already held is left as it is. */
+/** Adds a linked event as attended and returns its id; an event with that id already held is left as it is (see applyHostLink). */
 export function joinEvent(s: AppState, linked: LinkedEvent, now: number): string {
-  if (!s.events?.some((e) => e.id === linked.id)) s.events = [...(s.events ?? []), { ...linked, createdAt: now, attended: true, fromLink: true }]
+  const { kind: _kind, ...ev } = linked
+  if (!s.events?.some((e) => e.id === linked.id)) s.events = [...(s.events ?? []), { ...ev, createdAt: now, attended: true, fromLink: true }]
   return linked.id
+}
+
+/** A host link for an event I hold names its tag, unless I keep my own name or do not let the host name it. A peer link never does. */
+export function applyHostLink(s: AppState, linked: LinkedEvent): void {
+  const mine = s.events?.find((e) => e.id === linked.id)
+  if (mine && linked.kind === 'host' && linked.tagName && !mine.tagLocked && mine.hostNamesTags !== false) mine.tagName = linked.tagName
 }
 
 /** What deleteEvent took out, to put back (Undo). */
