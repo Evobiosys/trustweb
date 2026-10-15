@@ -43,11 +43,11 @@ export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeat
 /** Reviewed rows: key -> the feature ref last reviewed and how many changes came in since (0 = reviewed as it stands). */
 export type Seen = Record<string, { ref: string; updates: number }>
 
-/** The stored reviewed rows; an old string[] (keys only) becomes entries at the features' current refs. Anything else: nothing reviewed. */
-export function readSeen(raw: string | null, features: PreviewFeature[]): Seen {
+/** The stored reviewed rows; an old string[] (keys only) becomes entries with an unknown ref (they show as Update: until tapped). Anything else: nothing reviewed. */
+export function readSeen(raw: string | null): Seen {
   try {
     const v = JSON.parse(raw ?? '{}') as unknown
-    if (Array.isArray(v)) return Object.fromEntries((v as string[]).map((k) => [k, { ref: features.find((f) => f.key === k)?.ref ?? '', updates: 0 }]))
+    if (Array.isArray(v)) return Object.fromEntries((v as string[]).map((k) => [k, { ref: '', updates: 0 }]))  // ref unknown: the next render counts one update, never italic by itself
     return v && typeof v === 'object' ? (v as Seen) : {}
   } catch { return {} }
 }
