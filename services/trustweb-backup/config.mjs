@@ -77,6 +77,13 @@
 //   CONNECT_PER_MINUTE, CONNECT_PER_HOUR          6, 30     POST /connect and POST /name together, per network address (IPv6: /64), in memory, NOT anonymous
 //   CONNECT_GET_PER_MINUTE, CONNECT_GET_PER_HOUR  20, 300   GET /c/ and GET /who/ together, per network address (plain-text 429)
 //   CONNECT_SWEEP_MS                 3600000      how often expired codes are dropped (they also act as unknown when read)
+//   ORG_MAX_EVENTS, ORG_MAX_INVITEES            3, 25      wave 8: free organizer limits (events per org, invitee e-mails per event)
+//   ORG_HOSTED_MAX_EVENTS, ORG_HOSTED_MAX_INVITEES  50, 500  the same for an org the admin switched to plan "hosted" (POST /admin/org)
+//   ORG_MAX_ORGS                     2000         organizers in total; beyond it POST /org answers 503 full
+//   ORG_DAYS                         365          an org untouched this long may be swept (only the `updated` stamp exists; no sweeper yet)
+//   ORG_CREATE_PER_MINUTE, ORG_CREATE_PER_HOUR  6, 30     POST /org per network address (IPv6: /64), in memory
+//   ORG_WRITE_PER_MINUTE, ORG_WRITE_PER_HOUR    20, 200   POST /org/me and /org/event together, per network address
+//   ORG_HIT_PER_MINUTE               60           POST /org/hit per network address (the attendee phones' counter route)
 //   RESERVED_NAMES                   (empty)      wave 6e: comma list of usernames reserved IN ADDITION to the built-in list (production: japossert,jakob). Trimmed, lowercased,
 //                                                 compared after "." "_" "-" are removed. A reserved name can only be granted through the admin route; held, it is locked.
 //   ADMIN_TOKEN_FILE                 (unset)      wave 6e: JSON {"token": "<64 hex>"} of the admin routes (/admin/name, /admin/names; loopback only, never in Caddy). Unset: the
@@ -261,6 +268,18 @@ export function loadConfig(options = {}) {
     connectGetPerMinute: pick(options, 'connectGetPerMinute', 'CONNECT_GET_PER_MINUTE', 20),
     connectGetPerHour: pick(options, 'connectGetPerHour', 'CONNECT_GET_PER_HOUR', 300),
     connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
+
+    orgMaxEvents: pick(options, 'orgMaxEvents', 'ORG_MAX_EVENTS', 3),
+    orgMaxInvitees: pick(options, 'orgMaxInvitees', 'ORG_MAX_INVITEES', 25),
+    orgHostedMaxEvents: pick(options, 'orgHostedMaxEvents', 'ORG_HOSTED_MAX_EVENTS', 50),
+    orgHostedMaxInvitees: pick(options, 'orgHostedMaxInvitees', 'ORG_HOSTED_MAX_INVITEES', 500),
+    orgMax: pick(options, 'orgMax', 'ORG_MAX_ORGS', 2000),
+    orgDays: pick(options, 'orgDays', 'ORG_DAYS', 365),
+    orgCreatePerMinute: pick(options, 'orgCreatePerMinute', 'ORG_CREATE_PER_MINUTE', 6),
+    orgCreatePerHour: pick(options, 'orgCreatePerHour', 'ORG_CREATE_PER_HOUR', 30),
+    orgWritePerMinute: pick(options, 'orgWritePerMinute', 'ORG_WRITE_PER_MINUTE', 20),
+    orgWritePerHour: pick(options, 'orgWritePerHour', 'ORG_WRITE_PER_HOUR', 200),
+    orgHitPerMinute: pick(options, 'orgHitPerMinute', 'ORG_HIT_PER_MINUTE', 60),
 
     reservedNames: options.reservedNames ?? parseReservedList(process.env.RESERVED_NAMES),
     adminToken: options.adminToken ?? readAdminToken(),

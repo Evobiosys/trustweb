@@ -68,6 +68,10 @@ const MESSAGES = {
   provider_error: 'The transcription provider failed.',
   provider_timeout: 'The transcription provider took too long.',
   feedback_full: 'The feedback store is full.',
+  unknown_org: 'No such organizer.',
+  limit_events: 'The event limit of this plan is reached.',
+  limit_invitees: 'The invitee limit of this plan is reached.',
+  full: 'The server cannot take more organizers right now.',
   server_error: 'Server error.',
 }
 
