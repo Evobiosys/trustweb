@@ -3,7 +3,7 @@
  * Views are screens of their own (Screen.Events); the module keeps which one is showing.
  */
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventsSorted, localSettings, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
+import { attendees, deleteEvent, eventMatches, eventsSorted, localSettings, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
 import { encodeEventLink } from './event_link'
 import type { EventError, EventFields } from './events'
 import type { AppState, Person, TwEvent } from './model'
@@ -58,11 +58,19 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const { upcoming, past } = eventsSorted(h.state(), Date.now())
     const add = el('button', { class: 'btn btn-electric wide', 'data-event-add': '', onclick: () => show({ kind: 'form' }) }, [S.eventsAdd])
     if (!upcoming.length && !past.length) return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [el('p', { class: 'empty' }, [S.eventsEmpty]), add])]
-    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [
-      upcoming.length ? el('h3', {}, [S.eventsUpcoming]) : null, ...upcoming.map(row),
-      past.length ? el('h3', {}, [S.eventsPast]) : null, ...past.map(row),
-      add,
-    ])]
+    const rows = el('div', {}, [])
+    const draw = (q: string): void => {
+      const [up, pa] = [upcoming, past].map((l) => l.filter((e) => eventMatches(e, q)))
+      rows.replaceChildren(...[
+        up.length ? el('h3', {}, [S.eventsUpcoming]) : null, ...up.map(row),
+        pa.length ? el('h3', {}, [S.eventsPast]) : null, ...pa.map(row),
+      ].filter((n): n is HTMLElement => n !== null))
+    }
+    draw('')
+    const filter = upcoming.length + past.length > 5
+      ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
+      : null
+    return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add])]
   }
 
   function field(label: string, input: HTMLElement): Node[] {
@@ -73,6 +81,10 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
     const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: 'date', value: v })
     const name = text(existing?.name)
+    const tag = text(existing?.tagName)
+    const showSame = (): void => { tag.placeholder = name.value.trim() || S.eventsTagNameSame }
+    name.addEventListener('input', showSame)
+    showSame()
     const from = date(existing?.from)
     const to = date(existing?.to)
     const where = text(existing?.where)
@@ -93,6 +105,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       const made = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
       if (typeof made === 'string') { error.textContent = ERRORS[made]; error.hidden = false; return }
       const ev = { ...made, ...(existing ? localSettings(existing) : {}) }
+      const tagged = tag.value.trim()
+      if (tagged && tagged !== made.name) { ev.tagName = tagged; ev.tagLocked = true } else { delete ev.tagName; delete ev.tagLocked }
       const s = h.state()
       s.events = [...(s.events ?? []).filter((e) => e.id !== ev.id), ev]
       h.save()
@@ -100,7 +114,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     }
     const cancel = (): void => show(existing ? { kind: 'page', id: existing.id } : { kind: 'list' })
     return [h.header(existing ? S.eventsEdit : S.eventsNew, { back: cancel }), el('div', { class: 'scroll' }, [
-      ...field(S.eventsName, name), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsWhere, where),
+      ...field(S.eventsName, name), ...field(S.eventsTagNameField, tag), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsWhere, where),
       ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
       ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
       error,
