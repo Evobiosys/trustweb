@@ -111,8 +111,8 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
   const admitted: AppState = {
     ...s,
     inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop, askerTags)),
-    // The General note (general_notes.ts) is Only me: this copy of the record holds the admitted lines, never a person's free-text note.
-    people: s.people.map(({ generalNote: _private, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
+    // The General note (general_notes.ts) is Only me: this copy of the record holds the admitted lines, never a person's free-text note or where a dot sits in my Web view.
+    people: s.people.map(({ generalNote: _private, angle: _angle, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
   }
   const base = threadsForRing(admitted, ring, scope, askerTags)
   const notes = meetingNoteThreads(s, ring, hop, scope)

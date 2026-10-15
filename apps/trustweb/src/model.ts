@@ -302,6 +302,8 @@ export interface Person {
   intending?: { value: number; since: number }
   /** The ring is a suggestion (ring-suggestions file), not confirmed: the Web view keeps the person on the unsorted ring until a drop or the Curator confirms it. */
   ringSuggested?: boolean
+  /** Degrees (0 = top, clockwise) where the dot sits on its ring in the Web view: where it was dropped. Local only, never sent. */
+  angle?: number
 }
 
 /**
