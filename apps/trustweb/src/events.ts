@@ -69,6 +69,13 @@ export function tagLabel(ev: Pick<TwEvent, 'name' | 'tagName'>): string {
   return ev.tagName ?? ev.name
 }
 
+/** Every word of the query starts a word of the event's name, tag name or place (case-insensitive); an empty query matches all. */
+export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, query: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const hay = `${ev.name} ${ev.tagName ?? ''} ${ev.where}`.toLowerCase().split(/\s+/)
+  return words.every((w) => hay.some((h) => h.startsWith(w)))
+}
+
 /** The device-local settings an edit of the form must not drop. */
 export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked'> {
   const { fromLink, hostNamesTags, tagName, tagLocked } = ev

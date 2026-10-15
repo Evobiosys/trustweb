@@ -1,7 +1,7 @@
 /** Events (E1, wave 7): the model, the per-event tag on a person, and that nothing of it leaves the phone. */
 import { Audience, LineStatus, Ring, Tag } from '../../src/model.ts'
 import { askSources } from '../../src/cascade.ts'
-import { attendees, deleteEvent, eventLabel, eventsSorted, inWeb, isPast, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
+import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, isPast, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
 
 const NOW = new Date('2026-10-15T12:00').getTime()
 const ev = (over = {}) => newEvent({ name: 'Forum Alpbach', from: '2026-10-12', where: 'Vienna', ...over }, over.id ?? 'e1', NOW)
@@ -122,5 +122,12 @@ describe('hosts and tag name', () => {
   it('localSettings keeps what only this device holds', () => {
     expect(localSettings({ ...ev(), fromLink: true, tagName: 'X', tagLocked: true, hostNamesTags: false })).toEqual({ fromLink: true, tagName: 'X', tagLocked: true, hostNamesTags: false })
     expect(localSettings(ev())).toEqual({})
+  })
+
+  it('eventMatches: every query word starts a word of name, tag name or place', () => {
+    const e = { ...ev({ where: 'Wien Mitte' }), tagName: 'Mein Forum' }
+    for (const q of ['', 'forum', 'ALP', 'mein', 'mein alp', 'mit', 'wien forum']) expect(eventMatches(e, q)).toBe(true)
+    for (const q of ['rum', 'graz', 'forum graz']) expect(eventMatches(e, q)).toBe(false)
+    expect(eventMatches(ev(), 'mein')).toBe(false)
   })
 })
