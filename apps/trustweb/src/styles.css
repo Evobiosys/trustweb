@@ -144,6 +144,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .ppl{padding:8px 16px 0}
 .prow{display:flex; align-items:center; gap:13px; background:var(--card); border-radius:16px; padding:12px 14px; margin:0 0 10px; box-shadow:0 2px 12px rgba(36,27,46,.06); cursor:pointer; width:100%; border:0; text-align:left}
 .prow .who{flex:1; min-width:0}
+.prow button.who{background:none; border:0; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer}
 .prow .who b{font-size:15.5px; display:block}
 .prow .who i{font-style:normal; font-size:12px; color:var(--ink-soft)}
 .shield{font-size:11px; font-weight:700; border-radius:999px; padding:4px 10px; flex-shrink:0}
