@@ -1,3 +1,4 @@
+// @ts-nocheck  (fs/os/path: the crm tsconfig carries no node types; vitest runs this in node)
 import { mkdtempSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
