@@ -1,4 +1,4 @@
-/** Wave 8 rings-zoom proof (headless, dev only): PORT=5316 W=1280 H=900 [SHOT=/path.png] node rings_zoom.mjs. EXE=<chromium headless shell> if the default is not installed. */
+/** Wave 8 rings-zoom (whole Web screen body) proof (headless, dev only): PORT=5316 W=1280 H=900 [SHOT=/path.png] node rings_zoom.mjs. EXE=<chromium headless shell> if the default is not installed. */
 import { chromium } from 'playwright-core'
 
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5316}/`
@@ -13,16 +13,17 @@ try {
   await page.goto(URL); await page.waitForTimeout(1500)
   await page.evaluate((ppl) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, people: ppl, peers: [] })), [P('a1', 'Anna Huber', 'friend'), P('b1', 'Ben Gruber', 'acquaintance')])
   await page.reload(); await wrap.waitFor()
-  await page.addStyleTag({ content: '.demo-friends { position: fixed !important; top: auto !important; bottom: 0 !important; left: 0; right: 0; z-index: 99 } .twf { display: none !important }' })
+  await page.addStyleTag({ content: '.demo-friends { position: fixed !important; top: auto !important; bottom: 0 !important; left: 0; right: 0; z-index: 99 } .twf, .twf-ok { display: none !important }' })
   const state = () => page.evaluate(() => ({ t: document.querySelector('.rings-zoom').style.transform, z: document.querySelector('.rings-wrap').dataset.ringsZoom, vv: window.visualViewport.scale }))
   const phoneBox = () => page.locator('.phone').boundingBox()
   const box = await wrap.boundingBox()
   const c = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  const wheel = (sel, deltaY, ctrlKey, at) => page.evaluate(([s, d, ctrl, pt]) => {
-    const t = s === 'rings' ? document.querySelector('.rings-wrap') : document.body
-    const r = (s === 'rings' ? t : document.querySelector('.phone')).getBoundingClientRect()
-    const x = pt?.x ?? (s === 'rings' ? r.left + r.width / 2 : 4), y = pt?.y ?? (s === 'rings' ? r.top + r.height / 2 : 4)
-    return !t.dispatchEvent(new WheelEvent('wheel', { deltaY: d, ctrlKey: ctrl, clientX: x, clientY: y, bubbles: true, cancelable: true }))
+  // dispatches a wheel at the centre (or `at`) of the element `sel` ('body' = a corner of the phone); true when the page default was prevented
+  const wheel = (sel, deltaY, ctrlKey, at) => page.evaluate(([q, d, ctrl, pt]) => {
+    const t = document.querySelector(q === 'body' ? '.phone' : q)
+    const r = t.getBoundingClientRect()
+    const x = pt?.x ?? (q === 'body' ? 4 : r.left + r.width / 2), y = pt?.y ?? (q === 'body' ? 4 : r.top + r.height / 2)
+    return !(q === 'body' ? document.body : t).dispatchEvent(new WheelEvent('wheel', { deltaY: d, ctrlKey: ctrl, clientX: x, clientY: y, bubbles: true, cancelable: true }))
   }, [sel, deltaY, ctrlKey, at])
   // the tap target at k = 1: Anna's dot opens her card
   const tapOpens = async (pid) => { await page.locator(`.rings-wrap [data-pid="${pid}"]`).click(); await page.waitForTimeout(400); const t = await page.locator('.sheet').first().innerText().catch(() => ''); await page.locator('[data-sheet-home]').click(); await page.waitForTimeout(500); return t }
@@ -31,9 +32,15 @@ try {
   const firstA = await tapOpens('a1')
   check('taps at k = 1 open two different cards', first.length > 0 && first !== firstA)
   const before = await phoneBox()
-  check('plain wheel over the rings is not prevented, no zoom', !(await wheel('rings', -300, false)) && (await state()).z === '1')
+  check('plain wheel over the rings is not prevented, no zoom', !(await wheel('.rings-wrap', -300, false)) && (await state()).z === '1')
   check('ctrl+wheel outside the rings is not prevented, no zoom', !(await wheel('body', -300, true)) && (await state()).z === '1')
-  check('ctrl+wheel over the rings is prevented', await wheel('rings', -70, true, dot))
+  check('ctrl+wheel over the app header is not prevented, no zoom', !(await wheel('.hdr', -300, true)) && (await state()).z === '1')
+  check('ctrl+wheel over the tab bar is not prevented, no zoom', !(await wheel('.tabs', -300, true)) && (await state()).z === '1')
+  const sc = await page.locator('.scroll').boundingBox()
+  check('ctrl+wheel on empty Web body space (beside the rings) is prevented and zooms', (await wheel('.scroll', -70, true, { x: sc.x + 6, y: sc.y + 6 })) && +(await state()).z > 1)
+  await page.mouse.dblclick(sc.x + 6, sc.y + 6); await page.waitForTimeout(500)
+  check('dblclick on empty body space returns home', (await state()).z === '1')
+  check('ctrl+wheel over the rings is prevented', await wheel('.rings-wrap', -70, true, dot))
   let s = await state()
   check('rings zoomed (scale > 1), ringsZoom > 1', /scale\((?:[2-9]|1\.\d)/.test(s.t) && +s.z > 1)
   check('visualViewport.scale 1', s.vv === 1)

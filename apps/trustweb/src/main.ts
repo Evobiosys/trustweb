@@ -138,7 +138,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
-import { RINGS_ZOOM_HOME, type RingsZoom, panBy, toLocal, transformOf, zoomAt } from './rings_zoom'
+import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 
 enum Screen {
@@ -1338,12 +1338,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const k = ringsK = Math.min(1, C / ringsGeo.extent)
   const colourTags = loadColourTags()
   const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
-  const layer = el('div', { class: 'rings-zoom' })
-  wrap.appendChild(layer)
   let dragged = false
   wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
   ringsMenuOn(wrap, (v) => { dragged = v })
-  zoomOnRings(wrap, layer, (v) => { dragged = v })
   if (touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
@@ -1368,7 +1365,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     t.textContent = S.ringLabel[Ring.Unsorted]
     svg.appendChild(t)
   }
-  layer.appendChild(svg)
+  wrap.appendChild(svg)
   for (const ring of ringsGeo.rings) {
     const dot = ringsGeo.dot[ring]
     ;(members[ring] ?? []).forEach((p, i) => {
@@ -1408,46 +1405,47 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       if (arcs) b.style.setProperty('--arcs', arcs)
       b.style.setProperty('--d', dot * k + 'px')
       if (dot * k < 11) b.classList.add('nl')
-      layer.appendChild(b)
+      wrap.appendChild(b)
     })
   }
   const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet(true) }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
-  layer.appendChild(you)
+  wrap.appendChild(you)
   dragOnRings(wrap, s, (v) => { dragged = v })
   return wrap
 }
 
-/** Zoom and pan of the rings view; survives render() and resets when the Web screen is left. View state only (I1). */
+/** Zoom and pan of the Web screen's content; survives render() and resets when the Web screen is left. View state only (I1). */
 let ringsZoom: RingsZoom = RINGS_ZOOM_HOME
 
-/** A pointer position in wrap layout px (the wrap may be scaled for the query dock; the zoom layer is not applied). */
-function wrapPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement): { x: number; y: number } {
+/** A pointer position in the rings' own layout px, whatever the zoom layer and the query-dock scale do to the box. */
+function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement): { x: number; y: number } {
   const box = wrap.getBoundingClientRect()
   const k = box.width / RINGS_SIZE
   return { x: (e.clientX - box.left) / k, y: (e.clientY - box.top) / k }
 }
 
-/** A pointer position in unzoomed rings content px: what the ring and angle maths reads. */
-function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement): { x: number; y: number } {
-  const p = wrapPoint(e, wrap)
-  return toLocal(ringsZoom, p.x, p.y)
-}
-
 /**
- * Pinch (trackpad ctrl + wheel, Safari gestures, two fingers), pan (one pointer past 6 px at k > 1) and double tap home, all on the rings
- * only: outside them the browser zooms as ever. The phone frame stays; only the inner layer moves.
+ * Pinch (trackpad ctrl + wheel, Safari gestures, two fingers), pan (one pointer past 6 px at k > 1) and double tap home over the whole
+ * Web screen body, and only there: outside the phone, the header and the tab bar the browser zooms as ever. Only the inner layer moves.
  */
-function zoomOnRings(wrap: HTMLElement, layer: HTMLElement, setHeld: (v: boolean) => void): void {
+function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
+  const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea'
   const apply = (z: RingsZoom): void => {
     ringsZoom = z
     layer.style.transform = transformOf(z)
-    wrap.dataset.ringsZoom = String(z.k)
+    clip.classList.toggle('zoomed', z.k !== 1)
+    layer.querySelector<HTMLElement>('.rings-wrap')?.setAttribute('data-rings-zoom', String(z.k))
   }
   apply(ringsZoom)
-  const zoom = (factor: number, e: { clientX: number; clientY: number }): void => { const p = wrapPoint(e, wrap); apply(zoomAt(ringsZoom, factor, p.x, p.y)) }
-  wrap.addEventListener('wheel', (e) => {
+  const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight })
+  const zoom = (factor: number, e: { clientX: number; clientY: number }): void => {
+    if (ringsZoom.k === 1) clip.scrollTop = 0
+    const box = layer.getBoundingClientRect()
+    apply(zoomAt(ringsZoom, factor, e.clientX - box.left + ringsZoom.x, e.clientY - box.top + ringsZoom.y, view()))
+  }
+  clip.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return
     e.preventDefault()
     zoom(Math.exp(-e.deltaY * 0.01), e)
@@ -1455,23 +1453,27 @@ function zoomOnRings(wrap: HTMLElement, layer: HTMLElement, setHeld: (v: boolean
   let last = 1
   type Gesture = Event & { scale: number; clientX: number; clientY: number }
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
-    wrap.addEventListener(ev, (e) => {
+    clip.addEventListener(ev, (e) => {
       e.preventDefault()
       const g = e as Gesture
       if (ev === 'gesturestart') last = 1
       else if (ev === 'gesturechange') { zoom(g.scale / last, g); last = g.scale }
     })
   }
+  // A pan ends in a click on the same spot; the rings must not read it as a tap.
+  let panned = false
+  clip.addEventListener('click', (e) => { if (panned) e.stopPropagation() }, true)
   const down = new Map<number, { x: number; y: number }>()
   const spread = (): number => { const [a, b] = [...down.values()]; return Math.hypot(a.x - b.x, a.y - b.y) }
   let start: { x: number; y: number } | undefined
   let panning = false
-  wrap.addEventListener('pointerdown', (e) => {
+  clip.addEventListener('pointerdown', (e) => {
+    panned = false
     down.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    start = down.size === 1 && !(e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i') ? { x: e.clientX, y: e.clientY } : undefined
-    if (down.size === 2) { start = undefined; wrap.setPointerCapture(e.pointerId) }
+    start = down.size === 1 && !(e.target as HTMLElement).closest(skip) ? { x: e.clientX, y: e.clientY } : undefined
+    if (down.size === 2) { start = undefined; clip.setPointerCapture(e.pointerId) }
   })
-  wrap.addEventListener('pointermove', (e) => {
+  clip.addEventListener('pointermove', (e) => {
     const was = down.get(e.pointerId)
     if (!was) return
     if (down.size === 2) {
@@ -1484,23 +1486,21 @@ function zoomOnRings(wrap: HTMLElement, layer: HTMLElement, setHeld: (v: boolean
     if (!start || ringsZoom.k === 1) return
     if (!panning) {
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 6) return
-      panning = true
-      setHeld(true)
-      wrap.setPointerCapture(e.pointerId)
+      panning = panned = true
+      clip.setPointerCapture(e.pointerId)
     }
-    const k = wrap.getBoundingClientRect().width / RINGS_SIZE
-    apply(panBy(ringsZoom, (e.clientX - was.x) / k, (e.clientY - was.y) / k, RINGS_SIZE))
+    apply(panBy(ringsZoom, e.clientX - was.x, e.clientY - was.y, view()))
     down.set(e.pointerId, { x: e.clientX, y: e.clientY })
   })
   const lift = (e: PointerEvent): void => {
     down.delete(e.pointerId)
     start = undefined
-    if (panning && down.size === 0) { panning = false; setTimeout(() => setHeld(false), 0) }
+    if (panning && down.size === 0) { panning = false; setTimeout(() => { panned = false }, 0) }
   }
-  wrap.addEventListener('pointerup', lift)
-  wrap.addEventListener('pointercancel', lift)
-  wrap.addEventListener('dblclick', (e) => {
-    if (ringsZoom.k === 1 || (e.target as HTMLElement).closest('.node, .ctx-menu, .desire, .hint-i')) return
+  clip.addEventListener('pointerup', lift)
+  clip.addEventListener('pointercancel', lift)
+  clip.addEventListener('dblclick', (e) => {
+    if (ringsZoom.k === 1 || (e.target as HTMLElement).closest(skip)) return
     clearTimeout(addTimer)
     apply(RINGS_ZOOM_HOME)
   })
@@ -1579,8 +1579,8 @@ function ringsMenuOn(wrap: HTMLElement, setHeld: (v: boolean) => void): void {
   let timer: ReturnType<typeof setTimeout> | undefined
   let from = { x: 0, y: 0 }
   const open = (e: MouseEvent): void => {
-    const { x, y } = localPoint(e, wrap)
-    const at = wrapPoint(e, wrap)
+    const at = localPoint(e, wrap)
+    const { x, y } = at
     const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
     const near = ringAt(dist / ringsK, ringsGeo.radius, ringsGeo.rings)
     const onLine = Math.abs(ringsGeo.radius[near] * ringsK - dist) <= RING_LINE_HIT
@@ -1733,15 +1733,19 @@ function screenWeb(): Node[] {
   const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
   const right = document.createDocumentFragment()
   right.append(events, search)
+  // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
+  const layer = el('div', { class: 'rings-zoom' }, [
+    // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
+    queryOpen ? null : cardStackEl,
+    s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    ringsView(s, askMarks()),
+    isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
+  ])
+  const clip = el('div', { class: 'scroll' }, [layer])
+  zoomOnWeb(clip, layer)
   return [
     header(S.webTitle, { right, more: true }),
-    el('div', { class: 'scroll' }, [
-      // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
-      queryOpen ? null : cardStackEl,
-      s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-      ringsView(s, askMarks()),
-      isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
-    ]),
+    clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
