@@ -5,6 +5,7 @@
 import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { LinkedEvent } from './event_link'
 import { RINGS, ringSlot } from './model'
+import { sendHit } from './org_hits'
 import type { AppState, Person, TwEvent } from './model'
 
 /** What the form hands over; name, from and where are mandatory. */
@@ -107,7 +108,10 @@ export function attendees(s: AppState, eventId: string): Person[] {
 
 export function tagPerson(s: AppState, personId: string, eventId: string): void {
   const p = s.people.find((x) => x.id === personId)
-  if (p && !p.events?.includes(eventId)) p.events = [...(p.events ?? []), eventId]
+  if (!p || p.events?.includes(eventId)) return
+  p.events = [...(p.events ?? []), eventId]
+  const ev = s.events?.find((e) => e.id === eventId)
+  if (ev?.srv && !ev.hitTagged) { ev.hitTagged = true; sendHit(ev.srv, 'tagged') }
 }
 
 export function untagPerson(s: AppState, personId: string, eventId: string): void {
@@ -121,13 +125,17 @@ export function untagPerson(s: AppState, personId: string, eventId: string): voi
 /** Adds a linked event as attended and returns its id; an event with that id already held is left as it is (see applyHostLink). */
 export function joinEvent(s: AppState, linked: LinkedEvent, now: number): string {
   const { kind: _kind, ...ev } = linked
-  if (!s.events?.some((e) => e.id === linked.id)) s.events = [...(s.events ?? []), { ...ev, createdAt: now, attended: true, fromLink: true }]
+  if (!s.events?.some((e) => e.id === linked.id)) {
+    s.events = [...(s.events ?? []), { ...ev, createdAt: now, attended: true, fromLink: true }]
+    if (ev.srv) sendHit(ev.srv, 'joined')
+  }
   return linked.id
 }
 
 /** A host link for an event I hold names its tag, unless I keep my own name or do not let the host name it. A peer link never does. */
 export function applyHostLink(s: AppState, linked: LinkedEvent): void {
   const mine = s.events?.find((e) => e.id === linked.id)
+  if (mine && linked.srv && !mine.srv) mine.srv = linked.srv
   if (mine && linked.kind === 'host' && linked.tagName && !mine.tagLocked && mine.hostNamesTags !== false) mine.tagName = linked.tagName
 }
 

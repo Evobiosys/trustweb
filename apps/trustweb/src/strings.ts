@@ -254,6 +254,7 @@ export const S = {
   eventHostNamesTags: 'The host may name this tag',
   eventsTagged: (tag: string) => `People you met here: ${tag}`,
   eventLinkHostedBy: (hosts: string[]) => `Hosted by ${hosts.join(' and ')}`,
+  evOrgCounts: 'The organizer sees counts only: how many opened, joined and tagged. Never who.',
   eventLinkHostNames: 'The host names the tag for this event.',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
   searchOpen: 'Web Curator',

@@ -126,6 +126,7 @@ import { createEventsView } from './events_view'
 import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
 import { decodeEventLink } from './event_link'
+import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
@@ -2909,15 +2910,18 @@ function joinLink(text: string): boolean {
 }
 
 /** An event link opened: "You were at ..." with Add / Not me. The fragment is already gone from the address bar. */
+const openedHits = new Set<string>()
 function maybeOpenPendingEvent(): void {
   if (!pendingEvent || !state) return
   const ev = pendingEvent
   pendingEvent = null
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
+  if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const add = (): void => { const id = joinEvent(st(), ev, Date.now()); save(); closeSheet(); openEvents(id) }
   openSheet([
     el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
+    ev.srv ? el('p', { class: 'meta', 'data-org-counts-note': '' }, [S.evOrgCounts]) : null,
     ev.conditions ? el('p', {}, [ev.conditions]) : null,
     ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
     el('button', { class: 'btn btn-electric wide', 'data-event-join': '', onclick: add }, [S.eventLinkAdd]),
