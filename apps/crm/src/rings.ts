@@ -30,7 +30,7 @@ export const RING_COLORS = {
   close: '#8C4A00', friend: '#B8700A', acquaintance: '#D99A2B', intending: '#EFC978',
   unsorted: '#9e9e9e',
   /** The family tag's accent dot / chip. */
-  family: '#7b1fa2',
+  family: '#9575CD',
 }
 
 /** Display order of the groups, from the centre. */

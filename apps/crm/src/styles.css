@@ -15,9 +15,9 @@
 }
 /* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A deep teal night instead of a darkened beige, with the same accents. */
 :root:not([data-theme="light"]){
-  --page-bg:#0E1716; --page-ink:#EAF2EF;
-  --linen:#15201F; --card:#1D2B2A; --mist:#27383A; --ink:#EAF2EF; --ink-soft:#A9BDB8;
-  --line:rgba(234,242,239,.13); --tab-bg:rgba(21,32,31,.94);
+  --page-bg:#1C1B17; --page-ink:#F1EEE6;
+  --linen:#26241F; --card:#312E28; --mist:#3D3932; --ink:#F1EEE6; --ink-soft:#BDB6A8;
+  --line:rgba(241,238,230,.13); --tab-bg:rgba(38,36,31,.94);
   --tint-teal:#12383A; --tint-ok:#153A30; --tint-warn:#3F2A1E; --tint-violet:#1A3A3F;
   --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
   --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;

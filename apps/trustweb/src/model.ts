@@ -38,7 +38,7 @@ export const CLOSENESS_KEY = 'tw-closeness'
 // closeness, unsorted grey.
 export const RING_COLORS = {
   close: '#8C4A00', friend: '#B8700A', acquaintance: '#D99A2B', intending: '#EFC978',
-  family: { close: '#4a148c', friend: '#7b1fa2', acquaintance: '#ab47bc', intending: '#ce93d8' },
+  family: { close: '#7E57C2', friend: '#9575CD', acquaintance: '#B39DDB', intending: '#D1C4E9' },
   unsorted: '#9e9e9e',
   none: '#9e9e9e',
 }
