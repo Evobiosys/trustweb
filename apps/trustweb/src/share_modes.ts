@@ -33,7 +33,7 @@ export const SHARE_MODES: readonly ShareMode[] = [
   ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.TrustWebMatrix, ShareMode.OnlyTrustWeb, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp,
 ]
 
-/** At most this many modes sit on the Meet row; a third pin is refused. */
+/** Older records may hold up to this many pins; none is offered any more. */
 export const MAX_PINS = 2
 
 export function isShareMode(v: unknown): v is ShareMode {
@@ -78,19 +78,15 @@ export function modeAvailable(mode: ShareMode, mine: ChannelMap | undefined): bo
 }
 
 // ---------------------------------------------------------------------------
-// the row: pins and defaults
+// the row: one mode
 // ---------------------------------------------------------------------------
 
 /**
- * The default order when nothing is pinned: TrustWeb+Signal when a Signal link is saved, then TrustWeb+WhatsApp when a WhatsApp link
- * is saved, then OnlyTrustWeb. The first is the primary button, the next the secondary.
+ * Wave 9 (owner 2026-10-15 21:48): the Meet page offers Only TrustWeb alone; a messenger link is asked for from the person's card
+ * (contact_share.ts, contactreq) instead of being scanned in. The other enum values stay so older records parse.
  */
-export function defaultModes(mine: ChannelMap | undefined): ShareMode[] {
-  return [
-    ...(mine?.[Channel.Signal] ? [ShareMode.TrustWebSignal] : []),
-    ...(mine?.[Channel.WhatsApp] ? [ShareMode.TrustWebWhatsApp] : []),
-    ShareMode.OnlyTrustWeb,
-  ]
+export function defaultModes(): ShareMode[] {
+  return [ShareMode.OnlyTrustWeb]
 }
 
 /** A stored pin list, checked: known modes only, no duplicates, at most MAX_PINS, in order. Never throws. */
@@ -101,39 +97,9 @@ export function readPins(raw: unknown): ShareMode[] {
   return out.slice(0, MAX_PINS)
 }
 
-export interface PinResult {
-  pins: ShareMode[]
-  /** True when a pin was asked for while two are already pinned: nothing changed, the caller says so in plain words. */
-  refused: boolean
-}
-
-/**
- * Pin or unpin one mode. The first pin is the first button; a second pin the second. Unpinning the first moves the remaining one to the
- * first place. A third pin is refused.
- */
-export function togglePin(pins: readonly ShareMode[], mode: ShareMode): PinResult {
-  const now = readPins(pins)
-  if (!isShareMode(mode)) return { pins: now, refused: false } // not a mode (a stale or damaged caller): nothing changes
-  if (now.includes(mode)) return { pins: now.filter((m) => m !== mode), refused: false }
-  if (now.length >= MAX_PINS) return { pins: now, refused: true }
-  return { pins: [...now, mode], refused: false }
-}
-
-/** The modes on the two buttons of the Meet row: the pinned ones in pin order, then the defaults that are not pinned already. */
-export function rowModes(pins: unknown, mine: ChannelMap | undefined): ShareMode[] {
-  const pinned = readPins(pins)
-  const fill = defaultModes(mine).filter((m) => !pinned.includes(m))
-  return [...pinned, ...fill].slice(0, MAX_PINS)
-}
-
-/**
- * The mode in force: the remembered one while its channel is still saved, else the first button whose channel is saved (a pinned mode
- * whose link was removed stays on its button but is never the mode in force), else the default primary. A stored value that is not a mode
- * (a newer or damaged record) counts as none.
- */
-export function effectiveMode(stored: unknown, pins: unknown, mine: ChannelMap | undefined): ShareMode {
-  if (isShareMode(stored) && modeAvailable(stored, mine)) return stored
-  return rowModes(pins, mine).find((m) => modeAvailable(m, mine)) ?? defaultModes(mine)[0] // the default list always ends with Only TrustWeb
+/** The mode in force: Only TrustWeb. A stored messenger mode (an older record) is ignored; so is a value that is not a mode. */
+export function effectiveMode(stored: unknown): ShareMode {
+  return stored === ShareMode.OnlyTrustWeb ? stored : defaultModes()[0]
 }
 
 /** Boot repair for the two optional record fields. True when the state changed. Never throws. */

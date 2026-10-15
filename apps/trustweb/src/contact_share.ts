@@ -324,6 +324,53 @@ export function primaryReachable(person: ContactCarrier): Reachable | null {
   return reachableChannels(person)[0] ?? null
 }
 
+// ---------------------------------------------------------------------------
+// Wave 9: asking a connected person for their links
+// ---------------------------------------------------------------------------
+
+export const CONTACT_REQ_PARAM = 'contactreq'
+/** What a card can ask for: the three channels the contact box saves. */
+export const REQUESTABLE: readonly Channel[] = [Channel.Signal, Channel.WhatsApp, Channel.Matrix]
+/** A person may be asked again after this long. */
+export const REQ_AGAIN_MS = 24 * 60 * 60 * 1000
+
+/** The chat text that asks for these channels: <app url>?contactreq=1#want=signal,whatsapp,matrix. */
+export function requestText(appUrl: string, wants: readonly Channel[]): string {
+  return `${appUrl}?${CONTACT_REQ_PARAM}=1#want=${wants.join(',')}`
+}
+
+/** The channels a request text asks for (known, requestable, no duplicates); null for anything else or an empty ask. Never throws. */
+export function parseRequestText(appUrl: string, text: string): Channel[] | null {
+  const prefix = `${appUrl}?${CONTACT_REQ_PARAM}=1#`
+  if (typeof text !== 'string' || !text.startsWith(prefix) || text.length > CONTACT_TEXT_MAX + 20) return null
+  const want = new URLSearchParams(text.slice(prefix.length)).get('want') ?? ''
+  const out = REQUESTABLE.filter((ch) => want.split(',').includes(ch))
+  return out.length ? out : null
+}
+
+export function isRequestText(appUrl: string, text: string): boolean {
+  return text.startsWith(`${appUrl}?${CONTACT_REQ_PARAM}=1#`)
+}
+
+/** May this person be asked now (never asked, or the last ask is older than REQ_AGAIN_MS)? */
+export function mayAskAgain(askedAt: number | undefined, now: number): boolean {
+  return askedAt === undefined || now - askedAt >= REQ_AGAIN_MS
+}
+
+export interface AnswerPlan {
+  /** Saved and ticked: goes out at once. */
+  auto: Channel[]
+  /** Saved, not ticked: the owner is asked, one by one. */
+  ask: Channel[]
+}
+
+/** What to do with a request: ticked -> auto, saved but not ticked -> ask, not saved (or not a sendable value) -> nothing. */
+export function answerPlan(mine: ChannelMap | undefined, settings: ShareSettings | undefined, wanted: readonly Channel[]): AnswerPlan {
+  const auto = wanted.filter((ch) => ticked(mine, settings)[ch])
+  const ask = wanted.filter((ch) => !auto.includes(ch) && ticked(mine, withTick(settings, ch, true))[ch])
+  return { auto, ask }
+}
+
 // A contact text can reach the scanning phone before it has created the card of
 // the person who sent it (the card is made after the connect call returns). The
 // text is held, bounded, and applied the moment the card exists.

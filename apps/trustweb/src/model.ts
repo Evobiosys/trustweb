@@ -321,6 +321,8 @@ export interface Person {
   /** Wave 6e: no longer stored from the wire; an older record may still hold it, ignored. */
   theirSignalProvider?: SignalProvider
   theirChannelsAt?: number
+  /** Wave 9: when I last asked this connected person for their links (contact_share.ts requestText). */
+  contactAsked?: number
   /**
    * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
    * they ask further than one step. Absent: the default (passesAsksOn).
