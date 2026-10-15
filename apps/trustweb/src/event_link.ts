@@ -5,8 +5,11 @@
 import { newEvent } from './events'
 import type { TwEvent } from './model'
 
-/** What travels: the event without my own attendance, my tags or when I made it. */
-export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink'>
+/** peer: what attendees forward to each other. host: the organizer's, which also names the tag (events.ts applyHostLink). */
+export type LinkKind = 'peer' | 'host'
+
+/** What travels: the event without my own attendance or when I made it, and the kind of link. */
+export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked'> & { kind: LinkKind }
 
 const MAX_BYTES = 4096
 
@@ -20,9 +23,9 @@ function fromBase64Url(b64: string): string {
   return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
 }
 
-export function encodeEventLink(ev: TwEvent, origin: string): string {
-  const { id, name, from, to, where, conditions, themes, organizer } = ev
-  const payload: LinkedEvent = { id, name, from, where, ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
+export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind): string {
+  const { id, name, from, to, where, conditions, themes, organizer, hosts, hostNamesTags, tagName } = ev
+  const payload: LinkedEvent = { kind, id, name, from, where, ...(hosts?.length ? { hosts } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(to ? { to } : {}), ...(conditions ? { conditions } : {}), ...(themes?.length ? { themes } : {}), ...(organizer ? { organizer } : {}) }
   return `${origin}/#ev=${toBase64Url(JSON.stringify(payload))}`
 }
 
@@ -35,16 +38,19 @@ export function decodeEventLink(hash: string): LinkedEvent | null {
     if (typeof o !== 'object' || o === null || Array.isArray(o)) return null
     const f = o as Record<string, unknown>
     const text = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+    const kind = f.kind
+    if (kind !== 'peer' && kind !== 'host') return null
+    const strings = (v: unknown): string[] | undefined => (Array.isArray(v) && v.every((t) => typeof t === 'string') ? (v as string[]) : undefined)
     const id = text(f.id)
     const name = text(f.name)
     const from = text(f.from)
     const where = text(f.where)
     if (!id || !name || !from || !where) return null
-    const themes = Array.isArray(f.themes) && f.themes.every((t) => typeof t === 'string') ? (f.themes as string[]) : undefined
-    const ev = newEvent({ name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes }, id, 0)
+    const ev = newEvent({ name, from, where, to: text(f.to), conditions: text(f.conditions), organizer: text(f.organizer), themes: strings(f.themes), hosts: strings(f.hosts) }, id, 0)
     if (typeof ev === 'string') return null
+    const tagName = text(f.tagName)?.trim()
     const { createdAt: _c, attended: _a, ...rest } = ev
-    return rest
+    return { ...rest, kind, ...(typeof f.hostNamesTags === 'boolean' ? { hostNamesTags: f.hostNamesTags } : {}), ...(tagName ? { tagName } : {}) }
   } catch {
     return null
   }

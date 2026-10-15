@@ -1,7 +1,7 @@
 /** Events (E1, wave 7): the model, the per-event tag on a person, and that nothing of it leaves the phone. */
 import { Audience, LineStatus, Ring, Tag } from '../../src/model.ts'
 import { askSources } from '../../src/cascade.ts'
-import { attendees, deleteEvent, eventLabel, eventsSorted, isPast, matchPeople, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
+import { attendees, deleteEvent, eventLabel, localSettings, tagLabel, eventsSorted, isPast, matchPeople, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel } from '../../src/events.ts'
 
 const NOW = new Date('2026-10-15T12:00').getTime()
 const ev = (over = {}) => newEvent({ name: 'Forum Alpbach', from: '2026-10-12', where: 'Vienna', ...over }, over.id ?? 'e1', NOW)
@@ -92,5 +92,21 @@ describe('I1: events never leave the phone', () => {
     for (const leak of ['Secret Retreat', 'Hallstatt', 'e1"']) expect(out).not.toContain(leak)
     expect(s.events).toHaveLength(1)
     expect(s.people[0].events).toEqual(['e1'])
+  })
+})
+
+describe('hosts and tag name', () => {
+  it('hosts are trimmed, empties left out; none means the key is absent', () => {
+    expect(ev({ hosts: [' Anna Gruber ', ' ', 'Ben Huber'] })).toMatchObject({ hosts: ['Anna Gruber', 'Ben Huber'] })
+    expect(ev({ hosts: [' '] })).not.toHaveProperty('hosts')
+    expect(ev()).not.toHaveProperty('hosts')
+  })
+  it('the tag is called the event name until renamed', () => {
+    expect(tagLabel(ev())).toBe('Forum Alpbach')
+    expect(tagLabel({ ...ev(), tagName: 'Alpbach 26' })).toBe('Alpbach 26')
+  })
+  it('localSettings keeps what only this device holds', () => {
+    expect(localSettings({ ...ev(), fromLink: true, tagName: 'X', tagLocked: true, hostNamesTags: false })).toEqual({ fromLink: true, tagName: 'X', tagLocked: true, hostNamesTags: false })
+    expect(localSettings(ev())).toEqual({})
   })
 })

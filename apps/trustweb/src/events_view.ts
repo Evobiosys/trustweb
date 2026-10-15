@@ -3,7 +3,7 @@
  * Views are screens of their own (Screen.Events); the module keeps which one is showing.
  */
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventsSorted, newEvent, restoreEvent, splitThemes, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
+import { attendees, deleteEvent, eventsSorted, localSettings, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, untagPerson, whenLabel, matchPeople } from './events'
 import { encodeEventLink } from './event_link'
 import type { EventError, EventFields } from './events'
 import type { AppState, Person, TwEvent } from './model'
@@ -22,8 +22,8 @@ export interface EventsViewHooks {
   /** A card with an Undo button. */
   undoNotice: (title: string, onUndo: () => void) => void
   newId: () => string
-  /** Copies a text and says so (the app's toast). */
-  copyLink: (text: string) => void
+  /** Copies a text and says so (the app's toast, or `done` as its words). */
+  copyLink: (text: string, done?: string) => void
   origin: string
 }
 
@@ -40,7 +40,11 @@ const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.even
 
 export function createEventsView(h: EventsViewHooks): EventsView {
   let view: View = { kind: 'list' }
-  const show = (v: View): void => { view = v; h.redraw() }
+  /** The share toggle "For the event host"; never saved, off whenever a page opens. */
+  let hostLink = false
+  /** Whether the Advanced disclosure stays open across redraws. */
+  let advancedOpen = false
+  const show = (v: View): void => { view = v; hostLink = false; advancedOpen = false; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -75,14 +79,20 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const conditions = el('textarea', { class: 'field', rows: 3 }, [existing?.conditions ?? ''])
     const themes = text(existing?.themes?.join(', '))
     const organizer = text(existing?.organizer)
+    const hosts = el('div', {}, [])
+    const addHost = (v = ''): void => { hosts.append(text(v)) }
+    ;(existing ? existing.hosts ?? [] : [h.state().me.displayName]).forEach(addHost)
+    if (!hosts.children.length) addHost()
     const error = el('p', { class: 'warn', 'data-event-error': '', hidden: true })
     const save = (): void => {
       const fields: EventFields = {
         name: name.value, from: from.value, to: to.value, where: where.value, conditions: conditions.value,
         themes: splitThemes(themes.value), organizer: organizer.value, attended: existing?.attended,
+        hosts: [...hosts.querySelectorAll('input')].map((i) => i.value),
       }
-      const ev = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
-      if (typeof ev === 'string') { error.textContent = ERRORS[ev]; error.hidden = false; return }
+      const made = newEvent(fields, existing?.id ?? h.newId(), existing?.createdAt ?? Date.now())
+      if (typeof made === 'string') { error.textContent = ERRORS[made]; error.hidden = false; return }
+      const ev = { ...made, ...(existing ? localSettings(existing) : {}) }
       const s = h.state()
       s.events = [...(s.events ?? []).filter((e) => e.id !== ev.id), ev]
       h.save()
@@ -92,6 +102,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return [h.header(existing ? S.eventsEdit : S.eventsNew, { back: cancel }), el('div', { class: 'scroll' }, [
       ...field(S.eventsName, name), ...field(S.eventsFrom, from), ...field(S.eventsTo, to), ...field(S.eventsWhere, where),
       ...field(S.eventsConditions, conditions), ...field(S.eventsThemes, themes), ...field(S.eventsOrganizer, organizer),
+      ...field(S.eventsHost, hosts), el('button', { class: 'btn btn-ghost btn-sm', 'data-event-cohost': '', onclick: () => addHost() }, [S.eventsCoHost]),
       error,
       el('button', { class: 'btn btn-electric wide', 'data-event-save': '', onclick: save }, [S.eventsSave]),
       el('button', { class: 'btn btn-ghost wide', onclick: cancel }, [S.eventsCancel]),
@@ -133,6 +144,48 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     h.undoNotice(S.eventsDeleted(ev.name), () => { restoreEvent(h.state(), gone); h.save(); h.redraw() })
   }
 
+  /** Copies the link the toggle now shows; the host one says so in the toast. */
+  function copyShown(ev: TwEvent): void {
+    h.copyLink(encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer'), hostLink ? S.eventHostLinkCopied : undefined)
+  }
+
+  /** Switching copies the matching link at once: host link on, peer link off. */
+  function hostToggle(ev: TwEvent): HTMLElement {
+    return el('button', {
+      class: 'chip' + (hostLink ? ' on' : ''), role: 'switch', 'aria-checked': String(hostLink), 'data-event-host-toggle': '',
+      onclick: () => {
+        hostLink = !hostLink
+        copyShown(ev)
+        h.redraw()
+      },
+    }, [S.eventHostLinkToggle])
+  }
+
+  /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
+  function advanced(ev: TwEvent): HTMLElement {
+    const name = el('input', { class: 'field', value: tagLabel(ev), 'aria-label': S.eventTagName, 'data-event-tag-name': '' })
+    name.addEventListener('change', () => {
+      const v = name.value.trim()
+      if (!v || v === tagLabel(ev)) { name.value = tagLabel(ev); return }
+      ev.tagName = v
+      ev.tagLocked = true
+      h.save()
+      copyShown(ev)
+      h.redraw()
+    })
+    const hostNames = el('input', { type: 'checkbox', 'data-event-host-names': '' })
+    hostNames.checked = ev.hostNamesTags !== false
+    hostNames.addEventListener('change', () => { ev.hostNamesTags = hostNames.checked; h.save() })
+    const box = el('details', { 'data-event-advanced': '' }, [
+      el('summary', {}, [S.eventAdvanced]),
+      ...field(S.eventTagName, name),
+      el('label', { class: 'meta' }, [hostNames, ' ', S.eventHostNamesTags]),
+    ])
+    box.open = advancedOpen
+    box.addEventListener('toggle', () => { advancedOpen = box.open })
+    return box
+  }
+
   function page(ev: TwEvent): Node[] {
     const people = attendees(h.state(), ev.id)
     const attended = el('button', {
@@ -146,12 +199,14 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.themes ? el('div', { class: 'chips' }, ev.themes.map((t) => el('span', { class: 'chip' }, [t]))) : null,
       ev.conditions ? el('p', {}, [ev.conditions]) : null,
       el('div', { class: 'chips' }, [attended]),
-      el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => h.copyLink(encodeEventLink(ev, h.origin)) }, [S.eventLinkShare]),
+      el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => copyShown(ev) }, [S.eventLinkShare]),
+      hostToggle(ev),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
-      el('h3', {}, [S.eventsAttendees]),
+      el('h3', {}, [S.eventsTagged(tagLabel(ev))]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
+      advanced(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),
     ])]
