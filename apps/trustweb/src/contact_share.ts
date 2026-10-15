@@ -26,7 +26,7 @@
 import {
   SignalHandleKind, SignalProvider, channelLink, isSignalProvider, isWhatsAppQrLink, normalizeHandle, revealsNumberOn, signalHandleKind,
 } from './channel'
-import { CHANNELS, Channel } from './model'
+import { CHANNELS, Channel, Ring } from './model'
 import { stripUnsafe, fingerprint } from './safe_text'
 
 export type ChannelMap = Partial<Record<Channel, string>>
@@ -389,4 +389,13 @@ export function takeContact(held: HeldContacts, peerId: string): string | undefi
   const text = held.get(peerId)
   held.delete(peerId)
   return text
+}
+
+/**
+ * Who may be ANSWERED when they ask for my messenger links (Jakob 2026-10-15 22:25): only a connection I made or confirmed myself.
+ * Never a reach-out through the public trustweb.one/<name> link, and nobody I still hold on the Intending ring: moving them to a real
+ * ring is my deliberate act, and until then a request is dropped, not answered. Links never leave at connect time at all.
+ */
+export function mayAnswerRequest(peer: { reachOut?: true }, person: { ring: Ring; reachedOut?: 'sent' | 'received' }): boolean {
+  return !peer.reachOut && !person.reachedOut && person.ring !== Ring.Intending
 }
