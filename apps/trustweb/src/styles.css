@@ -400,6 +400,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .hint-i{position:absolute; top:-8px; right:-8px; z-index:6; width:19px; height:19px; padding:0; border-radius:50%; cursor:pointer;
   border:1.5px solid var(--ink-soft); background:var(--card); color:var(--ink-soft); display:grid; place-items:center;
   font:italic 700 11.5px/1 Georgia,"Times New Roman",serif}
+.hint-i.legend-i{position:static; margin:4px auto 0; display:block}
 .hint-i::before{content:""; position:absolute; inset:-6px}
 .hint-i:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .hint-wrap.hint-off .hint-i{display:none}

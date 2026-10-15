@@ -1786,7 +1786,7 @@ function screenWeb(): Node[] {
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
     ringsView(s, askMarks()),
-    s.people.some((p) => p.reachedOut) ? el('p', { class: 'meta legend', 'data-legend-reach-out': '' }, [S.legendReachedOut]) : null,
+    s.people.some((p) => p.reachedOut) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
   const clip = el('div', { class: 'scroll' }, [layer])
