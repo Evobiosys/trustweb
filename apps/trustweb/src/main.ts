@@ -122,6 +122,8 @@ import { importGroup } from './import_view'
 import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
+import { createEventsView } from './events_view'
+import { eventLabel } from './events'
 import { ImageStore } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
@@ -147,6 +149,8 @@ enum Screen {
   StillTrue = 'still',
   /** What people in your web shared with you, and what you share (wave 1733 round B). */
   Feed = 'feed',
+  /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
+  Events = 'events',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -683,6 +687,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
   switch (s) {
     case Screen.Web:
     case Screen.StillTrue:
+    case Screen.Events:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -871,7 +876,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Events))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -889,6 +894,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
+      case Screen.Events: return eventsView.body()
     }
   })()
   host.replaceChildren(...body)
@@ -1533,11 +1539,20 @@ function curatorSheet(): void {
   curator.open()
 }
 
+/** The Events screen: the list, or one event's page (from a chip on a person). */
+function openEvents(eventId?: string): void {
+  eventsView.open(eventId)
+  go(Screen.Events)
+}
+
 function screenWeb(): Node[] {
   const s = st()
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
+  const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
+  const right = document.createDocumentFragment()
+  right.append(events, search)
   return [
-    header(S.webTitle, { right: search, more: true }),
+    header(S.webTitle, { right, more: true }),
     el('div', { class: 'scroll' }, [
       // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
       queryOpen ? null : cardStackEl,
@@ -1794,9 +1809,20 @@ function personSheet(personId: string): void {
     sharedReachRow(p),
     passOnRowFor(p),
     askAgainRow(p),
+    eventChipsRow(p),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
+}
+
+/** The events this person is tagged with (E1): a chip each, tap opens the event page. */
+function eventChipsRow(p: Person): HTMLElement | null {
+  const evs = (st().events ?? []).filter((e) => p.events?.includes(e.id))
+  if (!evs.length) return null
+  return el('div', { class: 'chips', 'data-person-events': p.id }, [
+    el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
+    ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [e.name])),
+  ])
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -2497,6 +2523,12 @@ const curator = createCurator({
     if (screen === Screen.Web) render()
   },
 })
+const eventsView = createEventsView({
+  state: st, save, header, leave: () => go(Screen.Web), redraw: render, personSheet, avatar,
+  undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
+  newId: () => randomId(8),
+})
+
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
