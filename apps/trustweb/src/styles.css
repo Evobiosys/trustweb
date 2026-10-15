@@ -104,6 +104,7 @@ body:has(.phone.embedded){padding:0}
 .foot:first-child{margin-top:0}
 
 .field{width:100%; border:1.5px solid var(--line); border-radius:14px; padding:12px 14px; font:inherit; font-size:15px; background:var(--card); color:var(--ink)}
+.field.default{color:var(--ink-soft)}
 .field:focus{outline:none; border-color:var(--electric)}
 textarea.field{resize:vertical; line-height:1.5}
 .lbl{display:block; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin:16px 2px 6px; font-weight:600}
