@@ -6,6 +6,7 @@
  * links to them, each opening in a new tab.
  */
 import { el } from '../../demo/src/ui/dom'
+import { devEventsFile } from './dev_events'
 import { devRecordFile } from './dev_record'
 import { RECORD_FORMAT } from './model'
 import { S } from './strings'
@@ -63,5 +64,6 @@ export function aboutGroup(): (HTMLElement | null)[] {
     // Smooth updates are the hosted version's promise (P20): which build this is, and which data format it keeps.
     el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), RECORD_FORMAT)]),
     devRecordFile() ? el('p', { class: 'meta about-dev-record' }, [`dev record: ${devRecordFile()}`]) : null,
+    devEventsFile() ? el('p', { class: 'meta about-dev-events' }, [`dev events: ${devEventsFile()?.events.length}`]) : null,
   ]
 }

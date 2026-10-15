@@ -9,7 +9,7 @@
 // ABSOLUTE base, like apps/demo (see its vite.config.ts): a relative base
 // 404s every asset when the page is opened without its trailing slash.
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
@@ -92,6 +92,43 @@ function releaseFile() {
 function devRecord(command) {
   const file = process.env.TW_DEV_RECORD
   return command === 'serve' && file && !process.env.TW_STOCK ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
+}
+
+// Dev only: dev-events.json next to the dev record (events and per-person event tags, src/dev_events.ts); empty while the file is absent,
+// null (no code path at all in a build) without a dev record. Same gate as the record.
+const devEventsPath = () => (process.env.TW_DEV_RECORD && !process.env.TW_STOCK ? path.join(path.dirname(process.env.TW_DEV_RECORD), 'dev-events.json') : '')
+function devEvents(command) {
+  const file = devEventsPath()
+  if (command !== 'serve' || !file) return 'null'
+  return existsSync(file) ? readFileSync(file, 'utf8') : '{"events":[],"people":{}}'
+}
+
+// Dev only: POST /__tw/events writes dev-events.json atomically (tmp + rename), only { events, people }.
+function eventsApi() {
+  const loopback = (req) => /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '') && (!req.headers.origin || new URL(req.headers.origin).host === req.headers.host)
+  return {
+    name: 'trustweb-events-api',
+    configureServer(server) {
+      const file = devEventsPath()
+      if (!file) return
+      server.middlewares.use('/__tw/events', (req, res) => {
+        if (req.method !== 'POST' || !loopback(req)) { res.statusCode = req.method !== 'POST' ? 405 : 403; res.end(); return }
+        let text = ''
+        req.on('data', (c) => { text += c })
+        req.on('end', () => {
+          try {
+            const b = JSON.parse(text)
+            if (!Array.isArray(b?.events) || !b.people || typeof b.people !== 'object') throw new Error('bad body')
+            const tmp = file + '.tmp'
+            writeFileSync(tmp, JSON.stringify({ events: b.events, people: b.people }, null, 1) + '\n')
+            renameSync(tmp, file)
+            res.statusCode = 204
+          } catch { res.statusCode = 400 }
+          res.end()
+        })
+      })
+    },
+  }
 }
 
 // Dev only (scripts/tw_dev.sh, feature.json): the feature overlay text. Never in a build.
@@ -258,8 +295,8 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
-  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi()] : [])],
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

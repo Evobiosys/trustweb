@@ -99,6 +99,7 @@ import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
+import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devRecordFile, seedDevRecord } from './dev_record'
 import { initDevFeature } from './dev_feature'
 import { setUpInstall } from './install'
@@ -342,6 +343,11 @@ try {
     if (repairPeerCards(state, () => true, () => randomId(8), S.peerCardRepairedContext, Date.now())) save()
   }
 } catch { /* the record stays as loaded */ }
+// Dev only (dev_events.ts): the events and tags remembered in dev-events.json join the record before the first render.
+{
+  const remembered = devEventsFile()
+  if (state && !solo && remembered && mergeDevEvents(state, remembered)) save()
+}
 // Side-by-side demo phones start like a real phone, with "Your first name"
 // (owner 2026-10-05); the name field is prefilled from ?device_name= and the
 // demo content (web, inventory) is seeded under the name typed in createMe().
@@ -353,7 +359,10 @@ function st(): AppState {
   return state
 }
 function save(): void {
-  if (state && !superseded) saveState(persona, state, storeCtx)
+  if (state && !superseded) {
+    saveState(persona, state, storeCtx)
+    pushDevEvents(state)
+  }
 }
 
 // ---------------------------------------------------------------------------
