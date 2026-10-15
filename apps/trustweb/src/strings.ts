@@ -88,7 +88,7 @@ function consentRoute(p: TranscribeProviderInfo | null): string {
 
 export const S = {
   appName: 'TrustWeb',
-  tagline: 'Amplifying the power of weak ties',
+  tagline: 'Amplifying the power of loose ties',
   // Wave 2 (B10): lead with what people find, not with "another app".
   startLead: 'Find people and things through people you trust. Ask the people you have actually met, and the people they trust. What you know stays on your phone; a question travels, the data stays.',
   startSolo: 'Try the demo',
@@ -170,6 +170,9 @@ export const S = {
   connectInviteNotes: (name: string) => `${name} also shared the notes from your conversation.`,
   connectJoin: 'Connect',
   reachOutStart: (name: string) => `Reach out to ${name} on TrustWeb`,
+  /** The same sentence in parts: the name sits in a teal span (the tagline's colour). */
+  reachOutStartBefore: 'Reach out to ',
+  reachOutStartAfter: ' on TrustWeb',
   reachOutJoin: 'Create my web and reach out',
   reachOutStartNote: 'The name above is what the sender typed, not verified. Reaching out shares your name with them, nothing else.',
   legendReachedOut: 'yellow: reached out via your trustweb.one link',
