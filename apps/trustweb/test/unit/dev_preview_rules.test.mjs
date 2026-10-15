@@ -1,5 +1,5 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
-import { confirmText, needsHint, tapped, toggled } from '../../src/dev_preview_rules.ts'
+import { cascaded, confirmText, needsHint, tapped, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -36,5 +36,22 @@ describe('dev preview row tap and confirm', () => {
   it('confirm wording follows the direction of the toggle', () => {
     expect(confirmText('Events', false)).toBe('Re-assemble preview without Events? The page reloads.')
     expect(confirmText('Events', true)).toBe('Re-assemble preview with Events? The page reloads.')
+  })
+})
+
+describe('dev preview outliner tree and cascade preview', () => {
+  const keys = (ns) => ns.map((n) => `${n.depth}:${n.feature.key}`)
+  const flat = (ns) => ns.flatMap((n) => [n, ...flat(n.children)])
+  it('nests by requires with depth, keeps list order', () => {
+    expect(keys(flat(tree(set)))).toEqual(['0:events', '1:event-link', '2:deep', '0:overlay'])
+  })
+  it('a feature whose requires are missing sits at the root; the first present require is the parent', () => {
+    const odd = [f('a'), f('b', ['gone']), f('c', ['gone', 'a'])]
+    expect(keys(flat(tree(odd)))).toEqual(['0:a', '1:c', '0:b'])
+  })
+  it('cascaded lists what flips with a toggle, not the key itself', () => {
+    expect(cascaded(set, 'events', false)).toEqual(['event-link', 'deep'])
+    expect(cascaded(set, 'overlay', false)).toEqual([])
+    expect(cascaded(toggled(set, 'events', false), 'deep', true)).toEqual(['events', 'event-link'])
   })
 })

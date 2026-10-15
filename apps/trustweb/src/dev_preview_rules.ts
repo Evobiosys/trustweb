@@ -30,3 +30,21 @@ export function tapped(lit: string | null, key: string): string | null {
 export function confirmText(title: string, checked: boolean): string {
   return `Re-assemble preview ${checked ? 'with' : 'without'} ${title}? The page reloads.`
 }
+
+export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }
+
+/** Features nested by `requires`: a feature sits under the first required feature present in the list, else at the root. List order is kept. */
+export function tree(features: PreviewFeature[]): TreeNode[] {
+  const nodes = new Map(features.map((f) => [f.key, { feature: f, depth: 0, children: [] as TreeNode[] }]))
+  const roots: TreeNode[] = []
+  for (const n of nodes.values()) (n.feature.requires.map((r) => nodes.get(r)).find(Boolean)?.children ?? roots).push(n)
+  const setDepth = (list: TreeNode[], depth: number): void => { for (const n of list) { n.depth = depth; setDepth(n.children, depth + 1) } }
+  setDepth(roots, 0)
+  return roots
+}
+
+/** Keys that flip together with `key` when it is toggled (the cascade), without `key` itself. */
+export function cascaded(features: PreviewFeature[], key: string, checked: boolean): string[] {
+  const after = toggled(features, key, checked)
+  return features.filter((f, i) => f.key !== key && f.checked !== after[i].checked).map((f) => f.key)
+}

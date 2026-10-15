@@ -7,7 +7,7 @@
  */
 import { pollStatus } from './dev_feature'
 import { createPointer } from './dev_pointer'
-import { confirmText, needsHint, tapped, type PreviewFeature } from './dev_preview_rules'
+import { cascaded, confirmText, needsHint, tapped, toggled, tree, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -24,6 +24,8 @@ const CSS = `
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
+.twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
 .twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
@@ -59,6 +61,8 @@ export function initDevPreview(): void {
   if (!p) return
   let busy: string | null = null
   let waiting = false
+  let since = 0
+  let prStep = ''
   let lit: string | null = null
   let ask: { key: string; checked: boolean } | null = null
   let error = ''
@@ -72,6 +76,10 @@ export function initDevPreview(): void {
 
   const collapsed = (): boolean => store.get(COLLAPSED) === '1'
   const setCollapsed = (on: boolean): void => { store.set(COLLAPSED, on ? '1' : ''); render() }
+  const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
+  const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
+  const begin = (): void => { since = Date.now() }
+  setInterval(() => { const c = root.querySelector('.clk'); if (c) c.textContent = elapsed() + ' s'; if (busy !== null && elapsed() > 90 && !root.querySelector('.slow')) render() }, 1000)
   const sync = (): void => { document.documentElement.style.setProperty('--twp-h', root.offsetHeight + 'px') }
 
   // Drag by `handle`; a pointer that moved less than 4 px is a click.
@@ -98,7 +106,7 @@ export function initDevPreview(): void {
   }
 
   async function act(key: string | null, run: () => Promise<Preview>): Promise<void> {
-    busy = key ?? 'x'; error = ''; render()
+    busy = key ?? 'x'; error = ''; begin(); render()
     try { p = await run() } catch (e) { error = (e as Error).message }
     busy = null; render()
   }
@@ -114,28 +122,34 @@ export function initDevPreview(): void {
     render()
   }
 
-  // The toggle restarts vite (the worktree's vite.config.mjs changes), so the answer may never arrive: wait until the server answers, then reload.
+  // The toggle restarts vite (the worktree's vite.config.mjs changes), so the POST may die mid-flight: poll until the server answers
+  // with an assembled.at newer than the POST start (the CLI writes assembled{} last), then reload; an assembled.error is shown instead.
   async function reassemble(a: { key: string; checked: boolean }): Promise<void> {
-    ask = null; busy = a.key; error = ''; render()
+    const start = Math.floor(Date.now() / 1000) * 1000
+    ask = null; busy = a.key; error = ''; begin(); render()
     try { await call('POST', '', { feature: a.key, checked: a.checked }) } catch (e) {
       if (e instanceof ApiError) { error = e.message; busy = null; render(); return }
+      waiting = true; render()
     }
-    waiting = true; render()
-    for (let i = 0; i < 120; i++) {
+    for (;;) {
+      const q = await call('GET', '').catch(() => null)
+      if (q?.assembled && Date.parse(q.assembled.at) > start) {
+        if (!q.assembled.error) { location.reload(); return }
+        p = q; busy = null; waiting = false; render(); return
+      }
       await new Promise((r) => setTimeout(r, 500))
-      if (await fetch('/__tw/preview').then((r) => r.ok, () => false)) { location.reload(); return }
     }
-    busy = null; waiting = false; error = 'server did not come back: reload by hand'; render()
   }
 
-  function row(f: PreviewFeature): HTMLElement {
-    const hint = needsHint(p!.features, f.key)
-    const box = h('input', { type: 'checkbox', checked: f.checked, disabled: busy !== null || hint !== null })
+  function row(n: TreeNode, shown: PreviewFeature[], grey: string[]): HTMLElement {
+    const f = n.feature, d = shown.find((x) => x.key === f.key)!
+    const hint = needsHint(shown, f.key)
+    const off = loading() || hint !== null || grey.includes(f.key)
+    const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
     box.addEventListener('change', () => { ask = { key: f.key, checked: box.checked }; render() })
-    const off = busy !== null || hint !== null
     const label = h('div', { className: 'feat' + (off ? ' off' : '') + (lit === f.key ? ' lit' : '') }, box, h('span', {}, f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : ''))), lit === f.key ? h('i') : '')
     label.addEventListener('click', (e) => { if (e.target !== box) tap(f) })
-    return label
+    return h('div', {}, label, ...(n.children.length ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
   function askBox(a: { key: string; checked: boolean }): HTMLElement {
@@ -146,14 +160,20 @@ export function initDevPreview(): void {
     return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.key)!.title, a.checked), h('div', {}, go, no))
   }
 
+  function slow(): HTMLElement {
+    const re = h('button', { textContent: 'Reload' })
+    re.addEventListener('click', () => { location.reload() })
+    return h('div', { className: 'row warn slow' }, 'taking long: reload by hand ', re)
+  }
+
   function prPart(n: number): HTMLElement {
     if (p!.pr) return h('div', { className: 'btns' }, h('a', { href: p!.pr.url, target: '_blank', textContent: 'PR #' + p!.pr.number }))
-    const go = h('button', { textContent: `Create PR with ${n} checked`, disabled: busy !== null || n === 0 })
+    const go = h('button', { textContent: `Create PR with ${n} checked`, disabled: loading() || n === 0 })
     go.addEventListener('click', () => {
       void call('POST', '/pr', {}).then(() => {
-        prText = 'starting'; render()
+        prText = 'starting'; prStep = ''; begin(); render()
         pollStatus((j) => {
-          prText = j.text ?? j.step; prUrl = j.url ?? ''
+          prStep = j.step; prText = j.text ?? j.step; prUrl = j.url ?? ''
           if (j.step === 'ready') void call('GET', '').then((q) => { p = q; render() })
           render()
         })
@@ -175,10 +195,12 @@ export function initDevPreview(): void {
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       x.addEventListener('click', () => setCollapsed(true))
-      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), h('span', { textContent: waiting ? 'server restarting...' : busy ? 'assembling...' : mode + ' preview' }), x)))
+      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), x)))
+      const shown = ask ? toggled(q.features, ask.key, ask.checked) : q.features
+      const grey = ask ? cascaded(q.features, ask.key, ask.checked) : []
       const n = q.features.filter((f) => f.checked).length
       const other = mode === 'personal' ? 'stock' : 'personal'
-      const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: busy !== null })
+      const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
         void act(null, () => call('POST', '/mode', { mode: other })).then(() => {
           if (!error) location.href = `http://127.0.0.1:${other === 'personal' ? q.port : q.stockPort}/${location.hash}`
@@ -186,8 +208,9 @@ export function initDevPreview(): void {
       })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
-        h('div', { className: 'row' }, ...q.features.map(row)),
+        h('div', { className: 'row' }, ...tree(shown).map((n) => row(n, shown, grey))),
         ...(ask ? [askBox(ask)] : []),
+        ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
         prPart(n), h('div', { className: 'btns' }, sw),
