@@ -4,7 +4,7 @@
  */
 import './styles.css'
 import { randomId } from '../../demo/src/crypto'
-import { encodeEventLink, decodeEventLink } from './event_link'
+import { encodeEventLink, decodeEventLink, linkOrigin } from './event_link'
 import { newEvent } from './events'
 import {
   LANDING, csv, errorWords, eventPayload, limitsLine, mailto, message, parseInvitees, withSrv,
@@ -167,7 +167,7 @@ async function save(): Promise<void> {
   const localId = editing?.localId ?? randomId(8)
   const ev = newEvent(event, localId, Date.now())
   if (typeof ev === 'string') { formErr.textContent = FIELD_WORDS[ev]; return }
-  const link = encodeEventLink({ ...ev, ...(event.tagName ? { tagName: event.tagName } : {}) }, location.origin, 'host')
+  const link = encodeEventLink({ ...ev, ...(event.tagName ? { tagName: event.tagName } : {}) }, linkOrigin(location.origin), 'host')
   const auth = { org: account.org, secret: account.secret }
   let r: Reply
   if (editing) r = await post('/org/event', { ...auth, id: editing.id, event, link: withSrv(link, editing.id), invitees: emails })

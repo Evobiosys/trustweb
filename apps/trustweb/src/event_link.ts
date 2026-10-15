@@ -4,6 +4,7 @@
  */
 import { newEvent } from './events'
 import type { TwEvent } from './model'
+import { SHORT_LINK_ORIGINS } from './short_link'
 
 /** peer: what attendees forward to each other. host: the organizer's, which also names the tag (events.ts applyHostLink). */
 export type LinkKind = 'peer' | 'host'
@@ -22,6 +23,11 @@ function toBase64Url(text: string): string {
 function fromBase64Url(b64: string): string {
   const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'))
   return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
+}
+
+/** The origin event links carry: the page's own when it is a production app host, else the live app, so links open without this device. */
+export function linkOrigin(pageOrigin: string): string {
+  return SHORT_LINK_ORIGINS.includes(pageOrigin) ? pageOrigin : 'https://app.trustweb.one'
 }
 
 export function encodeEventLink(ev: TwEvent, origin: string, kind: LinkKind): string {

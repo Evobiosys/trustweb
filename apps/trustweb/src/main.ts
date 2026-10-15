@@ -126,7 +126,7 @@ import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
-import { decodeEventLink } from './event_link'
+import { decodeEventLink, linkOrigin } from './event_link'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore } from './image_store'
@@ -2775,7 +2775,7 @@ const curator = createCurator({
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
-  newId: () => randomId(8), copyLink, joinLink, origin: APP_URL.replace(/\/$/, ''),
+  newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
 })
 
 const feed = createFeedView({
