@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
+import { readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
@@ -140,6 +141,100 @@ function approveApi() {
   }
 }
 
+// Dev only (the `preview` CLI, previews-interface.txt): TW_PREVIEW is the registry file <id>.json of this preview. Never in a build.
+const previewFile = () => process.env.TW_PREVIEW ?? ''
+const readPreview = () => JSON.parse(readFileSync(previewFile(), 'utf8'))
+function devPreview(command) {
+  try { return command === 'serve' && previewFile() ? JSON.stringify(readPreview()) : 'null' } catch { return 'null' }
+}
+
+// Dev only: GET/POST /__tw/preview* (the preview panel, src/dev_preview.ts) drive the `preview` CLI: $TW_PREVIEW_BIN, else $TW_OPS/bin/preview, else PATH.
+const serverStarted = Date.now()
+
+// The waiting page: self-contained (no module imports), so it needs nothing from vite while vite restarts. Polls /__tw/preview and goes to `to`
+// once readyToGo (three 200s in a row from a server started after `since`).
+function waitPage(id) {
+  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>restarting</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-content:center;gap:10px;text-align:center;background:#241b2e;color:#fff;font:15px system-ui}
+b{font:700 18px ui-monospace,monospace;color:#4fd7a0}i{width:22px;height:22px;margin:auto;border:3px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+button{font:600 14px system-ui;border:0;border-radius:6px;padding:8px 14px;background:#4fd7a0;color:#241b2e}</style>
+<b id=id></b><i id=spin></i><div id=msg></div>
+<script>
+const readyToGo = ${readyToGo.toString()}
+const q = new URLSearchParams(location.search), since = Number(q.get('since')) || 0, t0 = Date.now()
+const to = /^\\/(?!\\/)/.test(q.get('to') ?? '') ? q.get('to') : '/'
+document.getElementById('id').textContent = ${JSON.stringify(id).replace(/</g, '\\u003c')}
+const msg = document.getElementById('msg'), answers = []
+async function poll() {
+  const s = Math.floor((Date.now() - t0) / 1000)
+  if (s >= 120) {
+    document.getElementById('spin').remove()
+    msg.textContent = 'server did not come back '
+    const b = msg.appendChild(document.createElement('button')); b.textContent = 'Retry'; b.onclick = () => location.reload()
+    return
+  }
+  msg.textContent = 'server restarting... ' + s + ' s'
+  try {
+    const r = await fetch('/__tw/preview', { cache: 'no-store' })
+    answers.push({ status: r.status, serverStarted: r.ok ? (await r.json()).serverStarted : undefined })
+  } catch { answers.push({ status: 0 }) }
+  if (readyToGo(answers, since)) { location.replace(to); return }
+  setTimeout(poll, 500)
+}
+poll()
+</script>`
+}
+
+function previewApi() {
+  const loopback = (req) => /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '') && (!req.headers.origin || new URL(req.headers.origin).host === req.headers.host)
+  const bin = () => process.env.TW_PREVIEW_BIN ?? (process.env.TW_OPS ? path.join(process.env.TW_OPS, 'bin/preview') : 'preview')
+  const body = (req) => new Promise((resolve) => {
+    let text = ''
+    req.on('data', (c) => { text += c })
+    req.on('end', () => { try { resolve(JSON.parse(text)) } catch { resolve(null) } })
+  })
+  return {
+    name: 'trustweb-preview-api',
+    configureServer(server) {
+      if (!previewFile()) return
+      const json = (res, o, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(o)) }
+      const run = (args) => {
+        try {
+          execFileSync(bin(), [readPreview().id, ...args], { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] })
+          return null
+        } catch (e) { return String(e.stderr || e.message).trim().slice(-600) }
+      }
+      server.middlewares.use('/__tw/wait', (req, res) => {
+        if (!loopback(req)) { res.statusCode = 403; res.end(); return }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(waitPage(readPreview().id))
+      })
+      server.middlewares.use('/__tw/preview', async (req, res) => {
+        if (!loopback(req)) { res.statusCode = 403; res.end(); return }
+        const sub = (req.url ?? '/').split('?')[0]
+        if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted }); return }
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        if (sub === '/pr') {
+          spawn(bin(), [readPreview().id, 'pr'], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
+          json(res, { started: true })
+          return
+        }
+        const b = await body(req)
+        let args = null
+        if (sub === '/' && typeof b?.feature === 'string' && typeof b.checked === 'boolean' && readPreview().features.some((f) => f.key === b.feature)) args = ['toggle', b.feature, b.checked ? 'on' : 'off']
+        const keys = readPreview().features.map((f) => f.key)
+        if (sub === '/' && b?.set && keys.length === Object.keys(b.set).length && keys.every((k) => typeof b.set[k] === 'boolean')) args = ['set', keys.map((k) => `${k}=${b.set[k] ? 'on' : 'off'}`).join(',')]
+        if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
+        if (!args) { json(res, { error: 'bad request' }, 400); return }
+        const error = run(args)
+        if (error !== null) json(res, { error }, 500)
+        else json(res, readPreview())
+      })
+    },
+  }
+}
+
 // Dev only: where the overlay is built from (git at serve start), personal or stock, and the stock twin's URL.
 function devBuild(command) {
   if (command !== 'serve') return 'null'
@@ -163,8 +258,8 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_BUILD__: devBuild(command) },
-  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi()] : [])],
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+  plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
   // Tests point TW_PUBLIC_DIR at a scratch directory to serve demo-peer.json,

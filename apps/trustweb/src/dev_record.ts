@@ -16,13 +16,30 @@ export function devRecordFile(): string | null {
   return devRecord()?.file ?? null
 }
 
-/** Stores the dev record as this origin's record when none is there yet, or when the one there carries demo people (an earlier "add demo friends"): a record preview shows only the record's people. Call before the first loadState. */
+/** Cheap content stamp of the seed text (FNV-1a 32 bit), remembered per origin so a changed seed file is noticed. */
+function stamp(text: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0
+  return h.toString(16) + ':' + text.length
+}
+
+/**
+ * Stores the dev record as this origin's record when none is there yet, when the one there carries demo people (an earlier "add demo
+ * friends"), or when the seed file changed since it was last applied (Jakob 2026-10-15: the seed is regenerated from Tana, so it wins);
+ * the record it replaces is kept under <key>.before-seed. Call before the first loadState.
+ */
 export function seedDevRecord(persona: string): void {
   const rec = devRecord()
   if (!rec || !parseRecord(rec.text)) return
   try {
     const key = storageKey(persona)
     const had = localStorage.getItem(key)
-    if (had === null || parseRecord(had)?.demo) localStorage.setItem(key, rec.text)
+    const seen = localStorage.getItem(key + '.seed')
+    const now = stamp(rec.text)
+    if (had === null || parseRecord(had)?.demo || seen !== now) {
+      if (had !== null && had !== rec.text) localStorage.setItem(key + '.before-seed', had)
+      localStorage.setItem(key, rec.text)
+      localStorage.setItem(key + '.seed', now)
+    }
   } catch { /* storage blocked: the welcome screen shows as usual */ }
 }
