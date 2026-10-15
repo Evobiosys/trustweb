@@ -14,7 +14,7 @@
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { norm } from './contacts'
-  import { SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
+  import { NONRESP_KEY, SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
   import { Kind } from './placement'
   import { effectivePerson, entityValues } from './person_view'
   import { PersonForm } from './nav'
@@ -106,6 +106,7 @@
         {/if}
         <p class="meta-line"><RingLabel personId={person.id} ring={person.ring} /> · {meta}</p>
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
+        {#if values[NONRESP_KEY] === true}<p class="meta-line" data-part="nonresp">{S.noAnswer}</p>{/if}
       </div>
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>

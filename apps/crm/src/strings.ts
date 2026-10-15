@@ -165,6 +165,7 @@ export const S = {
   down: 'Move down',
   presenceActive: 'On TrustWeb, active recently',
   presenceIdle: 'On TrustWeb, not active recently',
+  noAnswer: 'no answer',
   environments: 'Environments',
   peopleTab: 'People',
   noEnvironments: 'No environments in this record.',

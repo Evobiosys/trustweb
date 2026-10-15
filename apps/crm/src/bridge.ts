@@ -8,6 +8,8 @@ export interface Host {
   setRing(personId: string, ring: string): void
   /** Same for the family tag (purple accent on the Web view). */
   setFamily(personId: string, on: boolean): void
+  /** Sets a TrustWeb-only checkbox field (tw-non-responsive) in the host's record, so its dots and asks follow at once. */
+  setFlag(personId: string, key: string, on: boolean): void
   /** A person hidden in the Curator leaves the host's record too (and comes back with `restorePerson`), so the Web view drops them at once. */
   removePerson(personId: string): void
   restorePerson(person: Person): void

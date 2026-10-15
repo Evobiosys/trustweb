@@ -154,3 +154,10 @@ describe('hidden and blank persons', () => {
     expect(stats).toMatchObject({ persons: 3, hidden: 2, blank: 1 })
   })
 })
+
+describe('generator keeps TrustWeb-only entries', () => {
+  it('re-emits tw-non-responsive on regeneration', async () => {
+    const { render } = await import('../../scripts/tana_schema_to_fields.mjs')
+    expect(render([], 'person')).toContain('"id": "tw-non-responsive"')
+  })
+})

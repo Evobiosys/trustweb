@@ -11,6 +11,7 @@ import { host } from './bridge'
 import { FAMILY_KEY, RING_KEY } from './rings'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
+import { NONRESP_KEY } from './fields'
 import type { FieldValue, FieldValues } from './fields'
 import { ContactPointKind, InteractionKind, Stage } from './model'
 import type { CrmState, Curation } from './model'
@@ -171,6 +172,11 @@ export function setField(personId: string, key: string, value: FieldValue): void
   }
   if (person && key === FAMILY_KEY && typeof value === 'boolean') {
     setFamilyIn(person, value)
+    return
+  }
+  if (person && key === NONRESP_KEY && typeof value === 'boolean') {
+    person.fields = { ...person.fields, [key]: value } as unknown as Person['fields']
+    host.setFlag?.(personId, key, value)
     return
   }
   // Assign first, then write through the store: a local taken before the assignment would be the raw object, not the reactive one, and the edit would never be saved.

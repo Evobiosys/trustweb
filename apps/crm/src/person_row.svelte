@@ -27,20 +27,23 @@
     presence?: Presence
     fav?: FavLink | null
     ring?: string
+    /** The non-responsive field is on: the row is greyed with a small hint. */
+    nonresp?: boolean
     /** Drops the row's grip lands on: reorders it within its section. */
     ondrop?: Drop
     onopen: (id: string) => void
   }
-  const { id, name, context, meta = '', extra = [], presence = Presence.None, fav = null, ring, ondrop, onopen }: Props = $props()
+  const { id, name, context, meta = '', extra = [], presence = Presence.None, fav = null, ring, ondrop, nonresp = false, onopen }: Props = $props()
 </script>
 
-<div class="person-row" class:with-ring={ring}>
+<div class="person-row" class:with-ring={ring} class:nonresp>
   {#if ondrop}<span class="grip" role="presentation" data-key={id} aria-label={S.dragRow} use:grip={ondrop}>⋮⋮</span>{/if}
   <button class="pr-open" onclick={(): void => onopen(id)}>
     <Avatar {id} name={shownName(name)} />
     <span class="pr-main">
       <strong>{shownName(name)}</strong>
       {#if context}<span class="ctx">{context}</span>{/if}
+      {#if nonresp}<span class="meta" data-part="nonresp">{S.noAnswer}</span>{/if}
       {#if meta}<span class="meta">{meta}</span>{/if}
       {#each extra as line (line)}<span class="meta">{line}</span>{/each}
     </span>

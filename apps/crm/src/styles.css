@@ -240,6 +240,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .ring-label{min-height:24px; padding:0 10px; font-size:12px}
 .sort-card{background:var(--card); border-radius:16px; padding:16px; margin:10px 0}
 .sort-banner{display:block; width:100%; margin:8px 0}
+.person-row.nonresp{opacity:.55}
 .person-row.with-ring{flex-wrap:wrap}
 .pr-ring{flex:0 0 auto; order:3}
 .pr-ring:has(.ring-chips){flex-basis:100%}

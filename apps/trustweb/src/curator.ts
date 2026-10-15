@@ -23,10 +23,10 @@ function loadFailed(target: HTMLElement, err: unknown): void {
   target.replaceChildren(el('p', { class: 'curator-error' }, [S.curatorLoadFailed]), el('button', { class: 'btn btn-sm', onclick: () => location.reload() }, [S.curatorReload]))
 }
 
-export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void }): Curator {
+export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void }): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
-  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, removePerson: opts.removePerson, restorePerson: opts.restorePerson }
+  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson }
   return {
     el: root,
     open() {

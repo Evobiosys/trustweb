@@ -72,6 +72,7 @@ import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS,
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
+import { askPeers } from './non_responsive'
 import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
@@ -970,7 +971,7 @@ export class Net {
     }
     const timeoutMs = askTimeoutMs(reach, this.windowMs)
     const now = Date.now()
-    const outgoing = s.peers.map((peer) => ({ peer, qid: randomId(12) }))
+    const outgoing = askPeers(s).map((peer) => ({ peer, qid: randomId(12) }))
     s.sentAsks = addSentAsk(s.sentAsks, { id: root, text: freeText, at: now, to: outgoing.map(({ peer, qid }) => ({ peerId: peer.id, qid })) }, now)
     this.hooks.save()
     const results = await Promise.all(outgoing.map(async ({ peer, qid }): Promise<AskResult> => ({

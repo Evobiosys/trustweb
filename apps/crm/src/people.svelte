@@ -3,7 +3,7 @@
   import { lastActivityText, lastPastByPerson } from './display'
   import Avatar from './avatar.svelte'
   import EmptyState from './empty_state.svelte'
-  import { baseFields, fieldLabelOf, passesFilters, valueText } from './fields'
+  import { NONRESP_KEY, baseFields, fieldLabelOf, passesFilters, valueText } from './fields'
   import type { FieldValues } from './fields'
   import { matches } from './contacts'
   import { applySuggestion, fileUnder, intendingNotice, unsortedIds } from './sorting.svelte'
@@ -124,7 +124,7 @@
       <div class="slot" class:before={drag.key !== null && drag.before === row.person.id} class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
       <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
         extra={extraFor(Kind.Person, values)} presence={presence(row.person, lastPast.get(row.person.id), prefs.activityDays, now)}
-        ring={row.person.ring} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
+        ring={row.person.ring} nonresp={values[NONRESP_KEY] === true} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
       </div>
     {/each}
     </div>
@@ -141,7 +141,7 @@
             <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
             <div class="suggest-row">
             <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
-              ring={row.person.ring} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
+              ring={row.person.ring} nonresp={valuesOf(row.person.id)[NONRESP_KEY] === true} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
             {#if sec.ring !== UNSORTED}
               <div class="suggest-actions">
               <button class="quiet" data-action="apply-suggestion" onclick={(): void => { applySuggestion(row.person.id, suggestions[row.person.id]) }}>{S.applySuggestion}</button>
