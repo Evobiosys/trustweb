@@ -21,10 +21,11 @@
 // LOGGING: none. No logger is passed to this module, it never touches stdout/stderr, and server.mjs does not log these routes
 // (test/connect.test.mjs scans the source and captures the process output). A failure answers 500 server_error without a message.
 //
-// ABUSE: POST /connect and POST /name share one per-address budget (IPv4 as it is, IPv6 by /64, in memory); GET /c/ and GET /who/ share a more
+// ABUSE: GET /who/<name> also has a per-name budget (cfg.whoPerNamePerMinute, all addresses together) so one name cannot be burned from many addresses;
+// every /c/ and /who/ answer carries X-Robots-Tag: noindex, nofollow. POST /connect and POST /name share one per-address budget (IPv4 as it is, IPv6 by /64, in memory); GET /c/ and GET /who/ share a more
 // generous one and answer a plain-text 429. Bodies are capped at cfg.connectMaxBytes, JSON only, own-host Origin only, never cross-site.
 
-import { CODE_RE, isNameShape } from './connect_names.mjs'
+import { CODE_RE, isNameShape, squash } from './connect_names.mjs'
 import { newSecret, SECRET_RE } from './connect_store.mjs'
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'
 import { createWindowLimiter, ipKey } from './limits.mjs'
@@ -55,6 +56,7 @@ export function nameIntent(body) {
   return isNameShape(name) ? { intent: 'claim', name, alias: alias === true } : { field: 'name' }
 }
 
+const NOINDEX = 'noindex, nofollow'
 const PORT_SUFFIX = /:\d+$/
 /** Where the app lives on each app host: under /trustweb/ on app.idea2.site (scripts/deploy_wot.sh), at the root everywhere else. */
 const APP_PATHS = new Map([['app.idea2.site', '/trustweb/']])
@@ -109,6 +111,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
   const writeHour = createWindowLimiter({ limit: cfg.connectPerHour, windowMs: 3_600_000, now })
   const readMinute = createWindowLimiter({ limit: cfg.connectGetPerMinute, windowMs: 60_000, now })
   const readHour = createWindowLimiter({ limit: cfg.connectGetPerHour, windowMs: 3_600_000, now })
+  const perName = createWindowLimiter({ limit: cfg.whoPerNamePerMinute, windowMs: 60_000, now })
 
   /** The short link the answers carry (informational: the client builds its own from location.origin). */
   const shortUrl = (req, code) => `https://${appHostOf(req, cfg.linkHosts) ?? cfg.linkHosts[0]}/c/${code}`
@@ -244,6 +247,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
 
   /** GET|HEAD /c/<code>. pathname is the request path without its query. Returns the status it answered. */
   function open(req, res, pathname) {
+    res.setHeader('X-Robots-Tag', NOINDEX)
     const gated = readGate(req, res)
     if (gated !== null) return gated
     const url = checkedUrl(pathname.slice('/c/'.length), { touch: true })
@@ -252,11 +256,14 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
 
   /** GET|HEAD /who/<name>. Returns the status it answered. */
   function who(req, res, pathname) {
+    res.setHeader('X-Robots-Tag', NOINDEX)
     const gated = readGate(req, res)
     if (gated !== null) return gated
     const host = appHostOf(req, cfg.linkHosts)
     const wanted = pathname.slice('/who/'.length)
     if (host === null || !isNameShape(wanted)) return notFoundPage(res)
+    const burst = perName.hit(squash(wanted))
+    if (burst.limited) return slowDownText(res, burst.retryAfter)
     const code = store.codeOf(wanted)
     if (code === null || checkedUrl(code, { touch: false }) === null) return notFoundPage(res)
     return redirect(res, `https://${host}/c/${code}`)

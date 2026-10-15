@@ -20,6 +20,11 @@ const RESERVED_SET = new Set(RESERVED)
 /** The comparison form of a name: "." "_" "-" removed ("ja-kob" == "jakob"). */
 export const squash = (name) => name.replace(/[._-]/g, '')
 
+const CONFUSABLES = { 0: 'o', 1: 'l', 3: 'e', 5: 's', 7: 't' }
+
+/** The lookalike form of a name: squashed, with the usual confusables mapped (0 to o, 1 to l, 3 to e, 5 to s, 7 to t, rn to m). "jap0ssert" == "japossert". */
+export const confusableKey = (name) => squash(name).replace(/rn/g, 'm').replace(/[01357]/g, (c) => CONFUSABLES[c])
+
 /** Is `name` on the built-in reserved list? (the env list of wave 6e is added by reservedChecker) */
 export function isReserved(name) {
   return RESERVED_SET.has(squash(name))

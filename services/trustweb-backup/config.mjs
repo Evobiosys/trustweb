@@ -76,6 +76,7 @@
 //   CONNECT_MAX_BYTES                2048         body cap of POST /connect and POST /name (413 above)
 //   CONNECT_PER_MINUTE, CONNECT_PER_HOUR          6, 30     POST /connect and POST /name together, per network address (IPv6: /64), in memory, NOT anonymous
 //   CONNECT_GET_PER_MINUTE, CONNECT_GET_PER_HOUR  20, 300   GET /c/ and GET /who/ together, per network address (plain-text 429)
+//   WHO_PER_NAME_PER_MINUTE          60           GET /who/<name> per name (squashed), all addresses together (plain-text 429)
 //   CONNECT_SWEEP_MS                 3600000      how often expired codes are dropped (they also act as unknown when read)
 //   ORG_MAX_EVENTS, ORG_MAX_INVITEES            3, 25      wave 8: free organizer limits (events per org, invitee e-mails per event)
 //   ORG_HOSTED_MAX_EVENTS, ORG_HOSTED_MAX_INVITEES  50, 500  the same for an org the admin switched to plan "hosted" (POST /admin/org)
@@ -267,6 +268,7 @@ export function loadConfig(options = {}) {
     connectPerHour: pick(options, 'connectPerHour', 'CONNECT_PER_HOUR', 30),
     connectGetPerMinute: pick(options, 'connectGetPerMinute', 'CONNECT_GET_PER_MINUTE', 20),
     connectGetPerHour: pick(options, 'connectGetPerHour', 'CONNECT_GET_PER_HOUR', 300),
+    whoPerNamePerMinute: pick(options, 'whoPerNamePerMinute', 'WHO_PER_NAME_PER_MINUTE', 60),
     connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
 
     orgMaxEvents: pick(options, 'orgMaxEvents', 'ORG_MAX_EVENTS', 3),

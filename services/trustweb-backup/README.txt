@@ -67,6 +67,13 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   X-Admin-Token from the systemd credential admin = /etc/trustweb/admin.json), dispatched before the Host gate, NEVER in Caddy. Operator:
                   scripts/trustweb_name_grant.sh --host questhub --list | --code <22> --name <n> [--alias <n2>] | --remove <n>. admin.mjs, connect_aliases.mjs.
 
+  What protects a trustweb.one/<name> link (wave 9): GET /who and /c share a per-address limit (20/min, 300/h) and /who has a per-name limit of
+                  WHO_PER_NAME_PER_MINUTE (60) over all addresses together, so one name cannot be burned from many addresses (plain-text 429 with
+                  Retry-After). Every /who and /c answer carries X-Robots-Tag: noindex, nofollow. An unknown name and a bad shape answer the
+                  same no-store 404 page. A claim (primary or alias) is refused as name_taken when another code holds a lookalike (connect_names.mjs
+                  confusableKey: "." "_" "-" dropped, 0 1 3 5 7 read as o l e s t, rn as m); one's own variants are fine. The phone sends
+                  at most 10 reach-outs per hour (wave9/reach-out-yellow). Counters live in memory and restart with the server.
+
   /org/*          (wave 8) organizer accounts, the paying side: POST /org {"name"} -> 201 {"org","secret","plan":"free","limits":{"events":3,"invitees":25}} (same
                   code/secret generator as /connect, only sha256 of the secret kept); POST /org/me {"org","secret"} -> name, plan, limits, events with counters;
                   POST /org/event {"org","secret","event","link","invitees"[,"id"]} -> 201 create / 200 update (counters kept), {..."id","delete":true} -> 204.

@@ -17,7 +17,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import { answerFor, fieldsFor, MAX_NAMES, namesOf, planClaim, planGrant, planRelease, planRemove } from './connect_aliases.mjs'
-import { CODE_RE, isNameShape, isReserved } from './connect_names.mjs'
+import { CODE_RE, confusableKey, isNameShape, isReserved } from './connect_names.mjs'
 
 export const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
 const HASH_RE = /^[0-9a-f]{64}$/
@@ -179,6 +179,13 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     return false
   }
 
+  /** Does ANOTHER live code hold a name that looks like `name` (confusableKey)? Phishing guard of a claim; a scan, but claims are rare and rate limited. */
+  function lookalikeOfOther(code, name) {
+    const key = confusableKey(name)
+    for (const [n, c] of names) if (c !== code && confusableKey(n) === key && live(c) !== undefined) return true
+    return false
+  }
+
   /**
    * Applies a planner's Outcome to `entry` and persists it. One synchronous change, then the awaited write; a failed write puts the names and the last-use
    * time back (a name that another request took in the meantime stays with that request) and rethrows. Resolves a result {kind, ...}.
@@ -242,7 +249,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     async claim(code, secret, { name, alias = false }) {
       const entry = live(code)
       if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
-      return change(code, entry, planClaim({ held: namesOf(entry), name, alias, reserved, takenByOther: takenByOther(code, name) }))
+      return change(code, entry, planClaim({ held: namesOf(entry), name, alias, reserved, takenByOther: takenByOther(code, name) || lookalikeOfOther(code, name) }))
     },
 
     /** A RELEASE by the holder: the held name `name`, or the primary when `name` is null (the legacy {"name": ""}). Same result kinds as claim. */
