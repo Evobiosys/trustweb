@@ -4,7 +4,7 @@
   trustweb_user_caddy_edit.py <in Caddyfile> <out Caddyfile>
 
 Two edits, anchored and idempotent, nothing written unless both blocks transform (or already carry the routes):
-  1. the "trustweb.one, www.trustweb.one" block: a single path segment that looks like a username (2..40 of [a-z0-9._-], starting with a letter
+  1. the "trustweb.one, www.trustweb.one" block: a single path segment that looks like a username (2..40 of [a-z0-9_-], no dot: a dot means a file or a page, starting with a letter
      or digit) answers 302 to https://app.trustweb.one/who/<name> BEFORE the permanent redirect to trustintheweb.org that the block consists of.
      The root and everything else keep going to trustintheweb.org.
   2. the "app.trustweb.one" block: the same path shape, when it is not an existing file of the app (not file), answers 302 to /who/<name>
@@ -15,7 +15,7 @@ Reserved first segments of the app host are excluded by name (service and contro
 import re
 import sys
 
-NAME_RE = r"^/([a-z0-9][a-z0-9._-]{1,39})$"
+NAME_RE = r"^/([a-z0-9][a-z0-9_-]{1,39})$"
 SITE_HEAD = "trustweb.one, www.trustweb.one {\n"
 APP_HEAD = "app.trustweb.one {\n"
 
