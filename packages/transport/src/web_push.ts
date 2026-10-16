@@ -6,6 +6,7 @@
 // No dependency: a VAPID token is an ES256 JWT, which node:crypto signs; a payload-free push needs no content
 // encryption at all (RFC 8291 applies only when a body is sent).
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as cryptoSign, type KeyObject } from "node:crypto";
+import { parseApnsTarget, type ApnsTarget } from "./apns_push.js";
 
 /** node:crypto's JWK shape (older @types/node export it under a different name). */
 export type JsonWebKey = Record<string, string | string[] | boolean | undefined> & { kty?: string; crv?: string; x?: string; y?: string; d?: string };
@@ -16,6 +17,11 @@ export interface PushSubscriptionJson {
   keys?: { p256dh?: string; auth?: string };
   expirationTime?: number | null;
 }
+
+/** What the relay keeps per DID to wake its device: a Web Push subscription (Android, browsers) or an APNs token (wave 12, iPhone). */
+export type PushTarget = PushSubscriptionJson | ApnsTarget;
+
+export const isApnsTarget = (t: PushTarget): t is ApnsTarget => "apns" in t;
 
 export interface VapidKeys {
   /** EC P-256 private key as a JWK (the only secret of this file; kept in the relay's data directory, mode 0600). */
@@ -95,9 +101,11 @@ export async function sendWake(sub: PushSubscriptionJson, keys: VapidKeys, fetch
   }
 }
 
-/** A subscription a phone hands over is kept only when it has the shape a push service accepts. */
-export function parsePushSubscription(raw: unknown): PushSubscriptionJson | null {
+/** A subscription a phone hands over is kept only when it has the shape a push service accepts (or it is an APNs token). */
+export function parsePushSubscription(raw: unknown): PushTarget | null {
   if (!raw || typeof raw !== "object") return null;
+  const apns = parseApnsTarget(raw);
+  if (apns) return apns;
   const o = raw as Record<string, unknown>;
   if (typeof o.endpoint !== "string") return null;
   let endpoint: URL;

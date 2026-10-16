@@ -152,6 +152,8 @@ import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { APK_URL } from './install'
+import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
+import { nativePushAvailable, nativePushPermission, registerNativePush } from './native_push'
 
 enum Screen {
   Start = 'start',
@@ -245,6 +247,8 @@ interface Review {
 // ---------------------------------------------------------------------------
 
 declare const __TW_PREVIEW__: object | null | undefined
+// Wave 12 (native_app.ts): inside the iPhone app, root-relative requests go to the server, not into the bundle. Before any fetch.
+routeFetchToServer()
 const APP_URL = location.origin + import.meta.env.BASE_URL
 /** Connect links name the live app on a local, LAN or dev-slot page, so they open on any device. */
 const CONNECT_URL = linkOrigin(location.origin) + import.meta.env.BASE_URL
@@ -286,9 +290,9 @@ const wantInstall = params.get('install') === '1'
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
-/** The app on a home screen: a standalone PWA, or this session inside the APK (which runs as a tab until the origin vouches for it). */
+/** The app on a home screen: a standalone PWA, this session inside the APK (which runs as a tab until the origin vouches for it), or the iPhone app. */
 function installedHere(): boolean {
-  return runsAsInstalledApp() || isApkSession()
+  return runsAsInstalledApp() || isApkSession() || nativeApp
 }
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
@@ -390,20 +394,26 @@ function save(): void {
 let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 function mirrorPushBundle(s: AppState): void {
   if (!s.notificationsOn || !pushSupported() || mirrorTimer) return
-  mirrorTimer = setTimeout(() => { mirrorTimer = null; void pushBundleOf(st(), location.origin, S.appName).write() }, 250)
+  mirrorTimer = setTimeout(() => { mirrorTimer = null; void pushBundleOf(st(), SERVER_ORIGIN, S.appName).write() }, 250)
 }
 
 /** The relay's last word on this phone's push subscription (Settings > Notifications shows a hint when it cannot wake us). */
 let pushState: 'kept' | 'forgotten' | 'rejected' | 'unavailable' | 'unsupported' | 'no-worker' | 'relay-no-push' | 'denied' | 'failed' | null = null
 
-/** Subscribes this phone for wake-ups (push.ts) and tells the relay; on boot while on, and when the person turns notifications on. */
+/** Subscribes this phone for wake-ups (push.ts; in the iPhone app native_push.ts) and tells the relay; on boot while on, and when the person turns notifications on. */
 async function refreshPush(): Promise<void> {
   const s = st()
   if (!s.notificationsOn) { net.setPush(null); await unsubscribePush(); return }
+  if (nativeApp) {
+    const r = await registerNativePush()
+    if (r.ok) net.setPush(r.sub)
+    else pushState = r.why
+    return
+  }
   // The worker also shows this page's own notifications while it is hidden (push.ts showNotification), push or no push.
   await workerRegistration()
-  const r = await subscribePush(location.origin)
-  if (r.ok) { net.setPush(r.sub); await pushBundleOf(s, location.origin, S.appName).write() }
+  const r = await subscribePush(SERVER_ORIGIN)
+  if (r.ok) { net.setPush(r.sub); await pushBundleOf(s, SERVER_ORIGIN, S.appName).write() }
   else pushState = r.why
 }
 
@@ -471,6 +481,7 @@ function newDraft(personId?: string): void {
 // ---------------------------------------------------------------------------
 
 // Wave 6h (ask_window.ts): real phones ask with the 120 s window; the side-by-side demo keeps the 30 s one (two phones on one screen).
+// Wave 12: the iPhone app names the relay (its own origin is the bundle's).
 const net = new Net({
   state: st,
   save,
@@ -559,7 +570,7 @@ const net = new Net({
   onLateAnswersReleased: () => showAskCards(),
   // Wave 6i (reask.ts): a real phone re-sends its earlier unanswered asks to a connection that tightened its ring (never the demo flows).
   mayReask: (peer) => mayAskAgainWith(peer),
-}, solo ? { answerWindowMs: LEGACY_WINDOW_MS } : {})
+}, { ...(solo ? { answerWindowMs: LEGACY_WINDOW_MS } : {}), ...(nativeApp ? { relayOrigin: SERVER_ORIGIN } : {}) })
 
 /** A phone that shows TrustWeb to someone (the side-by-side demo, a demo persona, a demo account's own view): some defaults differ. */
 function demoPhone(): boolean {
@@ -1106,15 +1117,14 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  */
 function offerNotifications(): void {
   const s = state
-  if (!s || solo || s.notifOffered || s.notificationsOn || !installedHere() || typeof Notification === 'undefined') return
-  if (Notification.permission === 'denied') { s.notifOffered = true; save(); return }
+  if (!s || solo || s.notifOffered || s.notificationsOn || !installedHere() || (typeof Notification === 'undefined' && !nativePushAvailable())) return
+  if (!nativeApp && Notification.permission === 'denied') { s.notifOffered = true; save(); return }
   const answer = async (yes: boolean): Promise<void> => {
     st().notifOffered = true
     save()
     hideNotice()
     if (!yes) return
-    const p = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission().catch(() => 'denied' as NotificationPermission)
-    if (p !== 'granted') { toast(S.notifBlocked); return }
+    if (!(await notificationPermission())) { toast(S.notifBlocked); return }
     st().notificationsOn = true
     save()
     await refreshPush()
@@ -1264,7 +1274,7 @@ function openPendingShare(): boolean {
 
 /** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
 async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean }> {
-  const out = await resolveAddInput({ origin: location.origin, fetch: (i, init) => fetch(i, init) }, input)
+  const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
   const peer = await net.completeConnect(out.link, ring)
@@ -1826,12 +1836,16 @@ function askDesire(wrap: HTMLElement, p: Person, reminder: string[], cancel: () 
   wrap.appendChild(row)
 }
 
+/** The system's yes for notifications: iOS's sheet in the iPhone app (native_push.ts), the browser's elsewhere; true where there is no such thing. */
+async function notificationPermission(): Promise<boolean> {
+  if (nativeApp) return nativePushPermission()
+  if (typeof Notification === 'undefined' || Notification.permission === 'granted') return true
+  return (await Notification.requestPermission().catch(() => 'denied' as NotificationPermission)) === 'granted'
+}
+
 function notificationsCard(s: AppState): HTMLElement {
   const toggle = async (): Promise<void> => {
-    if (!s.notificationsOn && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
-      const p = await Notification.requestPermission().catch(() => 'denied' as NotificationPermission)
-      if (p !== 'granted') { toast(S.notifBlocked); return }
-    }
+    if (!s.notificationsOn && !(await notificationPermission())) { toast(S.notifBlocked); return }
     s.notificationsOn = !s.notificationsOn
     save()
     await refreshPush()
@@ -1845,7 +1859,9 @@ function notificationsCard(s: AppState): HTMLElement {
     box.addEventListener('change', () => { s.notifyKinds = { ...kinds, [kind]: box.checked }; save(); kinds[kind] = box.checked })
     return el('label', { class: 'notif-kind' }, [box, el('span', {}, [S.notifKind[kind]])])
   }
+  // Wave 12: in the iPhone app every arrival is one and the same Apple notification (native_push.ts), so the kind switches have nothing to switch.
   const hint = !s.notificationsOn ? null
+    : nativeApp ? (pushState === 'kept' ? S.notifPushOnIos : pushState === 'rejected' || pushState === 'unavailable' ? S.notifPushNoRelayIos : pushState === 'failed' || pushState === 'denied' ? S.notifPushFailed : null)
     : !pushSupported() || pushState === 'unsupported' ? S.notifPushUnsupported
     : pushState === 'relay-no-push' || pushState === 'unavailable' ? S.notifPushNoRelay
     : pushState === 'kept' ? S.notifPushOn
@@ -1854,7 +1870,7 @@ function notificationsCard(s: AppState): HTMLElement {
   return el('div', { class: 'verse notif' }, [
     el('h3', {}, [s.notificationsOn ? S.notifOnTitle : S.notifTitle]),
     el('p', {}, [S.notifBody]),
-    s.notificationsOn ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
+    s.notificationsOn && !nativeApp ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
     hint ? el('p', { class: 'meta', 'data-push-state': pushState ?? '' }, [hint]) : null,
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => void toggle() }, [s.notificationsOn ? S.notifTurnOff : S.notifTurnOn]),
   ])
@@ -3662,8 +3678,8 @@ function copyLink(text: string, done: string = S.meetCopied): void {
 
 /** The short-link choice for a connect code: its QR follows the choice, as do Copy, Send and NFC (chooser.current()). Not offered in an embedded demo phone. */
 function connectLinkChooser(qr: HTMLElement): LinkChooser {
-  shortLinker ??= createShortLinker({ origin: location.origin, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
-  return createLinkChooser({ origin: location.origin, offer: !solo, linker: shortLinker, qr, renderQr, copy: copyLink })
+  shortLinker ??= createShortLinker({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() })
+  return createLinkChooser({ origin: SERVER_ORIGIN, offer: !solo, linker: shortLinker, qr, renderQr, copy: copyLink })
 }
 
 /** One connect-code keeper per visit (connect_code.ts): the record lives in the app state, the requests only go out from the two app origins. */
@@ -3671,7 +3687,7 @@ let connectKeeper: ConnectKeeper | null = null
 
 function codeKeeper(): ConnectKeeper {
   connectKeeper ??= createConnectKeeper({
-    origin: location.origin,
+    origin: SERVER_ORIGIN,
     fetch: (input, init) => fetch(input, init),
     now: () => Date.now(),
     load: () => state?.connectCode,
@@ -3685,7 +3701,7 @@ let namesSyncer: NamesSync | null = null
 
 function namesSync(): NamesSync {
   namesSyncer ??= createNamesSync({
-    origin: location.origin,
+    origin: SERVER_ORIGIN,
     fetch: (input, init) => fetch(input, init),
     now: () => Date.now(),
     load: () => state?.connectCode,
@@ -3713,7 +3729,7 @@ async function ensureConnectCode(): Promise<void> {
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
-  const view: ConnectView = createConnectView({ origin: location.origin, offer: connectEligible(), keeper: codeKeeper(), qr, renderQr, copy: copyLink })
+  const view: ConnectView = createConnectView({ origin: SERVER_ORIGIN, offer: connectEligible(), keeper: codeKeeper(), qr, renderQr, copy: copyLink })
   const nfcStatus = el('p', { class: 'meta' })
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
@@ -5122,13 +5138,14 @@ function supersede(): void {
 const WAKE_FRESH_MS = 60_000
 let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return }
+  // Wave 12: the iPhone app in the background holds no drain, so the relay wakes it through Apple (net.ts pause); a fresh one when it is back.
+  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); if (nativeApp) net.pause(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
   if (!state || state.testOf?.handedOverAt) return
   // Review 6h: back in front after a long time away is an open too (an installed app on a phone is rarely started afresh).
   if (slept && appOpened()) showAskCards()
-  net.activate(slept)
+  net.activate(slept || nativeApp)
 })
 window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverAt) net.activate(false) })
 // Wave 6h (wake_watch.ts): a laptop that slept with this tab behind another window, a network that came back, a page restored from the

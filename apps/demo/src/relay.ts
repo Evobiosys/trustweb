@@ -223,7 +223,8 @@ export interface RelayChannelOptions {
 }
 
 /** The browser's PushSubscription.toJSON(); null withdraws it (TrustWeb wave 11, relay_server.ts handlePush). */
-export type PushSubscriptionJson = { endpoint: string; keys?: { p256dh?: string; auth?: string }; expirationTime?: number | null }
+/** The browser's PushSubscription.toJSON() shape, or (TrustWeb wave 12, the iPhone app) an APNs device token. */
+export type PushSubscriptionJson = { endpoint: string; keys?: { p256dh?: string; auth?: string }; expirationTime?: number | null } | { apns: string }
 
 export interface RelayChannel {
   /**

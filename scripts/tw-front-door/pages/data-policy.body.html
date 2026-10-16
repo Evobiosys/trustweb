@@ -89,8 +89,20 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
   </dl>
 </section>
 
+<section id="d-notifications">
+  <p class="eyebrow">7. Notifications</p>
+  <h2>The address the relay wakes your phone at</h2>
+  <dl class="facts">
+    <dt>What</dt><dd>Only if you switch notifications on: one push address per phone. In the Android app and in browsers, a push subscription (the push service's URL and two keys made by your browser); on iPhone and iPad, Apple's device token. The wake the relay sends through it is empty on Android and in browsers; on Apple devices it carries fixed words and nothing else, because Apple allows no empty notification. The push service (Google, Mozilla or Apple) sees that something was sent to your device and when, never what.</dd>
+    <dt>Where</dt><dd>Next to the relay's queue on our server in Switzerland; the wake passes through the push service of your platform, in the United States.</dd>
+    <dt>How long</dt><dd>Until you switch notifications off or the push service reports the address dead; replaced whenever your phone re-registers.</dd>
+    <dt>Who can read it</dt><dd>We see the address, tied to your phone's relay identifier, not to a name. The push service sees the wakes it carries.</dd>
+    <dt>How to delete it</dt><dd>Switch notifications off in Settings: the phone tells the relay to forget the address at once.</dd>
+  </dl>
+</section>
+
 <section id="d-front-doors">
-  <p class="eyebrow">7. The front doors</p>
+  <p class="eyebrow">8. The front doors</p>
   <h2>The demo resources and the personal front door</h2>
   <dl class="facts">
     <dt>What</dt><dd>The name and the identifier of each phone that connected, and the asks sent to them while they are handled. The demo front door, named "Jakob", holds lines its owner chose to publish in advance; the personal front door answers only from lines its owner allowed in advance. An ask is matched against the front door's lines and also passed on, with the name you use, to the phone of the person who runs it.</dd>
@@ -102,7 +114,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-links">
-  <p class="eyebrow">8. Short connect links</p>
+  <p class="eyebrow">9. Short connect links</p>
   <h2>The short link next to the long one</h2>
   <dl class="facts">
     <dt>What</dt><dd>Where the app offers a short link next to the long one: the long connect link, which carries the name you chose and what another phone needs to connect to yours, stored under a random ten-character id. It is not encrypted on the server beyond the connection itself; it is a link you already share openly. Making links is limited to 6 a minute and 30 an hour per network address, counted in memory, and at most 5000 links are stored at once.</dd>
@@ -114,7 +126,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-web-results">
-  <p class="eyebrow">9. Web results</p>
+  <p class="eyebrow">10. Web results</p>
   <h2>Search words sent to Brave through our server</h2>
   <dl class="facts">
     <dt>What</dt><dd>The words you type after you choose "Show results here". They go in the body of a request, never in an address.</dd>
@@ -126,7 +138,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-feedback">
-  <p class="eyebrow">10. Feedback and the notify box</p>
+  <p class="eyebrow">11. Feedback and the notify box</p>
   <h2>What you send us in a form</h2>
   <dl class="facts">
     <dt>What</dt><dd>The message, its kind, the contact line and the page you wrote from, and the time to the minute. Your email address only if you ticked "Write back to me", "Notify me when it is ready" or the newsletter box, or used the "notify me" form on the main page. No network address and no browser details.</dd>
@@ -138,7 +150,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-newsletter">
-  <p class="eyebrow">11. The newsletter</p>
+  <p class="eyebrow">12. The newsletter</p>
   <h2>If you tick the newsletter box</h2>
   <dl class="facts">
     <dt>What</dt><dd>Your email address, kept encrypted, with a fingerprint of it and the project it belongs to. You join only after you click the link in the confirmation email.</dd>
@@ -150,7 +162,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-old-waitlist">
-  <p class="eyebrow">12. The earlier waitlist</p>
+  <p class="eyebrow">13. The earlier waitlist</p>
   <h2>Entries from before 2026-10-07</h2>
   <dl class="facts">
     <dt>What</dt><dd>Until 2026-10-07 the main page's waitlist form sent its entries to the ReBioSys relay (idea2.site/rebiosys/api): your email address, the time, and a shortened fingerprint of your network address (a hash with a fixed salt: it hides the address from a casual reader, but anyone who wants to can work it back, so it is pseudonymous, not anonymous). That relay tries to send one confirmation email to the address (<span class="tbc">to confirm</span>: its mail sending was failing at the time of writing).</dd>
@@ -162,7 +174,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-counters">
-  <p class="eyebrow">13. Abuse counters</p>
+  <p class="eyebrow">14. Abuse counters</p>
   <h2>Per network address, in memory, not anonymous</h2>
   <dl class="facts">
     <dt>What</dt><dd>How many requests came from one network address (IPv6: from one /64 block) to the backup, hosting, transcription, feedback, web results and short link services, and to the newsletter hand-over.</dd>
@@ -174,7 +186,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-logs">
-  <p class="eyebrow">14. Server logs</p>
+  <p class="eyebrow">15. Server logs</p>
   <h2>What the machine writes down</h2>
   <dl class="facts">
     <dt>What</dt><dd>The web server (Caddy) keeps no access log. Its error log can note the network address and the page requested when a request fails, for example while a service restarts, never the content of a request; it also lists certificate renewals by host name. TrustWeb's own services log a method and a status, or an outcome, and no address, no path and no content. Two older services on the same server do log the requester's network address: the newsletter service and the ReBioSys relay.</dd>
@@ -186,7 +198,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-website">
-  <p class="eyebrow">15. This website</p>
+  <p class="eyebrow">16. This website</p>
   <h2>What a visit leaves behind</h2>
   <dl class="facts">
     <dt>What</dt><dd>No cookies, no analytics, no advertising, nothing stored in your browser. <!--IF:org-->Typefaces load from Google Fonts, so your browser contacts Google and Google receives your network address.<!--/IF--><!--IF:com-->Typefaces come from your own device, so this site contacts no third party.<!--/IF--></dd>
@@ -198,7 +210,7 @@ The <a href="privacy.html">privacy policy</a> explains why we may handle it and 
 </section>
 
 <section id="d-copies">
-  <p class="eyebrow">16. Copies of the server</p>
+  <p class="eyebrow">17. Copies of the server</p>
   <h2>Backups of our own</h2>
   <dl class="facts">
     <dt>What</dt><dd>A nightly snapshot of the newsletter data, kept on the same server for 14 days. TrustWeb's own folders (backups, hosted recordings, feedback) are not part of any scheduled copy job we found on the server.</dd>

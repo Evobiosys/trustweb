@@ -32,6 +32,14 @@
     It holds a message it could not deliver for 72 hours at most (older ones are cleared when the relay next handles a message), and drops it as soon as the receiving phone confirms it.
     The one exception to the encryption is the very first connection step between two phones, sent before they share a
     key: that message is not encrypted.</li>
+    <li id="notifications"><b>Notifications.</b> Off unless you switch them on. When they are on and a message waits for your phone while the app is
+    closed, the relay wakes the phone through the push service of your platform; the message itself stays on the relay until your phone reads it.
+    In the Android app and in browsers, that wake is empty: the push service (Google's for Chrome, Mozilla's for Firefox) learns that something waits
+    for your device, and when. <b>On iPhone and iPad, Apple makes it mandatory that every notification passes through Apple's push service, and Apple
+    allows no empty one.</b> So the relay sends one with fixed words ("Something arrived for you") and nothing else in it: Apple sees that something
+    arrived for your device and when, never what, from whom, or of which kind. We cannot switch that off; if you would rather Apple saw nothing, leave
+    notifications off on an Apple device and the app shows what arrived when you open it. For this, the relay keeps one address per phone (a push
+    subscription or an Apple device token), replaced when the phone re-registers and removed when you switch notifications off.</li>
     <li><b>Encrypted backup.</b> A backup is encrypted on your phone before it is uploaded. The
     server keeps ciphertext it cannot read, with its size and when it was last written. There is no
     automatic expiry for a backup, and no delete button for it yet; the <a href="data-policy.html#d-backup">data policy</a> says what you can do.</li>
@@ -129,6 +137,9 @@
   <h2>Who else is involved</h2>
   <ul>
     <li><b>Infomaniak</b>, in Switzerland: hosting of our server, which holds the relay, backups, hosted recordings, the front doors and the newsletter service.</li>
+    <li><b>Apple</b>, in the United States: Apple's push service, only on an iPhone or iPad with notifications switched on; it sees that a notification
+    was sent to your device and when, never its content. <b>Google</b> or <b>Mozilla</b>, in the United States: the push service of your browser, only on
+    Android or in a browser with notifications switched on; it sees that an empty wake was sent and when. See <a href="#notifications">above</a>.</li>
     <!--IF:prov-openrouter--><li><b>OpenRouter</b> and the inference provider behind it, in the United States: only for server transcription, only if it is
     switched on and you choose it. See <a href="#transcription">above</a>.</li><!--/IF-->
     <!--IF:prov-berget--><li><b>Berget AI</b>, in Sweden: only for server transcription, only if it is switched on and you choose it. <b>OpenRouter</b> and the

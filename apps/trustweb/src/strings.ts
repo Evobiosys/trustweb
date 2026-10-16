@@ -376,6 +376,9 @@ export const S = {
   notifKind: { connect: 'Someone wants to connect', ask: 'Someone is sending a query', chat: 'A message' } as Record<'connect' | 'ask' | 'chat', string>,
   notifPushOn: 'Also when the app is closed: the relay wakes this device with an empty push; what arrived is read here, under your keys.',
   notifPushNoRelay: 'While the app is open only: this relay does not wake devices (a preview, or an older relay).',
+  // Wave 12 (native_push.ts): on iPhone every notification must go through Apple's push service, and it cannot be empty.
+  notifPushOnIos: 'Also when the app is closed. Apple requires every notification to pass through Apple\'s push service, so the relay sends one with fixed words and nothing else in it: Apple sees that something arrived for this phone and when, never what or from whom. Every kind of arrival wakes the phone with the same words; what arrived is read here, under your keys.',
+  notifPushNoRelayIos: 'While the app is open only: this relay cannot wake iPhones yet.',
   notifPushUnsupported: 'While the app is open only: this browser offers no push. On Android, install the app for notifications when it is closed.',
   notifBodyConnect: (name: string) => `${name} wants to connect.`,
   notifPushFailed: 'While the app is open only: this browser could not register for push. On GrapheneOS, Vanadium needs sandboxed Google Play for push; a browser with push (Chrome, Brave) wakes the device also when the app is closed.',
