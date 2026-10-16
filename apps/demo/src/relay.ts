@@ -222,7 +222,17 @@ export interface RelayChannelOptions {
   fetchImpl?: typeof fetch
 }
 
+/** The browser's PushSubscription.toJSON(); null withdraws it (TrustWeb wave 11, relay_server.ts handlePush). */
+export type PushSubscriptionJson = { endpoint: string; keys?: { p256dh?: string; auth?: string }; expirationTime?: number | null }
+
 export interface RelayChannel {
+  /**
+   * TrustWeb wave 11: hands this device's Web Push subscription to the relay on the authenticated drain (now if open, and
+   * again after every reconnect), so the relay can WAKE this device with an empty push when a wire waits and no drain reads
+   * it. `null` tells the relay to forget it. The relay answers `push_ok`, `push_rejected` or `push_unavailable` (onPush).
+   */
+  setPush(sub: PushSubscriptionJson | null): void
+  onPush(cb: (outcome: 'kept' | 'forgotten' | 'rejected' | 'unavailable') => void): void
   /**
    * Opens the authenticated drain connection for `identity` and completes
    * the nonce -> Ed25519-sign -> `auth_ok` handshake. Resolves once
@@ -407,6 +417,14 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
   let sink: { resolveKey: PairKeyResolver; cb: (envelope: Envelope, fromDid: string) => void } | null = null
   let rawSink: ((fromDid: string, payload: string) => boolean | void) | null = null
   let statusCb: ((status: RelayStatus, at: number) => void) | null = null
+  /** undefined: nothing to tell the relay about push; null: withdraw; else the subscription to keep. */
+  let pushSub: PushSubscriptionJson | null | undefined = undefined
+  let pushCb: ((outcome: 'kept' | 'forgotten' | 'rejected' | 'unavailable') => void) | null = null
+
+  function sendPush(socket: RelayWebSocketLike): void {
+    if (pushSub === undefined || socket.readyState !== WS_OPEN) return
+    socket.send(JSON.stringify({ type: 'push', subscription: pushSub }))
+  }
 
   function emitStatus(status: RelayStatus): void {
     statusCb?.(status, Date.now())
@@ -487,8 +505,12 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
         backoff = reconnectBaseMs // healthy again -- reset the backoff
         emitStatus('connected')
         settleFirstAttempt(null)
+        sendPush(socket)
         return
       }
+      if (msg.type === 'push_ok') { pushCb?.((msg as { kept?: unknown }).kept ? 'kept' : 'forgotten'); return }
+      if (msg.type === 'push_rejected') { pushCb?.('rejected'); return }
+      if (msg.type === 'push_unavailable') { pushCb?.('unavailable'); return }
       if (msg.type === 'auth_failed') {
         // Our own signature over our own claimed DID should always verify;
         // a failure here on the FIRST attempt means "stop, tell the
@@ -646,6 +668,15 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     statusCb = cb
   }
 
+  function setPush(sub: PushSubscriptionJson | null): void {
+    pushSub = sub
+    if (ws) sendPush(ws)
+  }
+
+  function onPush(cb: (outcome: 'kept' | 'forgotten' | 'rejected' | 'unavailable') => void): void {
+    pushCb = cb
+  }
+
   function close(): void {
     const wasActive = !stopped
     stopped = true
@@ -671,5 +702,5 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     }
   }
 
-  return { connect, send, sendRaw, onEnvelope, onRawWire, onStatus, close }
+  return { connect, send, sendRaw, onEnvelope, onRawWire, onStatus, setPush, onPush, close }
 }

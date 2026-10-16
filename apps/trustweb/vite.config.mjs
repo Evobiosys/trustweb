@@ -28,8 +28,10 @@ const { svelte } = await import(pathToFileURL(path.join(crm, 'node_modules/@svel
 // the build alike. Not through publicDir: tests point TW_PUBLIC_DIR elsewhere.
 // Fixed names, not hashed: the live server sends no-cache for everything
 // outside /assets/, so a changed icon is picked up (only /assets/ is immutable).
-// No service worker: the app had stale-cache trouble before, and Chromium's
-// install prompt no longer needs one.
+// No CACHING service worker: the app had stale-cache trouble before, and Chromium's
+// install prompt no longer needs one. Wave 11 adds sw.js for PUSH ALONE (src/sw/sw.ts: no fetch handler, no cache), built
+// below as its own bundle at the root under a fixed name (no-cache like every root file), and the Android app's
+// .well-known/assetlinks.json (android/, the Trusted Web Activity's proof that the APK and this origin belong together).
 const PWA_DIR = path.resolve(here, 'pwa')
 const PWA_FILES = {
   'manifest.json': 'application/manifest+json',
@@ -37,14 +39,41 @@ const PWA_FILES = {
   'icons/icon-512.png': 'image/png',
   'icons/icon-maskable-512.png': 'image/png',
   'icons/apple-touch-icon.png': 'image/png',
+  '.well-known/assetlinks.json': 'application/json',
 }
+const SW_ENTRY = path.resolve(here, 'src/sw/sw.ts')
+const SW_FILE = 'sw.js'
+
+// The worker bundle: a second Vite build (library mode, one IIFE file) from the Curator's Vite, loaded by path like its Svelte plugin.
+async function buildWorker(outDir) {
+  const { build } = await import(pathToFileURL(path.join(crm, 'node_modules/vite/dist/node/index.js')).href)
+  await build({
+    configFile: false, logLevel: 'warn', root: here, publicDir: false, define: { 'import.meta.env.BASE_URL': '"/"' },
+    build: {
+      outDir, emptyOutDir: false, target: 'es2020', sourcemap: false, copyPublicDir: false,
+      lib: { entry: SW_ENTRY, formats: ['iife'], name: 'TrustWebWorker', fileName: () => SW_FILE },
+    },
+  })
+}
+let devWorker = null // dev: built once per server start, on the first request
 
 function pwaFiles() {
   return {
     name: 'trustweb-pwa-files',
+    configResolved(config) { resolvedOutDir = path.resolve(config.root, config.build.outDir) },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const file = (req.url ?? '').split('?')[0].replace(/^\//, '')
+        if (file === SW_FILE) {
+          const dir = path.join(os.tmpdir(), 'trustweb-sw-' + process.pid)
+          devWorker ??= buildWorker(dir).then(() => path.join(dir, SW_FILE))
+          devWorker.then((f) => {
+            res.setHeader('Content-Type', 'text/javascript')
+            res.setHeader('Cache-Control', 'no-cache')
+            res.end(readFileSync(f))
+          }, (err) => { res.statusCode = 500; res.end(String(err)) })
+          return
+        }
         const type = Object.hasOwn(PWA_FILES, file) ? PWA_FILES[file] : null
         if (!type) { next(); return }
         res.setHeader('Content-Type', type)
@@ -57,8 +86,14 @@ function pwaFiles() {
         this.emitFile({ type: 'asset', fileName: file, source: readFileSync(path.join(PWA_DIR, file)) })
       }
     },
+    async closeBundle() {
+      if (this.meta?.watchMode) return
+      await buildWorker(resolvedOutDir)
+    },
   }
 }
+let resolvedOutDir = path.resolve(here, 'dist')
+
 
 // Settings > About shows "App version <git short sha>, data format v1" (wave 2, P20).
 // A tree with uncommitted changes says so ("-dirty"); no git at all: "dev".

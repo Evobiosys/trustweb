@@ -39,9 +39,9 @@
  * DIDs stay in this layer. Nothing here hands a DID string to the UI.
  */
 import { createIdentity, deserializeIdentity, serializeIdentity, ecdhSharedSecret } from '../../demo/src/did'
-import type { Identity as DidIdentity } from '../../demo/src/did'
+import type { Identity as DidIdentity, SerializedIdentityV1 } from '../../demo/src/did'
 import { createRelayChannel } from '../../demo/src/relay'
-import type { RelayChannel, RelayStatus } from '../../demo/src/relay'
+import type { PushSubscriptionJson, RelayChannel, RelayStatus } from '../../demo/src/relay'
 import { deriveEcdhPairKey, randomId } from '../../demo/src/crypto'
 import { decodeFromQr, encodeForQr } from '../../demo/src/wire'
 import type { Envelope } from '../../demo/src/wire'
@@ -77,7 +77,7 @@ import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
 
-export type { RelayStatus }
+export type { PushSubscriptionJson, RelayStatus }
 
 export { ANSWER_WINDOW_MS }
 const RELEVANCE_BAND = 0.5
@@ -160,6 +160,8 @@ export interface NetHooks {
   state(): AppState
   save(): void
   onStatus(status: RelayStatus): void
+  /** Wave 11: the relay's answer to this phone's push subscription (push.ts shows "unavailable" as a hint). */
+  onPush?(outcome: 'kept' | 'forgotten' | 'rejected' | 'unavailable'): void
   /** A matching ask arrived: show the consent prompt, wherever the person is. */
   onAsk(ask: IncomingAsk): void
   /** A person scanned this device's code: they are now a connected peer. */
@@ -276,6 +278,8 @@ export class Net {
   private reasking = new Set<string>()
   private readonly windowMs: number
   private readonly relayOrigin: string | undefined
+  /** Wave 11: this device's Web Push subscription for the relay (undefined: nothing to say; null: withdraw). */
+  private pushSub: PushSubscriptionJson | null | undefined = undefined
 
   /** This phone's answer window (ask_window.ts): what its asks carry and what the dock counts down. */
   get answerWindowMs(): number {
@@ -346,6 +350,8 @@ export class Net {
       this.hooks.onStatus(status)
       if (status === 'connected') { this.noteConnected(Date.now()); void this.resendAcks(); void this.flushLateYes(); void this.flushAskAgain() }
     })
+    channel.onPush((outcome) => { if (this.channel === channel) this.hooks.onPush?.(outcome) })
+    if (this.pushSub !== undefined) channel.setPush(this.pushSub)
     channel.onRawWire((fromDid, payload) => this.handleRaw(fromDid, payload))
     channel.onEnvelope(async (fromDid) => {
       const peer = this.peerByDid(fromDid)
@@ -356,6 +362,17 @@ export class Net {
     } catch {
       /* relay.ts keeps reconnecting on its own; the status badge shows it */
     }
+  }
+
+  /** Wave 11 (push.ts): the subscription the relay may wake this device with; null withdraws it. Survives reconnects. */
+  setPush(sub: PushSubscriptionJson | null): void {
+    this.pushSub = sub
+    this.channel?.setPush(sub)
+  }
+
+  /** Wave 11: what the service worker needs to read a waiting wire by itself (push_bundle.ts): the identity, as stored. */
+  identityRecord(): SerializedIdentityV1 | null {
+    return this.hooks.state().identity ?? null
   }
 
   private closeDrain(): void {

@@ -147,6 +147,9 @@ import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
+import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
+import type { NotifyKind } from './notify_kinds'
+import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush } from './push'
 
 enum Screen {
   Start = 'start',
@@ -369,7 +372,28 @@ function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
+    mirrorPushBundle(state)
   }
+}
+
+// Wave 11: the service worker's copy of what it needs to read a waiting wire (push_bundle.ts), refreshed after a save while
+// notifications are on; one write per tick however many saves.
+let mirrorTimer: ReturnType<typeof setTimeout> | null = null
+function mirrorPushBundle(s: AppState): void {
+  if (!s.notificationsOn || !pushSupported() || mirrorTimer) return
+  mirrorTimer = setTimeout(() => { mirrorTimer = null; void pushBundleOf(st(), location.origin, S.appName).write() }, 250)
+}
+
+/** The relay's last word on this phone's push subscription (Settings > Notifications shows a hint when it cannot wake us). */
+let pushState: 'kept' | 'forgotten' | 'rejected' | 'unavailable' | 'unsupported' | 'no-worker' | 'relay-no-push' | 'denied' | 'failed' | null = null
+
+/** Subscribes this phone for wake-ups (push.ts) and tells the relay; on boot while on, and when the person turns notifications on. */
+async function refreshPush(): Promise<void> {
+  const s = st()
+  if (!s.notificationsOn) { net.setPush(null); await unsubscribePush(); return }
+  const r = await subscribePush(location.origin)
+  if (r.ok) { net.setPush(r.sub); await pushBundleOf(s, location.origin, S.appName).write() }
+  else pushState = r.why
 }
 
 // ---------------------------------------------------------------------------
@@ -440,9 +464,10 @@ const net = new Net({
   state: st,
   save,
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
+  onPush: (outcome) => { pushState = outcome },
   onAsk: (ask) => {
     askQueue.push(ask)
-    notify(S.notifBodyAsk(ask.fromName))
+    notify('ask', S.notifBodyAsk(ask.fromName))
     if (!askShowing) showNextAsk()
   },
   onPeerConnected: (peer) => {
@@ -463,6 +488,7 @@ const net = new Net({
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
+    notify('connect', S.notifBodyConnect(peer.displayName))
     render()
   },
   // A reach-out through the public link: over 10 an hour, or paused, it makes no card and gets no answer (counted, one toast per session).
@@ -483,7 +509,7 @@ const net = new Net({
     if (!acct) return false
     acct.pending = peer
     save()
-    notify(S.demoAcctAllowTitle(acct.name))
+    notify('connect', S.demoAcctAllowTitle(acct.name))
     showAllowCard(acct)
     return true
   },
@@ -618,11 +644,10 @@ function ownDoorDid(): string | null {
   return solo || !state ? null : ownFrontDoor(state, demoPeer)
 }
 
-function notify(body: string): void {
-  if (!state?.notificationsOn || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') {
-    try { new Notification(S.appName, { body }) } catch { /* some browsers only allow this from a service worker */ }
-  }
+/** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
+function notify(kind: NotifyKind, body: string): void {
+  if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
+  if (Notification.permission === 'granted') void showNotification(S.appName, body)
 }
 
 // ---------------------------------------------------------------------------
@@ -1258,7 +1283,7 @@ function screenStart(): Node[] {
     render()
     if (solo) showDemoFriends()
     else offerDemoContent()
-    void net.start().then(announceLink)
+    void net.start().then(announceLink).then(() => refreshPush())
     void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
@@ -1740,11 +1765,27 @@ function notificationsCard(s: AppState): HTMLElement {
     }
     s.notificationsOn = !s.notificationsOn
     save()
+    await refreshPush()
     settingsSheet()
   }
+  // Wave 11: one switch per kind; off here is off in the page and in the service worker alike.
+  const kinds = kindsOf(s)
+  const kindRow = (kind: NotifyKind): HTMLElement => {
+    const box = el('input', { type: 'checkbox', 'data-notify-kind': kind }) as HTMLInputElement
+    box.checked = kinds[kind]
+    box.addEventListener('change', () => { s.notifyKinds = { ...kinds, [kind]: box.checked }; save(); kinds[kind] = box.checked })
+    return el('label', { class: 'notif-kind' }, [box, el('span', {}, [S.notifKind[kind]])])
+  }
+  const hint = !s.notificationsOn ? null
+    : !pushSupported() || pushState === 'unsupported' ? S.notifPushUnsupported
+    : pushState === 'relay-no-push' || pushState === 'unavailable' ? S.notifPushNoRelay
+    : pushState === 'kept' ? S.notifPushOn
+    : null
   return el('div', { class: 'verse notif' }, [
     el('h3', {}, [s.notificationsOn ? S.notifOnTitle : S.notifTitle]),
     el('p', {}, [S.notifBody]),
+    s.notificationsOn ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
+    hint ? el('p', { class: 'meta', 'data-push-state': pushState ?? '' }, [hint]) : null,
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => void toggle() }, [s.notificationsOn ? S.notifTurnOff : S.notifTurnOn]),
   ])
 }
@@ -2382,7 +2423,7 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   s.chats = r.book
   save()
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
-  notify(S.chatNotifBody(peer.displayName))
+  notify('chat', S.chatNotifBody(peer.displayName))
   newMessageNotice(peer, r.message.key)
 }
 
@@ -3094,7 +3135,7 @@ function onSharedText(peer: Peer, text: string): void {
   const entry: ReceivedShare = { id: randomId(8), at: Date.now(), fromName: peer.displayName, fromPeerId: peer.id, link: text, title: link.title }
   s.received = [entry, ...(s.received ?? [])].slice(0, RECEIVED_MAX)
   save()
-  notify(S.recvTitle(peer.displayName))
+  notify('chat', S.recvTitle(peer.displayName))
   showNotice(S.recvTitle(peer.displayName), S.recvBody(link.title), [
     el('button', { class: 'btn btn-electric btn-sm', onclick: () => { hideNotice(); void openShare(link, entry) } }, [S.recvOpen]),
     el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.recvLater]),

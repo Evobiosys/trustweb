@@ -368,10 +368,16 @@ export const S = {
 
   notifTitle: 'Notifications are off',
   notifOnTitle: 'Notifications are on',
-  notifBody: 'Off by default, and there are no unread counters. A web page cannot see your phone\'s Do Not Disturb, so TrustWeb never buzzes on its own: an ask that matches something waits here until you open the app.',
+  notifBody: 'Off by default, and there are no unread counters. Choose what you want to hear about: someone wanting to connect, someone sending a query, a message. Each has its own switch.',
   notifTurnOn: 'Turn on notifications',
   notifTurnOff: 'Turn off notifications',
   notifBlocked: 'This browser refused notifications.',
+  // Wave 11: one switch per kind, and what the relay's wake-up path says.
+  notifKind: { connect: 'Someone wants to connect', ask: 'Someone is sending a query', chat: 'A message' } as Record<'connect' | 'ask' | 'chat', string>,
+  notifPushOn: 'Also when the app is closed: the relay wakes this device with an empty push; what arrived is read here, under your keys.',
+  notifPushNoRelay: 'While the app is open only: this relay does not wake devices (a preview, or an older relay).',
+  notifPushUnsupported: 'While the app is open only: this browser offers no push. On Android, install the app for notifications when it is closed.',
+  notifBodyConnect: (name: string) => `${name} wants to connect.`,
 
   ringLabel: {
     [Ring.Close]: 'Close friend',

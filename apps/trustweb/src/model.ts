@@ -793,6 +793,16 @@ export enum TabOrder {
  */
 export const RECORD_FORMAT = 1
 
+/** Wave 11: the three kinds of arrival a person can be told about, each with its own switch (Settings > Notifications). */
+export interface NotifyKinds {
+  /** Someone wants to connect: opened this phone's link or code, or reached out. */
+  connect: boolean
+  /** Someone is sending a query (an ask that matched, or an ask-again). */
+  ask: boolean
+  /** A message in a chat. */
+  chat: boolean
+}
+
 export interface AppState {
   v: typeof RECORD_FORMAT
   /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
@@ -806,6 +816,8 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
+  notifyKinds?: NotifyKinds
   /** Events I know (events.ts). Absent in older records. Local only. */
   events?: TwEvent[]
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
