@@ -26,7 +26,7 @@ const readings = () => [
   { path: 'pages/Lena Berger.md', date: '2026-05-02', reader: 'claude:haiku', people: [
     { name: 'Lena Berger', aliases: [], context: 'Co-founder of the repair café', facts: ['Lives in Leoben', 'Runs a repair café in Graz'], met: '2024-03-09', confidence: 0.9 },
   ] },
-  { path: 'journals/2026_07_12.md', date: '2026-07-12', reader: 'claude:haiku', people: [
+  { path: 'journals/2026_07_12.md', date: '2026-07-12', reader: 'claude:haiku', communities: ['DWeb-Berlin_2026'], people: [
     { name: 'Lena Berger', aliases: [], context: '', facts: ['Lives in Leoben', 'Plays cello'], met: '', confidence: 0.9 },
   ] },
 ]
@@ -85,9 +85,11 @@ describe('converter', () => {
   })
   it('a new person collects lines across notes without duplicates; metAt = explicit met date or earliest note', () => {
     const lena = record.people.find((p) => p.name === 'Lena Berger')!
-    expect(lena.lines.map((l) => l.text)).toEqual(['Lives in Leoben', 'Runs a repair café in Graz', 'Plays cello'])
+    expect(lena.lines.map((l) => l.text)).toEqual(['Lives in Leoben', 'Runs a repair café in Graz', 'community: DWeb-Berlin_2026', 'Plays cello'])
+    const c = lena.lines.find((l) => l.text.startsWith('community:'))!
+    expect([c.tag, c.customTag, c.source]).toEqual(['custom', 'community', { kind: 'local', path: 'journals/2026_07_12.md' }])
     expect(lena.metAt).toBe(Date.parse('2024-03-09T12:00:00Z'))
-    expect(new Set(lena.lines.map((l) => l.id)).size).toBe(3)
+    expect(new Set(lena.lines.map((l) => l.id)).size).toBe(4)
   })
   it('low confidence is dropped and counted; the record stays a valid AppState', () => {
     expect(record.people.find((p) => p.name === 'Jonas')).toBeUndefined()

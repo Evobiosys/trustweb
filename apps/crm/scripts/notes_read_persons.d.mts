@@ -1,5 +1,5 @@
 export interface ReadPerson { name: string; aliases: string[]; context: string; facts: string[]; met: string; confidence: number }
-export interface Reading { key?: string; path: string; date: string; reader?: string; chars?: number; people: ReadPerson[] }
+export interface Reading { key?: string; path: string; date: string; reader?: string; chars?: number; communities?: string[]; people: ReadPerson[] }
 export const PROMPT: string
 export function listNotes(vault: string, include?: string[]): string[]
 export function noteDate(rel: string, text: string, mtimeMs: number): string

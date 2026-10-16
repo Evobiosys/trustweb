@@ -29,6 +29,8 @@ export interface Filters {
   rules: { key: string; text: string }[]
   /** Sources (trustweb sources.ts: tana, local) whose people are hidden when NOTHING else knows them (Jakob 2026-10-16). */
   hideSources: string[]
+  /** Communities (a note's `trustweb-community`, lines tagged community) whose people are hidden when they are in no other community. */
+  hideCommunities: string[]
 }
 
 /** The sync option a hideable source belongs to; Apple Notes has no import yet. */
@@ -79,7 +81,7 @@ export interface Prefs {
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, truth: '', notesUrl: 'http://127.0.0.1:8263', notesToken: '', notesAutoSync: true, activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined

@@ -105,6 +105,11 @@ export const S = {
   pkmLabel: { tana: 'Tana', 'apple-notes': 'Apple Notes', 'obsidian-logseq': 'Obsidian / Logseq' } as Record<string, string>,
   pkmLater: 'Coming later.',
   // The notes bridge (Jakob 2026-10-16): Obsidian / Logseq two-way through a loopback bridge on this computer.
+  syncTitle: 'Sync & sources',
+  syncOpen: (n: number) => `Sync & sources (${n} on)`,
+  hideCommunityTitle: 'Communities',
+  hideCommunityHint: 'From your notes: a note with `trustweb-community: Name` in its front matter puts everyone it names into that community. A note with `trustweb: no` or #no-trustweb stays out of TrustWeb.',
+  hideOnlyIn: (c: string) => `Hide people only in ${c}`,
   truthTitle: 'Where everyone lives',
   truthHint: 'The system that holds every person. The others get only the people they already mention, written next to where they were found.',
   truthNone: 'Not declared',

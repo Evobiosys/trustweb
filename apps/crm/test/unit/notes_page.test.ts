@@ -96,3 +96,19 @@ describe('block in the home note', () => {
     expect(upsertBlock(rewritten, p3, { now: NOW + 9000 })).toContain('- 2026-07-11 Lent me the printer <!-- tw:tana-abc-2 -->\n<!-- trustweb:end tana-abc -->')
   })
 })
+
+describe('per-note rules', async () => {
+  const { noteCommunities, noteOptOut } = await import('../../scripts/notes_page.mjs')
+  it('opt out by front matter, tags or an inline #no-trustweb', () => {
+    expect(noteOptOut('---\ntrustweb: no\n---\n# x')).toBe(true)
+    expect(noteOptOut('---\ntags: [journal, no-trustweb]\n---\n')).toBe(true)
+    expect(noteOptOut('- private stuff #no-trustweb\n')).toBe(true)
+    expect(noteOptOut('---\ntrustweb: yes\n---\n#no-trustweb-ish\n')).toBe(false)
+    expect(noteOptOut('plain note')).toBe(false)
+  })
+  it('communities from front matter (string or list) and inline #community/ tags, cleaned and unique', () => {
+    expect(noteCommunities('---\ntrustweb-community: DWeb-Berlin_2026\n---\n')).toEqual(['DWeb-Berlin_2026'])
+    expect(noteCommunities('---\ncommunity: [A, "B"]\n---\n- met at #community/A and #community/C.\n')).toEqual(['A', 'B', 'C'])
+    expect(noteCommunities('nothing')).toEqual([])
+  })
+})

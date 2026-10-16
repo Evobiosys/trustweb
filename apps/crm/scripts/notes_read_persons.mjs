@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { MARK_FOLDER } from './notes_page.mjs'
+import { MARK_FOLDER, noteCommunities, noteOptOut } from './notes_page.mjs'
 
 export const PROMPT = `You extract people from one markdown note written by its owner ("the writer"). Output ONLY a JSON object, no prose:
 {"people":[{"name":"<full name as written>","aliases":["<other spellings or short forms in the note>"],"context":"<how the writer knows them, one sentence, or empty>","facts":["<one short fact per item about THIS person only, close to the note's wording>"],"met":"<YYYY-MM-DD only if the note says when the writer first met them, else empty>","confidence":<0..1>}]}
@@ -178,17 +178,19 @@ async function main() {
   let rels = o.files ? readFileSync(o.files, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean) : listNotes(vault, o.include)
   const todo = []
   let skippedSmall = 0
+  let optedOut = 0
   for (const rel of rels) {
     const abs = path.join(vault, rel)
     const st = statSync(abs)
     const text = readFileSync(abs, 'utf8')
     if (text.trim().length < MIN_CHARS) { skippedSmall++; continue }
+    if (noteOptOut(text)) { optedOut++; continue }
     const key = noteKey(rel, st.mtimeMs, o.reader)
     if (done.has(key)) continue
-    todo.push({ rel, text, key, date: noteDate(rel, text, st.mtimeMs) })
+    todo.push({ rel, text, key, date: noteDate(rel, text, st.mtimeMs), communities: noteCommunities(text) })
     if (todo.length >= o.limit) break
   }
-  console.log(`${rels.length} notes, ${skippedSmall} too small, ${done.size} already read, ${todo.length} to read with ${o.reader || '(dry run)'}`)
+  console.log(`${rels.length} notes, ${skippedSmall} too small, ${optedOut} opted out (#no-trustweb), ${done.size} already read, ${todo.length} to read with ${o.reader || '(dry run)'}`)
   if (o.dryRun) { for (const t of todo) console.log(`${t.date}  ${t.rel}  (${t.text.length} chars)`); return }
   const reader = readerFor(o.reader)
   let i = 0
@@ -202,7 +204,7 @@ async function main() {
       try {
         const r = await readNote(reader, t.rel, t.text, t.date)
         cost += r.cost
-        appendFileSync(outPath, `${JSON.stringify({ key: t.key, path: t.rel, date: t.date, reader: o.reader, chars: t.text.length, people: r.people })}\n`)
+        appendFileSync(outPath, `${JSON.stringify({ key: t.key, path: t.rel, date: t.date, reader: o.reader, chars: t.text.length, ...(t.communities.length ? { communities: t.communities } : {}), people: r.people })}\n`)
         okN++
         console.log(`${okN + errN}/${todo.length} ${t.rel}: ${r.people.length} people${r.cost ? ` ($${r.cost.toFixed(4)})` : ''}`)
       } catch (e) {

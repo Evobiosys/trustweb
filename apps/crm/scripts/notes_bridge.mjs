@@ -13,7 +13,7 @@ import { createServer } from 'node:http'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { MARK_FOLDER, blockChanges, parseBlocks, slug, updatePage, upsertBlock } from './notes_page.mjs'
+import { MARK_FOLDER, blockChanges, noteOptOut, parseBlocks, slug, updatePage, upsertBlock } from './notes_page.mjs'
 
 const CONFIG = path.join(process.env.XDG_CONFIG_HOME ?? path.join(homedir(), '.config'), 'trustweb', 'notes-bridge.json')
 const PAGES_DIR = path.join('TrustWeb', 'People')
@@ -101,6 +101,7 @@ export function push(vault, people, { everyone = false, now = Date.now(), own = 
     const abs = safePath(vault, rel)
     if (!abs || !existsSync(abs)) { res.errors.push(`${rel}: not in the vault`); continue }
     const before = readFileSync(abs, 'utf8')
+    if (noteOptOut(before)) { res.noHome += list.length; continue }
     let text = before
     for (const p of list) text = upsertBlock(text, p, { now })
     if (text === before) res.unchanged += list.length

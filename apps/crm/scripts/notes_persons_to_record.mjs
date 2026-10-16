@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { COMMUNITY_TAG } from './notes_page.mjs'
 
 const MAX_LINE = 200
 const TANA_URL = 'https://app.tana.inc?nodeid='
@@ -91,6 +92,13 @@ export function merge(seed, readings, { minConfidence = 0.5, reader = '' } = {})
       let i = 0
       const facts = [...(m.facts ?? [])]
       if (!full && m.context && !m.facts?.length) facts.push(m.context)
+      for (const c of r.communities ?? []) {
+        const text = `${COMMUNITY_TAG}: ${c}`
+        if (texts.has(norm(text))) continue
+        texts.add(norm(text))
+        person.lines.push({ id: `local-${h(key, 12)}-${pathTag}-c${h(c, 6)}`, text, tag: 'custom', customTag: COMMUNITY_TAG, audience: 'me', status: 'current', notedAt: at, checkedAt: at, source: { kind: 'local', path: r.path } })
+        stats.lines++
+      }
       for (const f of facts) {
         const text = f.slice(0, MAX_LINE)
         if (texts.has(norm(text))) continue

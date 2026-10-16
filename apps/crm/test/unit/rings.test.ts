@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Ring } from '../../../trustweb/src/model'
-import { passesFilters } from '../../src/fields'
+import { communitiesOf, passesFilters } from '../../src/fields'
 import { onlyFrom } from '../../../trustweb/src/sources'
 import { OUT_OF_WEB, RING_ORDER, choiceEdits, intendingEdits, ringColor, ringOf, ringSyncValue } from '../../src/rings'
 
@@ -60,5 +60,17 @@ describe('hide by source (Jakob 2026-10-16: only people nothing else knows)', ()
     expect(passesFilters({}, f, { id: 'local-b', lines: [] })).toBe(true)
     expect(passesFilters({}, f)).toBe(true)
     expect(passesFilters({}, { ...f, hideSources: [] }, { id: 'tana-a', lines: [line()] })).toBe(true)
+  })
+})
+
+describe('hide by community (only people in no other community)', () => {
+  const f = { hideDeceased: false, hideFamous: false, onlyConnection: false, rules: [], hideSources: [], hideCommunities: ['DWeb-Berlin_2026'] }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = (name: string): any => ({ id: 'l' + name, text: `community: ${name}`, tag: 'custom', customTag: 'community', audience: 'me', status: 'current', notedAt: 1, checkedAt: 1 })
+  it('lists communities; hides only-in; keeps people in another community too, and people in none', () => {
+    expect(communitiesOf({ lines: [c('DWeb-Berlin_2026'), c('Graz'), c('Graz')] })).toEqual(['DWeb-Berlin_2026', 'Graz'])
+    expect(passesFilters({}, f, { id: 'x', lines: [c('DWeb-Berlin_2026')] })).toBe(false)
+    expect(passesFilters({}, f, { id: 'x', lines: [c('DWeb-Berlin_2026'), c('Graz')] })).toBe(true)
+    expect(passesFilters({}, f, { id: 'x', lines: [] })).toBe(true)
   })
 })

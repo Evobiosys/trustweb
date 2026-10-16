@@ -112,6 +112,33 @@ export function diffPage(page, person) {
   return { ring, newLines }
 }
 
+// ---- per-note rules (Jakob 2026-10-16): a note can opt out, or put everyone it names into one community ----
+//   opt out:   front matter `trustweb: no`, or `no-trustweb` among its tags, or `#no-trustweb` anywhere in the text
+//   community: front matter `trustweb-community: DWeb-Berlin_2026` (or `community:`; a list works), or `#community/DWeb-Berlin_2026` in the text
+export const COMMUNITY_TAG = 'community'
+
+function frontMatter(text) {
+  const m = /^---\n([\s\S]*?)\n---/.exec(text)
+  return m ? m[1] : ''
+}
+
+export function noteOptOut(text) {
+  const fm = frontMatter(text)
+  if (/^trustweb\s*:\s*(no|false|off)\s*$/mi.test(fm)) return true
+  if (/^tags\s*:.*\bno-trustweb\b/mi.test(fm)) return true
+  return /(^|\s)#no-trustweb(?![\w-])/.test(text)
+}
+
+/** The communities a note declares, cleaned (no #, no surrounding quotes/brackets), in order, unique. */
+export function noteCommunities(text) {
+  const out = []
+  const add = (v) => { const c = String(v).replace(/^#/, '').replace(/[\[\]"']/g, '').replace(/[.,;:!?)]+$/, '').trim(); if (c && !out.includes(c)) out.push(c) }
+  const fm = frontMatter(text)
+  for (const m of fm.matchAll(/^(?:trustweb-)?community\s*:\s*(.+)$/gmi)) for (const v of m[1].split(',')) add(v)
+  for (const m of text.matchAll(/(^|\s)#community\/([^\s#]+)/g)) add(m[2])
+  return out
+}
+
 // ---- the block form (Jakob 2026-10-16, "append TrustWeb changes into the existing note where the person was found") ----
 // One marked block per person at the end of their home note:
 //   <!-- trustweb:begin <id> -->
