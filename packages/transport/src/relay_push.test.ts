@@ -120,6 +120,37 @@ describe("relay push wake-ups", () => {
     expect(wakes.map((w) => w.endpoint)).toEqual(["https://push.example.test/send/frozen"]);
   });
 
+  it("a peek auth streams the queue once, acks nothing, never displaces the live drain, and may hand over a subscription", async () => {
+    const { relay, store, endpoint } = await boot();
+    const me = createIdentity(endpoint);
+    const live = await drain(endpoint, me, false); // alive in the background: acks nothing
+    relay.submit(JSON.stringify({ to: me.did, from: "x", payload: "a" }));
+    relay.submit(JSON.stringify({ to: me.did, from: "x", payload: "b" }));
+    await live.until("wire");
+
+    const ws = new WebSocket(endpoint.replace("http", "ws") + "/relay/drain");
+    sockets.push(ws);
+    const frames: Record<string, unknown>[] = [];
+    const closed = new Promise<void>((r) => ws.on("close", () => r()));
+    ws.on("message", (d) => {
+      const m = JSON.parse(d.toString()) as Record<string, unknown>;
+      frames.push(m);
+      if (m.type === "challenge") {
+        const sig = ed25519.sign(new Uint8Array(Buffer.from(m.nonce as string, "base64url")), me.signing.secretKey);
+        ws.send(JSON.stringify({ type: "auth", did: me.did, sig: Buffer.from(sig).toString("base64url"), peek: true }));
+      }
+      if (m.type === "wire") ws.send(JSON.stringify({ type: "ack", ids: [m.id] })); // ignored on a peek
+      if (m.type === "peek_end") ws.send(JSON.stringify({ type: "push", subscription: SUB }));
+    });
+    await closed;
+    expect(frames.map((f) => f.type)).toEqual(["challenge", "auth_ok", "wire", "wire", "peek_end", "push_ok"]);
+    expect(live.ws.readyState).toBe(WebSocket.OPEN); // not displaced
+    expect(store.get(me.did)).toEqual(SUB);
+    live.ws.send(JSON.stringify({ type: "ack", ids: frames.filter((f) => f.type === "wire").map((f) => f.id as string) }));
+    await sleep(50);
+    expect(relay.submit(JSON.stringify({ to: me.did, from: "x", payload: "c" })).routed).toBe("accepted");
+  });
+
   it("a relay without push answers push_unavailable and 404s the key", async () => {
     const relay = new RelayServer();
     servers.push(relay);

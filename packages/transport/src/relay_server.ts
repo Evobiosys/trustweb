@@ -166,6 +166,8 @@ const PUSH_KEY_PATH = "/relay/push/key";
 interface ConnState {
   authenticated: boolean;
   did?: string;
+  /** A read-only look at the queue (service worker after a wake): never the live drain, acks ignored, closed after the stream. */
+  peek?: boolean;
   /** Single-use challenge; cleared after the first auth attempt (success or failure) so it can never be replayed. */
   nonce?: string;
   /** Queue ids already pushed on this socket, awaiting ack — avoids resending on every flush() while a delivery is in flight. */
@@ -183,6 +185,8 @@ interface ClientMessage {
   sig?: unknown;
   ids?: unknown;
   subscription?: unknown;
+  /** Wave 11: `auth` with `peek: true` reads the queue once without becoming the DID's drain (the service worker). */
+  peek?: unknown;
 }
 
 export class RelayServer {
@@ -454,6 +458,18 @@ export class RelayServer {
       clearTimeout(state.authDeadlineTimer);
       state.authDeadlineTimer = undefined;
     }
+    if (msg.peek === true) {
+      // Wave 11: the phone's service worker reads what waits without displacing the app's own drain (which may be alive
+      // in the background); nothing is dequeued, so the app still gets every wire. One pass, then the socket closes.
+      state.peek = true;
+      ws.send(JSON.stringify({ type: "auth_ok", peek: true }));
+      this.queueStore.prune(Date.now());
+      for (const q of this.queueStore.drain(did)) ws.send(JSON.stringify({ type: "wire", id: q.id, wire: q.wire }));
+      ws.send(JSON.stringify({ type: "peek_end" }));
+      const closer = setTimeout(() => ws.close(), 2_000);
+      closer.unref?.();
+      return;
+    }
     // One active drain per DID: a fresh, successfully-authenticated connection
     // for the same DID displaces the previous one rather than leaving two
     // sockets racing to drain (and double-deliver) the same queue.
@@ -467,7 +483,7 @@ export class RelayServer {
   }
 
   private handleAck(state: ConnState, msg: ClientMessage): void {
-    if (!state.authenticated || !state.did || !Array.isArray(msg.ids)) return;
+    if (!state.authenticated || !state.did || state.peek || !Array.isArray(msg.ids)) return;
     const ids = msg.ids.filter((x): x is string => typeof x === "string");
     if (ids.length === 0) return;
     this.queueStore.ackDelivered(state.did, ids);
