@@ -93,7 +93,7 @@ function releaseFile() {
 function notesToken() {
   try {
     const file = path.join(process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? '', '.config'), 'trustweb', 'notes-bridge.json')
-    return JSON.parse(fs.readFileSync(file, 'utf8')).token ?? null
+    return JSON.parse(readFileSync(file, 'utf8')).token ?? null
   } catch { return null }
 }
 
