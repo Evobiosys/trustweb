@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Files the browser may hand to the app (a shared file, a download); nothing of TrustWeb's own data lives here. -->
+<!--
+  What the FileProvider may hand to the browser. androidbrowserhelper writes the splash image to files/twa_splash/ and
+  passes it to Chrome through this provider (SplashImageTransferTask); without this path the app crashed at start
+  ("TrustWeb keeps stopping", 2026-10-16, found with .github/workflows/android-smoke.yml). Nothing of TrustWeb's own data lives here.
+-->
 <paths>
-    <files-path name="shared" path="shared/" />
+    <files-path name="twa_splash" path="twa_splash/" />
 </paths>
