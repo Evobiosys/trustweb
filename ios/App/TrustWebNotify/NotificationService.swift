@@ -6,6 +6,7 @@
 // words: who wants to connect, who sent a query, who wrote. Apple carried the generic words only. When nothing can be read
 // in time (no network, no bundle), the generic words stay.
 import UserNotifications
+import CryptoKit
 import Foundation
 
 class NotificationService: UNNotificationServiceExtension {

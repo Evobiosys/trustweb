@@ -40,7 +40,10 @@ jobs:
           xcodebuild -version
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build | tail -40
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build > "$RUNNER_TEMP/xcodebuild.log" 2>&1 \
+            || { grep -E 'error:' "$RUNNER_TEMP/xcodebuild.log" | head -40; echo "::error::xcodebuild failed"; exit 1; }
+          grep -E 'BUILD (SUCCEEDED|FAILED)' "$RUNNER_TEMP/xcodebuild.log"
+          test -d "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app/PlugIns/TrustWebNotify.appex"
           ls "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/"
       - name: launch in a simulator and watch it for 20 s
         run: |
