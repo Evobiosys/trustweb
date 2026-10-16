@@ -88,7 +88,7 @@ export function safePath(vault, rel) {
 }
 
 /** Blocks into home notes for the people that have one; with `everyone`, also one page per person under TrustWeb/People. */
-export function push(vault, people, { everyone = false, now = Date.now() } = {}) {
+export function push(vault, people, { everyone = false, now = Date.now(), own = new Map() } = {}) {
   const home = homeNotes(people, loadReadings(vault))
   const res = { written: 0, unchanged: 0, noHome: 0, pages: 0, errors: [] }
   const byFile = new Map()
@@ -104,7 +104,7 @@ export function push(vault, people, { everyone = false, now = Date.now() } = {})
     let text = before
     for (const p of list) text = upsertBlock(text, p, { now })
     if (text === before) res.unchanged += list.length
-    else { writeFileSync(abs, text); res.written += list.length }
+    else { writeFileSync(abs, text); own.set(rel, statSync(abs).mtimeMs); res.written += list.length }
   }
   if (everyone) {
     const dir = path.join(vault, PAGES_DIR)
@@ -166,21 +166,21 @@ function body(req) {
 
 const validPeople = (x) => Array.isArray(x) && x.every((p) => p && typeof p.id === 'string' && typeof p.name === 'string' && Array.isArray(p.lines))
 
-/** The vault watched: `changedAt` moves when a .md file outside the skipped folders is saved by anyone but the bridge itself. */
+/** The vault watched: `changedAt` moves when a .md file outside the skipped folders is saved by anyone but the bridge itself (own = the mtimes it wrote). */
 export function watchVault(cfg) {
-  const state = { changedAt: 0, ownWritesUntil: 0 }
+  const state = { changedAt: 0, own: new Map() }
   try {
     watch(cfg.vault, { recursive: true }, (_e, name) => {
-      const rel = String(name ?? '')
+      const rel = String(name ?? '').split(path.sep).join('/')
       if (!rel.endsWith('.md') || rel.split('/').some((d) => SKIP_DIRS.has(d))) return
-      if (Date.now() < state.ownWritesUntil) return
+      try { if (state.own.get(rel) === statSync(path.join(cfg.vault, rel)).mtimeMs) return } catch { /* deleted: counts as a change */ }
       state.changedAt = Date.now()
     })
   } catch (e) { console.error(`watch: ${e.message}`) }
   return state
 }
 
-export function handler(cfg, watched = { changedAt: 0, ownWritesUntil: 0 }) {
+export function handler(cfg, watched = { changedAt: 0, own: new Map() }) {
   return async (req, res) => {
     const origin = req.headers.origin
     const cors = origin && LOCAL_ORIGIN.test(origin) ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', Vary: 'Origin' } : {}
@@ -194,7 +194,7 @@ export function handler(cfg, watched = { changedAt: 0, ownWritesUntil: 0 }) {
       if (req.method === 'POST' && (url.pathname === '/push' || url.pathname === '/changes')) {
         const b = JSON.parse(await body(req) || '{}')
         if (!validPeople(b.people)) return send(400, { error: 'people[] needed' })
-        if (url.pathname === '/push') { watched.ownWritesUntil = Date.now() + 1500; return send(200, push(cfg.vault, b.people, { everyone: b.everyone === true })) }
+        if (url.pathname === '/push') return send(200, push(cfg.vault, b.people, { everyone: b.everyone === true, own: watched.own }))
         return send(200, { changes: changes(cfg.vault, b.people) })
       }
       send(404, { error: 'no such route' })
