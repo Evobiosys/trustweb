@@ -112,3 +112,13 @@ describe('per-note rules', async () => {
     expect(noteCommunities('nothing')).toEqual([])
   })
 })
+
+describe('stripBlocks', async () => {
+  const { stripBlocks } = await import('../../scripts/notes_page.mjs')
+  it('removes every TrustWeb block and nothing else; the reader key then ignores what the bridge wrote', async () => {
+    const note = '# day\n- Met Mira.\n\n<!-- trustweb:begin tana-abc -->\n- TrustWeb: Mira · ring: friend · updated: 2026-10-16T09:30:00.000Z\n<!-- trustweb:end tana-abc -->\n\n<!-- trustweb:begin local-1 -->\n- x\n<!-- trustweb:end local-1 -->\n- after\n'
+    expect(stripBlocks(note)).toBe('# day\n- Met Mira.\n\n- after\n')
+    const { noteKey } = await import('../../scripts/notes_read_persons.mjs')
+    expect(noteKey('a.md', stripBlocks(note), 'r')).toBe(noteKey('a.md', '# day\n- Met Mira.\n\n- after\n', 'r'))
+  })
+})

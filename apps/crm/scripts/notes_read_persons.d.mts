@@ -7,5 +7,5 @@ export function chunks(text: string): string[]
 export function parseAnswer(raw: unknown): { people: ReadPerson[] }
 export function mergePeople(lists: ReadPerson[][]): ReadPerson[]
 export function readerFor(spec: string): (text: string) => Promise<{ text: string; cost: number }>
-export function noteKey(rel: string, mtimeMs: number, reader: string): string
+export function noteKey(rel: string, text: string, reader: string): string
 export function readNote(reader: (text: string) => Promise<{ text: string; cost: number }>, rel: string, text: string, date: string): Promise<{ people: ReadPerson[]; cost: number }>

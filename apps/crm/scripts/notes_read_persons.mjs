@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { MARK_FOLDER, noteCommunities, noteOptOut } from './notes_page.mjs'
+import { MARK_FOLDER, noteCommunities, noteOptOut, stripBlocks } from './notes_page.mjs'
 
 export const PROMPT = `You extract people from one markdown note written by its owner ("the writer"). Output ONLY a JSON object, no prose:
 {"people":[{"name":"<full name as written>","aliases":["<other spellings or short forms in the note>"],"context":"<how the writer knows them, one sentence, or empty>","facts":["<one short fact per item about THIS person only, close to the note's wording>"],"met":"<YYYY-MM-DD only if the note says when the writer first met them, else empty>","confidence":<0..1>}]}
@@ -137,7 +137,8 @@ export function readerFor(spec) {
   throw new Error(`unknown reader "${spec}" (claude:<model> or ollama:<model>)`)
 }
 
-export const noteKey = (rel, mtimeMs, reader) => createHash('sha1').update(`${rel}\n${Math.round(mtimeMs)}\n${reader}`).digest('hex').slice(0, 16)
+/** A note is "already read" while its text (without TrustWeb's own blocks) and the reader are the same: a block the bridge wrote does not trigger a re-read. */
+export const noteKey = (rel, text, reader) => createHash('sha1').update(`${rel}\n${text}\n${reader}`).digest('hex').slice(0, 16)
 
 /** One note through the reader: every chunk, merged. */
 export async function readNote(reader, rel, text, date) {
@@ -182,10 +183,10 @@ async function main() {
   for (const rel of rels) {
     const abs = path.join(vault, rel)
     const st = statSync(abs)
-    const text = readFileSync(abs, 'utf8')
+    const text = stripBlocks(readFileSync(abs, 'utf8'))
     if (text.trim().length < MIN_CHARS) { skippedSmall++; continue }
     if (noteOptOut(text)) { optedOut++; continue }
-    const key = noteKey(rel, st.mtimeMs, o.reader)
+    const key = noteKey(rel, text, o.reader)
     if (done.has(key)) continue
     todo.push({ rel, text, key, date: noteDate(rel, text, st.mtimeMs), communities: noteCommunities(text) })
     if (todo.length >= o.limit) break

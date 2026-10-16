@@ -139,6 +139,11 @@ export function noteCommunities(text) {
   return out
 }
 
+/** The note without TrustWeb's own blocks: what the reader hashes and reads, so a block the bridge wrote never counts as a change nor gets read back. */
+export function stripBlocks(text) {
+  return text.replace(/\n*<!-- trustweb:begin ([^ ]+) -->\n[\s\S]*?<!-- trustweb:end \1 -->\n?/g, '\n')
+}
+
 // ---- the block form (Jakob 2026-10-16, "append TrustWeb changes into the existing note where the person was found") ----
 // One marked block per person at the end of their home note:
 //   <!-- trustweb:begin <id> -->

@@ -12,6 +12,7 @@ export function diffPage(page: Page, person: Person): { ring: string | null; new
 export const RINGS: readonly string[]
 export const COMMUNITY_TAG: string
 export function noteOptOut(text: string): boolean
+export function stripBlocks(text: string): string
 export function noteCommunities(text: string): string[]
 export interface Block { id: string; name: string; ring: string; updated: number; lines: PageLine[]; userLines: { text: string; date: string }[] }
 export function renderBlock(person: Person, o?: { now?: number; keep?: { text: string; date: string }[] }): string
