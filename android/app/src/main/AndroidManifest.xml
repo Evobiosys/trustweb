@@ -25,7 +25,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.TrustWeb"
-        tools:targetApi="34">
+        tools:targetApi="36">
 
         <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
         <meta-data android:name="web_manifest_url" android:value="@string/web_manifest_url" />

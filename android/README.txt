@@ -24,4 +24,4 @@ Release
      https://trustweb.one/apk  (Caddy 302 -> github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk)
 
 Local build (optional; the workflow is the reference build)
-  JDK 17, Gradle 8.11+, Android SDK with platform 35: gradle -p android assembleRelease -PtwVersionName=0.2.1 -PtwVersionCode=201
+  JDK 17, Gradle 8.11+, Android SDK with platform 36: gradle -p android assembleRelease -PtwVersionName=0.2.1 -PtwVersionCode=201
