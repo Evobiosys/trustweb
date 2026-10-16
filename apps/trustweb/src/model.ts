@@ -205,6 +205,8 @@ export enum Provenance {
   Typed = 'typed',
   /** Imported from Tana. */
   Tana = 'tana',
+  /** Imported from local notes on your computer (Obsidian/Logseq vault, markdown files). The date is the file's. */
+  Local = 'local',
   /** A person shared it with you (a Meet code's notes, a meeting sent inside TrustWeb). */
   SharedByPerson = 'shared-by-person',
   /** Demo content (imaginary friends and things). */
@@ -212,7 +214,7 @@ export enum Provenance {
 }
 
 export const PROVENANCES: readonly Provenance[] = [
-  Provenance.RecordedSolo, Provenance.RecordedMeeting, Provenance.Typed, Provenance.Tana, Provenance.SharedByPerson, Provenance.Demo,
+  Provenance.RecordedSolo, Provenance.RecordedMeeting, Provenance.Typed, Provenance.Tana, Provenance.Local, Provenance.SharedByPerson, Provenance.Demo,
 ]
 
 /**
@@ -235,6 +237,9 @@ export interface ItemSource {
   ref?: string
   /** Tana: the line's own node id (the CRM converter writes it); opens the node in Tana. Local only, NEVER sent to anyone. */
   nodeId?: string
+  /** Local notes: the file's path inside the vault and the model that read it (empty: a rule, no model). Local only, NEVER sent to anyone. */
+  path?: string
+  reader?: string
   /** Imported: when the person opened it and kept it ("Reviewed", wave 2, B4). Absent: unreviewed. Local only. */
   reviewedAt?: number
 }

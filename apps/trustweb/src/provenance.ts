@@ -67,6 +67,7 @@ export function recordedSource(meeting: boolean, meetingId: string | undefined, 
 export function provenanceState(source: ItemSource | undefined): ProvenanceState | null {
   switch (source?.kind) {
     case Provenance.Tana:
+    case Provenance.Local:
       return typeof source.reviewedAt === 'number' ? ProvenanceState.MassImported : ProvenanceState.Unreviewed
     case Provenance.RecordedSolo:
     case Provenance.RecordedMeeting:

@@ -1064,6 +1064,7 @@ export const S = {
     'recorded-meeting': 'recorded in a meeting',
     typed: 'typed',
     tana: 'from Tana',
+    local: 'from your notes',
     'shared-by-person': 'shared with you',
     demo: 'demo',
   } as Record<string, string>,
