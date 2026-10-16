@@ -26,7 +26,7 @@ interface NotificationEventLike extends ExtendableEventLike { notification: { cl
 interface NotificationLike { tag: string; close(): void }
 interface PushManagerLike { subscribe(o: { userVisibleOnly: boolean; applicationServerKey: BufferSource }): Promise<PushSubscription>; getSubscription(): Promise<PushSubscription | null> }
 interface RegistrationLike {
-  showNotification(title: string, o: { body: string; tag: string; icon: string; data?: unknown }): Promise<void>
+  showNotification(title: string, o: { body: string; tag: string; icon: string; renotify?: boolean; data?: unknown }): Promise<void>
   getNotifications(): Promise<NotificationLike[]>
   pushManager: PushManagerLike
 }
@@ -124,7 +124,9 @@ async function onPush(): Promise<void> {
     if (shown.some((n) => n.tag.startsWith('trustweb-'))) return
     lines = [WORKER_FALLBACK]
   }
-  await Promise.all(lines.map((body, i) => sw.registration.showNotification(bundle.appName, { body, tag: 'trustweb-arrival-' + i, icon })))
+  // One notification per arrival, each ringing on its own (Jakob 2026-10-16): a unique tag, never replacing an earlier one silently.
+  const stamp = Date.now()
+  await Promise.all(lines.map((body, i) => sw.registration.showNotification(bundle.appName, { body, tag: `trustweb-arrival-${stamp}-${i}`, renotify: true, icon })))
 }
 
 /**

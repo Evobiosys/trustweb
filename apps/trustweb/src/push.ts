@@ -111,7 +111,7 @@ export function pushBundleOf(s: AppState, relayOrigin: string, appName: string):
 export async function showNotification(title: string, body: string): Promise<void> {
   const reg = pushSupported() ? await workerRegistration() : null
   if (reg) {
-    try { await reg.showNotification(title, { body, tag: 'trustweb-' + body, icon: `${import.meta.env.BASE_URL}icons/icon-192.png` }); return } catch { /* falls through */ }
+    try { await reg.showNotification(title, { body, tag: `trustweb-page-${Date.now()}`, renotify: true, icon: `${import.meta.env.BASE_URL}icons/icon-192.png` }); return } catch { /* falls through */ }
   }
   try { new Notification(title, { body }) } catch { /* nothing more to try */ }
 }
