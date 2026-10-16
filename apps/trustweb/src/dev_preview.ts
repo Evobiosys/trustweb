@@ -338,7 +338,8 @@ export function initDevPreview(): void {
     if (pill) {
       const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
-      tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false); idClicked(q.id, state.moved) })
+      tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
+      tag.addEventListener('pointerdown', () => idClicked(q.id, state.moved))
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
@@ -347,7 +348,8 @@ export function initDevPreview(): void {
       const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
       const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
       const hs = drag(root.appendChild(header))
-      idEl.addEventListener('click', (e) => { e.stopPropagation(); idClicked(q.id, hs.moved) })
+      // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
+      idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
       const n = prCount(shown)
