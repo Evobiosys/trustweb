@@ -909,6 +909,8 @@ export interface AppState {
   webSearchConsent?: string[]
   /** Info hints ("i") the person switched off, by HintId. Absent: all on. */
   hiddenHints?: string[]
+  /** Imported sources (sources.ts: tana, local) hidden from the views on this phone; they still answer asks. Absent: all shown. */
+  hiddenSources?: string[]
   /** Demo accounts made on this phone (QR > Demo account, 2026-10-06). Absent: none. (Stored key kept from v1.) */
   testAccounts?: DemoAccount[]
   /** This phone is somebody's demo account. Absent: an ordinary phone (today's behaviour). (Stored key kept from v1.) */
