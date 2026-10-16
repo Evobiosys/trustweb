@@ -49,6 +49,12 @@ export interface Prefs {
   pkms: Pkm[]
   /** Advanced settings on: networks I admin (Curate, field scope) and the Pipeline tab. Off = the simple version (Jakob 2026-10-16). */
   advanced: boolean
+  /** The system everyone lives in (Jakob 2026-10-16: "everyone should be in Tana"); the others get only the people they already mention. Empty: none declared. */
+  truth: Pkm | ''
+  /** The notes bridge (scripts/notes_bridge.mjs) this computer runs, and its token (stays on this device). */
+  notesUrl: string
+  notesToken: string
+  notesAutoSync: boolean
   /** A connected person counts as active (filled circle) if something happened within this many days. */
   activityDays: number
   /** Light theme chosen in Settings; dark is the default, whatever the OS theme is. */
@@ -72,16 +78,24 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, activityDays: DEFAULT_ACTIVITY_DAYS,
+  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, truth: '', notesUrl: 'http://127.0.0.1:8263', notesToken: '', notesAutoSync: false, activityDays: DEFAULT_ACTIVITY_DAYS,
     filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined
     // Developer's own device (dev server with TW_CRM_TANA_TOKEN): Tana sync preloaded ON until the choice was saved once.
     const preload = first && __TW_TANA_TOKEN__ ? { pkms: [Pkm.Tana], token: __TW_TANA_TOKEN__, autoSync: true } : {}
+
     // Same dev path: Jakob's "Close to me" set until he saved his own.
     const near = saved.close === undefined && __TW_RECORD__ ? { close: DEV_CLOSE } : {}
-    return { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
+    const merged = { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
+    // Same dev path for the notes bridge: its token read from ~/.config/trustweb/notes-bridge.json by the dev server (vite define), until the developer saved one.
+    if (__TW_NOTES_TOKEN__ && saved.notesToken === undefined) {
+      merged.notesToken = __TW_NOTES_TOKEN__
+      if (!merged.pkms.includes(Pkm.Obsidian)) merged.pkms = [...merged.pkms, Pkm.Obsidian]
+      if (!merged.truth && merged.pkms.includes(Pkm.Tana)) merged.truth = Pkm.Tana
+    }
+    return merged
   } catch {
     return base
   }

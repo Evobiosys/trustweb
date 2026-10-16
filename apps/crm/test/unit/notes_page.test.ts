@@ -1,6 +1,6 @@
 // @ts-nocheck  (the page module is plain JS; shapes checked by its d.mts in src use)
 import { describe, expect, it } from 'vitest'
-import { diffPage, parsePage, renderPage, slug, updatePage } from '../../scripts/notes_page.mjs'
+import { blockChanges, diffPage, parseBlocks, parsePage, renderPage, slug, updatePage, upsertBlock } from '../../scripts/notes_page.mjs'
 
 const NOW = Date.UTC(2026, 9, 16, 9, 30)
 const line = (id, text, extra = {}) => ({ id, text, tag: 'note', audience: 'me', status: 'current', notedAt: Date.UTC(2026, 6, 11, 12), checkedAt: 1, ...extra })
@@ -60,5 +60,39 @@ updated: 2026-10-16T09:30:00.000Z
     const page = parsePage(renderPage(mira(), { now: NOW }).replace('ring: friend', 'ring: close'))
     expect(diffPage(page, mira()).ring).toBe('close')
     expect(parsePage(renderPage(mira(), { now: NOW }).replace('ring: friend', 'ring: bogus')).ring).toBe('')
+  })
+})
+
+describe('block in the home note', () => {
+  const note = '# 2026-07-11\n- Met Mira at the bonfire.\n- TODO milk\n'
+  it('appends a marked block, replaces it in place next time, leaves the note alone when nothing changed', () => {
+    const a = upsertBlock(note, mira(), { now: NOW })
+    expect(a).toBe(`${note}
+<!-- trustweb:begin tana-abc -->
+- TrustWeb: Mira Hollenstein · ring: friend · https://app.tana.inc?nodeid=abc · updated: 2026-10-16T09:30:00.000Z
+- 2026-07-11 Plays chess <!-- tw:tana-abc-0 -->
+- 2026-07-11 Runs a repair café in Graz <!-- tw:local-1-2-0 -->
+<!-- trustweb:end tana-abc -->
+`)
+    expect(upsertBlock(a, mira(), { now: NOW + 5000 })).toBe(a)
+    const p2 = { ...mira(), ring: 'close' }
+    const b = upsertBlock(`${a}\n- later note\n`, p2, { now: NOW + 5000 })
+    expect(b).toContain('ring: close · https://app.tana.inc?nodeid=abc · updated: 2026-10-16T09:30:05.000Z')
+    expect(b.endsWith('<!-- trustweb:end tana-abc -->\n\n- later note\n')).toBe(true)
+    expect(b.match(/trustweb:begin/g)).toHaveLength(1)
+  })
+  it('bullets added inside the block are read as new lines and kept until TrustWeb has them; the ring follows newer-wins', () => {
+    const a = upsertBlock(note, mira(), { now: NOW })
+    const edited = a.replace('ring: friend', 'ring: acquaintance').replace('<!-- trustweb:end tana-abc -->', '- 2026-10-02 Lent me the printer\n- Plays chess\n<!-- trustweb:end tana-abc -->')
+    const [b] = parseBlocks(edited)
+    expect(b).toMatchObject({ id: 'tana-abc', name: 'Mira Hollenstein', ring: 'acquaintance', updated: NOW })
+    expect(b.userLines).toEqual([{ text: 'Lent me the printer', date: '2026-10-02' }, { text: 'Plays chess', date: '' }])
+    expect(blockChanges(b, mira(), NOW + 60_000)).toEqual({ ring: 'acquaintance', newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })
+    expect(blockChanges(b, mira(), NOW)).toEqual({ ring: null, newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })   // file not saved after the block: TrustWeb's ring stands
+    const rewritten = upsertBlock(edited, mira(), { now: NOW + 5000 })
+    expect(rewritten).toContain('- 2026-10-02 Lent me the printer\n<!-- trustweb:end tana-abc -->')
+    expect(rewritten).not.toContain('- Plays chess\n<!--')
+    const p3 = mira(); p3.lines.push(line('tana-abc-2', 'Lent me the printer'))
+    expect(upsertBlock(rewritten, p3, { now: NOW + 9000 })).toContain('- 2026-07-11 Lent me the printer <!-- tw:tana-abc-2 -->\n<!-- trustweb:end tana-abc -->')
   })
 })

@@ -2853,6 +2853,14 @@ const curator = createCurator({
     save()
     if (screen === Screen.Web) render()
   },
+  // A bullet written next to the person in the vault (notes bridge) lands as a line of theirs, provenance local.
+  addLine: (id, line) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p || p.lines.some((l) => l.id === line.id || l.text === line.text)) return
+    p.lines.push(line)
+    save()
+    if (screen === Screen.Web) render()
+  },
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,

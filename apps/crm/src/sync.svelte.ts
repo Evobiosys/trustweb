@@ -11,6 +11,7 @@ import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY } from './rings'
 import { parseSuggestions } from './suggestions'
 import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
+import { notesTouched } from './notes_sync.svelte'
 
 const MAX_LOG = 100
 const TANA_PREFIX = 'tana-'
@@ -44,6 +45,7 @@ function queueOnce(personId: string, key: string, approved = false): void {
 /** The edit goes to the CRM's own record first; Tana hears about it 2 s after the last keystroke of that field (auto sync), or on "Sync now". */
 export function saveField(personId: string, key: string, value: FieldValue): void {
   setField(personId, key, value)
+  notesTouched()
   if (!tanaOn() || 'manual' in planFieldSync(key, value)) return
   // Queued (and persisted) at once, so a window killed inside the 2 s still replays the edit on the next boot.
   queueOnce(personId, key, true)
@@ -80,6 +82,7 @@ export function addNote(personId: string, text: string): void {
   if (!t) return
   addInteraction(personId, InteractionKind.Note, t)
   noteToTana(personId, t)
+  notesTouched()
 }
 
 /** Takes #person off the node in Tana (a queued edit, like the others) and the person out of every list here. */

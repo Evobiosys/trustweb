@@ -1,5 +1,5 @@
 /** What the app hosting the Curator as one of its tabs lends it (apps/trustweb); empty when the Curator runs on its own. */
-import type { AppState, Person } from '../../trustweb/src/model'
+import type { AppState, NoteLine, Person } from '../../trustweb/src/model'
 
 export interface Host {
   /** A copy of the host's live record (the Curator edits its copy: merges, hidden people). */
@@ -15,6 +15,8 @@ export interface Host {
   restorePerson(person: Person): void
   /** Settings "Hide people known only from …": the hidden sources (sources.ts) go to the host's record, so the Web view drops them at once. */
   setHiddenSources(kinds: readonly string[]): void
+  /** A bullet written in the vault (notes_sync.svelte.ts) becomes a line in the host's record, local provenance. */
+  addLine(personId: string, line: NoteLine): void
   /** The element the Curator lives in (its theme switch goes there). */
   root: HTMLElement
 }

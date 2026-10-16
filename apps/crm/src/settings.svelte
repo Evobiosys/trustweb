@@ -11,6 +11,7 @@
   import { store } from './state.svelte'
   import { S } from './strings'
   import { flush, sync, unhideInTrustweb } from './sync.svelte'
+  import { notes, syncNotes } from './notes_sync.svelte'
   import { manualItems } from './tana_sync'
 
   const manual = $derived(manualItems(store.app.people, store.crm.personFields))
@@ -58,6 +59,15 @@
     </button>
   </div>
   <p class="muted">{S.pkmQuestion}</p>
+  {#if prefs.pkms.length > 0}
+    <p class="muted">{S.truthTitle}: {S.truthHint}</p>
+    <div class="seg" role="group" aria-label={S.truthTitle}>
+      {#each prefs.pkms as p (p)}
+        <button data-truth={p} aria-pressed={prefs.truth === p} onclick={(): void => { prefs.truth = prefs.truth === p ? '' : p; savePrefs() }}>{S.pkmLabel[p]}</button>
+      {/each}
+      {#if !prefs.truth}<span class="muted">{S.truthNone}</span>{/if}
+    </div>
+  {/if}
   {#each PKMS as p (p)}
     <label class="fld check">
       <input type="checkbox" data-pkm={p} checked={prefs.pkms.includes(p)} onchange={(e): void => togglePkm(p, e.currentTarget.checked)} />
@@ -87,6 +97,19 @@
         </button>
         <h3 class="screen-title">{S.syncLog}</h3>
         {#each prefs.log as line (line)}<p class="muted">{line}</p>{:else}<p class="muted">{S.syncLogEmpty}</p>{/each}
+      {:else if p === Pkm.Obsidian}
+        <p class="muted">{S.notesBridge}</p>
+        <label class="fld"><span>{S.notesUrl}</span>
+          <input class="field" type="text" data-field="notes-url" bind:value={prefs.notesUrl} onchange={savePrefs} /></label>
+        <label class="fld"><span>{S.notesToken}</span>
+          <input class="field" type="password" autocomplete="off" data-field="notes-token" bind:value={prefs.notesToken} onchange={savePrefs} /></label>
+        <label class="fld check">
+          <input type="checkbox" data-field="notes-auto-sync" bind:checked={prefs.notesAutoSync} onchange={savePrefs} />
+          <span>{S.notesAutoSync}</span>
+        </label>
+        <button class="btn small" data-action="notes-sync-now" disabled={notes.running} onclick={(): void => { void syncNotes() }}>{notes.running ? S.notesSyncing : S.notesSyncNow}</button>
+        <button class="btn small" data-action="notes-everyone" disabled={notes.running} onclick={(): void => { if (confirm(S.notesEveryoneConfirm(store.app.people.length))) void syncNotes(true) }}>{S.notesEveryone}</button>
+        {#if notes.last}<p class="muted" data-part="notes-last">{S.notesLast(notes.last)}</p>{/if}
       {:else}
         <p class="muted">{S.pkmLater}</p>
       {/if}
