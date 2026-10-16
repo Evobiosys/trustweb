@@ -3,7 +3,7 @@
 name: android-smoke
 on:
   push:
-    paths: ['.github/workflows/android-smoke.yml']   # a push of this file runs it (workflow_dispatch needs it on main first)
+    paths: ['.github/workflows/android-smoke.yml']   # a push of this file runs it against the latest release (workflow_dispatch needs it on main first)
   workflow_dispatch:
     inputs:
       apk_url:
