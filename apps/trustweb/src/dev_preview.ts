@@ -298,6 +298,13 @@ export function initDevPreview(): void {
   function copyId(id: string): void {
     void navigator.clipboard?.writeText(id).then(() => toast(`${id} copied`), () => toast('copy refused by the browser'))
   }
+  // The panel re-renders between two quick clicks (the status poll), so the browser's dblclick never fires on the same node: two clicks within 400 ms on the id copy it.
+  let idClickAt = 0
+  function idClicked(id: string, moved: boolean): void {
+    if (moved) return
+    const now = Date.now()
+    if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
+  }
 
   /** More than ROWS_SHOWN feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
   const ROWS_SHOWN = 3
@@ -331,16 +338,16 @@ export function initDevPreview(): void {
     if (pill) {
       const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
-      tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
-      tag.addEventListener('dblclick', () => copyId(q.id))
+      tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false); idClicked(q.id, state.moved) })
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
       const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
-      idEl.addEventListener('dblclick', (e) => { e.stopPropagation(); copyId(q.id) })
-      drag(root.appendChild(h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const hs = drag(root.appendChild(header))
+      idEl.addEventListener('click', (e) => { e.stopPropagation(); idClicked(q.id, hs.moved) })
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
       const n = prCount(shown)
