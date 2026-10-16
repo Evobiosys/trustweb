@@ -59,15 +59,6 @@
     </button>
   </div>
   <p class="muted">{S.pkmQuestion}</p>
-  {#if prefs.pkms.length > 0}
-    <p class="muted">{S.truthTitle}: {S.truthHint}</p>
-    <div class="seg" role="group" aria-label={S.truthTitle}>
-      {#each prefs.pkms as p (p)}
-        <button data-truth={p} aria-pressed={prefs.truth === p} onclick={(): void => { prefs.truth = prefs.truth === p ? '' : p; savePrefs() }}>{S.pkmLabel[p]}</button>
-      {/each}
-      {#if !prefs.truth}<span class="muted">{S.truthNone}</span>{/if}
-    </div>
-  {/if}
   {#each PKMS as p (p)}
     <label class="fld check">
       <input type="checkbox" data-pkm={p} checked={prefs.pkms.includes(p)} onchange={(e): void => togglePkm(p, e.currentTarget.checked)} />
@@ -108,7 +99,6 @@
           <span>{S.notesAutoSync}</span>
         </label>
         <button class="btn small" data-action="notes-sync-now" disabled={notes.running} onclick={(): void => { void syncNotes() }}>{notes.running ? S.notesSyncing : S.notesSyncNow}</button>
-        <button class="btn small" data-action="notes-everyone" disabled={notes.running} onclick={(): void => { if (confirm(S.notesEveryoneConfirm(store.app.people.length))) void syncNotes(true) }}>{S.notesEveryone}</button>
         {#if notes.last}<p class="muted" data-part="notes-last">{S.notesLast(notes.last)}</p>{/if}
       {:else}
         <p class="muted">{S.pkmLater}</p>
@@ -157,6 +147,20 @@
     <span>{S.advancedOn}</span>
   </label>
   <p class="muted">{S.advancedHint}</p>
+  {#if prefs.advanced}
+    {#if prefs.pkms.length > 0}
+      <p class="muted">{S.truthTitle}: {S.truthHint}</p>
+      <div class="seg" role="group" aria-label={S.truthTitle}>
+        {#each prefs.pkms as p (p)}
+          <button data-truth={p} aria-pressed={prefs.truth === p} onclick={(): void => { prefs.truth = prefs.truth === p ? '' : p; savePrefs() }}>{S.pkmLabel[p]}</button>
+        {/each}
+        {#if !prefs.truth}<span class="muted">{S.truthNone}</span>{/if}
+      </div>
+    {/if}
+    {#if prefs.pkms.includes(Pkm.Obsidian)}
+      <button class="btn small" data-action="notes-everyone" disabled={notes.running} onclick={(): void => { if (confirm(S.notesEveryoneConfirm(store.app.people.length))) void syncNotes(true) }}>{S.notesEveryone}</button>
+    {/if}
+  {/if}
 
   <FieldsEditor />
   {#if prefs.advanced}<Curate />{/if}
