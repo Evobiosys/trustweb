@@ -34,7 +34,10 @@
     text-align:center; padding:6px 20px; font:600 .78rem var(--mono); letter-spacing:.04em}
   /* second row of the bar: the one link to the other site, right under the buttons.
      title carries the target; the hover also writes it out (data-url) */
-  .sitebar-sub{padding:0 28px 8px; display:flex; justify-content:flex-end}
+  .sitebar-sub{padding:0 28px 8px; display:flex; justify-content:flex-end; gap:18px; flex-wrap:wrap}
+  .installrow{font:500 .8rem var(--sans); color:var(--ink-soft)}
+  .installrow a{color:var(--ink-soft); text-decoration:underline; text-underline-offset:3px}
+  .installrow a:hover, .installrow a:focus-visible{color:var(--indigo)}
   .hostlink{position:relative; font:500 .8rem var(--sans); color:var(--ink-soft);
     text-decoration:underline; text-underline-offset:3px}
   .hostlink:hover, .hostlink:focus-visible{color:var(--indigo)}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files the browser may hand to the app (a shared file, a download); nothing of TrustWeb's own data lives here. -->
+<paths>
+    <files-path name="shared" path="shared/" />
+</paths>

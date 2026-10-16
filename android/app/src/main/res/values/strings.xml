@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TrustWeb</string>
+    <string name="launch_url">https://app.trustweb.one/</string>
+    <string name="web_manifest_url">https://app.trustweb.one/manifest.json</string>
+    <!-- The origin this app is trusted for; the origin answers with the same pairing at /.well-known/assetlinks.json. -->
+    <string name="asset_statements">[{ \"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://app.trustweb.one\" } }]</string>
+</resources>

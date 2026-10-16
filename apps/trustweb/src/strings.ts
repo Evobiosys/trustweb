@@ -1049,6 +1049,9 @@ export const S = {
   instIosMoveBody: 'On iPhone and iPad, an app on the home screen keeps its own storage, separate from this browser. Your people and notes do not move over by themselves. To take them along: back them up here, then choose "Restore from a backup" in the installed app, with the same key.',
   instIosMoveBackup: 'Back up first',
   instIosMoveNoServer: 'The backup server cannot be reached from this page right now, so your web cannot be moved yet. You can install anyway and start fresh there, or try again later.',
+  // Wave 11: the Android app, the same app with notifications while it is closed.
+  instApkLead: 'Or install the Android app: the same TrustWeb, with notifications while it is closed. Allow installing from this source once.',
+  instApkButton: 'Download the Android app (APK)',
   instMenu: 'This browser has not offered a one-tap install. Most browsers can still do it from their menu:',
   instMenuSteps: [
     'Chrome or Edge: the menu (three dots), then "Install app" or "Add to Home screen".',

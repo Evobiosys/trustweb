@@ -57,6 +57,22 @@ export function isIosAgent(userAgent: string, maxTouchPoints: number): boolean {
   return /iPad|iPhone|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)
 }
 
+/** Wave 11: the Android app (a Trusted Web Activity of this origin, android/), published by the release workflow. */
+export const APK_URL = 'https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk'
+
+export function isAndroidAgent(userAgent: string): boolean {
+  return /Android/.test(userAgent)
+}
+
+/** The APK offer, on Android outside the installed app only (a desktop has no use for it; iOS cannot run it). */
+function apkPart(): HTMLElement | null {
+  if (typeof navigator === 'undefined' || !isAndroidAgent(navigator.userAgent)) return null
+  return el('div', { class: 'inst-apk', 'data-install-apk': '' }, [
+    el('p', { class: 'meta' }, [S.instApkLead]),
+    el('a', { class: 'btn btn-ghost btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]),
+  ])
+}
+
 let deferred: InstallPromptEvent | null = null
 let installedNow = false
 let onChange: (() => void) | null = null
@@ -155,11 +171,11 @@ export function installSheetContent(h: InstallHooks): (Node | null)[] {
         h.toast(r === 'accepted' ? S.instAccepted : r === 'dismissed' ? S.instDismissed : S.instUnavailable)
         h.redraw()
       }
-      return [head, by, el('button', { class: 'btn btn-electric', 'data-install-path': path, onclick: () => void go() }, [S.instButton])]
+      return [head, by, el('button', { class: 'btn btn-electric', 'data-install-path': path, onclick: () => void go() }, [S.instButton]), apkPart()]
     }
     case InstallPath.Ios:
       return [head, by, el('div', { 'data-install-path': path }, iosPart(h))]
     case InstallPath.Menu:
-      return [head, by, el('div', { 'data-install-path': path }, [el('p', { class: 'meta' }, [S.instMenu]), steps(S.instMenuSteps)])]
+      return [head, by, el('div', { 'data-install-path': path }, [el('p', { class: 'meta' }, [S.instMenu]), steps(S.instMenuSteps)]), apkPart()]
   }
 }
