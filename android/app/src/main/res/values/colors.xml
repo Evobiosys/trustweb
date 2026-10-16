@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web app manifest's theme_color and background_color (apps/trustweb/pwa/manifest.json). -->
+    <color name="tw_theme">#3B1163</color>
+    <color name="tw_background">#F2EBDC</color>
+</resources>

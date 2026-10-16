@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TrustWeb" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/tw_theme</item>
+        <item name="android:navigationBarColor">@color/tw_background</item>
+        <item name="android:windowBackground">@color/tw_background</item>
+    </style>
+    <!-- Launch: a plain paper background until the splash drawable shows (no system splash icon of its own). -->
+    <style name="Theme.TrustWeb.Launch" parent="Theme.TrustWeb">
+        <item name="android:windowBackground">@color/tw_background</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

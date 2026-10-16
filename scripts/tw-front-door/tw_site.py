@@ -86,6 +86,8 @@ COM_HOST = "trustintheweb.com"
 ORG_LIVE_URL = f"https://{ORG_HOST}/"
 COM_LIVE_URL = f"https://{COM_HOST}/"
 WHITEPAPER_ANCHOR = "whitepaper.html#bonobos"
+# Wave 11: the Android app, published as a GitHub Release asset by .github/workflows/android-release.yml.
+APK_URL = "https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk"
 COM_THEME = "com/theme.css"  # the hosting site's own palette and typefaces, appended after the shared CSS
 
 
@@ -177,6 +179,7 @@ class Flags:
         )
         return {
             "APP": self.app_base.rstrip("/"),
+            "APK": APK_URL,
             "API": self.api_origin,
             "ORG": "" if self.is_org else ORG_LIVE_URL,
             "COM": COM_LIVE_URL if self.is_org else "",
@@ -254,6 +257,12 @@ ORG_PAGES: tuple[Page, ...] = (
         "White paper",
         "The TrustWeb white paper: outline in progress.",
         "pages/whitepaper.body.html",
+    ),
+    Page(
+        "history",
+        "History",
+        "TrustWeb's versions so far, what each one proved, and what comes next.",
+        "pages/history.body.html",
     ),
 )
 

@@ -453,6 +453,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .add-rings{display:flex; flex-direction:column; margin:4px 0 6px}
 .sheet .field{margin:8px 0 0}
 .verse.backup{margin:14px 0 0}
+.notif-kinds{display:flex; flex-direction:column; gap:6px; margin:8px 0 2px}
+.notif-kind{display:flex; align-items:center; gap:8px; font-size:13px}
+.notif-kind input{width:16px; height:16px; margin:0}
 .verse.backup .btn{display:block; padding-left:0}
 .verse.backup .btn-electric{padding:9px 16px; margin:10px 0 2px}
 .recovery-key{display:block; font:600 14px/1.6 ui-monospace,"SF Mono",Menlo,monospace; letter-spacing:.03em; background:var(--card);

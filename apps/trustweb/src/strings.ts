@@ -368,10 +368,16 @@ export const S = {
 
   notifTitle: 'Notifications are off',
   notifOnTitle: 'Notifications are on',
-  notifBody: 'Off by default, and there are no unread counters. A web page cannot see your phone\'s Do Not Disturb, so TrustWeb never buzzes on its own: an ask that matches something waits here until you open the app.',
+  notifBody: 'Off by default, and there are no unread counters. Choose what you want to hear about: someone wanting to connect, someone sending a query, a message. Each has its own switch.',
   notifTurnOn: 'Turn on notifications',
   notifTurnOff: 'Turn off notifications',
   notifBlocked: 'This browser refused notifications.',
+  // Wave 11: one switch per kind, and what the relay's wake-up path says.
+  notifKind: { connect: 'Someone wants to connect', ask: 'Someone is sending a query', chat: 'A message' } as Record<'connect' | 'ask' | 'chat', string>,
+  notifPushOn: 'Also when the app is closed: the relay wakes this device with an empty push; what arrived is read here, under your keys.',
+  notifPushNoRelay: 'While the app is open only: this relay does not wake devices (a preview, or an older relay).',
+  notifPushUnsupported: 'While the app is open only: this browser offers no push. On Android, install the app for notifications when it is closed.',
+  notifBodyConnect: (name: string) => `${name} wants to connect.`,
 
   ringLabel: {
     [Ring.Close]: 'Close friend',
@@ -1043,6 +1049,9 @@ export const S = {
   instIosMoveBody: 'On iPhone and iPad, an app on the home screen keeps its own storage, separate from this browser. Your people and notes do not move over by themselves. To take them along: back them up here, then choose "Restore from a backup" in the installed app, with the same key.',
   instIosMoveBackup: 'Back up first',
   instIosMoveNoServer: 'The backup server cannot be reached from this page right now, so your web cannot be moved yet. You can install anyway and start fresh there, or try again later.',
+  // Wave 11: the Android app, the same app with notifications while it is closed.
+  instApkLead: 'Or install the Android app: the same TrustWeb, with notifications while it is closed. Allow installing from this source once.',
+  instApkButton: 'Download the Android app (APK)',
   instMenu: 'This browser has not offered a one-tap install. Most browsers can still do it from their menu:',
   instMenuSteps: [
     'Chrome or Edge: the menu (three dots), then "Install app" or "Add to Home screen".',

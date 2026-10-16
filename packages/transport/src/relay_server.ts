@@ -44,6 +44,8 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { randomBytes } from "@noble/hashes/utils.js";
 import { resolveDidPeer } from "./did_identity.js";
 import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, type RelayQueueStore } from "./relay_queue_store.js";
+import type { PushSubscriptionStore } from "./push_store.js";
+import { parsePushSubscription, sendWake, type PushSubscriptionJson, type VapidKeys, type WakeOutcome } from "./web_push.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -135,7 +137,30 @@ export interface RelayServerOptions {
   maxQueuePerDid?: number;
   /** Max undelivered wires held across all recipients. Defaults to MAX_QUEUE_GLOBAL. */
   maxQueueGlobal?: number;
+  /** Web Push wake-ups (wave 11). Absent: the relay never pushes, phones are reached by their open drain only. */
+  push?: RelayPushOptions;
 }
+
+/**
+ * Wave 11 (TrustWeb APK + notifications): the relay may WAKE a phone through Web Push when a wire waits for it and
+ * no drain reads it. The wake carries nothing (web_push.ts); the phone's service worker opens the drain and reads the
+ * wire under its own keys. A phone opts in by sending `{type:"push", subscription}` on its authenticated drain;
+ * `subscription: null` opts out again.
+ */
+export interface RelayPushOptions {
+  store: PushSubscriptionStore;
+  vapid: VapidKeys;
+  /** Injectable sender (tests). Defaults to web_push.ts sendWake over global fetch. */
+  send?: (sub: PushSubscriptionJson, vapid: VapidKeys) => Promise<WakeOutcome>;
+  /** A phone whose drain is open but did not ack a flushed wire within this long is woken anyway (a frozen background tab). */
+  ackWaitMs?: number;
+  /** At most one wake per DID within this window; later wires in the window ride on the first wake. */
+  coalesceMs?: number;
+}
+
+const PUSH_ACK_WAIT_MS = 5_000;
+const PUSH_COALESCE_MS = 20_000;
+const PUSH_KEY_PATH = "/relay/push/key";
 
 /** Per-WebSocket connection state. Never exported — internal bookkeeping only. */
 interface ConnState {
@@ -157,6 +182,7 @@ interface ClientMessage {
   did?: unknown;
   sig?: unknown;
   ids?: unknown;
+  subscription?: unknown;
 }
 
 export class RelayServer {
@@ -167,6 +193,11 @@ export class RelayServer {
   private readonly maxWireBytes: number;
   private readonly maxQueuePerDid: number;
   private readonly maxQueueGlobal: number;
+  private readonly push: RelayPushOptions | null;
+  /** DID -> when its last wake went out (push coalescing). */
+  private readonly lastWake = new Map<string, number>();
+  /** DIDs with an ack check pending (a wire flushed to an open drain, waiting PUSH_ACK_WAIT_MS before waking). */
+  private readonly ackChecks = new Set<string>();
 
   /** DID -> its single active authenticated drain socket (a fresh auth for the same DID replaces the prior one). */
   private readonly liveDrains = new Map<string, WebSocket>();
@@ -183,6 +214,12 @@ export class RelayServer {
     this.maxWireBytes = opts.maxWireBytes ?? MAX_WIRE_BYTES;
     this.maxQueuePerDid = opts.maxQueuePerDid ?? MAX_QUEUE_PER_DID;
     this.maxQueueGlobal = opts.maxQueueGlobal ?? MAX_QUEUE_GLOBAL;
+    this.push = opts.push ?? null;
+  }
+
+  /** The VAPID public key phones subscribe with; null when this relay does not push. */
+  pushPublicKey(): string | null {
+    return this.push?.vapid.publicKey ?? null;
   }
 
   // ---- 6a: ingress -------------------------------------------------------
@@ -255,8 +292,60 @@ export class RelayServer {
     const live = this.liveDrains.get(to);
     if (live && live.readyState === WebSocket.OPEN) {
       this.flush(to);
+      this.wakeIfUnacked(to);
+    } else {
+      void this.wake(to);
     }
     return ACCEPTED;
+  }
+
+  // ---- wave 11: push wake-ups --------------------------------------------
+
+  /** A drain is open but may belong to a frozen tab: wake the phone if the queue still holds something after a short wait. */
+  private wakeIfUnacked(toDid: string): void {
+    if (!this.push || this.ackChecks.has(toDid)) return;
+    this.ackChecks.add(toDid);
+    const timer = setTimeout(() => {
+      this.ackChecks.delete(toDid);
+      if (this.queueStore.count(toDid) > 0) void this.wake(toDid);
+    }, this.push.ackWaitMs ?? PUSH_ACK_WAIT_MS);
+    timer.unref?.();
+  }
+
+  /** One contentless wake for `toDid`, at most once per coalescing window; a dead subscription is dropped. */
+  private async wake(toDid: string): Promise<void> {
+    const push = this.push;
+    if (!push) return;
+    const sub = push.store.get(toDid);
+    if (!sub) return;
+    const now = Date.now();
+    const last = this.lastWake.get(toDid) ?? 0;
+    if (now - last < (push.coalesceMs ?? PUSH_COALESCE_MS)) return;
+    this.lastWake.set(toDid, now);
+    const outcome = await (push.send ?? sendWake)(sub, push.vapid);
+    if (outcome === "gone") push.store.remove(toDid);
+    else if (outcome === "failed") this.lastWake.delete(toDid);
+  }
+
+  /** `{type:"push", subscription}` on an authenticated drain: keep (or, with null, forget) this DID's subscription. */
+  private handlePush(ws: WebSocket, state: ConnState, msg: ClientMessage): void {
+    if (!state.authenticated || !state.did) return;
+    if (!this.push) {
+      ws.send(JSON.stringify({ type: "push_unavailable" }));
+      return;
+    }
+    if (msg.subscription === null) {
+      this.push.store.remove(state.did);
+      ws.send(JSON.stringify({ type: "push_ok", kept: false }));
+      return;
+    }
+    const sub = parsePushSubscription(msg.subscription);
+    if (!sub) {
+      ws.send(JSON.stringify({ type: "push_rejected", reason: "malformed subscription" }));
+      return;
+    }
+    this.push.store.set(state.did, sub);
+    ws.send(JSON.stringify({ type: "push_ok", kept: true }));
   }
 
   /** Push every currently-queued, not-yet-sent-on-this-socket wire for `toDid` if it has a live authenticated drain. Idempotent. */
@@ -316,6 +405,7 @@ export class RelayServer {
       }
       if (msg.type === "auth") this.handleAuth(ws, state, msg);
       else if (msg.type === "ack") this.handleAck(state, msg);
+      else if (msg.type === "push") this.handlePush(ws, state, msg);
       // unknown types ignored silently, matching the JWM dispatch convention elsewhere in this package
     });
     ws.on("pong", () => {
@@ -445,6 +535,12 @@ export class RelayServer {
 
   private async handleIngressRequest(req: IncomingMessage, res: ServerResponse, ingressPath: string): Promise<void> {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (req.method === "GET" && url.pathname === PUSH_KEY_PATH) {
+      const key = this.pushPublicKey();
+      res.writeHead(key ? 200 : 404, { "content-type": "application/json", "cache-control": "no-cache" });
+      res.end(JSON.stringify(key ? { publicKey: key } : { error: "this relay does not push" }));
+      return;
+    }
     if (req.method !== "POST" || url.pathname !== ingressPath) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: `not found: ${req.method ?? ""} ${url.pathname}` }));
