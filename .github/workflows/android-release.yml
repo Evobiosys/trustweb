@@ -81,6 +81,6 @@ jobs:
             out/SHA256SUMS.txt
           generate_release_notes: true
           body: |
-            **Android app (APK)**: download `trustweb.apk`, open it on the phone, allow installing from this source once.
+            **Android app (APK)**: on the phone, tap `trustweb.apk` below (or open https://trustweb.one/apk), then open the download and allow installing from this source once.
             It is the web app https://app.trustweb.one/ as a Trusted Web Activity, with notifications while the app is closed
             (Settings > Notifications, each kind on its own). Same version as the web app.

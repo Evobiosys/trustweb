@@ -21,7 +21,7 @@ Release
   1. once: scripts/android_keystore.sh --push-secrets   (key in ~/.config/trustweb/, secrets to the GitHub repo, assetlinks.json written; commit it)
   2. bump the version in package.json files, merge to main, deploy the app (assetlinks.json goes live with it)
   3. git tag v0.2.1 && git push origin v0.2.1   -> the workflow publishes the APK as a GitHub Release asset:
-     https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk
+     https://trustweb.one/apk  (Caddy 302 -> github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk)
 
 Local build (optional; the workflow is the reference build)
   JDK 17, Gradle 8.11+, Android SDK with platform 35: gradle -p android assembleRelease -PtwVersionName=0.2.1 -PtwVersionCode=201
