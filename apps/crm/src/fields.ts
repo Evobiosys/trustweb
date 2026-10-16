@@ -1,6 +1,8 @@
 /** The #person fields as the CRM uses them: lookup, the mandatory default, and what counts as "set". */
 import { PERSON_FIELDS } from './person_fields'
 import type { PersonField } from './person_fields'
+import { onlyFrom } from '../../trustweb/src/sources'
+import type { Person } from '../../trustweb/src/model'
 
 /** A Tana reference kept as label + node id (id absent once the person retyped it). */
 export interface Ref {
@@ -67,7 +69,17 @@ export function intendingOf(values: FieldValues): number {
 }
 
 /** Whether a person (their merged values) passes the People filters. */
-export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[] }): boolean {
+/** The communities a person is in: their lines tagged community (a note's `trustweb-community`, or a Tana workspace later). */
+export function communitiesOf(person: Pick<Person, 'lines'>): string[] {
+  const out: string[] = []
+  for (const l of person.lines) if (l.tag === 'custom' && l.customTag === COMMUNITY_TAG && l.status !== 'gone') { const c = l.text.replace(/^community:\s*/i, '').trim(); if (c && !out.includes(c)) out.push(c) }
+  return out
+}
+export const COMMUNITY_TAG = 'community'
+
+export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[]; hideSources?: string[]; hideCommunities?: string[] }, person?: Pick<Person, 'id' | 'lines'>): boolean {
+  if (person && f.hideSources?.length) { const k = onlyFrom(person); if (k && f.hideSources.includes(k)) return false }
+  if (person && f.hideCommunities?.length) { const cs = communitiesOf(person); if (cs.length && cs.every((c) => f.hideCommunities!.includes(c))) return false }
   if (f.hideDeceased && values[DECEASED_KEY] === true) return false
   if (f.hideFamous && values[FAMOUS_KEY] === true && intendingOf(values) === 0) return false
   if (f.onlyConnection && values[CONNECTION_KEY] !== true) return false

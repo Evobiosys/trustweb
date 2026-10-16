@@ -33,10 +33,12 @@
 </div>
 <div class="scope" data-part="scope">
   <label class="fld check"><input type="radio" name="scope" checked={prefs.scope.length === 0} onchange={(): void => { prefs.scope = []; savePrefs() }} /><span>{S.scopeMe}</span></label>
-  <span class="muted">{S.scopeNetworks}</span>
-  {#each networks as n (n)}
-    <label class="fld check"><input type="checkbox" data-network={n} checked={prefs.scope.includes(n)} onchange={(e): void => toggleNetwork(n, e.currentTarget.checked)} /><span>{n}</span></label>
-  {/each}
+  {#if prefs.advanced}
+    <span class="muted">{S.scopeNetworks}</span>
+    {#each networks as n (n)}
+      <label class="fld check"><input type="checkbox" data-network={n} checked={prefs.scope.includes(n)} onchange={(e): void => toggleNetwork(n, e.currentTarget.checked)} /><span>{n}</span></label>
+    {/each}
+  {/if}
 </div>
 {#each SECTIONS as s (s)}
   <h4 class="ring-heading">{S.sectionLabel[s]} ({lay[s].length})</h4>

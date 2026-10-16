@@ -8,6 +8,7 @@
 import { LineStatus, ServerJobState, pastMeetings } from './model'
 import type { AppState, NoteLine, PastMeeting } from './model'
 import { fold, queryWords, searchMeetings } from './search'
+import { lineShown } from './sources'
 
 const DAY_MS = 86_400_000
 
@@ -45,7 +46,7 @@ export function personNotes(s: AppState, personId: string, query: string, dateLa
   const words = queryWords(query)
   const all = meetingsAbout(s, personId)
   const meetings = words.length ? searchMeetings(all, query, dateLabels).map((r) => r.meeting) : all
-  const lines = person.lines.filter((l) => !words.length || matchesWords(`${l.text} ${l.tag}`, words))
+  const lines = person.lines.filter((l) => lineShown(s, l, person) && (!words.length || matchesWords(`${l.text} ${l.tag}`, words)))
   const days = new Map<number, PersonNoteDay>()
   const entry = (at: number): PersonNoteDay => {
     const day = dayOf(at)

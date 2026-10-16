@@ -95,6 +95,7 @@ try {
   ok('timeline is newest first', dates.length > 10 && dates.every((d, i) => i === 0 || dates[i - 1] >= d))
   await shot('04-timeline')
 
+  await page.evaluate(() => { const k = 'trustweb-crm.v1.prefs'; localStorage.setItem(k, JSON.stringify({ ...JSON.parse(localStorage.getItem(k) ?? '{}'), advanced: true })) }); await page.reload(); await page.waitForSelector('[data-tab="pipeline"]')   // Pipeline sits behind Settings > Advanced (2026-10-16)
   await page.click('[data-tab="pipeline"]')
   await page.waitForSelector('[data-screen="pipeline"]')
   ok('pipeline shows five cards', (await page.locator('.card').count()) === 5)

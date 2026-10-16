@@ -13,3 +13,5 @@ declare const __TW_RECORD__: string | null
 declare const __TW_SUGGESTIONS__: string | null
 /** Dev server only: TW_CRM_TANA_TOKEN, to preload Tana sync on the developer's own device. Never set in a build. */
 declare const __TW_TANA_TOKEN__: string | null
+/** Dev only: the notes bridge token from ~/.config/trustweb/notes-bridge.json (vite define); null in a build. */
+declare const __TW_NOTES_TOKEN__: string | null

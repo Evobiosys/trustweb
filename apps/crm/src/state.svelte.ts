@@ -8,6 +8,7 @@
  */
 import type { AppState, Person } from '../../trustweb/src/model'
 import { host } from './bridge'
+import { prefs } from './prefs.svelte'
 import { FAMILY_KEY, RING_KEY } from './rings'
 import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
@@ -54,6 +55,7 @@ function start(): Store {
   let crm = loadCrm(persona)
   // Hosted: the ring and the family tag live in the host's record only; edits an older build kept in the Curator's own key are moved over (family) or dropped (ring: the record is newer).
   if (host.record) {
+    prefs.filters.hideSources = (app as { hiddenSources?: string[] }).hiddenSources ?? []   // one setting: the record's (Settings "Hide people known only from …")
     for (const [id, edits] of Object.entries(crm.personFields ?? {})) {
       const person = app.people.find((p) => p.id === id)
       if (typeof edits[FAMILY_KEY] === 'boolean' && person && (person.fields as FieldValues | undefined)?.[FAMILY_KEY] !== edits[FAMILY_KEY]) setFamilyIn(person, edits[FAMILY_KEY])

@@ -42,9 +42,9 @@
     return p ? entityValues(p, baseFields(p), edits(id)) : {}
   }
   const hasCustom = $derived(Object.keys(prefs.customOrder).length > 0)
-  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))).map((g) =>
+  const groups = $derived(groupByRing(contactRows(view, query, order).filter((r) => passesFilters(valuesOf(r.person.id), prefs.filters, r.person) && (!prefs.filters.onlyClose || isClose(valuesOf(r.person.id), prefs.close)))).map((g) =>
     order === SortOrder.Recent && hasCustom ? { ...g, rows: inCustomOrder(g.rows, (r) => r.person.id, prefs.customOrder[g.ring]) } : g))
-  const notPlaced = $derived(contactRows(view, query, order).filter((r) => ringOf(r.person.ring) === UNSORTED && passesFilters(valuesOf(r.person.id), prefs.filters)))
+  const notPlaced = $derived(contactRows(view, query, order).filter((r) => ringOf(r.person.ring) === UNSORTED && passesFilters(valuesOf(r.person.id), prefs.filters, r.person)))
   const suggestions = parseSuggestions(__TW_SUGGESTIONS__)
   /** Suggested rows the person set aside for now; they come back on the next visit. */
   let skipped = $state<string[]>([])

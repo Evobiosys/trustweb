@@ -71,6 +71,7 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
+import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
@@ -1775,7 +1776,7 @@ function openEvents(eventId?: string): void {
 }
 
 function screenWeb(): Node[] {
-  const s = st()
+  const s = shown(st())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
   const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
   const right = document.createDocumentFragment()
@@ -2842,6 +2843,21 @@ const curator = createCurator({
   restorePerson: (person) => {
     if (!state || state.people.some((x) => x.id === person.id)) return
     state.people.push(person)
+    save()
+    if (screen === Screen.Web) render()
+  },
+  // Curator > Settings "Hide people known only from …" moves the web at once (Jakob 2026-10-16: "reflected in the visual").
+  setHiddenSources: (kinds) => {
+    if (!state) return
+    setHiddenSources(state, kinds)
+    save()
+    if (screen === Screen.Web) render()
+  },
+  // A bullet written next to the person in the vault (notes bridge) lands as a line of theirs, provenance local.
+  addLine: (id, line) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p || p.lines.some((l) => l.id === line.id || l.text === line.text)) return
+    p.lines.push(line)
     save()
     if (screen === Screen.Web) render()
   },
@@ -4366,7 +4382,7 @@ function screenStillTrue(): Node[] {
   const p = r ? st().people.find((x) => x.id === r.personId) : undefined
   if (!r || !p) { screen = Screen.Web; return screenWeb() }
   const now = Date.now()
-  const cards = p.lines.filter((l) => l.status === LineStatus.Current).map((l: NoteLine) => {
+  const cards = p.lines.filter((l) => l.status === LineStatus.Current && lineShown(st(), l, p)).map((l: NoteLine) => {
     const v = r.verdict.get(l.id)
     const choice = (value: 'true' | 'changed' | 'gone', label: string): HTMLElement => el('button', {
       class: 'choice' + (v === value ? ' on' : ''),
@@ -4561,6 +4577,7 @@ function settingsSheet(): void {
       'aria-pressed': String(Boolean(s.demo)),
       onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
     }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
+    ...sourcesGroup(s),
     el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
@@ -4611,6 +4628,34 @@ function settingsSheet(): void {
     }, [S.resetPhone]),
   ])
   sheet.dataset.kind = 'settings'
+}
+
+/**
+ * Settings > Sources (Jakob 2026-10-16): each imported source (Tana, your notes) with a show/hide switch (a view choice; the
+ * notes still answer asks) and "Remove from this phone" (one shot after a warning; a new import brings it back). Only the
+ * sources the record holds are listed.
+ */
+function sourcesGroup(s: AppState): Node[] {
+  const rows = SOURCES.map((kind) => ({ kind, n: sourceCount(s, kind) })).filter((r) => r.n.people || r.n.lines)
+  if (!rows.length) return []
+  return [
+    el('h4', { class: 'eyebrow' }, [S.setSources]),
+    el('p', { class: 'meta' }, [S.setSourcesHint]),
+    ...rows.flatMap(({ kind, n }) => [
+      el('button', {
+        class: 'radio' + (sourceHidden(s, kind) ? '' : ' on'), 'aria-pressed': String(!sourceHidden(s, kind)), 'data-source-shown': kind,
+        onclick: () => { setSourceHidden(s, kind, !sourceHidden(s, kind)); save(); render(); settingsSheet() },
+      }, [el('b', {}, [S.setSourceShow(S.provLabel[kind])]), el('small', {}, [S.setSourceCount(n.people, n.lines)])]),
+      el('button', {
+        class: 'btn btn-ghost btn-sm', 'data-source-remove': kind,
+        onclick: () => {
+          if (!confirm(S.setSourceRemoveConfirm(S.provLabel[kind], n.people, n.lines))) return
+          const gone = removeSource(s, kind, () => randomId(8))
+          save(); render(); toast(S.setSourceRemoved(gone.people, gone.lines)); settingsSheet()
+        },
+      }, [S.setSourceRemove]),
+    ]),
+  ]
 }
 
 // ---------------------------------------------------------------------------
