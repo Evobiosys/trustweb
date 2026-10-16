@@ -149,7 +149,7 @@ import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoo
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
-import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush } from './push'
+import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 
 enum Screen {
   Start = 'start',
@@ -391,6 +391,8 @@ let pushState: 'kept' | 'forgotten' | 'rejected' | 'unavailable' | 'unsupported'
 async function refreshPush(): Promise<void> {
   const s = st()
   if (!s.notificationsOn) { net.setPush(null); await unsubscribePush(); return }
+  // The worker also shows this page's own notifications while it is hidden (push.ts showNotification), push or no push.
+  await workerRegistration()
   const r = await subscribePush(location.origin)
   if (r.ok) { net.setPush(r.sub); await pushBundleOf(s, location.origin, S.appName).write() }
   else pushState = r.why
