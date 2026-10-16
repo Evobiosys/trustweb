@@ -1,0 +1,45 @@
+# TrustWeb for Android: launch an APK in an emulator and keep the logcat (wave 11, after "TrustWeb keeps stopping" on a
+# phone). Manual: Actions > android-smoke > Run workflow, with the APK URL (default: the latest release).
+name: android-smoke
+on:
+  push:
+    paths: ['.github/workflows/android-smoke.yml']   # a push of this file runs it against the latest release. (workflow_dispatch needs it on main first)
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: APK to launch
+        default: https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - run: curl -sSL -o trustweb.apk "${{ inputs.apk_url || 'https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk' }}" && ls -la trustweb.apk
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis_playstore
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r trustweb.apk
+            adb logcat -c
+            adb shell am start -W -n one.trustweb.app/com.google.androidbrowserhelper.trusted.LauncherActivity || true
+            sleep 20
+            adb shell dumpsys activity activities | grep -i "one.trustweb\|mResumedActivity" | head -5 || true
+            adb logcat -d > logcat.txt
+            echo "=== trustweb lines ==="; grep -i "trustweb\|TwaLauncher\|LauncherActivity" logcat.txt | head -40 || true
+            if grep -q "FATAL EXCEPTION" logcat.txt; then echo "=== crash ==="; grep -n -A 40 "FATAL EXCEPTION" logcat.txt | head -80; echo "::error::the app crashed in the emulator"; exit 1; fi
+            echo "no crash"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logcat
+          path: logcat.txt

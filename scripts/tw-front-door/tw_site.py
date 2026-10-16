@@ -87,7 +87,7 @@ ORG_LIVE_URL = f"https://{ORG_HOST}/"
 COM_LIVE_URL = f"https://{COM_HOST}/"
 WHITEPAPER_ANCHOR = "whitepaper.html#bonobos"
 # Wave 11: the Android app, published as a GitHub Release asset by .github/workflows/android-release.yml.
-APK_URL = "https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk"
+APK_URL = "https://trustweb.one/apk"  # Caddy on questhub 302s to the latest GitHub Release asset
 COM_THEME = "com/theme.css"  # the hosting site's own palette and typefaces, appended after the shared CSS
 
 

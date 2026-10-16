@@ -42,8 +42,10 @@ button{font-family:inherit}
 }
 /* overflow:clip, not only hidden: the closed sheet (bottom:-100%) overflows the phone, and a focus or a tap scrolling an overflow:hidden box moved the whole phone up, so the bars and the page misaligned (wave 5, item e) */
 @media (max-width:480px){
+  /* Wave 11: the page itself never moves (a drag used to scroll the frame and collapse the browser bar in the Android app). */
+  html,body{overflow:hidden; overscroll-behavior:none; height:100dvh}
   body{padding:0}
-  .phone{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
+  .phone{position:fixed; inset:0; width:auto; height:auto; max-height:none; border-radius:0; box-shadow:none}
 }
 .phone.embedded{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
 body:has(.phone.embedded){padding:0}

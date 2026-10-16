@@ -58,7 +58,7 @@ export function isIosAgent(userAgent: string, maxTouchPoints: number): boolean {
 }
 
 /** Wave 11: the Android app (a Trusted Web Activity of this origin, android/), published by the release workflow. */
-export const APK_URL = 'https://github.com/Evobiosys/trustweb/releases/latest/download/trustweb.apk'
+export const APK_URL = 'https://trustweb.one/apk'
 
 export function isAndroidAgent(userAgent: string): boolean {
   return /Android/.test(userAgent)

@@ -13,7 +13,7 @@ val keystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
 
 android {
     namespace = "one.trustweb.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "one.trustweb.app"
@@ -21,6 +21,8 @@ android {
         targetSdk = 35
         versionCode = twVersionCode
         versionName = twVersionName
+        // The web app learns it runs inside this shell, and which version (apps/trustweb/src/apk.ts offers a newer shell).
+        manifestPlaceholders["launchUrl"] = "https://app.trustweb.one/?apk=$twVersionName"
     }
 
     signingConfigs {
