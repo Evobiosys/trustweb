@@ -20,6 +20,8 @@ export interface PushBundle {
   relayOrigin: string
   /** The app's name, the notification title. */
   appName: string
+  /** The relay's VAPID public key (base64url), for re-subscribing from the worker (sw.ts onSubscriptionChange). Absent: older bundle. */
+  vapidKey?: string
 }
 
 const DB_NAME = 'trustweb-push'

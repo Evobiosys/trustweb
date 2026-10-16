@@ -380,7 +380,7 @@ export const S = {
   notifBodyConnect: (name: string) => `${name} wants to connect.`,
   notifPushFailed: 'While the app is open only: this browser could not register for push. On GrapheneOS, Vanadium needs sandboxed Google Play for push; a browser with push (Chrome, Brave) wakes the device also when the app is closed.',
   apkUpdTitle: (v: string) => `TrustWeb app ${v} is out`,
-  apkUpdBody: 'The web app updates by itself; this is the Android shell around it. Download the new one and install it over this one, your data stays.',
+  apkUpdBody: 'The web app updates by itself; this is the Android shell around it. Download the new one and install it over this one (do not uninstall first: that deletes your data here).',
   apkUpdGet: 'Download',
   apkUpdLater: 'Later',
   setApkGroup: (v: string) => `Android app ${v}`,
@@ -1062,7 +1062,7 @@ export const S = {
   instIosMoveBackup: 'Back up first',
   instIosMoveNoServer: 'The backup server cannot be reached from this page right now, so your web cannot be moved yet. You can install anyway and start fresh there, or try again later.',
   // Wave 11: the Android app, the same app with notifications while it is closed.
-  instApkLead: 'Or install the Android app: the same TrustWeb, with notifications while it is closed. Allow installing from this source once.',
+  instApkLead: 'Or install the Android app: the same TrustWeb, with notifications while it is closed. Allow installing from this source once. Update it by installing the new one over it; uninstalling the app deletes its data on this phone (back up first).',
   instApkButton: 'Download the Android app (APK)',
   instMenu: 'This browser has not offered a one-tap install. Most browsers can still do it from their menu:',
   instMenuSteps: [

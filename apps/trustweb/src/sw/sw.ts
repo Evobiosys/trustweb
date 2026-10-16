@@ -21,11 +21,17 @@ import type { PushBundle } from '../push_bundle'
 /** The worker scope, typed here (tsconfig has the DOM lib, not WebWorker's; both at once clash). */
 interface WindowClientLike { visibilityState?: string; focused?: boolean; focus(): Promise<unknown>; url: string }
 interface ClientsLike { matchAll(o: { type: 'window'; includeUncontrolled: boolean }): Promise<WindowClientLike[]>; openWindow(url: string): Promise<unknown>; claim(): Promise<void> }
-interface RegistrationLike { showNotification(title: string, o: { body: string; tag: string; icon: string; data?: unknown }): Promise<void> }
 interface ExtendableEventLike extends Event { waitUntil(p: Promise<unknown>): void }
 interface NotificationEventLike extends ExtendableEventLike { notification: { close(): void } }
+interface NotificationLike { tag: string; close(): void }
+interface PushManagerLike { subscribe(o: { userVisibleOnly: boolean; applicationServerKey: BufferSource }): Promise<PushSubscription>; getSubscription(): Promise<PushSubscription | null> }
+interface RegistrationLike {
+  showNotification(title: string, o: { body: string; tag: string; icon: string; data?: unknown }): Promise<void>
+  getNotifications(): Promise<NotificationLike[]>
+  pushManager: PushManagerLike
+}
 interface SwScope {
-  addEventListener(type: 'install' | 'activate' | 'push', cb: (e: ExtendableEventLike) => void): void
+  addEventListener(type: 'install' | 'activate' | 'push' | 'pushsubscriptionchange', cb: (e: ExtendableEventLike) => void): void
   addEventListener(type: 'notificationclick', cb: (e: NotificationEventLike) => void): void
   skipWaiting(): Promise<void>
   clients: ClientsLike
@@ -35,14 +41,17 @@ interface SwScope {
 // Outside a worker (the unit test imports peekDrain) there is no `self` and nothing to listen for.
 const sw = (typeof self !== 'undefined' ? self : globalThis) as unknown as SwScope
 
-/** How long the drain may take to hand over what waits; then the worker tells what it has. */
-const PEEK_TOTAL_MS = 6_000
-/** No wire for this long after the first: everything that waited is in. */
-const PEEK_QUIET_MS = 700
+/** How long the relay may take to hand over what waits (a dozing radio is slow); then the worker tells what it has. */
+const PEEK_TOTAL_MS = 15_000
+/** An older relay sends no peek_end: no wire for this long after auth, everything that waited is in. */
+const PEEK_QUIET_MS = 1_500
 
 interface Arrival { kind: NotifyKind; name: string | null }
 
-/** Reads waiting wires off the drain without acking. Null: could not read (no answer in time, auth failed). */
+/**
+ * Reads waiting wires with a PEEK auth (relay_server.ts): a read-only pass that never displaces the app's own drain, which
+ * may be alive in the background, and acks nothing. Null: could not read (no answer in time, auth failed).
+ */
 export function peekDrain(bundle: PushBundle, identity: Identity, wsCtor: new (url: string) => WebSocket = WebSocket): Promise<Arrival[] | null> {
   return new Promise((resolve) => {
     const url = new URL('/relay/drain', bundle.relayOrigin)
@@ -81,8 +90,9 @@ export function peekDrain(bundle: PushBundle, identity: Identity, wsCtor: new (u
     ws.addEventListener('message', (ev: MessageEvent) => {
       let msg: { type?: unknown; nonce?: unknown; wire?: unknown }
       try { msg = JSON.parse(String(ev.data)) } catch { return }
-      if (msg.type === 'challenge' && typeof msg.nonce === 'string') { ws.send(JSON.stringify({ type: 'auth', did: identity.did, sig: signChallenge(identity, msg.nonce) })); return }
+      if (msg.type === 'challenge' && typeof msg.nonce === 'string') { ws.send(JSON.stringify({ type: 'auth', did: identity.did, sig: signChallenge(identity, msg.nonce), peek: true })); return }
       if (msg.type === 'auth_ok') { authed = true; settle(); return }
+      if (msg.type === 'peek_end') { finish(true); return }
       if (msg.type === 'auth_failed') { finish(false); return }
       if (msg.type === 'wire' && typeof msg.wire === 'string') { pending.push(read(msg.wire)); settle() }
     })
@@ -105,9 +115,49 @@ async function onPush(): Promise<void> {
   let identity: Identity | null = null
   try { identity = deserializeIdentity(bundle.identity) } catch { identity = null }
   const arrivals = identity ? await peekDrain(bundle, identity) : null
-  const lines = arrivals ? workerLines(arrivals, bundle.kinds) : [WORKER_FALLBACK]
+  let lines = arrivals ? workerLines(arrivals, bundle.kinds) : [WORKER_FALLBACK]
   const icon = new URL('icons/icon-192.png', bundle.relayOrigin + appBase()).toString()
+  if (!lines.length) {
+    // Nothing readable (the app in the background took it already, or every kind that arrived is off). A push that shows
+    // nothing counts against this site in Chrome and the subscription gets throttled: show the fallback unless one of ours is up.
+    const shown = await sw.registration.getNotifications().catch(() => [] as NotificationLike[])
+    if (shown.some((n) => n.tag.startsWith('trustweb-'))) return
+    lines = [WORKER_FALLBACK]
+  }
   await Promise.all(lines.map((body, i) => sw.registration.showNotification(bundle.appName, { body, tag: 'trustweb-arrival-' + i, icon })))
+}
+
+/**
+ * The push service replaced this device's subscription (it happens after a browser update, a reinstall, a long sleep): the
+ * relay still holds the old one and its wakes die. Subscribe again with the relay's key and hand the new one over on a peek
+ * connection (handlePush accepts it there too), without waiting for the app to open.
+ */
+async function onSubscriptionChange(): Promise<void> {
+  const bundle = await readPushBundle()
+  if (!bundle?.vapidKey) return
+  const keyBytes = Uint8Array.from(atob(bundle.vapidKey.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
+  const sub = await sw.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes as BufferSource }).catch(() => null)
+  if (!sub) return
+  const b64 = (buf: ArrayBuffer | null): string | undefined => buf ? btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : undefined
+  const json = { endpoint: sub.endpoint, keys: { p256dh: b64(sub.getKey('p256dh')), auth: b64(sub.getKey('auth')) } }
+  let identity: Identity
+  try { identity = deserializeIdentity(bundle.identity) } catch { return }
+  await new Promise<void>((resolve) => {
+    const url = new URL('/relay/drain', bundle.relayOrigin); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    let ws: WebSocket
+    const done = (): void => { try { ws.close() } catch { /* closed */ } resolve() }
+    const timer = setTimeout(done, PEEK_TOTAL_MS)
+    try { ws = new WebSocket(url.toString()) } catch { clearTimeout(timer); resolve(); return }
+    ws.addEventListener('message', (ev: MessageEvent) => {
+      let msg: { type?: unknown; nonce?: unknown }
+      try { msg = JSON.parse(String(ev.data)) } catch { return }
+      if (msg.type === 'challenge' && typeof msg.nonce === 'string') ws.send(JSON.stringify({ type: 'auth', did: identity.did, sig: signChallenge(identity, msg.nonce), peek: true }))
+      else if (msg.type === 'auth_ok') ws.send(JSON.stringify({ type: 'push', subscription: json }))
+      else if (msg.type === 'push_ok' || msg.type === 'push_rejected' || msg.type === 'push_unavailable') { clearTimeout(timer); done() }
+    })
+    ws.addEventListener('close', () => { clearTimeout(timer); resolve() })
+    ws.addEventListener('error', () => { /* close follows */ })
+  })
 }
 
 /** The app's base path: the worker is served at <base>sw.js. */
@@ -126,5 +176,6 @@ if ('registration' in sw && 'clients' in sw) {
   sw.addEventListener('install', () => { void sw.skipWaiting() })
   sw.addEventListener('activate', (e) => { e.waitUntil(sw.clients.claim()) })
   sw.addEventListener('push', (e) => { e.waitUntil(onPush()) })
+  sw.addEventListener('pushsubscriptionchange', (e) => { e.waitUntil(onSubscriptionChange()) })
   sw.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil(focusApp()) })
 }

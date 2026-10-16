@@ -12,6 +12,10 @@ Files
   ../.github/workflows/android-release.yml   builds, signs and publishes trustweb-<version>.apk on a v* tag
   ../scripts/android_keystore.sh     makes the release key once, prints the GitHub secrets, writes assetlinks.json
 
+Data
+  The app's data lives in the browser's storage for app.trustweb.one. Installing a newer APK over the old one keeps it.
+  UNINSTALLING the app makes Android's browser delete that site data (identity, connections, notes): back up first.
+
 Pairing with the origin
   apps/trustweb/pwa/.well-known/assetlinks.json names the signing certificate's SHA-256. Served at
   https://app.trustweb.one/.well-known/assetlinks.json by the normal app deploy. Until it matches, Android shows the

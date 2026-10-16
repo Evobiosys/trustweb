@@ -16,6 +16,8 @@ export function pushSupported(): boolean {
 }
 
 let registering: Promise<ServiceWorkerRegistration | null> | null = null
+/** The relay's key the current subscription was made with (subscribePush), written into the worker's bundle. */
+let relayKeyInUse: string | null = null
 
 /** The one registration (scope: the app's base). Null where workers are not available or the file is not served (dev without the build). */
 export function workerRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -75,6 +77,7 @@ export async function subscribePush(relayOrigin: string): Promise<SubscribeOutco
     const sameKey = sub?.options.applicationServerKey && toB64u(sub.options.applicationServerKey) === toB64u(keyBytes.buffer as ArrayBuffer)
     if (sub && !sameKey) { await sub.unsubscribe().catch(() => false); sub = null }
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes as BufferSource })
+    relayKeyInUse = key
     return { ok: true, sub: asJson(sub) }
   } catch {
     return { ok: false, why: 'failed' }
@@ -96,7 +99,7 @@ export function pushBundleOf(s: AppState, relayOrigin: string, appName: string):
   return {
     identity,
     write: () => (identity
-      ? writePushBundle({ v: 1, identity, peers: s.peers.filter((p) => p.did).map((p) => ({ did: p.did, name: p.displayName })), kinds: kindsOf(s), relayOrigin, appName })
+      ? writePushBundle({ v: 1, identity, peers: s.peers.filter((p) => p.did).map((p) => ({ did: p.did, name: p.displayName })), kinds: kindsOf(s), relayOrigin, appName, ...(relayKeyInUse ? { vapidKey: relayKeyInUse } : {}) })
       : Promise.resolve()).catch(() => undefined),
   }
 }
