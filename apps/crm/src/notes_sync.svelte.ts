@@ -14,7 +14,8 @@ import { store } from './state.svelte'
 import { saveField } from './sync.svelte'
 
 export const notes = $state({ running: false, last: '' })
-const DEBOUNCE_MS = 2000
+const DEBOUNCE_MS = 400
+const POLL_MS = 2000
 const MAX_LOG = 100
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -39,7 +40,7 @@ export async function syncNotes(everyone = false): Promise<void> {
   if (notes.running || !notesOn()) return
   notes.running = true
   try {
-    const people = peoplePayload(store.app.people, store.crm.personFields)
+    const people = peoplePayload(store.app.people, store.crm.personFields, store.crm.interactions)
     const { changes } = await call<{ changes: Change[] }>('/changes', { people })
     const applied = applyChanges(changes, people, {
       setRing: (id, ring) => saveField(id, RING_KEY, ring),
@@ -50,7 +51,7 @@ export async function syncNotes(everyone = false): Promise<void> {
       now: () => Date.now(),
       newId: () => `vault-${dayKey(Date.now())}-${Math.random().toString(36).slice(2, 8)}`,
     })
-    const r = await call<PushResult>('/push', { people: peoplePayload(store.app.people, store.crm.personFields), everyone })
+    const r = await call<PushResult>('/push', { people: peoplePayload(store.app.people, store.crm.personFields, store.crm.interactions), everyone })
     log(`${applied.rings} ring(s) and ${applied.lines} line(s) from the vault; ${r.written} written, ${r.unchanged} unchanged, ${r.noHome} without a note${everyone ? `, ${r.pages} page(s)` : ''}${r.errors.length ? `; ${r.errors.join('; ')}` : ''}`)
   } catch (e) {
     log(`bridge not reachable (${e instanceof Error ? e.message : String(e)})`)
@@ -66,4 +67,19 @@ export function notesTouched(): void {
   timer = setTimeout(() => { timer = undefined; void syncNotes() }, DEBOUNCE_MS)
 }
 
-if (typeof window !== 'undefined' && prefs.notesAutoSync && notesOn()) void syncNotes()
+/** The bridge watches the vault; while auto-sync is on, a file saved there is pulled within POLL_MS (a saved file, not an unsaved editor buffer). */
+let seenStamp = 0
+async function pollVault(): Promise<void> {
+  if (!notesOn() || !prefs.notesAutoSync || notes.running) return
+  try {
+    const r = await fetch(`${prefs.notesUrl.replace(/\/$/, '')}/status`, { headers: { Authorization: `Bearer ${prefs.notesToken.trim()}` } })
+    if (!r.ok) return
+    const { changedAt } = await r.json() as { changedAt?: number }
+    if (typeof changedAt === 'number' && changedAt > seenStamp) { seenStamp = changedAt; await syncNotes() }
+  } catch { /* bridge away: the next tick tries again */ }
+}
+
+if (typeof window !== 'undefined') {
+  if (prefs.notesAutoSync && notesOn()) void syncNotes()
+  setInterval(() => { void pollVault() }, POLL_MS)
+}

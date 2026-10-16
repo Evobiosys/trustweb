@@ -13,6 +13,15 @@ describe('notes client', () => {
     expect(out[0].ring).toBe('close')
     expect(out[1].ring).toBe('unsorted')
   })
+  it('the Curator\'s notes and what-happened entries ride along as crm- bullets', () => {
+    const out = peoplePayload(people(), undefined, [
+      { id: 'i1', personId: 'tana-a', at: 7, kind: 'note', text: 'test' },
+      { id: 'i2', personId: 'tana-a', at: 8, kind: 'met', text: '', place: 'Café Prückel' },
+      { id: 'i3', personId: 'nobody', at: 9, kind: 'note', text: 'x' },
+    ] as never[])
+    expect(out[0].lines.map((l) => [l.id, l.text, l.notedAt])).toEqual([['a0', 'Plays chess', 1], ['crm-i1', 'test', 7], ['crm-i2', 'Met (Café Prückel)', 8]])
+    expect(out[1].lines).toEqual([])
+  })
   it('applies rings (valid, different) and added bullets (new text only) with local provenance and the bullet\'s date', () => {
     const calls: unknown[] = []
     const r = applyChanges([

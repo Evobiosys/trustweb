@@ -84,7 +84,7 @@ describe('notes bridge: who may talk to it', () => {
     const server = await new Promise((resolve) => serve(c, resolve))
     const port = server.address().port
     const call = (p, body, token = 't0k3n') => fetch(`http://127.0.0.1:${port}${p}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:5220' }, body: body ? JSON.stringify(body) : undefined })
-    expect((await call('/status')).status).toBe(200)
+    expect(await (await call('/status')).json()).toEqual({ vault: path.basename(v), changedAt: 0 })
     expect((await call('/status', null, 'nope')).status).toBe(401)
     const r = await (await call('/push', { people: people() })).json()
     expect(r.written).toBe(2)

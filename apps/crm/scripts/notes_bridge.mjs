@@ -8,7 +8,7 @@
 //   node scripts/notes_bridge.mjs changes --record <record.json>          what the vault says that the record does not (ring edits, added bullets)
 // HTTP (all need `Authorization: Bearer <token>`): GET /status, POST /push {people, everyone?}, POST /changes {people}
 import { createHash, randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, watch, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -166,7 +166,21 @@ function body(req) {
 
 const validPeople = (x) => Array.isArray(x) && x.every((p) => p && typeof p.id === 'string' && typeof p.name === 'string' && Array.isArray(p.lines))
 
-export function handler(cfg) {
+/** The vault watched: `changedAt` moves when a .md file outside the skipped folders is saved by anyone but the bridge itself. */
+export function watchVault(cfg) {
+  const state = { changedAt: 0, ownWritesUntil: 0 }
+  try {
+    watch(cfg.vault, { recursive: true }, (_e, name) => {
+      const rel = String(name ?? '')
+      if (!rel.endsWith('.md') || rel.split('/').some((d) => SKIP_DIRS.has(d))) return
+      if (Date.now() < state.ownWritesUntil) return
+      state.changedAt = Date.now()
+    })
+  } catch (e) { console.error(`watch: ${e.message}`) }
+  return state
+}
+
+export function handler(cfg, watched = { changedAt: 0, ownWritesUntil: 0 }) {
   return async (req, res) => {
     const origin = req.headers.origin
     const cors = origin && LOCAL_ORIGIN.test(origin) ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', Vary: 'Origin' } : {}
@@ -176,11 +190,11 @@ export function handler(cfg) {
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end() }
     try {
       const url = new URL(req.url ?? '/', 'http://localhost')
-      if (req.method === 'GET' && url.pathname === '/status') return send(200, { vault: path.basename(cfg.vault), notes: listNotes(cfg.vault).length, readings: loadReadings(cfg.vault).length })
+      if (req.method === 'GET' && url.pathname === '/status') return send(200, { vault: path.basename(cfg.vault), changedAt: watched.changedAt })
       if (req.method === 'POST' && (url.pathname === '/push' || url.pathname === '/changes')) {
         const b = JSON.parse(await body(req) || '{}')
         if (!validPeople(b.people)) return send(400, { error: 'people[] needed' })
-        if (url.pathname === '/push') return send(200, push(cfg.vault, b.people, { everyone: b.everyone === true }))
+        if (url.pathname === '/push') { watched.ownWritesUntil = Date.now() + 1500; return send(200, push(cfg.vault, b.people, { everyone: b.everyone === true })) }
         return send(200, { changes: changes(cfg.vault, b.people) })
       }
       send(404, { error: 'no such route' })
@@ -191,7 +205,7 @@ export function handler(cfg) {
 }
 
 export function serve(cfg, onListen = () => {}) {
-  const server = createServer(handler(cfg))
+  const server = createServer(handler(cfg, watchVault(cfg)))
   server.listen(cfg.port, '127.0.0.1', () => onListen(server))
   return server
 }

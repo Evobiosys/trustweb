@@ -12,4 +12,5 @@ export function safePath(vault: string, rel: unknown): string | null
 export function push(vault: string, people: Person[], o?: { everyone?: boolean; now?: number }): PushResult
 export function changes(vault: string, people: Person[]): Change[]
 export function allowed(req: { headers: Record<string, string | undefined>; method?: string }, cfg: BridgeConfig): 'host' | 'origin' | 'token' | null
+export function watchVault(cfg: BridgeConfig): { changedAt: number; ownWritesUntil: number }
 export function serve(cfg: BridgeConfig, onListen?: (server: import('node:http').Server) => void): import('node:http').Server
