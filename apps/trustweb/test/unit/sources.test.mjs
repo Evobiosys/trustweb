@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Audience, LineStatus, Provenance, Ring, Tag, threadsForRing } from '../../src/model.ts'
-import { hiddenSources, lineShown, personShown, removeSource, setSourceHidden, shown, sourceCount, sourceOfLine, sourceOfPerson } from '../../src/sources.ts'
+import { hiddenSources, lineShown, onlyFrom, personShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceOfLine, sourceOfPerson } from '../../src/sources.ts'
 import { personNotes } from '../../src/person_notes.ts'
 
 const line = (id, text, source) => ({ id, text, tag: Tag.Note, audience: Audience.FriendsOfFriends, status: LineStatus.Current, notedAt: 1000, checkedAt: 1000, ...(source ? { source } : {}) })
@@ -43,17 +43,24 @@ describe('hide (a view choice)', () => {
     expect(s.hiddenSources).toBeUndefined()
     expect(hiddenSources({ hiddenSources: ['demo', 'tana'] })).toEqual(['tana'])
   })
-  it('shown(): hidden Tana leaves out Tana persons and Tana lines; everyone else stays the same object', () => {
+  it('shown(): hidden Tana leaves out persons known only from Tana and Tana lines; a Tana person with a note line stays, without the Tana line', () => {
     const s = state()
     expect(shown(s)).toBe(s)
     setSourceHidden(s, Provenance.Tana, true)
     const v = shown(s)
-    expect(v.people.map((p) => p.id)).toEqual(['local-c', 'd'])
-    expect(v.people[0]).toBe(s.people[2])
-    expect(v.people[1].lines.map((l) => l.text)).toEqual(['Typed by hand'])
-    expect(personShown(s, { id: 'tana-a' })).toBe(false)
+    expect(v.people.map((p) => p.id)).toEqual(['tana-a', 'local-c', 'd'])
+    expect(v.people[0].lines.map((l) => l.text)).toEqual(['Knows a 3D printer'])
+    expect(v.people[1]).toBe(s.people[2])
+    expect(v.people[2].lines.map((l) => l.text)).toEqual(['Typed by hand'])
+    expect(onlyFrom(s.people[0])).toBeNull()
+    expect(onlyFrom(s.people[1])).toBe(Provenance.Tana)
+    expect(personShown(s, s.people[1])).toBe(false)
     expect(lineShown(s, { tanaId: 'n9' })).toBe(false)
     expect(s.people).toHaveLength(4)
+    setHiddenSources(s, ['local', 'demo'])
+    expect(s.hiddenSources).toEqual(['local'])
+    setHiddenSources(s, [])
+    expect(s.hiddenSources).toBeUndefined()
   })
   it('hidden local notes leave Tana persons in place without their note lines; the card lists the same', () => {
     const s = state()

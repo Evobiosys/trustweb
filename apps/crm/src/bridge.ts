@@ -13,6 +13,8 @@ export interface Host {
   /** A person hidden in the Curator leaves the host's record too (and comes back with `restorePerson`), so the Web view drops them at once. */
   removePerson(personId: string): void
   restorePerson(person: Person): void
+  /** Settings "Hide people known only from …": the hidden sources (sources.ts) go to the host's record, so the Web view drops them at once. */
+  setHiddenSources(kinds: readonly string[]): void
   /** The element the Curator lives in (its theme switch goes there). */
   root: HTMLElement
 }

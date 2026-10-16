@@ -4,6 +4,7 @@
   import FieldsEditor from './fields_editor.svelte'
   import ImportExport from './import_export.svelte'
   import { PLACE_FIELDS } from './close'
+  import { host } from './bridge'
   import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
@@ -24,6 +25,7 @@
   function toggleHideSource(k: string, on: boolean): void {
     prefs.filters.hideSources = on ? [...prefs.filters.hideSources, k] : prefs.filters.hideSources.filter((x) => x !== k)
     savePrefs()
+    host.setHiddenSources?.(prefs.filters.hideSources)   // the web view follows at once
   }
 
   let place = $state('')

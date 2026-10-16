@@ -38,8 +38,16 @@ export function setSourceHidden(s: Pick<AppState, 'hiddenSources'>, kind: Proven
   else delete s.hiddenSources
 }
 
-export function personShown(s: Pick<AppState, 'hiddenSources'>, p: Pick<Person, 'id'>): boolean {
+/** The one source a person is known from, when nothing else knows them: their id's source and every line's; else null. */
+export function onlyFrom(p: Pick<Person, 'id' | 'lines'>): Provenance | null {
   const k = sourceOfPerson(p)
+  if (!k) return null
+  return p.lines.every((l) => sourceOfLine(l, p) === k) ? k : null
+}
+
+/** Hidden only when known from a hidden source and nothing else (Jakob 2026-10-16): a Tana person with a note line or a typed line stays. */
+export function personShown(s: Pick<AppState, 'hiddenSources'>, p: Pick<Person, 'id' | 'lines'>): boolean {
+  const k = onlyFrom(p)
   return !k || !sourceHidden(s, k)
 }
 
@@ -75,6 +83,13 @@ export function sourceCount(s: Pick<AppState, 'people'>, kind: Provenance): Sour
  * One shot: the source leaves the record. A person of this source whose lines also came from somewhere else is not lost:
  * they stay as a person without a source (fresh id), with those lines. Returns what left.
  */
+/** The hidden set as a whole (the Curator's checkbox writes it through host.setHiddenSources). */
+export function setHiddenSources(s: Pick<AppState, 'hiddenSources'>, kinds: readonly string[]): void {
+  const next = SOURCES.filter((k) => kinds.includes(k))
+  if (next.length) s.hiddenSources = next
+  else delete s.hiddenSources
+}
+
 export function removeSource(s: AppState, kind: Provenance, newId: () => string): SourceCount {
   const before = sourceCount(s, kind)
   s.people = s.people.flatMap((p) => {

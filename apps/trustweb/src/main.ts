@@ -71,7 +71,7 @@ import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
-import { SOURCES, lineShown, removeSource, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
+import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
@@ -2843,6 +2843,13 @@ const curator = createCurator({
   restorePerson: (person) => {
     if (!state || state.people.some((x) => x.id === person.id)) return
     state.people.push(person)
+    save()
+    if (screen === Screen.Web) render()
+  },
+  // Curator > Settings "Hide people known only from …" moves the web at once (Jakob 2026-10-16: "reflected in the visual").
+  setHiddenSources: (kinds) => {
+    if (!state) return
+    setHiddenSources(state, kinds)
     save()
     if (screen === Screen.Web) render()
   },

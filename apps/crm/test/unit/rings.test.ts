@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Ring } from '../../../trustweb/src/model'
-import { onlyFrom, passesFilters } from '../../src/fields'
+import { passesFilters } from '../../src/fields'
+import { onlyFrom } from '../../../trustweb/src/sources'
 import { OUT_OF_WEB, RING_ORDER, choiceEdits, intendingEdits, ringColor, ringOf, ringSyncValue } from '../../src/rings'
 
 describe('rings', () => {
