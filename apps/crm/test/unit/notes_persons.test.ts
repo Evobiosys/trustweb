@@ -20,6 +20,8 @@ const readings = () => [
     { name: 'Mira Hollenstein', aliases: ['Mira'], context: 'Met at the bonfire', facts: ['Runs a repair café in Graz', 'Offered her 3D printer'], met: '', confidence: 0.95 },
     { name: 'Tobias', aliases: [], context: 'Call about OTF', facts: ['Wants the Dec deadline confirmed'], met: '', confidence: 0.8 },
     { name: 'Jonas', aliases: [], context: 'Partner of Mira', facts: [], met: '', confidence: 0.3 },
+    { name: 'Olga Nowak', aliases: [], context: 'Runs the bonfire kitchen', facts: [], met: '', confidence: 0.8 },
+    { name: 'Pat Name-Only', aliases: [], context: '', facts: [], met: '', confidence: 0.8 },
   ] },
   { path: 'pages/Lena Berger.md', date: '2026-05-02', reader: 'claude:haiku', people: [
     { name: 'Lena Berger', aliases: [], context: 'Co-founder of the repair café', facts: ['Lives in Leoben', 'Runs a repair café in Graz'], met: '2024-03-09', confidence: 0.9 },
@@ -90,7 +92,9 @@ describe('converter', () => {
   it('low confidence is dropped and counted; the record stays a valid AppState', () => {
     expect(record.people.find((p) => p.name === 'Jonas')).toBeUndefined()
     expect(stats.belowConfidence).toBe(1)
-    expect(stats.newPersons).toBe(2)
+    expect(stats.newPersons).toBe(4)
+    expect(record.people.find((p) => p.name === 'Olga Nowak')!.lines).toEqual([])
+    expect(record.people.find((p) => p.name === 'Pat Name-Only')).toBeUndefined()
     expect(isAppState(record)).toBe(true)
   })
   it('is one-shot: merging again onto its own output gives the same record', () => {
@@ -100,7 +104,7 @@ describe('converter', () => {
   })
   it('withoutTana keeps the notes half of a person in both sources as a local person and drops Tana-only ones', () => {
     const r = withoutTana(record)
-    expect(r.people.map((p) => p.name).sort()).toEqual(['Lena Berger', 'Mira Hollenstein', 'Tobias'])
+    expect(r.people.map((p) => p.name).sort()).toEqual(['Lena Berger', 'Mira Hollenstein', 'Olga Nowak', 'Tobias'])
     const mira = r.people.find((p) => p.name === 'Mira Hollenstein')!
     expect(mira.id).toMatch(/^local-/)
     expect(mira.lines.map((l) => l.text)).toEqual(['Runs a repair café in Graz', 'Offered her 3D printer'])

@@ -103,7 +103,7 @@ export function merge(seed, readings, { minConfidence = 0.5, reader = '' } = {})
       }
     }
   }
-  for (const p of fresh.values()) if (p.lines.length) record.people.push(p)
+  for (const p of fresh.values()) if (p.lines.length || p.context) record.people.push(p)   // a name alone is not a person yet
   return { record, stats, matched }
 }
 
