@@ -4,6 +4,7 @@
   import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS } from './nav'
   import { nav, showTab } from './nav.svelte'
+  import { prefs } from './prefs.svelte'
   import People from './people.svelte'
   import MergeToast from './merge_toast.svelte'
   import Person from './person.svelte'
@@ -60,7 +61,7 @@
   <p class="privacy">{S.privacy}</p>
 
   <nav class="tabbar" aria-label={S.navLabel}>
-    {#each TABS as tab (tab)}
+    {#each TABS.filter((t) => t !== Tab.Pipeline || prefs.advanced) as tab (tab)}
       <button class="tab" data-tab={tab} aria-current={nav.tab === tab ? 'page' : undefined} onclick={(): void => showTab(tab)}>
         {TAB_LABEL[tab]}
       </button>

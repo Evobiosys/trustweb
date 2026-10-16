@@ -6,7 +6,7 @@
 
   let open = $state(false)
   const active = $derived(
-    [prefs.filters.hideDeceased, prefs.filters.hideFamous, prefs.filters.onlyConnection, prefs.filters.onlyClose].filter(Boolean).length + prefs.filters.rules.length)
+    [prefs.filters.hideDeceased, prefs.filters.hideFamous, prefs.filters.onlyConnection, prefs.filters.onlyClose].filter(Boolean).length + prefs.filters.rules.length + prefs.filters.hideSources.length)
   let ruleKey = $state('')
   let ruleText = $state('')
 

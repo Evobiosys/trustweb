@@ -104,6 +104,11 @@ export const S = {
   pkmQuestion: 'Sync with your personal knowledge management systems',
   pkmLabel: { tana: 'Tana', 'apple-notes': 'Apple Notes', 'obsidian-logseq': 'Obsidian / Logseq' } as Record<string, string>,
   pkmLater: 'Coming later.',
+  /** Hide by source (Jakob 2026-10-16): only people nothing else knows about. */
+  hideOnlyFrom: (label: string) => `Hide people known only from ${label}`,
+  advancedTitle: 'Advanced',
+  advancedOn: 'Advanced settings',
+  advancedHint: 'On: networks you administer (field scope, Curate for a network) and the Pipeline tab. Off: the simple version.',
   tanaMcp: 'Tana MCP = the local API Tana exposes on this computer, http://127.0.0.1:8262',
   tanaAutoSync: 'Sync my edits to Tana automatically',
   tanaToken: 'Tana token (stays on this device)',

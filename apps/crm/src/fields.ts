@@ -1,6 +1,8 @@
 /** The #person fields as the CRM uses them: lookup, the mandatory default, and what counts as "set". */
 import { PERSON_FIELDS } from './person_fields'
 import type { PersonField } from './person_fields'
+import { sourceOfLine, sourceOfPerson } from '../../trustweb/src/sources'
+import type { Person } from '../../trustweb/src/model'
 
 /** A Tana reference kept as label + node id (id absent once the person retyped it). */
 export interface Ref {
@@ -67,7 +69,15 @@ export function intendingOf(values: FieldValues): number {
 }
 
 /** Whether a person (their merged values) passes the People filters. */
-export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[] }): boolean {
+/** The one source a person came from, when nothing else knows them: their id's source and every line's (sources.ts); else null. */
+export function onlyFrom(p: Pick<Person, 'id' | 'lines'>): string | null {
+  const k = sourceOfPerson(p)
+  if (!k) return null
+  return p.lines.every((l) => sourceOfLine(l, p) === k) ? k : null
+}
+
+export function passesFilters(values: FieldValues, f: { hideDeceased: boolean; hideFamous: boolean; onlyConnection: boolean; rules: { key: string; text: string }[]; hideSources?: string[] }, person?: Pick<Person, 'id' | 'lines'>): boolean {
+  if (person && f.hideSources?.length) { const k = onlyFrom(person); if (k && f.hideSources.includes(k)) return false }
   if (f.hideDeceased && values[DECEASED_KEY] === true) return false
   if (f.hideFamous && values[FAMOUS_KEY] === true && intendingOf(values) === 0) return false
   if (f.onlyConnection && values[CONNECTION_KEY] !== true) return false

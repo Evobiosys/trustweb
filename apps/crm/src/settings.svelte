@@ -4,7 +4,7 @@
   import FieldsEditor from './fields_editor.svelte'
   import ImportExport from './import_export.svelte'
   import { PLACE_FIELDS } from './close'
-  import { PKMS, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
+  import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
   import { store } from './state.svelte'
@@ -20,6 +20,11 @@
   }
 
   const toSort = $derived(unsortedIds().length)
+
+  function toggleHideSource(k: string, on: boolean): void {
+    prefs.filters.hideSources = on ? [...prefs.filters.hideSources, k] : prefs.filters.hideSources.filter((x) => x !== k)
+    savePrefs()
+  }
 
   let place = $state('')
 
@@ -56,6 +61,12 @@
       <input type="checkbox" data-pkm={p} checked={prefs.pkms.includes(p)} onchange={(e): void => togglePkm(p, e.currentTarget.checked)} />
       <span>{S.pkmLabel[p]}</span>
     </label>
+    {#if PKM_SOURCE[p]}
+      <label class="fld check sub">
+        <input type="checkbox" data-hide-source={PKM_SOURCE[p]} checked={prefs.filters.hideSources.includes(PKM_SOURCE[p])} onchange={(e): void => toggleHideSource(PKM_SOURCE[p] ?? '', e.currentTarget.checked)} />
+        <span>{S.hideOnlyFrom(S.pkmLabel[p])}</span>
+      </label>
+    {/if}
     {#if prefs.pkms.includes(p)}
       {#if p === Pkm.Tana}
         <p class="muted">{S.tanaMcp}</p>
@@ -115,8 +126,15 @@
 
   <ImportExport />
 
+  <h3 class="screen-title">{S.advancedTitle}</h3>
+  <label class="fld check">
+    <input type="checkbox" data-field="advanced" bind:checked={prefs.advanced} onchange={savePrefs} />
+    <span>{S.advancedOn}</span>
+  </label>
+  <p class="muted">{S.advancedHint}</p>
+
   <FieldsEditor />
-  <Curate />
+  {#if prefs.advanced}<Curate />{/if}
 
   <h3 class="screen-title">{S.manualTitle}</h3>
   <p class="muted">{S.manualPlacement}</p>

@@ -27,7 +27,12 @@ export interface Filters {
   onlyClose: boolean
   /** All must hold (AND): the field's text contains `text`, case-insensitive. */
   rules: { key: string; text: string }[]
+  /** Sources (trustweb sources.ts: tana, local) whose people are hidden when NOTHING else knows them (Jakob 2026-10-16). */
+  hideSources: string[]
 }
+
+/** The sync option a hideable source belongs to; Apple Notes has no import yet. */
+export const PKM_SOURCE: Partial<Record<Pkm, string>> = { [Pkm.Tana]: 'tana', [Pkm.Obsidian]: 'local' }
 
 export interface Prefs {
   filters: Filters
@@ -42,6 +47,8 @@ export interface Prefs {
   customOrder: Record<string, string[]>
   /** Systems my people sync with; none by default. */
   pkms: Pkm[]
+  /** Advanced settings on: networks I admin (Curate, field scope) and the Pipeline tab. Off = the simple version (Jakob 2026-10-16). */
+  advanced: boolean
   /** A connected person counts as active (filled circle) if something happened within this many days. */
   activityDays: number
   /** Light theme chosen in Settings; dark is the default, whatever the OS theme is. */
@@ -65,8 +72,8 @@ export interface Prefs {
 }
 
 function load(): Prefs {
-  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
+  const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, activityDays: DEFAULT_ACTIVITY_DAYS,
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined
