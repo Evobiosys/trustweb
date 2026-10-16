@@ -893,6 +893,8 @@ export interface AppState {
   demo?: { people: string[]; inventory: string[] }
   /** The phone offered demo content once (popup); absent: not yet. */
   demoOffered?: boolean
+  /** Wave 11: the installed app offered notifications once (offerNotifications); the answer is notificationsOn. */
+  notifOffered?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
   /**

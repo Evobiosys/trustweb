@@ -1090,6 +1090,33 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  * anywhere else counts as "no thanks", so the card never sits over what the
  * person went on to do (Settings can still add it).
  */
+/**
+ * Wave 11: the installed app (APK or home-screen PWA) asks once, on its first open, whether to turn notifications on.
+ * The browser's permission prompt follows the tap (the TWA relays it to Android's own dialog). Not in a browser tab:
+ * there Settings > Notifications is the place.
+ */
+function offerNotifications(): void {
+  const s = state
+  if (!s || solo || s.notifOffered || s.notificationsOn || !runsAsInstalledApp() || typeof Notification === 'undefined') return
+  if (Notification.permission === 'denied') { s.notifOffered = true; save(); return }
+  const answer = async (yes: boolean): Promise<void> => {
+    st().notifOffered = true
+    save()
+    hideNotice()
+    if (!yes) return
+    const p = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission().catch(() => 'denied' as NotificationPermission)
+    if (p !== 'granted') { toast(S.notifBlocked); return }
+    st().notificationsOn = true
+    save()
+    await refreshPush()
+    toast(S.notifOnTitle)
+  }
+  showNotice(S.notifOfferTitle, S.notifOfferBody, [
+    el('button', { class: 'btn btn-electric btn-sm', 'data-notif-offer': 'yes', onclick: () => void answer(true) }, [S.notifOfferYes]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-offer': 'no', onclick: () => void answer(false) }, [S.notifOfferNo]),
+  ])
+}
+
 function offerDemoContent(): void {
   const s = state
   if (!s || solo || devRecordFile() || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth() || runsAsInstalledApp()) return
@@ -1285,6 +1312,7 @@ function screenStart(): Node[] {
     render()
     if (solo) showDemoFriends()
     else offerDemoContent()
+    offerNotifications()
     void net.start().then(announceLink).then(() => refreshPush())
     void completePendingConnect()
     maybeOpenPendingShare()
@@ -5098,6 +5126,7 @@ if (state && !state.testOf?.handedOverAt) {
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
   offerDemoContent()
+  offerNotifications()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).

@@ -39,6 +39,7 @@ jobs:
           name: trustweb-${{ github.sha }}
           path: apps/trustweb/dist
           retention-days: 30
+          include-hidden-files: true   # .well-known/assetlinks.json (the Android app's pairing; v4 drops dot-paths otherwise)
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 20

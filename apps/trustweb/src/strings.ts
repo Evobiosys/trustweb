@@ -378,6 +378,10 @@ export const S = {
   notifPushNoRelay: 'While the app is open only: this relay does not wake devices (a preview, or an older relay).',
   notifPushUnsupported: 'While the app is open only: this browser offers no push. On Android, install the app for notifications when it is closed.',
   notifBodyConnect: (name: string) => `${name} wants to connect.`,
+  notifOfferTitle: 'Turn on notifications?',
+  notifOfferBody: 'Hear when someone wants to connect, sends you a query or a message, also while TrustWeb is closed. Each kind has its own switch in Settings.',
+  notifOfferYes: 'Turn on',
+  notifOfferNo: 'Not now',
 
   ringLabel: {
     [Ring.Close]: 'Close friend',
