@@ -23,7 +23,7 @@ export function valuesOf(personId: string): FieldValues {
 export function unsortedIds(): string[] {
   return store.app.people
     .filter((p) => ringOf(effectivePerson(p, store.crm.personFields?.[p.id]).ring) === UNSORTED
-      && !p.name.includes('@') && passesFilters(valuesOf(p.id), prefs.filters))
+      && !p.name.includes('@') && passesFilters(valuesOf(p.id), prefs.filters, p))
     .map((p) => p.id)
 }
 

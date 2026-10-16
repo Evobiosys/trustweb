@@ -104,12 +104,13 @@ describe('focusFor / transcriptIndexAt', () => {
 })
 
 describe('what an asker receives does not change (no provenance leaks)', () => {
-  const SECRETS = ['m1', 'qAo6KedrMFrC', 'recorded-meeting', 'tana', 'Shared-By-Person', 'Lukas', '20000', 'meetingId', 'source', 'atMs']
+  const SECRETS = ['m1', 'qAo6KedrMFrC', 'recorded-meeting', 'tana', 'Shared-By-Person', 'Lukas', '20000', 'meetingId', 'source', 'atMs', 'journals/2026_07_11.md', 'haiku']
   const withSources = () => {
     const s = oldState()
     migrateSources(s)
     s.inventory[0].source = { kind: Provenance.Tana, ref: 'qAo6KedrMFrC' }
     s.people[0].lines[1].source = { kind: Provenance.SharedByPerson, fromName: 'Lukas' }
+    s.people[0].lines[0].source = { kind: Provenance.Local, path: 'journals/2026_07_11.md', reader: 'haiku' }
     return s
   }
   const without = () => {

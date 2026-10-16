@@ -28,6 +28,14 @@ function devBuild(): string {
   return JSON.stringify({ branch: git('rev-parse', '--abbrev-ref', 'HEAD'), sha: git('rev-parse', '--short', 'HEAD'), time, mode: process.env.TW_CRM_RECORD ? 'personal' : 'stock', stockUrl: '' })
 }
 
+/** Dev only: the notes bridge's token (scripts/notes_bridge.mjs init) so the developer's own Curator needs no paste. */
+function notesToken(): string | null {
+  try {
+    const file = path.join(process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? '', '.config'), 'trustweb', 'notes-bridge.json')
+    return JSON.parse(readFileSync(file, 'utf8')).token ?? null
+  } catch { return null }
+}
+
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? (process.env.CRM_BASE ?? '/crm/') : '/',
   plugins: [svelte()],
@@ -38,6 +46,7 @@ export default defineConfig(({ command }) => ({
     __TW_FEATURE__: command === 'serve' ? JSON.stringify({ title: 'Web Curator: people, rings, sort, Tana sync', hint: '' }) : 'null',
     __TW_BUILD__: command === 'serve' ? devBuild() : 'null',
     __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null),
+    __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null),
   },
   publicDir: false,
   build: {

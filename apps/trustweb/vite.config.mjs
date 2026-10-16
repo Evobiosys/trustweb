@@ -89,6 +89,14 @@ function releaseFile() {
 }
 
 // Dev only (scripts/tw_dev.sh): a record file every fresh preview origin opens with, instead of the welcome screen. Never in a build.
+/** Dev only: the notes bridge's token from ~/.config/trustweb/notes-bridge.json (apps/crm/scripts/notes_bridge.mjs init), so the Curator in a personal preview needs no paste. */
+function notesToken() {
+  try {
+    const file = path.join(process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? '', '.config'), 'trustweb', 'notes-bridge.json')
+    return JSON.parse(readFileSync(file, 'utf8')).token ?? null
+  } catch { return null }
+}
+
 function devRecord(command) {
   const file = process.env.TW_DEV_RECORD
   return command === 'serve' && file && !process.env.TW_STOCK ? JSON.stringify({ file: path.basename(file), text: readFileSync(file, 'utf8') }) : 'null'
@@ -295,7 +303,7 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
   plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).
