@@ -33,8 +33,13 @@ const SANDBOX = "https://api.sandbox.push.apple.com";
 /** Apple wants a token younger than an hour and not minted more often than every 20 minutes. */
 const TOKEN_LIFETIME_MS = 50 * 60_000;
 const EXPIRATION_S = 24 * 3600;
-/** The whole payload. Constant on purpose: Apple sees the same bytes for every arrival of every person. */
-export const APNS_PAYLOAD = JSON.stringify({ aps: { alert: { title: "TrustWeb", body: "Something arrived for you" }, sound: "default", "thread-id": "trustweb" } });
+/**
+ * The whole payload. Constant on purpose: Apple sees the same bytes for every arrival of every person. `mutable-content`
+ * hands it to the app's Notification Service Extension (ios/App/TrustWebNotify), which opens the drain on the phone, reads
+ * the waiting wires under the pair keys and rewrites the words before they show; these generic words are what shows when
+ * the extension cannot (no network, a dead bundle).
+ */
+export const APNS_PAYLOAD = JSON.stringify({ aps: { alert: { title: "TrustWeb", body: "Something arrived for you" }, sound: "default", "thread-id": "trustweb", "mutable-content": 1 } });
 
 /** A device token as the app reports it: hex, 32 bytes today (Apple reserves the right to make it longer). */
 export function parseApnsTarget(raw: unknown): ApnsTarget | null {

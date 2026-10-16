@@ -10,6 +10,7 @@ import type { PushSubscriptionJson } from './net'
 import { kindsOf } from './notify_kinds'
 import type { AppState } from './model'
 import { clearPushBundle, writePushBundle } from './push_bundle'
+import type { PushBundle } from './push_bundle'
 
 export function pushSupported(): boolean {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof PushManager !== 'undefined' && typeof Notification !== 'undefined'
@@ -93,13 +94,13 @@ export async function unsubscribePush(): Promise<void> {
   await sub?.unsubscribe().catch(() => false)
 }
 
-/** What the worker needs, from the record as it is now. Peers without a DID (none in practice) are skipped. */
-export function pushBundleOf(s: AppState, relayOrigin: string, appName: string): { identity: AppState['identity']; write: () => Promise<void> } {
+/** What the worker (or, in the iPhone app, the notification extension: `writer`) needs, from the record as it is now. Peers without a DID (none in practice) are skipped. */
+export function pushBundleOf(s: AppState, relayOrigin: string, appName: string, writer: (b: PushBundle) => Promise<void> = writePushBundle): { identity: AppState['identity']; write: () => Promise<void> } {
   const identity = s.identity
   return {
     identity,
     write: () => (identity
-      ? writePushBundle({ v: 1, identity, peers: s.peers.filter((p) => p.did).map((p) => ({ did: p.did, name: p.displayName })), kinds: kindsOf(s), relayOrigin, appName, ...(relayKeyInUse ? { vapidKey: relayKeyInUse } : {}) })
+      ? writer({ v: 1, identity, peers: s.peers.filter((p) => p.did).map((p) => ({ did: p.did, name: p.displayName })), kinds: kindsOf(s), relayOrigin, appName, ...(relayKeyInUse ? { vapidKey: relayKeyInUse } : {}) })
       : Promise.resolve()).catch(() => undefined),
   }
 }

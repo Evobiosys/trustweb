@@ -9,7 +9,8 @@ which opens the live site), a new web build needs a new app build here.
 Files
   ../capacitor.config.ts             app id one.trustweb.app, webDir, CapacitorHttp (fetch goes native: no CORS for capacitor://localhost)
   App/App/Info.plist                 camera and microphone texts, remote-notification background mode, version from MARKETING_VERSION
-  App/App/App.entitlements           aps-environment (push); Xcode switches it to production in an archive
+  App/App/App.entitlements           aps-environment (push) and the App Group; Xcode switches aps to production in an archive
+  App/TrustWebNotify/                the Notification Service Extension (see Notifications below)
   App/App/AppDelegate.swift          hands the APNs token to Capacitor's PushNotifications plugin
   App/App/Assets.xcassets            AppIcon (1024, no alpha, from apps/trustweb/pwa/icons/icon-maskable-512.png), Splash (android/ splash.png)
   App/CapApp-SPM/Package.swift       written by `cap sync` (the plugin list); do not edit
@@ -27,8 +28,14 @@ Notifications (apps/trustweb/src/native_push.ts, packages/transport/src/apns_pus
   (APNs), download the .p8 once. teamId: Membership. "sandbox": true while the phone runs an Xcode build; the relay also
   retries the other environment once on BadDeviceToken. Without the file the relay answers push_rejected and the app says
   "this relay cannot wake iPhones yet".
-  Roadmap: a Notification Service Extension could rewrite the alert on the phone from the queue (per-kind switches, names)
-  without telling Apple more; today every arrival is the same notification.
+  Before the alert shows, iOS runs the app's Notification Service Extension (App/TrustWebNotify, target TrustWebNotify,
+  bundle id one.trustweb.app.notify): it reads the push bundle the web app keeps in the App Group group.one.trustweb.app
+  (App/App/PushBundleStore.swift, written through the app-local plugin TrustWebPushBundlePlugin.swift), opens the relay
+  drain in peek mode, reads the waiting wires under the pair keys (TrustWebWire.swift mirrors apps/demo/src crypto, did and
+  relay framing with CryptoKit) and puts the real words in: "<name> sent you a message." Apple carried the fixed words only.
+  No network or no bundle: the fixed words stay. A kind switched off also shows the fixed words (dropping a notification
+  needs Apple's filtering entitlement: roadmap). The App Group and Push Notifications capabilities must exist on both the
+  app id and the extension id in the developer account (Xcode's automatic signing registers them).
 
 Build on a Mac with Xcode (none on this Mac today; the workflow is the reference build)
   cd apps/trustweb && TW_BASE=/ VITE_TW_SITE_URL=https://trustintheweb.org ../crm/node_modules/.bin/vite build --outDir dist --emptyOutDir

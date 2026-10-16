@@ -2,10 +2,14 @@
  * Wave 12: notifications in the iPhone app. A WKWebView has no Web Push, so the device token comes from Capacitor's
  * PushNotifications plugin (APNs) and goes to the relay over the drain like a Web Push subscription does (net.ts setPush,
  * `{apns: <token>}`; relay: packages/transport/src/apns_push.ts). Apple allows no silent wake that shows something, so the
- * relay sends a constant alert with no sender, kind or count in it; the app reads what arrived once it is opened.
+ * relay sends a constant alert with no sender, kind or count in it, and the app's Notification Service Extension
+ * (ios/App/TrustWebNotify) rewrites the words on the phone after reading the waiting wires itself, as the service worker
+ * does on Android. For that it needs the push bundle (push_bundle.ts): handed over through the app-local plugin
+ * TrustWebPushBundle (ios/App/App/TrustWebPushBundlePlugin.swift) into the App Group the two share.
  */
 import { capacitor, nativeApp } from './native_app'
 import type { PushSubscriptionJson } from './net'
+import type { PushBundle } from './push_bundle'
 
 type Grant = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale'
 
@@ -55,4 +59,20 @@ export async function registerNativePush(): Promise<{ ok: true; sub: PushSubscri
   const value = await token
   if (!value) { token = null; return { ok: false, why: 'failed' } }
   return { ok: true, sub: { apns: value } }
+}
+
+interface BundlePlugin {
+  write(o: { bundle: string }): Promise<void>
+  clear(): Promise<void>
+}
+
+const bundlePlugin = (): BundlePlugin | null => (nativeApp ? ((capacitor()?.Plugins?.TrustWebPushBundle as BundlePlugin | undefined) ?? null) : null)
+
+/** The extension's copy of what it needs (push_bundle.ts PushBundle), replaced whole on every write. */
+export async function writeNativeBundle(b: PushBundle): Promise<void> {
+  await bundlePlugin()?.write({ bundle: JSON.stringify(b) })
+}
+
+export async function clearNativeBundle(): Promise<void> {
+  await bundlePlugin()?.clear()
 }

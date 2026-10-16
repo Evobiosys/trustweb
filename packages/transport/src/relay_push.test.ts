@@ -279,7 +279,7 @@ describe("relay apns wake-ups", () => {
       expect(await sendApns({ apns: TOKEN }, cfg)).toBe("sent");
       expect(seen[0].path).toBe(`/3/device/${TOKEN}`);
       expect(seen[0].body).toBe(APNS_PAYLOAD);
-      expect(JSON.parse(seen[0].body)).toEqual({ aps: { alert: { title: "TrustWeb", body: "Something arrived for you" }, sound: "default", "thread-id": "trustweb" } });
+      expect(JSON.parse(seen[0].body)).toEqual({ aps: { alert: { title: "TrustWeb", body: "Something arrived for you" }, sound: "default", "thread-id": "trustweb", "mutable-content": 1 } });
       expect(seen[0].headers["apns-topic"]).toBe("one.trustweb.app");
       expect(seen[0].headers["apns-push-type"]).toBe("alert");
       expect(seen[0].headers.authorization.startsWith("bearer ")).toBe(true);

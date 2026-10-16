@@ -377,7 +377,7 @@ export const S = {
   notifPushOn: 'Also when the app is closed: the relay wakes this device with an empty push; what arrived is read here, under your keys.',
   notifPushNoRelay: 'While the app is open only: this relay does not wake devices (a preview, or an older relay).',
   // Wave 12 (native_push.ts): on iPhone every notification must go through Apple's push service, and it cannot be empty.
-  notifPushOnIos: 'Also when the app is closed. Apple requires every notification to pass through Apple\'s push service, so the relay sends one with fixed words and nothing else in it: Apple sees that something arrived for this phone and when, never what or from whom. Every kind of arrival wakes the phone with the same words; what arrived is read here, under your keys.',
+  notifPushOnIos: 'Also when the app is closed. Apple requires every notification to pass through Apple\'s push service, so the relay sends one with fixed words and nothing else in it; before it shows, TrustWeb\'s own extension on this phone reads what arrived, under your keys, and puts the real words in. Apple sees that something arrived for this phone and when, never what or from whom. A kind you switch off shows the fixed words.',
   notifPushNoRelayIos: 'While the app is open only: this relay cannot wake iPhones yet.',
   notifPushUnsupported: 'While the app is open only: this browser offers no push. On Android, install the app for notifications when it is closed.',
   notifBodyConnect: (name: string) => `${name} wants to connect.`,

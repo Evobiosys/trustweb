@@ -153,7 +153,7 @@ import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscri
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
 import { APK_URL } from './install'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
-import { nativePushAvailable, nativePushPermission, registerNativePush } from './native_push'
+import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 
 enum Screen {
   Start = 'start',
@@ -393,8 +393,13 @@ function save(): void {
 // notifications are on; one write per tick however many saves.
 let mirrorTimer: ReturnType<typeof setTimeout> | null = null
 function mirrorPushBundle(s: AppState): void {
-  if (!s.notificationsOn || !pushSupported() || mirrorTimer) return
-  mirrorTimer = setTimeout(() => { mirrorTimer = null; void pushBundleOf(st(), SERVER_ORIGIN, S.appName).write() }, 250)
+  if (!s.notificationsOn || !(pushSupported() || nativeApp) || mirrorTimer) return
+  mirrorTimer = setTimeout(() => { mirrorTimer = null; void writePushBundleNow() }, 250)
+}
+
+/** The bundle the worker reads (push_bundle.ts), or in the iPhone app the one the notification extension reads (native_push.ts). */
+function writePushBundleNow(): Promise<void> {
+  return pushBundleOf(st(), SERVER_ORIGIN, S.appName, nativeApp ? writeNativeBundle : undefined).write()
 }
 
 /** The relay's last word on this phone's push subscription (Settings > Notifications shows a hint when it cannot wake us). */
@@ -403,17 +408,17 @@ let pushState: 'kept' | 'forgotten' | 'rejected' | 'unavailable' | 'unsupported'
 /** Subscribes this phone for wake-ups (push.ts; in the iPhone app native_push.ts) and tells the relay; on boot while on, and when the person turns notifications on. */
 async function refreshPush(): Promise<void> {
   const s = st()
-  if (!s.notificationsOn) { net.setPush(null); await unsubscribePush(); return }
+  if (!s.notificationsOn) { net.setPush(null); await unsubscribePush(); if (nativeApp) await clearNativeBundle(); return }
   if (nativeApp) {
     const r = await registerNativePush()
-    if (r.ok) net.setPush(r.sub)
+    if (r.ok) { net.setPush(r.sub); await writePushBundleNow() }
     else pushState = r.why
     return
   }
   // The worker also shows this page's own notifications while it is hidden (push.ts showNotification), push or no push.
   await workerRegistration()
   const r = await subscribePush(SERVER_ORIGIN)
-  if (r.ok) { net.setPush(r.sub); await pushBundleOf(s, SERVER_ORIGIN, S.appName).write() }
+  if (r.ok) { net.setPush(r.sub); await writePushBundleNow() }
   else pushState = r.why
 }
 
@@ -1859,7 +1864,7 @@ function notificationsCard(s: AppState): HTMLElement {
     box.addEventListener('change', () => { s.notifyKinds = { ...kinds, [kind]: box.checked }; save(); kinds[kind] = box.checked })
     return el('label', { class: 'notif-kind' }, [box, el('span', {}, [S.notifKind[kind]])])
   }
-  // Wave 12: in the iPhone app every arrival is one and the same Apple notification (native_push.ts), so the kind switches have nothing to switch.
+  // Wave 12: in the iPhone app the notification extension applies these switches (native_push.ts); Apple carries fixed words either way.
   const hint = !s.notificationsOn ? null
     : nativeApp ? (pushState === 'kept' ? S.notifPushOnIos : pushState === 'rejected' || pushState === 'unavailable' ? S.notifPushNoRelayIos : pushState === 'failed' || pushState === 'denied' ? S.notifPushFailed : null)
     : !pushSupported() || pushState === 'unsupported' ? S.notifPushUnsupported
@@ -1870,7 +1875,7 @@ function notificationsCard(s: AppState): HTMLElement {
   return el('div', { class: 'verse notif' }, [
     el('h3', {}, [s.notificationsOn ? S.notifOnTitle : S.notifTitle]),
     el('p', {}, [S.notifBody]),
-    s.notificationsOn && !nativeApp ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
+    s.notificationsOn ? el('div', { class: 'notif-kinds' }, NOTIFY_KINDS.map(kindRow)) : null,
     hint ? el('p', { class: 'meta', 'data-push-state': pushState ?? '' }, [hint]) : null,
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => void toggle() }, [s.notificationsOn ? S.notifTurnOff : S.notifTurnOn]),
   ])

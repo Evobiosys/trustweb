@@ -36,8 +36,9 @@
     closed, the relay wakes the phone through the push service of your platform; the message itself stays on the relay until your phone reads it.
     In the Android app and in browsers, that wake is empty: the push service (Google's for Chrome, Mozilla's for Firefox) learns that something waits
     for your device, and when. <b>On iPhone and iPad, Apple makes it mandatory that every notification passes through Apple's push service, and Apple
-    allows no empty one.</b> So the relay sends one with fixed words ("Something arrived for you") and nothing else in it: Apple sees that something
-    arrived for your device and when, never what, from whom, or of which kind. We cannot switch that off; if you would rather Apple saw nothing, leave
+    allows no empty one.</b> So the relay sends one with fixed words ("Something arrived for you") and nothing else in it; before it shows, TrustWeb's
+    own notification extension on your phone reads the waiting message itself, under your keys, and replaces the fixed words with the real ones.
+    Apple sees that something arrived for your device and when, never what, from whom, or of which kind. We cannot switch that off; if you would rather Apple saw nothing, leave
     notifications off on an Apple device and the app shows what arrived when you open it. For this, the relay keeps one address per phone (a push
     subscription or an Apple device token), replaced when the phone re-registers and removed when you switch notifications off.</li>
     <li><b>Encrypted backup.</b> A backup is encrypted on your phone before it is uploaded. The
