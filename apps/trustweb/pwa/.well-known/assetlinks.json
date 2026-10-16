@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "one.trustweb.app",
-    "sha256_cert_fingerprints": ["REPLACE_WITH_RELEASE_KEY_SHA256_FINGERPRINT"]
+    "sha256_cert_fingerprints": ["68:3F:36:0F:95:3B:AB:84:9E:DE:12:39:A2:DA:66:4E:3F:C1:07:C8:F2:A4:55:04:CE:AB:C0:EB:57:DD:19:CE"]
   }
 }]
