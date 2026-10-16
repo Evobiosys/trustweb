@@ -56,8 +56,8 @@ describe('reader: pure parts', () => {
   })
   it('listNotes walks the vault, skips code and caches, returns sorted vault-relative paths', () => {
     const v = mkdtempSync(path.join(tmpdir(), 'vault-'))
-    for (const d of ['journals', 'node_modules/x', 'code/y', '.obsidian', 'memory/people']) mkdirSync(path.join(v, d), { recursive: true })
-    for (const f of ['journals/2026_01_01.md', 'node_modules/x/a.md', 'code/y/b.md', '.obsidian/c.md', 'memory/people/d.md', 'memory/e.txt']) writeFileSync(path.join(v, f), 'x')
+    for (const d of ['journals', 'node_modules/x', 'code/y', '.obsidian', 'memory/people', 'TrustWeb/People']) mkdirSync(path.join(v, d), { recursive: true })
+    for (const f of ['journals/2026_01_01.md', 'node_modules/x/a.md', 'code/y/b.md', '.obsidian/c.md', 'memory/people/d.md', 'memory/e.txt', 'TrustWeb/People/p.md', 'TrustWeb/People/.trustweb-generated']) writeFileSync(path.join(v, f), 'x')
     utimesSync(path.join(v, 'memory/people/d.md'), new Date(), new Date())
     expect(listNotes(v)).toEqual(['journals/2026_01_01.md', 'memory/people/d.md'])
     expect(listNotes(v, ['memory', 'missing'])).toEqual(['memory/people/d.md'])
@@ -117,5 +117,15 @@ describe('converter', () => {
   it('loadReadings keeps the last line per note path', () => {
     const r = loadReadings(['{"path":"a.md","date":"2026-01-01","people":[]}\n{"path":"a.md","date":"2026-01-02","people":[]}\n', '{"path":"b.md","date":"2026-01-03","people":[]}\n'])
     expect(r.map((x) => `${x.path}:${x.date}`)).toEqual(['a.md:2026-01-02', 'b.md:2026-01-03'])
+  })
+})
+
+describe('notes_sync pull', () => {
+  it('chains the reader (resumable) and the converter on the same seed, work files beside the vault assets', async () => {
+    const { pullArgs } = await import('../../scripts/notes_sync.mjs')
+    const a = pullArgs({ vault: '/v', seed: '/s/record.json', reader: 'ollama:qwen3.5:4b', include: 'journals,pages', me: 'Me' })
+    expect(a.readings).toBe('/v/assets/local-notes/people-ollama-qwen3.5-4b.jsonl')
+    expect(a.read).toEqual(['/v', a.readings, '--reader', 'ollama:qwen3.5:4b', '--include', 'journals,pages'])
+    expect(a.convert).toEqual([a.readings, '/s/record.json', '--merge', '/s/record.json', '--tana-links', '/v/assets/local-notes/tana-links.md', '--me', 'Me'])
   })
 })

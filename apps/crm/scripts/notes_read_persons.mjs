@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { MARK_FOLDER } from './notes_page.mjs'
 
 export const PROMPT = `You extract people from one markdown note written by its owner ("the writer"). Output ONLY a JSON object, no prose:
 {"people":[{"name":"<full name as written>","aliases":["<other spellings or short forms in the note>"],"context":"<how the writer knows them, one sentence, or empty>","facts":["<one short fact per item about THIS person only, close to the note's wording>"],"met":"<YYYY-MM-DD only if the note says when the writer first met them, else empty>","confidence":<0..1>}]}
@@ -23,6 +24,7 @@ const MIN_CHARS = 40
 export function listNotes(vault, include = []) {
   const out = []
   const walk = (dir) => {
+    if (existsSync(path.join(dir, MARK_FOLDER))) return   // TrustWeb's own pages (notes_page.mjs): never read back as notes
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name)); continue }
       if (e.isFile() && e.name.endsWith('.md')) out.push(path.relative(vault, path.join(dir, e.name)).split(path.sep).join('/'))
