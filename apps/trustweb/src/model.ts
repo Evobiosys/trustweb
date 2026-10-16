@@ -895,6 +895,10 @@ export interface AppState {
   demoOffered?: boolean
   /** Wave 11: the installed app offered notifications once (offerNotifications); the answer is notificationsOn. */
   notifOffered?: boolean
+  /** Wave 11 (apk.ts): the Android shell's version this record was last opened by, when the update check last ran, and whether it runs. */
+  apkVersion?: string
+  apkCheckedAt?: number
+  apkUpdates?: boolean
   /** Settings > Advanced: close friend / friend / acquaintance under each name on the web. Absent: hidden (2026-10-06). */
   showRingNames?: boolean
   /**

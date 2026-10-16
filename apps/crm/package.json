@@ -1,7 +1,7 @@
 {
   "name": "@ew/crm",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "license": "AGPL-3.0-or-later",
   "description": "Web Curator: contacts, timeline, pipeline and follow-ups over TrustWeb's own record, local-first",
   "type": "module",

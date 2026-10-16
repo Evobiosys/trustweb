@@ -150,6 +150,8 @@ import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
+import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
+import { APK_URL } from './install'
 
 enum Screen {
   Start = 'start',
@@ -281,6 +283,13 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 const wantInstall = params.get('install') === '1'
+// Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
+const apkLaunch = apkParam(params)
+if (apkLaunch) rememberApkSession(apkLaunch)
+/** The app on a home screen: a standalone PWA, or this session inside the APK (which runs as a tab until the origin vouches for it). */
+function installedHere(): boolean {
+  return runsAsInstalledApp() || isApkSession()
+}
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -1097,7 +1106,7 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  */
 function offerNotifications(): void {
   const s = state
-  if (!s || solo || s.notifOffered || s.notificationsOn || !runsAsInstalledApp() || typeof Notification === 'undefined') return
+  if (!s || solo || s.notifOffered || s.notificationsOn || !installedHere() || typeof Notification === 'undefined') return
   if (Notification.permission === 'denied') { s.notifOffered = true; save(); return }
   const answer = async (yes: boolean): Promise<void> => {
     st().notifOffered = true
@@ -1115,6 +1124,35 @@ function offerNotifications(): void {
     el('button', { class: 'btn btn-electric btn-sm', 'data-notif-offer': 'yes', onclick: () => void answer(true) }, [S.notifOfferYes]),
     el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-offer': 'no', onclick: () => void answer(false) }, [S.notifOfferNo]),
   ])
+}
+
+/** Wave 11 (apk.ts): inside the APK, once per six hours, offer a newer shell; the card waits until no other card is up. */
+async function offerApkUpdate(): Promise<void> {
+  const s = state
+  const mine = apkSessionVersion()
+  if (!s || !mine || !updateCheckDue(s, Date.now())) return
+  s.apkVersion = mine
+  s.apkCheckedAt = Date.now()
+  save()
+  const latest = await latestApkVersion()
+  if (!latest || !newerVersion(latest, mine) || !friendsEl.hidden) return
+  showNotice(S.apkUpdTitle(latest), S.apkUpdBody, [
+    el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', 'data-apk-update': latest }, [S.apkUpdGet]),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: hideNotice }, [S.apkUpdLater]),
+  ])
+}
+
+/** Settings (inside the APK only): the update check on or off. */
+function apkUpdatesRow(s: AppState): HTMLElement[] {
+  if (!isApkSession()) return []
+  const on = s.apkUpdates !== false
+  return [
+    el('h4', { class: 'eyebrow' }, [S.setApkGroup(apkSessionVersion() ?? '')]),
+    el('button', {
+      class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-apk-updates': String(on),
+      onclick: () => { s.apkUpdates = !on; save(); settingsSheet() },
+    }, [el('b', {}, [S.setApkUpdates]), el('small', {}, [S.setApkUpdatesHint])]),
+  ]
 }
 
 function offerDemoContent(): void {
@@ -1313,6 +1351,7 @@ function screenStart(): Node[] {
     if (solo) showDemoFriends()
     else offerDemoContent()
     offerNotifications()
+    setTimeout(() => void offerApkUpdate(), 4000)
     void net.start().then(announceLink).then(() => refreshPush())
     void completePendingConnect()
     maybeOpenPendingShare()
@@ -1810,6 +1849,7 @@ function notificationsCard(s: AppState): HTMLElement {
     : !pushSupported() || pushState === 'unsupported' ? S.notifPushUnsupported
     : pushState === 'relay-no-push' || pushState === 'unavailable' ? S.notifPushNoRelay
     : pushState === 'kept' ? S.notifPushOn
+    : pushState === 'failed' || pushState === 'denied' || pushState === 'no-worker' ? S.notifPushFailed
     : null
   return el('div', { class: 'verse notif' }, [
     el('h3', {}, [s.notificationsOn ? S.notifOnTitle : S.notifTitle]),
@@ -4686,7 +4726,8 @@ function settingsSheet(): void {
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
-    installable ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
+    installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
+    ...apkUpdatesRow(s),
     ...aboutGroup(),
     // safetyLink(SafetyPlace.Settings, () => openSheet(safetySheetNodes({ place: SafetyPlace.Settings, back: { label: S.safeBackSettings, go: settingsSheet } }))),
     solo ? null : el('button', {
@@ -5127,6 +5168,7 @@ if (state && !state.testOf?.handedOverAt) {
   if (state.connectCode) void ensureConnectCode()
   offerDemoContent()
   offerNotifications()
+  setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).
