@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, defaultsToNetwork, matchIds, shake, step, tierOf, applyPins, pinsOf } from '../../src/network_graph.ts'
+import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, networkChosen, matchIds, shake, step, tierOf, applyPins, pinsOf } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -10,9 +10,11 @@ const person = (id, ring, context = '', lines = 0) => ({
 const settle = (g) => { for (let i = 0; i < LAYOUT_ITERATIONS; i++) step(g, alphaAt(i)) }
 
 describe('network graph', () => {
-  it('defaults to the network above 60 people only', () => {
-    expect(defaultsToNetwork(60)).toBe(false)
-    expect(defaultsToNetwork(61)).toBe(true)
+  it('opens on the rings unless this device chose the network', () => {
+    expect(networkChosen(null)).toBe(false)
+    expect(networkChosen('rings')).toBe(false)
+    expect(networkChosen('junk')).toBe(false)
+    expect(networkChosen('network')).toBe(true)
   })
 
   it('has me pinned at the centre, a star edge per person, dashed for intending', () => {

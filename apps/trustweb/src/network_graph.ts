@@ -7,7 +7,6 @@
 import { LineStatus, Ring } from './model'
 import type { Person } from './model'
 
-export const NETWORK_DEFAULT_ABOVE = 60
 export const LAYOUT_ITERATIONS = 300
 
 /** The rings drawn as tiers: unsorted is outermost (grey, old "none"), outside is "not in my web". Family takes its closeness's tier. */
@@ -62,8 +61,9 @@ export const DEFAULT_FORCES: Forces = { link: 1, charge: 260, gravity: 0.002, co
 export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean }
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[] }
 
-export function defaultsToNetwork(people: number): boolean {
-  return people > NETWORK_DEFAULT_ABOVE
+/** The Web tab opens on Rings unless this device chose Network (the stored `trustweb.ui.webView` value). */
+export function networkChosen(stored: string | null): boolean {
+  return stored === 'network'
 }
 
 function hash(s: string): number {
