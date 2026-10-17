@@ -1,6 +1,6 @@
 /** The "Agreements" section of a person's card (wave 7). DOM and words only: the rules are agreements.ts, sending is the caller's. */
 import { el } from '../../demo/src/ui/dom'
-import { AGREEMENT_MAX, AgreementStatus, isExpired } from './agreements'
+import { AGREEMENT_MAX, AgreementStatus, MAX_TIME, isExpired } from './agreements'
 import type { Agreement } from './agreements'
 import { S } from './strings'
 
@@ -18,7 +18,7 @@ export interface AgreementsDeps {
   resend: (id: string) => void
 }
 
-const day = (at: number): string => new Date(at).toISOString().slice(0, 10)
+const day = (at: number): string => (Number.isFinite(at) && Math.abs(at) <= MAX_TIME ? new Date(at).toISOString().slice(0, 10) : '')
 
 function lineRow(d: AgreementsDeps, a: Agreement): HTMLElement {
   const expired = isExpired(a, d.now())
