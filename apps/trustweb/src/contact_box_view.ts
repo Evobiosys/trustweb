@@ -1,6 +1,6 @@
 /**
  * The contact box (wave 6e, owner 2026-10-08: "let it just be the Signal link, and then let people also, in the same box, add the
- * WhatsApp link"): ONE box for Signal, WhatsApp and Matrix, each with its own "share when we connect" tick. It sits in Meet > Advanced
+ * WhatsApp link"): ONE box for Signal, WhatsApp, Matrix and Consensual, each with its own "share when we connect" tick. It sits in Meet > Advanced
  * and in Settings; both draw it from here, so they cannot drift apart. No Signal/Molly choice any more.
  *
  * DOM and words only: what a value must look like is channel.ts, what is saved and ticked is the hook's (main.ts) business. Typing in a
@@ -13,7 +13,7 @@ import { S } from './strings'
 import { ICONS } from './icons'
 
 /** The channels of the box, in this order. */
-export const BOX_CHANNELS: readonly Channel[] = [Channel.Signal, Channel.WhatsApp, Channel.Matrix]
+export const BOX_CHANNELS: readonly Channel[] = [Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Consensual]
 
 export interface ContactBoxOptions {
   /** What is saved now. */

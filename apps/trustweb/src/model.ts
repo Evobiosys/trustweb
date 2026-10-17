@@ -409,10 +409,12 @@ export enum Channel {
   Delta = 'delta',
   Telegram = 'telegram',
   Messenger = 'messenger',
+  /** A Consensual address (consensu.al): TrustWeb only links out to it (channel.ts), never reads or writes there. */
+  Consensual = 'consensual',
 }
 
 export const CHANNELS: readonly Channel[] = [
-  Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Delta, Channel.Telegram, Channel.Messenger,
+  Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Delta, Channel.Telegram, Channel.Messenger, Channel.Consensual,
 ]
 
 export interface Peer {
@@ -838,6 +840,8 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
+  preferConsensual?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only when `profileShare` is on, to a connected peer, in a chat text. */
   profile?: MyProfile
   /** Wave 7: the "share my profile when we connect" tick. Absent: off. */

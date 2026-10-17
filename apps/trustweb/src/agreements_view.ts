@@ -10,6 +10,8 @@ export interface AgreementsDeps {
   now: () => number
   /** Connected on TrustWeb: a mutual agreement can be proposed. */
   canPropose: boolean
+  /** Consensual's own proposal flow, when this person's Consensual address is known. */
+  consensualLink?: string
   add: (text: string, expiresAt: number | undefined, propose: boolean) => void
   remove: (id: string) => void
   accept: (id: string) => void
@@ -49,6 +51,7 @@ export function agreementsSection(d: AgreementsDeps): HTMLElement {
       d.canPropose ? el('label', { class: 'chat-row' }, [mutual, el('span', {}, [S.agrMutual(d.name)])]) : el('p', { class: 'meta' }, [S.agrMineOnly]),
       el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-agr-add': '1', onclick: add }, [S.agrAdd]),
     ]),
+    d.consensualLink ? el('a', { class: 'btn btn-ghost btn-sm', href: d.consensualLink, target: '_blank', rel: 'noopener noreferrer', 'data-agr-consensual': '1' }, [S.consPropose]) : null,
     el('p', { class: 'meta' }, [S.agrHint]),
   ])
 }

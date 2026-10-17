@@ -80,6 +80,42 @@ function normalizeWhatsApp(raw: string): string | null {
   return digits ? toE164('+' + digits[1]) : null
 }
 
+// ---------------------------------------------------------------------------
+// Consensual (wave 14). One stored shape: the share link https://app.consensu.al/connect?to=<did>. A pasted bare DID or a link on
+// consensual.myceli.al is accepted and stored in that form. The link opens Consensual's own page; nothing is read or sent there.
+// ---------------------------------------------------------------------------
+
+const CONSENSUAL_DID = /^did:peer:2(\.[AVES][A-Za-z0-9_-]+)+$/
+const CONSENSUAL_DID_MAX = 400
+const CONSENSUAL_ORIGIN = 'https://app.consensu.al'
+/** Consensual's own proposal flow (agreements); the card links here when a person's address is known. */
+export const CONSENSUAL_AGREEMENTS_LINK = `${CONSENSUAL_ORIGIN}/agreements`
+
+export function isConsensualDid(s: string): boolean {
+  return s.length <= CONSENSUAL_DID_MAX && CONSENSUAL_DID.test(s)
+}
+
+function normalizeConsensual(raw: string): string | null {
+  let did = raw
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    const u = linkOn(raw, ['app.consensu.al', 'consensual.myceli.al'])
+    // Exactly /connect?to=<did>: no other parameter or fragment can ride along.
+    if (!u || !/^\/connect\/?$/.test(u.pathname) || u.hash !== '' || [...u.searchParams.keys()].join() !== 'to') return null
+    did = u.searchParams.get('to') ?? ''
+  }
+  return isConsensualDid(did) ? `${CONSENSUAL_ORIGIN}/connect?to=${did}` : null
+}
+
+/** The DID inside a stored Consensual value, or null. */
+function consensualDid(value: string): string | null {
+  try {
+    const did = new URL(value).searchParams.get('to')
+    return did !== null && isConsensualDid(did) ? did : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * The canonical value to store, or null if the input is not a valid way to
  * reach someone on this channel.
@@ -97,6 +133,8 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
       const id = link ? safeDecode(link.hash.replace(/^#\/?/, '')) : raw
       return id !== null && MATRIX_ID.test(id) ? id : null
     }
+    case Channel.Consensual:
+      return normalizeConsensual(raw)
     case Channel.Delta: {
       const link = linkOn(raw, ['i.delta.chat'])
       if (link && link.hash.length > 1) return link.href
@@ -134,6 +172,11 @@ export function channelLink(channel: Channel, value: string): string {
       return isWhatsAppQrLink(value) ? value : `https://wa.me/${value.replace(/\D/g, '')}`
     case Channel.Matrix:
       return `https://matrix.to/#/${value}`
+    case Channel.Consensual: {
+      // Their chat page; a phone without the connection lands on Consensual's own notice and can connect there.
+      const did = consensualDid(value)
+      return did ? `${CONSENSUAL_ORIGIN}/chat?with=${did}` : value
+    }
     case Channel.Delta:
       // A bare address can only become mailto:, which opens Delta Chat only
       // where it is the default mail app; an i.delta.chat invite always does.

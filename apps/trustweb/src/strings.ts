@@ -1036,6 +1036,7 @@ export const S = {
     [Channel.Delta]: 'Delta Chat',
     [Channel.Telegram]: 'Telegram',
     [Channel.Messenger]: 'Messenger',
+    [Channel.Consensual]: 'Consensual',
   } as Record<Channel, string>,
   chPh: {
     [Channel.Signal]: 'Signal username link (best) or phone number (+43...)',
@@ -1044,6 +1045,7 @@ export const S = {
     [Channel.Delta]: 'Delta Chat invite link or email address',
     [Channel.Telegram]: 'Username or phone number',
     [Channel.Messenger]: 'Username (m.me/...)',
+    [Channel.Consensual]: 'Their Consensual link (Connect > Share)',
   } as Record<Channel, string>,
   chInvalid: {
     [Channel.Signal]: 'Paste a signal.me username link, or use an international number like +43 660 1234567.',
@@ -1052,6 +1054,7 @@ export const S = {
     [Channel.Delta]: 'Paste their i.delta.chat invite link, or an email address.',
     [Channel.Telegram]: 'A Telegram username has 5 to 32 letters, digits or _, or use +43... .',
     [Channel.Messenger]: 'Use their Messenger username (the part after m.me/).',
+    [Channel.Consensual]: 'Paste the share link from Consensual > Connect > Share (https://app.consensu.al/connect?to=did:peer:...), or the did:peer:2 address itself.',
   } as Record<Channel, string>,
   chOpen: (app: string) => `Open in ${app}`,
   chAdd: 'Add',
@@ -1507,6 +1510,11 @@ export const S = {
   chatOpen: 'Chat',
   chatTitle: (name: string) => `Chat with ${name}`,
   chatMessageOn: (app: string) => `Message on ${app}`,
+  consChat: 'Chat on Consensual',
+  consPropose: 'Propose on Consensual',
+  consHonesty: 'This opens Consensual, a separate app by the Consensual steward; TrustWeb does not read or send anything there.',
+  setConsensual: 'Prefer Consensual for chats',
+  setConsensualHint: 'When you hold a person\'s Consensual link, the Chat button on their card opens Consensual; TrustWeb\'s own chat stays one tap below.',
   chatNotConnected: (name: string) => `${name} is not connected on TrustWeb yet. Connect first to chat here.`,
   chatEmpty: (name: string) => `Nothing written yet. Say hello to ${name}.`,
   chatOffline: 'No connection right now. Your message waits here and goes out when you are back online.',
@@ -1569,7 +1577,7 @@ export const S = {
   },
   // Wave 6b (c): Advanced under the one QR, and the sharing line (connect_advanced_view.ts)
   advancedLabel: 'Advanced',
-  advLinksTitle: 'Your links: Signal, WhatsApp, Matrix',
+  advLinksTitle: 'Your links: Signal, WhatsApp, Matrix, Consensual',
   signalTopAria: (name: string) => `Message ${name} on Signal`,
   shareRowLabel: 'How to share your code',
   shareMode: {
