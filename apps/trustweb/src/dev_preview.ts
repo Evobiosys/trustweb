@@ -306,24 +306,26 @@ export function initDevPreview(): void {
     if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
   }
 
-  /** More than ROWS_SHOWN feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
-  const ROWS_SHOWN = 3
+  /** Rows that fit: the panel may use ~70% of the viewport, one feature row is ~90 px, ~260 px go to header and buttons; never fewer than 3. */
+  const rowsShown = (): number => Math.max(3, Math.floor((window.innerHeight * 0.7 - 260) / 90))
+  /** More than rowsShown() feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
   function fewRows(secs: { sec: HTMLElement; rows: HTMLElement[] }[], id: string): HTMLElement[] {
     const total = secs.reduce((n, s) => n + s.rows.length, 0)
     const open = store.get(`twp-more-${id}`) === '1'
-    if (total <= ROWS_SHOWN || open) {
+    const shown = rowsShown()
+    if (total <= shown || open) {
       const out: HTMLElement[] = secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
-      if (total > ROWS_SHOWN) { const less = h('button', { className: 'more', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
+      if (total > shown) { const less = h('button', { className: 'more', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
       return out
     }
     const out: HTMLElement[] = []
-    let left = ROWS_SHOWN
+    let left = shown
     for (const s of secs) {
       if (left <= 0) break
       out.push(h('div', { className: 'row' }, s.sec, ...s.rows.slice(0, left)))
       left -= s.rows.length
     }
-    const more = h('button', { className: 'more', textContent: `… ${total - ROWS_SHOWN} more` })
+    const more = h('button', { className: 'more', textContent: `… ${total - shown} more` })
     more.addEventListener('click', () => { store.set(`twp-more-${id}`, '1'); render() })
     out.push(more)
     return out
@@ -382,6 +384,8 @@ export function initDevPreview(): void {
     if (lit) { lit = null; render() } else if (!collapsed()) setCollapsed(true)
   })
   render()
+  let resizing: ReturnType<typeof setTimeout> | undefined
+  window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(() => { if (p) render() }, 150) })
   // A reload while "Create PR" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
     if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
