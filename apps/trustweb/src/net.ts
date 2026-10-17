@@ -217,11 +217,11 @@ export interface NetHooks {
   mayReask?(peer: Peer): boolean
 }
 
-/** Tests only (test/unit/hops_net.test.mjs): never a URL or UI setting. Production passes nothing. */
+/** Never a URL or UI setting. A browser passes nothing; tests (test/unit/hops_net.test.mjs) and the iPhone app (native_app.ts) name the relay. */
 export interface NetOptions {
   /** A shorter answer window; production always uses ANSWER_WINDOW_MS. */
   answerWindowMs?: number
-  /** The relay's origin outside a browser; production uses the page's own origin. */
+  /** The relay's origin where it is not the page's own: tests, and the bundled iPhone app (wave 12). */
   relayOrigin?: string
 }
 
@@ -389,6 +389,14 @@ export class Net {
     if (!this.lock || !this.identity) return
     if (!this.lock.held()) { this.lock.request(true); return }
     if (fresh) void this.openDrain(this.identity)
+  }
+
+  /**
+   * Wave 12: the iPhone app went to the background. iOS freezes the page within seconds, but a drain that stays open a little
+   * longer would still ack a wire and the relay would not wake the phone through Apple: closed here, reopened by activate(true).
+   */
+  pause(): void {
+    this.closeDrain()
   }
 
   /** Closes the relay drain for good: after a hand-over the identity lives on another phone. */

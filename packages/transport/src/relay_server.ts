@@ -45,7 +45,8 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import { resolveDidPeer } from "./did_identity.js";
 import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, type RelayQueueStore } from "./relay_queue_store.js";
 import type { PushSubscriptionStore } from "./push_store.js";
-import { parsePushSubscription, sendWake, type PushSubscriptionJson, type VapidKeys, type WakeOutcome } from "./web_push.js";
+import { isApnsTarget, parsePushSubscription, sendWake, type PushSubscriptionJson, type VapidKeys, type WakeOutcome } from "./web_push.js";
+import { sendApns, type ApnsConfig, type ApnsTarget } from "./apns_push.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -152,6 +153,10 @@ export interface RelayPushOptions {
   vapid: VapidKeys;
   /** Injectable sender (tests). Defaults to web_push.ts sendWake over global fetch. */
   send?: (sub: PushSubscriptionJson, vapid: VapidKeys) => Promise<WakeOutcome>;
+  /** Wave 12 (apns_push.ts): the Apple push credentials. Absent: an iPhone's token is rejected (push_rejected), the web path stays. */
+  apns?: ApnsConfig;
+  /** Injectable APNs sender (tests). Defaults to apns_push.ts sendApns. */
+  sendApns?: (target: ApnsTarget, cfg: ApnsConfig) => Promise<WakeOutcome>;
   /** A phone whose drain is open but did not ack a flushed wire within this long is woken anyway (a frozen background tab). */
   ackWaitMs?: number;
   /** At most one wake per DID within this window; later wires in the window ride on the first wake. */
@@ -326,7 +331,9 @@ export class RelayServer {
     const last = this.lastWake.get(toDid) ?? 0;
     if (now - last < (push.coalesceMs ?? PUSH_COALESCE_MS)) return;
     this.lastWake.set(toDid, now);
-    const outcome = await (push.send ?? sendWake)(sub, push.vapid);
+    const outcome = isApnsTarget(sub)
+      ? push.apns ? await (push.sendApns ?? sendApns)(sub, push.apns) : "gone"
+      : await (push.send ?? sendWake)(sub, push.vapid);
     if (outcome === "gone") push.store.remove(toDid);
     else if (outcome === "failed") this.lastWake.delete(toDid);
   }
@@ -346,6 +353,10 @@ export class RelayServer {
     const sub = parsePushSubscription(msg.subscription);
     if (!sub) {
       ws.send(JSON.stringify({ type: "push_rejected", reason: "malformed subscription" }));
+      return;
+    }
+    if (isApnsTarget(sub) && !this.push.apns) {
+      ws.send(JSON.stringify({ type: "push_rejected", reason: "this relay does not push to Apple devices" }));
       return;
     }
     this.push.store.set(state.did, sub);

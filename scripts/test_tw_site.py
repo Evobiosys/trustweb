@@ -56,6 +56,17 @@ class Subpages(unittest.TestCase):
                 self.assertIn("Brave may log them under its own terms", text)
                 self.assertIn("keeps no copy of your words or of the results", text)
 
+    def test_privacy_states_the_apple_push_caveat_on_both_sites(self) -> None:
+        for which in site.Site:
+            text = re.sub(r"\s+", " ", pages(which)["privacy.html"])
+            with self.subTest(site=which.value):
+                self.assertIn('id="notifications"', text)
+                self.assertIn("Apple makes it mandatory", text)
+                self.assertIn("Apple sees that something arrived for your device and when, never what", text)
+                self.assertIn("Something arrived for you", text)
+                self.assertIn("Apple</b>, in the United States", text)
+                self.assertIn('id="d-notifications"', pages(which)["data-policy.html"])
+
     def test_terms_are_built_only_when_published_and_then_on_both_sites(self) -> None:
         for which in site.Site:
             with self.subTest(site=which.value):
@@ -101,7 +112,7 @@ class Subpages(unittest.TestCase):
             sections = re.findall(
                 r'<section id="(d-[a-z-]+)">(.*?)</section>', html, re.DOTALL
             )
-            self.assertEqual(len(sections), 16)
+            self.assertEqual(len(sections), 17)
             for ident, body in sections:
                 with self.subTest(site=which.value, section=ident):
                     self.assertEqual(

@@ -23,6 +23,9 @@
 //   RELAY_VAPID_FILE    - wave 11: the VAPID key file for Web Push wake-ups (web_push.ts). Created on first start
 //                         (mode 0600) when absent. Default: "vapid.json" next to the queue db. Set to "off" to never push.
 //   RELAY_VAPID_SUBJECT - the mailto:/https: contact in every VAPID token (default mailto:hello@trustintheweb.org).
+//   RELAY_APNS_FILE     - wave 12 (iPhone app): Apple push credentials, JSON {keyId, teamId, topic, privateKey (the .p8 PEM),
+//                         sandbox?} (apns_push.ts loadApnsConfig). Default: "apns.json" next to the queue db; absent = iPhones
+//                         are not woken (their token is refused on the drain). Mode 0600, never in git.
 //
 // Deliberately uses RelayServer's DEFAULT ingress/drain paths (/relay/send,
 // /relay/drain) rather than any custom prefix: alpha_server.ts's meet-card
@@ -42,6 +45,7 @@ import { RelayServer, type RelayPushOptions } from "./relay_server.js";
 import { SqliteRelayQueueStore } from "./relay_queue_store.js";
 import { SqlitePushSubscriptionStore } from "./push_store.js";
 import { generateVapidKeys, loadVapidKeys, type VapidKeys } from "./web_push.js";
+import { loadApnsConfig } from "./apns_push.js";
 
 /** Reads the VAPID keys, minting them on the first start. */
 export function vapidKeysAt(file: string, subject: string): VapidKeys {
@@ -55,13 +59,16 @@ async function main(): Promise<void> {
   const port = Number(process.env.RELAY_PORT ?? "4177");
   const host = process.env.RELAY_HOST ?? "127.0.0.1";
   const dbPath = process.env.RELAY_QUEUE_DB ?? "queue.db";
-  const vapidFile = process.env.RELAY_VAPID_FILE ?? path.join(path.dirname(path.resolve(dbPath)), "vapid.json");
+  const dataDir = path.dirname(path.resolve(dbPath));
+  const vapidFile = process.env.RELAY_VAPID_FILE ?? path.join(dataDir, "vapid.json");
+  const apnsFile = process.env.RELAY_APNS_FILE ?? path.join(dataDir, "apns.json");
 
   const queueStore = new SqliteRelayQueueStore(dbPath);
   let push: RelayPushOptions | undefined;
   if (vapidFile !== "off") {
     const vapid = vapidKeysAt(vapidFile, process.env.RELAY_VAPID_SUBJECT ?? "mailto:hello@trustintheweb.org");
-    push = { store: new SqlitePushSubscriptionStore(dbPath), vapid };
+    const apns = existsSync(apnsFile) ? loadApnsConfig(JSON.parse(readFileSync(apnsFile, "utf8"))) : undefined;
+    push = { store: new SqlitePushSubscriptionStore(dbPath), vapid, ...(apns ? { apns } : {}) };
   }
   const relay = new RelayServer({ queueStore, push });
 
@@ -78,7 +85,7 @@ async function main(): Promise<void> {
   console.log(
     `[relay_only] listening on http://${host}:${boundPort} ` +
       `(ingress POST /relay/send, drain WS /relay/drain, queue db: ${dbPath}, ` +
-      (push ? `push: on, ${push.store.count()} subscribed, key ${vapidFile})` : "push: off)"),
+      (push ? `push: on, ${push.store.count()} subscribed, key ${vapidFile}, apns: ${push.apns ? "on" : "off"})` : "push: off)"),
   );
 }
 

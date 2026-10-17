@@ -1,0 +1,68 @@
+# TrustWeb for iPhone (wave 12): build the Capacitor app (ios/) for the simulator, launch it there and fail if it dies.
+# No signing: a macOS runner has no Apple Developer account (and this Mac has no Xcode), so this is the reference build
+# until the account exists; android-smoke.yml is the Android twin. The simulator .app is kept as an artifact.
+name: ios-smoke
+on:
+  push:
+    paths: ['ios/**', 'capacitor.config.ts', 'apps/trustweb/src/native_*.ts', '.github/workflows/ios-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build the workspace packages apps/demo imports (their main is dist/)
+        run: pnpm --filter "@ew/demo^..." build
+      - name: build the web app for the bundle (base /, the live site as its website)
+        working-directory: apps/trustweb
+        env:
+          TW_BASE: /
+          TW_RELEASE: ${{ github.sha }}
+          VITE_TW_SITE_URL: https://trustintheweb.org
+        run: ../crm/node_modules/.bin/vite build --outDir dist --emptyOutDir
+      - run: node apps/trustweb/test/scan_bundle_for_private_lines.mjs apps/trustweb/dist
+      - name: copy the bundle into the Xcode project
+        run: npx cap sync ios
+      - name: build for the simulator (no signing)
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build > "$RUNNER_TEMP/xcodebuild.log" 2>&1 \
+            || { grep -E 'error:' "$RUNNER_TEMP/xcodebuild.log" | head -40; echo "::error::xcodebuild failed"; exit 1; }
+          grep -E 'BUILD (SUCCEEDED|FAILED)' "$RUNNER_TEMP/xcodebuild.log"
+          test -d "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app/PlugIns/TrustWebNotify.appex"
+          ls "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/"
+      - name: launch in a simulator and watch it for 20 s
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; ds=[d for r in json.load(sys.stdin)["devices"].values() for d in r if d["name"].startswith("iPhone")]; print(ds[-1]["udid"])')
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          pid=$(xcrun simctl launch "$udid" one.trustweb.app | sed -E 's/.*: ([0-9]+)$/\1/')
+          echo "launched, pid $pid"
+          sleep 20
+          xcrun simctl spawn "$udid" log show --last 1m --predicate 'process == "App"' > simulator-log.txt || true
+          if ! ps -p "$pid" > /dev/null; then echo "::error::the app died in the simulator"; tail -60 simulator-log.txt; exit 1; fi
+          echo "still running"
+          (cd "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" && zip -qr "$GITHUB_WORKSPACE/TrustWeb-simulator.zip" App.app)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-smoke-${{ github.sha }}
+          path: |
+            simulator-log.txt
+            TrustWeb-simulator.zip
+          retention-days: 30

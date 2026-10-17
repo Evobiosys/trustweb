@@ -5,7 +5,7 @@
  */
 import {
   ModeSharing, SHARE_MODES, ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable,
-  modePayload, modeSharing, narrowMine, needsCameraApp, readPins, repairShareFields,
+  modePayload, modeSharing, narrowMine, needsCameraApp, parseVia, readPins, repairShareFields, viaFragment,
 } from '../../src/share_modes.ts'
 import { Channel } from '../../src/model.ts'
 import { buildContactPayload, contactText, contactToSend, withTick } from '../../src/contact_share.ts'
@@ -60,16 +60,44 @@ describe('pins: older records only', () => {
   })
 })
 
-describe('the one offered mode (wave 9)', () => {
-  it('defaultModes: Only TrustWeb first, whatever links are saved', () => {
-    expect(defaultModes()[0]).toBe(ShareMode.OnlyTrustWeb)
-    expect(defaultModes()).toEqual([ShareMode.OnlyTrustWeb])
+describe('the row (wave 13)', () => {
+  it('defaultModes: Only TrustWeb alone until a link is saved', () => {
+    expect(defaultModes(undefined)).toEqual([ShareMode.OnlyTrustWeb])
+    expect(defaultModes({})).toEqual([ShareMode.OnlyTrustWeb])
   })
-  it('effectiveMode: an older messenger mode, an unknown value or nothing falls back to Only TrustWeb', () => {
-    for (const old of [ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.TrustWebMatrix, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp, 'both', 42, undefined]) {
-      expect(effectiveMode(old)).toBe(ShareMode.OnlyTrustWeb)
-    }
-    expect(effectiveMode(ShareMode.OnlyTrustWeb)).toBe(ShareMode.OnlyTrustWeb)
+  it('Signal saved: Only TrustWeb, TrustWeb + Signal, Only Signal', () => {
+    expect(defaultModes({ [Channel.Signal]: SIGNAL_USER })).toEqual([ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.OnlySignal])
+  })
+  it('both saved: the five, in the fixed order; Matrix adds no mode', () => {
+    expect(defaultModes(ALL)).toEqual([
+      ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp,
+    ])
+    expect(defaultModes({ [Channel.Matrix]: MATRIX })).toEqual([ShareMode.OnlyTrustWeb])
+  })
+  it('effectiveMode: a stored mode stays while its link is saved', () => {
+    expect(effectiveMode(ShareMode.OnlySignal, ALL)).toBe(ShareMode.OnlySignal)
+    expect(effectiveMode(ShareMode.TrustWebWhatsApp, ALL)).toBe(ShareMode.TrustWebWhatsApp)
+  })
+  it('effectiveMode: link removed, Matrix mode, unknown value or nothing -> Only TrustWeb', () => {
+    expect(effectiveMode(ShareMode.OnlySignal, { [Channel.WhatsApp]: WA_QR })).toBe(ShareMode.OnlyTrustWeb)
+    expect(effectiveMode(ShareMode.OnlySignal, undefined)).toBe(ShareMode.OnlyTrustWeb)
+    for (const old of [ShareMode.TrustWebMatrix, 'both', 42, undefined]) expect(effectiveMode(old, ALL)).toBe(ShareMode.OnlyTrustWeb)
+  })
+})
+
+describe('via= in the long link (wave 13)', () => {
+  it('TrustWeb + Signal / WhatsApp carry the channel name in capitals, never the handle', () => {
+    expect(viaFragment(ShareMode.TrustWebSignal)).toBe('via=SIGNAL')
+    expect(viaFragment(ShareMode.TrustWebWhatsApp)).toBe('via=WHATSAPP')
+    expect(viaFragment(ShareMode.TrustWebSignal)).not.toContain('adaUsername')
+  })
+  it('the other modes carry none', () => {
+    for (const m of [ShareMode.OnlyTrustWeb, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp, ShareMode.TrustWebMatrix]) expect(viaFragment(m)).toBe('')
+  })
+  it('parseVia reads it from a fragment among others; garbage is ignored', () => {
+    expect(parseVia('#n=hi&via=SIGNAL')).toBe(Channel.Signal)
+    expect(parseVia('via=WHATSAPP&k=x')).toBe(Channel.WhatsApp)
+    for (const bad of ['', '#', '#via=', '#via=signal', '#via=MATRIX', '#via=SIGNAL,WHATSAPP', '#xvia=SIGNAL']) expect(parseVia(bad)).toBeNull()
   })
 })
 

@@ -51,6 +51,8 @@ enum KeyKind {
 
 enum Info {
   Enc = 'trustweb-backup/v1/enc',
+  /** Local snapshots (snapshot.ts): the same key text opens them, under a key of its own (it never decrypts a server backup). */
+  SnapshotEnc = 'trustweb-snapshot/v1/enc',
   Id = 'trustweb-backup/v1/id',
   Token = 'trustweb-backup/v1/token',
 }
@@ -209,7 +211,7 @@ export function parseKeyText(text: string): BackupKey {
   return { text: formatKey(parsed.kind, parsed.bytes), fromPassphrase: parsed.kind === KeyKind.Passphrase }
 }
 
-async function derive(key: BackupKey): Promise<Derived> {
+async function hkdfOf(key: BackupKey): Promise<{ hkdfKey: CryptoKey; params: (info: Info) => HkdfParams }> {
   const { bytes } = decodeKeyText(key.text)
   const hkdfKey = await crypto.subtle.importKey('raw', buf(bytes), 'HKDF', false, ['deriveBits', 'deriveKey'])
   const params = (info: Info): HkdfParams => ({
@@ -218,14 +220,24 @@ async function derive(key: BackupKey): Promise<Derived> {
     salt: new ArrayBuffer(0),
     info: buf(enc.encode(info)),
   })
-  const encKey = await crypto.subtle.deriveKey(params(Info.Enc), hkdfKey, { name: 'AES-GCM', length: 256 }, false, [
-    'encrypt',
-    'decrypt',
-  ])
+  return { hkdfKey, params }
+}
+
+async function aesKey(key: BackupKey, info: Info): Promise<CryptoKey> {
+  const { hkdfKey, params } = await hkdfOf(key)
+  return crypto.subtle.deriveKey(params(info), hkdfKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+}
+
+async function derive(key: BackupKey): Promise<Derived> {
+  const { hkdfKey, params } = await hkdfOf(key)
+  const encKey = await aesKey(key, Info.Enc)
   const id = toHex(new Uint8Array(await crypto.subtle.deriveBits(params(Info.Id), hkdfKey, 256)))
   const token = toHex(new Uint8Array(await crypto.subtle.deriveBits(params(Info.Token), hkdfKey, 256)))
   return { encKey, id, token }
 }
+
+/** The AES key a local snapshot is sealed under (snapshot.ts): derived from the same key text, with its own HKDF label. */
+export const snapshotKey = (key: BackupKey): Promise<CryptoKey> => aesKey(key, Info.SnapshotEnc)
 
 function aad(id: string): ArrayBuffer {
   const idBytes = enc.encode(id)
@@ -239,13 +251,8 @@ function endpoint(base: string, id: string): string {
   return `${base.endsWith('/') ? base : `${base}/`}${id}`
 }
 
-export async function backupNow(
-  key: BackupKey,
-  payload: unknown,
-  base: string = DEFAULT_BASE,
-): Promise<{ at: number; bytes: number }> {
-  const { encKey, id, token } = await derive(key)
-  const at = Date.now()
+/** [version byte][12-byte IV][AES-GCM of {v, at, data}], AAD = version byte + `id` (the layout in the header). The server backup and snapshot.ts share it. */
+export async function sealBlob(encKey: CryptoKey, id: string, at: number, payload: unknown): Promise<Uint8Array> {
   const plain = enc.encode(JSON.stringify({ v: FORMAT_VERSION, at, data: payload }))
   const iv = new Uint8Array(IV_BYTES)
   crypto.getRandomValues(iv)
@@ -256,6 +263,17 @@ export async function backupNow(
   blob[0] = FORMAT_VERSION
   blob.set(iv, 1)
   blob.set(cipher, 1 + IV_BYTES)
+  return blob
+}
+
+export async function backupNow(
+  key: BackupKey,
+  payload: unknown,
+  base: string = DEFAULT_BASE,
+): Promise<{ at: number; bytes: number }> {
+  const { encKey, id, token } = await derive(key)
+  const at = Date.now()
+  const blob = await sealBlob(encKey, id, at, payload)
   const res = await fetch(endpoint(base, id), {
     method: 'PUT',
     headers: { 'X-Write-Token': token, 'Content-Type': 'application/octet-stream' },
@@ -297,7 +315,7 @@ export async function restoreIfChanged(key: BackupKey, etag: string | null, base
   return { changed: true, data, etag: res.headers.get('ETag') }
 }
 
-async function openBlob(encKey: CryptoKey, id: string, blob: Uint8Array): Promise<unknown> {
+export async function openBlob(encKey: CryptoKey, id: string, blob: Uint8Array): Promise<unknown> {
   if (blob.length < 1 + IV_BYTES + 16 || blob[0] !== FORMAT_VERSION) throw new Error('The backup has an unknown format')
   let plain: ArrayBuffer
   try {

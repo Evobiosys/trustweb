@@ -1,28 +1,28 @@
-// push_store.ts — where the relay keeps each DID's one push subscription (web_push.ts). A phone hands it over on its
+// push_store.ts — where the relay keeps each DID's one push target (web_push.ts PushTarget: a Web Push subscription or, wave 12, an APNs token). A phone hands it over on its
 // AUTHENTICATED drain only (relay_server.ts handlePush), so a row can be written by the DID's owner alone. The row says
 // nothing about the person: a push-service URL and two client keys, replaced whenever the phone re-subscribes, removed
 // when the phone switches notifications off or the push service answers "gone".
 import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
-import type { PushSubscriptionJson } from "./web_push.js";
+import type { PushTarget } from "./web_push.js";
 
 const requireCjs = createRequire(import.meta.url);
 const { DatabaseSync } = requireCjs("node:sqlite") as typeof import("node:sqlite");
 
 export interface PushSubscriptionStore {
-  get(did: string): PushSubscriptionJson | null;
-  set(did: string, sub: PushSubscriptionJson): void;
+  get(did: string): PushTarget | null;
+  set(did: string, sub: PushTarget): void;
   remove(did: string): void;
   /** How many phones can be woken; for the status line only. */
   count(): number;
 }
 
 export class InMemoryPushSubscriptionStore implements PushSubscriptionStore {
-  private readonly rows = new Map<string, PushSubscriptionJson>();
-  get(did: string): PushSubscriptionJson | null {
+  private readonly rows = new Map<string, PushTarget>();
+  get(did: string): PushTarget | null {
     return this.rows.get(did) ?? null;
   }
-  set(did: string, sub: PushSubscriptionJson): void {
+  set(did: string, sub: PushTarget): void {
     this.rows.set(did, sub);
   }
   remove(did: string): void {
@@ -44,17 +44,17 @@ export class SqlitePushSubscriptionStore implements PushSubscriptionStore {
     );
   }
 
-  get(did: string): PushSubscriptionJson | null {
+  get(did: string): PushTarget | null {
     const row = this.db.prepare("SELECT sub FROM push_subs WHERE did = ?").get(did) as { sub: string } | undefined;
     if (!row) return null;
     try {
-      return JSON.parse(row.sub) as PushSubscriptionJson;
+      return JSON.parse(row.sub) as PushTarget;
     } catch {
       return null;
     }
   }
 
-  set(did: string, sub: PushSubscriptionJson): void {
+  set(did: string, sub: PushTarget): void {
     this.db
       .prepare("INSERT INTO push_subs (did, sub, updated_at) VALUES (?, ?, ?) ON CONFLICT(did) DO UPDATE SET sub = excluded.sub, updated_at = excluded.updated_at")
       .run(did, JSON.stringify(sub), Date.now());

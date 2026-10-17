@@ -14,7 +14,7 @@
  *     relay redelivery is dropped, and a RETRY of a pending message reuses its
  *     original timestamp (the hook passes `sentAt` to Net.sendText) and so is
  *     dropped by the receiver if the first try arrived after all.
- * Ordering is by local arrival: a sender's clock is never trusted.
+ * Ordering is by local arrival: a sender's clock is never trusted. (Trimming past the bound and device sync use `byStamp`, so two devices keep the same messages.)
  * Wave 6i (chat_re.ts): a message may carry the ask it answers (`re`), kept with it in the thread and sent again on a retry.
  *
  * Pure and DOM-free; every function returns a new book and never throws on bad
@@ -94,19 +94,21 @@ function threadOf(book: ChatBook, peerId: string): ChatThread {
   return has(book, peerId) ? book[peerId] : { messages: [], unread: 0 }
 }
 
-function lastAt(thread: ChatThread): number {
+export function lastAt(thread: ChatThread): number {
   const last = thread.messages[thread.messages.length - 1]
   return last ? last.at : 0
 }
 
-/** Drops the oldest messages beyond the bound, waiting ones last (a message still to be sent is not forgotten first). */
-function trimThread(messages: ChatMessage[]): ChatMessage[] {
-  const out = [...messages]
-  while (out.length > CHAT_KEEP_PER_PERSON) {
-    const i = out.findIndex((m) => m.state !== MessageState.Pending)
-    out.splice(i === -1 ? 0 : i, 1)
-  }
-  return out
+/** The one order of a thread on every device: the sender's timestamp, then the key (sync_core.ts merges and trims by it). */
+export const byStamp = (a: ChatMessage, b: ChatMessage): number => a.sentAt - b.sentAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+
+/** Drops the oldest messages (by `byStamp`) beyond the bound, waiting ones last (a message still to be sent is not forgotten first). */
+export function trimThread(messages: ChatMessage[]): ChatMessage[] {
+  const excess = messages.length - CHAT_KEEP_PER_PERSON
+  if (excess <= 0) return messages
+  const pending = (m: ChatMessage): number => (m.state === MessageState.Pending ? 1 : 0)
+  const drop = new Set([...messages].sort((a, b) => pending(a) - pending(b) || byStamp(a, b)).slice(0, excess))
+  return messages.filter((m) => !drop.has(m))
 }
 
 function withThread(book: ChatBook, peerId: string, thread: ChatThread): ChatBook {

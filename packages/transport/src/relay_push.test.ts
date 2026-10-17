@@ -2,13 +2,15 @@
 // web_push.ts). The push service is a fake here; what is checked is WHEN a wake goes out, that it carries nothing,
 // and that a VAPID token verifies against the public key the phone subscribed with.
 import { describe, it, expect, afterEach } from "vitest";
-import { createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, verify as cryptoVerify } from "node:crypto";
+import { createServer as createHttp2Server } from "node:http2";
 import { WebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { createIdentity } from "./did_identity.js";
 import { RelayServer } from "./relay_server.js";
 import { InMemoryPushSubscriptionStore } from "./push_store.js";
 import { generateVapidKeys, loadVapidKeys, parsePushSubscription, sendWake, vapidAuthorization, type PushSubscriptionJson, type WakeOutcome } from "./web_push.js";
+import { APNS_PAYLOAD, apnsProviderToken, loadApnsConfig, parseApnsTarget, sendApns, type ApnsConfig, type ApnsTarget } from "./apns_push.js";
 
 const servers: RelayServer[] = [];
 const sockets: WebSocket[] = [];
@@ -210,5 +212,84 @@ describe("web_push", () => {
     expect(parsePushSubscription({ endpoint: "http://p.test/x" })).toBeNull();
     expect(parsePushSubscription({ endpoint: 5 })).toBeNull();
     expect(parsePushSubscription(null)).toBeNull();
+  });
+});
+
+// Wave 12 (apns_push.ts): an iPhone hands over an APNs device token instead of a Web Push subscription; the relay wakes it
+// through Apple with a constant payload that names no sender, kind or count.
+describe("relay apns wake-ups", () => {
+  const TOKEN = "ab".repeat(32);
+  const KEY = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const CFG: ApnsConfig = { keyId: "KEY1234567", teamId: "TEAM123456", topic: "one.trustweb.app", privateKey: KEY.privateKey.export({ type: "pkcs8", format: "pem" }) as string };
+
+  it("keeps a token only when the relay has Apple credentials, and routes the wake to the APNs sender", async () => {
+    const without = await boot();
+    const me = createIdentity(without.endpoint);
+    const d = await drain(without.endpoint, me, true);
+    d.ws.send(JSON.stringify({ type: "push", subscription: { apns: TOKEN } }));
+    expect((await d.until("push_rejected")).reason).toMatch(/Apple/);
+    expect(without.store.get(me.did)).toBeNull();
+
+    const store = new InMemoryPushSubscriptionStore();
+    const woken: ApnsTarget[] = [];
+    const relay = new RelayServer({ push: { store, vapid: generateVapidKeys("mailto:t@e.test"), apns: CFG, sendApns: async (t) => { woken.push(t); return "sent"; }, send: async () => { throw new Error("web sender must not run"); } } });
+    servers.push(relay);
+    const { port } = await relay.listen(0, "127.0.0.1");
+    const endpoint = `http://127.0.0.1:${port}`;
+    const phone = createIdentity(endpoint);
+    const d2 = await drain(endpoint, phone, true);
+    d2.ws.send(JSON.stringify({ type: "push", subscription: { apns: TOKEN.toUpperCase() } }));
+    expect((await d2.until("push_ok")).kept).toBe(true);
+    expect(store.get(phone.did)).toEqual({ apns: TOKEN });
+    d2.ws.terminate();
+    await sleep(50);
+    relay.submit(JSON.stringify({ to: phone.did, from: "x", payload: "a" }));
+    await sleep(30);
+    expect(woken).toEqual([{ apns: TOKEN }]);
+  });
+
+  it("signs a provider token Apple's public key verifies, and parses only a hex device token", () => {
+    const [h, c, s] = apnsProviderToken(CFG, 1_700_000_000_000).split(".");
+    expect(JSON.parse(Buffer.from(h, "base64url").toString())).toEqual({ alg: "ES256", kid: "KEY1234567" });
+    expect(JSON.parse(Buffer.from(c, "base64url").toString())).toEqual({ iss: "TEAM123456", iat: 1_700_000_000 });
+    expect(cryptoVerify("sha256", Buffer.from(`${h}.${c}`), { key: KEY.publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(s, "base64url"))).toBe(true);
+    expect(parseApnsTarget({ apns: TOKEN })).toEqual({ apns: TOKEN });
+    expect(parseApnsTarget({ apns: "not-hex" })).toBeNull();
+    expect(parsePushSubscription({ apns: TOKEN })).toEqual({ apns: TOKEN });
+    expect(() => loadApnsConfig({ ...CFG, privateKey: "nope" })).toThrow();
+    expect(() => loadApnsConfig({ ...CFG, topic: "" })).toThrow();
+  });
+
+  it("POSTs the constant alert over HTTP/2 and maps Apple's answer", async () => {
+    const seen: { path: string; headers: Record<string, string>; body: string }[] = [];
+    let answer: { status: number; body?: string } = { status: 200 };
+    const server = createHttp2Server((req, res) => {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c: string) => { body += c; });
+      req.on("end", () => {
+        seen.push({ path: req.url, headers: Object.fromEntries(Object.entries(req.headers).filter(([k]) => !k.startsWith(":")).map(([k, v]) => [k, String(v)])), body });
+        res.writeHead(answer.status, { "content-type": "application/json" });
+        res.end(answer.body ?? "");
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const cfg = { ...CFG, endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}` };
+    try {
+      expect(await sendApns({ apns: TOKEN }, cfg)).toBe("sent");
+      expect(seen[0].path).toBe(`/3/device/${TOKEN}`);
+      expect(seen[0].body).toBe(APNS_PAYLOAD);
+      expect(JSON.parse(seen[0].body)).toEqual({ aps: { alert: { title: "TrustWeb", body: "Something arrived for you" }, sound: "default", "thread-id": "trustweb", "mutable-content": 1 } });
+      expect(seen[0].headers["apns-topic"]).toBe("one.trustweb.app");
+      expect(seen[0].headers["apns-push-type"]).toBe("alert");
+      expect(seen[0].headers.authorization.startsWith("bearer ")).toBe(true);
+      answer = { status: 410, body: JSON.stringify({ reason: "Unregistered" }) };
+      expect(await sendApns({ apns: TOKEN }, cfg)).toBe("gone");
+      answer = { status: 403, body: JSON.stringify({ reason: "InvalidProviderToken" }) };
+      expect(await sendApns({ apns: TOKEN }, cfg)).toBe("failed");
+    } finally {
+      server.close();
+    }
+    expect(await sendApns({ apns: TOKEN }, { ...CFG, endpoint: "http://127.0.0.1:1" })).toBe("failed");
   });
 });
