@@ -10,14 +10,14 @@ import type { Person } from './model'
 export const NETWORK_DEFAULT_ABOVE = 60
 export const LAYOUT_ITERATIONS = 300
 
-/** Ring values the record may carry beyond `Ring` (rings v3): unsorted (outermost, grey, old "none"), outside ("not in my web"). Family is a tag, not a tier. */
-export type Tier = Ring | 'unsorted' | 'outside'
+/** The rings drawn as tiers: unsorted is outermost (grey, old "none"), outside is "not in my web". Family takes its closeness's tier. */
+export type Tier = Exclude<Ring, Ring.None | Ring.Family> | 'outside'
 /** Distance from me per ring; "intending" spreads over INTENDING_NEAR (desire 10) to INTENDING_FAR (desire 0). */
-const REST: Record<Tier, number> = { [Ring.Close]: 60, [Ring.Friend]: 100, [Ring.Acquaintance]: 150, [Ring.Intending]: 215, unsorted: 260, outside: 260 }
+const REST: Record<Tier, number> = { [Ring.Close]: 60, [Ring.Friend]: 100, [Ring.Acquaintance]: 150, [Ring.Intending]: 215, [Ring.Unsorted]: 260, outside: 260 }
 const INTENDING_NEAR = 175
 /** Four greens (darkest = closest), unsorted grey. */
 export const TIER_COLOUR: Record<Tier, string> = {
-  [Ring.Close]: '#0b5d2a', [Ring.Friend]: '#2e8b4a', [Ring.Acquaintance]: '#6fbf73', [Ring.Intending]: '#a9dca0', unsorted: '#9a9aa6', outside: '#9a9aa6',
+  [Ring.Close]: '#0b5d2a', [Ring.Friend]: '#2e8b4a', [Ring.Acquaintance]: '#6fbf73', [Ring.Intending]: '#a9dca0', [Ring.Unsorted]: '#9a9aa6', outside: '#9a9aa6',
 }
 /** The purple accent ring drawn around a family node. */
 export const FAMILY_COLOUR = '#7a3fc4'
@@ -123,11 +123,11 @@ export function tierOf(p: Person): Tier {
   let ring = p.ring as string
   if (ring === 'family') ring = (p as Stored).closeness ?? Ring.Close
   if (ring === 'close_friend') ring = Ring.Close
-  if (ring === 'outside' || ring === 'unsorted') return ring
-  if ((Object.values(Ring) as string[]).includes(ring)) return ring as Ring
+  if (ring === 'outside') return ring
+  if (ring !== Ring.None && (Object.values(Ring) as string[]).includes(ring)) return ring as Tier
   // old "none": calendar ids (an "@" in the name), famous and deceased people are not in my web
   const f = fieldsOf(p)
-  return p.name.includes('@') || f[F_FAMOUS] || f[F_DECEASED] ? 'outside' : 'unsorted'
+  return p.name.includes('@') || f[F_FAMOUS] || f[F_DECEASED] ? 'outside' : Ring.Unsorted
 }
 
 /** Desire 0..10 of an intending person (absent or out of range: 0). */
