@@ -2,7 +2,7 @@
  * Wave 6 (U4 c): the notes on one person, per day (src/person_notes.ts): every card line (also the ones no longer true) and
  * every past meeting about them, newest day first, searchable by the same words rule as the past-meetings search.
  */
-import { dayOf, lineIsCurrent, meetingsAbout, personNotes } from '../../src/person_notes.ts'
+import { LINE_TEXT_MAX, dayOf, editLineText, lineIsCurrent, meetingsAbout, personNotes, removeLine } from '../../src/person_notes.ts'
 import { AboutKind, LineStatus, Ring, Tag, Audience } from '../../src/model.ts'
 
 const DAY = 86_400_000
@@ -68,5 +68,33 @@ describe('personNotes', () => {
 
   it('an unknown person gives nothing', () => {
     expect(personNotes(state(), 'nobody', '', labels)).toEqual([])
+  })
+})
+
+describe('editLineText / removeLine (wave 14: edit a note by tapping it)', () => {
+  it('sets the trimmed text, keeps the other fields, stamps checkedAt', () => {
+    const s = state()
+    const before = { ...s.people[0].lines[0] }
+    expect(editLineText(s, 'anna', 'a1', '  Plays pickleball  ', 123)).toBe(true)
+    const l = s.people[0].lines[0]
+    expect(l).toEqual({ ...before, text: 'Plays pickleball', checkedAt: 123 })
+  })
+  it('rejects an unknown person or line, and empty text', () => {
+    const s = state()
+    expect(editLineText(s, 'anna', 'zz', 'x')).toBe(false)
+    expect(editLineText(s, 'nobody', 'a1', 'x')).toBe(false)
+    expect(editLineText(s, 'anna', 'a1', '   ')).toBe(false)
+    expect(s.people[0].lines[0].text).toBe('Looking for a pickleball court')
+  })
+  it('caps the text at LINE_TEXT_MAX', () => {
+    const s = state()
+    editLineText(s, 'anna', 'a1', 'x'.repeat(500))
+    expect(s.people[0].lines[0].text).toHaveLength(LINE_TEXT_MAX)
+  })
+  it('removeLine drops one line, false for unknown', () => {
+    const s = state()
+    expect(removeLine(s, 'anna', 'a1')).toBe(true)
+    expect(s.people[0].lines.map((l) => l.id)).toEqual(['a2', 'a3'])
+    expect(removeLine(s, 'anna', 'a1')).toBe(false)
   })
 })

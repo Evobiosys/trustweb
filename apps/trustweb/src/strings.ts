@@ -156,6 +156,8 @@ export const S = {
   personNotesNone: 'No notes or meetings with them yet.',
   personNotesNothing: (q: string) => `Nothing about "${q}" in your notes on them.`,
   personNotesGone: 'no longer true',
+  personNotesEditAria: 'Edit this note',
+  personNotesRemoveConfirm: 'Remove this note?',
   setNotesMatch: 'Let asks match my notes too',
   setNotesMatchHint: 'When somebody asks through you, the notes you took in meetings can match too (never a note that is "Only me"). You still say yes or no to every ask, and only the one line goes out, never the whole note or the meeting. Off for a demo phone.',
   setDirectOnly: 'Ask only my direct contacts',
