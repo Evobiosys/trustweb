@@ -54,6 +54,14 @@ describe('WhatsApp', () => {
     expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/430000000000')).toBe('+430000000000')
     expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/430000000000/')).toBe('+430000000000')
   })
+  it('keeps a WhatsApp Business short link whole: wa.me/message/<code>, no number in it', () => {
+    const biz = 'https://wa.me/message/ABCDEFGH12345'
+    expect(normalizeHandle(Channel.WhatsApp, biz)).toBe(biz)
+    expect(isWhatsAppQrLink(biz)).toBe(true)
+    expect(revealsWhatsAppNumber(biz)).toBe(false)
+    expect(link(Channel.WhatsApp, biz)).toBe(biz)
+    expect(normalizeHandle(Channel.WhatsApp, biz + '?x=1')).toBeNull()
+  })
   it('keeps WhatsApp\'s own share-QR link whole: wa.me/qr/<code>, no number in it', () => {
     expect(normalizeHandle(Channel.WhatsApp, 'https://wa.me/qr/ABCDEFGH12345')).toBe('https://wa.me/qr/ABCDEFGH12345')
     expect(link(Channel.WhatsApp, 'https://wa.me/qr/ABCDEFGH12345')).toBe('https://wa.me/qr/ABCDEFGH12345')
@@ -66,7 +74,7 @@ describe('WhatsApp', () => {
   it('refuses every other shape: query string, hash, other path, other host, http, short code, odd characters', () => {
     for (const bad of [
       'https://wa.me/qr/ABCDEFGH12345?text=hi', 'https://wa.me/qr/ABCDEFGH12345#x', 'https://wa.me/430000000000?text=hi', 'https://wa.me/430000000000#x',
-      'https://wa.me/qr/', 'https://wa.me/qr/ABC', 'https://wa.me/qr/ABCDEFGH12345/extra', 'https://wa.me/message/ABCDEFGH12345', 'https://wa.me/',
+      'https://wa.me/qr/', 'https://wa.me/qr/ABC', 'https://wa.me/qr/ABCDEFGH12345/extra', 'https://wa.me/',
       'http://wa.me/qr/ABCDEFGH12345', 'https://wa.me.evil.test/qr/ABCDEFGH12345', 'https://api.whatsapp.com/send?phone=430000000000', 'https://wa.me/qr/ABCD-EFGH12345',
       'https://wa.me/qr/ABCDEFGH12345?', 'ftp://wa.me/430000000000',
     ]) expect(normalizeHandle(Channel.WhatsApp, bad), bad).toBeNull()
