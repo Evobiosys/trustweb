@@ -4833,6 +4833,18 @@ function reachOutLink(): string {
   return name ? `trustweb.one/${name}` : 'your link'
 }
 
+const SETTINGS_ADV_KEY = 'trustweb.ui.settingsAdvanced'
+
+/** Settings > Advanced: one folded group; open state is remembered per device. */
+function settingsAdvancedGroup(children: (Node | null)[]): HTMLElement {
+  const d = el('details', { 'data-settings-advanced': '1', class: 'settings-adv' }, [
+    el('summary', { class: 'adv-toggle' }, [S.setAdvanced]), ...children,
+  ]) as HTMLDetailsElement
+  try { d.open = localStorage.getItem(SETTINGS_ADV_KEY) === '1' } catch { /* private mode: stays folded */ }
+  d.addEventListener('toggle', () => { try { localStorage.setItem(SETTINGS_ADV_KEY, d.open ? '1' : '0') } catch { /* ignore */ } })
+  return d
+}
+
 function settingsSheet(): void {
   const s = st()
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
@@ -4862,6 +4874,26 @@ function settingsSheet(): void {
       el('p', { class: 'meta', 'data-reach-outs-held': '' }, [S.reachOutsHeldCount(s.reachOutHeld ?? 0)]),
       s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
+    ]),
+    buildContactBox({}).el,
+    ...(connectEligible() ? devices.settingsGroup() : []),
+    notificationsCard(s),
+    ...sourcesGroup(s),
+    settingsAdvancedGroup([
+    ...feed.settingsGroup(),
+    el('h4', { class: 'eyebrow' }, [S.setQuery]),
+    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
+      class: 'radio' + (queryStyle() === q ? ' on' : ''),
+      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    ...recordingSettings(s),
+    ...hosting.settingsGroup(),
+    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+    el('h4', { class: 'eyebrow' }, [S.setTabs]),
+    pick(TabOrder.WebLeft, S.setTabsWebLeft),
+    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
+    el('p', { class: 'meta' }, [S.setTabsHint]),
+    ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
       ...(s.testAccounts?.length
         ? s.testAccounts.map((t) => demoAccountRow(t, settingsSheet))
@@ -4871,23 +4903,6 @@ function settingsSheet(): void {
         onclick: () => { s.demoOnlyForDemoAccounts = !demoOnlyForDemoAccounts(s); save(); settingsSheet() },
       }, [el('b', {}, [S.setDemoOnly]), el('small', {}, [S.setDemoOnlyHint])]),
     ]),
-    el('h4', { class: 'eyebrow' }, [S.setTabs]),
-    pick(TabOrder.WebLeft, S.setTabsWebLeft),
-    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
-    el('p', { class: 'meta' }, [S.setTabsHint]),
-    buildContactBox({}).el,
-    channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
-    el('h4', { class: 'eyebrow' }, [S.setQuery]),
-    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
-      class: 'radio' + (queryStyle() === q ? ' on' : ''),
-      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
-    ...recordingSettings(s),
-    ...hosting.settingsGroup(),
-    ...(connectEligible() ? devices.settingsGroup() : []),
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
-    ...feed.settingsGroup(),
-    notificationsCard(s),
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
@@ -4895,8 +4910,7 @@ function settingsSheet(): void {
       'aria-pressed': String(Boolean(s.demo)),
       onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
     }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
-    ...sourcesGroup(s),
-    el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
+    channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
       'aria-pressed': String(s.showRingNames === true),
@@ -4927,6 +4941,7 @@ function settingsSheet(): void {
       'aria-pressed': String(!hintHidden(id)),
       onclick: () => { setHintHidden(id, !hintHidden(id)); render(); settingsSheet() },
     }, [el('b', {}, [S.setHintsOne(S.hintLabel[id])]), el('small', {}, [S.hintText[id]])])),
+    ]),
     el('h4', { class: 'eyebrow' }, [S.setTutorial]),
     el('button', {
       class: 'btn btn-ghost', disabled: !(s.hiddenHints?.length),

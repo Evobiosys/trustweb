@@ -46,6 +46,7 @@ const closeSheet = (page) => page.locator('.sheet-veil').click({ position: { x: 
 const openSettings = async (page) => {
   await closeSheet(page)
   await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.locator('[data-feed-toggle]').waitFor({ timeout: 5_000 })
 }
@@ -277,12 +278,14 @@ async function main() {
     const d = await android.newPage()
     await startPhone(d, vite.base, 'Dana')
     await d.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await d.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
     await d.getByRole('button', { name: 'Settings' }).click()
     await d.getByRole('button', { name: /Add ways to reach you/ }).click()
     const androidChannels = await d.locator('.sheet.on [data-contact-box]').innerText()
     ok('Android: "Signal" only (wave 6e: the Signal/Molly choice is gone, one Signal link)', !/Molly/.test(androidChannels) && /Signal/.test(androidChannels), androidChannels)
     await android.close()
     await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await a.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
     await a.getByRole('button', { name: 'Settings' }).click()
     await a.getByRole('button', { name: /Add ways to reach you/ }).click()
     ok('elsewhere (iPhone, desktop): "Signal" only (Molly exists on Android only)', !/Molly/.test(await a.locator('.sheet.on .channels').innerText()))

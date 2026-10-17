@@ -28,6 +28,7 @@ async function shot(page, name) {
 }
 const openSettings = async (page) => {
   await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.locator('[data-import-open]').waitFor({ timeout: 5_000 })
 }
