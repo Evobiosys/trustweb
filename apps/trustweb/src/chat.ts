@@ -94,7 +94,7 @@ function threadOf(book: ChatBook, peerId: string): ChatThread {
   return has(book, peerId) ? book[peerId] : { messages: [], unread: 0 }
 }
 
-function lastAt(thread: ChatThread): number {
+export function lastAt(thread: ChatThread): number {
   const last = thread.messages[thread.messages.length - 1]
   return last ? last.at : 0
 }

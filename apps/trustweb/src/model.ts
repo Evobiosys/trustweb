@@ -304,7 +304,7 @@ export interface Person {
   did?: string
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
-   * this phone only: never matched, relayed or put into a shared code.
+   * the owner's own devices only (sealed when it travels between linked devices, sync_core.ts): never matched, relayed or put into a shared code.
    * Absent in records saved before it existed.
    */
   channels?: Partial<Record<Channel, string>>

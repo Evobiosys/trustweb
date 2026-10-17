@@ -30,8 +30,7 @@ interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: S
 /** A device waiting for the person's "Confirm" (both sides of a pairing show one). */
 export interface PairRequest { name: string; fp: string; confirm(): void; cancel(): void }
 
-/** A record that arrived complete and waits for the person's "Confirm". */
-/** `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
+/** A record that arrived complete and waits for the person's "Confirm". `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
 export interface Incoming { from: Pairing; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
 
 export interface SyncLinkDeps {
@@ -63,6 +62,9 @@ type Msg =
   | { t: 'data'; sid: string; i: number; n: number; r: boolean; d: string; name: string; exp: number }
 
 const MAX_PIECES = 200
+/** Own HKDF label for the sync keys: a sync key can never open another channel's message. (No production pairings exist yet, so no migration.) */
+const SYNC_KEY_INFO = 'trustweb-device-sync/v1'
+const pairKeyOf = (secret: Uint8Array): Promise<CryptoKey> => deriveEcdhPairKey(secret, SYNC_KEY_INFO)
 const OFFER_MS = SYNC_TTL_MS
 
 function utf8(s: string): Uint8Array { return new TextEncoder().encode(s) }
@@ -115,7 +117,7 @@ export function createSyncLink(d: SyncLinkDeps) {
 
   async function pairKey(did: string): Promise<CryptoKey> {
     let k = keys.get(did)
-    if (!k) { k = await deriveEcdhPairKey(ecdhSharedSecret(identity, did)); keys.set(did, k) }
+    if (!k) { k = await pairKeyOf(ecdhSharedSecret(identity, did)); keys.set(did, k) }
     return k
   }
   const send = async (did: string, msg: Msg): Promise<void> => channel.sendRaw(did, await sealMsg(await pairKey(did), msg))
@@ -180,6 +182,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
     persist()
     const pieces = toChunks(bundleOf(s, store.stamps))
+    if (pieces.length > MAX_PIECES) { d.onLog(`The record is too large to send (${pieces.length} pieces, the most is ${MAX_PIECES})`); throw new Error('too large') }
     const sid = randomId(12)
     for (let i = 0; i < pieces.length; i++) {
       await send(p.did, { t: 'data', sid, i, n: pieces.length, r: reply, d: toB64u(pieces[i]), name: d.deviceName(), exp: stamp() })
@@ -224,14 +227,14 @@ export function createSyncLink(d: SyncLinkDeps) {
     /** The code to show on the device that offers: its DID and a fresh one-time secret (valid 10 minutes, one use). */
     async offerCode(): Promise<string> {
       const secret = toB64u(randomBytes(16))
-      offer = { secret, key: await deriveEcdhPairKey(fromB64u(secret)), until: now() + OFFER_MS }
+      offer = { secret, key: await pairKeyOf(fromB64u(secret)), until: now() + OFFER_MS }
       return pairingCode(identity.did, secret)
     },
     /** The device that scanned or typed the code: sends itself, and returns what to confirm (null: not a code). */
     async join(code: string): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
-      await channel.sendRaw(c.did, await sealMsg(await deriveEcdhPairKey(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), exp: stamp() }))
+      await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), exp: stamp() }))
       return request(c.did, 'Other device')
     },
     unlink(did: string): void {
@@ -239,7 +242,7 @@ export function createSyncLink(d: SyncLinkDeps) {
       keys.delete(did)
       persist()
     },
-    /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline" or "version" otherwise. */
+    /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline", "version" or "too large" (and with the relay's error if a send fails). */
     async syncNow(did: string): Promise<void> {
       const p = store.pairings.find((x) => x.did === did)
       if (!p) throw new Error('not linked')

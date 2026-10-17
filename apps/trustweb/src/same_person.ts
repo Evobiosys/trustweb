@@ -31,11 +31,16 @@ export function unitePerson(w: Person, l: Person): Person {
   return out
 }
 
-/** Follows oldId -> keptId links to the end; a cycle ends where it closes (never loops). */
+/** Follows oldId -> keptId links to the end. A cycle (a damaged map; the merge never makes one) ends at its smallest id, the same from every start. */
 export function resolveSameAs(map: Record<string, string> | undefined, id: string): string {
-  const seen = new Set<string>()
+  const path: string[] = []
   let cur = id
-  while (map && Object.prototype.hasOwnProperty.call(map, cur) && !seen.has(cur)) { seen.add(cur); cur = map[cur] }
+  while (map && Object.prototype.hasOwnProperty.call(map, cur)) {
+    const at = path.indexOf(cur)
+    if (at >= 0) return path.slice(at).reduce((a, b) => (b < a ? b : a))
+    path.push(cur)
+    cur = map[cur]
+  }
   return cur
 }
 
@@ -73,6 +78,7 @@ export function mergePersons(s: AppState, keepId: string, dropId: string): boole
   if (note) merged.generalNote = note
   s.people = s.people.filter((p) => p !== drop).map((p) => (p === keep ? merged : p))
   s.sameAs = { ...s.sameAs, [dropId]: keepId }
+  if (s.sameAs[keepId] === dropId) delete s.sameAs[keepId]
   for (const m of s.meetings ?? []) if (m.personId === dropId) m.personId = keepId
   if (s.demo) s.demo.people = [...new Set(s.demo.people.map((id) => (id === dropId ? keepId : id)))]
   return true

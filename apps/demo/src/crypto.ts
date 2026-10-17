@@ -152,7 +152,7 @@ export async function derivePairKey(nonceA: string, nonceB: string): Promise<Cry
  * ceremony needs this instead of `derivePairKey`, and did.ts's
  * `ecdhSharedSecret` for the ECDH step itself.
  */
-export async function deriveEcdhPairKey(sharedSecret: Uint8Array): Promise<CryptoKey> {
+export async function deriveEcdhPairKey(sharedSecret: Uint8Array, info = 'ew-demo-ecdh-pair-v1'): Promise<CryptoKey> {
   const baseKey = await globalThis.crypto.subtle.importKey('raw', sharedSecret as BufferSource, 'HKDF', false, [
     'deriveKey',
   ])
@@ -161,7 +161,7 @@ export async function deriveEcdhPairKey(sharedSecret: Uint8Array): Promise<Crypt
       name: 'HKDF',
       hash: 'SHA-256',
       salt: new Uint8Array(0),
-      info: new TextEncoder().encode('ew-demo-ecdh-pair-v1'),
+      info: new TextEncoder().encode(info),
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },

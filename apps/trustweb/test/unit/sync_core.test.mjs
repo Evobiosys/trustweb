@@ -220,3 +220,44 @@ describe('sameAs in sync', () => {
     expect(mac.people[0].name).toBe('Ada new')
   })
 })
+
+describe('review fixes (DS-01, DS-02, DS-04, DS-06)', () => {
+  const merged = (mineMap, theirMap) => {
+    const mine = state({ sameAs: mineMap })
+    mergeBundle(mine, {}, { v: 2, people: [], inventory: [], meetings: [], at: {}, sameAs: theirMap }, 0)
+    return mine.sameAs
+  }
+  it('a reverse pair never makes a 2-cycle: the larger id points at the smaller, either way round', async () => {
+    const { resolveSameAs } = await import('../../src/same_person.ts')
+    expect(merged({ B: 'A' }, { A: 'B' })).toEqual({ B: 'A' })
+    expect(merged({ A: 'B' }, { B: 'A' })).toEqual({ B: 'A' })
+    expect(resolveSameAs(merged({ A: 'B' }, { B: 'A' }), 'A')).toBe('A')
+  })
+  it('a clash X->Y vs X->Z keeps the smaller target and lists it; re-declaring after stays acyclic', async () => {
+    const { mergePersons, resolveSameAs } = await import('../../src/same_person.ts')
+    const mine = state({ sameAs: { X: 'Z' } })
+    const res = mergeBundle(mine, {}, { v: 2, people: [], inventory: [], meetings: [], at: {}, sameAs: { X: 'Y' } }, 0)
+    expect(mine.sameAs).toEqual({ X: 'Y' })
+    expect(res.conflicts.filter((c) => c.kind === 'sameAs')).toHaveLength(1)
+    const s = state({ people: [person('A', 'Ada'), person('B', 'Ada')], sameAs: { A: 'B' } })
+    expect(mergePersons(s, 'A', 'B')).toBe(true)
+    expect(s.sameAs).toEqual({ B: 'A' })
+    expect(resolveSameAs({ A: 'B', B: 'A' }, 'B')).toBe('A')
+    expect(resolveSameAs({ A: 'B', B: 'A' }, 'A')).toBe('A')
+  })
+  it('more threads than the bound: the quietest are dropped and listed', () => {
+    const thread = (at) => ({ unread: 0, messages: [{ key: 'k' + at, dir: 'in', text: 'x', at, sentAt: at, state: 'received' }] })
+    const chats = Object.fromEntries(Array.from({ length: 300 }, (_, i) => ['p' + i, thread(i + 10)]))
+    const mine = state({ chats })
+    const res = mergeBundle(mine, {}, { v: 2, people: [], inventory: [], meetings: [], at: {}, chats: { extra: thread(5000) } }, 0)
+    expect(Object.keys(mine.chats)).toHaveLength(300)
+    expect(mine.chats.p0).toBeUndefined()
+    expect(mine.chats.extra).toBeDefined()
+    expect(res.conflicts.find((c) => c.kind === 'chat').label).toContain('1 chat thread')
+  })
+  it('parseBundle refuses a non-finite stamp', () => {
+    const b = { v: 1, people: [], inventory: [], meetings: [], at: { 'p:a': 'soon' } }
+    expect(parseBundle(b)).toBeNull()
+    expect(parseBundle({ ...b, at: { 'p:a': 5 } })).not.toBeNull()
+  })
+})

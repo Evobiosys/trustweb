@@ -85,15 +85,13 @@ export function createSnapshotView(h: SnapshotViewHooks): SnapshotView {
     } catch { pending = S.snNotKept }
   }
 
-  /** Opens `bytes` with `key`, asks, snapshots what is here, then replaces the record. False when it did not open as a record. */
-  async function restoreBytes(bytes: Uint8Array, key: BackupKey): Promise<boolean> {
-    let record
-    try { record = parseRecord(JSON.stringify((await openSnapshot(key, bytes)).record)) } catch { return false }
-    if (!record) return false
-    if (!confirm(S.snRestoreConfirm)) return true
+  /** Opens `bytes` with `key`, asks, snapshots what is here, then replaces the record. Throws when it does not open as a record. */
+  async function restoreBytes(bytes: Uint8Array, key: BackupKey): Promise<void> {
+    const record = parseRecord(JSON.stringify((await openSnapshot(key, bytes)).record))
+    if (!record) throw new Error('not a record')
+    if (!confirm(S.snRestoreConfirm)) return
     await take(S.snReasonRestore)
     h.replaceRecord(restoreRecord(record, h.state()))
-    return true
   }
 
   function showKey(back: () => void, key: BackupKey): void {
@@ -114,8 +112,15 @@ export function createSnapshotView(h: SnapshotViewHooks): SnapshotView {
     const ok = async (): Promise<void> => {
       let next: BackupKey
       try { next = input.value.trim().toUpperCase().startsWith('TW1') ? parseKeyText(input.value) : await keyFromPassphrase(input.value) } catch { msg.textContent = S.snBadKey; return }
-      const { skipped } = await rekey(await currentKey(), next, localStorage, listKey)
-      localStorage.setItem(keyName, next.text)
+      const old = await currentKey()
+      try { localStorage.setItem(keyName, next.text) } catch { msg.textContent = S.snKeyStoreFailed; return }
+      let skipped: number
+      try { ({ skipped } = await rekey(old, next, localStorage, listKey)) } catch {
+        try { localStorage.setItem(keyName, old.text) } catch { /* the sheet below tells the person */ }
+        msg.textContent = S.snKeyStoreFailed
+        return
+      }
+      if (skipped) try { localStorage.setItem(keyName + '-old', old.text) } catch { /* said in the toast: the old key is not kept */ }
       h.toast(skipped ? S.snKeySkipped(skipped) : S.snKeyChanged)
       back()
     }
@@ -138,7 +143,7 @@ export function createSnapshotView(h: SnapshotViewHooks): SnapshotView {
         const bytes = f ? new Uint8Array(await f.arrayBuffer()) : fromB64u(paste.value.trim())
         const text = keyIn.value.trim()
         const key = !text ? await currentKey() : text.toUpperCase().startsWith('TW1') ? parseKeyText(text) : await keyFromPassphrase(text)
-        if (!(await restoreBytes(bytes, key))) msg.textContent = S.snFileBad
+        await restoreBytes(bytes, key)
       } catch { msg.textContent = S.snFileBad }
     }
     open([
@@ -152,9 +157,7 @@ export function createSnapshotView(h: SnapshotViewHooks): SnapshotView {
     const rows = readSnapshots(localStorage, listKey).reverse().map((e) => el('div', { class: 'verse', 'data-snapshot': String(e.at) }, [
       el('p', { class: 'meta' }, [S.snRow(h.when(e.at), Math.max(1, Math.round(e.bytes / 1024)), e.reason)]),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-snapshot-restore': String(e.at), onclick: () => {
-        void (async () => {
-          if (!(await restoreBytes(fromB64u(e.blob), await currentKey()))) h.toast(S.snKeyOpenFailed)
-        })()
+        void currentKey().then((k) => restoreBytes(fromB64u(e.blob), k)).catch(() => h.toast(S.snKeyOpenFailed))
       } }, [S.snRestore]),
     ]))
     return [

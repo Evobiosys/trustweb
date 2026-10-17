@@ -145,7 +145,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   async function syncNow(p: Pairing): Promise<void> {
     try { await link.syncNow(p.did); failed.delete(p.did); h.toast(S.dvSent) } catch (e) {
-      failed.set(p.did, (e as Error).message === 'version' ? S.dvUpdate(p.name) : S.dvOffline)
+      failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge }[(e as Error).message] ?? S.dvSendFailed)
       devicesSheet()
     }
   }

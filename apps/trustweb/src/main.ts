@@ -18,6 +18,7 @@
  * speaker transcript fed by TalkWeave (desktop) or on-device speech.
  * No chat, no unread badges, notifications off by default.
  */
+import { createViaCard } from './via_card'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
@@ -279,7 +280,7 @@ let heldToasted = false
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
 // A TrustWeb + Signal / WhatsApp link names its channel (#via=SIGNAL, share_modes.ts): connecting on that messenger is one more tap.
 const viaChannel = pendingConnect ? parseVia(location.hash) : null
-let viaPersonId: string | null = null
+const viaCard = createViaCard()
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -1258,9 +1259,11 @@ async function completePendingConnect(): Promise<void> {
   }
   // Links never leave at connect time (Jakob 2026-10-15): the named channel is asked for, and the host's answer rules (onContactRequest).
   if (viaChannel && !demoLink) {
-    viaPersonId = person.id
-    person.contactAsked = Date.now()
-    net.sendText(peer, requestText(APP_URL, [viaChannel])).catch(() => { /* the card's ask button stays */ })
+    viaCard.expect(person.id)
+    net.sendText(peer, requestText(APP_URL, [viaChannel])).then(() => {
+      person.contactAsked = Date.now()
+      save()
+    }, () => { /* the card's ask button stays */ })
   }
   save()
   applyHeldContact(peer, person)
@@ -1321,11 +1324,12 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       if (held) held.ring = ring
       save()
       connectAdd = null
+      viaCard.closed(person.id)
       toast(S.connectAddedToast(person.name))
       render()
       if (!openPendingShare()) personSheet(person.id)
     },
-    onLater: () => { connectAdd = null; closeSheet(); openPendingShare() },
+    onLater: () => { connectAdd = null; closeSheet(); if (!openPendingShare() && viaCard.closed(person.id)) personSheet(person.id) },
   })
   connectAdd = { peerId: peer.id, handle }
   const nodes: Node[] = [...handle.nodes]
@@ -2476,8 +2480,7 @@ function applyContact(peer: Peer, person: Person, text: string): void {
   // Their card is open (the scan just landed on it): show the Message button now, unless the person is typing in it.
   const typing = sheet.contains(document.activeElement) && (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
   // A link with via=<CHANNEL>: once the add sheet is done, their card opens as soon as their links arrive.
-  const viaOpen = viaPersonId === person.id && connectAdd === null
-  if (viaOpen) viaPersonId = null
+  const viaOpen = viaCard.contact(person.id, connectAdd !== null)
   if (viaOpen || (cardOpenFor === person.id && sheet.classList.contains('on') && !typing)) personSheet(person.id)
 }
 

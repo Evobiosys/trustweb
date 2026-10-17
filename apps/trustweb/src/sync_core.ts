@@ -21,7 +21,7 @@
  */
 import type { AppState, InventoryItem, PastMeeting, Person, TwEvent } from './model'
 import { CHANNELS } from './model'
-import { MessageState, byStamp, sanitizeChatBook, trimThread } from './chat'
+import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trimThread } from './chat'
 import type { ChatBook } from './chat'
 import type { ChannelMap, ShareSettings } from './contact_share'
 import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_person'
@@ -35,7 +35,7 @@ export const HANDSHAKE_MS = 30_000
 /** Conflicts kept in AppState.syncReview. */
 export const REVIEW_MAX = 50
 
-export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'channel' | 'sameAs'
+export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'channel' | 'sameAs' | 'chat'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
 export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
 
@@ -78,7 +78,7 @@ export interface Counts { people: number; lines: number; resources: number; meet
 
 const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:' } as const
 
-/** djb2 over the JSON text: change detection on this device only, never compared across devices. */
+/** djb2 over the JSON text: change detection (a stored stamp), and the "identical on both sides" skip in stampsAfterMerge. The merge itself compares the JSON text, so a collision cannot keep an older version. */
 function hashOf(v: unknown): string {
   const s = JSON.stringify(v)
   let h = 5381
@@ -178,6 +178,8 @@ function strMap(v: unknown): Record<string, string> | null {
 }
 
 const VALUE_MAX = 300
+/** Entries in `at`, like the ceiling strMap puts on the others: one per entity, so far above any real record. */
+const AT_MAX = 20_000
 
 function parseChannels(v: unknown): SyncBundle['channels'] | null {
   if (!isObj(v) || !isObj(v.mine) || !isObj(v.share)) return null
@@ -212,6 +214,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if ((v.v !== 1 && v.v !== 2) || !isList(v.people) || !isList(v.inventory) || !isList(v.meetings) || !isObj(v.at)) return null
   const people = v.people as unknown as Person[]
   if (!people.every((p) => Array.isArray(p.lines) && typeof p.name === 'string')) return null
+  if (!Object.values(v.at).every((n) => Number.isFinite(n)) || Object.keys(v.at).length > AT_MAX) return null
   const out: SyncBundle = { v: v.v, people, inventory: v.inventory as unknown as InventoryItem[], meetings: v.meetings as unknown as PastMeeting[], at: v.at as Record<string, number> }
   if (v.v === 1) return out
   const by = v.by === undefined ? {} : strMap(v.by)
@@ -238,7 +241,7 @@ function mergeList<T extends { id: string }>(
     const i = out.findIndex((m) => m.id === t.id)
     if (i < 0) { out.push(t); c.res.added++; continue }
     const m = out[i]
-    if (hashOf(m) === hashOf(t)) continue
+    if (JSON.stringify(m) === JSON.stringify(t)) continue
     const mAt = c.myAt[key(m)]?.at ?? 0
     const tAt = c.theirs.at[key(t)] ?? 0
     const theirsWins = tAt > mAt
@@ -254,16 +257,24 @@ function mergeList<T extends { id: string }>(
   return out
 }
 
-/** The two maps united; both ends of a clash keep the lexicographically smaller target and the clash is listed. */
+/**
+ * The two maps united, never with a cycle: both ends of a clash (X->Y vs X->Z) keep the lexicographically smaller target, a reverse pair
+ * ({B:A} + {A:B}) keeps the larger id pointing at the smaller, and each such decision is listed.
+ */
 function uniteSameAs(mine: Record<string, string> | undefined, theirs: Record<string, string> | undefined, res: MergeResult): Record<string, string> | undefined {
   const out = { ...mine }
+  const listed = (k: string, a: string, b: string, kept: Conflict['kept']): void => { res.conflicts.push({ kind: 'sameAs', id: k, label: k, kept, mine: a, theirs: b }) }
   for (const [k, v] of Object.entries(theirs ?? {})) {
     if (k === v) continue
-    const have = Object.prototype.hasOwnProperty.call(out, k) ? out[k] : undefined
-    if (have === undefined) { out[k] = v; res.added++ } else if (have !== v) {
-      out[k] = have < v ? have : v
-      res.conflicts.push({ kind: 'sameAs', id: k, label: k, kept: have < v ? 'mine' : 'theirs', mine: have, theirs: v })
+    const have = has(out, k) ? out[k] : undefined
+    if (have === v) continue
+    const target = have === undefined || v < have ? v : have
+    if (have !== undefined) listed(k, have, v, target === have ? 'mine' : 'theirs')
+    if (resolveSameAs(out, target) === k) {
+      if (out[target] !== k || k < target) { listed(k, String(have ?? ''), v, 'mine'); continue }
+      delete out[target]
     }
+    if (target !== have) { out[k] = target; if (have === undefined) res.added++ }
   }
   return Object.keys(out).length ? out : undefined
 }
@@ -300,6 +311,9 @@ function mergeChats(mine: AppState, theirs: ChatBook, res: MergeResult): void {
     }
     book[peerId] = { messages: trimThread([...byKey.values()].sort(byStamp)), unread: Math.max(m?.unread ?? 0, t.unread) }
   }
+  const quiet = Object.keys(book).sort((a, b) => lastAt(book[a]) - lastAt(book[b])).slice(0, Math.max(0, Object.keys(book).length - CHAT_MAX_THREADS))
+  for (const id of quiet) delete book[id]
+  if (quiet.length) res.conflicts.push({ kind: 'chat', id: 'threads', label: `${quiet.length} chat thread(s) dropped`, kept: 'mine', mine: `The ${quiet.length} quietest chat thread(s) were left out: ${CHAT_MAX_THREADS} is the most TrustWeb keeps.`, theirs: '' })
   if (Object.keys(theirs).length) mine.chats = book
 }
 
