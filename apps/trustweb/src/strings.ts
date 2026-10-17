@@ -630,6 +630,7 @@ export const S = {
   meetWaysLater: 'Coming later: NFC, Bluetooth and AirDrop, phone to phone.',
   meetNfcWrite: 'Write your link to an NFC tag',
   meetNfcWaiting: 'Hold a tag or card to the back of this phone...',
+  needsCameraApp: 'This code holds your phone number: scan it with the phone camera, not inside Signal or WhatsApp.',
   meetNfcDone: 'Written. Anyone who taps that tag gets your link.',
   meetNfcFailed: 'Could not write the tag.',
   meetCopy: 'Copy link',

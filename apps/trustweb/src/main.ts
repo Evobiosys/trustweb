@@ -45,7 +45,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isShareMode, modeSharing, repairShareFields,
+  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -275,6 +275,9 @@ let heldToasted = false
 // Notes shared by a Meet code ride in the URL FRAGMENT (#n=...), which a
 // browser never sends to the server, so they stay out of access logs.
 const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '').slice(0, 600)
+// A TrustWeb + Signal / WhatsApp link names its channel (#via=SIGNAL, share_modes.ts): connecting on that messenger is one more tap.
+const viaChannel = pendingConnect ? parseVia(location.hash) : null
+let viaPersonId: string | null = null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -1250,6 +1253,12 @@ async function completePendingConnect(): Promise<void> {
     for (const l of extractLines(sharedNotes)) {
       person.lines.push({ id: randomId(8), text: l.text, tag: l.tag, audience: Audience.OnlyMe, status: LineStatus.Current, notedAt: now, checkedAt: now, source: sharedSource(peer.displayName) })
     }
+  }
+  // Links never leave at connect time (Jakob 2026-10-15): the named channel is asked for, and the host's answer rules (onContactRequest).
+  if (viaChannel && !demoLink) {
+    viaPersonId = person.id
+    person.contactAsked = Date.now()
+    net.sendText(peer, requestText(APP_URL, [viaChannel])).catch(() => { /* the card's ask button stays */ })
   }
   save()
   applyHeldContact(peer, person)
@@ -2460,7 +2469,10 @@ function applyContact(peer: Peer, person: Person, text: string): void {
   render()
   // Their card is open (the scan just landed on it): show the Message button now, unless the person is typing in it.
   const typing = sheet.contains(document.activeElement) && (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
-  if (cardOpenFor === person.id && sheet.classList.contains('on') && !typing) personSheet(person.id)
+  // A link with via=<CHANNEL>: once the add sheet is done, their card opens as soon as their links arrive.
+  const viaOpen = viaPersonId === person.id && connectAdd === null
+  if (viaOpen) viaPersonId = null
+  if (viaOpen || (cardOpenFor === person.id && sheet.classList.contains('on') && !typing)) personSheet(person.id)
 }
 
 /** Call right after a card for `peer` exists (onPeerConnected, completePendingConnect). */
@@ -3628,10 +3640,10 @@ enum MeetPage {
 
 let meetPage: MeetPage = MeetPage.TrustWeb
 
-/** The share mode in force (share_modes.ts): Only TrustWeb. */
+/** The share mode in force (share_modes.ts): the remembered one while its link is still saved, else Only TrustWeb. */
 function shareModeNow(): ShareMode {
   const s = st()
-  return effectiveMode(s.shareMode)
+  return effectiveMode(s.shareMode, s.myChannels)
 }
 
 function setShareMode(mode: ShareMode): void {
@@ -3736,6 +3748,7 @@ function meetTrustWebPage(): HTMLElement {
   const qr = el('div', { class: 'qrwrap' })
   const view: ConnectView = createConnectView({ origin: SERVER_ORIGIN, offer: connectEligible(), keeper: codeKeeper(), qr, renderQr, copy: copyLink })
   const nfcStatus = el('p', { class: 'meta' })
+  const cameraNote = el('p', { class: 'meta', 'data-camera-app': '', hidden: true }, [S.needsCameraApp])
   const copy = el('button', {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
@@ -3766,8 +3779,19 @@ function meetTrustWebPage(): HTMLElement {
     controls: () => { const ch = modeChannel(); return ch && mine()[ch] ? tickControlsFor(ch, () => apply(true)) : null },
     addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
   })
+  // The long link is set again only when the mode changes its fragment (TrustWeb + Signal / WhatsApp add `via=`).
+  let link = ''
+  let baseFrag = ''
+  let appliedFrag: string | null = null
   const apply = (ticksOnly = false): void => {
+    const mode = shareModeNow()
+    const frag = [baseFrag, viaFragment(mode)].filter(Boolean).join('&')
+    if (link && frag !== appliedFrag) { appliedFrag = frag; view.setLink(link, frag) }
+    // Only Signal / Only WhatsApp: the QR, Copy and NFC carry the messenger's own link; none (number not ticked) -> no QR, Copy / NFC off.
+    view.setOverride(isOnlyMessenger(mode) ? modePayload(mode, '', mine(), st().contactShare) ?? '' : null)
+    cameraNote.hidden = !needsCameraApp(mode, mine())
     copy.disabled = !view.current()
+    if (nfc) nfc.disabled = !view.current()
     row.refresh()
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
@@ -3775,7 +3799,7 @@ function meetTrustWebPage(): HTMLElement {
     advanced.setOpen(meetAdvancedOpen)
   }
   const row = createShareRow({
-    modes: defaultModes,
+    modes: () => defaultModes(mine()),
     current: shareModeNow,
     pick,
     isOpen: () => meetAdvancedOpen,
@@ -3801,24 +3825,22 @@ function meetTrustWebPage(): HTMLElement {
   if (st().connectCode) void namesSync().refresh()
   void (async () => {
     await net.start()
-    const link = net.connectLink(CONNECT_URL)
+    link = net.connectLink(CONNECT_URL)
     // After a meeting the code also carries the notes and the transcript, encrypted (share.ts); the key rides in the fragment only,
     // which a browser never sends to a server, and which the redirect of /c/<code> keeps.
-    let frag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
+    baseFrag = notes ? 'n=' + encodeURIComponent(notes.slice(0, 300)) : ''
     const share = await meetSharePack()
     if (share) {
-      frag += (frag ? '&' : '') + shareFragment(share)
+      baseFrag += (baseFrag ? '&' : '') + shareFragment(share)
       sharedDd.textContent = transcriptStillComing(draftMeeting()) ? S.meetSharedPending : S.meetSharedTranscript
     }
-    view.setLink(link, frag)
-    copy.removeAttribute('disabled')
-    nfc?.removeAttribute('disabled')
     apply()
   })()
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     row.el,
     qr,
+    cameraNote,
     sharing.el,
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
