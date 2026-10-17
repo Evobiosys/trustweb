@@ -896,9 +896,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .who i{display:block}
 
 .events-page .meta{font-size:13px; color:var(--ink-soft); line-height:1.55}
-.not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
-.chip .pwho{display:inline-block; vertical-align:middle}
-.link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}
 /* Wave 7: the Timeline on a person's card (timeline_view.ts). */
 .person-timeline{display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin:10px 0}
 .tl-panel{display:flex; flex-direction:column; gap:8px; width:100%}
@@ -915,3 +912,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tl-sum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .tl-dir{font-style:normal; font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
 .tl-more{margin:0 4px 4px; word-break:break-word}
+.not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
+.chip .pwho{display:inline-block; vertical-align:middle}
+.link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}
