@@ -1,4 +1,4 @@
-# TrustWeb on every push (GitHub-hosted runner, free minutes of a private repo). Push only: a pull request
+# TrustWeb on every push (GitHub-hosted runner, free minutes of a private repo). Push only (except the small reach-out-link job): a pull request
 # from a branch of this private repo shows the push run's result, so a second pull_request run would double the minutes.
 # Two steps (Jakob 2026-10-13): a quick look first (local preview, or pre.trustweb.one for a cloud branch), then
 # the verified step. So two jobs run side by side: `bundle` builds the app fast (about 30 s; its artifact
@@ -7,6 +7,7 @@
 name: ci
 on:
   push:
+  pull_request:   # only the reach-out-link job runs on it (the other jobs keep push only, see their `if`)
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -14,6 +15,7 @@ permissions:
   contents: read
 jobs:
   bundle:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,6 +43,7 @@ jobs:
           retention-days: 30
           include-hidden-files: true   # .well-known/assetlinks.json (the Android app's pairing; v4 drops dot-paths otherwise)
   checks:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -64,3 +67,11 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+  # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
+  reach-out-link:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I scripts/test_reach_out_chain.py

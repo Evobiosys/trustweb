@@ -75,3 +75,17 @@ test('claim: a lookalike of ANOTHER code\'s name is name_taken (primary and alia
     assert.equal((await claim(srv.port, { name: 'anna.hub3r', ...b })).status, 200)
   })
 })
+
+test('/who forgives a phone keyboard: capital letters, trailing dot/slash/space/punctuation, NFKC; the target is the same /c/<code>; real bad shapes stay 404', async () => {
+  await withServer(0, BASE, async ({ srv }) => {
+    const a = await mint(srv.port)
+    assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
+    const target = (await who(srv.port, 'ada')).headers.location
+    for (const typed of ['Ada', 'ADA', 'ada.', 'ada/', 'ada%20', 'Ada.%20', 'ada!?', 'ada)', '%EF%BD%81da']) {
+      const r = await who(srv.port, typed)
+      assert.equal(r.status, 302, typed)
+      assert.equal(r.headers.location, target, typed)
+    }
+    for (const typed of ['a%20da', 'ad.a.x', '%E0%A4%A', '..', '']) assert.equal((await who(srv.port, typed)).status, 404, typed)
+  })
+})
