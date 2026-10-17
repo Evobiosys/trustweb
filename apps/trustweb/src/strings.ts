@@ -1172,6 +1172,7 @@ export const S = {
   aboutVersion: (sha: string, format: number) => `App version ${sha}, data format v${format}`,
   aboutBy: 'TrustWeb, by ',
   aboutEvoBioSys: 'EvoBioSys',
+  aboutSteward: 'Stewarded by trustintheweb.org, which we intend to turn into a foundation. Hosting, where you have it, comes from trustintheweb.com. The Web Curator, the open-source product underneath, has the same steward.',
   aboutPage: { faq: 'FAQ', feedback: 'Feedback', privacy: 'Privacy', imprint: 'Imprint' } as Record<string, string>,
 
   // Install on the home screen (wave 1733, contract I3).
