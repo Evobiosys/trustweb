@@ -15,6 +15,7 @@ import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
+import type { Conflict } from './sync_core'
 
 export enum Ring {
   Close = 'close',
@@ -818,13 +819,13 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
-  /** Events I know (events.ts). Absent in older records. Local only. */
+  /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
-  /** My own messenger handles (Meet shows my Signal / Matrix code). This phone only. */
+  /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
@@ -850,8 +851,15 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
-  /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. */
+  /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. Text only; also synced, sealed, between the owner's own devices. */
   chats?: ChatBook
+  /**
+   * Device sync (wave 13, same_person.ts): dropped person id -> kept person id, written when the owner declared two persons the same
+   * person. Travels between the owner's devices so a dropped id never comes back. Optional; an older build ignores it.
+   */
+  sameAs?: Record<string, string>
+  /** Device sync (wave 13): conflicts of the last merges, newest first, at most 50, shown in Review merge until dismissed. Optional. */
+  syncReview?: Conflict[]
   /**
    * Wave 6f (away_asks.ts): asks that matched this web but reached this phone after the asker had stopped waiting ("<name> asked while
    * you were away"), newest first, at most AWAY_ASKS_MAX, each kept AWAY_ASK_KEEP_MS or until dismissed. Absent: none. Older builds ignore it.

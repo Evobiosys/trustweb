@@ -372,3 +372,19 @@ with defaults.
   and degrees; every hop's own yes (I8). An explicit stored off keeps its value.
 - Honest label (I7/I9): this widens a default. The switch hint on the person's card now reads
   "On unless you switch it off."
+
+## D-device-sync-v2 (2026-10-17): the owner's own devices share more, and nothing is lost doing it
+
+Jakob, 2026-10-17 08:28 (R1 to R8). Extends wave 7 device sync (people, resources, meetings) to events,
+my own messenger links with their share ticks, chat text, and an owner-declared "same person" map.
+
+- Still only between the owner's own linked devices, sealed (X25519 ECDH pair key, AES-GCM) over the existing
+  relay, which sees DIDs and sizes. No server change. Never: identity, peers, connect code, hosting, settings,
+  images, audio. I1 reads "the owner's own devices" for these fields; not a widening towards anyone else.
+- R1/R2: a local encrypted snapshot (last 5) is taken before every merge, every "same person" merge and every
+  restore. If storage is full the merge goes on anyway and says so (R1 beats R2 only then).
+- R4: union by id, newer stamp wins, the loser stays readable in Review merge (kept until dismissed, at most 50).
+  "Newer" is a wall-clock comparison across devices; a wrong clock can win wrongly (hence the snapshot).
+- R5: `sameAs` (dropped id -> kept id) travels with the sync so a dropped id never comes back.
+- Honest label (I7): chats and messenger links are no longer "this phone only"; the hints now say they also go,
+  sealed, to the owner's own linked devices.

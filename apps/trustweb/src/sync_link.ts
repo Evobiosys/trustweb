@@ -8,7 +8,7 @@
  * that every message is AES-GCM sealed under the pair key before it reaches the relay, which sees only DIDs and sizes (I1).
  *
  * Messages (JSON inside the seal, each with `exp` = sent + 10 min, ignored after): hello / ready (is the other device on? answer within
- * 30 s or no sync starts) and data pieces (sync_core.ts toChunks). The relay accepts unauthenticated ingress and holds a wire until
+ * 30 s or no sync starts; both carry SYNC_VERSION, a device of another version is told to update instead of a silent no-op) and data pieces (sync_core.ts toChunks). The relay accepts unauthenticated ingress and holds a wire until
  * its recipient drains it; it cannot be told to forget after 10 minutes, so `exp` is enforced by the receiver (open point in the report).
  *
  * Sent through sendRaw: the relay's raw path is for the connect bootstrap only, but what travels here is sealed by this file, so the
@@ -20,7 +20,7 @@ import { createRelayChannel } from '../../demo/src/relay'
 import type { RelayChannel } from '../../demo/src/relay'
 import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u } from '../../demo/src/crypto'
 import type { AppState } from './model'
-import { HANDSHAKE_MS, SYNC_TTL_MS, bundleOf, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
+import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
 
 export interface Pairing { did: string; name: string; fp: string; linkedAt: number; lastSyncAt: number }
@@ -31,14 +31,17 @@ interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: S
 export interface PairRequest { name: string; fp: string; confirm(): void; cancel(): void }
 
 /** A record that arrived complete and waits for the person's "Confirm". */
-export interface Incoming { from: Pairing; counts: Counts; reply: boolean; accept(): Promise<MergeResult>; decline(): void }
+/** `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
+export interface Incoming { from: Pairing; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
 
 export interface SyncLinkDeps {
   persona: string
   storeCtx?: string
   state: () => AppState
   save: () => void
-  deviceName: string
+  deviceName: () => string
+  /** Takes the local snapshot that must exist before any merge is applied (snapshot_view.ts); never throws. */
+  snapshot: (reason: string, file: boolean) => Promise<void>
   channel?: RelayChannel
   /** Where the identity and pairings live. Default: localStorage. */
   storage?: Pick<Storage, 'getItem' | 'setItem'>
@@ -50,11 +53,13 @@ export interface SyncLinkDeps {
   onChange: () => void
   /** Overrides how long a handshake waits (tests). */
   handshakeMs?: number
+  /** Overrides the SYNC_VERSION this device announces (tests). */
+  version?: number
 }
 
 type Msg =
   | { t: 'pair'; did: string; name: string; exp: number }
-  | { t: 'hello' | 'ready'; sid: string; name: string; exp: number }
+  | { t: 'hello' | 'ready'; sid: string; name: string; v?: number; exp: number }
   | { t: 'data'; sid: string; i: number; n: number; r: boolean; d: string; name: string; exp: number }
 
 const MAX_PIECES = 200
@@ -84,11 +89,13 @@ async function openMsg(key: CryptoKey, payload: string): Promise<Msg | null> {
 
 export function createSyncLink(d: SyncLinkDeps) {
   const now = d.now ?? Date.now
+  const version = d.version ?? SYNC_VERSION
   const storeKey = `trustweb.sync.v1.${d.persona}${d.storeCtx ? '.' + d.storeCtx : ''}`
   const channel = d.channel ?? createRelayChannel()
   const storage = (): Pick<Storage, 'getItem' | 'setItem'> => d.storage ?? localStorage
   const keys = new Map<string, CryptoKey>()
-  const waiting = new Map<string, () => void>()
+  /** sid -> called with the other device's SYNC_VERSION (a device older than the field sends none: 1). */
+  const waiting = new Map<string, (v: number) => void>()
   const partial = new Map<string, { n: number; parts: Uint8Array[]; got: number; reply: boolean; did: string }>()
   let offer: { secret: string; key: CryptoKey; until: number } | null = null
   let store: Store
@@ -146,17 +153,20 @@ export function createSyncLink(d: SyncLinkDeps) {
     if (!bundle) { d.onLog(`Ignored a damaged record from ${p.name}`); return }
     d.onIncoming({
       from: p, counts: countsOf(bundle), reply: acc.reply,
-      accept: () => accept(p, bundle, acc.reply),
+      accept: (file) => accept(p, bundle, acc.reply, file),
       decline: () => d.onLog(`Declined the record from ${p.name}`),
     })
   }
 
-  async function accept(p: Pairing, bundle: SyncBundle, reply: boolean): Promise<MergeResult> {
+  async function accept(p: Pairing, bundle: SyncBundle, reply: boolean, file: boolean): Promise<MergeResult> {
     const s = d.state()
+    await d.snapshot(`before sync from ${p.name}`, file)
     const t = now()
-    const before = refreshStamps(s, store.stamps, t)
+    const me = d.deviceName()
+    const before = refreshStamps(s, store.stamps, t, me)
     const res = mergeBundle(s, before, bundle, p.lastSyncAt)
-    store.stamps = stampsAfterMerge(s, before, bundle, t)
+    recordReview(s, res.conflicts)
+    store.stamps = stampsAfterMerge(s, before, bundle, t, me, p.name)
     p.lastSyncAt = t
     persist()
     d.save()
@@ -167,12 +177,12 @@ export function createSyncLink(d: SyncLinkDeps) {
 
   async function sendBundle(p: Pairing, reply: boolean): Promise<void> {
     const s = d.state()
-    store.stamps = refreshStamps(s, store.stamps, now())
+    store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
     persist()
     const pieces = toChunks(bundleOf(s, store.stamps))
     const sid = randomId(12)
     for (let i = 0; i < pieces.length; i++) {
-      await send(p.did, { t: 'data', sid, i, n: pieces.length, r: reply, d: toB64u(pieces[i]), name: d.deviceName, exp: stamp() })
+      await send(p.did, { t: 'data', sid, i, n: pieces.length, r: reply, d: toB64u(pieces[i]), name: d.deviceName(), exp: stamp() })
       d.onLog(`Sending to ${p.name}: ${i + 1}/${pieces.length}`)
     }
   }
@@ -184,8 +194,8 @@ export function createSyncLink(d: SyncLinkDeps) {
       if (!m) return false
       if (m.t !== 'pair' && now() <= m.exp) {
         if (m.name && m.name !== p.name) { p.name = m.name; persist() }
-        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName, exp: stamp() })
-        else if (m.t === 'ready') waiting.get(m.sid)?.()
+        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName(), v: version, exp: stamp() })
+        else if (m.t === 'ready') waiting.get(m.sid)?.(m.v ?? 1)
         else if (m.t === 'data') await onData(p, m)
       }
       return true
@@ -221,7 +231,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     async join(code: string): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
-      await channel.sendRaw(c.did, await sealMsg(await deriveEcdhPairKey(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName, exp: stamp() }))
+      await channel.sendRaw(c.did, await sealMsg(await deriveEcdhPairKey(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), exp: stamp() }))
       return request(c.did, 'Other device')
     },
     unlink(did: string): void {
@@ -229,18 +239,20 @@ export function createSyncLink(d: SyncLinkDeps) {
       keys.delete(did)
       persist()
     },
-    /** Starts a sync: only when the other device answers "ready" within 30 s. Rejects with "offline" otherwise. */
+    /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline" or "version" otherwise. */
     async syncNow(did: string): Promise<void> {
       const p = store.pairings.find((x) => x.did === did)
       if (!p) throw new Error('not linked')
       const sid = randomId(12)
       d.onLog(`Asking ${p.name} if it is on…`)
-      const ready = new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => { waiting.delete(sid); resolve(false) }, d.handshakeMs ?? HANDSHAKE_MS)
-        waiting.set(sid, () => { clearTimeout(timer); waiting.delete(sid); resolve(true) })
+      const ready = new Promise<number | null>((resolve) => {
+        const timer = setTimeout(() => { waiting.delete(sid); resolve(null) }, d.handshakeMs ?? HANDSHAKE_MS)
+        waiting.set(sid, (v) => { clearTimeout(timer); waiting.delete(sid); resolve(v) })
       })
-      await send(did, { t: 'hello', sid, name: d.deviceName, exp: stamp() })
-      if (!(await ready)) { d.onLog(`${p.name} did not answer: open TrustWeb there and try again`); throw new Error('offline') }
+      await send(did, { t: 'hello', sid, name: d.deviceName(), v: version, exp: stamp() })
+      const v = await ready
+      if (v === null) { d.onLog(`${p.name} did not answer: open TrustWeb there and try again`); throw new Error('offline') }
+      if (v !== version) { d.onLog(`${p.name} runs an other version of TrustWeb: update it there`); throw new Error('version') }
       await sendBundle(p, false)
     },
     stop: (): void => channel.close(),

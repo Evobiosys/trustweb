@@ -229,6 +229,7 @@ describe('PRIVACY: the General note is Only me', () => {
       'cascade.ts', // strips it from the ask matcher's copy of the record
       'main.ts', // the hook: setGeneralNote / generalNoteOf
       'strings.ts', // copy
+      'same_person.ts', // joins the two notes when the owner declares two persons one (nothing leaves the device)
       'demo_to_live.ts', // carries a demo person's whole record to the live phone of the same owner, on this device (no network)
     ])
     const hits = []

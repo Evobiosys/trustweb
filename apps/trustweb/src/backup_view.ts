@@ -16,12 +16,21 @@ import { S } from './strings'
 
 interface BackupInfo { keyText: string; fromPassphrase: boolean; lastAt: number; lastBytes: number }
 
+const infoKey = (persona: string, storeCtx?: string): string => `trustweb.backup.${persona}${storeCtx ? '.' + storeCtx : ''}`
+
+/** The recovery key text this device backs up with, or null (snapshot_view.ts uses the same key for its local snapshots). */
+export function backupKeyText(persona: string, storeCtx?: string): string | null {
+  try { return (JSON.parse(localStorage.getItem(infoKey(persona, storeCtx)) ?? 'null') as BackupInfo | null)?.keyText ?? null } catch { return null }
+}
+
 export interface BackupViewHooks {
   persona: string
   storeCtx?: string
   state: () => AppState
   /** Restore: the backup's record replaces this phone's (after the person confirmed), then the app reloads. */
   replaceRecord: (s: AppState) => void
+  /** Runs (and is awaited) just before a restore replaces the record: the local snapshot. */
+  beforeRestore: () => Promise<void>
   openSheet: (children: (Node | null)[]) => void
   closeSheet: () => void
   toast: (msg: string) => void
@@ -43,7 +52,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
   // without it must not offer a backup that can only fail.
   let backupAvailable: boolean | null = null
   let backupProbe: Promise<void> | null = null
-  const storeKey = `trustweb.backup.${h.persona}${h.storeCtx ? '.' + h.storeCtx : ''}`
+  const storeKey = infoKey(h.persona, h.storeCtx)
 
   function loadBackupInfo(): BackupInfo | null {
     try {
@@ -118,6 +127,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
         const record = typeof data === 'object' && data !== null ? parseRecord(JSON.stringify(data)) : null
         if (!record) { msg.textContent = S.bkBadData; return }
         if (!confirm(S.bkRestoreConfirm)) return
+        await h.beforeRestore()
         saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: Date.now(), lastBytes: 0 })
         h.replaceRecord(record)
       } catch (e) {

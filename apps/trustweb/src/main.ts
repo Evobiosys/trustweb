@@ -124,6 +124,7 @@ import { createPastMeetings, whenLabel } from './past_meetings_view'
 import { createSwissContext, readHosting } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
+import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { importGroup } from './import_view'
 import { createCurator } from './curator'
@@ -1410,6 +1411,9 @@ function screenStart(): Node[] {
       demo ? el('div', { class: 'field test-name', 'aria-label': S.yourName }, [demo.account]) : name,
       el('button', { class: 'btn btn-electric', onclick: submit }, [demo ? S.demoStart(demo.account) : invite ? (solo ? S.connectJoin : S.reachOutJoin) : S.startOwn]),
     ]),
+    !invite && !demo && deviceSyncEligible()
+      ? el('button', { class: 'btn btn-ghost btn-sm', 'data-link-from-start': '1', onclick: () => { devices.start(); devices.open() } }, [S.dvLinkIt])
+      : null,
     el('p', { class: 'foot' }, [S.startFoot]),
   ])]
 }
@@ -2184,6 +2188,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   openSheet([
     p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
+    solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -2954,9 +2959,23 @@ const hosting = createHostingView({
   redrawSettings: () => { if (sheet.dataset.kind === 'settings' && sheet.classList.contains('on')) settingsSheet() },
   openSettings: () => settingsSheet(),
 })
-const devices = createSyncView({
-  persona, storeCtx, state: st, save, sheet, openSheet, toast, when: whenLabel, changed: render, openSettings: () => settingsSheet(),
+const snapshots = createSnapshotView({
+  persona, storeCtx, state: () => state, sheet, openSheet, toast, when: whenLabel,
+  replaceRecord: (s) => { state = s; save(); location.reload() },
 })
+const devices = createSyncView({
+  persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
+})
+
+/** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
+function stateForSync(): AppState {
+  if (!state) {
+    createMe(S.dvDefaultName)
+    screen = Screen.Web
+    void net.start().then(announceLink)
+  }
+  return st()
+}
 const images = new ImageStore(persona, storeCtx)
 const curator = createCurator({
   record: () => (state ? structuredClone(state) : null),
@@ -3735,7 +3754,12 @@ function namesSync(): NamesSync {
 
 /** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
 function connectEligible(): boolean {
-  return !solo && persona === 'me' && !!state && !state.testOf && window.top === window
+  return !!state && !state.testOf && deviceSyncEligible()
+}
+
+/** A phone's own personal account (record or not yet): the one that may link its other devices. Not a demo phone, a demo account's tab or an embedded frame. */
+function deviceSyncEligible(): boolean {
+  return !solo && persona === 'me' && window.top === window
 }
 
 /** Registers or updates this phone's connect code when due (boot where a code exists, a new name, the Meet page); never throws, never blocks. */
@@ -4825,6 +4849,7 @@ function sourcesGroup(s: AppState): Node[] {
 const backup = createBackupView({
   persona, storeCtx, state: st, openSheet, closeSheet, toast,
   replaceRecord: (s) => { state = s; save(); location.reload() },
+  beforeRestore: () => snapshots.take(S.snReasonRestore),
   redraw: () => { if (screen === Screen.Inventory) render() },
 })
 
