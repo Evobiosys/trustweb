@@ -48,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -58,7 +58,7 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
-import { fingerprint, stripUnsafe } from './safe_text'
+import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
@@ -529,7 +529,6 @@ const net = new Net({
     if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
-    if (mayAnswerRequest(peer, person) && mayShareContact(shareModeNow())) sendProfileTo(peer, false)
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -2434,11 +2433,10 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
 
 /** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
 function profileSheet(): void {
-  const s = st()
-  const mine = (): MyProfile => s.profile ?? { norms: [] }
-  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); s.profile = p }
+  const mine = (): MyProfile => st().profile ?? { norms: [] }
+  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); st().profile = p }
   openSheet(profileSheetNodes({
-    profile: mine, inventory: () => s.inventory, now: Date.now,
+    profile: mine, inventory: () => st().inventory, now: Date.now,
     commit: () => { save(); profileSheet() },
     addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
@@ -2448,14 +2446,10 @@ function profileSheet(): void {
   sheet.dataset.kind = 'profile'
 }
 
-/** Under the contact box: "My profile" and the tick that shares it (norms, favourite way, intro) the same way the links go, in the same share modes. */
+/** Under the contact box: "My profile" (norms, favourite way, intro). It leaves this phone only on the owner's tap "Send my profile" on a card. */
 function profileRow(): HTMLElement {
-  const tick = el('input', { type: 'checkbox', 'data-share-profile': '1' })
-  tick.checked = st().profileShare === true
-  tick.addEventListener('change', () => { if (tick.checked) st().profileShare = true; else delete st().profileShare; save() })
   return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
-    el('label', { class: 'chat-row' }, [tick, el('span', {}, [S.profShareTick])]),
   ])
 }
 
@@ -2476,27 +2470,20 @@ function chatIo(): ChatIo {
 // Messenger links leave this phone ONLY as the answer to an explicit request (onContactRequest), never at connect time
 // (Jakob 2026-10-15 22:25: a reach-out via trustweb.one/<name> must not be able to get them).
 
-/**
- * Wave 7 (profile.ts): sends my profile to one connected peer in a chat text: on connect when the "share my profile" tick is on and the
- * share mode allows it (the caller checks the mode), once per change (profileSent); `force` is the owner's own "Send my profile" tap.
- */
-function sendProfileTo(peer: Peer, force: boolean): void {
-  const s = st()
-  if (!force && !s.profileShare) return
-  const text = buildProfileText(APP_URL, s.profile)
-  if (!text) { if (force) toast(S.profEmpty); return }
-  const fp = fingerprint(text)
-  if (!force && s.profileSent?.[peer.id] === fp) return
-  net.sendText(peer, text).then(() => {
-    s.profileSent = { ...s.profileSent, [peer.id]: fp }
-    save()
-    if (force) toast(S.profSent(peer.displayName))
-  }).catch(() => { if (force) toast(S.agrSendFailed) })
+/** The demo persona, a solo tab and demo accounts never send anything to a phone (hello, profile). */
+const noSendTo = (peer: Peer): boolean => isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)
+
+/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. */
+function sendProfileTo(peer: Peer): void {
+  if (noSendTo(peer)) return
+  const text = buildProfileText(APP_URL, st().profile)
+  if (!text) { toast(S.profEmpty); return }
+  net.sendText(peer, text).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
-  if (isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)) return
+  if (noSendTo(peer)) return
   const text = helloText(APP_URL, st().me.displayName)
   if (text) net.sendText(peer, text).catch(() => { /* the other phone keeps the typed name, or none */ })
 }
@@ -2589,7 +2576,7 @@ function onContactRequest(peer: Peer, text: string): void {
   const s = st()
   const wanted = parseRequestText(APP_URL, text)
   const person = s.people.find((p) => p.peerId === peer.id)
-  if (!wanted || !person || isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  if (!wanted || !person || noSendTo(peer)) return
   // Someone who came in through the public link stays on Intending until I move them: until then a request is dropped, not answered.
   if (!mayAnswerRequest(peer, person)) return
   const plan = answerPlan(s.myChannels, s.contactShare, wanted)
@@ -2607,28 +2594,33 @@ function onContactRequest(peer: Peer, text: string): void {
 
 function sendProfileRow(p: Person): HTMLElement | null {
   const peer = st().peers.find((x) => x.id === p.peerId)
-  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer, true) }, [S.profSendTo(p.name)]) : null
+  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
 function agreementsFor(p: Person): HTMLElement {
-  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
-  const find = (id: string) => p.agreements?.find((a) => a.id === id)
+  // The record may have been replaced since the card opened: look the person and the connection up on every call.
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  const peerNow = (): Peer | undefined => { const pid = now().peerId; return pid ? st().peers.find((x) => x.id === pid) : undefined }
+  const find = (id: string) => now().agreements?.find((a) => a.id === id)
   const redraw = (): void => { save(); personSheet(p.id) }
-  const send = (text: string, onFail: () => void): void => {
-    if (!peer) { onFail(); return }
+  const send = (text: string | null, onFail: () => void): void => {
+    const peer = peerNow()
+    if (!peer || !text) { onFail(); if (!text) toast(S.agrTooLong); return }
     net.sendText(peer, text).catch(() => { onFail(); toast(S.agrSendFailed) })
   }
   return agreementsSection({
-    name: p.name, agreements: () => p.agreements ?? [], now: Date.now, canPropose: !!peer,
+    name: p.name, agreements: () => now().agreements ?? [], now: Date.now, canPropose: !!peerNow(),
     add: (text, expiresAt, propose) => {
-      const a = addAgreement(p, randomId(8), text, Date.now(), { proposed: propose && !!peer, expiresAt })
-      if (a?.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
+      const wantsSend = propose && !!peerNow()
+      const a = addAgreement(now(), randomId(8), text, Date.now(), { proposed: wantsSend, expiresAt, appUrl: APP_URL })
+      if (!a) toast(wantsSend ? S.agrTooLong : S.agrRefused)
+      else if (a.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
       redraw()
     },
-    remove: (id) => { removeAgreement(p, id); redraw() },
+    remove: (id) => { removeAgreement(now(), id); redraw() },
     accept: (id) => {
-      if (!acceptAgreement(p, id)) return
+      if (!acceptAgreement(now(), id)) return
       send(acceptText(APP_URL, id), () => { const a = find(id); if (a) { a.status = AgreementStatus.Incoming; redraw() } })
       redraw()
     },
@@ -2640,7 +2632,7 @@ function agreementsFor(p: Person): HTMLElement {
 function onAgreementText(peer: Peer, text: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
   const msg = parseAgreementText(APP_URL, text)
-  if (!person || !msg || !receiveAgreement(person, msg, Date.now())) return
+  if (!person || !msg || !mayAnswerRequest(peer, person) || !receiveAgreement(person, msg, Date.now())) return
   save()
   toast(msg.kind === 'accept' ? S.agrAccepted(peer.displayName) : S.agrProposedToast(peer.displayName))
   if (cardOpenFor === person.id && sheet.classList.contains('on') && !sheet.contains(document.activeElement)) personSheet(person.id)

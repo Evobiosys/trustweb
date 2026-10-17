@@ -17,14 +17,14 @@ export const PERSON_FIELDS: readonly PersonField[] = [
     "tanaAttributeId": "FcZJGS5EH2on",
     "label": "intending to connect",
     "type": "checkbox",
-    "description": "on: I intend to connect with this person (TrustWeb CRM); off: not in my network"
+    "description": "on: I intend to connect with this person (Web Curator); off: not in my network"
   },
   {
     "id": "6QzDHIfrlmSz",
     "tanaAttributeId": "6QzDHIfrlmSz",
     "label": "famous",
     "type": "checkbox",
-    "description": "public figure I do not know personally (TrustWeb CRM filter)"
+    "description": "public figure I do not know personally (Web Curator filter)"
   },
   {
     "id": "4J9bhDw1UdTj",
