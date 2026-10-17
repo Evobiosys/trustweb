@@ -1040,7 +1040,7 @@ export const S = {
   } as Record<Channel, string>,
   chPh: {
     [Channel.Signal]: 'Signal username link (best) or phone number (+43...)',
-    [Channel.WhatsApp]: 'Phone number (+43...) or wa.me link',
+    [Channel.WhatsApp]: 'Phone number (+43...), or a wa.me or wa.me/qr link (WhatsApp or Business)',
     [Channel.Matrix]: '@name:server.org',
     [Channel.Delta]: 'Delta Chat invite link or email address',
     [Channel.Telegram]: 'Username or phone number',
@@ -1049,7 +1049,7 @@ export const S = {
   } as Record<Channel, string>,
   chInvalid: {
     [Channel.Signal]: 'Paste a signal.me username link, or use an international number like +43 660 1234567.',
-    [Channel.WhatsApp]: 'Use an international number like +43 660 1234567, or paste a link like https://wa.me/4366012345 or https://wa.me/qr/... (no extra parts after it).',
+    [Channel.WhatsApp]: 'Use an international number like +43 660 1234567, or paste a link like https://wa.me/4366012345 https://wa.me/qr/... or https://wa.me/message/... (from WhatsApp or WhatsApp Business; no extra parts after it).',
     [Channel.Matrix]: 'A Matrix address looks like @name:server.org.',
     [Channel.Delta]: 'Paste their i.delta.chat invite link, or an email address.',
     [Channel.Telegram]: 'A Telegram username has 5 to 32 letters, digits or _, or use +43... .',
@@ -1577,7 +1577,9 @@ export const S = {
   },
   // Wave 6b (c): Advanced under the one QR, and the sharing line (connect_advanced_view.ts)
   advancedLabel: 'Advanced',
-  advLinksTitle: 'Your links: Signal, WhatsApp, Matrix, Consensual',
+  advLinksTitle: 'Your Signal, WhatsApp, Matrix or Consensual link',
+  advLinksHint: 'Saved once, used in Settings and here.',
+  cbWhatsAppLabel: 'WhatsApp (or WhatsApp Business)',
   signalTopAria: (name: string) => `Message ${name} on Signal`,
   shareRowLabel: 'How to share your code',
   shareMode: {

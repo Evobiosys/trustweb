@@ -6,7 +6,7 @@
  *   B  on https://app.trustintheweb.org (the loopback app behind a TLS front, STUBBED /link), a demo account's code: nothing is
  *      requested on opening the Meet sheet; one request per tap; the QR, Copy and the long/short views follow the choice; a repeat tap and a switch
  *      back and forth ask the server no second time; the note says "30 days"
- *   N  an NFC tag gets the connect code once the server answered (the code never changes), the long link before (Web NFC stubbed)
+ *   N  no NFC write button is offered, even with Web NFC stubbed (owner 2026-10-17)
  *   C  every failure falls back to the long link: 500, 400, 429 with Retry-After, 503, 507, a broken 200, a refused connection,
  *      offline; a retry afterwards works
  *   D  a demo-account code (Meet > Demo account) offers it too, and its QR follows
@@ -185,14 +185,9 @@ async function partN(browser, origin) {
   server.delayMs = 1500
   await server.install(ctx)
   await openMeet(page, origin)
-  const long = await payload(page)
-  await page.getByRole('button', { name: 'Write your link to an NFC tag' }).click()
-  await page.waitForFunction(() => window.__nfcWrites.length === 1)
-  t.ok('n: before the server answered, a tag gets the long link (the fallback)', (await page.evaluate(() => window.__nfcWrites[0])) === long)
-  const code = await page.waitForFunction(() => /\/c\/[A-Za-z0-9_-]{22}$/.test(document.querySelector('.qrwrap')?.getAttribute('data-payload') ?? ''), null, { timeout: 15_000 }).then(() => payload(page))
-  await page.getByRole('button', { name: 'Write your link to an NFC tag' }).click()
-  await page.waitForFunction(() => window.__nfcWrites.length === 2)
-  t.ok('n: once the code is there, a tag gets the code link (it never changes, so the tag keeps working)', (await page.evaluate(() => window.__nfcWrites[1])) === code, code)
+  // owner 2026-10-17: writing a tag is off (NFC_WRITE_OFFERED in main.ts), even where Web NFC exists.
+  await page.locator('.qrwrap canvas').waitFor()
+  t.ok('n: no NFC write button is offered', (await page.getByRole('button', { name: 'Write your link to an NFC tag' }).count()) === 0)
   await ctx.close()
 }
 

@@ -55,18 +55,19 @@ function normalizeSignal(raw: string): string | null {
 // WhatsApp (wave 6e). Two stored shapes, and only these:
 //   +436601234567                 a phone number (canonical E.164): the link is https://wa.me/<digits>
 //   https://wa.me/qr/<code>       WhatsApp's own share-QR link: it carries NO phone number
+//   https://wa.me/message/<code>  WhatsApp Business short link: the same, no phone number
 // A wa.me link with a query string, a hash or any other path is no WhatsApp handle at all (nothing a person pastes may smuggle a
 // prefilled message or a tracking parameter into a link this phone shows, shares or draws).
 // ---------------------------------------------------------------------------
 
 /** The code of a wa.me/qr link: letters and digits only (WhatsApp's own are 13 upper-case characters; the bound is generous). */
 const WA_QR_CODE = /^[A-Za-z0-9]{8,40}$/
-const WA_QR_PATH = /^\/qr\/([A-Za-z0-9]{8,40})\/?$/
+const WA_QR_PATH = /^\/(qr|message)\/([A-Za-z0-9]{8,40})\/?$/
 const WA_NUMBER_PATH = /^\/(\d{7,15})\/?$/
 
-/** True for the canonical stored share-QR form (https://wa.me/qr/<code>), nothing else. */
+/** True for the canonical stored share-link forms (https://wa.me/qr/<code> or https://wa.me/message/<code>), nothing else. */
 export function isWhatsAppQrLink(value: string): boolean {
-  const m = /^https:\/\/wa\.me\/qr\/([^/]+)$/.exec(value)
+  const m = /^https:\/\/wa\.me\/(?:qr|message)\/([^/]+)$/.exec(value)
   return m !== null && WA_QR_CODE.test(m[1])
 }
 
@@ -75,7 +76,7 @@ function normalizeWhatsApp(raw: string): string | null {
   const link = linkOn(raw, ['wa.me'])
   if (!link || link.search !== '' || link.hash !== '' || /[?#]/.test(raw)) return null
   const qr = WA_QR_PATH.exec(link.pathname)
-  if (qr) return `https://wa.me/qr/${qr[1]}`
+  if (qr) return `https://wa.me/${qr[1]}/${qr[2]}`
   const digits = WA_NUMBER_PATH.exec(link.pathname)
   return digits ? toE164('+' + digits[1]) : null
 }

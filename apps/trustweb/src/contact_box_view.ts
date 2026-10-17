@@ -41,7 +41,7 @@ export interface ContactBox {
 
 /** A channel's name in the box; Signal carries its glyph (wave 6h, S3: "include the signal icon to make it easier visible"). */
 function channelName(ch: Channel): HTMLElement {
-  const name = el('span', { class: 'ch-name ch-' + ch }, [S.chLabel[ch]])
+  const name = el('span', { class: 'ch-name ch-' + ch }, [ch === Channel.WhatsApp ? S.cbWhatsAppLabel : S.chLabel[ch]])
   if (ch !== Channel.Signal) return name
   const glyph = el('span', { class: 'ch-glyph', 'aria-hidden': 'true' })
   glyph.innerHTML = ICONS.signal
