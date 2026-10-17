@@ -896,6 +896,22 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .who i{display:block}
 
 .events-page .meta{font-size:13px; color:var(--ink-soft); line-height:1.55}
+/* Wave 7: the Timeline on a person's card (timeline_view.ts). */
+.person-timeline{display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin:10px 0}
+.tl-panel{display:flex; flex-direction:column; gap:8px; width:100%}
+.tl-panel[hidden], .tl-form[hidden], .tl-more[hidden]{display:none}
+.tl-form{display:flex; flex-direction:column; gap:6px}
+.tl-actions{display:flex; gap:8px; flex-wrap:wrap}
+.tl-day{display:flex; flex-direction:column; gap:6px}
+.tl-day h5{margin:4px 0 0}
+.tl-item{display:flex; flex-direction:column; gap:2px}
+.tl-entry{display:flex; align-items:center; gap:8px; width:100%; border:0; background:var(--card); color:inherit; font:inherit; font-size:13.5px; text-align:left; border-radius:12px; padding:8px 12px; cursor:pointer}
+.tl-entry:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.tl-glyph{display:inline-grid; place-items:center; width:20px; height:20px; flex-shrink:0; color:var(--teal)}
+.tl-glyph svg{width:100%; height:100%; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.tl-sum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.tl-dir{font-style:normal; font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
+.tl-more{margin:0 4px 4px; word-break:break-word}
 .not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
 .chip .pwho{display:inline-block; vertical-align:middle}
 .link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}
