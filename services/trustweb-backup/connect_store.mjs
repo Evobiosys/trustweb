@@ -6,6 +6,7 @@
 //           wave 15: beside `codes` two more maps: "claims" {"<address key>":[ms, ...]} (names claimed per address in the cap window) and "released"
 //           {"<name>":{"at":<ms>,"code":"<former holder>"}} (a freed name rests REST_MS for everyone but its former holder; kept PREV_MS). A code entry
 //           may carry "previousHolderAt" (when the former holder of its claimed name let go). Older builds ignore all three.
+//           wave 15 (devices): "moved" {"<name>":<ms>} (when a name last moved between two codes of one account, once per MOVE_MS). Older builds ignore it.
 //   mode 0600, rewritten atomically (temp file, fsync, rename), writes serialised through one promise queue.
 //
 // Everything lives in memory (at most `max` codes). Each mutation (secret check, uniqueness check, change) is ONE synchronous block with no
@@ -19,13 +20,15 @@
 
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
-import { answerFor, fieldsFor, MAX_NAMES, namesOf, planClaim, planGrant, planRelease, planRemove } from './connect_aliases.mjs'
+import { answerFor, fieldsFor, MAX_NAMES, namesOf, planClaim, planGrant, planMove, planRelease, planRemove } from './connect_aliases.mjs'
 import { CODE_RE, confusableKey, isNameShape, isReserved } from './connect_names.mjs'
 
 /** A freed name rests this long before another code may claim it; the cap counts claims in this window; a code shows "name had a previous holder" this long. */
 export const REST_MS = 30 * 86_400_000
 export const CAP_WINDOW_MS = 30 * 86_400_000
 export const PREV_MS = 180 * 86_400_000
+/** A name moves between the codes of one account at most once in this window. */
+export const MOVE_MS = 30 * 86_400_000
 
 export const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
 const HASH_RE = /^[0-9a-f]{64}$/
@@ -49,7 +52,7 @@ const isEntry = (code, e) =>
   CODE_RE.test(code) && e !== null && typeof e === 'object' && typeof e.h === 'string' && HASH_RE.test(e.h) && typeof e.url === 'string' && Number.isFinite(e.seen)
 
 /** How a planner's refusal reaches the caller (the result `kind`). */
-const REFUSALS = Object.freeze({ locked: 'locked', reserved: 'reserved', taken: 'taken', too_many: 'too_many', not_held: 'not_held' })
+const REFUSALS = Object.freeze({ locked: 'locked', reserved: 'reserved', taken: 'taken', too_many: 'too_many', not_held: 'not_held', alias_cap: 'alias_cap' })
 
 /**
  * Opens (or creates) the store. Resolves the store object; its `recovered` is true when the file did not parse and was moved
@@ -62,6 +65,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
   const names = new Map() // name (primary or alias) -> code
   const claims = new Map() // address key -> [ms of each claim in the cap window]
   const released = new Map() // name -> {at, code}: freed lately
+  const moved = new Map() // name -> ms of its last move between codes
   let recovered = false
   let chain = Promise.resolve()
 
@@ -89,6 +93,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     }
     for (const [addr, list] of Object.entries(parsed.claims ?? {})) if (Array.isArray(list)) claims.set(addr, list.filter(Number.isFinite))
     for (const [n, r] of Object.entries(parsed.released ?? {})) if (isNameShape(n) && r && Number.isFinite(r.at) && typeof r.code === 'string') released.set(n, { at: r.at, code: r.code })
+    for (const [n, at] of Object.entries(parsed.moved ?? {})) if (isNameShape(n) && Number.isFinite(at)) moved.set(n, at)
     forget()
   }
 
@@ -100,6 +105,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       else claims.delete(addr)
     }
     for (const [n, r] of released) if (r.at <= now() - PREV_MS) released.delete(n)
+    for (const [n, at] of moved) if (at <= now() - MOVE_MS) moved.delete(n)
   }
 
   /** The names a loaded entry claims, in order: the primary, then the aliases (anything that is not a string is dropped here, the rest in index). */
@@ -139,7 +145,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       const handle = await fs.open(tmp, 'w', 0o600)
       try {
         await handle.chmod(0o600)
-        await handle.writeFile(JSON.stringify({ v: 1, codes: Object.fromEntries(codes), claims: Object.fromEntries(claims), released: Object.fromEntries(released) }))
+        await handle.writeFile(JSON.stringify({ v: 1, codes: Object.fromEntries(codes), claims: Object.fromEntries(claims), released: Object.fromEntries(released), moved: Object.fromEntries(moved) }))
         await handle.sync()
       } finally {
         await handle.close()
@@ -204,10 +210,10 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     return false
   }
 
-  /** Does ANOTHER live code hold a name that looks like `name` (confusableKey)? Phishing guard of a claim; a scan, but claims are rare and rate limited. */
-  function lookalikeOfOther(code, name) {
+  /** Does ANOTHER live code (not `code`, not `also`) hold a name that looks like `name` (confusableKey)? Phishing guard of a claim; a scan, but claims are rare and rate limited. */
+  function lookalikeOfOther(code, name, also) {
     const key = confusableKey(name)
-    for (const [n, c] of names) if (c !== code && confusableKey(n) === key && live(c) !== undefined) return true
+    for (const [n, c] of names) if (c !== code && c !== also && confusableKey(n) === key && live(c) !== undefined) return true
     return false
   }
 
@@ -304,6 +310,53 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       const fresh = plan.kind === 'set' && !held.includes(name) && addr !== undefined // a new name; promoting a held alias is no claim
       const hit = fresh ? capHit(addr, cap) : null
       return hit === null ? change(code, entry, plan, fresh ? { addr, name } : undefined) : { kind: 'name_cap', ...hit }
+    },
+
+    /**
+     * A MOVE (devices, wave 15): `name` leaves the code `from.code` and joins `code`, as an alias or (as 'primary') the primary, when BOTH secrets open their codes.
+     * Both entries change in one synchronous step, one write, and a failed write puts both back. No claim (the cap does not count it), no rest, but one move per
+     * name per MOVE_MS. Resolves {kind: 'named', ...} of `code`, {kind: 'forbidden'} (either secret, unknown or expired alike), {kind: 'not_held' | 'alias_cap' | 'taken'}
+     * or {kind: 'moved_lately', until}.
+     */
+    async move(code, secret, { name, from, as }) {
+      const entry = live(code)
+      const src = live(from.code)
+      const opens = [secretOpens(entry, secret), secretOpens(src, from.secret)]
+      if (!opens[0] || !opens[1]) return { kind: 'forbidden' }
+      if (!namesOf(src).includes(name)) return { kind: 'not_held' }
+      const last = moved.get(name)
+      if (last !== undefined && last > now() - MOVE_MS) return { kind: 'moved_lately', until: last + MOVE_MS }
+      const plan = planMove({ held: namesOf(entry), name, as })
+      if (plan.kind !== 'set') return { kind: REFUSALS[plan.kind] }
+      if (lookalikeOfOther(code, name, from.code)) return { kind: 'taken' }
+      const before = { to: namesOf(entry), from: namesOf(src), seenTo: entry.seen, seenFrom: src.seen, moved: last }
+      applyNames(from.code, src, before.from.filter((n) => n !== name))
+      applyNames(code, entry, plan.names)
+      entry.seen = src.seen = now()
+      moved.set(name, now())
+      // The rollback may run after other requests changed the map: a name another code holds by now is not given back (F11).
+      const mine = (c) => (n) => { const h = names.get(n); return h === undefined || h === c }
+      await commit(() => {
+        applyNames(code, entry, before.to.filter(mine(code)))
+        applyNames(from.code, src, before.from.filter(mine(from.code)))
+        entry.seen = before.seenTo
+        src.seen = before.seenFrom
+        if (before.moved === undefined) moved.delete(name)
+        else moved.set(name, before.moved)
+      })
+      return named(entry)
+    },
+
+    /** Takes the secret back (unlink): `code` gets a NEW secret, the old one is dead at once. Resolves {kind: 'rotated', secret} or {kind: 'forbidden'}. */
+    async rotate(code, secret) {
+      const entry = live(code)
+      if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
+      const before = { h: entry.h, seen: entry.seen }
+      const fresh = newSecret()
+      entry.h = hashSecret(fresh).toString('hex')
+      entry.seen = now()
+      await commit(() => Object.assign(entry, before))
+      return { kind: 'rotated', secret: fresh }
     },
 
     /** A RELEASE by the holder: the held name `name`, or the primary when `name` is null (the legacy {"name": ""}). Same result kinds as claim. */

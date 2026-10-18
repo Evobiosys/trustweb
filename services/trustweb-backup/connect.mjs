@@ -1,8 +1,10 @@
 // Connect codes and usernames (wave 6b; contract: DEVLOG/trustweb-wave-1733/services-api-contract.txt, section 10).
 //
 //   POST /connect {url, code?, secret?}   mint (201 {code, secret, url}) or update (200 {code, url}) the long connect url stored under a stable code
+//   POST /connect {code, secret, rotate:true}   unlink: a NEW secret for the code (200 {code, secret, url}), the old one is dead (wave 15)
 //   GET  /c/<code>                        302 to the stored (re-validated) url
 //   POST /name {code, secret, name?, alias?, release?}   claim a primary name or an alias, release one, or (nothing else given) READ the names (wave 6e)
+//   POST /name {code, secret, move, from:{code, secret}, as?}   MOVE a name between two codes of one account (wave 15, devices; both secrets, 400 when code === from)
 //   GET  /who/<name>                      302 to https://<same app host>/c/<code>   (the primary name or an alias)
 //
 // OPEN REDIRECT: /c/ redirects ONLY to a url that passes validLongUrl (https, one of cfg.linkHosts exactly, no port or userinfo, a connect
@@ -38,14 +40,24 @@ const NAME_REFUSALS = Object.freeze({
   reserved: [409, 'reserved'],
   taken: [409, 'name_taken'],
   too_many: [409, 'too_many_names'],
+  not_held: [409, 'not_held'],
+  alias_cap: [409, 'alias_cap'],
+  moved_lately: [409, 'name_moved'],
 })
 
 /**
  * The ONE intent of a POST /name body (wave 6e, contract 10.9.2), judged on shape alone:
- * {intent: 'claim', name, alias} | {intent: 'release', name} (name null = the legacy {"name": ""}: the primary) | {intent: 'read'} | {field} (a 400 naming the field).
+ * {intent: 'claim', name, alias} | {intent: 'move', name, from: {code, secret}, as} | {intent: 'release', name} (name null = the legacy {"name": ""}: the primary) | {intent: 'read'} | {field} (a 400 naming the field).
  */
 export function nameIntent(body) {
-  const { name, alias, release } = body
+  const { name, alias, release, move, from, as } = body
+  if (move !== undefined) {
+    if (name !== undefined || alias !== undefined || release !== undefined || !isNameShape(move)) return { field: 'move' }
+    const fromOk = from !== null && typeof from === 'object' && typeof from.code === 'string' && CODE_RE.test(from.code) && typeof from.secret === 'string' && SECRET_RE.test(from.secret)
+    if (!fromOk) return { field: 'from' }
+    if (as !== undefined && as !== 'primary' && as !== 'alias') return { field: 'as' }
+    return { intent: 'move', name: move, from: { code: from.code, secret: from.secret }, as }
+  }
   if (alias !== undefined && typeof alias !== 'boolean') return { field: 'alias' }
   if (release !== undefined) {
     if (name !== undefined) return { field: 'release' }
@@ -184,9 +196,28 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
   }
 
   /** POST /connect. Returns the status it answered. */
+  async function rotate(res, req, code, secret) {
+    let result
+    try {
+      result = await store.rotate(code, secret)
+    } catch {
+      return jsonError(res, 500, 'server_error')
+    }
+    if (result.kind === 'forbidden') return jsonError(res, 403, 'forbidden')
+    sendJson(res, 200, { code, secret: result.secret, url: shortUrl(req, code) })
+    return 200
+  }
+
   async function create(req, res) {
     const got = await receive(req, res)
     if (got.body === undefined) return got.status
+    if (got.body.rotate !== undefined) {
+      const { code, secret, rotate: wanted } = got.body
+      if (wanted !== true) return jsonError(res, 400, 'bad_request', { field: 'rotate' })
+      if (typeof code !== 'string' || !CODE_RE.test(code)) return jsonError(res, 400, 'bad_request', { field: 'code' })
+      if (typeof secret !== 'string' || !SECRET_RE.test(secret)) return jsonError(res, 400, 'bad_request', { field: 'secret' })
+      return rotate(res, req, code, secret)
+    }
     const url = validLongUrl(got.body.url, cfg.linkHosts, cfg.connectMaxBytes)
     if (url === null) return jsonError(res, 400, 'bad_request', { field: 'url' })
     const { code, secret } = got.body
@@ -199,6 +230,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
   function applyIntent(intent, code, secret, addr) {
     if (intent.intent === 'read') return store.read(code, secret)
     if (intent.intent === 'release') return store.release(code, secret, intent.name)
+    if (intent.intent === 'move') return store.move(code, secret, intent)
     return store.claim(code, secret, { name: intent.name, alias: intent.alias, addr, cap: capFor(nameCapAllow.list(), addr, code, cfg.nameCap) })
   }
 
@@ -211,6 +243,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     if (intent.field !== undefined) return jsonError(res, 400, 'bad_request', { field: intent.field })
     if (typeof code !== 'string' || !CODE_RE.test(code)) return jsonError(res, 400, 'bad_request', { field: 'code' })
     if (typeof secret !== 'string' || !SECRET_RE.test(secret)) return jsonError(res, 400, 'bad_request', { field: 'secret' })
+    if (intent.intent === 'move' && intent.from.code === code) return jsonError(res, 400, 'bad_request', { field: 'from' })
     let result
     try {
       result = await applyIntent(intent, code, secret, ipKey(clientOf(req)))
@@ -221,7 +254,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     if (result.kind === 'name_cap') return jsonError(res, 429, 'name-cap', { until: result.until, field: 'name' })
     if (result.kind !== 'named') {
       const [status, error] = NAME_REFUSALS[result.kind]
-      return jsonError(res, status, error, { field: 'name' })
+      return jsonError(res, status, error, { field: 'name', ...(result.until === undefined ? {} : { until: result.until }) })
     }
     sendJson(res, 200, { name: result.name, aliases: result.aliases, locked: result.locked })
     return 200

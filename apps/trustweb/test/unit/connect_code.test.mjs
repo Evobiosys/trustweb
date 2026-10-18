@@ -134,10 +134,27 @@ describe('registerConnect', () => {
   })
   it('a 403 on an update (the server forgot the code) mints a new one once', async () => {
     const { f, calls } = fake([{ status: 403, body: { error: 'forbidden' } }, minted(CODE2, SECRET2)])
-    const out = await registerConnect(deps(f), record(), longUrl())
+    const out = await registerConnect(deps(f), record({ url: longUrl('Old') }), longUrl())
     expect(calls).toHaveLength(2)
     expect(calls[1].body).toEqual({ url: longUrl() })
     expect(out).toEqual({ ok: true, record: record({ code: CODE2, secret: SECRET2 }) })
+  })
+  it('a 403 on a code that holds a name, was shared or belongs to another device is Stale, never a new code (F3, D4)', async () => {
+    for (const over of [{ name: 'ada' }, { aliases: ['ada2'] }, { shared: true }, { owner: 'other' }]) {
+      const { f, calls } = fake([{ status: 403, body: { error: 'forbidden' } }, minted(CODE2, SECRET2)])
+      expect(await registerConnect(deps(f), record({ url: longUrl('Old'), ...over }), longUrl())).toEqual({ ok: false, error: ConnectError.Stale })
+      expect(calls).toHaveLength(1)
+    }
+  })
+  it('the same link that only aged is a read-only GET of /c/<code>, no write; gone (404) re-mints an unnamed code', async () => {
+    const { f, calls } = fake([{ status: 302, body: {} }])
+    const out = await registerConnect(deps(f), record({ updatedAt: NOW - 40 * DAY }), longUrl())
+    expect(calls.map((c) => [c.init.method ?? 'GET', c.url])).toEqual([['GET', `${ORIGIN}/c/${CODE}`]])
+    expect(out).toEqual({ ok: true, record: record({ updatedAt: NOW - 40 * DAY, touchedAt: NOW }) })
+    const gone = fake([{ status: 404, body: {} }, minted(CODE2, SECRET2)])
+    expect((await registerConnect(deps(gone.f), record({ updatedAt: NOW - 40 * DAY }), longUrl())).ok).toBe(true)
+    const named = fake([{ status: 404, body: {} }])
+    expect(await registerConnect(deps(named.f), record({ name: 'ada', updatedAt: NOW - 40 * DAY }), longUrl())).toEqual({ ok: false, error: ConnectError.Stale })
   })
   it('a 403 on a mint does not loop', async () => {
     const { f, calls } = fake([{ status: 403, body: {} }])
@@ -163,7 +180,7 @@ describe('registerConnect', () => {
     expect(await registerConnect(deps(fake([answer]).f), null, longUrl())).toEqual({ ok: false, error: ConnectError.Server })
   })
   it('an update answered with another code is Server (the record is kept as it was)', async () => {
-    expect(await registerConnect(deps(fake([updated(CODE2)]).f), record(), longUrl())).toEqual({ ok: false, error: ConnectError.Server })
+    expect(await registerConnect(deps(fake([updated(CODE2)]).f), record({ url: longUrl('Old') }), longUrl())).toEqual({ ok: false, error: ConnectError.Server })
   })
   it('sends nothing from a page that is not an app origin', async () => {
     const { f, calls } = fake([minted()])
@@ -218,7 +235,7 @@ describe('createConnectKeeper', () => {
     expect(box.value.code).toBe(CODE)
     expect(k.shortFor(longUrl('Ada B'))).toBe(`${ORIGIN}/c/${CODE}`)
   })
-  it('after 30 days it writes the same link again', async () => {
+  it('after 30 days it only touches the same link (GET, no write); the touch restarts the 30 days', async () => {
     let now = NOW
     const { k, calls } = keeper([minted(), updated()], { now: () => now })
     await k.ensure(longUrl())
@@ -227,7 +244,8 @@ describe('createConnectKeeper', () => {
     expect(calls).toHaveLength(1)
     now = NOW + 30 * DAY
     await k.ensure(longUrl())
-    expect(calls).toHaveLength(2)
+    expect(calls.map((c) => c.init.method ?? 'GET')).toEqual(['POST', 'GET'])
+    expect(k.shortFor(longUrl())).toBe(`${ORIGIN}/c/${CODE}`)
   })
   it('two ensures at once share one request', async () => {
     const { k, calls } = keeper([minted()])
@@ -308,13 +326,19 @@ describe('createConnectKeeper', () => {
     const k = createConnectKeeper({ ...deps(f), load: () => box.value, store: (r) => { box.value = r } })
     await k.ensure(longUrl('Ada B'))
     expect(box.value).toMatchObject({ name: 'ada', aliases: ['ada2'], lockedNames: ['ada'] })
-    const box2 = { value: record({ name: 'ada', aliases: ['ada2'] }) }
+    const box2 = { value: record({ url: longUrl('Old') }) }
     const f2 = fake([{ status: 403, body: { error: 'forbidden' } }, minted(CODE2, SECRET2)]).f
     const k2 = createConnectKeeper({ ...deps(f2), load: () => box2.value, store: (r) => { box2.value = r } })
     await k2.ensure(longUrl('Ada B'))
     expect(box2.value.code).toBe(CODE2)
     expect(box2.value.name).toBeUndefined()
     expect(box2.value.aliases).toBeUndefined()
+    // A code that holds a name is marked stale instead (F3): no new code, no lost username.
+    const box3 = { value: record({ name: 'ada', url: longUrl('Old') }) }
+    const k3 = createConnectKeeper({ ...deps(fake([{ status: 403, body: { error: 'forbidden' } }, minted(CODE2, SECRET2)]).f), load: () => box3.value, store: (r) => { box3.value = r } })
+    await k3.ensure(longUrl('Ada B'))
+    expect(box3.value).toMatchObject({ code: CODE, name: 'ada', stale: true })
+    expect(registrationDue(box3.value, longUrl('Ada B'), NOW)).toBe(false)
   })
   it('a 403 that is not "forbidden" (forbidden_origin) never throws the code away', async () => {
     const { k, box, calls } = keeper([minted(), { status: 403, body: { error: 'forbidden_origin' } }], {})
