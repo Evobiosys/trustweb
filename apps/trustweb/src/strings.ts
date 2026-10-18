@@ -1548,6 +1548,12 @@ export const S = {
   // Contact received / chat
   contactReceivedToast: (name: string) => `${name} shared how to reach them`,
   chatOpen: 'Chat',
+  blockPerson: (name: string) => `Block ${name}`,
+  unblockPerson: (name: string) => `Unblock ${name}`,
+  blockConfirm: (name: string) => `Block ${name}? Their asks and messages stop, nothing is sent to them, and their dot disappears. They are not told.`,
+  blockedToast: (name: string) => `${name} is blocked`,
+  blockedTitle: 'Blocked',
+  blockedNone: 'Nobody is blocked.',
   chatTitle: (name: string) => `Chat with ${name}`,
   chatMessageOn: (app: string) => `Message on ${app}`,
   consChat: 'Chat on Consensual',
