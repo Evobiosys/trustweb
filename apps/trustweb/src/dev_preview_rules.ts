@@ -1,5 +1,5 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
-export { readyToGo } from '../dev_preview_rules.mjs'
+export { ciDiagnostics, readyToGo } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
@@ -190,3 +190,9 @@ export function devUrl(slot: string, loc: Pick<Location, 'pathname' | 'search' |
 
 /** "dev2" for https://dev2.trustweb.one/ */
 export const devLabel = (slot: string): string => new URL(slot).hostname.split('.')[0]
+
+/** The value a step asks to type: the text after "paste" or "type" (quotes dropped), else null. */
+export function typedValue(text: string): string | null {
+  const m = /\b(?:paste|type)\s+(.+)$/i.exec(text)
+  return m ? m[1].trim().replace(/^["'“‘]|["'”’]$/g, '') : null
+}

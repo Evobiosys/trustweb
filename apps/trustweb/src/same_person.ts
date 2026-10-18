@@ -50,6 +50,7 @@ export function unitePerson(w: Person, l: Person): Person {
   }
   if (w.agreements || l.agreements) out.agreements = uniteAgreements(w.agreements ?? [], l.agreements ?? [])
   if (w.theirProfile && l.theirProfile) out.theirProfile = l.theirProfile.at > w.theirProfile.at ? fillMissing(l.theirProfile, w.theirProfile) : fillMissing(w.theirProfile, l.theirProfile)
+  if (w.knows || l.knows) out.knows = [...new Set([...(w.knows ?? []), ...(l.knows ?? [])])]
   return out
 }
 

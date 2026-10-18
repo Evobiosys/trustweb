@@ -1,5 +1,5 @@
 /** Network view data and layout (src/network_graph.ts, wave 7). */
-import { DEFAULT_FORCES, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, networkChosen, matchIds, shake, step, tierOf, applyPins, pinsOf } from '../../src/network_graph.ts'
+import { DEFAULT_FORCES, knowsLinks, personLinks, LAYOUT_ITERATIONS, alphaAt, buildGraph, networkChosen, matchIds, shake, step, tierOf, applyPins, pinsOf } from '../../src/network_graph.ts'
 import { Ring } from '../../src/model.ts'
 
 const me = { id: 'me', displayName: 'Me' }
@@ -153,5 +153,23 @@ describe('forces', () => {
     expect(g.nodes[1]).toMatchObject({ x: 300, y: -40, pinned: true })
     expect(g.nodes[0]).toMatchObject({ x: 0, y: 0 })
     expect(pinsOf(g)).toEqual({ a: { x: 300, y: -40, a: true } })
+  })
+})
+
+describe('network knows edges', () => {
+  const k = (id, knows) => ({ ...person(id, Ring.Friend), knows })
+  it('mutual when both list each other, one-way otherwise; me is mutual with whoever lists it', () => {
+    const links = knowsLinks('me', [k('a', ['b', 'me']), k('b', ['a']), k('c', ['a'])])
+    expect(links).toEqual([[1, 2, true], [1, 0, true], [3, 1, false]])
+  })
+
+  it('ignores missing ids, self-links and repeats', () => {
+    expect(knowsLinks('me', [k('a', ['zz', 'a']), k('b', undefined)])).toEqual([])
+    expect(knowsLinks('me', [k('a', ['b', 'b']), k('b', ['a'])])).toEqual([[1, 2, true]])
+  })
+
+  it('buildGraph draws them: solid for mutual, dashed one-way, tagged', () => {
+    const g = buildGraph(me, [k('a', ['b']), k('b', ['a']), k('c', ['a'])])
+    expect(g.edges.filter((e) => e.knows).map((e) => [e.a, e.b, e.dashed, e.knows])).toEqual([[1, 2, false, 'mutual'], [3, 1, true, 'oneway']])
   })
 })

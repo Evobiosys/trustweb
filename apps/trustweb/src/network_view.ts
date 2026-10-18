@@ -6,7 +6,7 @@
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
 import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
-import type { Forces, Graph, GraphNode, Pins } from './network_graph'
+import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
 import { S } from './strings'
 
 export interface NetworkOptions {
@@ -56,7 +56,7 @@ interface Cached { key: string; graph: Graph; iteration: number; camera: Camera 
 let cached: Cached | null = null
 
 function keyOf(o: NetworkOptions): string {
-  return o.me.id + '|' + o.people.map((p) => p.id + p.ring + tierOf(p) + p.context + p.name).join('|')
+  return o.me.id + '|' + o.people.map((p) => p.id + p.ring + tierOf(p) + p.context + p.name + (p.knows ?? []).join(',')).join('|')
 }
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
@@ -107,7 +107,9 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ]),
   ])
   const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
-  const root = el('div', { class: 'net', 'data-view': 'network' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas])
+  const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
+  let tipTimer = 0
+  const root = el('div', { class: 'net', 'data-view': 'network' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, el('small', { class: 'net-legend' }, [S.netLegend])])
 
   const fit = (): Camera => {
     const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
@@ -124,6 +126,30 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (d <= Math.max(v.r * c.k, 10) + 4 && d < bestD) { best = v; bestD = d }
     }
     return best
+  }
+
+  // The nearest member connection within a fingertip of (px, py), for the "<a> knows <b>" tooltip.
+  const hitEdge = (px: number, py: number): GraphEdge | null => {
+    const c = cam()
+    let best: GraphEdge | null = null
+    let bestD = 8
+    for (const e of g.edges) {
+      if (!e.knows) continue
+      const a = g.nodes[e.a]; const b = g.nodes[e.b]
+      const ax = a.x * c.k + c.x; const ay = a.y * c.k + c.y
+      const dx = b.x * c.k + c.x - ax; const dy = b.y * c.k + c.y - ay
+      const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)))
+      const d = Math.hypot(px - ax - t * dx, py - ay - t * dy)
+      if (d < bestD) { best = e; bestD = d }
+    }
+    return best
+  }
+  const showTip = (e: GraphEdge): void => {
+    const a = g.nodes[e.a].name; const b = g.nodes[e.b].name
+    tip.textContent = e.knows === 'mutual' ? S.netKnowsBoth(a, b) : S.netKnows(a, b)
+    tip.hidden = false
+    clearTimeout(tipTimer)
+    tipTimer = window.setTimeout(() => { tip.hidden = true }, 3500)
   }
 
   const colour = (v: GraphNode): string =>
@@ -144,13 +170,14 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const filtering = matches.size > 0 || search.value.trim() !== ''
     const focus = hover ? new Set<number>([g.nodes.indexOf(hover), ...near[g.nodes.indexOf(hover)]]) : null
     const inFocus = (i: number): boolean => (!focus || focus.has(i)) && (!filtering || matches.has(g.nodes[i].id) || g.nodes[i].tier === undefined)
-    ctx.lineWidth = lq ? 0.6 : 1
+    const baseWidth = lq ? 0.6 : 1
     for (const e of g.edges) {
       const a = g.nodes[e.a]
       const b = g.nodes[e.b]
       const lit = lq ? !focus || (focus.has(e.a) && focus.has(e.b)) : !filtering || matches.has(a.id) || matches.has(b.id)
       ctx.strokeStyle = lq ? LOGSEQ.edge : colour(b.tier !== undefined ? b : a)
-      ctx.globalAlpha = lit ? (lq ? (focus ? 0.8 : 0.3) : e.thin ? 0.14 : 0.28) : 0.05
+      ctx.globalAlpha = lit ? (e.knows ? 0.8 : lq ? (focus ? 0.8 : 0.3) : e.thin ? 0.14 : 0.28) : 0.05
+      ctx.lineWidth = e.knows === 'mutual' ? 3 : e.knows ? 1.2 : baseWidth
       ctx.setLineDash(e.dashed ? [3, 4] : [])
       ctx.beginPath()
       ctx.moveTo(a.x * c.k + c.x, a.y * c.k + c.y)
@@ -158,6 +185,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       ctx.stroke()
     }
     ctx.setLineDash([])
+    ctx.lineWidth = baseWidth
     ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
@@ -287,7 +315,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (dragged) dragged.pinned = dragPinned
     if (!tap || was !== 1 || travelled > TAP_SLOP) return
     const v = hit(local(e).x, local(e).y)
-    if (!v) return
+    if (!v) { const ed = hitEdge(local(e).x, local(e).y); if (ed) showTip(ed); return }
     if (v.pinned && v.tier !== undefined) {
       if (lastTap.id === v.id && e.timeStamp - lastTap.at < DOUBLE_TAP_MS) { clearTimeout(opening); lastTap = { id: '', at: 0 }; unpin(v); return }
       lastTap = { id: v.id, at: e.timeStamp }
