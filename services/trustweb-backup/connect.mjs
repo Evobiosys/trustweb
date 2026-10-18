@@ -254,13 +254,20 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     return url === null ? notFoundPage(res) : redirect(res, landingFor(req, url))
   }
 
-  /** GET|HEAD /who/<name>. Returns the status it answered. */
+  /** What a person typed or a phone keyboard made of a name: NFKC, lowercase, trailing punctuation and (encoded) spaces dropped. A bad escape stays as is (then not a name). */
+  function typedName(raw) {
+    let text = raw
+    try { text = decodeURIComponent(raw) } catch { /* not a name: the uniform 404 */ }
+    return text.normalize('NFKC').toLowerCase().replace(/[\s.,;:)!?/]+$/u, '')
+  }
+
+  /** GET|HEAD /who/<name>, case and trailing punctuation forgiven (the redirect target is unchanged). Returns the status it answered. */
   function who(req, res, pathname) {
     res.setHeader('X-Robots-Tag', NOINDEX)
     const gated = readGate(req, res)
     if (gated !== null) return gated
     const host = appHostOf(req, cfg.linkHosts)
-    const wanted = pathname.slice('/who/'.length)
+    const wanted = typedName(pathname.slice('/who/'.length))
     if (host === null || !isNameShape(wanted)) return notFoundPage(res)
     const burst = perName.hit(squash(wanted))
     if (burst.limited) return slowDownText(res, burst.retryAfter)

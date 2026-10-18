@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wave 8 (organizer): put the username routes trustweb.one/<name> and app.trustweb.one/<name> (with log_skip) into the app.idea2.site, app.trustintheweb.org and
+# Wave 8 (organizer), wave 14 (reach-out-link: case/trailing-dot forgiving name pattern + handle_errors pages on trustweb.one, www, app.trustweb.one and trustintheweb.org; idempotent, upgrades the wave 8 block): put the username routes trustweb.one/<name> and app.trustweb.one/<name> (with log_skip) into the app.idea2.site, app.trustintheweb.org and
 # app.trustweb.one (wave 6c) blocks of the live Caddyfile on questhub. Same shape as trustweb_links_caddy_install.sh (wave 5). RUN BY THE ORCHESTRATOR, after the unit has the new code
 # (the unit answers 404/405 for these paths before that, so the order is: services deploy, then this script).
 #
@@ -40,7 +40,7 @@ changed() { grep -E '^[+-]' "$1" | grep -vE '^(\+\+\+|---) '; }
 cat "$LOCAL/diff"
 echo "--------"
 [ "${REQUIRE:-0}" = 0 ] || exit 3
-cmp -s "$LOCAL/live" "$LOCAL/edited" && { echo "nothing to change (both blocks already have the username route)"; exit 0; }
+cmp -s "$LOCAL/live" "$LOCAL/edited" && { echo "nothing to change (all blocks already have the username route and the error pages)"; exit 0; }
 B64="$(base64 < "$LOCAL/edited" | tr -d '\n')"
 rsh "set -euo pipefail
   D=\$(mktemp -d /tmp/twcaddyval.XXXXXX); trap 'rm -rf \"\$D\"' EXIT; chmod 755 \$D
@@ -66,4 +66,4 @@ printf '%s\n' "$out"
 BAK="$(printf '%s\n' "$out" | sed -n 's/^  backup: //p')"
 [ -n "$BAK" ] && echo "backup on the server: $BAK"
 echo "rollback check before any restore: ssh -o BatchMode=yes questhub \"sudo diff $BAK /etc/caddy/Caddyfile\" | cut -c1 | sort | uniq -c   (expect only '>' lines and hunk headers)"
-echo "installed. Next: smoke  curl -sI https://trustweb.one/japossert (302 to app.trustweb.one/who/japossert); curl -sI https://app.trustweb.one/japossert (302 to /who/japossert); https://trustweb.one/ still 301 to trustintheweb.org"
+echo "installed. Next: smoke  python3 -I scripts/test_reach_out_chain.py  (every variant ends in a real page; also curl -sI https://trustweb.one/Japossert -> 302 to app.trustweb.one/who/Japossert; https://trustweb.one/ still 301 to trustintheweb.org)"
