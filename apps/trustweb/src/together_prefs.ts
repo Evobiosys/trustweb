@@ -6,49 +6,49 @@
  */
 import { clipText, isRecord, keptList } from './kept_list'
 import type { Kept, KeepRule } from './kept_list'
-import { PLAY_ACTIVITY_MAX, PLAY_AREA_MAX, PLAY_RADIUS_KM_DEFAULT } from './play_request'
-import type { PlayRequest } from './play_request'
+import { TOGETHER_ACTIVITY_MAX, TOGETHER_AREA_MAX, TOGETHER_RADIUS_KM_DEFAULT } from './together_request'
+import type { TogetherRequest } from './together_request'
 
-export interface PlayPref extends Kept {
+export interface TogetherPref extends Kept {
   activity: string
   area?: string
   radiusKm?: number
   reach?: number
 }
 
-export const PLAY_PREFS_KEEP_MS = 365 * 86_400_000
-export const PLAY_PREFS_MAX = 12
+export const TOGETHER_PREFS_KEEP_MS = 365 * 86_400_000
+export const TOGETHER_PREFS_MAX = 12
 
-const RULE: KeepRule<PlayPref> = {
-  is: (v): v is PlayPref => isRecord(v) && typeof v.at === 'number' && typeof v.activity === 'string' && v.activity !== '',
-  keepMs: PLAY_PREFS_KEEP_MS,
-  max: PLAY_PREFS_MAX,
+const RULE: KeepRule<TogetherPref> = {
+  is: (v): v is TogetherPref => isRecord(v) && typeof v.at === 'number' && typeof v.activity === 'string' && v.activity !== '',
+  keepMs: TOGETHER_PREFS_KEEP_MS,
+  max: TOGETHER_PREFS_MAX,
 }
 
-export const livePlayPrefs = (list: unknown, now: number): PlayPref[] => keptList(list, RULE, now)
+export const liveTogetherPrefs = (list: unknown, now: number): TogetherPref[] => keptList(list, RULE, now)
 
 /** Remembers what this request chose (one entry per activity, the newest wins). Returns the new list. */
-export function rememberPlay(list: unknown, req: PlayRequest, now: number): PlayPref[] {
-  const rest = livePlayPrefs(list, now).filter((p) => p.activity !== req.activity)
-  const pref: PlayPref = {
+export function rememberTogether(list: unknown, req: TogetherRequest, now: number): TogetherPref[] {
+  const rest = liveTogetherPrefs(list, now).filter((p) => p.activity !== req.activity)
+  const pref: TogetherPref = {
     at: now,
-    activity: clipText(req.activity, PLAY_ACTIVITY_MAX),
-    ...(req.area ? { area: clipText(req.area, PLAY_AREA_MAX) } : {}),
+    activity: clipText(req.activity, TOGETHER_ACTIVITY_MAX),
+    ...(req.area ? { area: clipText(req.area, TOGETHER_AREA_MAX) } : {}),
     ...(req.radiusKm !== undefined ? { radiusKm: req.radiusKm } : {}),
     ...(req.reach !== undefined ? { reach: req.reach } : {}),
   }
-  return [pref, ...rest].slice(0, PLAY_PREFS_MAX)
+  return [pref, ...rest].slice(0, TOGETHER_PREFS_MAX)
 }
 
 /**
  * Fills the fields a request left out: first from the same activity, then (area and radius only: where someone plays travels between
  * activities, who they trust for it does not) from the most recent entry of any activity. Reach falls back to 1 at ask time (hops.ts).
  */
-export function fillFromPrefs(req: PlayRequest, list: unknown, now: number): PlayRequest {
-  const prefs = livePlayPrefs(list, now)
+export function fillFromPrefs(req: TogetherRequest, list: unknown, now: number): TogetherRequest {
+  const prefs = liveTogetherPrefs(list, now)
   const same = prefs.find((p) => p.activity === req.activity)
   const area = req.area ?? same?.area ?? prefs.find((p) => p.area)?.area
-  const radiusKm = req.radiusKm ?? same?.radiusKm ?? prefs.find((p) => p.radiusKm !== undefined)?.radiusKm ?? (area ? PLAY_RADIUS_KM_DEFAULT : undefined)
+  const radiusKm = req.radiusKm ?? same?.radiusKm ?? prefs.find((p) => p.radiusKm !== undefined)?.radiusKm ?? (area ? TOGETHER_RADIUS_KM_DEFAULT : undefined)
   const reach = req.reach ?? same?.reach
   return {
     ...req,

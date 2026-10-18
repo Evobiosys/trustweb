@@ -161,9 +161,9 @@ import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
-import { playAsk } from './play_match'
-import { fillFromPrefs, livePlayPrefs, rememberPlay } from './play_prefs'
-import { readPlayRequest } from './play_request'
+import { togetherAsk } from './together_match'
+import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
+import { readTogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
@@ -5051,9 +5051,9 @@ function settingsSheet(): void {
       // Off is stored as absent: the record keeps only what differs from the default.
       onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
-    livePlayPrefs(s.playPrefs, Date.now()).length === 0 ? null : el('div', { 'data-play-prefs': '1' }, [
-      el('p', { class: 'meta' }, [S.setPlayHint(livePlayPrefs(s.playPrefs, Date.now()).length)]),
-      el('button', { class: 'btn', onclick: () => { delete s.playPrefs; save(); settingsSheet() } }, [S.setPlayForget]),
+    liveTogetherPrefs(s.togetherPrefs, Date.now()).length === 0 ? null : el('div', { 'data-together-prefs': '1' }, [
+      el('p', { class: 'meta' }, [S.setTogetherHint(liveTogetherPrefs(s.togetherPrefs, Date.now()).length)]),
+      el('button', { class: 'btn', onclick: () => { delete s.togetherPrefs; save(); settingsSheet() } }, [S.setTogetherForget]),
     ]),
     el('button', {
       class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
@@ -5249,17 +5249,17 @@ function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
 
 /**
  * Wave 16: the dock's send. A sentence that names something to play ("I want to play padel again before Thursday") becomes a play
- * request: remembered settings fill what it leaves out (play_prefs.ts), it goes out as an ordinary ask with its friend degree as reach,
+ * request: remembered settings fill what it leaves out (together_prefs.ts), it goes out as an ordinary ask with its friend degree as reach,
  * and what it chose becomes the next default. Anything else is asked as typed.
  */
 function sendFromDock(text: string): void {
   const now = Date.now()
-  const req = readPlayRequest(text, now)
+  const req = readTogetherRequest(text, now)
   if (!req) { void runAsk(text); return }
   const s = st()
-  const filled = fillFromPrefs(req, s.playPrefs, now)
-  const ask = playAsk(filled, navigator.language)
-  s.playPrefs = rememberPlay(s.playPrefs, filled, now)
+  const filled = fillFromPrefs(req, s.togetherPrefs, now)
+  const ask = togetherAsk(filled, navigator.language)
+  s.togetherPrefs = rememberTogether(s.togetherPrefs, filled, now)
   // "Ask only my direct contacts" wins (askReachOf); otherwise a degree the request or its remembered settings name replaces the dock's.
   if (filled.reach !== undefined) { if (ask.reach === HOPS_DEFAULT) delete s.askReach; else s.askReach = ask.reach }
   save()

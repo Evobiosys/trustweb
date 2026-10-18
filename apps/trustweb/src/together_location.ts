@@ -2,7 +2,7 @@
  * Wave 16: where to play. The map is behind ONE interface so any library (or none) plugs in later: Jakob 2026-10-18 "I'm not super
  * happy with [the map libraries I used before], but I'd like to reuse the same code and then potentially just swap it out." No map code
  * exists in this repo or under SingularStructure yet, so the first picker is the text one: the person's words are the place, a radius
- * is the reach, and coordinates are optional. Only the label ever leaves the phone (play_request.ts).
+ * is the reach, and coordinates are optional. Only the label ever leaves the phone (together_request.ts).
  * Pure and DOM-free.
  */
 export interface Place {

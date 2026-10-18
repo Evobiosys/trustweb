@@ -200,8 +200,8 @@ export const S = {
   setNotesMatchHint: 'When somebody asks through you, the notes you took in meetings can match too (never a note that is "Only me"). You still say yes or no to every ask, and only the one line goes out, never the whole note or the meeting. Off for a demo phone.',
   setDirectOnly: 'Ask only my direct contacts',
   setDirectOnlyHint: 'Your asks go to the people you are connected with and stop there: each one answers from their own resources and never passes your ask on to their friends or to a front door. Off: they may pass it on where they allowed it.',
-  setPlayForget: 'Forget my play settings',
-  setPlayHint: (n: number) => `Remembered for ${n} ${n === 1 ? 'activity' : 'activities'}: where, how far and how many degrees of friends. A sentence like "I want to play padel again before Thursday" in the ask box reuses them.`,
+  setTogetherForget: 'Forget my together settings',
+  setTogetherHint: (n: number) => `Remembered for ${n} ${n === 1 ? 'activity' : 'activities'}: where, how far and how many degrees of friends. A sentence like "I want to play padel again before Thursday" in the ask box reuses them.`,
   addDeviceShort: 'Add a device',
   // Your own name, editable any time: tap yourself in the web, or Settings (owner 2026-10-05).
   meNameTitle: 'Your name',
