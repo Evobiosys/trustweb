@@ -102,8 +102,9 @@ export function push(vault, people, { everyone = false, now = Date.now(), own = 
     if (!abs || !existsSync(abs)) { res.errors.push(`${rel}: not in the vault`); continue }
     const before = readFileSync(abs, 'utf8')
     if (noteOptOut(before)) { res.noHome += list.length; continue }
+    const fileMtime = statSync(abs).mtimeMs
     let text = before
-    for (const p of list) text = upsertBlock(text, p, { now })
+    for (const p of list) text = upsertBlock(text, p, { now, fileMtime })
     if (text === before) res.unchanged += list.length
     else { writeFileSync(abs, text); own.set(rel, statSync(abs).mtimeMs); res.written += list.length }
   }
@@ -134,7 +135,7 @@ export function changes(vault, people) {
       const p = byId.get(b.id)
       if (!p) continue
       const c = blockChanges(b, p, mtime)
-      if (c.ring || c.newLines.length) out.push({ id: b.id, path: rel, ...c })
+      if (c.newLines.length) out.push({ id: b.id, path: rel, newLines: c.newLines })
     }
   }
   return out

@@ -81,19 +81,25 @@ describe('block in the home note', () => {
     expect(b.endsWith('<!-- trustweb:end tana-abc -->\n\n- later note\n')).toBe(true)
     expect(b.match(/trustweb:begin/g)).toHaveLength(1)
   })
-  it('bullets added inside the block are read as new lines and kept until TrustWeb has them; the ring follows newer-wins', () => {
+  it('bullets added inside the block are read as new lines and kept until TrustWeb has them; a ring edited in the file is reported, never applied', () => {
     const a = upsertBlock(note, mira(), { now: NOW })
     const edited = a.replace('ring: friend', 'ring: acquaintance').replace('<!-- trustweb:end tana-abc -->', '- 2026-10-02 Lent me the printer\n- Plays chess\n<!-- trustweb:end tana-abc -->')
     const [b] = parseBlocks(edited)
     expect(b).toMatchObject({ id: 'tana-abc', name: 'Mira Hollenstein', ring: 'acquaintance', updated: NOW })
     expect(b.userLines).toEqual([{ text: 'Lent me the printer', date: '2026-10-02' }, { text: 'Plays chess', date: '' }])
-    expect(blockChanges(b, mira(), NOW + 60_000)).toEqual({ ring: 'acquaintance', newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })
-    expect(blockChanges(b, mira(), NOW)).toEqual({ ring: null, newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })   // file not saved after the block: TrustWeb's ring stands
-    const rewritten = upsertBlock(edited, mira(), { now: NOW + 5000 })
-    expect(rewritten).toContain('- 2026-10-02 Lent me the printer\n<!-- trustweb:end tana-abc -->')
+    expect(blockChanges(b, mira(), NOW + 60_000)).toEqual({ fileRing: 'acquaintance', newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })
+    expect(blockChanges(b, mira(), NOW)).toEqual({ fileRing: null, newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] })   // file not saved after the block
+    // TrustWeb stays as is: the rewrite carries TrustWeb's ring and a note about what the file said; the note survives later rewrites
+    const rewritten = upsertBlock(edited, mira(), { now: NOW + 5000, fileMtime: NOW + 60_000 })
+    expect(rewritten).toContain('· ring: friend ·')
+    expect(rewritten).toContain('- 2026-10-16 note: this file said ring acquaintance; TrustWeb kept friend <!-- tw:note -->\n- 2026-10-02 Lent me the printer\n<!-- trustweb:end tana-abc -->')
+    expect(upsertBlock(rewritten, mira(), { now: NOW + 7000, fileMtime: NOW + 5000 })).toBe(rewritten)
+    expect(parseBlocks(rewritten)[0].notes).toEqual([{ text: 'note: this file said ring acquaintance; TrustWeb kept friend', date: '2026-10-16' }])
+    expect(blockChanges(parseBlocks(rewritten)[0], mira(), NOW + 90_000).newLines).toEqual([{ text: 'Lent me the printer', date: '2026-10-02' }])
+    expect(upsertBlock(edited, mira(), { now: NOW + 5000, fileMtime: NOW })).not.toContain('tw:note')   // the bridge's own write is no edit
     expect(rewritten).not.toContain('- Plays chess\n<!--')
     const p3 = mira(); p3.lines.push(line('tana-abc-2', 'Lent me the printer'))
-    expect(upsertBlock(rewritten, p3, { now: NOW + 9000 })).toContain('- 2026-07-11 Lent me the printer <!-- tw:tana-abc-2 -->\n<!-- trustweb:end tana-abc -->')
+    expect(upsertBlock(rewritten, p3, { now: NOW + 9000 })).toContain('- 2026-07-11 Lent me the printer <!-- tw:tana-abc-2 -->\n- 2026-10-16 note: this file said ring acquaintance; TrustWeb kept friend <!-- tw:note -->\n<!-- trustweb:end tana-abc -->')
   })
 })
 

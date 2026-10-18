@@ -14,8 +14,9 @@ export const COMMUNITY_TAG: string
 export function noteOptOut(text: string): boolean
 export function stripBlocks(text: string): string
 export function noteCommunities(text: string): string[]
-export interface Block { id: string; name: string; ring: string; updated: number; lines: PageLine[]; userLines: { text: string; date: string }[] }
-export function renderBlock(person: Person, o?: { now?: number; keep?: { text: string; date: string }[] }): string
+export interface Block { id: string; name: string; ring: string; updated: number; lines: PageLine[]; userLines: { text: string; date: string }[]; notes: { text: string; date: string }[] }
+export function renderBlock(person: Person, o?: { now?: number; keep?: { text: string; date: string }[]; notes?: { text: string; date: string }[] }): string
+export function fileEdited(block: Block, fileMtime: number): boolean
 export function parseBlocks(text: string): Block[]
-export function upsertBlock(noteText: string, person: Person, o?: { now?: number }): string
-export function blockChanges(block: Block, person: Person, fileMtime: number): { ring: string | null; newLines: { text: string; date: string }[] }
+export function upsertBlock(noteText: string, person: Person, o?: { now?: number; fileMtime?: number }): string
+export function blockChanges(block: Block, person: Person, fileMtime: number): { fileRing: string | null; newLines: { text: string; date: string }[] }
