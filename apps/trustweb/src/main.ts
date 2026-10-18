@@ -61,9 +61,9 @@ import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { channelLink, normalizeHandle } from './channel'
+import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
-  REQUESTABLE, answerPlan, buildContactPayload, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
+  REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
@@ -2223,8 +2223,11 @@ function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
+  const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
-    p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
+    cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
+    cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+    p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     reachedOutRow(p),
     noMessengerRow(p),
@@ -2325,7 +2328,9 @@ function passOnRowFor(p: Person): HTMLElement | null {
 }
 
 function sharedReachRow(p: Person): HTMLElement | null {
-  const shared = sharedReachables(p)
+  // The primary Consensual button of the card already is that link.
+  const onCard = chatOnConsensual(p, st().preferConsensual)
+  const shared = sharedReachables(p).filter((r) => r.channel !== onCard?.channel)
   if (!shared.length) return null
   return el('div', { class: 'ch-row shared' }, [
     ...shared.map((r) => el('a', {
@@ -2634,6 +2639,7 @@ function agreementsFor(p: Person): HTMLElement {
   }
   return agreementsSection({
     name: p.name, agreements: () => now().agreements ?? [], now: Date.now, canPropose: !!peerNow(),
+    consensualLink: consensualReachable(now()) ? CONSENSUAL_AGREEMENTS_LINK : undefined,
     add: (text, expiresAt, propose) => {
       const wantsSend = propose && !!peerNow()
       const a = addAgreement(now(), randomId(8), text, Date.now(), { proposed: wantsSend, expiresAt, appUrl: APP_URL })
@@ -4980,6 +4986,11 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('button', {
+      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
+      // Only "off" is stored: absent means on.
+      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
     el('button', {
       class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
       // Off is stored as absent: the record keeps only what differs from the default.

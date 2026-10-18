@@ -10,7 +10,7 @@
  * Wire: ONE short text inside the already encrypted chat envelope of a paired
  * peer (the pattern share.ts uses for meeting links), never inside the
  * cleartext connect-ack:
- *     <app url>?contact=1#signal=<link>&whatsapp=<+number>&wa=<wa.me/qr link>&matrix=<id>
+ *     <app url>?contact=1#signal=<link>&whatsapp=<+number>&wa=<wa.me/qr link>&matrix=<id>&consensual=<link>
  * `whatsapp` holds a phone number (older builds show it); the wa.me/qr share link travels under its own key `wa`, which an older
  * build drops instead of reading a number out of it. Wave 6e stopped writing the Signal/Molly hint `p=` (it is still read).
  * A build that does not know it shows nothing (share.ts only reads its own
@@ -33,7 +33,7 @@ export type ChannelMap = Partial<Record<Channel, string>>
 
 export const CONTACT_PARAM = 'contact'
 /** Longest single value accepted or sent (a Delta Chat invite is the longest real one). */
-export const CONTACT_VALUE_MAX = 200
+export const CONTACT_VALUE_MAX = 440
 /** The whole text must fit the 500 characters of a chat envelope, with room to spare. */
 export const CONTACT_TEXT_MAX = 480
 const PROVIDER_KEY = 'p'
@@ -63,13 +63,14 @@ export interface BuiltContact {
 
 /**
  * The initial state of the tick beside a contact-box entry: on for a link or id that holds no phone number (a Signal username link,
- * a WhatsApp share-QR link, a Matrix id), never for a phone number. The owner sees the tick and can clear it.
+ * a WhatsApp share-QR link, a Matrix id, a Consensual link), never for a phone number. The owner sees the tick and can clear it.
  */
 export function defaultShareTick(channel: Channel, handle: string): boolean {
   switch (channel) {
     case Channel.Signal: return signalHandleKind(handle) === SignalHandleKind.UsernameLink
     case Channel.WhatsApp: return isWhatsAppQrLink(handle)
-    case Channel.Matrix: return true
+    case Channel.Matrix:
+    case Channel.Consensual: return true
     default: return false
   }
 }
@@ -310,6 +311,19 @@ export function sharedReachables(person: ContactCarrier): Reachable[] {
 }
 
 /**
+ * Wave 14: the Consensual address of a person (typed or shared), when the card's primary button should open it: known AND the setting
+ * "Prefer Consensual for chats" is not off (`prefer` is AppState.preferConsensual: absent = on). Pure, for the card.
+ */
+export function chatOnConsensual(person: ContactCarrier, prefer: false | undefined): Reachable | null {
+  return prefer === false ? null : consensualReachable(person)
+}
+
+/** The Consensual address of a person whatever the setting says (the Agreements link needs only that it is known). */
+export function consensualReachable(person: ContactCarrier): Reachable | null {
+  return reachableChannels(person).find((r) => r.channel === Channel.Consensual) ?? null
+}
+
+/**
  * Wave 6h, S3: their Signal link, when one is known (typed by the owner or shared by them), for the icon next to their name. Review 6h:
  * only a signal.me link (what channel.ts stores today); a value an older build kept that points anywhere else draws no icon, so the
  * "Message on Signal" glyph can never open another site.
@@ -329,8 +343,8 @@ export function primaryReachable(person: ContactCarrier): Reachable | null {
 // ---------------------------------------------------------------------------
 
 export const CONTACT_REQ_PARAM = 'contactreq'
-/** What a card can ask for: the three channels the contact box saves. */
-export const REQUESTABLE: readonly Channel[] = [Channel.Signal, Channel.WhatsApp, Channel.Matrix]
+/** What a card can ask for: the channels the contact box saves. */
+export const REQUESTABLE: readonly Channel[] = [Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Consensual]
 /** A person may be asked again after this long. */
 export const REQ_AGAIN_MS = 24 * 60 * 60 * 1000
 
