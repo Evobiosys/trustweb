@@ -1,11 +1,15 @@
 /** Merging two people: which field values the survivor takes, and which records move over. Pure. */
-import { isSet, valueText } from './fields'
+import { NOTES_KEY, isSet, valueText } from './fields'
 import type { FieldValue, FieldValues } from './fields'
 import type { ContactPoint, FollowUp, Interaction } from './model'
 
 export enum Pick {
   Keep = 'keep',
   Other = 'other',
+  /** Both values, joined. */
+  Both = 'both',
+  /** Neither value: the field ends up empty. */
+  Neither = 'neither',
 }
 
 export interface MergeRow {
@@ -26,9 +30,27 @@ export function mergeRows(keep: FieldValues, other: FieldValues, otherIsNewer: b
     }))
 }
 
-/** The field edits that put the other person's picked values on the survivor. */
+/** Both values in one: " · " between them, a new line for notes. */
+function joined(key: string, a: FieldValue | undefined, b: FieldValue | undefined): FieldValue {
+  return [valueText(a), valueText(b)].filter(Boolean).join(key === NOTES_KEY ? '\n' : ' · ')
+}
+
+/** The pick after tapping × on one side: that side's value drops out. */
+export function dismiss(pick: Pick, side: Pick.Keep | Pick.Other): Pick {
+  const other = side === Pick.Keep ? Pick.Other : Pick.Keep
+  return pick === side || pick === Pick.Neither ? Pick.Neither : pick === Pick.Both ? other : pick
+}
+
+/** The field edits that put the survivor's merged values in place (nothing for a kept value). */
 export function mergeEdits(rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>): [string, FieldValue][] {
-  return rows.filter((r) => (picks[r.key] ?? r.pick) === Pick.Other && r.other !== undefined).map((r) => [r.key, r.other as FieldValue])
+  const edits: [string, FieldValue][] = []
+  for (const r of rows) {
+    const pick = picks[r.key] ?? r.pick
+    if (pick === Pick.Other && r.other !== undefined) edits.push([r.key, r.other])
+    else if (pick === Pick.Both) edits.push([r.key, joined(r.key, r.keep, r.other)])
+    else if (pick === Pick.Neither) edits.push([r.key, ''])
+  }
+  return edits
 }
 
 /** Interactions and follow-ups of `from` re-pointed at `into`; the ids moved (for an undo). */

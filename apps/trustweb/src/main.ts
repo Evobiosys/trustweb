@@ -48,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -79,6 +79,8 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
+import { networkChosen } from './network_graph'
+import { createNetworkView } from './network_view'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -1937,9 +1939,25 @@ function openEvents(eventId?: string): void {
   go(Screen.Events)
 }
 
+const WEB_VIEW_KEY = 'trustweb.ui.webView'
+
+function webViewToggle(network: boolean): HTMLElement {
+  const pick = (value: 'rings' | 'network'): void => {
+    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
+    render()
+  }
+  return el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
+    el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
+    el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+  ])
+}
+
 function screenWeb(): Node[] {
   const s = shown(st())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
+  let stored: string | null = null
+  try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
+  const network = s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
   right.append(...(featureOn(st(), 'events') ? [iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')] : []), search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
@@ -1947,7 +1965,9 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-    ringsView(s, askMarks()),
+    network
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+      : ringsView(s, askMarks()),
     s.people.some((p) => p.reachedOut) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
@@ -1955,6 +1975,7 @@ function screenWeb(): Node[] {
   zoomOnWeb(clip, layer)
   return [
     header(S.webTitle, { right, more: true }),
+    ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2408,7 +2429,7 @@ function tickControlsFor(ch: Channel, after: () => void): HTMLElement {
 }
 
 /**
- * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. Meet > Advanced and Settings both draw it
+ * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. The Meet page and Settings both draw it
  * from here. `changed` runs after a link was saved or removed, `ticked` after a tick was changed (the Meet page redraws its sentence).
  */
 function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () => void }): ContactBox {
@@ -3917,6 +3938,9 @@ async function ensureConnectCode(): Promise<void> {
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
 
+/** owner 2026-10-17: off for now. The button, nfc.ts and the strings stay. */
+const NFC_WRITE_OFFERED = false
+
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
@@ -3927,7 +3951,7 @@ function meetTrustWebPage(): HTMLElement {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
-  const nfc = nfcWriteSupported()
+  const nfc = NFC_WRITE_OFFERED && nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
@@ -3947,11 +3971,12 @@ function meetTrustWebPage(): HTMLElement {
     changed: () => apply(),
     ticked: () => apply(true),
   })
+  const publicVia = el('p', { class: 'meta', 'data-public-link-via': '', hidden: true })
   const sharing = createSharingLine({
     sharing: () => modeSharing(shareModeNow(), st().myChannels, st().contactShare),
     channel: modeChannel,
     controls: () => { const ch = modeChannel(); return ch && mine()[ch] ? tickControlsFor(ch, () => apply(true)) : null },
-    addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
+    addLink: (ch) => box.edit(ch),
   })
   // The long link is set again only when the mode changes its fragment (TrustWeb + Signal / WhatsApp add `via=`).
   let link = ''
@@ -3967,6 +3992,9 @@ function meetTrustWebPage(): HTMLElement {
     copy.disabled = !view.current()
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
+    const via = publicLinkVia(mode)
+    publicVia.hidden = !via
+    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -3985,7 +4013,7 @@ function meetTrustWebPage(): HTMLElement {
     release: (name) => namesSync().release(name),
   })
   const advanced = createAdvanced({
-    contactBox: box.el,
+    modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
     names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })
   // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
@@ -4013,9 +4041,15 @@ function meetTrustWebPage(): HTMLElement {
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     row.el,
+    publicVia,
     qr,
     cameraNote,
     sharing.el,
+    el('div', { 'data-contact-box-on-meet': '' }, [
+      el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
+      el('p', { class: 'meta' }, [S.advLinksHint]),
+      box.el,
+    ]),
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
       el('dt', {}, [S.meetShared]), sharedDd,

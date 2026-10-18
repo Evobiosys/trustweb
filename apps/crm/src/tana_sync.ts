@@ -97,3 +97,9 @@ export async function connect(token: string, fetcher: typeof fetch = fetch): Pro
 export function nodeIdIn(text: string): string | null {
   return /(?:node-?id|"id")["':\s=]+([\w-]{8,14})/i.exec(text)?.[1] ?? /tana:([\w-]{8,14})/.exec(text)?.[1] ?? null
 }
+
+/** The node's own name in a read_node reply (first line, tags and the node-id comment cut off); null when it cannot be told. */
+export function nameIn(text: string): string | null {
+  const line = /^- (.*?)(?:\s+#[^\s<]+)*\s*<!-- node-id:/m.exec(text)
+  return line ? line[1] : null
+}

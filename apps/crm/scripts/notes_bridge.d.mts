@@ -2,7 +2,7 @@ import type { Person } from '../../trustweb/src/model'
 import type { Reading } from './notes_read_persons.mjs'
 export interface BridgeConfig { vault: string; port: number; token: string }
 export interface PushResult { written: number; unchanged: number; noHome: number; pages: number; errors: string[] }
-export interface Change { id: string; path: string; ring: string | null; newLines: { text: string; date: string }[] }
+export interface Change { id: string; path: string; newLines: { text: string; date: string }[] }
 export function readConfig(file?: string): BridgeConfig
 export function writeConfig(c: BridgeConfig, file?: string): void
 export function listNotes(vault: string): string[]

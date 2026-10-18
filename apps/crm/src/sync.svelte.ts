@@ -1,5 +1,4 @@
 /** Saves a field edit, queues it for Tana when the person chose Tana, and pushes the queue (auto or "Sync now"). */
-import { dayKey } from './dates'
 import { mergedFields, baseFields, HIDE_KEY, INTENDING_KEY, NOTES_KEY, SINCE_KEY } from './fields'
 import { InteractionKind } from './model'
 import { entityValues, splitName } from './person_view'
@@ -9,7 +8,7 @@ import { prefs, savePrefs, tanaOn } from './prefs.svelte'
 import { addInteraction, hidePerson, setField, store, unhidePerson } from './state.svelte'
 import { FAMILY_KEY, RING_APPROVED_KEY, RING_KEY } from './rings'
 import { parseSuggestions } from './suggestions'
-import { PERSON_TAG_ID, connect, nodeIdIn, planFieldSync } from './tana_sync'
+import { PERSON_TAG_ID, connect, nameIn, nodeIdIn, planFieldSync } from './tana_sync'
 import type { ToolCall } from './tana_sync'
 import { notesTouched } from './notes_sync.svelte'
 
@@ -68,10 +67,10 @@ export function renamePerson(personId: string, from: string, to: string): void {
   if (prefs.autoSync) void flush()
 }
 
-/** Queues one note line ("2026-10-14 text") for Tana's "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
-export function noteToTana(personId: string, text: string, at: number = Date.now()): void {
+/** Queues one note line (the text only, Tana stamps the time itself) for "Notes from TrustWeb"; pushed at once (auto sync) or with "Sync now". */
+export function noteToTana(personId: string, text: string): void {
   if (!tanaOn()) return
-  prefs.queue.push({ personId, key: NOTES_KEY, append: `${dayKey(at)} ${text.replace(/\s+/g, ' ').trim()}` })
+  prefs.queue.push({ personId, key: NOTES_KEY, append: text.replace(/\s+/g, ' ').trim() })
   savePrefs()
   if (prefs.autoSync) void flush()
 }
@@ -95,10 +94,10 @@ export function untagPerson(personId: string): void {
   hidePerson(personId)
 }
 
-/** After a merge: the loser's Tana node moves under the survivor's (queued behind the note and the hide). */
-export function moveUnder(personId: string, intoId: string): void {
+/** After a merge: the loser's Tana node moves under the survivor's and is renamed "merged duplicate: <name>" (queued behind the note and the hide). */
+export function moveUnder(personId: string, intoId: string, name: string): void {
   if (!tanaOn() || !knownNode(personId) || !knownNode(intoId)) return
-  prefs.queue.push({ personId, key: MOVE_KEY, into: intoId })
+  prefs.queue.push({ personId, key: MOVE_KEY, into: intoId }, { personId, key: RENAME_KEY, rename: { from: name, to: `merged duplicate: ${name}` } })
   savePrefs()
   if (prefs.autoSync) void flush()
 }
@@ -136,7 +135,10 @@ async function nodeFor(call: ToolCall, personId: string): Promise<string> {
 
 async function push(call: ToolCall, item: { personId: string; key: string; approved?: boolean; append?: string; into?: string; rename?: { from: string; to: string } }): Promise<void> {
   if (item.key === RENAME_KEY && item.rename) {
-    await call('edit_node', { nodeId: await nodeFor(call, item.personId), name: { old_string: item.rename.from, new_string: item.rename.to } })
+    // Tana's search/replace needs the node's exact current name, which can differ from the one shown here.
+    const nodeId = await nodeFor(call, item.personId)
+    const current = nameIn(await call('read_node', { nodeId, maxDepth: 0 })) ?? item.rename.from
+    await call('edit_node', { nodeId, name: { old_string: current, new_string: item.rename.to } })
     log(`${item.rename.from}: renamed to ${item.rename.to} in Tana`)
     return
   }

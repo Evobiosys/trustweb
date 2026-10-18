@@ -1,1 +1,1 @@
-{"title":"Web Curator inside the app","hint":"Top right outliner glyph > Web Curator; tap a person: the Curator page.","selector":"[data-view=curator]"}
+{"title":"Network graph: rings, pins, Logseq style","hint":"Web tab > Network. Drag a node to pin it; ⋯ menu: Logseq style, Forces, Export.","selector":"[data-view=network]"}

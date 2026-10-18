@@ -50,11 +50,14 @@
     <RingChips current={ring} {family} onchoose={(c): void => { fileUnder(personId, c); reminder = c === Ring.Intending ? intendingNotice(personId) : []; open = reminder.length > 0 }} onfamily={(on): void => { setFamily(personId, on) }} />
     {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
     <button class="link" data-action="ring-advanced" aria-expanded={more} onclick={(): void => { more = !more }}>{more ? S.ringAdvancedHide : S.ringAdvanced}</button>
-    {#if more}<RingAdvanced {personId} ongone={gone} />{/if}
-    <div class="add-actions">
-      <button class="btn small ghost" data-action="ring-delete" onclick={(): void => { asking = 'delete' }}>{S.ringDelete}</button>
-      {#if tanaOn()}<button class="btn small ghost" data-action="ring-untag" onclick={(): void => { asking = 'untag' }}>{S.ringUntag}</button>{/if}
-    </div>
+    {#if more}
+      <div class="add-actions danger">
+        <button class="quiet" data-action="ring-delete" onclick={(): void => { asking = 'delete' }}>{S.ringDelete}</button>
+        {#if tanaOn()}<button class="quiet" data-action="ring-untag" onclick={(): void => { asking = 'untag' }}>{S.ringUntag}</button>{/if}
+      </div>
+      <p class="muted">{S.ringCloseness}</p>
+      <RingAdvanced {personId} ongone={gone} />
+    {/if}
     {#if asking}
       <div class="ring-sheet" role="alertdialog" data-part="ring-sheet">
         <p>{asking === 'delete' ? S.ringDeleteAsk(name) : S.ringUntagAsk(name)}</p>
