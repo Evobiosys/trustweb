@@ -26,8 +26,9 @@ export function mergePeople(keepId: string, otherId: string, rows: readonly Merg
   const fieldUndo = apply(keepId, edits, before)
   const recordsUndo = mergeRecords(otherId, keepId)
   noteToTana(otherId, `merged into ${keepName}`)
+  noteToTana(keepId, `merged ${otherName}`)
   hideFromTrustweb(otherId)
-  moveUnder(otherId, keepId)
+  moveUnder(otherId, keepId, otherName)
   clearTimeout(timer)
   lastMerge.name = otherName
   lastMerge.undo = (): void => {

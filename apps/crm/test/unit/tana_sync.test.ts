@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { manualItems, parseRpc, planFieldSync } from '../../src/tana_sync'
+import { manualItems, nameIn, parseRpc, planFieldSync } from '../../src/tana_sync'
 
 describe('tana sync plan', () => {
   it('maps content, option, checkbox and email edits to Tana tools', () => {
@@ -22,5 +22,10 @@ describe('tana sync plan', () => {
     expect(parseRpc('{"result":{"content":[{"text":"ok"}]}}').result?.content?.[0].text).toBe('ok')
     expect(parseRpc('event: message\ndata: {"result":{}}\n\n')).toEqual({ result: {} })
     expect(parseRpc('')).toEqual({})
+  })
+  it('reads the node name from a live read_node reply', () => {
+    expect(nameIn('- Ramakrishna #person <!-- node-id: eOW0VvopwvO_ -->\n  - *[... 8 children truncated due to depth limit]*\n')).toBe('Ramakrishna')
+    expect(nameIn('- Ann Lee #person #famous <!-- node-id: abc -->')).toBe('Ann Lee')
+    expect(nameIn('nothing')).toBeNull()
   })
 })
