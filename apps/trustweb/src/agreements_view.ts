@@ -45,6 +45,7 @@ export function agreementsSection(d: AgreementsDeps): HTMLElement {
   const list = d.agreements()
   return el('div', { class: 'agreements', 'data-agreements': '1' }, [
     el('h4', { class: 'eyebrow' }, [S.agrTitle]),
+    el('p', { class: 'meta', 'data-agreements-beta': '1' }, [S.agreementsBetaNote]),
     list.length ? el('div', {}, list.map((a) => lineRow(d, a))) : el('p', { class: 'meta' }, [S.agrNone(d.name)]),
     el('div', { class: 'cb-row editing' }, [
       text, el('label', { class: 'meta' }, [S.agrExpiry + ' ', until]),

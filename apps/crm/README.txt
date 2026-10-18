@@ -50,6 +50,9 @@ DEV RECORD (dev server only; a build ignores it)
                                  + the note line "merged into <name>". Undo toast for 30 s.
   TW_CRM_TANA_TOKEN=<token>      dev server only: preloads Tana sync ON (auto, 2 s) on a device that never saved its choice.
                                  Never in a build.
+  TW_CRM_STOCK_URL=<url>         dev server only: target of the overlay's "Open stock preview" button (hidden when unset).
+                                 The overlay's NEW <n> badge counts dev-server starts (~/.cache/trustweb-dev/build-counter-<branch>);
+                                 "Approve personal preview" POSTs /__tw/approve (loopback, same origin) -> approvals/<branch>-<sha>.txt.
 
 PULL FROM TANA (the other direction; the CRM only pushes field edits)
   TW_CRM_TANA_TOKEN=... node scripts/tana_pull_persons.mjs <persons-index.json> <persons-nodes.json> [--only id,...] [--since ISO]

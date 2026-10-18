@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Pick, joinPoints, linesToAdd, mergeEdits, mergeRows, repoint } from '../../src/merge'
+import { Pick, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, repoint } from '../../src/merge'
 import { ContactPointKind, InteractionKind } from '../../src/model'
 
 describe('merge', () => {
@@ -23,5 +23,13 @@ describe('merge', () => {
     expect(joinPoints([p], [p, { kind: ContactPointKind.Email, value: 'a@example.at' }])).toHaveLength(2)
     const l = (text: string, tag = 'note') => ({ text, tag })
     expect(linesToAdd([l('x')], [l('x'), l('y'), l('ring: derived'), l('x', 'custom')])).toEqual([l('y'), l('x', 'custom')])
+  })
+  it('adds both values, joins notes on a new line, and lets a side be dismissed', () => {
+    const rows = mergeRows({ a: 'x', IVe9VSySDcS1: 'n1' }, { a: 'y', IVe9VSySDcS1: 'n2' }, true)
+    expect(mergeEdits(rows, { a: Pick.Both, IVe9VSySDcS1: Pick.Both })).toEqual([['a', 'x · y'], ['IVe9VSySDcS1', 'n1\nn2']])
+    expect(mergeEdits(rows, { a: Pick.Neither })).toContainEqual(['a', ''])
+    expect(dismiss(Pick.Keep, Pick.Keep)).toBe(Pick.Neither)
+    expect(dismiss(Pick.Both, Pick.Keep)).toBe(Pick.Other)
+    expect(dismiss(Pick.Other, Pick.Keep)).toBe(Pick.Other)
   })
 })

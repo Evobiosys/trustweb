@@ -4,6 +4,7 @@
  * every build it is null, so this code and the record never reach a bundle. File-only: the record lives outside the repo.
  */
 import { mergeDevEvents, pickDevEvents } from './dev_events'
+import type { AppState } from './model'
 import { parseRecord, storageKey } from './store'
 
 declare const __TW_DEV_RECORD__: { file: string; text: string } | null | undefined
@@ -28,7 +29,27 @@ function stamp(text: string): string {
 function withKeptEvents(seed: string, replaced: string | null): string {
   const old = replaced === null ? null : parseRecord(replaced)
   const next = parseRecord(seed)
-  return old && next && mergeDevEvents(next, pickDevEvents(old)) ? JSON.stringify(next) : seed
+  if (!old || !next) return seed
+  const events = mergeDevEvents(next, pickDevEvents(old))
+  const placed = keepPlacements(next, old)
+  return events || placed ? JSON.stringify(next) : seed
+}
+
+/**
+ * A re-applied seed never moves what the phone placed (Jakob 2026-10-16: "if there is a fight, TrustWeb stays as is"): for every
+ * person in both, the stored ring, intending value and dot angle win over the seed's. Returns whether anything was kept.
+ */
+export function keepPlacements(next: AppState, old: AppState): boolean {
+  const was = new Map(old.people.map((p) => [p.id, p]))
+  let kept = false
+  for (const p of next.people) {
+    const o = was.get(p.id)
+    if (!o) continue
+    if (o.ring !== p.ring) { p.ring = o.ring; delete p.ringSuggested; kept = true }
+    if (o.intending && JSON.stringify(o.intending) !== JSON.stringify(p.intending)) { p.intending = o.intending; kept = true }
+    if (o.angle !== undefined && o.angle !== p.angle) { p.angle = o.angle; kept = true }
+  }
+  return kept
 }
 
 /**

@@ -22,16 +22,15 @@ describe('notes client', () => {
     expect(out[0].lines.map((l) => [l.id, l.text, l.notedAt])).toEqual([['a0', 'Plays chess', 1], ['crm-i1', 'test', 7], ['crm-i2', 'Met (Café Prückel)', 8]])
     expect(out[1].lines).toEqual([])
   })
-  it('applies rings (valid, different) and added bullets (new text only) with local provenance and the bullet\'s date', () => {
+  it('applies added bullets (new text only) with local provenance and the bullet\'s date; never a ring', () => {
     const calls: unknown[] = []
     const r = applyChanges([
-      { id: 'tana-a', path: 'journals/2026_07_11.md', ring: 'close', newLines: [{ text: 'Plays chess', date: '' }, { text: 'Lent me the printer', date: '2026-10-02' }, { text: ' ', date: '' }] },
-      { id: 'local-b', path: 'pages/Ben.md', ring: 'bogus', newLines: [{ text: 'Likes tea', date: '' }] },
-      { id: 'gone', path: 'x.md', ring: 'close', newLines: [{ text: 'x', date: '' }] },
-    ], people(), { setRing: (id, ring) => calls.push(['ring', id, ring]), addLine: (id, l) => calls.push(['line', id, l.text, l.notedAt, l.source]), now: () => 5000, newId: () => 'n1' })
-    expect(r).toEqual({ rings: 1, lines: 2 })
+      { id: 'tana-a', path: 'journals/2026_07_11.md', newLines: [{ text: 'Plays chess', date: '' }, { text: 'Lent me the printer', date: '2026-10-02' }, { text: ' ', date: '' }] },
+      { id: 'local-b', path: 'pages/Ben.md', newLines: [{ text: 'Likes tea', date: '' }] },
+      { id: 'gone', path: 'x.md', newLines: [{ text: 'x', date: '' }] },
+    ], people(), { addLine: (id, l) => calls.push(['line', id, l.text, l.notedAt, l.source]), now: () => 5000, newId: () => 'n1' })
+    expect(r).toEqual({ lines: 2 })
     expect(calls).toEqual([
-      ['ring', 'tana-a', 'close'],
       ['line', 'tana-a', 'Lent me the printer', Date.parse('2026-10-02T12:00:00Z'), { kind: 'local', path: 'journals/2026_07_11.md' }],
       ['line', 'local-b', 'Likes tea', 5000, { kind: 'local', path: 'pages/Ben.md' }],
     ])

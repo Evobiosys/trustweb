@@ -88,6 +88,8 @@ export function createShareRow(o: ShareRowOptions): ShareRow {
 }
 
 export interface AdvancedOptions {
+  /** Only Signal / Only WhatsApp (share_modes.ts advancedModes): the same buttons as the row; picking one works as in the row. */
+  modes: { list: () => ShareMode[]; current: () => ShareMode; pick: (mode: ShareMode) => void }
   /** The names block (names_view.ts). `available` is false until this phone holds a code on the server. */
   names: { available: () => boolean; el: HTMLElement }
 }
@@ -104,8 +106,15 @@ export function createAdvanced(o: AdvancedOptions): AdvancedView {
   const root = el('div', { class: 'advanced' }, [panel])
 
   const refresh = (): void => {
+    const cur = o.modes.current()
+    const list = o.modes.list()
+    const modes = list.length
+      ? el('div', { class: 'seg', role: 'group', 'aria-label': S.shareRowLabel, 'data-advanced-modes': '' }, list.map((m) => el('button', {
+          class: cur === m ? 'on' : '', type: 'button', 'aria-pressed': String(cur === m), 'data-mode': m, onclick: () => o.modes.pick(m),
+        }, [S.shareMode[m]])))
+      : null
     // The names block is built once and only moved here, so a redraw never clears what is being typed.
-    panel.replaceChildren(...(o.names.available() ? [o.names.el] : []))
+    panel.replaceChildren(...(modes ? [modes] : []), ...(o.names.available() ? [o.names.el] : []))
   }
   refresh()
   return {

@@ -2,7 +2,7 @@
   import { norm } from './contacts'
   import { shownName } from './display'
   import { fieldById, fieldLabelOf, valueText } from './fields'
-  import { Pick, linesToAdd, mergeRows } from './merge'
+  import { Pick, dismiss, linesToAdd, mergeRows } from './merge'
   import { mergePeople } from './merge.svelte'
   import { openPerson } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
@@ -79,8 +79,15 @@
     {#each rows as r (r.key)}
       <div class="merge-row" data-merge-row={r.key}>
         <strong>{label(r.key)}</strong>
-        <label><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Keep} onchange={(): void => { picks[r.key] = Pick.Keep }} />{valueText(r.keep) || '—'}</label>
-        <label><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Other} onchange={(): void => { picks[r.key] = Pick.Other }} />{valueText(r.other) || '—'}</label>
+        {#each [[Pick.Keep, r.keep], [Pick.Other, r.other]] as [side, v] (side)}
+          {@const pick = picks[r.key] ?? r.pick}
+          {@const taken = pick === side || pick === Pick.Both}
+          <span class="merge-side" data-side={side}>
+            <label><input type="radio" name={`merge-${r.key}`} checked={pick === side} onchange={(): void => { picks[r.key] = side as Pick }} /><span class:dropped={!taken}>{valueText(v) || '—'}</span></label>
+            <button class="quiet" data-action="merge-dismiss" aria-label={S.mergeDismiss} onclick={(): void => { picks[r.key] = dismiss(pick, side as Pick.Keep | Pick.Other) }}>×</button>
+          </span>
+        {/each}
+        <label class="merge-both"><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Both} onchange={(): void => { picks[r.key] = Pick.Both }} />{S.mergeBoth}</label>
       </div>
     {/each}
     <p>{S.mergeAdds(added, events)}</p>
