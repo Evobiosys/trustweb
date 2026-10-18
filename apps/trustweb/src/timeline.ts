@@ -19,6 +19,7 @@
  */
 import type { AppState, Person } from './model'
 import { stripUnsafe } from './safe_text'
+import { MAX_TIME } from './agreements'
 import { S } from './strings'
 
 export enum TlChannel {
@@ -62,7 +63,7 @@ export const TIMELINE_MAX = 5000
 export const IMPORT_MAX_BYTES = 2_000_000
 
 const oneOf = <T extends string>(all: readonly T[], v: unknown): T | undefined => all.find((a) => a === v)
-const line = (v: unknown, max: number): string => (typeof v === 'string' ? stripUnsafe(v).replace(/\s+/g, ' ').trim().slice(0, max) : '')
+const line = (v: unknown, max: number): string => (typeof v === 'string' ? [...stripUnsafe(v).replace(/\s+/g, ' ').trim()].slice(0, max).join('') : '')
 
 /** One entry as it is stored, or null when it is unusable (no time, unknown channel or direction, empty summary). */
 export function cleanEntry(raw: unknown, source: TlSource): TimelineEntry | null {
@@ -71,12 +72,12 @@ export function cleanEntry(raw: unknown, source: TlSource): TimelineEntry | null
   const channel = oneOf(TL_CHANNELS, r.channel)
   const direction = oneOf(Object.values(TlDirection), r.direction)
   const summary = line(r.summary, SUMMARY_MAX)
-  if (!channel || !direction || !summary || typeof r.at !== 'number' || !Number.isFinite(r.at) || r.at <= 0) return null
+  if (!channel || !direction || !summary || typeof r.at !== 'number' || !Number.isFinite(r.at) || r.at <= 0 || r.at > MAX_TIME) return null
   const ref = line(r.ref, REF_MAX)
   return { at: Math.round(r.at), channel, direction, summary, ...(ref ? { ref } : {}), source }
 }
 
-const keyOf = (e: TimelineEntry): string => `${e.at}|${e.channel}|${e.direction}|${e.summary}`
+export const keyOf = (e: TimelineEntry): string => `${e.at}|${e.channel}|${e.direction}|${e.summary}`
 
 /** Adds entries to the person (newest first order is made when drawing); returns how many went in. Duplicates and overflow are skipped. */
 export function addEntries(p: Person, entries: readonly TimelineEntry[]): number {

@@ -89,3 +89,13 @@ describe('privacy', () => {
     expect(JSON.stringify(threads)).not.toContain('garden plan')
   })
 })
+
+describe('R8: code points and time bounds', () => {
+  it('cuts a summary by code points (no broken pair) and drops an import time beyond the Date range', () => {
+    const e = cleanEntry({ at: 5, channel: 'email', direction: 'in', summary: '😀'.repeat(300) }, TlSource.Import)
+    expect([...e.summary]).toHaveLength(SUMMARY_MAX)
+    expect(e.summary).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    const r = parseTimelineImport(JSON.stringify([{ at: 1e20, channel: 'email', direction: 'in', summary: 'x' }, { at: -5, channel: 'email', direction: 'in', summary: 'x' }]))
+    expect(r).toMatchObject({ entries: [], skipped: 2 })
+  })
+})

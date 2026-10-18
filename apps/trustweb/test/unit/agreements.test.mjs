@@ -82,3 +82,28 @@ describe('record', () => {
     expect(JSON.stringify(threads)).not.toMatch(/SECRET/)
   })
 })
+
+describe('PR #24 review fixes (R1, R6, R7, R9)', () => {
+  const day = (at) => (Number.isFinite(at) && Math.abs(at) <= 8.64e15 ? new Date(at).toISOString() : '')
+  it('R1: an expiry beyond the Date range is refused when parsed, dropped in repair, and never set locally', () => {
+    const url = `${APP}?agree=1#id=a1&t=hi&e=1e20`
+    expect(parseAgreementText(APP, url)).toEqual({ kind: 'propose', id: 'a1', text: 'hi' })
+    const s = { people: [{ agreements: [{ id: 'a1', text: 'x', at: 1, status: 'mine', expiresAt: 1e20 }, { id: 'a2', text: 'y', at: 1, status: 'mine', expiresAt: 5 }] }] }
+    repairAgreements(s)
+    expect(s.people[0].agreements.map((a) => a.id)).toEqual(['a2'])
+    expect(addAgreement({}, 'a3', 'z', NOW, { expiresAt: 1e20 })).not.toHaveProperty('expiresAt')
+    expect(day(1e20)).toBe('')
+  })
+  it('R6: a proposal whose encoded text exceeds 500 characters is refused (non-ASCII expands when encoded)', () => {
+    const p = {}
+    expect(addAgreement(p, 'a1', 'é'.repeat(100), NOW, { proposed: true, appUrl: APP })).toBeNull()
+    expect(addAgreement(p, 'a2', 'é'.repeat(100), NOW)).not.toBeNull()
+    expect(proposalText(APP, p.agreements[0])).toBeNull()
+    expect(proposalText(APP, { id: 'a', text: 'short', at: 1, status: 'proposed' }).length).toBeLessThanOrEqual(500)
+  })
+  it('R7: repair counts code points like cleanText', () => {
+    const text = '😀'.repeat(200)
+    const s = { people: [{ agreements: [{ id: 'a1', text, at: 1, status: 'mine' }] }] }
+    expect(repairAgreements(s)).toBe(false)
+  })
+})

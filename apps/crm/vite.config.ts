@@ -1,4 +1,4 @@
-// TrustWeb CRM build config. Own toolchain (node_modules in this directory),
+// Web Curator build config. Own toolchain (node_modules in this directory),
 // unlike apps/trustweb which borrows apps/demo's Vite. fs.allow reaches the
 // repo root because src/ imports apps/trustweb/src/model.ts and strings.ts.
 //

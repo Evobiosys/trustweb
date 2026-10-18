@@ -4,6 +4,7 @@
  * every build it is null, so this code and the record never reach a bundle. File-only: the record lives outside the repo.
  */
 import { mergeDevEvents, pickDevEvents } from './dev_events'
+import { addNetworkDemo } from './network_seed'
 import type { AppState } from './model'
 import { parseRecord, storageKey } from './store'
 
@@ -29,10 +30,11 @@ function stamp(text: string): string {
 function withKeptEvents(seed: string, replaced: string | null): string {
   const old = replaced === null ? null : parseRecord(replaced)
   const next = parseRecord(seed)
-  if (!old || !next) return seed
-  const events = mergeDevEvents(next, pickDevEvents(old))
-  const placed = keepPlacements(next, old)
-  return events || placed ? JSON.stringify(next) : seed
+  if (!next) return seed
+  const added = addNetworkDemo(next)
+  const events = old !== null && mergeDevEvents(next, pickDevEvents(old))
+  const placed = old !== null && keepPlacements(next, old)
+  return added || events || placed ? JSON.stringify(next) : seed
 }
 
 /**
