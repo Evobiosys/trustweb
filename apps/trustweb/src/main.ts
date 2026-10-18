@@ -48,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -2409,7 +2409,7 @@ function tickControlsFor(ch: Channel, after: () => void): HTMLElement {
 }
 
 /**
- * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. Meet > Advanced and Settings both draw it
+ * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. The Meet page and Settings both draw it
  * from here. `changed` runs after a link was saved or removed, `ticked` after a tick was changed (the Meet page redraws its sentence).
  */
 function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () => void }): ContactBox {
@@ -3906,6 +3906,9 @@ async function ensureConnectCode(): Promise<void> {
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
 
+/** owner 2026-10-17: off for now. The button, nfc.ts and the strings stay. */
+const NFC_WRITE_OFFERED = false
+
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
   const qr = el('div', { class: 'qrwrap' })
@@ -3916,7 +3919,7 @@ function meetTrustWebPage(): HTMLElement {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
-  const nfc = nfcWriteSupported()
+  const nfc = NFC_WRITE_OFFERED && nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
@@ -3936,11 +3939,12 @@ function meetTrustWebPage(): HTMLElement {
     changed: () => apply(),
     ticked: () => apply(true),
   })
+  const publicVia = el('p', { class: 'meta', 'data-public-link-via': '', hidden: true })
   const sharing = createSharingLine({
     sharing: () => modeSharing(shareModeNow(), st().myChannels, st().contactShare),
     channel: modeChannel,
     controls: () => { const ch = modeChannel(); return ch && mine()[ch] ? tickControlsFor(ch, () => apply(true)) : null },
-    addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
+    addLink: (ch) => box.edit(ch),
   })
   // The long link is set again only when the mode changes its fragment (TrustWeb + Signal / WhatsApp add `via=`).
   let link = ''
@@ -3956,6 +3960,9 @@ function meetTrustWebPage(): HTMLElement {
     copy.disabled = !view.current()
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
+    const via = publicLinkVia(mode)
+    publicVia.hidden = !via
+    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -3974,7 +3981,7 @@ function meetTrustWebPage(): HTMLElement {
     release: (name) => namesSync().release(name),
   })
   const advanced = createAdvanced({
-    contactBox: box.el,
+    modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
     names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })
   // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
@@ -4002,9 +4009,15 @@ function meetTrustWebPage(): HTMLElement {
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     row.el,
+    publicVia,
     qr,
     cameraNote,
     sharing.el,
+    el('div', { 'data-contact-box-on-meet': '' }, [
+      el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
+      el('p', { class: 'meta' }, [S.advLinksHint]),
+      box.el,
+    ]),
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
       el('dt', {}, [S.meetShared]), sharedDd,
