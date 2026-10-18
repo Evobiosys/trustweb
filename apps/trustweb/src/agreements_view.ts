@@ -18,6 +18,9 @@ export interface AgreementsDeps {
   resend: (id: string) => void
 }
 
+/** Open state of the folded section, per device. */
+const OPEN_KEY = 'trustweb.ui.agreementsOpen'
+
 const day = (at: number): string => (Number.isFinite(at) && Math.abs(at) <= MAX_TIME ? new Date(at).toISOString().slice(0, 10) : '')
 
 function lineRow(d: AgreementsDeps, a: Agreement): HTMLElement {
@@ -43,8 +46,7 @@ export function agreementsSection(d: AgreementsDeps): HTMLElement {
   }
   text.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
   const list = d.agreements()
-  return el('div', { class: 'agreements', 'data-agreements': '1' }, [
-    el('h4', { class: 'eyebrow' }, [S.agrTitle]),
+  const body = el('div', { class: 'agreements', 'data-agreements': '1' }, [
     el('p', { class: 'meta', 'data-agreements-beta': '1' }, [S.agreementsBetaNote]),
     list.length ? el('div', {}, list.map((a) => lineRow(d, a))) : el('p', { class: 'meta' }, [S.agrNone(d.name)]),
     el('div', { class: 'cb-row editing' }, [
@@ -55,4 +57,11 @@ export function agreementsSection(d: AgreementsDeps): HTMLElement {
     d.consensualLink ? el('a', { class: 'btn btn-ghost btn-sm', href: d.consensualLink, target: '_blank', rel: 'noopener noreferrer', 'data-agr-consensual': '1' }, [S.consPropose]) : null,
     el('p', { class: 'meta' }, [S.agrHint]),
   ])
+  const summary = el('summary', { class: 'adv-toggle' })
+  const wrap = el('details', { 'data-agreements-section': '1' }, [summary, body]) as HTMLDetailsElement
+  const paint = (): void => { summary.textContent = `${S.agrTitle} ${wrap.open ? '▴' : '▾'}` }
+  try { wrap.open = localStorage.getItem(OPEN_KEY) === '1' } catch { /* closed */ }
+  paint()
+  wrap.addEventListener('toggle', () => { paint(); try { localStorage.setItem(OPEN_KEY, wrap.open ? '1' : '0') } catch { /* ignore */ } })
+  return wrap
 }

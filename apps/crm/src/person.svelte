@@ -31,8 +31,10 @@
     personId: string
     /** Where the back arrow and a hidden person go; the Curator tab's own list by default. */
     onclose?: () => void
+    /** Inside the host's person card, which shows the name and its own close bar: no back arrow, no second big name. */
+    embedded?: boolean
   }
-  const { personId, onclose = closePerson }: Props = $props()
+  const { personId, onclose = closePerson, embedded = false }: Props = $props()
 
   let form = $state<PersonForm>(PersonForm.None)
   let editing = $state<string | null>(null)
@@ -91,7 +93,7 @@
 </script>
 
 <section class="person" data-screen="person">
-  <button class="back" onclick={onclose}>&larr; {S.back}</button>
+  {#if !embedded}<button class="back" onclick={onclose}>&larr; {S.back}</button>{/if}
   {#if person}
     <div class="person-head">
       <Avatar id={person.id} name={shownName(person.name)} />
@@ -101,7 +103,7 @@
           <input class="field name-edit" data-field="name-edit" aria-label={S.renameName} autofocus value={person.name}
             onblur={(e): void => { if (renaming) rename(person.name, e.currentTarget.value) }}
             onkeydown={(e): void => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') renaming = false }} />
-        {:else}
+        {:else if !embedded}
           <h2><button class="name-btn" data-action="name-edit" title={S.renameName} onclick={(): void => { renaming = true }}>{shownName(person.name)}</button></h2>
         {/if}
         <p class="meta-line"><RingLabel personId={person.id} ring={person.ring} /> · {meta}</p>

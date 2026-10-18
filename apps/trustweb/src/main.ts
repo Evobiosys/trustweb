@@ -2224,6 +2224,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
+    el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text]),
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -2239,8 +2240,8 @@ function personSheet(personId: string): void {
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
+    curator.person(p.id, closeSheet, { embedded: true }),
     agreementsFor(p),
-    curator.person(p.id, closeSheet),
     blockRow(p),
   ])
   cardOpenFor = p.id
