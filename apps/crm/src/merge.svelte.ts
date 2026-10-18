@@ -18,11 +18,11 @@ function nameOf(id: string): string {
 }
 
 /** Merges `otherId` into `keepId`; the survivor keeps its id (and Tana node). */
-export function mergePeople(keepId: string, otherId: string, rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>): void {
+export function mergePeople(keepId: string, otherId: string, rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>, custom: Readonly<Record<string, string>> = {}): void {
   const keepName = nameOf(keepId)
   const otherName = nameOf(otherId)
   const before = valuesOf(keepId)
-  const edits = mergeEdits(rows, picks)
+  const edits = mergeEdits(rows, picks, custom)
   const fieldUndo = apply(keepId, edits, before)
   const recordsUndo = mergeRecords(otherId, keepId)
   noteToTana(otherId, `merged into ${keepName}`)

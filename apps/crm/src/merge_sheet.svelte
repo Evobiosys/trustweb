@@ -2,7 +2,7 @@
   import { norm } from './contacts'
   import { shownName } from './display'
   import { fieldById, fieldLabelOf, valueText } from './fields'
-  import { Pick, clearedCount, dismiss, linesToAdd, mergeRows, neitherAllowed } from './merge'
+  import { Pick, clearedCount, customAllowed, dismiss, linesToAdd, mergeRows, neitherAllowed } from './merge'
   import { mergePeople } from './merge.svelte'
   import { openPerson } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
@@ -22,6 +22,8 @@
   let otherId = $state<string | null>(null)
   let keepOther = $state(false)
   let picks = $state<Record<string, Pick>>({})
+  /** The values typed under "Other value", by field. */
+  let custom = $state<Record<string, string>>({})
 
   const hits = $derived(query.trim()
     ? store.app.people.filter((p) => p.id !== personId && norm(p.name).includes(norm(query.trim()))).slice(0, 30)
@@ -47,12 +49,13 @@
     otherId = null
     keepOther = false
     picks = {}
+    custom = {}
   }
 
   function go(): void {
     if (!dropId) return
     const survivor = keepId
-    mergePeople(survivor, dropId, rows, picks)
+    mergePeople(survivor, dropId, rows, picks, custom)
     reset()
     openPerson(survivor)
   }
@@ -74,8 +77,8 @@
 {:else}
   <div class="ring-sheet" data-part="merge-sheet">
     <div class="ring-chips" role="radiogroup">
-      <button class="rchip" data-action="merge-keep" data-keep="this" aria-pressed={!keepOther} onclick={(): void => { keepOther = false; picks = {} }}>{S.mergeKeep(nameOf(personId))}</button>
-      <button class="rchip" data-action="merge-keep" data-keep="other" aria-pressed={keepOther} onclick={(): void => { keepOther = true; picks = {} }}>{S.mergeKeep(nameOf(otherId))}</button>
+      <button class="rchip" data-action="merge-keep" data-keep="this" aria-pressed={!keepOther} onclick={(): void => { keepOther = false; picks = {}; custom = {} }}>{S.mergeKeep(nameOf(personId))}</button>
+      <button class="rchip" data-action="merge-keep" data-keep="other" aria-pressed={keepOther} onclick={(): void => { keepOther = true; picks = {}; custom = {} }}>{S.mergeKeep(nameOf(otherId))}</button>
     </div>
     {#each rows as r (r.key)}
       <div class="merge-row" data-merge-row={r.key}>
@@ -85,13 +88,20 @@
           {@const taken = pick === side || pick === Pick.Both}
           <span class="merge-side" data-side={side}>
             <label><input type="radio" name={`merge-${r.key}`} checked={pick === side} onchange={(): void => { picks[r.key] = side as Pick }} /><span class="merge-val" class:dropped={!taken} title={valueText(v)}>{valueText(v) || '—'}</span></label>
-            {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId))}
+            {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId), custom)}
               <button class="quiet" data-action="merge-dismiss" aria-label={S.mergeDismiss} onclick={(): void => { picks[r.key] = dismiss(pick, side as Pick.Keep | Pick.Other) }}>×</button>
             {/if}
           </span>
         {/each}
         <label class="merge-both"><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Both} onchange={(): void => { picks[r.key] = Pick.Both }} />{S.mergeBoth}</label>
-        {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId))}
+        {#if customAllowed(r.key)}
+          <span class="merge-custom">
+            <label><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Custom} onchange={(): void => { picks[r.key] = Pick.Custom }} />{S.mergeCustom}</label>
+            <input class="field" type="text" data-field="merge-custom" data-key={r.key} placeholder={S.mergeCustomPh} aria-label={`${label(r.key)}: ${S.mergeCustom}`}
+              value={custom[r.key] ?? ''} oninput={(e): void => { custom[r.key] = e.currentTarget.value; picks[r.key] = Pick.Custom }} />
+          </span>
+        {/if}
+        {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId), custom)}
           <label class="merge-neither"><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Neither} onchange={(): void => { picks[r.key] = Pick.Neither }} />{S.mergeNeither}</label>
         {/if}
       </div>

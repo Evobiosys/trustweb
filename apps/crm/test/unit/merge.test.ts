@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Pick, clearedCount, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, neitherAllowed, repoint } from '../../src/merge'
+import { Pick, clearedCount, customAllowed, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, neitherAllowed, repoint } from '../../src/merge'
 import { LAST_NAME_KEY } from '../../src/placement'
 import { ContactPointKind, InteractionKind } from '../../src/model'
 
@@ -43,5 +43,16 @@ describe('merge', () => {
     expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Neither }, {})).toBe(false)
     expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Both }, {})).toBe(true)
     expect(clearedCount(rows, { a: Pick.Neither, 'tw-first': Pick.Neither })).toBe(2)
+  })
+  it('custom: a typed value replaces both; empty keeps the survivor; never for the ring; counts as a value for the name guard', () => {
+    const rows = mergeRows({ 'tw-ring': 'friend', 'tw-first': 'Ann', a: 'x' }, { 'tw-ring': 'acquaintance', 'tw-first': 'Anna', a: 'y' }, true)
+    expect(mergeEdits(rows, { a: Pick.Custom }, { a: '  z  ' })).toContainEqual(['a', 'z'])
+    expect(mergeEdits(rows, { a: Pick.Custom }, { a: '   ' }).some(([k]) => k === 'a')).toBe(false)
+    expect(mergeEdits(rows, { 'tw-ring': Pick.Custom }, { 'tw-ring': 'close' }).some(([k]) => k === 'tw-ring')).toBe(false)
+    expect(customAllowed('tw-ring')).toBe(false)
+    expect(customAllowed('a')).toBe(true)
+    const both = mergeRows({ 'tw-first': 'Ann', [LAST_NAME_KEY]: 'M' }, { 'tw-first': 'Anna', [LAST_NAME_KEY]: 'Muster' }, true)
+    expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Custom }, {}, { 'tw-first': 'Anne' })).toBe(true)
+    expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Custom }, {}, {})).toBe(false)
   })
 })
