@@ -10,6 +10,7 @@
  * separate "hidden" path: a note not shared with you looks exactly like no match.
  */
 import type { ChatThread, SharedItem } from '../../demo/src/types'
+import type { PlayPref } from './play_prefs'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
@@ -950,6 +951,11 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /**
+   * Wave 16 (play_prefs.ts): the area, radius and friend degree of the last play request per activity, so the next sentence
+   * ("play padel again before Thursday") needs no form. Kept by the small-list rule; read through livePlayPrefs(). Older builds ignore it.
+   */
+  playPrefs?: PlayPref[]
   /**
    * Wave 6 (Jakob 2026-10-08: "all my notes should be queriable"): meeting notes also answer asks that
    * arrive through this phone (notes_source.ts), each hit still in front of the person for a yes or no.
