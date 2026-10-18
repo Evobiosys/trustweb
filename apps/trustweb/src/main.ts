@@ -1617,7 +1617,8 @@ function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement):
  * Web screen body, and only there: outside the phone, the header and the tab bar the browser zooms as ever. Only the inner layer moves.
  */
 function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
-  const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea'
+  // [data-own-zoom] (the Network view) pans and zooms itself in its draw loop, so it stays crisp: this layer leaves it alone.
+  const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea, [data-own-zoom]'
   const apply = (z: RingsZoom): void => {
     ringsZoom = z
     layer.style.transform = transformOf(z)
@@ -1632,7 +1633,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
     apply(zoomAt(ringsZoom, factor, e.clientX - box.left + ringsZoom.x, e.clientY - box.top + ringsZoom.y, view()))
   }
   clip.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey) return
+    if (!e.ctrlKey || (e.target as HTMLElement).closest('[data-own-zoom]')) return
     e.preventDefault()
     zoom(Math.exp(-e.deltaY * 0.01), e)
   }, { passive: false })
@@ -1640,6 +1641,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
   type Gesture = Event & { scale: number; clientX: number; clientY: number }
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
     clip.addEventListener(ev, (e) => {
+      if ((e.target as HTMLElement).closest('[data-own-zoom]')) return
       e.preventDefault()
       const g = e as Gesture
       if (ev === 'gesturestart') last = 1
@@ -1655,6 +1657,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
   let panning = false
   clip.addEventListener('pointerdown', (e) => {
     panned = false
+    if ((e.target as HTMLElement).closest('[data-own-zoom]')) return
     down.set(e.pointerId, { x: e.clientX, y: e.clientY })
     start = down.size === 1 && !(e.target as HTMLElement).closest(skip) ? { x: e.clientX, y: e.clientY } : undefined
     if (down.size === 2) { start = undefined; clip.setPointerCapture(e.pointerId) }
