@@ -786,7 +786,7 @@ test('store: concurrent mints serialise their writes; prune drops the expired an
     assert.equal(store.codeOf('ada'), made[0].code)
     t = 1100
     assert.equal(await store.prune(), 30)
-    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {}, claims: {}, released: {} })
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {}, claims: {}, released: {}, moved: {} })
     assert.equal(store.codeOf('ada'), null)
     assert.equal(await store.prune(), 0)
   })

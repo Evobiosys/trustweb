@@ -140,3 +140,10 @@ for the long routes), still 30 s on /backup and /feedback.
 
 Caddy keeps the original Host header (app.idea2.site) and sets X-Forwarded-For; the server trusts the last X-Forwarded-For
 entry only when the socket peer is loopback. Do not log request bodies or the /backup/ and /hosted/ paths (ids are secrets).
+
+Devices (wave 15): one account code across linked devices
+  POST /connect {code, secret, rotate:true}   unlink: a NEW secret (200 {code, secret, url}); the old one is dead.
+  POST /name {code, secret, move:"<name>", from:{code, secret}, as?:"primary"|"alias"}   atomic move of a name between two codes of one
+     account: both secrets must open (403 either way), code === from is 400, 409 not_held / alias_cap (target would pass 3 names) /
+     name_moved (one move per name per 30 days, `until` says when) / name_taken (lookalike). No claim (the name cap ignores it), no
+     30-day rest, a locked name moves and stays locked. Both codes change in one step with one write.
