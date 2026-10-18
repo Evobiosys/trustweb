@@ -104,6 +104,11 @@ describe('converter', () => {
     expect(again.record).toEqual(record)
     expect(withoutLocal(record)).toEqual(withoutLocal(seed()))
   })
+  it('withoutLocal strips only what the converter made; a line the bridge pulled from the vault (vault- id) stays', () => {
+    const s = seed()
+    s.people[0].lines.push({ ...line('vault-1', 'Lent me the printer'), source: { kind: 'local', path: 'journals/x.md' } } as never, { ...line('local-abc-def-0', 'from a reading'), source: { kind: 'local', path: 'journals/x.md' } } as never)
+    expect(withoutLocal(s).people[0].lines.map((l) => l.id)).toEqual(['tana-abc-0', 'vault-1'])
+  })
   it('withoutTana keeps the notes half of a person in both sources as a local person and drops Tana-only ones', () => {
     const r = withoutTana(record)
     expect(r.people.map((p) => p.name).sort()).toEqual(['Lena Berger', 'Mira Hollenstein', 'Olga Nowak', 'Tobias'])

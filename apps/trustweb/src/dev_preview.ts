@@ -9,6 +9,7 @@ import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
+import { createWalker } from './dev_walk'
 import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prMerged, prRunning, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
@@ -17,6 +18,7 @@ interface Preview {
   assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
   next?: { id: string; port: number }
+  session?: { id: string; path: string }
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
@@ -28,9 +30,11 @@ const CSS = `
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
+.twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .more.less{color:#b7a8c9}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
+.twp-pre{position:fixed;left:50%;top:10vh;transform:translateX(-50%);z-index:100001;width:min(560px,92vw);padding:8px;border-radius:10px;background:#241b2e;color:#fff;font:11px system-ui;display:grid;gap:6px}.twp-pre pre{margin:0;max-height:50vh;overflow:auto;white-space:pre-wrap;user-select:all}
 .twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
@@ -92,6 +96,7 @@ export function initDevPreview(): void {
   let opening: ReturnType<typeof setTimeout> | null = null
   let making = false
   let pointing = false
+  let walking: string | null = null
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
@@ -147,6 +152,15 @@ export function initDevPreview(): void {
   }
 
   createDevice2(p.id, p.stockPort, mode, toast)
+  const walker = createWalker(toast)
+
+  // Title tap / Walk: do the feature's steps in the page; a feature without steps is only pointed at.
+  async function walk(f: PreviewFeature): Promise<void> {
+    if (!f.steps?.length) { tap(f); return }
+    steps.close(); lit = null; walking = f.key; render()
+    await walker.run(f.steps)
+    if (walking === f.key) { walking = null; render() }
+  }
 
   function tap(f: PreviewFeature): void {
     seen = tapSeen(seen, f.key, f.ref ?? '')
@@ -197,8 +211,12 @@ export function initDevPreview(): void {
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '')
-    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) tap(f) })
+    const go = h('button', { className: 'mini', textContent: walking === f.key ? 'Stop' : 'Walk' })
+    go.addEventListener('click', (e) => { e.stopPropagation(); if (walking === f.key) { walker.stop(); walking = null; render() } else void walk(f) })
+    const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
+    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', ...(f.steps?.length ? [go, how] : []))
+    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) void walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
 
@@ -282,6 +300,36 @@ export function initDevPreview(): void {
     return h('div', { className: 'btns' }, go, ...(making ? [h('small', { textContent: 'creating the new preview...' })] : []))
   }
 
+  /** Clipboard API, else a textarea + execCommand('copy'), else the text in a selectable <pre> (the poll re-renders the panel, so it sits beside it). */
+  async function copy(text: string, done: string): Promise<void> {
+    try { await navigator.clipboard.writeText(text); toast(done); return } catch { /* not allowed (gesture expired during the fetch): fall back */ }
+    const ta = document.body.appendChild(h('textarea', { value: text }))
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    if (ok) { toast(done); return }
+    const box = document.body.appendChild(h('div', { className: 'twp-pre' }, h('small', { textContent: 'Copy was refused: select all (tap the text) and copy by hand.' }), h('pre', { textContent: text }), h('button', { textContent: 'Close', onclick: () => { box.remove() } })))
+  }
+
+  /** Under "CI failed on PR #n": the trimmed failure log to the clipboard, and the session (id + path) it was worked on in. */
+  function ciFailed(pr: number): HTMLElement {
+    const diag = h('button', { textContent: 'Copy diagnostics' })
+    diag.addEventListener('click', () => {
+      void fetch('/__tw/ci/diagnostics?pr=' + pr).then(async (r) => {
+        if (r.ok) return copy(await r.text(), 'diagnostics copied')
+        const { error } = await r.json().catch(() => ({ error: '' })) as { error?: string }
+        toast('diagnostics failed: ' + (error || 'HTTP ' + r.status))
+      }).catch((e: unknown) => { toast('diagnostics failed: ' + String(e)) })
+    })
+    const open = h('button', { className: 'alt', textContent: 'Open the session' })
+    open.addEventListener('click', () => {
+      const s = p!.session
+      if (s) { void copy(`${s.id}\n${s.path}`, 'session id and path copied'); return }
+      void fetch('/__tw/ci/devlog').then((r) => r.text()).then((dir) => { window.open('file://' + dir); void copy(dir, 'DEVLOG folder copied') }, () => { toast('no DEVLOG folder') })
+    })
+    return h('div', { className: 'btns' }, diag, open)
+  }
+
   function prPart(n: number, blocked: boolean): HTMLElement {
     if (prMerged(p!)) return mergedPart(n)
     const label = prButton(p!.pr, n, p!.assembled?.sha, n)
@@ -290,8 +338,44 @@ export function initDevPreview(): void {
     const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || blocked })
     go.addEventListener('click', pushPr)
     const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
-    const status = prText ? h('div', {}, prText, ...stay, eta) : ''
+    const status = prText ? h('div', {}, prText, ...stay, eta, ...(prStep === 'failed' && (prNum ?? p!.pr?.number) ? [ciFailed(prNum ?? p!.pr!.number)] : [])) : ''
     return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), ...(blocked ? [h('small', { textContent: 'Reload first: the PR takes the assembled set' })] : []), status)
+  }
+
+  function copyId(id: string): void {
+    void navigator.clipboard?.writeText(id).then(() => toast(`${id} copied`), () => toast('copy refused by the browser'))
+  }
+  // The panel re-renders between two quick clicks (the status poll), so the browser's dblclick never fires on the same node: two clicks within 400 ms on the id copy it.
+  let idClickAt = 0
+  function idClicked(id: string, moved: boolean): void {
+    if (moved) return
+    const now = Date.now()
+    if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
+  }
+
+  /** Rows that fit: the panel may use ~70% of the viewport, one feature row is ~90 px, ~260 px go to header and buttons; never fewer than 3. */
+  const rowsShown = (): number => Math.max(3, Math.floor((window.innerHeight * 0.7 - 260) / 90))
+  /** More than rowsShown() feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
+  function fewRows(secs: { sec: HTMLElement; rows: HTMLElement[] }[], id: string): HTMLElement[] {
+    const total = secs.reduce((n, s) => n + s.rows.length, 0)
+    const open = store.get(`twp-more-${id}`) === '1'
+    const shown = rowsShown()
+    if (total <= shown || open) {
+      const out: HTMLElement[] = secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
+      if (total > shown) { const less = h('button', { className: 'more less', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
+      return out
+    }
+    const out: HTMLElement[] = []
+    let left = shown
+    for (const s of secs) {
+      if (left <= 0) break
+      out.push(h('div', { className: 'row' }, s.sec, ...s.rows.slice(0, left)))
+      left -= s.rows.length
+    }
+    const more = h('button', { className: 'more', textContent: `… ${total - shown} more` })
+    more.addEventListener('click', () => { store.set(`twp-more-${id}`, '1'); render() })
+    out.push(more)
+    return out
   }
 
   function render(): void {
@@ -301,15 +385,20 @@ export function initDevPreview(): void {
     root.className = 'twp' + (pill ? ' pill' : '')
     root.replaceChildren()
     if (pill) {
-      const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand' }))
+      const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
       tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
+      tag.addEventListener('pointerdown', () => idClicked(q.id, state.moved))
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
-      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
+      const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const hs = drag(root.appendChild(header))
+      // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
+      idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
       const n = prCount(shown)
@@ -322,7 +411,7 @@ export function initDevPreview(): void {
       })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
-        ...sections(tree(visible(shown))).map((s) => h('div', { className: 'row' }, h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), ...s.nodes.map((n) => row(n, shown, grey)))),
+        ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown, grey)) })), q.id),
         ...(ask ? [askBox(ask)] : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
@@ -342,6 +431,8 @@ export function initDevPreview(): void {
     if (lit) { lit = null; render() } else if (!collapsed()) setCollapsed(true)
   })
   render()
+  let resizing: ReturnType<typeof setTimeout> | undefined
+  window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(() => { if (p) render() }, 150) })
   // A reload while "Create PR" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
     if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
