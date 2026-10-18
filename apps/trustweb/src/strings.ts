@@ -1718,7 +1718,8 @@ export const S = {
     [Norm.Custom]: 'Custom',
   } as Record<Norm, string>,
   // Wave 7: agreements per person (agreements.ts, agreements_view.ts)
-  agrTitle: 'Agreements',
+  agrTitle: 'Agreements (beta)',
+  agreementsBetaNote: 'Beta: agreements will later run on Consensual (consensu.al); what you record here stays on your devices.',
   agrNone: (name: string) => `No explicit agreements with ${name} yet.`,
   agrPh: 'For example: call me only for urgent things',
   agrExpiry: 'Ends on',
