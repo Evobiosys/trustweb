@@ -41,7 +41,7 @@ describe('pair and sync', () => {
   it('pairs with a code, shows one fingerprint, syncs a record both ways, the relay sees no plaintext', async () => {
     const h = hub()
     const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada', [line('l1')])]), 'mac')
-    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben')]), 'phone')
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
     const code = await mac.api.offerCode()
     const mine = await phone.api.join(code)
     expect(mine.fp).toMatch(/^[0-9A-F]{4}$/)
@@ -67,8 +67,8 @@ describe('pair and sync', () => {
     expect(phone.box.incoming).toHaveLength(1)
 
     const all = h.wires.map((w) => w.payload).join('')
-    expect(all).not.toContain('Ada')
-    expect(all).not.toContain('Ben')
+    expect(all).not.toContain('Ada Lovelace')
+    expect(all).not.toContain('Ben Carter')
   })
 
   it('a code is one use: a second device with the same code gets no request', async () => {
@@ -98,8 +98,8 @@ describe('pair and sync', () => {
 
   it('a snapshot is taken before the merge is applied (with the file wish), and again for the reply', async () => {
     const h = hub()
-    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada')]), 'mac')
-    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben')]), 'phone')
+    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada Lovelace')]), 'mac')
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
     const mine = await phone.api.join(await mac.api.offerCode())
     await until(() => mac.box.requests.length === 1)
     mine.confirm(); mac.box.requests[0].confirm()
