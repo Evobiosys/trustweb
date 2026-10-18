@@ -365,6 +365,8 @@ export interface Person {
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
   reachedOut?: 'sent' | 'received'
+  /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
+  knows?: string[]
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
 }

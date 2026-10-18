@@ -79,6 +79,9 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
+import { networkChosen } from './network_graph'
+import { createNetworkView } from './network_view'
+import { knowsRow } from './knows_view'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -1937,10 +1940,26 @@ function openEvents(eventId?: string): void {
   go(Screen.Events)
 }
 
+const WEB_VIEW_KEY = 'trustweb.ui.webView'
+
+function webViewToggle(network: boolean): HTMLElement {
+  const pick = (value: 'rings' | 'network'): void => {
+    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
+    render()
+  }
+  return el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
+    el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
+    el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+  ])
+}
+
 function screenWeb(): Node[] {
   const s = shown(st())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
   const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
+  let stored: string | null = null
+  try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
+  const network = s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
   right.append(events, search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
@@ -1948,7 +1967,9 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-    ringsView(s, askMarks()),
+    network
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+      : ringsView(s, askMarks()),
     s.people.some((p) => p.reachedOut) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
@@ -1956,6 +1977,7 @@ function screenWeb(): Node[] {
   zoomOnWeb(clip, layer)
   return [
     header(S.webTitle, { right, more: true }),
+    ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2213,6 +2235,7 @@ function personSheet(personId: string): void {
     askAgainRow(p),
     leanRow(p),
     eventChipsRow(p),
+    knowsRow(p, st().people, save, () => personSheet(p.id)),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
