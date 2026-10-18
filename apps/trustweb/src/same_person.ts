@@ -28,6 +28,7 @@ export function unitePerson(w: Person, l: Person): Person {
   const have = new Set(w.lines.map((x) => x.id))
   out.lines = [...w.lines, ...l.lines.filter((x) => !have.has(x.id))]
   if (w.events || l.events) out.events = [...new Set([...(w.events ?? []), ...(l.events ?? [])])]
+  if (w.knows || l.knows) out.knows = [...new Set([...(w.knows ?? []), ...(l.knows ?? [])])]
   return out
 }
 

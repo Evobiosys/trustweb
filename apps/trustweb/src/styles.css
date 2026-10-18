@@ -906,4 +906,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}
 .net-menu{display:grid; gap:6px; margin:0 0 8px; padding:10px; border-radius:12px; background:var(--card); font-size:13px}
 .net-menu[hidden]{display:none}
+.net-tip{margin:6px 0; padding:6px 10px; border-radius:10px; background:var(--card); font-size:13px}
+.net-tip[hidden]{display:none}
+.net-legend{display:block; margin:4px 0; opacity:.7}
 .net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}

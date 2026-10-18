@@ -79,6 +79,7 @@ import { extractLines } from './notes'
 import { S } from './strings'
 import { networkChosen } from './network_graph'
 import { createNetworkView } from './network_view'
+import { knowsRow } from './knows_view'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -2222,6 +2223,7 @@ function personSheet(personId: string): void {
     askAgainRow(p),
     leanRow(p),
     eventChipsRow(p),
+    knowsRow(p, st().people, save, () => personSheet(p.id)),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
