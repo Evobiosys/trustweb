@@ -367,6 +367,8 @@ export interface Person {
   reachedOut?: 'sent' | 'received'
   /** Wave 15: when I blocked this person (non_responsive.ts isBlocked). 0 = unblocked: kept as a value so the unblock wins a device sync (fillMissing would refill a deleted field). Older builds ignore it. */
   blocked?: number
+  /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
+  knows?: string[]
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
 }

@@ -58,7 +58,8 @@ export interface GraphNode {
 export interface Forces { link: number; charge: number; gravity: number; collide: number; labelZoom: number }
 export const DEFAULT_FORCES: Forces = { link: 1, charge: 260, gravity: 0.002, collide: 0, labelZoom: 1.5 }
 
-export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean }
+/** `knows`: a connection between members (a knows b; mutual = both list each other). */
+export interface GraphEdge { a: number; b: number; rest: number; dashed: boolean; thin?: boolean; knows?: 'mutual' | 'oneway' }
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[] }
 
 /** The Web tab opens on Rings unless this device chose Network (the stored `trustweb.ui.webView` value). */
@@ -137,6 +138,27 @@ function restOf(t: Tier, desire: number): number {
   return t === Ring.Intending ? REST[t] - ((REST[t] - INTENDING_NEAR) * desire) / 10 : REST[t]
 }
 
+/**
+ * Member-to-member connections from Person.knows over node indexes (0 = me, person i = i + 1): [knower, known, mutual]. A person listing
+ * my id is connected to me (mutual: everyone in my web is in my star). Unknown ids, self-links and repeats are ignored.
+ */
+export function knowsLinks(meId: string, people: readonly Person[]): [number, number, boolean][] {
+  const index = new Map(people.map((p, i) => [p.id, i + 1]))
+  index.set(meId, 0)
+  const lists = people.map((p) => new Set(p.knows ?? []))
+  const out: [number, number, boolean][] = []
+  const seen = new Set<string>()
+  people.forEach((p, i) => {
+    for (const id of lists[i]) {
+      const j = index.get(id)
+      if (j === undefined || j === i + 1 || seen.has(`${Math.min(i + 1, j)}|${Math.max(i + 1, j)}`)) continue
+      seen.add(`${Math.min(i + 1, j)}|${Math.max(i + 1, j)}`)
+      out.push([i + 1, j, j === 0 || lists[j - 1].has(p.id)])
+    }
+  })
+  return out
+}
+
 export function buildGraph(me: { id: string; displayName: string }, people: readonly Person[]): Graph {
   const nodes: GraphNode[] = [{ id: me.id, name: me.displayName, context: '', x: 0, y: 0, vx: 0, vy: 0, r: 12, pinned: true }]
   const edges: GraphEdge[] = []
@@ -159,6 +181,7 @@ export function buildGraph(me: { id: string; displayName: string }, people: read
     edges.push({ a: a + 1, b: b + 1, rest: thin ? PEER_REST : LINK_REST, dashed: false, thin })
     nodes[a + 1].linked = nodes[b + 1].linked = true
   }
+  for (const [a, b, mutual] of knowsLinks(me.id, people)) edges.push({ a, b, rest: LINK_REST, dashed: !mutual, knows: mutual ? 'mutual' : 'oneway' })
   for (const v of nodes) if (v.linked) v.r += 2
   return { nodes, edges }
 }

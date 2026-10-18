@@ -1,6 +1,6 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { cascaded, ciDiagnostics, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -220,5 +220,15 @@ describe('dev preview PR count, block and reviewed rows', () => {
     expect(out[0].nodes.map((n) => [n.feature.key, n.children.map((c) => c.feature.key)])).toEqual([['v', ['v2']]])
     expect(out[1].nodes.map((n) => [n.feature.key, n.children.map((c) => c.feature.key)])).toEqual([['p', ['p2']]])
     expect(sections(tree([f('o', 'ops')])).map((s) => s.repo)).toEqual(['ops'])
+  })
+  it('ciDiagnostics: failed job names first, then only error lines, 200 lines at most', () => {
+    const log = 'job\tstep\tall fine\njob\tstep\t  ✗ chain FAIL 429\njob\tstep\tError: boom'
+    expect(ciDiagnostics(['reach-out-link'], log)).toBe('job: reach-out-link\n✗ chain FAIL 429\nError: boom')
+    expect(ciDiagnostics([], 'FAIL\n'.repeat(500)).split('\n')).toHaveLength(200)
+  })
+  it('typedValue: the text after paste or type, quotes dropped; none otherwise', () => {
+    expect(typedValue('paste https://wa.me/qr/ABC')).toBe('https://wa.me/qr/ABC')
+    expect(typedValue('Type "Manuel"')).toBe('Manuel')
+    expect(typedValue('tap Save')).toBeNull()
   })
 })
