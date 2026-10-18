@@ -17,21 +17,28 @@ export interface AgreementCarrier { agreements?: Agreement[] }
 export const AGREE_PARAM = 'agree'
 export const AGREEMENT_MAX = 200
 export const AGREEMENTS_PER_PERSON = 30
+/** The largest time a Date holds (ms); a later expiry would make `new Date(e).toISOString()` throw. */
+export const MAX_TIME = 8.64e15
+/** The longest agreement text (encoded) the receiver reads; parseAgreementText drops anything longer. */
+const TEXT_ENCODED_MAX = 500
 const ID_MAX = 24
 const isStatus = (v: unknown): v is AgreementStatus => Object.values(AgreementStatus).includes(v as AgreementStatus)
 const prefix = (appUrl: string): string => `${appUrl}?${AGREE_PARAM}=1#`
 const cleanText = (v: unknown): string => (typeof v === 'string' ? [...stripUnsafe(v).replace(/\s+/g, ' ').trim()].slice(0, AGREEMENT_MAX).join('') : '')
 const okId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v) && v.length <= ID_MAX
 
+const validTime = (v: number): boolean => Number.isFinite(v) && v > 0 && v <= MAX_TIME
+
 export const isExpired = (a: Pick<Agreement, 'expiresAt'>, now: number): boolean => a.expiresAt !== undefined && a.expiresAt <= now
 
-/** Adds an agreement of mine; null when the text is empty or the person holds too many. `proposed` marks it as sent for their yes. */
-export function addAgreement(person: AgreementCarrier, id: string, text: string, now: number, opts: { proposed?: boolean; expiresAt?: number } = {}): Agreement | null {
+/** Adds an agreement of mine; null when the text is empty, the person holds too many, or a proposal (with `appUrl`) would be too long to send. `proposed` marks it as sent for their yes. */
+export function addAgreement(person: AgreementCarrier, id: string, text: string, now: number, opts: { proposed?: boolean; expiresAt?: number; appUrl?: string } = {}): Agreement | null {
   const t = cleanText(text)
   const list = person.agreements ?? []
   if (!t || !okId(id) || list.length >= AGREEMENTS_PER_PERSON || list.some((a) => a.id === id)) return null
   const a: Agreement = { id, text: t, at: now, status: opts.proposed ? AgreementStatus.Proposed : AgreementStatus.Mine }
-  if (opts.expiresAt !== undefined && Number.isFinite(opts.expiresAt)) a.expiresAt = opts.expiresAt
+  if (opts.expiresAt !== undefined && validTime(opts.expiresAt)) a.expiresAt = opts.expiresAt
+  if (opts.proposed && opts.appUrl !== undefined && !proposalText(opts.appUrl, a)) return null
   person.agreements = [...list, a]
   return a
 }
@@ -41,10 +48,12 @@ export function removeAgreement(person: AgreementCarrier, id: string): void {
   if (!person.agreements.length) delete person.agreements
 }
 
-export function proposalText(appUrl: string, a: Agreement): string {
+/** The proposal text, or null when its encoded form is longer than the receiver accepts. */
+export function proposalText(appUrl: string, a: Agreement): string | null {
   const q = new URLSearchParams({ id: a.id, t: a.text })
   if (a.expiresAt !== undefined) q.set('e', String(a.expiresAt))
-  return prefix(appUrl) + q.toString()
+  const text = prefix(appUrl) + q.toString()
+  return text.length <= TEXT_ENCODED_MAX ? text : null
 }
 
 export const acceptText = (appUrl: string, id: string): string => prefix(appUrl) + new URLSearchParams({ id, ok: '1' }).toString()
@@ -55,7 +64,7 @@ export type AgreementMessage = { kind: 'propose'; id: string; text: string; expi
 
 /** Reads an agreement text; null for anything else. Never throws. */
 export function parseAgreementText(appUrl: string, text: string): AgreementMessage | null {
-  if (!isAgreementText(appUrl, text) || text.length > 500) return null
+  if (!isAgreementText(appUrl, text) || text.length > TEXT_ENCODED_MAX) return null
   try {
     const q = new URLSearchParams(text.slice(prefix(appUrl).length))
     const id = q.get('id')
@@ -64,7 +73,7 @@ export function parseAgreementText(appUrl: string, text: string): AgreementMessa
     const t = cleanText(q.get('t'))
     if (!t) return null
     const e = Number(q.get('e'))
-    return { kind: 'propose', id, text: t, ...(q.has('e') && Number.isFinite(e) && e > 0 ? { expiresAt: e } : {}) }
+    return { kind: 'propose', id, text: t, ...(q.has('e') && Number.isFinite(e) && validTime(e) ? { expiresAt: e } : {}) }
   } catch {
     return null
   }
@@ -102,8 +111,8 @@ export function repairAgreements(state: { people?: unknown }): boolean {
     const raw = Array.isArray(person.agreements) ? person.agreements : []
     const seen = new Set<string>()
     const good = raw.filter((a): a is Agreement => typeof a === 'object' && a !== null && okId(a.id) && !seen.has(a.id) && !!seen.add(a.id)
-      && typeof a.text === 'string' && a.text.length > 0 && a.text.length <= AGREEMENT_MAX && typeof a.at === 'number' && isStatus(a.status)
-      && (a.expiresAt === undefined || typeof a.expiresAt === 'number')).slice(0, AGREEMENTS_PER_PERSON)
+      && typeof a.text === 'string' && a.text.length > 0 && [...a.text].length <= AGREEMENT_MAX && typeof a.at === 'number' && isStatus(a.status)
+      && (a.expiresAt === undefined || (typeof a.expiresAt === 'number' && validTime(a.expiresAt)))).slice(0, AGREEMENTS_PER_PERSON)
     if (good.length === raw.length && Array.isArray(person.agreements)) continue
     changed = true
     if (good.length) person.agreements = good

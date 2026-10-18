@@ -155,24 +155,26 @@ export function stripBlocks(text) {
 const BLOCK_RE = /<!-- trustweb:begin ([^ ]+) -->\n([\s\S]*?)<!-- trustweb:end \1 -->\n?/g
 const HEAD_RE = /^- TrustWeb: (.*?) · ring: (\w+)(?: · (https:\/\/app\.tana\.inc\S*))? · updated: (\S+)\s*$/
 
-export function renderBlock(person, { now = Date.now(), keep = [] } = {}) {
+export function renderBlock(person, { now = Date.now(), keep = [], notes = [] } = {}) {
   const head = `- TrustWeb: ${esc(person.name)} · ring: ${person.ring}${person.id.startsWith('tana-') ? ` · ${TANA_URL}${person.id.slice(5)}` : ''} · updated: ${new Date(now).toISOString()}`
   const lines = person.lines.filter((l) => l.status !== 'gone').map((l) => `- ${day(l.notedAt)} ${esc(l.text)} <!-- tw:${l.id} -->`)
+  const noted = notes.map((n) => `- ${n.date ? `${n.date} ` : ''}${n.text} <!-- tw:note -->`)
   const kept = keep.map((k) => `- ${k.date ? `${k.date} ` : ''}${k.text}`)
-  return `<!-- trustweb:begin ${person.id} -->\n${[head, ...lines, ...kept].join('\n')}\n<!-- trustweb:end ${person.id} -->\n`
+  return `<!-- trustweb:begin ${person.id} -->\n${[head, ...lines, ...noted, ...kept].join('\n')}\n<!-- trustweb:end ${person.id} -->\n`
 }
 
 /** Every block in a note: id, name, ring, updated stamp, tagged lines, and untagged bullets (the person's own additions). */
 export function parseBlocks(text) {
   const out = []
   for (const m of text.matchAll(BLOCK_RE)) {
-    const b = { id: m[1], name: '', ring: '', updated: NaN, lines: [], userLines: [] }
+    const b = { id: m[1], name: '', ring: '', updated: NaN, lines: [], userLines: [], notes: [] }
     for (const l of m[2].split('\n')) {
       const h = HEAD_RE.exec(l)
       if (h) { b.name = h[1]; b.ring = RINGS.includes(h[2]) ? h[2] : ''; b.updated = Date.parse(h[4]); continue }
       const x = LINE_RE.exec(l)
       if (!x || !x[2]) continue
-      if (x[3]) b.lines.push({ id: x[3], text: x[2], date: x[1] ?? '' })
+      if (x[3] === 'note') b.notes.push({ text: x[2], date: x[1] ?? '' })
+      else if (x[3]) b.lines.push({ id: x[3], text: x[2], date: x[1] ?? '' })
       else b.userLines.push({ text: x[2], date: x[1] ?? '' })
     }
     out.push(b)
@@ -183,12 +185,16 @@ export function parseBlocks(text) {
 /**
  * The note with this person's block written: replaced in place when there, else appended. Bullets the person added inside the
  * block stay (until TrustWeb has them as lines, then the tagged line takes their place). Unchanged content -> the same text back.
+ * A ring edited in the file (saved after the block was written, `fileMtime`) never moves TrustWeb's: TrustWeb stays as is and the
+ * block gets a note saying what the file said (Jakob 2026-10-16: "if there is a fight, TrustWeb stays; make a note on the md").
  */
-export function upsertBlock(noteText, person, { now = Date.now() } = {}) {
+export function upsertBlock(noteText, person, { now = Date.now(), fileMtime = 0 } = {}) {
   const old = parseBlocks(noteText).find((b) => b.id === person.id)
   const have = new Set(person.lines.map((l) => esc(l.text).toLowerCase()))
   const keep = (old?.userLines ?? []).filter((u) => !have.has(u.text.toLowerCase()))
-  const block = renderBlock(person, { now, keep })
+  const notes = [...(old?.notes ?? [])]
+  if (old && fileEdited(old, fileMtime) && old.ring && old.ring !== person.ring) notes.push({ date: day(now), text: `note: this file said ring ${old.ring}; TrustWeb kept ${person.ring}` })
+  const block = renderBlock(person, { now, keep, notes })
   const re = new RegExp(`<!-- trustweb:begin ${person.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} -->\\n[\\s\\S]*?<!-- trustweb:end ${person.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} -->\\n?`)
   if (old) {
     const cur = re.exec(noteText)[0]
@@ -199,14 +205,16 @@ export function upsertBlock(noteText, person, { now = Date.now() } = {}) {
   return `${noteText}${sep}${block}`
 }
 
+/** The file was saved after the block was written (more than a second later: the bridge's own write lands within that). */
+export const fileEdited = (block, fileMtime) => (Number.isFinite(block.updated) ? fileMtime > block.updated + 1000 : true)
+
 /**
- * What the file says that the record does not, by the newer-wins rule: the block's ring when the file was saved after the block
- * was written (fileMtime > updated) and differs; the untagged bullets as new lines always (lines only ever get added).
+ * What the file says that the record does not: the untagged bullets as new lines (lines only ever get added). A ring edited in
+ * the file is reported (`fileRing`) for the log but never applied: TrustWeb stays as is, upsertBlock writes the note.
  */
 export function blockChanges(block, person, fileMtime) {
   const have = new Set(person.lines.map((l) => esc(l.text).toLowerCase()))
   const newLines = block.userLines.filter((u) => !have.has(u.text.toLowerCase()))
-  const fileNewer = Number.isFinite(block.updated) ? fileMtime > block.updated + 1000 : true
-  const ring = block.ring && block.ring !== person.ring && fileNewer ? block.ring : null
-  return { ring, newLines }
+  const fileRing = block.ring && block.ring !== person.ring && fileEdited(block, fileMtime) ? block.ring : null
+  return { fileRing, newLines }
 }

@@ -552,12 +552,14 @@ test('names: bad names are 400 field name: charset, case, "@", spaces, unicode, 
   })
 })
 
-test('who: unknown, malformed, other-case, prefix, substring, trailing-slash and encoded names are the same byte-identical 404 page; names are never listed', async () => {
+test('who: unknown, malformed, other-case, prefix, substring, trailing-slash and encoded names are the same byte-identical 404 page (other case and a trailing slash/dot are forgiven since wave 14); names are never listed', async () => {
   await withServer(0, BASE, async ({ srv }) => {
     const a = await mint(srv.port)
     assert.equal((await claim(srv.port, { name: 'ada.lovelace', ...a })).status, 200)
     const pages = []
-    for (const bad of ['nobody', 'Ada.Lovelace', 'ada', 'lovelace', 'ada.lovelac', 'ada.lovelace/', 'ada.lovelace%2f', 'ada%2elovelace', '', '%', '..', 'a'.repeat(40), 'ada%20lovelace', '*', '.']) {
+    const target = (await who(srv.port, 'ada.lovelace')).headers.location
+    for (const typed of ['Ada.Lovelace', 'ada.lovelace/', 'ada.lovelace%2f', 'ada%2elovelace']) assert.equal((await who(srv.port, typed)).headers.location, target, typed)
+    for (const bad of ['nobody', 'ada', 'lovelace', 'ada.lovelac', '', '%', '..', 'a'.repeat(40), 'ada%20lovelace', '*', '.']) {
       const r = await who(srv.port, bad)
       assert.equal(r.status, 404, bad)
       pages.push(r.text)

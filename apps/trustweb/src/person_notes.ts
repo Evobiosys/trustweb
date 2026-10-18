@@ -73,3 +73,25 @@ export function pendingTranscripts(s: Pick<AppState, 'meetings' | 'people'>, per
 export function lineIsCurrent(l: Pick<NoteLine, 'status'>): boolean {
   return l.status === LineStatus.Current
 }
+
+/** The longest note line (as the Advanced "add" field and the inventory import cap it). */
+export const LINE_TEXT_MAX = 160
+
+/** Edits the text of one of the person's lines in place (keeps id, tag, audience, status, source, notedAt; checkedAt = now). False: unknown line or empty text. */
+export function editLineText(s: Pick<AppState, 'people'>, personId: string, lineId: string, text: string, now = Date.now()): boolean {
+  const line = s.people.find((p) => p.id === personId)?.lines.find((l) => l.id === lineId)
+  const t = text.trim().slice(0, LINE_TEXT_MAX)
+  if (!line || !t) return false
+  line.text = t
+  line.checkedAt = now
+  return true
+}
+
+/** Removes one line of the person. False: unknown line. */
+export function removeLine(s: Pick<AppState, 'people'>, personId: string, lineId: string): boolean {
+  const person = s.people.find((p) => p.id === personId)
+  const i = person ? person.lines.findIndex((l) => l.id === lineId) : -1
+  if (!person || i < 0) return false
+  person.lines.splice(i, 1)
+  return true
+}

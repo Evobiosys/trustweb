@@ -177,7 +177,7 @@ function strMap(v: unknown): Record<string, string> | null {
   return out
 }
 
-const VALUE_MAX = 300
+const VALUE_MAX = 440
 /** Entries in `at`, like the ceiling strMap puts on the others: one per entity, so far above any real record. */
 const AT_MAX = 20_000
 

@@ -2,8 +2,11 @@
  * "Same person" (wave 13, R5): the owner declares two persons (two ids) to be one. Pure and DOM-free.
  * The dropped id is remembered in AppState.sameAs (dropped -> kept), which travels with a device sync so the dropped id never comes back.
  */
+import { AgreementStatus } from './agreements'
+import type { Agreement } from './agreements'
 import { Ring } from './model'
 import type { AppState, Person } from './model'
+import { keyOf } from './timeline'
 
 type Rec = Record<string, unknown>
 
@@ -19,6 +22,19 @@ export function fillMissing<T extends object>(winner: T, loser: T): T {
   return out as T
 }
 
+const RANK: Record<AgreementStatus, number> = { [AgreementStatus.Mine]: 0, [AgreementStatus.Incoming]: 1, [AgreementStatus.Proposed]: 2, [AgreementStatus.Mutual]: 3 }
+
+/** One agreement per id; the further-along status wins, the newer expiry on a tie. */
+function uniteAgreements(a: readonly Agreement[], b: readonly Agreement[]): Agreement[] {
+  const byId = new Map<string, Agreement>()
+  for (const x of [...a, ...b]) {
+    const had = byId.get(x.id)
+    const better = !had || RANK[x.status] > RANK[had.status] || (RANK[x.status] === RANK[had.status] && (x.expiresAt ?? 0) > (had.expiresAt ?? 0))
+    if (better) byId.set(x.id, x)
+  }
+  return [...byId.values()]
+}
+
 /** Winner's person, plus any note line and event tag only the loser has, and every other missing field except the ring-bound ones (a suggested ring or a dot angle would move a confirmed person). */
 export function unitePerson(w: Person, l: Person): Person {
   const { ringSuggested: _s, angle: _a, ...rest } = l
@@ -28,6 +44,12 @@ export function unitePerson(w: Person, l: Person): Person {
   const have = new Set(w.lines.map((x) => x.id))
   out.lines = [...w.lines, ...l.lines.filter((x) => !have.has(x.id))]
   if (w.events || l.events) out.events = [...new Set([...(w.events ?? []), ...(l.events ?? [])])]
+  if (w.timeline || l.timeline) {
+    const seen = new Set<string>()
+    out.timeline = [...(w.timeline ?? []), ...(l.timeline ?? [])].filter((e) => !seen.has(keyOf(e)) && !!seen.add(keyOf(e)))
+  }
+  if (w.agreements || l.agreements) out.agreements = uniteAgreements(w.agreements ?? [], l.agreements ?? [])
+  if (w.theirProfile && l.theirProfile) out.theirProfile = l.theirProfile.at > w.theirProfile.at ? fillMissing(l.theirProfile, w.theirProfile) : fillMissing(w.theirProfile, l.theirProfile)
   return out
 }
 

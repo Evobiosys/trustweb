@@ -55,15 +55,17 @@ describe('notes bridge: writes', () => {
 })
 
 describe('notes bridge: reads back', () => {
-  it('changes: a ring edited after the block was written and bullets added inside it; code folders are never read', () => {
+  it('changes: bullets added inside a block; a ring edited in the file is NOT a change (TrustWeb stays, the next push notes it); code folders are never read', () => {
     const v = vault()
     push(v, people(), { now: NOW })
     const f = path.join(v, 'journals', '2026_07_11.md')
     writeFileSync(f, readFileSync(f, 'utf8').replace('ring: friend', 'ring: close').replace('<!-- trustweb:end tana-abc -->', '- 2026-10-02 Lent me the printer\n<!-- trustweb:end tana-abc -->'))
     utimesSync(f, new Date(NOW + 60_000), new Date(NOW + 60_000))
-    expect(changes(v, people())).toEqual([{ id: 'tana-abc', path: 'journals/2026_07_11.md', ring: 'close', newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] }])
-    utimesSync(f, new Date(NOW), new Date(NOW))
-    expect(changes(v, people())[0].ring).toBeNull()
+    expect(changes(v, people())).toEqual([{ id: 'tana-abc', path: 'journals/2026_07_11.md', newLines: [{ text: 'Lent me the printer', date: '2026-10-02' }] }])
+    push(v, people(), { now: NOW + 5000 })
+    const after = readFileSync(f, 'utf8')
+    expect(after).toContain('· ring: friend ·')
+    expect(after).toContain('note: this file said ring close; TrustWeb kept friend <!-- tw:note -->')
   })
 })
 

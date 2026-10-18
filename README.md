@@ -11,7 +11,7 @@ people they trust. What you know stays on your phone; a question travels, the da
 ## Products and entities
 
 - **trustintheweb.org** is the steward of both products, conceptually under EvoBioSys. We intend to turn it into a foundation.
-- **trustintheweb.com** is a commercial public-benefit company and the hosting provider for both products (at least querying). Users meet it only as the hosting line on their bill.
+- **trustintheweb.com** is a commercial public-benefit company and the hosting provider for both products (at least querying). Users meet it only as the hosting company named in About.
 - **trustweb.one** is the querying app. It uses the Web Curator under the hood.
 - **Web Curator** (`apps/crm`, was TrustWeb CRM) is its own open-source product, stewarded by trustintheweb.org like the rest.
 

@@ -55,18 +55,19 @@ function normalizeSignal(raw: string): string | null {
 // WhatsApp (wave 6e). Two stored shapes, and only these:
 //   +436601234567                 a phone number (canonical E.164): the link is https://wa.me/<digits>
 //   https://wa.me/qr/<code>       WhatsApp's own share-QR link: it carries NO phone number
+//   https://wa.me/message/<code>  WhatsApp Business short link: the same, no phone number
 // A wa.me link with a query string, a hash or any other path is no WhatsApp handle at all (nothing a person pastes may smuggle a
 // prefilled message or a tracking parameter into a link this phone shows, shares or draws).
 // ---------------------------------------------------------------------------
 
 /** The code of a wa.me/qr link: letters and digits only (WhatsApp's own are 13 upper-case characters; the bound is generous). */
 const WA_QR_CODE = /^[A-Za-z0-9]{8,40}$/
-const WA_QR_PATH = /^\/qr\/([A-Za-z0-9]{8,40})\/?$/
+const WA_QR_PATH = /^\/(qr|message)\/([A-Za-z0-9]{8,40})\/?$/
 const WA_NUMBER_PATH = /^\/(\d{7,15})\/?$/
 
-/** True for the canonical stored share-QR form (https://wa.me/qr/<code>), nothing else. */
+/** True for the canonical stored share-link forms (https://wa.me/qr/<code> or https://wa.me/message/<code>), nothing else. */
 export function isWhatsAppQrLink(value: string): boolean {
-  const m = /^https:\/\/wa\.me\/qr\/([^/]+)$/.exec(value)
+  const m = /^https:\/\/wa\.me\/(?:qr|message)\/([^/]+)$/.exec(value)
   return m !== null && WA_QR_CODE.test(m[1])
 }
 
@@ -75,9 +76,45 @@ function normalizeWhatsApp(raw: string): string | null {
   const link = linkOn(raw, ['wa.me'])
   if (!link || link.search !== '' || link.hash !== '' || /[?#]/.test(raw)) return null
   const qr = WA_QR_PATH.exec(link.pathname)
-  if (qr) return `https://wa.me/qr/${qr[1]}`
+  if (qr) return `https://wa.me/${qr[1]}/${qr[2]}`
   const digits = WA_NUMBER_PATH.exec(link.pathname)
   return digits ? toE164('+' + digits[1]) : null
+}
+
+// ---------------------------------------------------------------------------
+// Consensual (wave 14). One stored shape: the share link https://app.consensu.al/connect?to=<did>. A pasted bare DID or a link on
+// consensual.myceli.al is accepted and stored in that form. The link opens Consensual's own page; nothing is read or sent there.
+// ---------------------------------------------------------------------------
+
+const CONSENSUAL_DID = /^did:peer:2(\.[AVES][A-Za-z0-9_-]+)+$/
+const CONSENSUAL_DID_MAX = 400
+const CONSENSUAL_ORIGIN = 'https://app.consensu.al'
+/** Consensual's own proposal flow (agreements); the card links here when a person's address is known. */
+export const CONSENSUAL_AGREEMENTS_LINK = `${CONSENSUAL_ORIGIN}/agreements`
+
+export function isConsensualDid(s: string): boolean {
+  return s.length <= CONSENSUAL_DID_MAX && CONSENSUAL_DID.test(s)
+}
+
+function normalizeConsensual(raw: string): string | null {
+  let did = raw
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    const u = linkOn(raw, ['app.consensu.al', 'consensual.myceli.al'])
+    // Exactly /connect?to=<did>: no other parameter or fragment can ride along.
+    if (!u || !/^\/connect\/?$/.test(u.pathname) || u.hash !== '' || [...u.searchParams.keys()].join() !== 'to') return null
+    did = u.searchParams.get('to') ?? ''
+  }
+  return isConsensualDid(did) ? `${CONSENSUAL_ORIGIN}/connect?to=${did}` : null
+}
+
+/** The DID inside a stored Consensual value, or null. */
+function consensualDid(value: string): string | null {
+  try {
+    const did = new URL(value).searchParams.get('to')
+    return did !== null && isConsensualDid(did) ? did : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -97,6 +134,8 @@ export function normalizeHandle(channel: Channel, input: string): string | null 
       const id = link ? safeDecode(link.hash.replace(/^#\/?/, '')) : raw
       return id !== null && MATRIX_ID.test(id) ? id : null
     }
+    case Channel.Consensual:
+      return normalizeConsensual(raw)
     case Channel.Delta: {
       const link = linkOn(raw, ['i.delta.chat'])
       if (link && link.hash.length > 1) return link.href
@@ -134,6 +173,11 @@ export function channelLink(channel: Channel, value: string): string {
       return isWhatsAppQrLink(value) ? value : `https://wa.me/${value.replace(/\D/g, '')}`
     case Channel.Matrix:
       return `https://matrix.to/#/${value}`
+    case Channel.Consensual: {
+      // Their chat page; a phone without the connection lands on Consensual's own notice and can connect there.
+      const did = consensualDid(value)
+      return did ? `${CONSENSUAL_ORIGIN}/chat?with=${did}` : value
+    }
     case Channel.Delta:
       // A bare address can only become mailto:, which opens Delta Chat only
       // where it is the default mail app; an i.delta.chat invite always does.

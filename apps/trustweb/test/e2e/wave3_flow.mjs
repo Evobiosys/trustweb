@@ -40,6 +40,7 @@ const until = async (fn, ms = 20_000) => {
 }
 const openSettings = async (page) => {
   await tab(page, 'My Resources')
+  await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
   // The sheet redraws once the server's status is in (app-wave2 A2): wait for it, so no click lands on the old sheet.

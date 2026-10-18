@@ -84,8 +84,8 @@ async function main() {
     const modes = await ada.locator('.advanced-panel .mode-row [data-mode]').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-mode')))
     ok('1. the list holds all six modes', JSON.stringify(modes) === JSON.stringify(['trustweb-signal', 'trustweb-whatsapp', 'trustweb-matrix', 'only-trustweb', 'only-signal', 'only-whatsapp']), JSON.stringify(modes))
     ok('1. each mode has a pin toggle', (await ada.locator('.advanced-panel [data-pin]').count()) === 6)
-    ok('1. ONE contact box with Signal, WhatsApp and Matrix', (await ada.locator('.advanced-panel [data-contact-box]').count()) === 1
-      && JSON.stringify(await ada.locator('.advanced-panel [data-cb-row]').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-cb-row')))) === JSON.stringify(['signal', 'whatsapp', 'matrix']))
+    ok('1. ONE contact box with Signal, WhatsApp and Matrix', (await ada.locator('[data-contact-box-on-meet] [data-contact-box]').count()) === 1
+      && JSON.stringify(await ada.locator('[data-contact-box-on-meet] [data-cb-row]').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-cb-row')))) === JSON.stringify(['signal', 'whatsapp', 'matrix']))
     const panelText = await ada.locator('.advanced-panel').innerText()
     ok('1. no Signal/Molly choice anywhere: no provider buttons, no "Molly" in the panel', (await ada.locator('[data-provider]').count()) === 0 && !/Molly/.test(panelText), panelText.slice(0, 200))
     ok('1. a mode whose link is missing says so', (await ada.locator('[data-mode-missing="trustweb-signal"]').count()) === 1)
@@ -97,7 +97,7 @@ async function main() {
     ok('2. the row is [TrustWeb + Signal][Only TrustWeb][arrow]', JSON.stringify(await rowModes(ada)) === JSON.stringify(['trustweb-signal', 'only-trustweb']))
     ok('2. TrustWeb + Signal is the primary and in force', (await currentMode(ada)) === 'trustweb-signal' && (await ada.locator('[data-share-row] [data-slot="primary"]').getAttribute('data-mode')) === 'trustweb-signal')
     ok('2. the QR is still the connect link', /connect=/.test(await payload(ada)))
-    ok('2. a username link is ticked by default (in the box and in the sentence)', await ada.locator('.advanced-panel [data-share-tick="signal"]').isChecked() && await ada.locator('.sharing-line [data-share-tick="signal"]').isChecked())
+    ok('2. a username link is ticked by default (in the box and in the sentence)', await ada.locator('[data-contact-box-on-meet] [data-share-tick="signal"]').isChecked() && await ada.locator('.sharing-line [data-share-tick="signal"]').isChecked())
     ok('2. the sentence says a scan also gives the Signal link', (await ada.locator('[data-signal-sharing="shared"]').innerText()).includes('also gives them your Signal link'))
     const bob = await newPhone(browser, errors)
     const bobCard = await scan(ada, bob, 'Bob')
@@ -139,11 +139,11 @@ async function main() {
     ok('5. replacing the link by a NUMBER turns its tick off (a number needs its own yes)', (await record(ada)).contactShare?.shareOnConnect?.whatsapp === false || (await record(ada)).contactShare?.shareOnConnect?.whatsapp === undefined)
     ok('5. Only WhatsApp with an unticked number: no code at all, and the sentence says why',
       !(await payload(ada)) && /not being shared: it holds your phone number/.test(await ada.locator('[data-signal-sharing="number-not-ticked"]').innerText().catch(() => '')), String(await payload(ada)))
-    ok('5. a plain note warns that the link holds the number', (await ada.locator('.advanced-panel [data-cb-ticks="whatsapp"] [data-share="phone"]').count()) === 1)
+    ok('5. a plain note warns that the link holds the number', (await ada.locator('[data-contact-box-on-meet] [data-cb-ticks="whatsapp"] [data-share="phone"]').count()) === 1)
     await ada.locator('.sharing-line [data-share-tick="whatsapp"]').check()
     ok('5. ticked: the QR holds https://wa.me/<digits>', !!(await until(async () => (await payload(ada)) === 'https://wa.me/430000000001')), String(await payload(ada)))
     ok('5. the camera-app note shows for a number', /camera app/.test(await ada.locator('[data-scan="camera-only"]').innerText().catch(() => '')))
-    ok('5. the box and the sentence share one tick (box shows it ticked too)', await ada.locator('.advanced-panel [data-cb-ticks="whatsapp"] [data-share-tick="whatsapp"]').isChecked())
+    ok('5. the box and the sentence share one tick (box shows it ticked too)', await ada.locator('[data-contact-box-on-meet] [data-cb-ticks="whatsapp"] [data-share-tick="whatsapp"]').isChecked())
     await ada.locator('.sharing-line [data-share-tick="whatsapp"]').uncheck()
     await chooseMode(ada, 'only-signal')
     ok('5. Only Signal: the QR holds exactly the signal.me username link', (await payload(ada)) === SIGNAL_USER)
@@ -167,9 +167,9 @@ async function main() {
     // a mode whose link is missing: opens the box on it, takes the mode once the link is saved
     await ada.locator('.advanced-panel [data-mode="trustweb-matrix"]').click()
     ok('6. TrustWeb + Matrix without a Matrix id opens the box on Matrix and does not take the mode yet',
-      (await ada.locator('.advanced-panel [data-cb-input="matrix"]').count()) === 1 && (await currentMode(ada)) === 'trustweb-whatsapp')
-    await ada.locator('.advanced-panel [data-cb-input="matrix"]').fill(MATRIX)
-    await ada.locator('.advanced-panel [data-cb-save="matrix"]').click()
+      (await ada.locator('[data-contact-box-on-meet] [data-cb-input="matrix"]').count()) === 1 && (await currentMode(ada)) === 'trustweb-whatsapp')
+    await ada.locator('[data-contact-box-on-meet] [data-cb-input="matrix"]').fill(MATRIX)
+    await ada.locator('[data-contact-box-on-meet] [data-cb-save="matrix"]').click()
     ok('6. saving the id takes the waiting mode', !!(await until(async () => (await currentMode(ada)) === 'trustweb-matrix')))
     ok('6. a Matrix id is ticked by default', (await record(ada)).contactShare?.shareOnConnect?.matrix === true)
     const dan = await newPhone(browser, errors)
