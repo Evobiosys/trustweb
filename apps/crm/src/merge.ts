@@ -1,5 +1,7 @@
 /** Merging two people: which field values the survivor takes, and which records move over. Pure. */
 import { NOTES_KEY, isSet, valueText } from './fields'
+import { LAST_NAME_KEY } from './placement'
+import { RING_KEY } from './rings'
 import type { FieldValue, FieldValues } from './fields'
 import type { ContactPoint, FollowUp, Interaction } from './model'
 
@@ -39,6 +41,27 @@ function joined(key: string, a: FieldValue | undefined, b: FieldValue | undefine
 export function dismiss(pick: Pick, side: Pick.Keep | Pick.Other): Pick {
   const other = side === Pick.Keep ? Pick.Other : Pick.Keep
   return pick === side || pick === Pick.Neither ? Pick.Neither : pick === Pick.Both ? other : pick
+}
+
+/** The value a row ends with under `pick`. */
+function resultOf(r: MergeRow, pick: Pick): FieldValue | undefined {
+  return pick === Pick.Keep ? r.keep : pick === Pick.Other ? r.other : pick === Pick.Both ? joined(r.key, r.keep, r.other) : undefined
+}
+
+const NAME_KEYS: readonly string[] = ['tw-first', LAST_NAME_KEY]
+
+/** Whether "Neither" may be picked for `key`: never for the ring, and for a name part only while the other part keeps a value. `same` holds the values both people share. */
+export function neitherAllowed(key: string, rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>, same: FieldValues): boolean {
+  if (key === RING_KEY) return false
+  if (!NAME_KEYS.includes(key)) return true
+  const otherKey = NAME_KEYS.find((k) => k !== key) as string
+  const row = rows.find((r) => r.key === otherKey)
+  return isSet(row ? resultOf(row, picks[otherKey] ?? row.pick) : same[otherKey])
+}
+
+/** How many fields the merge empties. */
+export function clearedCount(rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>): number {
+  return rows.filter((r) => (picks[r.key] ?? r.pick) === Pick.Neither).length
 }
 
 /** The field edits that put the survivor's merged values in place (nothing for a kept value). */
