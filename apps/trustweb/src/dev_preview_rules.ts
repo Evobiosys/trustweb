@@ -1,5 +1,5 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
-export { ciDiagnostics, readyToGo } from '../dev_preview_rules.mjs'
+export { ciDiagnostics, diagnosticsFor, ghBin, readyToGo } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 

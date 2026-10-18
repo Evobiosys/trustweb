@@ -30,10 +30,11 @@ const CSS = `
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
-.twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
+.twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .more.less{color:#b7a8c9}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
+.twp-pre{position:fixed;left:50%;top:10vh;transform:translateX(-50%);z-index:100001;width:min(560px,92vw);padding:8px;border-radius:10px;background:#241b2e;color:#fff;font:11px system-ui;display:grid;gap:6px}.twp-pre pre{margin:0;max-height:50vh;overflow:auto;white-space:pre-wrap;user-select:all}
 .twp-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;padding:6px 12px;border-radius:8px;background:#241b2e;color:#fff;font:12px system-ui}
 .twp button{font:600 11px system-ui;border:0;border-radius:6px;padding:5px 8px;background:#4fd7a0;color:#241b2e;cursor:pointer}
 .twp button.alt{background:none;color:#4fd7a0;border:1px solid #4fd7a0}.twp .x{background:none;color:#fff;font-size:14px;padding:0 4px}
@@ -299,19 +300,32 @@ export function initDevPreview(): void {
     return h('div', { className: 'btns' }, go, ...(making ? [h('small', { textContent: 'creating the new preview...' })] : []))
   }
 
-  const copy = (text: string, done: string): void => { void navigator.clipboard.writeText(text).then(() => { toast(done) }, () => { toast('copy refused by the browser') }) }
+  /** Clipboard API, else a textarea + execCommand('copy'), else the text in a selectable <pre> (the poll re-renders the panel, so it sits beside it). */
+  async function copy(text: string, done: string): Promise<void> {
+    try { await navigator.clipboard.writeText(text); toast(done); return } catch { /* not allowed (gesture expired during the fetch): fall back */ }
+    const ta = document.body.appendChild(h('textarea', { value: text }))
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    if (ok) { toast(done); return }
+    const box = document.body.appendChild(h('div', { className: 'twp-pre' }, h('small', { textContent: 'Copy was refused: select all (tap the text) and copy by hand.' }), h('pre', { textContent: text }), h('button', { textContent: 'Close', onclick: () => { box.remove() } })))
+  }
 
   /** Under "CI failed on PR #n": the trimmed failure log to the clipboard, and the session (id + path) it was worked on in. */
   function ciFailed(pr: number): HTMLElement {
     const diag = h('button', { textContent: 'Copy diagnostics' })
     diag.addEventListener('click', () => {
-      void fetch('/__tw/ci/diagnostics?pr=' + pr).then((r) => r.text()).then((t) => { copy(t, 'diagnostics copied') }, () => { toast('no diagnostics') })
+      void fetch('/__tw/ci/diagnostics?pr=' + pr).then(async (r) => {
+        if (r.ok) return copy(await r.text(), 'diagnostics copied')
+        const { error } = await r.json().catch(() => ({ error: '' })) as { error?: string }
+        toast('diagnostics failed: ' + (error || 'HTTP ' + r.status))
+      }).catch((e: unknown) => { toast('diagnostics failed: ' + String(e)) })
     })
     const open = h('button', { className: 'alt', textContent: 'Open the session' })
     open.addEventListener('click', () => {
       const s = p!.session
-      if (s) { copy(`${s.id}\n${s.path}`, 'session id and path copied'); return }
-      void fetch('/__tw/ci/devlog').then((r) => r.text()).then((dir) => { window.open('file://' + dir); copy(dir, 'DEVLOG folder copied') }, () => { toast('no DEVLOG folder') })
+      if (s) { void copy(`${s.id}\n${s.path}`, 'session id and path copied'); return }
+      void fetch('/__tw/ci/devlog').then((r) => r.text()).then((dir) => { window.open('file://' + dir); void copy(dir, 'DEVLOG folder copied') }, () => { toast('no DEVLOG folder') })
     })
     return h('div', { className: 'btns' }, diag, open)
   }
@@ -348,7 +362,7 @@ export function initDevPreview(): void {
     const shown = rowsShown()
     if (total <= shown || open) {
       const out: HTMLElement[] = secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
-      if (total > shown) { const less = h('button', { className: 'more', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
+      if (total > shown) { const less = h('button', { className: 'more less', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
       return out
     }
     const out: HTMLElement[] = []
