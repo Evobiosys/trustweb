@@ -303,6 +303,7 @@ async function main() {
     await a.getByRole('button', { name: 'More' }).click().catch(() => {})
     await a.locator('nav.tabs button', { hasText: 'Web' }).click()
     await a.getByRole('button', { name: 'More' }).click()
+    await a.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await a.locator('.menu-item', { hasText: 'Settings' }).click()
     const settings = a.locator('.sheet')
     ok('Settings > Demo accounts: connected, 7 days left', /DEMO ACCOUNTS/i.test(await text(settings)) && /Anna-demo connected · 7 days left/.test(await text(settings)))
@@ -357,6 +358,7 @@ async function main() {
     await c.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     ok('its Inventory shows "What this account found" with the ladder', /What this account found/i.test(await text(c.locator('.found'))) && /Ladder/.test(await text(c.locator('.found'))), await text(c.locator('.found')))
     await shot(c, '11-ben-found')
+    await c.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await c.getByRole('button', { name: 'Settings' }).click()
     ok('its Settings say it is your demo account and when it ends', /This is your demo account Ben-demo/.test(await text(c.locator('.sheet'))) && /ends in 7 days/.test(await text(c.locator('.sheet'))))
     await c.locator('.sheet').getByRole('button', { name: 'Hand over this demo account' }).click()

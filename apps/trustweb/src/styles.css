@@ -917,6 +917,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tl-sum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .tl-dir{font-style:normal; font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
 .tl-more{margin:0 4px 4px; word-break:break-word}
+.settings-adv{margin:12px 0}
+.settings-adv > summary{cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center}
+.settings-adv > summary::-webkit-details-marker{display:none}
+.settings-adv > summary::after{content:'▾'}
+.settings-adv[open] > summary::after{content:'▴'}
 .not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
 .chip .pwho{display:inline-block; vertical-align:middle}
 .link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}

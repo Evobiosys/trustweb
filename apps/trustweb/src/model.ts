@@ -989,6 +989,8 @@ export interface AppState {
   imports?: ImportBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
+  /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
+  features?: { events?: false; inventory?: false }
 }
 
 export interface FeedSettings {
@@ -1012,6 +1014,21 @@ export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
 export function feedOn(s: Pick<AppState, 'feed'>): boolean {
   return s.feed?.on === true
+}
+
+export type FeatureKey = 'events' | 'inventory' | 'feed'
+
+/** Whether a Settings > Features switch is on: events and inventory default on, the Feed defaults off (feedOn). */
+export function featureOn(s: Pick<AppState, 'feed' | 'features'>, key: FeatureKey): boolean {
+  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false
+}
+
+/** Switch events or inventory; on removes the key so the record keeps only what differs from the default. */
+export function setFeature(s: Pick<AppState, 'features'>, key: 'events' | 'inventory', on: boolean): void {
+  if (on) {
+    if (s.features) delete s.features[key]
+    if (s.features && !Object.keys(s.features).length) delete s.features
+  } else s.features = { ...s.features, [key]: false }
 }
 
 export interface HostingState {
