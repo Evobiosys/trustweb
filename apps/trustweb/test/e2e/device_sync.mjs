@@ -89,7 +89,7 @@ async function main() {
     ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 0 resources, 0 meetings, 1 event, 1 message.').isVisible())
     await phone.locator('[data-receive]').click()
     const adopted = await until(async () => (await record(phone)).connectCode)
-    ok('Wave 15: the Phone adopted the Mac\'s public link as a record of another device (the keeper leaves it alone)', adopted?.owner === 'other' && adopted.name === 'ada' && adopted.code === 'A'.repeat(22), JSON.stringify(adopted))
+    ok('Wave 15: the Phone adopted the Mac\'s public link as a record of another device (the keeper leaves it alone)', adopted?.owner === 'other' && adopted.name === 'ada' && adopted.code === 'A'.repeat(22), JSON.stringify({ code: adopted?.code, owner: adopted?.owner, name: adopted?.name }))
     ok('Wave 15: My devices shows "My username" and where the link opens', (await phone.locator('[data-un-opens]').innerText()).includes('trustweb.one/ada opens on') && (await phone.locator('[data-un-name="ada"]').count()) === 1)
 
     const both = ['Ada Mac', 'Bo Mac', 'Cy Phone']

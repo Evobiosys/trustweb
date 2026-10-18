@@ -367,7 +367,7 @@ try {
 try {
   if (state) {
     // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
-    const codeFixed = repairConnectRecord(state) || repairOtherCodes(state)
+    const codeFixed = [repairConnectRecord(state), repairOtherCodes(state)].some(Boolean)
     // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
     const modesFixed = repairShareFields(state)
     // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
@@ -3922,7 +3922,7 @@ async function ensureConnectCode(): Promise<void> {
     await net.start()
     await codeKeeper().ensure(net.connectLink(CONNECT_URL))
     // Wave 15: the records another device owns are kept alive here (the keeper leaves them alone), once per 30 days each.
-    if (state?.connectCode?.owner === 'other' || state?.otherCodes?.length) await careForCodes({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save, log: () => {} })
+    if (state?.connectCode?.owner === 'other' || state?.otherCodes?.length || state?.pendingRenew?.length) await careForCodes({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save, log: () => {} })
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
 
@@ -4443,7 +4443,9 @@ function handoverSheet(): void {
     if (!backup.available()) { msg.textContent = S.handNoServer; make.removeAttribute('disabled'); return }
     try {
       const key = await newRandomKey()
-      const pack: AppState = { ...s, testOf: { ...t, own: undefined } }
+      // The public link and its secret are the owner's, not the demo account's (F17).
+      const { connectCode: _c, otherCodes: _o, pendingRenew: _p, ...rest } = s
+      const pack: AppState = { ...rest, testOf: { ...t, own: undefined } }
       await backupNow(key, pack)
       link = APP_URL + '?handover=1#' + handoverFragment({ keyText: key.text, accountId: t.accountId ?? 'x0000', account: s.me.displayName })
       t.handedOverAt = Date.now()

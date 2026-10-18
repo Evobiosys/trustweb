@@ -22,7 +22,7 @@ import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u 
 import type { AppState } from './model'
 import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
-import { mergeCodes } from './sync_code'
+import { mergeCodes, withoutCodes } from './sync_code'
 import type { CodeMerge } from './sync_code'
 
 export interface Pairing {
@@ -183,21 +183,25 @@ export function createSyncLink(d: SyncLinkDeps) {
     const t = now()
     const me = d.deviceName()
     const before = refreshStamps(s, store.stamps, t, me)
-    const res = mergeBundle(s, before, bundle, p.lastSyncAt)
-    res.codes = mergeCodes(s, bundle, p.did, p.lastSyncAt === 0)
+    // A pairing this device does not share with takes no code and no display name from the other side either (F2, D3).
+    const view = p.shareCode === false ? withoutCodes(bundle) : bundle
+    const res = mergeBundle(s, before, view, p.lastSyncAt)
+    if (view.connectCode) res.codes = mergeCodes(s, view, p.did)
     recordReview(s, res.conflicts)
-    store.stamps = stampsAfterMerge(s, before, bundle, t, me, p.name)
+    store.stamps = stampsAfterMerge(s, before, view, t, me, p.name)
     p.lastSyncAt = t
     persist()
     d.save()
     d.onLog(`Merged from ${p.name}: ${res.added} added, ${res.updated} updated, ${res.conflicts.length} to review`)
-    if (bundle.connectCode && d.settleCodes) await d.settleCodes(res.codes).catch(() => d.onLog(`Could not settle the username with ${p.name}`))
+    if (res.codes && d.settleCodes) await d.settleCodes(res.codes).catch(() => d.onLog(`Could not settle the username with ${p.name}`))
     if (!reply) await sendBundle(p, true).catch(() => d.onLog(`Could not send ours back to ${p.name}`))
     return res
   }
 
   async function sendBundle(p: Pairing, reply: boolean): Promise<void> {
     const s = d.state()
+    // Once the code went out, a dead secret means "sync with the other device", never a new code (F3).
+    if (p.shareCode !== false && s.connectCode && s.connectCode.owner !== 'other' && !s.connectCode.shared) { s.connectCode = { ...s.connectCode, shared: true }; d.save() }
     store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
     persist()
     const pieces = toChunks(bundleOf(s, store.stamps, p.shareCode !== false))
@@ -256,6 +260,15 @@ export function createSyncLink(d: SyncLinkDeps) {
       if (!c) return null
       await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), exp: stamp() }))
       return request(c.did, 'Other device')
+    },
+    /** The per-pairing tick "Shares my username" (D1). */
+    setShare(did: string, on: boolean): void {
+      const p = store.pairings.find((x) => x.did === did)
+      if (!p) return
+      if (on) delete p.shareCode
+      else p.shareCode = false
+      persist()
+      d.onChange()
     },
     unlink(did: string): void {
       store.pairings = store.pairings.filter((x) => x.did !== did)

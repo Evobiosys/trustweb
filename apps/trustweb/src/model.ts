@@ -871,6 +871,8 @@ export interface AppState {
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.
    */
   otherCodes?: ConnectRecord[]
+  /** Wave 15: codes whose secret renewal (unlink) failed; retried at the next keeper run (sync_codes.ts). */
+  pendingRenew?: string[]
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. Text only; also synced, sealed, between the owner's own devices. */
   chats?: ChatBook
   /**

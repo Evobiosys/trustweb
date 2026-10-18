@@ -26,7 +26,7 @@ import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trim
 import type { ChatBook } from './chat'
 import type { ChannelMap, ShareSettings } from './contact_share'
 import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_person'
-import { codesForBundle, parseCodeField, readCodeList, travelling, validLongUrl } from './sync_code'
+import { codesForBundle, parseCodeField, readCodeList, validLongUrl, wireOther } from './sync_code'
 import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
 
@@ -39,7 +39,7 @@ export const HANDSHAKE_MS = 30_000
 /** Conflicts kept in AppState.syncReview. */
 export const REVIEW_MAX = 50
 
-export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'channel' | 'sameAs' | 'chat'
+export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'channel' | 'sameAs' | 'chat' | 'name'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
 export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
 
@@ -159,7 +159,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     ...codesForBundle(s, shareCode),
-    ...(s.me?.displayName ? { displayName: s.me.displayName } : {}),
+    ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
   }
 }
 
@@ -245,7 +245,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   const code = parseCodeField(v.connectCode)
   if (code) {
     out.connectCode = code
-    const others = readCodeList(v.otherCodes, [code.code]).filter((r) => validLongUrl(r.url)).map(travelling)
+    const others = readCodeList(v.otherCodes, [code.code]).filter((r) => validLongUrl(r.url)).map(wireOther)
     if (others.length) out.otherCodes = others
   }
   if (typeof v.displayName === 'string' && v.displayName.trim() && v.displayName.length <= 60) out.displayName = v.displayName
@@ -366,6 +366,17 @@ function mergeChannels(mine: AppState, theirs: NonNullable<SyncBundle['channels'
   }
 }
 
+/** The name shown on the public link: skipped when the other side has no timestamp for it; otherwise the newer wins and the difference is listed like a messenger link (F12). */
+function mergeDisplayName(mine: AppState, myStamps: Stamps, theirs: SyncBundle, res: MergeResult): void {
+  const t = theirs.at['n:me']
+  const m = mine.me?.displayName
+  if (!theirs.displayName || !t || !m || theirs.displayName === m) return
+  const my = myStamps['n:me']
+  const theirsWins = t > (my?.at ?? 0)
+  res.conflicts.push({ kind: 'name', id: 'displayName', label: 'Name on my public link', kept: theirsWins ? 'theirs' : 'mine', mine: m, theirs: theirs.displayName, mineAt: my?.at, mineBy: my?.by, theirsAt: t, theirsBy: theirs.by?.['n:me'] })
+  if (theirsWins) { mine.me.displayName = theirs.displayName; res.updated++ }
+}
+
 /**
  * Merges `theirs` into `mine` (mutating `mine`), `since` = when this pair last synced (0: never). Returns what happened.
  * Entities adopted from `theirs` take their stamp over, so they are not sent back as "changed here".
@@ -384,7 +395,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
-  if (theirs.displayName && theirs.displayName !== mine.me?.displayName && (theirs.at['n:me'] ?? 0) > (myStamps['n:me']?.at ?? 0)) { mine.me.displayName = theirs.displayName; res.updated++ }
+  mergeDisplayName(mine, myStamps, theirs, res)
   collapseSamePersons(mine)
   return res
 }

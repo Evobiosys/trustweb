@@ -15,7 +15,7 @@
  * and know no aliases: the phone then keeps what its record holds.
  */
 import {
-  CONNECT_CODE_RE, ClaimError, MAX_ALIASES, MAX_NAMES, NAME_RE, canRegister, field, postTo, readConnectRecord, readNameList,
+  CONNECT_CODE_RE, ClaimError, MAX_ALIASES, MAX_NAMES, NAME_RE, canRegister, field, mustKeep, postTo, readConnectRecord, readNameList,
 } from './connect_code'
 import type { ConnectClientDeps, ConnectKeeper, ConnectRecord } from './connect_code'
 import { ConnectError } from './connect_code'
@@ -213,7 +213,7 @@ export function createNamesSync(deps: NamesSyncDeps): NamesSync {
     if (!out.ok && out.error === ClaimError.RateLimited) deps.keeper.noteRateLimited()
     // The record may have changed while the request ran (a registration); write into the fresh one, or not at all when the code is gone.
     const fresh = held()
-    if (!out.ok && out.error === ClaimError.Forgotten && fresh?.code === record.code && fresh.owner === 'other' && !fresh.stale) deps.store({ ...fresh, stale: true })
+    if (!out.ok && out.error === ClaimError.Forgotten && fresh?.code === record.code && mustKeep(fresh) && !fresh.stale) deps.store({ ...fresh, stale: true })
     if (out.ok && fresh?.code === record.code) keep(fresh, out.names)
     else if (!out.ok && out.names && fresh?.code === record.code) keep(fresh, out.names)
     return out

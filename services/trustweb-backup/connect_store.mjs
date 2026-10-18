@@ -334,9 +334,11 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       applyNames(code, entry, plan.names)
       entry.seen = src.seen = now()
       moved.set(name, now())
+      // The rollback may run after other requests changed the map: a name another code holds by now is not given back (F11).
+      const mine = (c) => (n) => { const h = names.get(n); return h === undefined || h === c }
       await commit(() => {
-        applyNames(code, entry, before.to)
-        applyNames(from.code, src, before.from)
+        applyNames(code, entry, before.to.filter(mine(code)))
+        applyNames(from.code, src, before.from.filter(mine(from.code)))
         entry.seen = before.seenTo
         src.seen = before.seenFrom
         if (before.moved === undefined) moved.delete(name)

@@ -147,3 +147,6 @@ Devices (wave 15): one account code across linked devices
      account: both secrets must open (403 either way), code === from is 400, 409 not_held / alias_cap (target would pass 3 names) /
      name_moved (one move per name per 30 days, `until` says when) / name_taken (lookalike). No claim (the name cap ignores it), no
      30-day rest, a locked name moves and stays locked. Both codes change in one step with one write.
+  An OLD server (before this wave) ignores `move` and `rotate`: it answers a move as a plain READ (200 with the unchanged names, so the
+     client sees no change and reports a server error) and a rotate with a 400 (no url); nothing is lost. Deploy the server first.
+  The app also touches a code with a plain GET /c/<code> (read-only, no body) to keep it from expiring; the url is written only when it changed.

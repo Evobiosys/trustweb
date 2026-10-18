@@ -18,7 +18,8 @@ import { heldNames, namesOf } from './names_sync'
 import type { NamesOutcome } from './names_sync'
 import type { ConnectRecord } from './connect_code'
 import { opensOn } from './sync_code'
-import { makePrimary, moveHere, openHere, refreshAll, releaseName, rotateCodes, settleCodes } from './sync_codes'
+import type { CodeMerge } from './sync_code'
+import { dropCode, makePrimary, moveHere, openHere, pickCode, refreshAll, releaseName, rotateCodes, settleCodes } from './sync_codes'
 import type { CodeOpsDeps } from './sync_codes'
 import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
@@ -141,7 +142,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('p', { class: 'meta' }, [`${p.fp} · ${p.lastSyncAt ? S.dvLast(h.when(p.lastSyncAt)) : S.dvNever}`]),
       failed.has(p.did) ? el('p', { class: 'warn', 'data-sync-failed': p.did }, [failed.get(p.did)]) : null,
       el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [failed.has(p.did) ? S.dvTryAgain : S.dvSyncNow]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.dvUnlinkConfirm)) { link.unlink(p.did); unlinked(p); devicesSheet() } } }, [S.dvUnlink]),
+      shareToggle(p),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.dvUnlinkConfirm)) void unlinkDevice(p) } }, [S.dvUnlink]),
     ]))
     const name = el('input', { class: 'field', value: deviceNameOf(nameKey), maxlength: '40', 'aria-label': S.dvDeviceName, 'data-device-name': '1' })
     open(SHEET_KIND, [
@@ -163,10 +165,37 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     ])
   }
 
-  /** Unlinking takes this side's shared secrets back (a new secret per code); the unlinked device's copy goes stale. Nothing to take back when the code was never shared. */
-  function unlinked(p: Pairing): void {
+  /** The tick "Shares my username" per pairing (D1); switching it off renews the secret of the codes this device owns, so the other side's copy dies. */
+  function shareToggle(p: Pairing): HTMLElement {
+    const box = el('input', { type: 'checkbox', checked: p.shareCode !== false, 'data-share-toggle': p.did }) as HTMLInputElement
+    box.onchange = () => {
+      const was = p.shareCode !== false
+      link.setShare(p.did, box.checked)
+      const deps = codeDeps()
+      if (was && !box.checked && deps) void rotateCodes(deps).then(() => { if (showing()) devicesSheet() })
+    }
+    return el('label', { class: 'consent' }, [box, el('span', {}, [S.unSharesToggle])])
+  }
+
+  /**
+   * Unlink. When the public link opens on the device being unlinked, it is first moved to this device ("Open on this device"); if that fails the unlink is
+   * refused with the reason (F5). Afterwards the secrets of the codes this device owns are renewed when the pairing shared them.
+   */
+  async function unlinkDevice(p: Pairing): Promise<void> {
+    const main = h.peek()?.connectCode
     const deps = codeDeps()
-    if (deps && p.shareCode !== false) void rotateCodes(deps).then(() => { if (showing()) devicesSheet() })
+    if (main && !main.stale) {
+      const on = opensOn(main.url, h.askDid(), link.pairings())
+      if (on.kind === 'device' && on.did === p.did) {
+        const ok = deps ? await openHere(deps, await h.connectLink()).catch(() => false) : false
+        if (!ok) { h.toast(S.unUnlinkRefused); return }
+        h.toast(S.unOpenedFirst)
+      }
+    }
+    const shared = p.shareCode !== false
+    link.unlink(p.did)
+    if (deps && shared) await rotateCodes(deps)
+    devicesSheet()
   }
 
   /** The device a record came from, by its pairing's name; this device when it minted the code itself. */
@@ -213,25 +242,53 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const movable = main && !main.stale && opensOn(main.url, h.askDid(), link.pairings()).kind !== 'this'
     return [
       el('h4', { class: 'eyebrow', 'data-my-username': '1' }, [S.unTitle]),
-      main?.stale ? el('p', { class: 'warn', 'data-un-stale': '1' }, [S.unStale]) : null,
+      main?.stale ? el('p', { class: 'warn', 'data-un-stale': '1' }, [main.owner === 'other' ? S.unStale : S.unStaleThis]) : null,
       opens ? el('p', { 'data-un-opens': '1' }, [S.unOpensOn(mainNames[0], opens)]) : null,
       opens ? el('p', { class: 'meta' }, [S.unNewOn(opens)]) : null,
       ...(main && !main.stale ? mainNames.map((n, i) => nameRow(main, n, i === 0, true)) : []),
       movable ? el('button', { class: 'btn btn-electric btn-sm', 'data-un-open-here': '1', onclick: () => void act(async (d) => openHere(d, await h.connectLink())) }, [S.unOpenHere]) : null,
       others.some((r) => heldNames(namesOf(r)).length) ? el('p', { class: 'meta' }, [S.unLeft]) : null,
       ...others.flatMap((r) => (r.stale ? [] : heldNames(namesOf(r)).map((n) => nameRow(r, n, false, false)))),
+      ...others.filter((r) => !r.stale && !heldNames(namesOf(r)).length).map((r) => el('div', { class: 'verse', 'data-un-old': r.code }, [
+        el('p', { class: 'meta' }, [S.unOldLink]),
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-un-drop': r.code, onclick: () => { const s = h.peek(); if (s) dropCode(s, h.save, r.code); devicesSheet() } }, [S.unReleaseOld]),
+      ])),
     ]
   }
 
-  /** The one-time sheet of the device that holds the code both now share. */
+  /** The one-time sheet after the owner kept one link for all devices. */
   function mergedSheet(): void {
     const name = h.peek()?.connectCode?.name
-    if (!name) return
+    if (!name) return devicesSheet()
     open('devices-merged', [
       el('h3', {}, [S.unTitle]),
       el('p', { 'data-un-merged': '1' }, [S.unMerged(name)]),
       el('button', { class: 'btn btn-electric', onclick: devicesSheet }, [S.unMergedOk]),
     ])
+  }
+
+  /** Two links met and this device's would lose names: the owner picks which to keep; nothing has moved yet, "Later" leaves it for the next sync (F1, D2). */
+  function choiceSheet(c: NonNullable<CodeMerge['choice']>): void {
+    const names = (r: ConnectRecord): string[] => heldNames(namesOf(r))
+    const side = (r: ConnectRecord, who: 'mine' | 'theirs'): HTMLElement => el('div', { class: 'verse', 'data-un-choice': who }, [
+      el('b', {}, [`trustweb.one/${names(r)[0]}`]),
+      el('p', { class: 'meta' }, [`${S.unOnDevice(deviceOf(r))}: ${names(r).map((n) => '@' + n).join(', ')}`]),
+      el('button', { class: 'btn btn-electric btn-sm', 'data-un-keep': who, onclick: () => void pick(c, who) }, [S.unKeep(names(r)[0])]),
+    ])
+    open('devices-choice', [
+      el('h3', {}, [S.unTitle]),
+      el('p', {}, [S.unChoose(names(c.mine)[0], names(c.theirs)[0], deviceOf(c.theirs))]),
+      side(c.mine, 'mine'), side(c.theirs, 'theirs'),
+      el('button', { class: 'btn btn-ghost', 'data-un-later': '1', onclick: devicesSheet }, [S.unLater]),
+    ])
+  }
+
+  async function pick(c: NonNullable<CodeMerge['choice']>, keep: 'mine' | 'theirs'): Promise<void> {
+    const deps = codeDeps()
+    if (!deps) { h.toast(S.unOpenHereFailed); return }
+    await pickCode(deps, c, keep)
+    h.changed()
+    mergedSheet()
   }
 
   async function syncNow(p: Pairing): Promise<void> {
@@ -309,7 +366,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const res = await i.accept(file)
     h.changed()
     h.toast([S.dvMerged(res.added, res.updated), h.snapshots.note()].filter(Boolean).join(' '))
-    if (res.codes?.merged) mergedSheet()
+    if (res.codes?.choice) choiceSheet(res.codes.choice)
     else if (res.conflicts.length) reviewSheet()
     else devicesSheet()
   }
