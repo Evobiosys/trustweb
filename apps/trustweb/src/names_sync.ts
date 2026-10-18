@@ -5,6 +5,7 @@
  *   READ     {code, secret}                     the names, changing nothing (how the app learns names the operator granted)
  *   CLAIM    {code, secret, name}               sets the primary          {..., alias: true} adds an alias
  *   RELEASE  {code, secret, release: "<name>"}  frees that one name (releasing the primary promotes the first alias)
+ *   MOVE     {code, secret, move: "<name>", from: {code, secret}, as}  (wave 15) the name leaves the other code of the same account and joins this one
  * Every 200 answers {"name": "<primary or empty>", "aliases": ["..."]}; a 409 names its reason: name_taken, reserved, name_locked,
  * too_many_names. A LOCKED name (reserved and held by this code: the operator granted it) can neither be released nor replaced from the
  * app. Every 200 carries `locked` (contract 10.9, E1's correction of the pin): the held names that are reserved right now; it is drawn
@@ -57,14 +58,17 @@ export type NameIntent =
   | { kind: 'read' }
   | { kind: 'claim'; name: string; alias: boolean }
   | { kind: 'release'; name: string }
+  /** Wave 15 (devices): `name` leaves the code `from` (both secrets travel) and joins this one, as an alias or the primary. */
+  | { kind: 'move'; name: string; from: Pick<ConnectRecord, 'code' | 'secret'>; as: 'primary' | 'alias' }
 
-/** The JSON body of one intent: exactly one of read / claim / release. */
+/** The JSON body of one intent: exactly one of read / claim / release / move. */
 export function bodyOf(record: ConnectRecord, intent: NameIntent): string {
   const auth = { code: record.code, secret: record.secret }
   switch (intent.kind) {
     case 'read': return JSON.stringify(auth)
     case 'claim': return JSON.stringify({ ...auth, name: intent.name, ...(intent.alias ? { alias: true } : {}) })
     case 'release': return JSON.stringify({ ...auth, release: intent.name })
+    case 'move': return JSON.stringify({ ...auth, move: intent.name, from: { code: intent.from.code, secret: intent.from.secret }, as: intent.as })
   }
 }
 
@@ -106,6 +110,7 @@ export function answerMatches(intent: NameIntent, names: NamesState): boolean {
     case 'read': return true
     case 'claim': return intent.alias ? heldNames(names).includes(intent.name) : names.name === intent.name
     case 'release': return !heldNames(names).includes(intent.name)
+    case 'move': return intent.as === 'primary' ? names.name === intent.name : heldNames(names).includes(intent.name)
   }
 }
 
@@ -117,6 +122,9 @@ function errorFor(status: number, json: unknown): ClaimError {
       case 'reserved': return ClaimError.Reserved
       case 'name_locked': return ClaimError.NameLocked
       case 'too_many_names': return ClaimError.TooManyNames
+      case 'alias_cap': return ClaimError.AliasCap
+      case 'name_moved': return ClaimError.NameMoved
+      case 'not_held': return ClaimError.NotHeld
       default: return ClaimError.Taken
     }
   }
@@ -139,7 +147,7 @@ function lockedBy(intent: NameIntent, prior: NamesState): string | null {
 /** One call to POST /name. Never throws. */
 export async function callNames(deps: ConnectClientDeps, record: ConnectRecord, intent: NameIntent): Promise<NamesOutcome> {
   if (!canRegister(deps.origin)) return { ok: false, error: ClaimError.Network }
-  if ((intent.kind === 'claim' || intent.kind === 'release') && !isSendableName(intent.name)) return { ok: false, error: ClaimError.BadName }
+  if (intent.kind !== 'read' && !isSendableName(intent.name)) return { ok: false, error: ClaimError.BadName }
   const prior = namesOf(record)
   const res = await postTo(deps, '/name', bodyOf(record, intent))
   if (res === ConnectError.Network) return { ok: false, error: ClaimError.Network }
@@ -178,6 +186,8 @@ export interface NamesSync {
   refresh(force?: boolean): Promise<NamesOutcome>
   claim(name: string, alias: boolean): Promise<NamesOutcome>
   release(name: string): Promise<NamesOutcome>
+  /** Wave 15: moves `name` from another code of this account into this one. */
+  move(name: string, from: ConnectRecord, as: 'primary' | 'alias'): Promise<NamesOutcome>
   /** Called whenever the held names changed. Returns the way to stop listening. */
   onChange(listener: () => void): () => void
 }
@@ -203,6 +213,7 @@ export function createNamesSync(deps: NamesSyncDeps): NamesSync {
     if (!out.ok && out.error === ClaimError.RateLimited) deps.keeper.noteRateLimited()
     // The record may have changed while the request ran (a registration); write into the fresh one, or not at all when the code is gone.
     const fresh = held()
+    if (!out.ok && out.error === ClaimError.Forgotten && fresh?.code === record.code && fresh.owner === 'other' && !fresh.stale) deps.store({ ...fresh, stale: true })
     if (out.ok && fresh?.code === record.code) keep(fresh, out.names)
     else if (!out.ok && out.names && fresh?.code === record.code) keep(fresh, out.names)
     return out
@@ -217,6 +228,7 @@ export function createNamesSync(deps: NamesSyncDeps): NamesSync {
     },
     claim: (name, alias) => call({ kind: 'claim', name, alias }),
     release: (name) => call({ kind: 'release', name }),
+    move: (name, from, as) => call({ kind: 'move', name, from, as }),
     onChange(listener: () => void): () => void {
       listeners.add(listener)
       return () => { listeners.delete(listener) }

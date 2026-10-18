@@ -49,6 +49,17 @@ export interface ConnectRecord {
    * Only names this code still holds are kept. Absent: none known.
    */
   lockedNames?: string[]
+  /**
+   * Wave 15 (devices; local only, never synced): 'other' = the record came from a linked device. The keeper then does NOTHING with it (never
+   * re-points the url, never mints on a 403): the url changes only through the explicit "Open on this device". Absent = 'this'.
+   */
+  owner?: 'this' | 'other'
+  /** Wave 15 (local only): the pairing (sync DID) this record came from; the device name is looked up when drawing. */
+  fromDid?: string
+  /** Wave 15 (local only): the server refused this record's secret or no longer knows the code (the other device unlinked us, or it expired). */
+  stale?: true
+  /** Wave 15 (local only): when this device last kept the record alive on the server without owning it (sync_codes.ts care). */
+  touchedAt?: number
 }
 
 /** A code holds at most this many names: one primary plus up to MAX_ALIASES aliases (services contract 10.9). */
@@ -99,6 +110,10 @@ export function readConnectRecord(raw: unknown): ConnectRecord | null {
   const lockedNames = readNameList(o.lockedNames, MAX_NAMES).filter((n) => held.includes(n))
   return {
     code, secret, url, updatedAt,
+    ...(o.owner === 'other' ? { owner: 'other' as const } : {}),
+    ...(typeof o.fromDid === 'string' && o.fromDid.length <= 1600 ? { fromDid: o.fromDid } : {}),
+    ...(o.stale === true ? { stale: true as const } : {}),
+    ...(typeof o.touchedAt === 'number' && Number.isFinite(o.touchedAt) ? { touchedAt: o.touchedAt } : {}),
     ...(name ? { name } : {}), ...(aliases.length ? { aliases } : {}), ...(lockedNames.length ? { lockedNames } : {}),
   }
 }
@@ -144,13 +159,14 @@ export function canRegister(origin: string): boolean {
 /** Does the server's copy need to be written: nothing there yet, another link, or older than 30 days. */
 export function registrationDue(record: ConnectRecord | null, longUrl: string, now: number): boolean {
   if (!record) return true
+  if (record.owner === 'other') return false // the keeper leaves a record of another device alone (wave 15)
   if (record.url !== longUrl) return true
   return now - record.updatedAt >= CONNECT_REFRESH_MS || now < record.updatedAt
 }
 
 /** The short link to show for this long link right now, or null while the server's copy is missing or out of date. */
 export function shortToShow(origin: string, record: ConnectRecord | null, longUrl: string, now: number): string | null {
-  if (!record || registrationDue(record, longUrl, now)) return null
+  if (!record || record.stale || registrationDue(record, longUrl, now)) return null
   return connectShortLink(origin, record.code)
 }
 
@@ -222,7 +238,7 @@ export async function registerConnect(deps: ConnectClientDeps, record: ConnectRe
   if (res === ConnectError.Network) return { ok: false, error: ConnectError.Network }
   // Only the server's "forbidden" (unknown, expired, wrong secret) means the code is gone; a 403 forbidden_origin (a proxy or origin
   // problem) must not throw away a code that still works, and with it a printed QR and a username.
-  if (record && res.status === 403 && field(res.json, 'error') === 'forbidden') return registerConnect(deps, null, longUrl)
+  if (record && record.owner !== 'other' && res.status === 403 && field(res.json, 'error') === 'forbidden') return registerConnect(deps, null, longUrl)
   if (res.status !== 200 && res.status !== 201) return { ok: false, error: errorForStatus(res.status) }
   if (record && res.status === 200) {
     if (field(res.json, 'code') !== record.code) return { ok: false, error: ConnectError.Server }
@@ -248,6 +264,12 @@ export enum ClaimError {
   TooManyNames = 'too-many-names',
   /** 429 name-cap: this network address already claimed its 3 names in 30 days (not the shared cooldown). */
   NameCap = 'name-cap',
+  /** 409 alias_cap: moving the name would give the target code more than three names. */
+  AliasCap = 'alias-cap',
+  /** 409 name_moved: this name moved lately (once in 30 days). */
+  NameMoved = 'name-moved',
+  /** 409 not_held: the other code no longer holds the name. */
+  NotHeld = 'not-held',
   /** 403: the server no longer knows this code (it expired); the next registration makes a new one. */
   Forgotten = 'forgotten',
   RateLimited = 'rate-limited',
@@ -321,7 +343,10 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   }
 
   const run = async (longUrl: string): Promise<boolean> => {
-    const out = await registerConnect(deps, held(), longUrl)
+    const start = held()
+    const out = await registerConnect(deps, start, longUrl)
+    // A sync may have brought a code in while this request ran: the record is then the shared one and this answer is dropped (the new code just expires).
+    if (out.ok && held()?.code !== start?.code) return false
     if (!out.ok) {
       lastFailAt = deps.now()
       if (out.error === ConnectError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS

@@ -22,13 +22,21 @@ import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u 
 import type { AppState } from './model'
 import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
+import { mergeCodes } from './sync_code'
+import type { CodeMerge } from './sync_code'
 
-export interface Pairing { did: string; name: string; fp: string; linkedAt: number; lastSyncAt: number }
+export interface Pairing {
+  did: string; name: string; fp: string; linkedAt: number; lastSyncAt: number
+  /** Wave 15: the DID this device asks and answers with (the one its public link carries; hello, ready and pair announce it), so "opens on <device>" can name it. */
+  askDid?: string
+  /** Wave 15: false = my username and public link are NOT sent to this device (the tick on the confirm sheet). Absent = shared. */
+  shareCode?: boolean
+}
 
 interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: Stamps }
 
 /** A device waiting for the person's "Confirm" (both sides of a pairing show one). */
-export interface PairRequest { name: string; fp: string; confirm(): void; cancel(): void }
+export interface PairRequest { name: string; fp: string; confirm(opts?: { shareCode?: boolean }): void; cancel(): void }
 
 /** A record that arrived complete and waits for the person's "Confirm". `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
 export interface Incoming { from: Pairing; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
@@ -50,6 +58,10 @@ export interface SyncLinkDeps {
   /** Progress and log lines, in the order they happen. */
   onLog: (line: string) => void
   onChange: () => void
+  /** Wave 15: the DID this device asks with (its public link's), announced to the paired device; undefined while it has none. */
+  askDid?: () => string | undefined
+  /** Wave 15: the network step after a merge that brought codes in (sync_codes.ts); never throws. */
+  settleCodes?: (merge: CodeMerge) => Promise<void>
   /** Overrides how long a handshake waits (tests). */
   handshakeMs?: number
   /** Overrides the SYNC_VERSION this device announces (tests). */
@@ -57,8 +69,8 @@ export interface SyncLinkDeps {
 }
 
 type Msg =
-  | { t: 'pair'; did: string; name: string; exp: number }
-  | { t: 'hello' | 'ready'; sid: string; name: string; v?: number; exp: number }
+  | { t: 'pair'; did: string; name: string; ask?: string; exp: number }
+  | { t: 'hello' | 'ready'; sid: string; name: string; v?: number; ask?: string; exp: number }
   | { t: 'data'; sid: string; i: number; n: number; r: boolean; d: string; name: string; exp: number }
 
 const MAX_PIECES = 200
@@ -66,6 +78,8 @@ const MAX_PIECES = 200
 const SYNC_KEY_INFO = 'trustweb-device-sync/v1'
 const pairKeyOf = (secret: Uint8Array): Promise<CryptoKey> => deriveEcdhPairKey(secret, SYNC_KEY_INFO)
 const OFFER_MS = SYNC_TTL_MS
+/** An announced asking DID is a did:peer:2 of sane size (it only ever names a device in the list). */
+const askOk = (v: unknown): v is string => typeof v === 'string' && /^did:peer:2\.[A-Za-z0-9.:_-]{20,1500}$/.test(v)
 
 function utf8(s: string): Uint8Array { return new TextEncoder().encode(s) }
 
@@ -122,14 +136,17 @@ export function createSyncLink(d: SyncLinkDeps) {
   }
   const send = async (did: string, msg: Msg): Promise<void> => channel.sendRaw(did, await sealMsg(await pairKey(did), msg))
   const stamp = (): number => now() + SYNC_TTL_MS
+  const ask = (): { ask?: string } => { const a = d.askDid?.(); return askOk(a) ? { ask: a } : {} }
 
   /** The pairing request both sides show: the fingerprint of the shared secret, and what Confirm does. */
-  async function request(did: string, name: string): Promise<PairRequest> {
+  async function request(did: string, name: string, ask?: string): Promise<PairRequest> {
     const fp = await fingerprintOf(ecdhSharedSecret(identity, did))
     return {
       name, fp,
-      confirm: () => {
-        store.pairings = [...store.pairings.filter((p) => p.did !== did), { did, name, fp, linkedAt: now(), lastSyncAt: 0 }]
+      confirm: (opts) => {
+        store.pairings = [...store.pairings.filter((p) => p.did !== did), {
+          did, name, fp, linkedAt: now(), lastSyncAt: 0, ...(askOk(ask) ? { askDid: ask } : {}), ...(opts?.shareCode === false ? { shareCode: false } : {}),
+        }]
         persist()
         d.onLog(`Linked ${name} (${fp})`)
       },
@@ -167,12 +184,14 @@ export function createSyncLink(d: SyncLinkDeps) {
     const me = d.deviceName()
     const before = refreshStamps(s, store.stamps, t, me)
     const res = mergeBundle(s, before, bundle, p.lastSyncAt)
+    res.codes = mergeCodes(s, bundle, p.did, p.lastSyncAt === 0)
     recordReview(s, res.conflicts)
     store.stamps = stampsAfterMerge(s, before, bundle, t, me, p.name)
     p.lastSyncAt = t
     persist()
     d.save()
     d.onLog(`Merged from ${p.name}: ${res.added} added, ${res.updated} updated, ${res.conflicts.length} to review`)
+    if (bundle.connectCode && d.settleCodes) await d.settleCodes(res.codes).catch(() => d.onLog(`Could not settle the username with ${p.name}`))
     if (!reply) await sendBundle(p, true).catch(() => d.onLog(`Could not send ours back to ${p.name}`))
     return res
   }
@@ -181,7 +200,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     const s = d.state()
     store.stamps = refreshStamps(s, store.stamps, now(), d.deviceName())
     persist()
-    const pieces = toChunks(bundleOf(s, store.stamps))
+    const pieces = toChunks(bundleOf(s, store.stamps, p.shareCode !== false))
     if (pieces.length > MAX_PIECES) { d.onLog(`The record is too large to send (${pieces.length} pieces, the most is ${MAX_PIECES})`); throw new Error('too large') }
     const sid = randomId(12)
     for (let i = 0; i < pieces.length; i++) {
@@ -197,7 +216,8 @@ export function createSyncLink(d: SyncLinkDeps) {
       if (!m) return false
       if (m.t !== 'pair' && now() <= m.exp) {
         if (m.name && m.name !== p.name) { p.name = m.name; persist() }
-        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName(), v: version, exp: stamp() })
+        if ((m.t === 'hello' || m.t === 'ready') && askOk(m.ask) && m.ask !== p.askDid) { p.askDid = m.ask; persist() }
+        if (m.t === 'hello') await send(fromDid, { t: 'ready', sid: m.sid, name: d.deviceName(), v: version, ...ask(), exp: stamp() })
         else if (m.t === 'ready') waiting.get(m.sid)?.(m.v ?? 1)
         else if (m.t === 'data') await onData(p, m)
       }
@@ -207,7 +227,7 @@ export function createSyncLink(d: SyncLinkDeps) {
       const m = await openMsg(offer.key, payload)
       if (m?.t === 'pair' && m.did === fromDid && now() <= m.exp) {
         offer = null
-        d.onPairRequest(await request(fromDid, m.name))
+        d.onPairRequest(await request(fromDid, m.name, m.ask))
         return true
       }
     }
@@ -234,7 +254,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     async join(code: string): Promise<PairRequest | null> {
       const c = parsePairingCode(code)
       if (!c) return null
-      await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), exp: stamp() }))
+      await channel.sendRaw(c.did, await sealMsg(await pairKeyOf(fromB64u(c.secret)), { t: 'pair', did: identity.did, name: d.deviceName(), ...ask(), exp: stamp() }))
       return request(c.did, 'Other device')
     },
     unlink(did: string): void {
@@ -252,7 +272,7 @@ export function createSyncLink(d: SyncLinkDeps) {
         const timer = setTimeout(() => { waiting.delete(sid); resolve(null) }, d.handshakeMs ?? HANDSHAKE_MS)
         waiting.set(sid, (v) => { clearTimeout(timer); waiting.delete(sid); resolve(v) })
       })
-      await send(did, { t: 'hello', sid, name: d.deviceName(), v: version, exp: stamp() })
+      await send(did, { t: 'hello', sid, name: d.deviceName(), v: version, ...ask(), exp: stamp() })
       const v = await ready
       if (v === null) { d.onLog(`${p.name} did not answer: open TrustWeb there and try again`); throw new Error('offline') }
       if (v !== version) { d.onLog(`${p.name} runs an other version of TrustWeb: update it there`); throw new Error('version') }

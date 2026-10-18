@@ -5,7 +5,8 @@
  * What travels (SyncBundle v2): people (with their note lines and fields), resources (inventory), past meetings, events, my own messenger
  * links with their share ticks (myChannels, contactShare), chats as TEXT ONLY (the ChatMessage fields; no image, no audio) and the sameAs map
  * ("these two persons are one"). All of it only sealed between the owner's own linked devices (sync_link.ts). Never the relay identity, peers,
- * connect code, hosting secret or any setting: those belong to one device. Pictures stay on their device (imageId is dropped).
+ * hosting secret or any setting: those belong to one device. The connect code (public link + username) travels only when the pairing shares it
+ * (wave 15, sync_code.ts), with the name shown on it (`displayName`, newer wins). Pictures stay on their device (imageId is dropped).
  *
  * Merge, per entity (a person, a resource, a meeting, an event, one messenger link), by id: unknown ids are added; the same id on both sides
  * keeps the version with the newer stamp and takes over every field only the other side has; a person's note lines are united by id so
@@ -25,6 +26,9 @@ import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trim
 import type { ChatBook } from './chat'
 import type { ChannelMap, ShareSettings } from './contact_share'
 import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_person'
+import { codesForBundle, parseCodeField, readCodeList, travelling, validLongUrl } from './sync_code'
+import type { CodeMerge } from './sync_code'
+import type { ConnectRecord } from './connect_code'
 
 /** 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 2
@@ -52,6 +56,11 @@ export interface SyncBundle {
   events?: TwEvent[]
   chats?: ChatBook
   sameAs?: Record<string, string>
+  /** Wave 15: the public link and username of this account, when the pairing shares them (sync_code.ts), and the others it holds. Never part of a conflict or the sync log. */
+  connectCode?: ConnectRecord
+  otherCodes?: ConnectRecord[]
+  /** Wave 15: the name shown on the public link (me.displayName), so it stays the same on every device; peer ids differ per device by design. */
+  displayName?: string
 }
 
 export interface Conflict {
@@ -72,6 +81,8 @@ export interface MergeResult {
   added: number
   updated: number
   conflicts: Conflict[]
+  /** Wave 15: what the codes of the bundle still need from the network (set by the link, sync_code.ts). */
+  codes?: CodeMerge
 }
 
 export interface Counts { people: number; lines: number; resources: number; meetings: number; events: number; messages: number }
@@ -108,7 +119,7 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'myChannels' | 'contactShare'>
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
 
 function entities(s: Source): [string, unknown][] {
   return [
@@ -118,10 +129,11 @@ function entities(s: Source): [string, unknown][] {
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
+    ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, myChannels: b.channels?.mine, contactShare: b.channels?.share })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -133,7 +145,7 @@ export function refreshStamps(s: AppState, prev: Stamps, now: number, device: st
   return out
 }
 
-export function bundleOf(s: AppState, stamps: Stamps): SyncBundle {
+export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBundle {
   const entries = Object.entries(stamps)
   return {
     v: SYNC_VERSION,
@@ -146,6 +158,8 @@ export function bundleOf(s: AppState, stamps: Stamps): SyncBundle {
     events: (s.events ?? []).map(syncEvent),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
+    ...codesForBundle(s, shareCode),
+    ...(s.me?.displayName ? { displayName: s.me.displayName } : {}),
   }
 }
 
@@ -227,6 +241,14 @@ export function parseBundle(v: unknown): SyncBundle | null {
   out.chats = sanitizeChatBook(v.chats)
   const map = Object.entries(sameAs).filter(([k, x]) => k !== x)
   if (map.length) out.sameAs = Object.fromEntries(map)
+  // The codes are optional extras: a malformed one is dropped alone, never the bundle (a record from a newer build still merges).
+  const code = parseCodeField(v.connectCode)
+  if (code) {
+    out.connectCode = code
+    const others = readCodeList(v.otherCodes, [code.code]).filter((r) => validLongUrl(r.url)).map(travelling)
+    if (others.length) out.otherCodes = others
+  }
+  if (typeof v.displayName === 'string' && v.displayName.trim() && v.displayName.length <= 60) out.displayName = v.displayName
   return out
 }
 
@@ -362,6 +384,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
+  if (theirs.displayName && theirs.displayName !== mine.me?.displayName && (theirs.at['n:me'] ?? 0) > (myStamps['n:me']?.at ?? 0)) { mine.me.displayName = theirs.displayName; res.updated++ }
   collapseSamePersons(mine)
   return res
 }
