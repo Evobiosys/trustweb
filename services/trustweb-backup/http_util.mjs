@@ -45,6 +45,7 @@ const MESSAGES = {
   forbidden_token: 'The token does not match.',
   forbidden: 'Not allowed.',
   name_taken: 'That name is taken.',
+  'name-cap': 'Three names per connection in 30 days; organizers can ask the steward for more.',
   reserved: 'That name is reserved.',
   name_locked: 'That name is reserved for you; ask to change it.',
   too_many_names: 'A code can hold up to 3 names.',

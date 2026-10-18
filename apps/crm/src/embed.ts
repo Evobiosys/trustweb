@@ -35,13 +35,13 @@ export async function mountCurator(el: HTMLElement, lent: Omit<Host, 'root'>): P
 }
 
 /** One person's page (the Curator tab's own, same component and CSS) in a fresh element of the host, read from the host's record as it is now. */
-export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root'>, personId: string, onclose: () => void): Promise<void> {
+export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root'>, personId: string, onclose: () => void, embedded = false): Promise<void> {
   Object.assign(host, lent)
   const [{ default: Person }, { reloadRecord }] = await Promise.all([import('./person.svelte'), import('./state.svelte')])
   reloadRecord()
   const theme = (host.root ?? document.documentElement).dataset.theme
   if (theme) el.dataset.theme = theme
-  mount(Person, { target: shadowTarget(el), props: { personId, onclose } })
+  mount(Person, { target: shadowTarget(el), props: { personId, onclose, embedded } })
 }
 
 /** A drag out of the Web view's rings: the same "hide in trustweb" as the Curator's own (Tana checkbox through the sync, local removal). */

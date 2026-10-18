@@ -11,7 +11,7 @@ export interface Curator {
   el: HTMLElement
   open(): void
   /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
-  person(personId: string, onclose: () => void): HTMLElement
+  person(personId: string, onclose: () => void, opts?: { embedded?: boolean }): HTMLElement
   /** Hide in trustweb (Tana checkbox through the Curator's sync, removed from this record) and its Undo. */
   hide(personId: string): Promise<void>
   unhide(personId: string): Promise<void>
@@ -39,9 +39,9 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
         await m.mountCurator(root, lent)
       }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
     },
-    person(personId, onclose) {
+    person(personId, onclose, opts) {
       const page = el('div', { class: 'curator-person' }, [S.curatorLoading])
-      void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose) }).catch((e: unknown) => loadFailed(page, e))
+      void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose, opts?.embedded) }).catch((e: unknown) => loadFailed(page, e))
       return page
     },
     hide: async (personId) => { await (await import('@web-curator')).hideFromRings(lent, personId) },

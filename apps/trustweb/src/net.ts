@@ -72,7 +72,8 @@ import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS,
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
 import { LogOutcome, RINGS, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
-import { askPeers } from './non_responsive'
+import { askPeers, isBlocked } from './non_responsive'
+import { personOf } from './peer_cards'
 import { addUnmatchedAsk, dismissUnmatchedAsk, unmatchedReason, withOnlyMeOpened } from './unmatched_asks'
 import { acceptsReaskFrom, askAgainAllowed, earlierAsk, noteEarlierAsk, noteReasked, reaskCandidates, reaskFields, reaskText, showsEarlierAsk, undoReasked } from './reask'
 import type { EarlierAsk, ReaskPlan } from './reask'
@@ -538,6 +539,8 @@ export class Net {
    * a retry of a waiting chat message passes its ORIGINAL ts so the receiver can drop a duplicate (chat.ts).
    */
   async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe): Promise<void> {
+    // Wave 15: nothing leaves for a blocked person (links, profile, agreements, events, chat): one choke point, no notice.
+    if (this.blockedPeer(peer)) throw new Error('blocked')
     await this.start()
     // Wave 6i: `re`, the ask this message answers (chat_re.ts makeRe built it), travels inside the same sealed envelope.
     const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts, ...(re ? { re } : {}) }
@@ -566,6 +569,10 @@ export class Net {
     this.hooks.onLogChanged()
   }
 
+  private blockedPeer(peer: Peer): boolean {
+    return isBlocked(personOf(this.hooks.state().people, peer.id))
+  }
+
   private async handleQuery(q: QueryEnvelope, fromDid: string): Promise<void> {
     if (this.seenQids.has(q.qid)) return
     const receivedAt = Date.now()
@@ -583,7 +590,8 @@ export class Net {
     const lateMode = carriesWindow(q)
     // The same ask again by another path, a cycle back to this phone, or one that went further than
     // its asker allowed (direct_ask.ts / hops.ts): answered like no match, at the same moment, never shown.
-    const repeat = this.roots.repeat(info.root, receivedAt)
+    // Wave 15: a blocked person's ask is treated as a repeat: answered like no match at the same moment (I3), never shown, logged or passed on.
+    const repeat = this.roots.repeat(info.root, receivedAt) || this.blockedPeer(peer)
     const cycle = info.travels && info.root !== null && info.seen.includes(await seenHash(info.root, s.me.id))
     // Wave 6i (reask.ts): an earlier ask its asker sent again after this phone tightened their ring. One already shown at this ring (or
     // a tighter one) is answered like no match, never shown again: a double tap or a lower-then-raise repeats no prompt. Review 6i: it
@@ -1037,7 +1045,7 @@ export class Net {
   }
 
   private async sendAskAgain(peer: Peer): Promise<boolean> {
-    if (!this.channel) return false
+    if (!this.channel || this.blockedPeer(peer)) return false
     const env: AskAgainEnvelope = { v: 1, t: 'ask-again' }
     // Review 6i: their asks marked as earlier are read as such from now on, for a while (reask.ts acceptsReaskFrom). Set BEFORE the
     // send: the other phone re-asks the moment the relay hands it over, and its first re-ask can arrive here before the relay's reply

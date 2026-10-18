@@ -22,7 +22,7 @@ import { createViaCard } from './via_card'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { askPeers, isNonResponsive } from './non_responsive'
+import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
@@ -31,7 +31,7 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
-import { createConnectKeeper, repairConnectRecord } from './connect_code'
+import { canRegister, createConnectKeeper, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
@@ -48,9 +48,10 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
+import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -58,12 +59,12 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
-import { fingerprint, stripUnsafe } from './safe_text'
+import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { channelLink, normalizeHandle } from './channel'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
-  REQUESTABLE, answerPlan, buildContactPayload, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
+  REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
@@ -79,6 +80,9 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
+import { networkChosen } from './network_graph'
+import { createNetworkView } from './network_view'
+import { knowsRow } from './knows_view'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -129,11 +133,14 @@ import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
 import { createPastMeetings, whenLabel } from './past_meetings_view'
+import { editLineText, removeLine } from './person_notes'
 import { createSwissContext, readHosting } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
+import { repairOtherCodes } from './sync_code'
+import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
@@ -364,7 +371,7 @@ try {
 try {
   if (state) {
     // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
-    const codeFixed = repairConnectRecord(state)
+    const codeFixed = [repairConnectRecord(state), repairOtherCodes(state)].some(Boolean)
     // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
     const modesFixed = repairShareFields(state)
     // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
@@ -529,7 +536,6 @@ const net = new Net({
     if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
-    if (mayAnswerRequest(peer, person) && mayShareContact(shareModeNow())) sendProfileTo(peer, false)
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -779,12 +785,12 @@ function recordButton(): HTMLElement {
 
 function renderTabs(): void {
   const web = tabButton(Screen.Web, S.navWeb, 'web')
-  const inv = tabButton(Screen.Inventory, S.navInventory, 'inventory')
+  const inv = state && !featureOn(state, 'inventory') ? null : tabButton(Screen.Inventory, S.navInventory, 'inventory')
   const invLeft = state?.tabOrder === TabOrder.InventoryLeft
   // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
   const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv)
-  tabs.classList.toggle('four', feedTab.length > 0)
+  tabs.replaceChildren(...[invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv].filter((b): b is HTMLElement => b !== null))
+  tabs.classList.toggle('four', tabs.children.length > 3)
 }
 renderTabs()
 
@@ -1304,7 +1310,7 @@ function openPendingShare(): boolean {
 }
 
 /** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
-async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean }> {
+async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean; previous?: string }> {
   const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
@@ -1318,7 +1324,7 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
   }
   save()
   applyHeldContact(peer, person)
-  return { person, existed }
+  return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
 }
 
 /** The sheet after a scan (connect_add_view.ts): the person is connected; pick the ring, correct the name, then their card opens. */
@@ -1508,7 +1514,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const C = 176
   const counts = {} as Record<Ring, number>
   const members: Partial<Record<Ring, Person[]>> = {}
-  for (const p of s.people) (members[webSlot(p)] ??= []).push(p)
+  for (const p of s.people) if (!isBlocked(p)) (members[webSlot(p)] ??= []).push(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
   const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)]))
   // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
@@ -1937,18 +1943,35 @@ function openEvents(eventId?: string): void {
   go(Screen.Events)
 }
 
+const WEB_VIEW_KEY = 'trustweb.ui.webView'
+
+function webViewToggle(network: boolean): HTMLElement {
+  const pick = (value: 'rings' | 'network'): void => {
+    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
+    render()
+  }
+  return el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
+    el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
+    el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+  ])
+}
+
 function screenWeb(): Node[] {
   const s = shown(st())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
-  const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
+  let stored: string | null = null
+  try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
+  const network = s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
-  right.append(events, search)
+  right.append(...(featureOn(st(), 'events') ? [iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')] : []), search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-    ringsView(s, askMarks()),
+    network
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+      : ringsView(s, askMarks()),
     s.people.some((p) => p.reachedOut) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
@@ -1956,6 +1979,7 @@ function screenWeb(): Node[] {
   zoomOnWeb(clip, layer)
   return [
     header(S.webTitle, { right, more: true }),
+    ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2000,6 +2024,7 @@ function addPersonSheet(ring: Ring): void {
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
+  let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
     busy = true
     addBtn.setAttribute('disabled', '')
@@ -2008,13 +2033,22 @@ function addPersonSheet(ring: Ring): void {
     busy = false
     addBtn.removeAttribute('disabled')
     if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
-    closeSheet()
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
     render()
-    personSheet(out.person.id)
+    // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
+    const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
+    if (noteId === null || !noticeShown(st(), noteId)) { closeSheet(); personSheet(out.person.id); return }
+    const note = el('p', { class: 'meta', role: 'status', 'data-name-previous': '' }, [
+      S.namePreviousHolder,
+      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => { dismissNotice(st(), noteId); save(); note.remove() } }, ['×']),
+    ])
+    codeStatus.replaceWith(note)
+    addBtn.textContent = S.addDone
+    after = () => { closeSheet(); personSheet(out.person.id) }
   }
   const add = (): void => {
     if (busy) return
+    if (after) { after(); return }
     if (code.value.trim()) { void addByCode(); return }
     const n = name.value.trim()
     if (!n) { name.focus(); return }
@@ -2202,8 +2236,12 @@ function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
+  const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
-    p.peerId ? el('button', { class: 'btn btn-electric', 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
+    el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text]),
+    cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
+    cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+    p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     reachedOutRow(p),
     noMessengerRow(p),
@@ -2213,13 +2251,30 @@ function personSheet(personId: string): void {
     askAgainRow(p),
     leanRow(p),
     eventChipsRow(p),
+    knowsRow(p, st().people, save, () => personSheet(p.id)),
     timelineSection(p),
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
+    curator.person(p.id, closeSheet, { embedded: true }),
     agreementsFor(p),
-    curator.person(p.id, closeSheet),
+    blockRow(p),
   ])
   cardOpenFor = p.id
+}
+
+/** Wave 15: Block / Unblock on the card. Blocked: asks unanswered, chat unseen, nothing sent, dot hidden; unblock stores 0 so it wins a sync. */
+function blockRow(p: Person): HTMLElement {
+  const on = isBlocked(p)
+  return el('button', {
+    class: 'btn btn-ghost btn-sm', 'data-block-person': p.id,
+    onclick: () => {
+      if (!on && !confirm(S.blockConfirm(p.name))) return
+      p.blocked = on ? 0 : Date.now()
+      save(); render()
+      if (sheet.dataset.kind === 'settings') settingsSheet(); else closeSheet()
+      if (!on) toast(S.blockedToast(p.name))
+    },
+  }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -2264,7 +2319,7 @@ function leanRow(p: Person): HTMLElement | null {
 
 /** The events this person is tagged with (E1): a chip each, tap opens the event page. */
 function eventChipsRow(p: Person): HTMLElement | null {
-  const evs = (st().events ?? []).filter((e) => p.events?.includes(e.id))
+  const evs = featureOn(st(), 'events') ? (st().events ?? []).filter((e) => p.events?.includes(e.id)) : []
   if (!evs.length) return null
   return el('div', { class: 'chips', 'data-person-events': p.id }, [
     el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
@@ -2303,7 +2358,9 @@ function passOnRowFor(p: Person): HTMLElement | null {
 }
 
 function sharedReachRow(p: Person): HTMLElement | null {
-  const shared = sharedReachables(p)
+  // The primary Consensual button of the card already is that link.
+  const onCard = chatOnConsensual(p, st().preferConsensual)
+  const shared = sharedReachables(p).filter((r) => r.channel !== onCard?.channel)
   if (!shared.length) return null
   return el('div', { class: 'ch-row shared' }, [
     ...shared.map((r) => el('a', {
@@ -2409,7 +2466,7 @@ function tickControlsFor(ch: Channel, after: () => void): HTMLElement {
 }
 
 /**
- * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. Meet > Advanced and Settings both draw it
+ * The contact box (contact_box_view.ts): Signal, WhatsApp and Matrix, each with its own tick. The Meet page and Settings both draw it
  * from here. `changed` runs after a link was saved or removed, `ticked` after a tick was changed (the Meet page redraws its sentence).
  */
 function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () => void }): ContactBox {
@@ -2434,11 +2491,10 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
 
 /** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
 function profileSheet(): void {
-  const s = st()
-  const mine = (): MyProfile => s.profile ?? { norms: [] }
-  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); s.profile = p }
+  const mine = (): MyProfile => st().profile ?? { norms: [] }
+  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); st().profile = p }
   openSheet(profileSheetNodes({
-    profile: mine, inventory: () => s.inventory, now: Date.now,
+    profile: mine, inventory: () => st().inventory, now: Date.now,
     commit: () => { save(); profileSheet() },
     addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
@@ -2448,14 +2504,10 @@ function profileSheet(): void {
   sheet.dataset.kind = 'profile'
 }
 
-/** Under the contact box: "My profile" and the tick that shares it (norms, favourite way, intro) the same way the links go, in the same share modes. */
+/** Under the contact box: "My profile" (norms, favourite way, intro). It leaves this phone only on the owner's tap "Send my profile" on a card. */
 function profileRow(): HTMLElement {
-  const tick = el('input', { type: 'checkbox', 'data-share-profile': '1' })
-  tick.checked = st().profileShare === true
-  tick.addEventListener('change', () => { if (tick.checked) st().profileShare = true; else delete st().profileShare; save() })
   return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
-    el('label', { class: 'chat-row' }, [tick, el('span', {}, [S.profShareTick])]),
   ])
 }
 
@@ -2476,27 +2528,20 @@ function chatIo(): ChatIo {
 // Messenger links leave this phone ONLY as the answer to an explicit request (onContactRequest), never at connect time
 // (Jakob 2026-10-15 22:25: a reach-out via trustweb.one/<name> must not be able to get them).
 
-/**
- * Wave 7 (profile.ts): sends my profile to one connected peer in a chat text: on connect when the "share my profile" tick is on and the
- * share mode allows it (the caller checks the mode), once per change (profileSent); `force` is the owner's own "Send my profile" tap.
- */
-function sendProfileTo(peer: Peer, force: boolean): void {
-  const s = st()
-  if (!force && !s.profileShare) return
-  const text = buildProfileText(APP_URL, s.profile)
-  if (!text) { if (force) toast(S.profEmpty); return }
-  const fp = fingerprint(text)
-  if (!force && s.profileSent?.[peer.id] === fp) return
-  net.sendText(peer, text).then(() => {
-    s.profileSent = { ...s.profileSent, [peer.id]: fp }
-    save()
-    if (force) toast(S.profSent(peer.displayName))
-  }).catch(() => { if (force) toast(S.agrSendFailed) })
+/** The demo persona, a solo tab and demo accounts never send anything to a phone (hello, profile). */
+const noSendTo = (peer: Peer): boolean => isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)
+
+/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. */
+function sendProfileTo(peer: Peer): void {
+  if (noSendTo(peer)) return
+  const text = buildProfileText(APP_URL, st().profile)
+  if (!text) { toast(S.profEmpty); return }
+  net.sendText(peer, text).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
-  if (isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)) return
+  if (noSendTo(peer)) return
   const text = helloText(APP_URL, st().me.displayName)
   if (text) net.sendText(peer, text).catch(() => { /* the other phone keeps the typed name, or none */ })
 }
@@ -2589,7 +2634,7 @@ function onContactRequest(peer: Peer, text: string): void {
   const s = st()
   const wanted = parseRequestText(APP_URL, text)
   const person = s.people.find((p) => p.peerId === peer.id)
-  if (!wanted || !person || isDemoPersona(persona) || demoAccounts().some((t) => t.peerId === peer.id)) return
+  if (!wanted || !person || noSendTo(peer)) return
   // Someone who came in through the public link stays on Intending until I move them: until then a request is dropped, not answered.
   if (!mayAnswerRequest(peer, person)) return
   const plan = answerPlan(s.myChannels, s.contactShare, wanted)
@@ -2607,28 +2652,34 @@ function onContactRequest(peer: Peer, text: string): void {
 
 function sendProfileRow(p: Person): HTMLElement | null {
   const peer = st().peers.find((x) => x.id === p.peerId)
-  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer, true) }, [S.profSendTo(p.name)]) : null
+  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
 function agreementsFor(p: Person): HTMLElement {
-  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
-  const find = (id: string) => p.agreements?.find((a) => a.id === id)
+  // The record may have been replaced since the card opened: look the person and the connection up on every call.
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  const peerNow = (): Peer | undefined => { const pid = now().peerId; return pid ? st().peers.find((x) => x.id === pid) : undefined }
+  const find = (id: string) => now().agreements?.find((a) => a.id === id)
   const redraw = (): void => { save(); personSheet(p.id) }
-  const send = (text: string, onFail: () => void): void => {
-    if (!peer) { onFail(); return }
+  const send = (text: string | null, onFail: () => void): void => {
+    const peer = peerNow()
+    if (!peer || !text) { onFail(); if (!text) toast(S.agrTooLong); return }
     net.sendText(peer, text).catch(() => { onFail(); toast(S.agrSendFailed) })
   }
   return agreementsSection({
-    name: p.name, agreements: () => p.agreements ?? [], now: Date.now, canPropose: !!peer,
+    name: p.name, agreements: () => now().agreements ?? [], now: Date.now, canPropose: !!peerNow(),
+    consensualLink: consensualReachable(now()) ? CONSENSUAL_AGREEMENTS_LINK : undefined,
     add: (text, expiresAt, propose) => {
-      const a = addAgreement(p, randomId(8), text, Date.now(), { proposed: propose && !!peer, expiresAt })
-      if (a?.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
+      const wantsSend = propose && !!peerNow()
+      const a = addAgreement(now(), randomId(8), text, Date.now(), { proposed: wantsSend, expiresAt, appUrl: APP_URL })
+      if (!a) toast(wantsSend ? S.agrTooLong : S.agrRefused)
+      else if (a.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
       redraw()
     },
-    remove: (id) => { removeAgreement(p, id); redraw() },
+    remove: (id) => { removeAgreement(now(), id); redraw() },
     accept: (id) => {
-      if (!acceptAgreement(p, id)) return
+      if (!acceptAgreement(now(), id)) return
       send(acceptText(APP_URL, id), () => { const a = find(id); if (a) { a.status = AgreementStatus.Incoming; redraw() } })
       redraw()
     },
@@ -2640,7 +2691,7 @@ function agreementsFor(p: Person): HTMLElement {
 function onAgreementText(peer: Peer, text: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
   const msg = parseAgreementText(APP_URL, text)
-  if (!person || !msg || !receiveAgreement(person, msg, Date.now())) return
+  if (!person || !msg || !mayAnswerRequest(peer, person) || !receiveAgreement(person, msg, Date.now())) return
   save()
   toast(msg.kind === 'accept' ? S.agrAccepted(peer.displayName) : S.agrProposedToast(peer.displayName))
   if (cardOpenFor === person.id && sheet.classList.contains('on') && !sheet.contains(document.activeElement)) personSheet(person.id)
@@ -2664,6 +2715,7 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   if (!r.message) return
   s.chats = r.book
   save()
+  if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
   notify('chat', S.chatNotifBody(peer.displayName))
   newMessageNotice(peer, r.message.key)
@@ -2707,7 +2759,10 @@ function hideMsgNotice(): void {
 
 /** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
 function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
-  switch (routeText(APP_URL, text)) {
+  const kind = routeText(APP_URL, text)
+  // Wave 15: a blocked person's chat texts are stored (onChatText) but nothing else of theirs is acted on.
+  if (kind !== TextKind.Chat && isBlocked(personOf(st().people, peer.id))) return
+  switch (kind) {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
     case TextKind.ContactRequest: onContactRequest(peer, text); return
@@ -3080,6 +3135,9 @@ const past = createPastMeetings({
   extra: (m) => transcription.meetingExtras(m),
   opened: (m) => packs.checkOne(m),
   removed: (m) => hosting.removed(m.id),
+  // Lines travel as part of the whole person record: save() is all the Curator/vault/device sync need (as for the checkedAt edit in the review sheet).
+  editLine: (personId, lineId, text) => { if (state && editLineText(state, personId, lineId, text)) save() },
+  removeLine: (personId, lineId) => { if (state && removeLine(state, personId, lineId)) save() },
 })
 
 // The Swiss server's newer services (wave 1733 round B): never on a demo phone or a demo account.
@@ -3100,6 +3158,11 @@ const snapshots = createSnapshotView({
 })
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
+  askDid: () => state?.identity?.did,
+  codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
+    ? { origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save }
+    : null),
+  connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -3428,6 +3491,18 @@ function maybeOpenPendingEvent(): void {
   if (!pendingEvent || !state) return
   const ev = pendingEvent
   pendingEvent = null
+  if (!featureOn(st(), 'events')) {
+    // Events are switched off (Settings > Features): the invite is not dropped, the app asks once whether to turn them on.
+    openSheet([
+      el('h2', {}, [S.featureEventsPrompt]),
+      el('button', {
+        class: 'btn btn-electric wide', 'data-feature-events-on': '',
+        onclick: () => { setFeature(st(), 'events', true); save(); renderTabs(); render(); pendingEvent = ev; maybeOpenPendingEvent() },
+      }, [S.featureEventsOn]),
+      el('button', { class: 'btn btn-ghost wide', 'data-feature-events-later': '', onclick: closeSheet }, [S.featureEventsLater]),
+    ])
+    return
+  }
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
@@ -3903,8 +3978,13 @@ async function ensureConnectCode(): Promise<void> {
   try {
     await net.start()
     await codeKeeper().ensure(net.connectLink(CONNECT_URL))
+    // Wave 15: the records another device owns are kept alive here (the keeper leaves them alone), once per 30 days each.
+    if (state?.connectCode?.owner === 'other' || state?.otherCodes?.length || state?.pendingRenew?.length) await careForCodes({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save, log: () => {} })
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
+
+/** owner 2026-10-17: off for now. The button, nfc.ts and the strings stay. */
+const NFC_WRITE_OFFERED = false
 
 function meetTrustWebPage(): HTMLElement {
   const notes = meetNotes
@@ -3916,7 +3996,7 @@ function meetTrustWebPage(): HTMLElement {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
-  const nfc = nfcWriteSupported()
+  const nfc = NFC_WRITE_OFFERED && nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
         onclick: () => {
@@ -3936,11 +4016,12 @@ function meetTrustWebPage(): HTMLElement {
     changed: () => apply(),
     ticked: () => apply(true),
   })
+  const publicVia = el('p', { class: 'meta', 'data-public-link-via': '', hidden: true })
   const sharing = createSharingLine({
     sharing: () => modeSharing(shareModeNow(), st().myChannels, st().contactShare),
     channel: modeChannel,
     controls: () => { const ch = modeChannel(); return ch && mine()[ch] ? tickControlsFor(ch, () => apply(true)) : null },
-    addLink: (ch) => { meetAdvancedOpen = true; apply(); box.edit(ch) },
+    addLink: (ch) => box.edit(ch),
   })
   // The long link is set again only when the mode changes its fragment (TrustWeb + Signal / WhatsApp add `via=`).
   let link = ''
@@ -3956,6 +4037,9 @@ function meetTrustWebPage(): HTMLElement {
     copy.disabled = !view.current()
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
+    const via = publicLinkVia(mode)
+    publicVia.hidden = !via
+    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -3974,7 +4058,7 @@ function meetTrustWebPage(): HTMLElement {
     release: (name) => namesSync().release(name),
   })
   const advanced = createAdvanced({
-    contactBox: box.el,
+    modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
     names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })
   // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
@@ -4002,9 +4086,15 @@ function meetTrustWebPage(): HTMLElement {
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     row.el,
+    publicVia,
     qr,
     cameraNote,
     sharing.el,
+    el('div', { 'data-contact-box-on-meet': '' }, [
+      el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle]),
+      el('p', { class: 'meta' }, [S.advLinksHint]),
+      box.el,
+    ]),
     el('dl', { class: 'qr-facts' }, [
       el('dt', {}, [S.meetRing]), el('dd', {}, [S.meetRingValue]),
       el('dt', {}, [S.meetShared]), sharedDd,
@@ -4423,7 +4513,9 @@ function handoverSheet(): void {
     if (!backup.available()) { msg.textContent = S.handNoServer; make.removeAttribute('disabled'); return }
     try {
       const key = await newRandomKey()
-      const pack: AppState = { ...s, testOf: { ...t, own: undefined } }
+      // The public link and its secret are the owner's, not the demo account's (F17).
+      const { connectCode: _c, otherCodes: _o, pendingRenew: _p, ...rest } = s
+      const pack: AppState = { ...rest, testOf: { ...t, own: undefined } }
       await backupNow(key, pack)
       link = APP_URL + '?handover=1#' + handoverFragment({ keyText: key.text, accountId: t.accountId ?? 'x0000', account: s.me.displayName })
       t.handedOverAt = Date.now()
@@ -4833,6 +4925,34 @@ function reachOutLink(): string {
   return name ? `trustweb.one/${name}` : 'your link'
 }
 
+/**
+ * Settings sections: a folded <details> each; the open state is remembered per device (trustweb.ui.settings.<key>);
+ * `first` opens when nothing is remembered. An empty section is not drawn.
+ */
+function settingsSection(key: string, title: string, children: (Node | null)[], first = false): Node | null {
+  if (!children.some(Boolean)) return null
+  const attrs: Record<string, string> = { 'data-settings-section': key, class: 'settings-adv' }
+  if (key === 'advanced') attrs['data-settings-advanced'] = '1'
+  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, [title]), ...children]) as HTMLDetailsElement
+  const k = `trustweb.ui.settings.${key}`
+  try { const v = localStorage.getItem(k); d.open = v === null ? first : v === '1' } catch { d.open = first }
+  d.addEventListener('toggle', () => { try { localStorage.setItem(k, d.open ? '1' : '0') } catch { /* ignore */ } })
+  return d
+}
+
+/** A Settings > Features switch; off is the only stored state (featureOn in model.ts). */
+function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, hint: string): HTMLElement {
+  const on = featureOn(s, key)
+  return el('button', {
+    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), [`data-feature-${key}`]: '1',
+    onclick: () => {
+      setFeature(s, key, !on); save(); renderTabs()
+      if (!featureOn(s, 'inventory') && screen === Screen.Inventory) screen = Screen.Web
+      render(); settingsSheet()
+    },
+  }, [el('b', {}, [label]), el('small', {}, [hint])])
+}
+
 function settingsSheet(): void {
   const s = st()
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
@@ -4849,12 +4969,14 @@ function settingsSheet(): void {
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
-      el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
-    ]),
-    connectionRow(),
-    ...(solo || s.testOf ? [] : [
-      el('h4', { class: 'eyebrow' }, [S.reachOutsTitle]),
+    settingsSection('you', S.setSecYou, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+      ]),
+      connectionRow(),
+      buildContactBox({}).el,
+    ], true),
+    settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
         onclick: () => { if (s.reachOutsPaused) delete s.reachOutsPaused; else s.reachOutsPaused = true; save(); settingsSheet() },
@@ -4862,6 +4984,29 @@ function settingsSheet(): void {
       el('p', { class: 'meta', 'data-reach-outs-held': '' }, [S.reachOutsHeldCount(s.reachOutHeld ?? 0)]),
       s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
+    ]),
+    settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
+    settingsSection('devices', S.setSecDevices, connectEligible() ? devices.settingsGroup() : []),
+    settingsSection('features', S.setSecFeatures, [
+      ...feed.settingsGroup(),
+      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
+      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
+    ]),
+    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('advanced', S.setAdvanced, [
+    el('h4', { class: 'eyebrow' }, [S.setQuery]),
+    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
+      class: 'radio' + (queryStyle() === q ? ' on' : ''),
+      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    ...recordingSettings(s),
+    ...hosting.settingsGroup(),
+    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+    el('h4', { class: 'eyebrow' }, [S.setTabs]),
+    pick(TabOrder.WebLeft, S.setTabsWebLeft),
+    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
+    el('p', { class: 'meta' }, [S.setTabsHint]),
+    ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
       ...(s.testAccounts?.length
         ? s.testAccounts.map((t) => demoAccountRow(t, settingsSheet))
@@ -4871,23 +5016,6 @@ function settingsSheet(): void {
         onclick: () => { s.demoOnlyForDemoAccounts = !demoOnlyForDemoAccounts(s); save(); settingsSheet() },
       }, [el('b', {}, [S.setDemoOnly]), el('small', {}, [S.setDemoOnlyHint])]),
     ]),
-    el('h4', { class: 'eyebrow' }, [S.setTabs]),
-    pick(TabOrder.WebLeft, S.setTabsWebLeft),
-    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
-    el('p', { class: 'meta' }, [S.setTabsHint]),
-    buildContactBox({}).el,
-    channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
-    el('h4', { class: 'eyebrow' }, [S.setQuery]),
-    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
-      class: 'radio' + (queryStyle() === q ? ' on' : ''),
-      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
-    ...recordingSettings(s),
-    ...hosting.settingsGroup(),
-    ...(connectEligible() ? devices.settingsGroup() : []),
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
-    ...feed.settingsGroup(),
-    notificationsCard(s),
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
@@ -4895,13 +5023,23 @@ function settingsSheet(): void {
       'aria-pressed': String(Boolean(s.demo)),
       onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
     }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
-    ...sourcesGroup(s),
-    el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
+    channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
+    el('div', { 'data-blocked-list': '1' }, [
+      el('b', {}, [S.blockedTitle]),
+      ...(s.people.some(isBlocked)
+        ? s.people.filter(isBlocked).map((b) => el('div', { class: 'conn-row' }, [el('span', {}, [b.name]), blockRow(b)]))
+        : [el('p', { class: 'meta' }, [S.blockedNone])]),
+    ]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('button', {
+      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
+      // Only "off" is stored: absent means on.
+      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
     el('button', {
       class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
       // Off is stored as absent: the record keeps only what differs from the default.
@@ -4912,6 +5050,10 @@ function settingsSheet(): void {
       // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
       onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
     }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
+    el('button', {
+      class: 'radio' + (noticesOff(s) ? ' on' : ''), 'aria-pressed': String(noticesOff(s)), 'data-notices-off': '1',
+      onclick: () => { setNoticesOff(s, !noticesOff(s)); save(); settingsSheet() },
+    }, [el('b', {}, [S.setNoNotices]), el('small', {}, [S.setNoNoticesHint])]),
     solo ? null : el('button', {
       class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
       // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
@@ -4927,6 +5069,7 @@ function settingsSheet(): void {
       'aria-pressed': String(!hintHidden(id)),
       onclick: () => { setHintHidden(id, !hintHidden(id)); render(); settingsSheet() },
     }, [el('b', {}, [S.setHintsOne(S.hintLabel[id])]), el('small', {}, [S.hintText[id]])])),
+    ]),
     el('h4', { class: 'eyebrow' }, [S.setTutorial]),
     el('button', {
       class: 'btn btn-ghost', disabled: !(s.hiddenHints?.length),
@@ -4958,7 +5101,6 @@ function sourcesGroup(s: AppState): Node[] {
   const rows = SOURCES.map((kind) => ({ kind, n: sourceCount(s, kind) })).filter((r) => r.n.people || r.n.lines)
   if (!rows.length) return []
   return [
-    el('h4', { class: 'eyebrow' }, [S.setSources]),
     el('p', { class: 'meta' }, [S.setSourcesHint]),
     ...rows.flatMap(({ kind, n }) => [
       el('button', {

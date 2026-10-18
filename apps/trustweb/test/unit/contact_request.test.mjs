@@ -68,6 +68,8 @@ describe('mayAnswerRequest: a reach-out or an Intending-ring person is never ans
     expect(mayAnswerRequest({ reachOut: true }, { ring: Ring.Friend })).toBe(false)
     expect(mayAnswerRequest({}, { ring: Ring.Intending })).toBe(false)
     expect(mayAnswerRequest({}, { ring: Ring.Friend, reachedOut: 'received' })).toBe(false)
+    expect(mayAnswerRequest({}, { ring: Ring.Friend, blocked: 5 })).toBe(false)
+    expect(mayAnswerRequest({}, { ring: Ring.Friend, blocked: 0 })).toBe(true)
     expect(mayAnswerRequest({}, { ring: Ring.Acquaintance })).toBe(true)
   })
 })

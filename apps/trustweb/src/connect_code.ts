@@ -49,7 +49,27 @@ export interface ConnectRecord {
    * Only names this code still holds are kept. Absent: none known.
    */
   lockedNames?: string[]
+  /**
+   * Wave 15 (devices; local only, never synced): 'other' = the record came from a linked device. The keeper then does NOTHING with it (never
+   * re-points the url, never mints on a 403): the url changes only through the explicit "Open on this device". Absent = 'this'.
+   */
+  owner?: 'this' | 'other'
+  /** Wave 15 (local only): the pairing (sync DID) this record came from; the device name is looked up when drawing. */
+  fromDid?: string
+  /** Wave 15 (local only): the server refused this record's secret or no longer knows the code (the other device unlinked us, or it expired). */
+  stale?: true
+  /** Wave 15 (local only): when this device last kept the record alive on the server (a read-only GET /c/<code>). */
+  touchedAt?: number
+  /** Wave 15 (local only): the code was sent to a linked device, so a dead secret means "sync with it", never a new code. */
+  shared?: true
+  /** Wave 15: when the secret was last renewed (unlink); separate from `updatedAt` (the url), so each merges by its own clock. Travels. */
+  secretAt?: number
+  /** Wave 15: in a bundle's otherCodes only: the sender got this entry from yet another device (the receiver cannot name that device). */
+  relayed?: true
 }
+
+/** A code the keeper must never replace by a new one: it holds a username, was shared with a linked device, or belongs to another device. */
+export const mustKeep = (r: ConnectRecord): boolean => r.owner === 'other' || !!r.name || !!r.aliases?.length || r.shared === true
 
 /** A code holds at most this many names: one primary plus up to MAX_ALIASES aliases (services contract 10.9). */
 export const MAX_NAMES = 3
@@ -81,6 +101,8 @@ export enum ConnectError {
   Unavailable = 'unavailable',
   /** 5xx, or a 2xx that is not a code. */
   Server = 'server',
+  /** Wave 15: the server no longer accepts the secret of a code that holds a username or was shared: it is marked stale, never replaced by a new code. */
+  Stale = 'stale',
 }
 
 export type ConnectOutcome = { ok: true; record: ConnectRecord } | { ok: false; error: ConnectError }
@@ -99,6 +121,13 @@ export function readConnectRecord(raw: unknown): ConnectRecord | null {
   const lockedNames = readNameList(o.lockedNames, MAX_NAMES).filter((n) => held.includes(n))
   return {
     code, secret, url, updatedAt,
+    ...(o.owner === 'other' ? { owner: 'other' as const } : {}),
+    ...(typeof o.fromDid === 'string' && o.fromDid.length <= 1600 ? { fromDid: o.fromDid } : {}),
+    ...(o.stale === true ? { stale: true as const } : {}),
+    ...(typeof o.touchedAt === 'number' && Number.isFinite(o.touchedAt) ? { touchedAt: o.touchedAt } : {}),
+    ...(o.shared === true ? { shared: true as const } : {}),
+    ...(typeof o.secretAt === 'number' && Number.isFinite(o.secretAt) ? { secretAt: o.secretAt } : {}),
+    ...(o.relayed === true ? { relayed: true as const } : {}),
     ...(name ? { name } : {}), ...(aliases.length ? { aliases } : {}), ...(lockedNames.length ? { lockedNames } : {}),
   }
 }
@@ -144,13 +173,15 @@ export function canRegister(origin: string): boolean {
 /** Does the server's copy need to be written: nothing there yet, another link, or older than 30 days. */
 export function registrationDue(record: ConnectRecord | null, longUrl: string, now: number): boolean {
   if (!record) return true
+  if (record.owner === 'other' || record.stale) return false // the keeper leaves a record of another device, or one with a dead secret, alone (wave 15)
   if (record.url !== longUrl) return true
-  return now - record.updatedAt >= CONNECT_REFRESH_MS || now < record.updatedAt
+  const at = record.touchedAt ?? record.updatedAt // the last write or read-only touch
+  return now - at >= CONNECT_REFRESH_MS || now < at
 }
 
 /** The short link to show for this long link right now, or null while the server's copy is missing or out of date. */
 export function shortToShow(origin: string, record: ConnectRecord | null, longUrl: string, now: number): string | null {
-  if (!record || registrationDue(record, longUrl, now)) return null
+  if (!record || record.stale || registrationDue(record, longUrl, now)) return null
   return connectShortLink(origin, record.code)
 }
 
@@ -218,11 +249,18 @@ function mintedRecord(json: unknown, url: string, now: number): ConnectRecord | 
 export async function registerConnect(deps: ConnectClientDeps, record: ConnectRecord | null, longUrl: string): Promise<ConnectOutcome> {
   if (!canRegister(deps.origin)) return { ok: false, error: ConnectError.NotHere }
   if (shareBlock(longUrl, deps.origin) !== null) return { ok: false, error: ConnectError.Refused }
+  // The same link only aged (F6): a read-only touch, no write; the url is written only when it changed.
+  if (record && record.owner !== 'other' && !record.stale && record.url === longUrl) {
+    const seen = await touchCode(deps, record.code)
+    if (seen === null) return { ok: false, error: ConnectError.Network }
+    if (seen) return { ok: true, record: { ...record, touchedAt: deps.now() } }
+    return mustKeep(record) ? { ok: false, error: ConnectError.Stale } : registerConnect(deps, null, longUrl)
+  }
   const res = await post(deps, bodyFor(longUrl, record))
   if (res === ConnectError.Network) return { ok: false, error: ConnectError.Network }
   // Only the server's "forbidden" (unknown, expired, wrong secret) means the code is gone; a 403 forbidden_origin (a proxy or origin
   // problem) must not throw away a code that still works, and with it a printed QR and a username.
-  if (record && res.status === 403 && field(res.json, 'error') === 'forbidden') return registerConnect(deps, null, longUrl)
+  if (record && res.status === 403 && field(res.json, 'error') === 'forbidden') return mustKeep(record) ? { ok: false, error: ConnectError.Stale } : registerConnect(deps, null, longUrl)
   if (res.status !== 200 && res.status !== 201) return { ok: false, error: errorForStatus(res.status) }
   if (record && res.status === 200) {
     if (field(res.json, 'code') !== record.code) return { ok: false, error: ConnectError.Server }
@@ -246,6 +284,14 @@ export enum ClaimError {
   NameLocked = 'name-locked',
   /** 409 too_many_names: the code already holds all three. */
   TooManyNames = 'too-many-names',
+  /** 429 name-cap: this network address already claimed its 3 names in 30 days (not the shared cooldown). */
+  NameCap = 'name-cap',
+  /** 409 alias_cap: moving the name would give the target code more than three names. */
+  AliasCap = 'alias-cap',
+  /** 409 name_moved: this name moved lately (once in 30 days). */
+  NameMoved = 'name-moved',
+  /** 409 not_held: the other code no longer holds the name. */
+  NotHeld = 'not-held',
   /** 403: the server no longer knows this code (it expired); the next registration makes a new one. */
   Forgotten = 'forgotten',
   RateLimited = 'rate-limited',
@@ -262,6 +308,14 @@ export function cleanUsername(raw: string): string {
 /** True for a name this client will send: empty (release) or a valid name that does not look like a code. */
 export function isClaimable(name: string): boolean {
   return name === '' || (NAME_RE.test(name) && !CONNECT_CODE_RE.test(name))
+}
+
+/** A plain GET of /c/<code> (the server's expiry counts from the last open): true = still there, false = gone (404), null = no answer. */
+export async function touchCode(deps: ConnectClientDeps, code: string): Promise<boolean | null> {
+  try {
+    const res = await deps.fetch(`${deps.origin}/c/${code}`, { redirect: 'manual', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' })
+    return res.status !== 404
+  } catch { return null }
 }
 
 /** A registration answer replaces the stored record, but the names changed while it ran (names_sync.ts) are the fresh ones, not the captured copy. */
@@ -319,7 +373,16 @@ export function createConnectKeeper(deps: ConnectKeeperDeps): ConnectKeeper {
   }
 
   const run = async (longUrl: string): Promise<boolean> => {
-    const out = await registerConnect(deps, held(), longUrl)
+    const start = held()
+    const out = await registerConnect(deps, start, longUrl)
+    // A sync may have changed the record while this request ran (another code, a new secret, a url): this answer is then stale and dropped (F7).
+    const now = held()
+    if (out.ok && (now?.code !== start?.code || now?.secret !== start?.secret || now?.updatedAt !== start?.updatedAt || now?.owner !== start?.owner)) return false
+    if (!out.ok && out.error === ConnectError.Stale) {
+      if (start && now?.code === start.code) deps.store({ ...now, stale: true })
+      for (const l of [...listeners]) l()
+      return false
+    }
     if (!out.ok) {
       lastFailAt = deps.now()
       if (out.error === ConnectError.RateLimited) cooldownUntil = deps.now() + CONNECT_COOLDOWN_MS

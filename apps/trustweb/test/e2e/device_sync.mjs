@@ -31,6 +31,7 @@ async function withPeople(page, base, people, extra = {}) {
 async function openDevices(page) {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
   await page.getByRole('button', { name: 'More' }).click()
+  await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.devices', '1')) // Settings sections are folded by default
   await page.locator('.menu-item', { hasText: 'Settings' }).click()
   await page.locator('[data-open-devices]').click()
   await page.getByRole('heading', { name: 'My devices' }).waitFor({ timeout: 10_000 })
@@ -52,6 +53,8 @@ async function main() {
     const macExtra = {
       myChannels: { signal: 'https://signal.me/#eu/abcdEFGH1234' },
       events: [{ id: 'ev1', name: 'Bike meetup', from: '2026-10-01', where: 'Vienna', createdAt: 1, attended: true }],
+      // Wave 15: the Mac holds the public link + username; the localhost origin is no app origin, so the service is not asked (the record carries it).
+      connectCode: { code: 'A'.repeat(22), secret: 'S'.repeat(43), url: 'https://app.trustweb.one/?connect=did%3Apeer%3A2.' + 'z'.repeat(40), updatedAt: 1, name: 'ada' },
       chats: { 'mac-only-peer': { unread: 1, messages: [{ key: 'i:5:x', dir: 'in', text: 'hello from a mac-only connection', at: 5, sentAt: 5, state: 'received' }] } },
     }
     await withPeople(mac, vite.base, [person('a1', 'Ada Mac'), person('b1', 'Bo Mac')], macExtra)
@@ -71,6 +74,7 @@ async function main() {
     const fpPhone = await phone.locator('[data-fingerprint]').getAttribute('data-fingerprint')
     const fpMac = await until(() => mac.locator('[data-fingerprint]').getAttribute('data-fingerprint'))
     ok('both devices show the same 4-character fingerprint', /^[0-9A-F]{4}$/.test(fpPhone) && fpPhone === fpMac, `${fpPhone} vs ${fpMac}`)
+    ok('the confirm sheet offers "Also share my username and public link", ticked', await phone.locator('[data-share-code]').isChecked())
     await phone.locator('[data-pair-confirm]').click()
     await mac.locator('[data-pair-confirm]').click()
     ok('both list the other device', (await phone.locator('[data-device]').count()) === 1 && (await mac.locator('[data-device]').count()) === 1)
@@ -85,6 +89,9 @@ async function main() {
     await phone.locator('[data-receive]').waitFor({ timeout: 40_000 })
     ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 0 resources, 0 meetings, 1 event, 1 message.').isVisible())
     await phone.locator('[data-receive]').click()
+    const adopted = await until(async () => (await record(phone)).connectCode)
+    ok('Wave 15: the Phone adopted the Mac\'s public link as a record of another device (the keeper leaves it alone)', adopted?.owner === 'other' && adopted.name === 'ada' && adopted.code === 'A'.repeat(22), JSON.stringify({ code: adopted?.code, owner: adopted?.owner, name: adopted?.name }))
+    ok('Wave 15: My devices shows "My username" and where the link opens', (await phone.locator('[data-un-opens]').innerText()).includes('trustweb.one/ada opens on') && (await phone.locator('[data-un-name="ada"]').count()) === 1)
 
     const both = ['Ada Mac', 'Bo Mac', 'Cy Phone']
     ok('Mac holds all three', JSON.stringify(await names(mac)) === JSON.stringify(both), JSON.stringify(await names(mac)))

@@ -365,6 +365,10 @@ export interface Person {
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
   reachedOut?: 'sent' | 'received'
+  /** Wave 15: when I blocked this person (non_responsive.ts isBlocked). 0 = unblocked: kept as a value so the unblock wins a device sync (fillMissing would refill a deleted field). Older builds ignore it. */
+  blocked?: number
+  /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
+  knows?: string[]
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
 }
@@ -409,10 +413,12 @@ export enum Channel {
   Delta = 'delta',
   Telegram = 'telegram',
   Messenger = 'messenger',
+  /** A Consensual address (consensu.al): TrustWeb only links out to it (channel.ts), never reads or writes there. */
+  Consensual = 'consensual',
 }
 
 export const CHANNELS: readonly Channel[] = [
-  Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Delta, Channel.Telegram, Channel.Messenger,
+  Channel.Signal, Channel.WhatsApp, Channel.Matrix, Channel.Delta, Channel.Telegram, Channel.Messenger, Channel.Consensual,
 ]
 
 export interface Peer {
@@ -838,12 +844,10 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
-  /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only when `profileShare` is on, to a connected peer, in a chat text. */
+  /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
+  preferConsensual?: false
+  /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
-  /** Wave 7: the "share my profile when we connect" tick. Absent: off. */
-  profileShare?: boolean
-  /** peer id -> fingerprint of the profile text already sent to that peer. */
-  profileSent?: Record<string, string>
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
   /**
@@ -866,6 +870,13 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
+  /**
+   * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
+   * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.
+   */
+  otherCodes?: ConnectRecord[]
+  /** Wave 15: codes whose secret renewal (unlink) failed; retried at the next keeper run (sync_codes.ts). */
+  pendingRenew?: string[]
   /** Chat threads per connected peer id (chat.ts): at most 200 messages of 500 characters per person, 300 threads. Text only; also synced, sealed, between the owner's own devices. */
   chats?: ChatBook
   /**
@@ -884,6 +895,8 @@ export interface AppState {
   sentAsks?: SentAsk[]
   /** Wave 6h (late_answers.ts): yeses that came after their moment, newest first, kept LATE_KEEP_MS or until dismissed. Absent: none. */
   lateAnswers?: LateAnswer[]
+  /** Wave 15 (notices.ts): ids of dismissed one-line notes; "all-notices" silences them all. Absent: none dismissed. Older builds ignore it. */
+  dismissed?: string[]
   /** Wave 6h (held_asks.ts): consent prompts not decided yet. Absent: none. */
   heldAsks?: HeldAsk[]
   /** Wave 6h (unmatched_asks.ts): asks from direct contacts that matched nothing here. Absent: none. */
@@ -987,6 +1000,8 @@ export interface AppState {
   imports?: ImportBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
+  /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
+  features?: { events?: false; inventory?: false }
 }
 
 export interface FeedSettings {
@@ -1010,6 +1025,21 @@ export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {
 /** The Feed is optional and early (Jakob, wave 2, P9): off unless switched on in Settings > Feed. */
 export function feedOn(s: Pick<AppState, 'feed'>): boolean {
   return s.feed?.on === true
+}
+
+export type FeatureKey = 'events' | 'inventory' | 'feed'
+
+/** Whether a Settings > Features switch is on: events and inventory default on, the Feed defaults off (feedOn). */
+export function featureOn(s: Pick<AppState, 'feed' | 'features'>, key: FeatureKey): boolean {
+  return key === 'feed' ? feedOn(s) : s.features?.[key] !== false
+}
+
+/** Switch events or inventory; on removes the key so the record keeps only what differs from the default. */
+export function setFeature(s: Pick<AppState, 'features'>, key: 'events' | 'inventory', on: boolean): void {
+  if (on) {
+    if (s.features) delete s.features[key]
+    if (s.features && !Object.keys(s.features).length) delete s.features
+  } else s.features = { ...s.features, [key]: false }
 }
 
 export interface HostingState {

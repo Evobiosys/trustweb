@@ -40,8 +40,8 @@ const until = async (f) => { for (let i = 0; i < 100; i++) { if (f()) return; aw
 describe('pair and sync', () => {
   it('pairs with a code, shows one fingerprint, syncs a record both ways, the relay sees no plaintext', async () => {
     const h = hub()
-    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada', [line('l1')])]), 'mac')
-    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben')]), 'phone')
+    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada Lovelace', [line('l1')])]), 'mac')
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
     const code = await mac.api.offerCode()
     const mine = await phone.api.join(code)
     expect(mine.fp).toMatch(/^[0-9A-F]{4}$/)
@@ -67,8 +67,8 @@ describe('pair and sync', () => {
     expect(phone.box.incoming).toHaveLength(1)
 
     const all = h.wires.map((w) => w.payload).join('')
-    expect(all).not.toContain('Ada')
-    expect(all).not.toContain('Ben')
+    expect(all).not.toContain('Ada Lovelace')
+    expect(all).not.toContain('Ben Carter')
   })
 
   it('a code is one use: a second device with the same code gets no request', async () => {
@@ -98,8 +98,8 @@ describe('pair and sync', () => {
 
   it('a snapshot is taken before the merge is applied (with the file wish), and again for the reply', async () => {
     const h = hub()
-    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada')]), 'mac')
-    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben')]), 'phone')
+    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada Lovelace')]), 'mac')
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
     const mine = await phone.api.join(await mac.api.offerCode())
     await until(() => mac.box.requests.length === 1)
     mine.confirm(); mac.box.requests[0].confirm()
@@ -126,5 +126,89 @@ describe('pair and sync', () => {
     const h = hub()
     const a = await device(h, 'A', mk('J', []), 'a')
     expect(await a.api.join('hello')).toBeNull()
+  })
+})
+
+describe('one username for all devices (wave 15)', () => {
+  const ASK_A = 'did:peer:2.' + 'Vz6MkA'.repeat(8)
+  const ASK_B = 'did:peer:2.' + 'Vz6MkB'.repeat(8)
+  const link = (c, over = {}) => ({ code: c.repeat(22), secret: c.repeat(43), url: `https://app.trustintheweb.org/?connect=${encodeURIComponent(ASK_A)}`, updatedAt: 5, ...over })
+  const paired = async (a, b, opts) => {
+    const mine = await b.api.join(await a.api.offerCode())
+    await until(() => a.box.requests.length === 1)
+    mine.confirm(opts); a.box.requests[0].confirm(opts)
+    return b.api.pairings()[0].did
+  }
+
+  it('hello and ready announce the asking DID; each side stores it beside the pairing', async () => {
+    const h = hub()
+    const a = await device(h, 'A', mk('J', []), 'a', { askDid: () => ASK_A })
+    const b = await device(h, 'B', mk('J', []), 'b', { askDid: () => ASK_B })
+    const did = await paired(a, b)
+    expect(a.api.pairings()[0].askDid).toBe(ASK_B) // the joining side's pair message carried it
+    expect(b.api.pairings()[0].askDid).toBeUndefined()
+    await b.api.syncNow(did)
+    await until(() => a.box.incoming.length === 1)
+    expect(b.api.pairings()[0].askDid).toBe(ASK_A) // A's ready carried it
+  })
+
+  it('the code travels sealed; the receiver adopts it as owner other and settles; ticked off, nothing of it is sent', async () => {
+    const h = hub()
+    const merges = []
+    const a = await device(h, 'A', { ...mk('J', []), connectCode: link('A', { name: 'ada' }) }, 'a')
+    const b = await device(h, 'B', mk('J', []), 'b', { settleCodes: async (m) => { merges.push(m) } })
+    await paired(a, b)
+    await a.api.syncNow(a.api.pairings()[0].did)
+    await until(() => b.box.incoming.length === 1)
+    const res = await b.box.incoming[0].accept(false)
+    expect(b.state.connectCode).toMatchObject({ code: 'A'.repeat(22), owner: 'other', fromDid: b.api.pairings()[0].did })
+    expect(res.codes).toEqual({ reread: true })
+    expect(merges).toHaveLength(1)
+    expect(h.wires.map((w) => w.payload).join('')).not.toContain('A'.repeat(43))
+
+    const h2 = hub()
+    const c = await device(h2, 'C', { ...mk('J', []), connectCode: link('C') }, 'c')
+    const d = await device(h2, 'D', mk('J', []), 'd')
+    await paired(c, d, { shareCode: false })
+    expect(c.api.pairings()[0].shareCode).toBe(false)
+    await c.api.syncNow(c.api.pairings()[0].did)
+    await until(() => d.box.incoming.length === 1)
+    await d.box.incoming[0].accept(false)
+    expect(d.state.connectCode).toBeUndefined()
+  })
+
+  it('the receiving side honours its own tick: unticked there, no code and no display name are taken though the sender shares (F2, D3)', async () => {
+    const h = hub()
+    const merges = []
+    const a = await device(h, 'A', { ...mk('J', []), connectCode: link('A', { name: 'ada' }), me: { name: 'J', displayName: 'From A' } }, 'a')
+    const b = await device(h, 'B', { ...mk('J', []), me: { name: 'J', displayName: 'Mine B' } }, 'b', { settleCodes: async (m) => { merges.push(m) } })
+    const mine = await b.api.join(await a.api.offerCode())
+    await until(() => a.box.requests.length === 1)
+    mine.confirm({ shareCode: false })
+    a.box.requests[0].confirm()
+    expect(a.api.pairings()[0].shareCode).toBeUndefined()
+    await a.api.syncNow(a.api.pairings()[0].did)
+    await until(() => b.box.incoming.length === 1)
+    const res = await b.box.incoming[0].accept(false)
+    expect(b.state.connectCode).toBeUndefined()
+    expect(b.state.otherCodes).toBeUndefined()
+    expect(b.state.me.displayName).toBe('Mine B')
+    expect(res.codes).toBeUndefined()
+    expect(merges).toEqual([])
+  })
+
+  it('the tick can be changed later per pairing (D1); sending marks the code as shared (F3)', async () => {
+    const h = hub()
+    const a = await device(h, 'A', { ...mk('J', []), connectCode: link('A', { name: 'ada' }) }, 'a')
+    const b = await device(h, 'B', mk('J', []), 'b')
+    await paired(a, b)
+    const did = a.api.pairings()[0].did
+    a.api.setShare(did, false)
+    expect(a.api.pairings()[0].shareCode).toBe(false)
+    a.api.setShare(did, true)
+    expect(a.api.pairings()[0].shareCode).toBeUndefined()
+    await a.api.syncNow(did)
+    await until(() => b.box.incoming.length === 1)
+    expect(a.state.connectCode.shared).toBe(true)
   })
 })

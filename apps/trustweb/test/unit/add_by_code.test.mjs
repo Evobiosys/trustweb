@@ -116,6 +116,14 @@ describe('resolveCode / resolveName', () => {
     expect(out.ok).toBe(true)
     expect(answer.calls[0].url).toBe(`${ORIGIN}/who/ada`)
   })
+  it('prev=1 on the redirect marks a name that had another holder (wave 15): resolveAddInput carries the typed key', async () => {
+    const marked = LONG + '&prev=1'
+    expect(await resolveCode(deps({ url: marked }), CODE)).toMatchObject({ ok: true, previous: true })
+    expect(await resolveCode(deps({ url: LONG }), CODE)).not.toHaveProperty('previous')
+    expect(await resolveAddInput(deps({ url: marked }), '@ada')).toMatchObject({ ok: true, previous: 'ada' })
+    expect(await resolveAddInput(deps({ url: marked }), CODE)).toMatchObject({ ok: true, previous: CODE })
+    expect(await resolveAddInput(deps({ url: LONG }), '@ada')).not.toHaveProperty('previous')
+  })
   it('404 is NotFound, 429 RateLimited, 5xx Server', async () => {
     expect(await resolveCode(deps({ status: 404, redirected: false }), CODE)).toEqual({ ok: false, error: ResolveError.NotFound })
     expect(await resolveCode(deps({ status: 429, redirected: false }), CODE)).toEqual({ ok: false, error: ResolveError.RateLimited })

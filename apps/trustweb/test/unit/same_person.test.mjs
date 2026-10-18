@@ -50,3 +50,26 @@ describe('resolve and duplicates', () => {
     expect(pairs.map(([a, b]) => [a.id, b.id])).toEqual([['1', '2']])
   })
 })
+
+describe('R2: merging keeps timeline, agreements and the newer profile', () => {
+  const e = (at, summary = 's') => ({ at, channel: 'email', direction: 'in', summary, source: 'manual' })
+  const ag = (id, status, expiresAt) => ({ id, text: id, at: 1, status, ...(expiresAt ? { expiresAt } : {}) })
+  it('unions the timeline by entry and the agreements by id (further-along status, then newer expiry); nothing is dropped', () => {
+    const s = state([
+      person('k', 'Ada', { timeline: [e(1), e(2)], agreements: [ag('a', 'mine'), ag('b', 'mutual', 5), ag('c', 'proposed', 9)] }),
+      person('d', 'Ada', { timeline: [e(2), e(3)], agreements: [ag('a', 'mutual'), ag('b', 'mutual', 8), ag('c', 'mine'), ag('d', 'incoming')] }),
+    ])
+    mergePersons(s, 'k', 'd')
+    const p = s.people[0]
+    expect(p.timeline.map((x) => x.at).sort()).toEqual([1, 2, 3])
+    expect(Object.fromEntries(p.agreements.map((a) => [a.id, [a.status, a.expiresAt]]))).toEqual({ a: ['mutual', undefined], b: ['mutual', 8], c: ['proposed', 9], d: ['incoming', undefined] })
+  })
+  it('keeps the newer theirProfile and fills its missing fields from the older', () => {
+    const s = state([
+      person('k', 'Ada', { theirProfile: { norms: [], intro: 'old', favourite: 'call', at: 1 } }),
+      person('d', 'Ada', { theirProfile: { norms: [], intro: 'new', at: 9 } }),
+    ])
+    mergePersons(s, 'k', 'd')
+    expect(s.people[0].theirProfile).toEqual({ norms: [], intro: 'new', favourite: 'call', at: 9 })
+  })
+})

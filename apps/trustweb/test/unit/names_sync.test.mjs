@@ -126,7 +126,7 @@ describe('callNames: one POST /name per intent', () => {
   })
   it.each([
     [409, 'name_taken', ClaimError.Taken], [409, 'reserved', ClaimError.Reserved], [409, 'name_locked', ClaimError.NameLocked], [409, 'too_many_names', ClaimError.TooManyNames],
-    [409, undefined, ClaimError.Taken], [403, 'forbidden', ClaimError.Forgotten], [429, undefined, ClaimError.RateLimited], [400, 'bad_request', ClaimError.BadName],
+    [409, undefined, ClaimError.Taken], [403, 'forbidden', ClaimError.Forgotten], [429, undefined, ClaimError.RateLimited], [429, 'name-cap', ClaimError.NameCap], [400, 'bad_request', ClaimError.BadName],
     [500, undefined, ClaimError.Server], [503, undefined, ClaimError.Server],
   ])('status %i %s is %s', async (status, error, expected) => {
     const out = await callNames(deps(fake([{ status, body: error ? { error } : {} }]).f), record(), { kind: 'claim', name: 'ada', alias: false })
@@ -229,5 +229,30 @@ describe('createNamesSync: the phone\'s side', () => {
     box.value = record({ code: 'ZyXwVuTsRqPoNmLkJiHgFe' })
     await p
     expect(box.value.name).toBeUndefined()
+  })
+})
+
+describe('MOVE (wave 15, devices)', () => {
+  const from = { code: 'F'.repeat(22), secret: 'G'.repeat(43) }
+  const intent = { kind: 'move', name: 'bob', from, as: 'primary' }
+  it('the body names both codes and the target role', () => {
+    expect(JSON.parse(bodyOf(record(), intent))).toEqual({ code: CODE, secret: SECRET, move: 'bob', from, as: 'primary' })
+  })
+  it('a 200 must show the name where asked; the 409 reasons map to their own errors', async () => {
+    expect(answerMatches(intent, { name: 'bob', aliases: [], locked: [] })).toBe(true)
+    expect(answerMatches({ ...intent, as: 'alias' }, { name: 'ada', aliases: ['bob'], locked: [] })).toBe(true)
+    expect(answerMatches(intent, { name: 'ada', aliases: ['bob'], locked: [] })).toBe(false)
+    for (const [error, want] of [['alias_cap', ClaimError.AliasCap], ['name_moved', ClaimError.NameMoved], ['not_held', ClaimError.NotHeld]]) {
+      const { f } = fake([err409(error)])
+      expect(await callNames(deps(f), record(), intent)).toEqual({ ok: false, error: want })
+    }
+    const { f, calls } = fake([ok200('bob', ['ada'])])
+    expect(await callNames(deps(f), record(), intent)).toMatchObject({ ok: true, names: { name: 'bob', aliases: ['ada'] } })
+    expect(calls[0].body.move).toBe('bob')
+  })
+  it('a name that is not sendable is refused before any request', async () => {
+    const { f, calls } = fake([ok200('bob')])
+    expect(await callNames(deps(f), record(), { ...intent, name: 'No!' })).toEqual({ ok: false, error: ClaimError.BadName })
+    expect(calls).toHaveLength(0)
   })
 })

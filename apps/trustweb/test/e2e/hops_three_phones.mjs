@@ -220,6 +220,7 @@ async function main() {
 
     // 5. "Ask only my direct contacts" wins over any reach
     await tab(ann, 'My Resources')
+    await ann.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await ann.getByRole('button', { name: 'Settings' }).click()
     await ann.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
     // The sheet redraws once the server's status is in (wave3_flow does the same): wait for it, so no click lands on the old sheet.

@@ -65,6 +65,16 @@ export function planGrant({ held, name, alias, takenByOther }) {
   return set(alias ? [...held, name] : [name, ...held])
 }
 
+/**
+ * A MOVE of `name` (held by another code the caller also owns) into the code that holds `held`: as an alias at the end, or as the primary with the old
+ * primary kept as an alias. The count may not pass MAX_NAMES (409 alias_cap). A locked name moves too: the lock follows the name.
+ */
+export function planMove({ held, name, as }) {
+  if (held.includes(name)) return NOOP
+  if (held.length >= MAX_NAMES) return refuse('alias_cap')
+  return set(as === 'primary' ? [name, ...held] : [...held, name])
+}
+
 /** A REMOVE by the admin (also a locked name). */
 export function planRemove({ held, name }) {
   return held.includes(name) ? set(held.filter((n) => n !== name)) : refuse('not_held')

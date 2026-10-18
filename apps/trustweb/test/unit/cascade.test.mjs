@@ -208,3 +208,17 @@ describe('passing on through this phone (one_jakob.ts): who, and never the same 
     expect(ownFrontDoor({ me: { id: 'j', displayName: 'Jakob' } }, null)).toBeNull()
   })
 })
+
+describe('R11: the admitted copy holds none of the private top-level fields', () => {
+  it('profile, links, chats and the other side\'s channels never reach the matcher input', () => {
+    const now = 1
+    const s = {
+      v: 1, me: { id: 'c', displayName: 'C' }, peers: [], log: [], notificationsOn: false, inventory: [],
+      profile: { norms: [{ norm: 'custom', text: 'SECRET-PROFILE', at: 1, by: 'me' }] }, myChannels: { signal: 'SECRET-LINK' }, chats: { SECRET: [] },
+      people: [{ id: 'p1', name: 'Dana', context: 'met', ring: R.Friend, metAt: now, theirChannels: { signal: 'SECRET-THEIRS' }, lines: [{ id: 'l1', text: 'ladder', tag: Tag.Note, audience: A.Friends, status: LineStatus.Current, notedAt: now, checkedAt: now }] }],
+    }
+    const out = askSources(s, R.Close, 0)
+    expect(JSON.stringify([...out.threads, ...out.refs.values()])).not.toMatch(/SECRET/)
+    expect(out.threads.length).toBe(1)
+  })
+})

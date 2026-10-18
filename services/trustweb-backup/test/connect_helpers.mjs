@@ -15,7 +15,7 @@ export const T0 = 1_800_000_000_000
 /** The admin token of the tests: 64 hex characters. */
 export const TOKEN = 'ab'.repeat(32)
 /** Limits out of the way (most tests post and read a lot from one address). */
-export const ROOMY = { connectPerMinute: 10000, connectPerHour: 10000, connectGetPerMinute: 10000, connectGetPerHour: 10000, rateLimit: 100000 }
+export const ROOMY = { connectPerMinute: 10000, connectPerHour: 10000, connectGetPerMinute: 10000, connectGetPerHour: 10000, rateLimit: 100000, nameCap: 10000 }
 /** The reserved names of the production unit. */
 export const ENV_RESERVED = ['japossert', 'jakob']
 export const BASE = { linkHosts: [APP], ...ROOMY, reservedNames: ENV_RESERVED, adminToken: TOKEN }
