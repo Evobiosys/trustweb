@@ -7,6 +7,8 @@ import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
 import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
+import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
+import type { MenuAction } from './network_menu'
 import { S } from './strings'
 
 export interface NetworkOptions {
@@ -18,11 +20,10 @@ export interface NetworkOptions {
 
 const SETTINGS_KEY = 'trustweb.ui.netSettings'
 const PINS_KEY = 'trustweb.ui.netPins'
-const LONG_PRESS_MS = 500
 const DOUBLE_TAP_MS = 320
 const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7', label: '#c5d6d9' }
 const STEPS_PER_FRAME = 20
-const TAP_SLOP = 6
+const TAP_SLOP = PRESS_SLOP
 
 /** Per device: the Logseq look, the forces, and whether people outside my web (tier "outside") are drawn. */
 interface Settings { logseq: boolean; showAll: boolean; forces: Forces }
@@ -52,6 +53,8 @@ function download(name: string, blob: Blob): void {
 
 interface Camera { k: number; x: number; y: number }
 interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null }
+// People hidden from the graph this session only (never stored).
+const hiddenIds = new Set<string>()
 // One graph and camera per record, so a redraw of the screen keeps the picture where it settled.
 let cached: Cached | null = null
 
@@ -61,7 +64,7 @@ function keyOf(o: NetworkOptions): string {
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
-  const people = settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')
+  const people = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id))
   const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
   if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
@@ -108,8 +111,9 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   ])
   const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
   const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
+  const pop = el('div', { class: 'net-pop', 'data-net-pop': '', hidden: '' })
   let tipTimer = 0
-  const root = el('div', { class: 'net', 'data-view': 'network' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, el('small', { class: 'net-legend' }, [S.netLegend])])
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, el('small', { class: 'net-legend' }, [S.netLegend])])
 
   const fit = (): Camera => {
     const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
@@ -144,12 +148,14 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     }
     return best
   }
+  const open = (v: GraphNode): void => { if (v.tier === undefined) o.openMe(); else o.openPerson(v.id) }
   const showTip = (e: GraphEdge): void => {
     const a = g.nodes[e.a].name; const b = g.nodes[e.b].name
-    tip.textContent = e.knows === 'mutual' ? S.netKnowsBoth(a, b) : S.netKnows(a, b)
+    const card = (v: GraphNode): HTMLElement => el('button', { class: 'btn btn-ghost btn-sm', onclick: () => open(v) }, [S.netOpenCard(v.name)])
+    tip.replaceChildren(e.knows === 'mutual' ? S.netKnowsBoth(a, b) : S.netKnows(a, b), card(g.nodes[e.a]), card(g.nodes[e.b]))
     tip.hidden = false
     clearTimeout(tipTimer)
-    tipTimer = window.setTimeout(() => { tip.hidden = true }, 3500)
+    tipTimer = window.setTimeout(() => { tip.hidden = true }, 6000)
   }
 
   const colour = (v: GraphNode): string =>
@@ -160,7 +166,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const draw = (): void => {
     if (!ctx) return
     const c = cam()
-    const dpr = window.devicePixelRatio || 1
+    const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
     const css = getComputedStyle(document.documentElement)
@@ -241,7 +247,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const first = !w
     w = Math.floor(box.width) - 24
     h = Math.max(360, Math.floor(window.innerHeight * 0.62))
-    const dpr = window.devicePixelRatio || 1
+    const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     canvas.width = w * dpr; canvas.height = h * dpr
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
     if (first && state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
@@ -259,7 +265,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     c.x = px - (px - c.x) * (k / c.k); c.y = py - (py - c.y) * (k / c.k); c.k = k
     dirty = true
   }
-  // A node dragged becomes pinned; double-tap or long-press a pinned node unpins it.
+  // A node dragged becomes pinned; double-tap a pinned node unpins it; right-click or long-press opens the person menu.
   let drag: GraphNode | null = null
   let dragPinned = false
   let press = 0
@@ -267,7 +273,30 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let lastTap = { id: '', at: 0 }
   const unpin = (v: GraphNode): void => { v.pinned = false; savePins(g); state.iteration = Math.min(state.iteration, LAYOUT_ITERATIONS - 60); dirty = true }
   const endDrag = (): void => { clearTimeout(press); drag = null }
+  const closePop = (): void => { pop.hidden = true }
+  const act = (v: GraphNode, a: MenuAction): void => {
+    closePop()
+    if (a === 'pin') { v.pinned = true; savePins(g); reheat() } else if (a === 'unpin') unpin(v)
+    else if (a === 'inspect') open(v)
+    else { hiddenIds.add(v.id); root.replaceWith(createNetworkView(o)) }
+  }
+  const openPop = (v: GraphNode, p: { x: number; y: number }): void => {
+    endDrag(); travelled = Infinity
+    const labels: Record<MenuAction, string> = { pin: S.netPin, unpin: S.netUnpin, inspect: S.netInspect, hide: S.netHide }
+    pop.replaceChildren(...menuActions(v.pinned).map((a) => el('button', { class: 'btn btn-ghost btn-sm', onclick: () => act(v, a) }, [labels[a]])))
+    pop.hidden = false
+    const at = placeMenu(canvas.offsetLeft + p.x, canvas.offsetTop + p.y, pop.offsetWidth, pop.offsetHeight, root.clientWidth, root.clientHeight)
+    pop.style.left = at.x + 'px'; pop.style.top = at.y + 'px'
+  }
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    const p = local(e)
+    const v = hit(p.x, p.y)
+    if (v && v.tier !== undefined) openPop(v, p)
+  })
   canvas.addEventListener('pointerdown', (e) => {
+    closePop()
+    if (e.button > 0) return
     touched = true
     canvas.setPointerCapture(e.pointerId)
     const p = local(e)
@@ -277,7 +306,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const v = hit(p.x, p.y)
     if (!v || v.tier === undefined) return
     drag = v; dragPinned = v.pinned
-    if (v.pinned) press = window.setTimeout(() => { if (drag === v && travelled <= TAP_SLOP) { endDrag(); unpin(v); travelled = Infinity } }, LONG_PRESS_MS)
+    press = window.setTimeout(() => { if (drag === v && isLongPress(LONG_PRESS_MS, travelled)) openPop(v, p) }, LONG_PRESS_MS)
   })
   canvas.addEventListener('pointermove', (e) => {
     const p = local(e)
@@ -319,15 +348,15 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (v.pinned && v.tier !== undefined) {
       if (lastTap.id === v.id && e.timeStamp - lastTap.at < DOUBLE_TAP_MS) { clearTimeout(opening); lastTap = { id: '', at: 0 }; unpin(v); return }
       lastTap = { id: v.id, at: e.timeStamp }
-      opening = window.setTimeout(() => o.openPerson(v.id), DOUBLE_TAP_MS)
+      opening = window.setTimeout(() => open(v), DOUBLE_TAP_MS)
       return
     }
-    if (v.tier === undefined) o.openMe(); else o.openPerson(v.id)
+    open(v)
   }
   canvas.addEventListener('pointerup', (e) => release(e, true))
   canvas.addEventListener('pointercancel', (e) => release(e, false))
   canvas.addEventListener('pointerleave', () => { if (hover) { hover = null; dirty = true } })
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); const p = local(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015)) }, { passive: false })
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); closePop(); const p = local(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015)) }, { passive: false })
   search.addEventListener('input', () => { matches = matchIds(g, search.value); dirty = true })
 
   new ResizeObserver(resize).observe(root)
