@@ -823,6 +823,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .pn-day{display:flex; flex-direction:column; gap:6px}
 .pn-day h5{margin:4px 0 0}
 .sline.gone span{opacity:.6; text-decoration:line-through}
+.sline span.editable{cursor:text; align-self:stretch}
+.sline textarea.field{align-self:stretch; resize:none; overflow:hidden}
 
 /* Wave 6 (N8c): the visible way home on every sheet; (N8a) the search panel says it is not an ask */
 .sheet-bar{display:flex; justify-content:flex-end; margin:-8px 0 2px}
