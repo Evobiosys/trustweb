@@ -12,10 +12,10 @@ import { mountPlayer } from './audio_player'
 import type { PlayerHandle } from './audio_player'
 import { meetingSearchPanel } from './meeting_search_view'
 import { generalNoteMatches, generalNoteOf } from './general_notes'
-import { lineIsCurrent, personNotes, transcriptPending } from './person_notes'
+import { LINE_TEXT_MAX, lineIsCurrent, personNotes, transcriptPending } from './person_notes'
 import type { Segment } from './meeting_transcriber'
 import { isDemoPerson, pastMeetings } from './model'
-import type { AppState, ItemSource, PastMeeting, Tag, TranscriptLine } from './model'
+import type { AppState, ItemSource, NoteLine, PastMeeting, Tag, TranscriptLine } from './model'
 import type { SourceFocus } from './provenance'
 import { clock } from './recorder'
 import type { Recording } from './recorder'
@@ -55,6 +55,10 @@ export interface PastMeetingsHooks {
   extra?: (m: PastMeeting) => (Node | null)[]
   /** The meeting was opened (round B: a kept meeting looks for its late transcript). */
   opened?: (m: PastMeeting) => void
+  /** A note line of a person was edited (text already trimmed and non-empty). */
+  editLine?: (personId: string, lineId: string, text: string) => void
+  /** A note line of a person was removed (its text was emptied and confirmed). */
+  removeLine?: (personId: string, lineId: string) => void
   /** The meeting was deleted on this phone (round B: its hosted copy goes too). */
   removed?: (m: PastMeeting) => void
 }
@@ -208,6 +212,41 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
         ? [el('div', { class: 'pn-general', 'data-pn-general': '1' }, [el('h5', { class: 'eyebrow' }, [S.personNotesGeneral]), el('p', { class: 'pm-general' }, [note])])]
         : []
     }
+    // A current line turns into a textarea on tap: Enter or blur saves, Esc cancels, empty asks to remove. A gone line stays read-only.
+    const lineText = (l: NoteLine): HTMLElement => {
+      const span = el('span', {}, [l.text])
+      if (!lineIsCurrent(l)) return span
+      span.classList.add('editable')
+      span.tabIndex = 0
+      span.setAttribute('role', 'button')
+      span.setAttribute('aria-label', S.personNotesEditAria)
+      const edit = (): void => {
+        const area = el('textarea', { class: 'field', rows: '1', maxlength: String(LINE_TEXT_MAX), 'aria-label': S.personNotesEditAria }) as HTMLTextAreaElement
+        area.value = l.text
+        const grow = (): void => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight}px` }
+        let done = false
+        const finish = (save: boolean): void => {
+          if (done) return
+          done = true
+          const text = area.value.trim()
+          if (save && !text) {
+            if (confirm(S.personNotesRemoveConfirm)) { h.removeLine?.(personId, l.id); fill(); return }
+          } else if (save && text !== l.text) h.editLine?.(personId, l.id, text)
+          fill()
+        }
+        area.addEventListener('input', grow)
+        area.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true) } else if (e.key === 'Escape') finish(false)
+        })
+        area.addEventListener('blur', () => finish(true))
+        span.replaceWith(area)
+        area.focus()
+        grow()
+      }
+      span.addEventListener('click', edit)
+      span.addEventListener('keydown', (e) => { if (e.key === 'Enter') edit() })
+      return span
+    }
     const fill = (): void => {
       const days = personNotes(h.state(), personId, input.value, (m) => [whenLabel(m.startedAt), ...isoDateLabels(m.startedAt)])
       if (!days.length && !general().length) {
@@ -221,7 +260,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
           transcriptPending(m) ? el('span', { class: 'pm-transcribing', 'data-pn-transcribing': m.id }, [S.pastTranscribing]) : null,
         ])),
         ...d.lines.map((l) => el('div', { class: 'sline' + (lineIsCurrent(l) ? '' : ' gone'), 'data-pn-line': l.id }, [
-          h.tagChip(l.tag), el('span', {}, [l.text]), lineIsCurrent(l) ? null : el('em', {}, [S.personNotesGone]),
+          h.tagChip(l.tag), lineText(l), lineIsCurrent(l) ? null : el('em', {}, [S.personNotesGone]),
         ])),
       ])))
     }

@@ -131,6 +131,7 @@ import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
 import { createPastMeetings, whenLabel } from './past_meetings_view'
+import { editLineText, removeLine } from './person_notes'
 import { createSwissContext, readHosting } from './swiss_context'
 import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
@@ -3100,6 +3101,9 @@ const past = createPastMeetings({
   extra: (m) => transcription.meetingExtras(m),
   opened: (m) => packs.checkOne(m),
   removed: (m) => hosting.removed(m.id),
+  // Lines travel as part of the whole person record: save() is all the Curator/vault/device sync need (as for the checkedAt edit in the review sheet).
+  editLine: (personId, lineId, text) => { if (state && editLineText(state, personId, lineId, text)) save() },
+  removeLine: (personId, lineId) => { if (state && removeLine(state, personId, lineId)) save() },
 })
 
 // The Swiss server's newer services (wave 1733 round B): never on a demo phone or a demo account.
