@@ -35,9 +35,9 @@ export interface TogetherRequest {
   reach?: number
 }
 
-const DAY_MS = 86_400_000
+const DAY_MS = 86_400_000 // only for the plausibility range of an LLM draft; calendar maths uses addDays
 /** Words that follow "play" / precede "spielen" without naming what is played. */
-const NOT_ACTIVITY = new Set(['again', 'wieder', 'with', 'a', 'the', 'some', 'bis', 'vor', 'am', 'mal', 'gern', 'gerne', 'to', 'before', 'by', 'on'])
+const NOT_ACTIVITY = new Set(['play', 'playing', 'spielen', 'in', 'be', 'again', 'wieder', 'with', 'a', 'the', 'some', 'bis', 'vor', 'am', 'mal', 'gern', 'gerne', 'to', 'before', 'by', 'on'])
 const WEEKDAYS: Record<string, number> = {
   sunday: 0, sun: 0, sonntag: 0, monday: 1, mon: 1, montag: 1, tuesday: 2, tue: 2, tues: 2, dienstag: 2,
   wednesday: 3, wed: 3, mittwoch: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, donnerstag: 4, friday: 5, fri: 5, freitag: 5,
@@ -56,22 +56,28 @@ function nextWeekday(now: number, wd: number): number {
   return d.getTime()
 }
 
-/** "before Thursday" -> Thursday 00:00. Also "by", "until", "vor", "bis", "tomorrow", "this week", "weekend". */
+/** Local midnight `n` calendar days after the day of `t` (setDate, so a clock change never shifts the midnight; DAY_MS would). */
+const addDays = (t: number, n: number): number => { const d = new Date(startOfDay(t)); d.setDate(d.getDate() + n); return d.getTime() }
+
+/** "before Thursday" -> Thursday 00:00. Also "by", "until", "vor", "bis", "on Friday", "tomorrow", "this week", "weekend". */
 function readDeadline(t: string, now: number): { beforeAt?: number; fromAt?: number } {
+  const today = startOfDay(now)
   const wd = new RegExp(`\\b(?:before|by|until|till|vor|bis(?:\\s+zum)?)\\s+(?:next\\s+|nächsten?\\s+)?(${WD})\\b`).exec(t)
   if (wd) return { beforeAt: nextWeekday(now, WEEKDAYS[wd[1]]) }
   const on = new RegExp(`\\b(?:on|am|this|diesen?|next|nächsten?)\\s+(${WD})\\b`).exec(t)
   if (on) {
     const day = nextWeekday(now, WEEKDAYS[on[1]])
-    return { fromAt: day, beforeAt: day + DAY_MS }
+    return { fromAt: day, beforeAt: addDays(day, 1) }
   }
-  if (/\b(?:today|heute)\b/.test(t)) return { beforeAt: startOfDay(now) + DAY_MS }
-  if (/\b(?:tomorrow|morgen)\b/.test(t)) return { fromAt: startOfDay(now) + DAY_MS, beforeAt: startOfDay(now) + 2 * DAY_MS }
+  if (/\b(?:today|heute)\b/.test(t)) return { beforeAt: addDays(today, 1) }
+  if (/\b(?:tomorrow|morgen)\b/.test(t)) return { fromAt: addDays(today, 1), beforeAt: addDays(today, 2) }
   if (/\b(?:this weekend|am wochenende|dieses wochenende|weekend)\b/.test(t)) {
-    const sat = nextWeekday(now, 6)
-    return { fromAt: new Date(now).getDay() === 6 || new Date(now).getDay() === 0 ? startOfDay(now) : sat, beforeAt: sat + 2 * DAY_MS }
+    const dow = new Date(today).getDay()
+    // On a Saturday or Sunday the weekend is the one that is running, not the next.
+    const sat = dow === 6 ? today : dow === 0 ? addDays(today, -1) : nextWeekday(now, 6)
+    return { fromAt: Math.max(today, sat), beforeAt: addDays(sat, 2) }
   }
-  if (/\b(?:this week|diese woche|within a week|next 7 days)\b/.test(t)) return { beforeAt: startOfDay(now) + 7 * DAY_MS }
+  if (/\b(?:this week|diese woche|within a week|next 7 days)\b/.test(t)) return { beforeAt: addDays(today, 7) }
   return {}
 }
 
@@ -85,7 +91,10 @@ function readReach(t: string): number | undefined {
 function readArea(raw: string): { area?: string; radiusKm?: number } {
   const km = /\bwithin\s+(\d{1,3})\s*km\b|\b(\d{1,3})\s*km\b/i.exec(raw)
   const radiusKm = km ? Math.min(TOGETHER_RADIUS_KM_MAX, Number(km[1] ?? km[2])) : undefined
-  const near = /\b(?:near|around|in|bei|in der nähe von|nahe)\s+([^,.;!?]+?)(?=\s+(?:before|by|until|on|this|next|tomorrow|today|vor|bis|am|within|with|mit)\b|[,.;!?]|$)/i.exec(raw)
+  const END = '(?=\\s+(?:before|by|until|on|this|next|tomorrow|today|tonight|vor|bis|am|within|with|mit|heute|morgen)\\b|[,.;!?]|$)'
+  // "near Wien 7" always names a place; a bare "in" only before a capitalised word ("in Wien", not "in the band").
+  const near = new RegExp(`\\b(?:near|around|bei|in der nähe von|nahe)\\s+([^,.;!?]+?)${END}`, 'i').exec(raw)
+    ?? new RegExp(`\\bin\\s+([A-ZÄÖÜ][^,.;!?]*?)${END}`).exec(raw)
   const area = near ? clipText(near[1].trim(), TOGETHER_AREA_MAX) : undefined
   return { ...(area ? { area } : {}), ...(radiusKm !== undefined ? { radiusKm } : {}) }
 }
@@ -95,7 +104,11 @@ const LEAD = /^(?:(?:again|wieder|mal|gerne?)\s+)*(?:(?:play|playing|do|doing|go
 const TRAIL = /\s+(?:spielen|machen|gehen)$/
 /** Where the wanted thing ends: the "together" words, a time or a place. */
 const STOP = '(?:together|with(?:\\s+(?:me|someone|anyone|somebody))?|again|wieder|zusammen|mit|before|by|until|till|near|around|in|on|at|this|next|tomorrow|today|within|vor|bis|am|bei|nahe)'
-const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|like\\s+to|looking\\s+to|need\\s+someone\\s+to|someone\\s+to|möchte|moechte|möchten|will|wollen|lust\\s+(?:zu|auf))'
+const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|looking\\s+to|möchte|moechte|möchten|will|wollen|lust\\s+(?:zu|auf))'
+/** A request is a TOGETHER request only with one of these: without it "I would like to borrow a tent" stays an ordinary ask. */
+const TOGETHER_MARK = /\b(?:together|with me|with us|who wants|who'?s up for|zusammen|mit mir|wer (?:will|mag|hat lust)|play(?:ing)?|spielen)\b/
+/** Time words and "with me" are not part of the activity; taken out before it is read. */
+const TIME_WORDS = new RegExp(`\\b(?:(?:before|by|until|till|vor|bis(?:\\s+zum)?|on|am|this|diese[nrs]?|next|nächsten?)\\s+(?:${WD}|weekend|wochenende|week|woche)|today|tomorrow|tonight|heute|morgen|mit mir|with me)\\b`, 'g')
 
 /**
  * Reads one sentence of the pattern "I want to do X together, who wants to do it with me?" (X any activity: padel, hiking, cooking).
@@ -104,11 +117,14 @@ const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|like\\s+to|looking\\
 export function readTogetherRequest(text: string, now: number): TogetherRequest | null {
   const raw = text.trim()
   const t = raw.toLowerCase()
+  if (!TOGETHER_MARK.test(t)) return null
   const W = '([a-zäöüß][\\wäöüß-]*)'
-  const phrase = new RegExp(`\\b${WANT}\\s+(.+?)(?=\\s+${STOP}\\b|[,.;!?]|$)`).exec(t)?.[1]
-    ?? new RegExp(`\\bplay(?:ing)?\\s+(?:some\\s+|a\\s+game\\s+of\\s+)?${W}`).exec(t)?.[0]
-    ?? new RegExp(`\\b${W}\\s+(?:(?:wieder|mal|gerne?)\\s+)?spielen\\b`).exec(t)?.[0]
-  if (!phrase) return null
+  const bare = t.replace(TIME_WORDS, ' ').replace(/\s+/g, ' ')
+  let phrase = new RegExp(`\\b${WANT}\\s+(.+?)(?=\\s+${STOP}\\b|[,.;!?]|$)`).exec(bare)?.[1]
+    ?? new RegExp(`\\bplay(?:ing)?\\s+(?:some\\s+|a\\s+game\\s+of\\s+)?${W}`).exec(bare)?.[0]
+    ?? new RegExp(`\\b${W}\\s+(?:(?:wieder|mal|gerne?)\\s+)?spielen\\b`).exec(bare)?.[0]
+  if (!phrase?.trim()) return null
+  phrase = phrase.trim()
   const activity = phrase.replace(LEAD, '').replace(TRAIL, '').trim()
   if (!activity || NOT_ACTIVITY.has(activity)) return null
   const reach = readReach(t)

@@ -164,6 +164,7 @@ import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { togetherAsk } from './together_match'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { readTogetherRequest } from './together_request'
+import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
@@ -5247,37 +5248,48 @@ function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
   return Math.max(0, Math.ceil((startedAt + askWaitMs(reach, net.answerWindowMs) - Date.now()) / 1000))
 }
 
+/** A together request waiting for the second tap: the compiled sentence is in the box, its reach and filled settings wait here. */
+let togetherPending: { text: string; reach: number | undefined; filled: TogetherRequest } | null = null
+
 /**
- * Wave 16: the dock's send. A sentence that names something to play ("I want to play padel again before Thursday") becomes a play
- * request: remembered settings fill what it leaves out (together_prefs.ts), it goes out as an ordinary ask with its friend degree as reach,
- * and what it chose becomes the next default. Anything else is asked as typed.
+ * Wave 16: the dock's send. A sentence of the pattern "I want to play padel again before Thursday / who wants to go hiking with me"
+ * becomes a together request: remembered settings of the same activity fill what it leaves out and the compiled sentence replaces the
+ * box text, so the person SEES everything that will go out (area, window) before it does; the second tap sends it. Its friend degree
+ * rides on this one ask only (the dock's "How far?" stays as it was); what it chose becomes the next default only when it is sent.
+ * Anything that is not a together request is asked as typed, at once.
  */
 function sendFromDock(text: string): void {
   const now = Date.now()
+  const pending = togetherPending
+  togetherPending = null
+  if (pending && pending.text === text.trim()) {
+    const s = st()
+    s.togetherPrefs = rememberTogether(s.togetherPrefs, pending.filled, now)
+    save()
+    void runAsk(pending.text, pending.reach)
+    return
+  }
   const req = readTogetherRequest(text, now)
   if (!req) { void runAsk(text); return }
-  const s = st()
-  const filled = fillFromPrefs(req, s.togetherPrefs, now)
+  const filled = fillFromPrefs(req, st().togetherPrefs, now)
   const ask = togetherAsk(filled, navigator.language)
-  s.togetherPrefs = rememberTogether(s.togetherPrefs, filled, now)
-  // "Ask only my direct contacts" wins (askReachOf); otherwise a degree the request or its remembered settings name replaces the dock's.
-  if (filled.reach !== undefined) { if (ask.reach === HOPS_DEFAULT) delete s.askReach; else s.askReach = ask.reach }
-  save()
-  void runAsk(ask.text)
+  queryText = ask.text
+  togetherPending = { text: ask.text, reach: filled.reach, filled }
+  render()
 }
 
-async function runAsk(text: string): Promise<void> {
+async function runAsk(text: string, reach?: number): Promise<void> {
   const t = text.trim()
   if (!t) return
   const peers = askPeers(st())
-  askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: askReachOf(st()) }
+  askRun = { text: t, asked: peers.length, askedPeerIds: peers.map((p) => p.id), startedAt: Date.now(), results: null, reach: reach !== undefined && !askDirectOnly(st()) ? reach : askReachOf(st()) }
   clearInterval(countdownTimer)
   countdownTimer = setInterval(() => {
     const w = document.getElementById('tw-wait')
     if (w && askRun && !askRun.results) w.textContent = ' ' + S.queryWaiting(secondsLeft(askRun.startedAt, askRun.reach))
   }, 1000)
   render()
-  const results = await net.ask(t)
+  const results = await net.ask(t, reach)
   clearInterval(countdownTimer)
   if (askRun && askRun.text === t) askRun.results = results
   recordFound(t, results)
@@ -5329,6 +5341,7 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
+      !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
       reachChooser(askReachOf(s), askDirectOnly(s) || busy, (reach) => {

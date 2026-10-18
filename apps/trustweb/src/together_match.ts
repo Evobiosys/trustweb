@@ -17,10 +17,20 @@ export interface TogetherAsk {
 const dateLabel = (t: number, locale: string): string =>
   new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(t))
 
+/** One day -> "on Fri, Oct 23"; a span -> "from X to Y" (last day included); only a deadline -> "before X" (that midnight excluded). */
+function windowWords(req: TogetherRequest, locale: string): string[] {
+  const { fromAt, beforeAt } = req
+  if (beforeAt === undefined) return []
+  if (fromAt === undefined) return [`before ${dateLabel(beforeAt, locale)}`]
+  const last = new Date(beforeAt); last.setDate(last.getDate() - 1)
+  const first = dateLabel(fromAt, locale), end = dateLabel(last.getTime(), locale)
+  return [first === end ? `on ${first}` : `from ${first} to ${end}`]
+}
+
 /** The ask for a request (after prefs filled it). `locale` is the person's, so the text reads like their own sentence. */
 export function togetherAsk(req: TogetherRequest, locale = 'en'): TogetherAsk {
   const parts = [`Looking for company: ${req.phrase ?? req.activity}`]
-  if (req.beforeAt !== undefined) parts.push(`before ${dateLabel(req.beforeAt, locale)}`)
+  parts.push(...windowWords(req, locale))
   if (req.area) parts.push(`near ${req.area}${req.radiusKm !== undefined ? ` (within ${req.radiusKm} km)` : ''}`)
   return { text: parts.join(' '), reach: req.reach ?? HOPS_DEFAULT }
 }
@@ -32,7 +42,9 @@ export interface TogetherOffer {
   area?: string
 }
 
-const has = (line: string, word: string): boolean => line.toLowerCase().includes(word.toLowerCase())
+/** Whole-word match, so "cook" does not fit "cookie" (a trailing -s/-ing/-en of the same word does). */
+const has = (line: string, word: string): boolean =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|es|ing|en)?(?![\\p{L}\\p{N}])`, 'iu').test(line)
 
 /**
  * Does this offer fit the request? The activity must appear in the line; an area is compared only when BOTH sides state one (an offer
