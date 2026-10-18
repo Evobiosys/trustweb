@@ -22,7 +22,7 @@ import { createViaCard } from './via_card'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
-import { askPeers, isNonResponsive } from './non_responsive'
+import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
@@ -1508,7 +1508,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const C = 176
   const counts = {} as Record<Ring, number>
   const members: Partial<Record<Ring, Person[]>> = {}
-  for (const p of s.people) (members[webSlot(p)] ??= []).push(p)
+  for (const p of s.people) if (!isBlocked(p)) (members[webSlot(p)] ??= []).push(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
   const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)]))
   // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
@@ -2218,8 +2218,24 @@ function personSheet(personId: string): void {
     p.peerId ? sendProfileRow(p) : null,
     agreementsFor(p),
     curator.person(p.id, closeSheet),
+    blockRow(p),
   ])
   cardOpenFor = p.id
+}
+
+/** Wave 15: Block / Unblock on the card. Blocked: asks unanswered, chat unseen, nothing sent, dot hidden; unblock stores 0 so it wins a sync. */
+function blockRow(p: Person): HTMLElement {
+  const on = isBlocked(p)
+  return el('button', {
+    class: 'btn btn-ghost btn-sm', 'data-block-person': p.id,
+    onclick: () => {
+      if (!on && !confirm(S.blockConfirm(p.name))) return
+      p.blocked = on ? 0 : Date.now()
+      save(); render()
+      if (sheet.dataset.kind === 'settings') settingsSheet(); else closeSheet()
+      if (!on) toast(S.blockedToast(p.name))
+    },
+  }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -2664,6 +2680,7 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   if (!r.message) return
   s.chats = r.book
   save()
+  if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
   notify('chat', S.chatNotifBody(peer.displayName))
   newMessageNotice(peer, r.message.key)
@@ -2707,7 +2724,10 @@ function hideMsgNotice(): void {
 
 /** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
 function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
-  switch (routeText(APP_URL, text)) {
+  const kind = routeText(APP_URL, text)
+  // Wave 15: a blocked person's chat texts are stored (onChatText) but nothing else of theirs is acted on.
+  if (kind !== TextKind.Chat && isBlocked(personOf(st().people, peer.id))) return
+  switch (kind) {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
     case TextKind.ContactRequest: onContactRequest(peer, text); return
@@ -4897,6 +4917,12 @@ function settingsSheet(): void {
     }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
     ...sourcesGroup(s),
     el('h4', { class: 'eyebrow' }, [S.setAdvanced]),
+    el('div', { 'data-blocked-list': '1' }, [
+      el('b', {}, [S.blockedTitle]),
+      ...(s.people.some(isBlocked)
+        ? s.people.filter(isBlocked).map((b) => el('div', { class: 'conn-row' }, [el('span', {}, [b.name]), blockRow(b)]))
+        : [el('p', { class: 'meta' }, [S.blockedNone])]),
+    ]),
     el('button', {
       class: 'radio' + (s.showRingNames ? ' on' : ''),
       'aria-pressed': String(s.showRingNames === true),

@@ -69,6 +69,18 @@ describe('merge', () => {
   })
 })
 
+describe('blocked travels', () => {
+  it('a block arrives, and a newer unblock (0) beats it', () => {
+    const mine = state({ people: [person('a', 'Ada')] })
+    const blocked = state({ people: [{ ...person('a', 'Ada'), blocked: 7 }] })
+    mergeBundle(mine, refreshStamps(mine, {}, 1, 'T'), bundleOf(blocked, refreshStamps(blocked, {}, 5, 'T')), 0)
+    expect(mine.people[0].blocked).toBe(7)
+    const unblocked = state({ people: [{ ...person('a', 'Ada'), blocked: 0 }] })
+    mergeBundle(mine, refreshStamps(mine, {}, 5, 'T'), bundleOf(unblocked, refreshStamps(unblocked, {}, 9, 'T')), 0)
+    expect(mine.people[0].blocked).toBe(0)
+  })
+})
+
 describe('chunks and bundle shape', () => {
   it('a big record round-trips in pieces under the size bound', () => {
     const big = state({ people: Array.from({ length: 800 }, (_, i) => person('p' + i, 'Person ' + i + ' ü', [line('l' + i, 'x'.repeat(150))])) })

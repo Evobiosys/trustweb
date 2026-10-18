@@ -396,6 +396,6 @@ export function takeContact(held: HeldContacts, peerId: string): string | undefi
  * Never a reach-out through the public trustweb.one/<name> link, and nobody I still hold on the Intending ring: moving them to a real
  * ring is my deliberate act, and until then a request is dropped, not answered. Links never leave at connect time at all.
  */
-export function mayAnswerRequest(peer: { reachOut?: true }, person: { ring: Ring; reachedOut?: 'sent' | 'received' }): boolean {
-  return !peer.reachOut && !person.reachedOut && person.ring !== Ring.Intending
+export function mayAnswerRequest(peer: { reachOut?: true }, person: { ring: Ring; reachedOut?: 'sent' | 'received'; blocked?: number }): boolean {
+  return !(person.blocked && person.blocked > 0) && !peer.reachOut && !person.reachedOut && person.ring !== Ring.Intending
 }
