@@ -2,7 +2,7 @@
   import { norm } from './contacts'
   import { shownName } from './display'
   import { fieldById, fieldLabelOf, valueText } from './fields'
-  import { Pick, dismiss, linesToAdd, mergeRows } from './merge'
+  import { Pick, clearedCount, dismiss, linesToAdd, mergeRows, neitherAllowed } from './merge'
   import { mergePeople } from './merge.svelte'
   import { openPerson } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
@@ -35,6 +35,7 @@
     return p ? entityValues(p, baseFields(p), store.crm.personFields?.[id]) : {}
   }
   const rows = $derived(keep && drop ? mergeRows(valuesFor(keepId), valuesFor(drop.id), drop.metAt > keep.metAt) : [])
+  const cleared = $derived(clearedCount(rows, picks))
   const added = $derived(keep && drop ? linesToAdd(keep.lines, drop.lines).length : 0)
   const events = $derived(dropId ? store.crm.interactions.filter((i) => i.personId === dropId).length + store.crm.followUps.filter((f) => f.personId === dropId).length : 0)
   const label = (key: string): string => fieldById(key)?.label ?? fieldLabelOf(key)
@@ -83,14 +84,19 @@
           {@const pick = picks[r.key] ?? r.pick}
           {@const taken = pick === side || pick === Pick.Both}
           <span class="merge-side" data-side={side}>
-            <label><input type="radio" name={`merge-${r.key}`} checked={pick === side} onchange={(): void => { picks[r.key] = side as Pick }} /><span class:dropped={!taken}>{valueText(v) || '—'}</span></label>
-            <button class="quiet" data-action="merge-dismiss" aria-label={S.mergeDismiss} onclick={(): void => { picks[r.key] = dismiss(pick, side as Pick.Keep | Pick.Other) }}>×</button>
+            <label><input type="radio" name={`merge-${r.key}`} checked={pick === side} onchange={(): void => { picks[r.key] = side as Pick }} /><span class="merge-val" class:dropped={!taken} title={valueText(v)}>{valueText(v) || '—'}</span></label>
+            {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId))}
+              <button class="quiet" data-action="merge-dismiss" aria-label={S.mergeDismiss} onclick={(): void => { picks[r.key] = dismiss(pick, side as Pick.Keep | Pick.Other) }}>×</button>
+            {/if}
           </span>
         {/each}
         <label class="merge-both"><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Both} onchange={(): void => { picks[r.key] = Pick.Both }} />{S.mergeBoth}</label>
+        {#if neitherAllowed(r.key, rows, picks, valuesFor(keepId))}
+          <label class="merge-neither"><input type="radio" name={`merge-${r.key}`} checked={(picks[r.key] ?? r.pick) === Pick.Neither} onchange={(): void => { picks[r.key] = Pick.Neither }} />{S.mergeNeither}</label>
+        {/if}
       </div>
     {/each}
-    <p>{S.mergeAdds(added, events)}</p>
+    <p>{S.mergeAdds(added, events, cleared)}</p>
     <div class="add-actions">
       <button class="btn small" data-action="merge-go" onclick={go}>{S.mergeGo}</button>
       <button class="btn small ghost" data-action="merge-cancel" onclick={reset}>{S.ringCancel}</button>

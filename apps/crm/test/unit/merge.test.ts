@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Pick, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, repoint } from '../../src/merge'
+import { Pick, clearedCount, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, neitherAllowed, repoint } from '../../src/merge'
+import { LAST_NAME_KEY } from '../../src/placement'
 import { ContactPointKind, InteractionKind } from '../../src/model'
 
 describe('merge', () => {
@@ -31,5 +32,16 @@ describe('merge', () => {
     expect(dismiss(Pick.Keep, Pick.Keep)).toBe(Pick.Neither)
     expect(dismiss(Pick.Both, Pick.Keep)).toBe(Pick.Other)
     expect(dismiss(Pick.Other, Pick.Keep)).toBe(Pick.Other)
+  })
+  it('neither: never for the ring; a name part only while the other part keeps a value; cleared count', () => {
+    const rows = mergeRows({ 'tw-ring': 'friend', 'tw-first': 'Ann', a: 'x' }, { 'tw-ring': 'acquaintance', 'tw-first': 'Anna', a: 'y' }, true)
+    expect(neitherAllowed('tw-ring', rows, {}, {})).toBe(false)
+    expect(neitherAllowed('a', rows, {}, {})).toBe(true)
+    expect(neitherAllowed('tw-first', rows, {}, {})).toBe(false)
+    expect(neitherAllowed('tw-first', rows, {}, { [LAST_NAME_KEY]: 'Muster' })).toBe(true)
+    const both = mergeRows({ 'tw-first': 'Ann', [LAST_NAME_KEY]: 'M' }, { 'tw-first': 'Anna', [LAST_NAME_KEY]: 'Muster' }, true)
+    expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Neither }, {})).toBe(false)
+    expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Both }, {})).toBe(true)
+    expect(clearedCount(rows, { a: Pick.Neither, 'tw-first': Pick.Neither })).toBe(2)
   })
 })
