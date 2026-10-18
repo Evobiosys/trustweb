@@ -22,7 +22,7 @@
     if (!ready) return
     const at = inputToAt(date, Date.now())
     addInteraction(personId, kind, text, place, at)
-    if (kind === InteractionKind.Note) noteToTana(personId, text, at)
+    if (kind === InteractionKind.Note) noteToTana(personId, text)
     onclose()
   }
 </script>
