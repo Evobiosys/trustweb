@@ -48,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -3939,6 +3939,7 @@ function meetTrustWebPage(): HTMLElement {
     changed: () => apply(),
     ticked: () => apply(true),
   })
+  const publicVia = el('p', { class: 'meta', 'data-public-link-via': '', hidden: true })
   const sharing = createSharingLine({
     sharing: () => modeSharing(shareModeNow(), st().myChannels, st().contactShare),
     channel: modeChannel,
@@ -3959,6 +3960,9 @@ function meetTrustWebPage(): HTMLElement {
     copy.disabled = !view.current()
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
+    const via = publicLinkVia(mode)
+    publicVia.hidden = !via
+    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -3977,6 +3981,7 @@ function meetTrustWebPage(): HTMLElement {
     release: (name) => namesSync().release(name),
   })
   const advanced = createAdvanced({
+    modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
     names: { available: () => connectEligible() && st().connectCode !== undefined, el: namesView.el },
   })
   // The names block appears once the code is on the server, and asks the server which names the code holds (also the ones the operator granted).
@@ -4004,6 +4009,7 @@ function meetTrustWebPage(): HTMLElement {
   return el('div', { class: 'meet-page' }, [
     el('p', { class: 'hint' }, [S.meetLead]),
     row.el,
+    publicVia,
     qr,
     cameraNote,
     sharing.el,

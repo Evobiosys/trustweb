@@ -1582,6 +1582,7 @@ export const S = {
     [ShareMode.OnlySignal]: 'Only Signal',
     [ShareMode.OnlyWhatsApp]: 'Only WhatsApp',
   } as Record<ShareMode, string>,
+  publicLinkOffers: (link: string, app: string) => `Your link ${link} offers ${app} too.`,
   shareModeNow: (label: string) => `Showing: ${label}`,
   sharingLine: {
     [ModeSharing.Shared]: (app: string) => `Scanning this also gives them your ${app} link, so they can message you in one press.`,
