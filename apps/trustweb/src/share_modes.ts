@@ -81,14 +81,18 @@ export function modeAvailable(mode: ShareMode, mine: ChannelMap | undefined): bo
 // the row: one mode
 // ---------------------------------------------------------------------------
 
-/** The row, in this order; a mode shows once its link is saved (Only TrustWeb always). */
-const ROW: readonly ShareMode[] = [
-  ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp,
-]
+/** The row, in this order; a mode shows once its link is saved (Only TrustWeb always). Only Signal / Only WhatsApp sit under the arrow (owner 2026-10-17). */
+const ROW: readonly ShareMode[] = [ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp]
+const ADVANCED_ROW: readonly ShareMode[] = [ShareMode.OnlySignal, ShareMode.OnlyWhatsApp]
 
 // honey: no Matrix mode in the row until owner decision F (Matrix) says so.
 export function defaultModes(mine: ChannelMap | undefined): ShareMode[] {
   return ROW.filter((m) => modeAvailable(m, mine))
+}
+
+/** The modes under the arrow, once their link is saved. */
+export function advancedModes(mine: ChannelMap | undefined): ShareMode[] {
+  return ADVANCED_ROW.filter((m) => modeAvailable(m, mine))
 }
 
 /** A stored pin list, checked: known modes only, no duplicates, at most MAX_PINS, in order. Never throws. */
@@ -99,14 +103,19 @@ export function readPins(raw: unknown): ShareMode[] {
   return out.slice(0, MAX_PINS)
 }
 
-/** The mode in force: the stored one while it is in the row (its link still saved), else Only TrustWeb. */
+/** The mode in force: the stored one while it is in the row or under the arrow (its link still saved), else Only TrustWeb. */
 export function effectiveMode(stored: unknown, mine: ChannelMap | undefined): ShareMode {
-  return defaultModes(mine).find((m) => m === stored) ?? ShareMode.OnlyTrustWeb
+  return [...defaultModes(mine), ...advancedModes(mine)].find((m) => m === stored) ?? ShareMode.OnlyTrustWeb
 }
 
 /** The marker the LONG connect link of TrustWeb + Signal / WhatsApp carries in its fragment: the channel name only, never the handle. */
 export function viaFragment(mode: ShareMode): string {
   return mode === ShareMode.TrustWebSignal || mode === ShareMode.TrustWebWhatsApp ? `via=${(channelOf(mode) as Channel).toUpperCase()}` : ''
+}
+
+/** The channel the public link (code link, hence trustweb.one/<name>) offers too in this mode: the channel its `via=` marker names; null otherwise. Nothing reaches the server. */
+export function publicLinkVia(mode: ShareMode): Channel | null {
+  return parseVia(viaFragment(mode))
 }
 
 /** The channel a connect link's fragment names with `via=`; null for anything else. */

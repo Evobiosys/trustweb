@@ -28,6 +28,7 @@ const CSS = `
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
+.twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#b7a8c9;font-size:12px;cursor:pointer}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
@@ -294,6 +295,42 @@ export function initDevPreview(): void {
     return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), ...(blocked ? [h('small', { textContent: 'Reload first: the PR takes the assembled set' })] : []), status)
   }
 
+  function copyId(id: string): void {
+    void navigator.clipboard?.writeText(id).then(() => toast(`${id} copied`), () => toast('copy refused by the browser'))
+  }
+  // The panel re-renders between two quick clicks (the status poll), so the browser's dblclick never fires on the same node: two clicks within 400 ms on the id copy it.
+  let idClickAt = 0
+  function idClicked(id: string, moved: boolean): void {
+    if (moved) return
+    const now = Date.now()
+    if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
+  }
+
+  /** Rows that fit: the panel may use ~70% of the viewport, one feature row is ~90 px, ~260 px go to header and buttons; never fewer than 3. */
+  const rowsShown = (): number => Math.max(3, Math.floor((window.innerHeight * 0.7 - 260) / 90))
+  /** More than rowsShown() feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
+  function fewRows(secs: { sec: HTMLElement; rows: HTMLElement[] }[], id: string): HTMLElement[] {
+    const total = secs.reduce((n, s) => n + s.rows.length, 0)
+    const open = store.get(`twp-more-${id}`) === '1'
+    const shown = rowsShown()
+    if (total <= shown || open) {
+      const out: HTMLElement[] = secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
+      if (total > shown) { const less = h('button', { className: 'more', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
+      return out
+    }
+    const out: HTMLElement[] = []
+    let left = shown
+    for (const s of secs) {
+      if (left <= 0) break
+      out.push(h('div', { className: 'row' }, s.sec, ...s.rows.slice(0, left)))
+      left -= s.rows.length
+    }
+    const more = h('button', { className: 'more', textContent: `… ${total - shown} more` })
+    more.addEventListener('click', () => { store.set(`twp-more-${id}`, '1'); render() })
+    out.push(more)
+    return out
+  }
+
   function render(): void {
     const q = p!
     root.hidden = tab.hidden()
@@ -301,15 +338,20 @@ export function initDevPreview(): void {
     root.className = 'twp' + (pill ? ' pill' : '')
     root.replaceChildren()
     if (pill) {
-      const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand' }))
+      const tag = root.appendChild(h('div', { className: 'tag', textContent: q.id, title: 'Expand · double-click copies the id' }))
       const state = drag(tag)
       tag.addEventListener('click', () => { if (!state.moved) setCollapsed(false) })
+      tag.addEventListener('pointerdown', () => idClicked(q.id, state.moved))
     } else {
       const x = h('button', { className: 'x', textContent: '–', title: 'Collapse (Esc)' })
       const close = h('button', { className: 'x', textContent: '×', title: 'Hide for this tab' })
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
-      drag(root.appendChild(h('header', {}, h('b', { textContent: q.id }), ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)))
+      const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const hs = drag(root.appendChild(header))
+      // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
+      idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
       const n = prCount(shown)
@@ -322,7 +364,7 @@ export function initDevPreview(): void {
       })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
-        ...sections(tree(visible(shown))).map((s) => h('div', { className: 'row' }, h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), ...s.nodes.map((n) => row(n, shown, grey)))),
+        ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown, grey)) })), q.id),
         ...(ask ? [askBox(ask)] : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
@@ -342,6 +384,8 @@ export function initDevPreview(): void {
     if (lit) { lit = null; render() } else if (!collapsed()) setCollapsed(true)
   })
   render()
+  let resizing: ReturnType<typeof setTimeout> | undefined
+  window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(() => { if (p) render() }, 150) })
   // A reload while "Create PR" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
     if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)

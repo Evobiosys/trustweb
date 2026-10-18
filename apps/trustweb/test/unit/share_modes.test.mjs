@@ -4,7 +4,7 @@
  * Fake numbers only.
  */
 import {
-  ModeSharing, SHARE_MODES, ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable,
+  ModeSharing, SHARE_MODES, advancedModes, publicLinkVia, ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modeAvailable,
   modePayload, modeSharing, narrowMine, needsCameraApp, parseVia, readPins, repairShareFields, viaFragment,
 } from '../../src/share_modes.ts'
 import { Channel } from '../../src/model.ts'
@@ -65,14 +65,20 @@ describe('the row (wave 13)', () => {
     expect(defaultModes(undefined)).toEqual([ShareMode.OnlyTrustWeb])
     expect(defaultModes({})).toEqual([ShareMode.OnlyTrustWeb])
   })
-  it('Signal saved: Only TrustWeb, TrustWeb + Signal, Only Signal', () => {
-    expect(defaultModes({ [Channel.Signal]: SIGNAL_USER })).toEqual([ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.OnlySignal])
+  it('Signal saved: Only TrustWeb, TrustWeb + Signal; Only Signal sits under the arrow', () => {
+    expect(defaultModes({ [Channel.Signal]: SIGNAL_USER })).toEqual([ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal])
+    expect(advancedModes({ [Channel.Signal]: SIGNAL_USER })).toEqual([ShareMode.OnlySignal])
   })
-  it('both saved: the five, in the fixed order; Matrix adds no mode', () => {
-    expect(defaultModes(ALL)).toEqual([
-      ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp,
-    ])
+  it('both saved: three in the row, the two Only messenger modes under the arrow; Matrix adds no mode', () => {
+    expect(defaultModes(ALL)).toEqual([ShareMode.OnlyTrustWeb, ShareMode.TrustWebSignal, ShareMode.TrustWebWhatsApp])
+    expect(advancedModes(ALL)).toEqual([ShareMode.OnlySignal, ShareMode.OnlyWhatsApp])
     expect(defaultModes({ [Channel.Matrix]: MATRIX })).toEqual([ShareMode.OnlyTrustWeb])
+    expect(advancedModes({ [Channel.Matrix]: MATRIX })).toEqual([])
+  })
+  it('publicLinkVia: the public link offers Signal / WhatsApp in TrustWeb + X only', () => {
+    expect(publicLinkVia(ShareMode.TrustWebSignal)).toBe(Channel.Signal)
+    expect(publicLinkVia(ShareMode.TrustWebWhatsApp)).toBe(Channel.WhatsApp)
+    for (const m of [ShareMode.OnlyTrustWeb, ShareMode.OnlySignal, ShareMode.OnlyWhatsApp, ShareMode.TrustWebMatrix]) expect(publicLinkVia(m)).toBeNull()
   })
   it('effectiveMode: a stored mode stays while its link is saved', () => {
     expect(effectiveMode(ShareMode.OnlySignal, ALL)).toBe(ShareMode.OnlySignal)

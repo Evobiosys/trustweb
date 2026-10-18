@@ -2,7 +2,7 @@
  * The pieces of the Meet page that go with the share modes (share_modes.ts), DOM and words only:
  *   - the share row: THREE buttons, the primary mode, the secondary mode and an arrow that opens Advanced
  *   - the sharing line: one plain sentence saying what a scan hands over in the mode on show, with the tick one tap away
- *   - the Advanced panel: the contact box, then the names block
+ *   - the Advanced panel: the names block (the contact box sits on the Meet page itself, owner 2026-10-17)
  */
 import { el } from '../../demo/src/ui/dom'
 import { ShareMode, ModeSharing } from './share_modes'
@@ -88,8 +88,8 @@ export function createShareRow(o: ShareRowOptions): ShareRow {
 }
 
 export interface AdvancedOptions {
-  /** The contact box (one for Meet > Advanced and Settings). */
-  contactBox: HTMLElement
+  /** Only Signal / Only WhatsApp (share_modes.ts advancedModes): the same buttons as the row; picking one works as in the row. */
+  modes: { list: () => ShareMode[]; current: () => ShareMode; pick: (mode: ShareMode) => void }
   /** The names block (names_view.ts). `available` is false until this phone holds a code on the server. */
   names: { available: () => boolean; el: HTMLElement }
 }
@@ -102,14 +102,19 @@ export interface AdvancedView {
 }
 
 export function createAdvanced(o: AdvancedOptions): AdvancedView {
-  const linksTitle = el('h4', { class: 'eyebrow', 'data-adv-links': '' }, [S.advLinksTitle])
   const panel = el('div', { class: 'advanced-panel', role: 'group', 'aria-label': S.advancedLabel, hidden: true, 'data-advanced-panel': '' })
   const root = el('div', { class: 'advanced' }, [panel])
 
   const refresh = (): void => {
-    // The contact box and the names block are built once and only moved here, so a redraw never clears what is being typed.
-    // Wave 6h, S3: the settings that are always there come first: your Signal, WhatsApp and Matrix links (Jakob 2026-10-08).
-    panel.replaceChildren(linksTitle, o.contactBox, ...(o.names.available() ? [o.names.el] : []))
+    const cur = o.modes.current()
+    const list = o.modes.list()
+    const modes = list.length
+      ? el('div', { class: 'seg', role: 'group', 'aria-label': S.shareRowLabel, 'data-advanced-modes': '' }, list.map((m) => el('button', {
+          class: cur === m ? 'on' : '', type: 'button', 'aria-pressed': String(cur === m), 'data-mode': m, onclick: () => o.modes.pick(m),
+        }, [S.shareMode[m]])))
+      : null
+    // The names block is built once and only moved here, so a redraw never clears what is being typed.
+    panel.replaceChildren(...(modes ? [modes] : []), ...(o.names.available() ? [o.names.el] : []))
   }
   refresh()
   return {

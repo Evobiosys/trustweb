@@ -154,6 +154,11 @@ textarea.field{resize:vertical; line-height:1.5}
 @keyframes asked{50%{box-shadow:0 0 0 7px rgba(18,168,227,.28), 0 2px 10px rgba(36,27,46,.2)}}
 .node.shared .ava{box-shadow:0 0 0 3px #fff, 0 0 0 6px var(--mint), 0 0 18px rgba(79,215,160,.8)}
 .screen.querying .rings-wrap{transform-origin:top center}
+.net{padding:0 12px}
+.net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
+.net-search{padding:8px 12px; font-size:14px}
+.net-canvas{display:block; touch-action:none; border-radius:16px; background:var(--card); cursor:grab}
+.web-view{margin:6px 16px 0}
 .ppl{padding:8px 16px 0}
 .prow{display:flex; align-items:center; gap:13px; background:var(--card); border-radius:16px; padding:12px 14px; margin:0 0 10px; box-shadow:0 2px 12px rgba(36,27,46,.06); cursor:pointer; width:100%; border:0; text-align:left}
 .prow .who{flex:1; min-width:0}
@@ -818,6 +823,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .pn-day{display:flex; flex-direction:column; gap:6px}
 .pn-day h5{margin:4px 0 0}
 .sline.gone span{opacity:.6; text-decoration:line-through}
+.sline span.editable{cursor:text; align-self:stretch}
+.sline textarea.field{align-self:stretch; resize:none; overflow:hidden}
 
 /* Wave 6 (N8c): the visible way home on every sheet; (N8a) the search panel says it is not an ask */
 .sheet-bar{display:flex; justify-content:flex-end; margin:-8px 0 2px}
@@ -912,6 +919,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tl-sum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .tl-dir{font-style:normal; font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
 .tl-more{margin:0 4px 4px; word-break:break-word}
+.settings-adv{margin:12px 0}
+.settings-adv > summary{cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center}
+.settings-adv > summary::-webkit-details-marker{display:none}
+.settings-adv > summary::after{content:'▾'}
+.settings-adv[open] > summary::after{content:'▴'}
 .not-in-web{display:block; font-size:.8em; font-style:normal; color:var(--ink-soft)}
 .chip .pwho{display:inline-block; vertical-align:middle}
 .link-preview{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; text-overflow:ellipsis; margin:8px 0}
+.net-menu{display:grid; gap:6px; margin:0 0 8px; padding:10px; border-radius:12px; background:var(--card); font-size:13px}
+.net-menu[hidden]{display:none}
+.net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}

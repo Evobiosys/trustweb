@@ -35,7 +35,7 @@ export function loadReadings(texts) {
 export function withoutLocal(record) {
   const people = record.people
     .filter((p) => !p.id.startsWith('local-'))
-    .map((p) => ({ ...p, lines: p.lines.filter((l) => l.source?.kind !== 'local') }))
+    .map((p) => ({ ...p, lines: p.lines.filter((l) => !(l.source?.kind === 'local' && l.id.startsWith('local-'))) }))   // vault- lines (written next to a person in the vault, notes bridge) stay
   return { ...record, people }
 }
 
