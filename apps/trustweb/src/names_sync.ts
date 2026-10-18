@@ -121,7 +121,7 @@ function errorFor(status: number, json: unknown): ClaimError {
     }
   }
   if (status === 403) return ClaimError.Forgotten
-  if (status === 429) return ClaimError.RateLimited
+  if (status === 429) return field(json, 'error') === 'name-cap' ? ClaimError.NameCap : ClaimError.RateLimited
   if (status === 400) return ClaimError.BadName
   return ClaimError.Server
 }

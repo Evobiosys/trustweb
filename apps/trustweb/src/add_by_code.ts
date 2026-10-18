@@ -133,7 +133,8 @@ export enum ResolveError {
   Server = 'server',
 }
 
-export type ResolveOutcome = { ok: true; link: ConnectLinkParams } | { ok: false; error: ResolveError }
+/** `previous`: the server marked the name as having had another holder lately (prev=1 on the redirect; no identity is told). */
+export type ResolveOutcome = { ok: true; link: ConnectLinkParams; previous?: true } | { ok: false; error: ResolveError }
 
 export interface ResolveDeps {
   /** The page's origin (location.origin): the only host ever asked. */
@@ -148,6 +149,11 @@ export function linkFromFinalUrl(finalUrl: string, origin: string): ConnectLinkP
   try { u = new URL(finalUrl) } catch { return null }
   if (!readsOrigin(u, origin) || u.username || u.password) return null
   return parseConnectLinkParams(u.search)
+}
+
+/** Did the server add prev=1 to the connect link it redirected to? */
+export function hasPrevMark(finalUrl: string): boolean {
+  try { return new URL(finalUrl).searchParams.get('prev') === '1' } catch { return false }
 }
 
 async function lookup(deps: ResolveDeps, path: string): Promise<ResolveOutcome> {
@@ -165,7 +171,7 @@ async function lookup(deps: ResolveDeps, path: string): Promise<ResolveOutcome> 
     if (res.status >= 500) return { ok: false, error: ResolveError.Server }
     if (!res.ok || !res.redirected) return { ok: false, error: ResolveError.Refused }
     const link = linkFromFinalUrl(finalUrl, deps.origin)
-    return link ? { ok: true, link } : { ok: false, error: ResolveError.Refused }
+    return link ? { ok: true, link, ...(hasPrevMark(finalUrl) ? { previous: true as const } : {}) } : { ok: false, error: ResolveError.Refused }
   } catch {
     return { ok: false, error: ResolveError.Network }
   } finally {
@@ -234,7 +240,8 @@ export type AddFailure =
   | { type: 'resolve'; error: ResolveError; kind: AddKind.Code | AddKind.Name }
   | { type: 'did'; problem: DidProblem; relayOrigin?: string }
 
-export type AddResolved = { ok: true; kind: AddKind; link: ConnectLinkParams } | { ok: false; failure: AddFailure }
+/** `previous`: the typed code or name (the key of the note) when its username had another holder before. */
+export type AddResolved = { ok: true; kind: AddKind; link: ConnectLinkParams; previous?: string } | { ok: false; failure: AddFailure }
 
 /**
  * What the sheet does when "Add to my web" is pressed with the field filled: read it, and for a code or a name ask our server (the only
@@ -251,7 +258,10 @@ export async function resolveAddInput(deps: ResolveDeps, input: string): Promise
     case AddKind.Code:
     case AddKind.Name: {
       const out = parsed.kind === AddKind.Code ? await resolveCode(deps, parsed.code) : await resolveName(deps, parsed.name)
-      return out.ok ? reachable(parsed.kind, out.link, deps.origin) : { ok: false, failure: { type: 'resolve', error: out.error, kind: parsed.kind } }
+      if (!out.ok) return { ok: false, failure: { type: 'resolve', error: out.error, kind: parsed.kind } }
+      const key = parsed.kind === AddKind.Code ? parsed.code : parsed.name
+      const got = reachable(parsed.kind, out.link, deps.origin)
+      return got.ok && out.previous ? { ...got, previous: key } : got
     }
   }
 }

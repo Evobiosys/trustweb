@@ -87,6 +87,9 @@ function consentRoute(p: TranscribeProviderInfo | null): string {
   return `The audio of a recording goes through our server in Switzerland to an outside transcription service${where}, which turns it into text.`
 }
 
+/** The 429 name-cap answer of POST /name (wave 15), shared by the claim sheets. */
+const NAME_CAP_HIT = 'Three names per connection in 30 days; organizers can ask the steward for more.'
+
 export const S = {
   appName: 'TrustWeb',
   tagline: 'Amplifying the power of loose ties',
@@ -1021,6 +1024,12 @@ export const S = {
   unmatchedAddLine: 'My Resources',
   unmatchedMessage: (name: string) => `Message ${name}`,
   unmatchedDismiss: 'Dismiss',
+  nameCapHit: NAME_CAP_HIT,
+  namePreviousHolder: 'This username belonged to someone else before.',
+  noticeDismiss: 'Dismiss this note',
+  addDone: 'Done',
+  setNoNotices: "Don't show such notices",
+  setNoNoticesHint: 'Small one-line notes, like "This username belonged to someone else before.", stay away.',
   setUnmatched: 'Show me asks that matched nothing',
   setUnmatchedHint: 'When someone you are connected with asks for something and nothing of yours matches, you see a quiet card here, with why (nothing matched, or a line whose "Who can ask" leaves them out). They still see a plain "No match". Off for a demo phone.',
   askClose: 'Back to the app',
@@ -1610,6 +1619,7 @@ export const S = {
     [ClaimError.NameLocked]: 'This name is reserved for you and stays; ask to change it.',
     [ClaimError.TooManyNames]: 'You already have 3 names.',
     [ClaimError.Forgotten]: 'Our server no longer knows this code. Open this page again: a new code is made, then claim the name again.',
+    [ClaimError.NameCap]: NAME_CAP_HIT,
     [ClaimError.RateLimited]: 'Too many tries just now. Wait a minute and try again.',
     [ClaimError.Network]: 'No answer from our server. Check your connection and try again.',
     [ClaimError.Server]: 'Our server did not answer properly. Try again in a moment.',

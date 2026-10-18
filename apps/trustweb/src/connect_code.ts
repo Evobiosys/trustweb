@@ -246,6 +246,8 @@ export enum ClaimError {
   NameLocked = 'name-locked',
   /** 409 too_many_names: the code already holds all three. */
   TooManyNames = 'too-many-names',
+  /** 429 name-cap: this network address already claimed its 3 names in 30 days (not the shared cooldown). */
+  NameCap = 'name-cap',
   /** 403: the server no longer knows this code (it expired); the next registration makes a new one. */
   Forgotten = 'forgotten',
   RateLimited = 'rate-limited',
