@@ -126,7 +126,7 @@ describe('callNames: one POST /name per intent', () => {
   })
   it.each([
     [409, 'name_taken', ClaimError.Taken], [409, 'reserved', ClaimError.Reserved], [409, 'name_locked', ClaimError.NameLocked], [409, 'too_many_names', ClaimError.TooManyNames],
-    [409, undefined, ClaimError.Taken], [403, 'forbidden', ClaimError.Forgotten], [429, undefined, ClaimError.RateLimited], [400, 'bad_request', ClaimError.BadName],
+    [409, undefined, ClaimError.Taken], [403, 'forbidden', ClaimError.Forgotten], [429, undefined, ClaimError.RateLimited], [429, 'name-cap', ClaimError.NameCap], [400, 'bad_request', ClaimError.BadName],
     [500, undefined, ClaimError.Server], [503, undefined, ClaimError.Server],
   ])('status %i %s is %s', async (status, error, expected) => {
     const out = await callNames(deps(fake([{ status, body: error ? { error } : {} }]).f), record(), { kind: 'claim', name: 'ada', alias: false })

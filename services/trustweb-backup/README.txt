@@ -60,6 +60,14 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   https://<same app host>/c/<code>. 2 KB bodies, own-host Origin, POSTs 6/min and 30/h and GETs 20/min and 300/h per address, 365 days after
                   the last use, at most 20000 codes, store <BACKUP_DIR>/connect.json (0600). Never logged. CONNECT_* settings (config.mjs). Caddy:
                   scripts/trustweb_connect_caddy_install.sh. connect.mjs, connect_store.mjs, connect_names.mjs. Contract: services-api-contract.txt section 10.
+  name limits, wave 15 (name_cap.mjs, connect_store.mjs): a network address (IPv4 as is, IPv6 by /64) may CLAIM 3 names per 30 days (NAME_CAP; promoting an alias, a re-claim,
+                  a release and a read are no claims); the 4th answers 429 {"error":"name-cap","until":<ms>}. The count sits in the connect store file ("claims") and survives
+                  restarts. A freed name rests 30 days for every other code (answered name_taken; its former holder may reclaim at once); "released" in the store file keeps it
+                  180 days. GET /c/<code> of a code whose claimed name had another holder in the last 180 days redirects with &prev=1 added to the query (the app shows a dismissible
+                  note; no identity is kept or told). HOW AN ORGANIZER GETS MORE: mails the steward BEFORE the event (no squatting) with the username(s) and the event. The operator
+                  then adds an entry to the NAME_CAP_ALLOW file (JSON array) and runs `systemctl kill -s HUP trustweb-backup` (or `kill -HUP <pid>`; no restart needed):
+                    [{"code":"<22-char connect code of the organizer>" | "addr":"203.0.113.7" | "prefix":"2001:db8:1:", "cap":20, "note":"organizer <who>, approved <when>"}]
+                  The highest matching cap wins; entries without cap >= 1 or without code/addr/prefix are ignored.
   usernames, wave 6e (contract section 10.9): a code holds up to 3 names (a primary + 2 aliases; POST /name {"name","alias":true} / {"release":"<name>"} / code+secret
                   alone = READ the names; answers {"name","aliases","locked"}: locked = the held names that are reserved). RESERVED_NAMES (env, production japossert,jakob) + the built-in list answer 409 reserved;
                   a reserved name a code holds was granted by the admin and is LOCKED against the app (409 name_locked). The admin routes POST|DELETE /admin/name and

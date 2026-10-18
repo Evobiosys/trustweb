@@ -185,13 +185,15 @@ test('aliases: an alias with no primary becomes the primary; re-claiming a held 
 })
 
 test('aliases: a different primary REPLACES the old one and frees it (6b); the aliases stay; promoting an alias swaps', async () => {
-  await withServer(0, BASE, async ({ srv }) => {
+  let t = T0
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     await claim(srv.port, { name: 'ada', ...a })
     await claim(srv.port, { name: 'ada.two', alias: true, ...a })
     assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: ['ada.two'], locked: [] })
-    assert.equal((await who(srv.port, 'ada')).status, 404, 'the replaced primary is free at once')
+    assert.equal((await who(srv.port, 'ada')).status, 404, 'the replaced primary no longer resolves')
+    t += 31 * DAY // a freed name rests 30 days (wave 15)
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
     assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...a })).json, { name: 'ada.two', aliases: ['grace'], locked: [] }, 'PROMOTE: the alias becomes the primary, the old primary an alias')
     await claim(srv.port, { name: 'ada.three', alias: true, ...a })
@@ -219,7 +221,8 @@ test('aliases: release frees one name; the primary release promotes the first al
 })
 
 test('aliases: a name held by another code is name_taken as primary and as alias, whichever role the holder has; a release frees it', async () => {
-  await withServer(0, BASE, async ({ srv }) => {
+  let t = T0
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     await claim(srv.port, { name: 'ada', ...a })
@@ -227,6 +230,7 @@ test('aliases: a name held by another code is name_taken as primary and as alias
     for (const alias of [false, true]) for (const name of ['ada', 'ada.two']) assert.equal((await claim(srv.port, { name, alias, ...b })).status, 409, `${name} alias=${alias}`)
     assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...b })).json.error, 'name_taken')
     await claim(srv.port, { release: 'ada.two', ...a })
+    t += 31 * DAY // a freed name rests 30 days (wave 15)
     assert.deepEqual((await claim(srv.port, { name: 'ada.two', alias: true, ...b })).json, { name: 'ada.two', aliases: [], locked: [] })
   })
 })

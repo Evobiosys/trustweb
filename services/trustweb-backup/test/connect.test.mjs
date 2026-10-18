@@ -18,7 +18,7 @@ const LONG2 = `https://${APP}/?connect=did%3Apeer%3A2.Ez6LSsecondDIDmarker&id=p-
 const JSON_H = { 'Content-Type': 'application/json' }
 const LINKS = { linkHosts: [APP] }
 /** Limits out of the way (most tests post and read a lot from one address). */
-const ROOMY = { connectPerMinute: 10000, connectPerHour: 10000, connectGetPerMinute: 10000, connectGetPerHour: 10000, rateLimit: 100000 }
+const ROOMY = { connectPerMinute: 10000, connectPerHour: 10000, connectGetPerMinute: 10000, connectGetPerHour: 10000, rateLimit: 100000, nameCap: 10000 }
 const BASE = { ...LINKS, ...ROOMY }
 const DAY = 86_400_000
 const T0 = 1_800_000_000_000
@@ -473,7 +473,8 @@ test('names: claim 200 {name}; idempotent for the owner; /who/ answers 302 to th
 })
 
 test('names: a second code claiming a taken name gets 409 name_taken; 403 beats 409 (a wrong secret never learns what is taken); a name is unique even across a release and reclaim', async () => {
-  await withServer(0, BASE, async ({ srv }) => {
+  let t = T0
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
@@ -486,6 +487,7 @@ test('names: a second code claiming a taken name gets 409 name_taken; 403 beats 
     assert.equal(free.status, 403)
     assert.equal(free.text, oracle.text)
     assert.equal((await claim(srv.port, { name: '', ...a })).status, 200) // release
+    t += 31 * DAY // a freed name rests 30 days (wave 15)
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 409)
     assert.equal((await who(srv.port, 'ada')).headers.location, `${ORIGIN}/c/${b.code}`)
@@ -507,7 +509,8 @@ test('names: release with "" frees the name (200 {name: ""}, idempotent), /who/ 
 })
 
 test('names: a code that claims another name RELEASES the old one in the same write (one name per code)', async () => {
-  await withServer(0, BASE, async ({ srv, backupDir }) => {
+  let t = T0
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
@@ -515,7 +518,8 @@ test('names: a code that claims another name RELEASES the old one in the same wr
     assert.equal((await who(srv.port, 'ada')).status, 404)
     assert.equal((await who(srv.port, 'grace')).status, 302)
     assert.equal((await readStore(backupDir)).codes[a.code].name, 'grace')
-    assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200) // the old one is free at once
+    t += 31 * DAY // a freed name rests 30 days (wave 15)
+    assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
   })
 })
 
@@ -784,7 +788,7 @@ test('store: concurrent mints serialise their writes; prune drops the expired an
     assert.equal(store.codeOf('ada'), made[0].code)
     t = 1100
     assert.equal(await store.prune(), 30)
-    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {} })
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {}, claims: {}, released: {} })
     assert.equal(store.codeOf('ada'), null)
     assert.equal(await store.prune(), 0)
   })

@@ -68,6 +68,7 @@ import { createHostedStore } from './hosted_store.mjs'
 import { createConnect } from './connect.mjs'
 import { createConnectStore } from './connect_store.mjs'
 import { reservedChecker } from './connect_names.mjs'
+import { createNameCapAllow } from './name_cap.mjs'
 import { createOrganizer, isOrgPath } from './organizer.mjs'
 import { createOrgStore, limitsFor } from './organizer_store.mjs'
 import { createAdmin, isAdminPath, permits as adminPermits } from './admin.mjs'
@@ -165,7 +166,9 @@ export async function startServer(options = {}) {
   } catch {
     cfg.log('connect store unavailable: connect codes off')
   }
-  const connect = connectStore === null ? null : createConnect({ cfg, store: connectStore, clientOf, now: cfg.now })
+  const nameCapAllow = createNameCapAllow(cfg.nameCapAllowFile)
+  process.on('SIGHUP', nameCapAllow.reload)
+  const connect = connectStore === null ? null : createConnect({ cfg, store: connectStore, clientOf, now: cfg.now, nameCapAllow })
   const connectSweep = connectStore === null ? null : setInterval(() => connectStore.prune().catch(() => undefined), cfg.connectSweepMs)
   connectSweep?.unref()
 
@@ -477,6 +480,7 @@ export async function startServer(options = {}) {
       new Promise((resolve) => {
         clearInterval(linkSweep)
         clearInterval(connectSweep)
+        process.off('SIGHUP', nameCapAllow.reload)
         server.close(() => resolve())
         server.closeAllConnections()
       }),

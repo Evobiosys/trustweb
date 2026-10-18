@@ -888,6 +888,8 @@ export interface AppState {
   sentAsks?: SentAsk[]
   /** Wave 6h (late_answers.ts): yeses that came after their moment, newest first, kept LATE_KEEP_MS or until dismissed. Absent: none. */
   lateAnswers?: LateAnswer[]
+  /** Wave 15 (notices.ts): ids of dismissed one-line notes; "all-notices" silences them all. Absent: none dismissed. Older builds ignore it. */
+  dismissed?: string[]
   /** Wave 6h (held_asks.ts): consent prompts not decided yet. Absent: none. */
   heldAsks?: HeldAsk[]
   /** Wave 6h (unmatched_asks.ts): asks from direct contacts that matched nothing here. Absent: none. */

@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { confusableKey } from '../connect_names.mjs'
 import { call, withServer } from './helpers.mjs'
-import { BASE, claim, mint, who } from './connect_helpers.mjs'
+import { BASE, DAY, T0, claim, mint, who } from './connect_helpers.mjs'
 
 const NOINDEX = 'noindex, nofollow'
 const openCode = (port, code) => call(port, { url: `/c/${code}` })
@@ -57,7 +57,8 @@ test('/who 404: unknown name and bad shape answer the same headers and body, no-
 })
 
 test('claim: a lookalike of ANOTHER code\'s name is name_taken (primary and alias); own variants are fine; a released name frees its lookalikes', async () => {
-  await withServer(0, BASE, async ({ srv }) => {
+  let t = T0
+  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port)
     assert.equal((await claim(srv.port, { name: 'anna.huber', ...a })).status, 200)
@@ -72,6 +73,7 @@ test('claim: a lookalike of ANOTHER code\'s name is name_taken (primary and alia
     assert.equal((await claim(srv.port, { name: 'anna.hub3r', ...a })).status, 200)
     assert.equal((await claim(srv.port, { release: 'anna.hub3r', ...a })).status, 200)
     assert.equal((await claim(srv.port, { release: 'anna.huber', ...a })).status, 200)
+    t += 31 * DAY // a freed name rests 30 days (wave 15)
     assert.equal((await claim(srv.port, { name: 'anna.hub3r', ...b })).status, 200)
   })
 })

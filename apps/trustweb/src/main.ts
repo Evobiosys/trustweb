@@ -51,6 +51,7 @@ import {
   ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
+import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -1307,7 +1308,7 @@ function openPendingShare(): boolean {
 }
 
 /** The add sheet's "code, name or DID" (add_by_code.ts): look it up, connect, and make the person in the ring picked. A failure comes back as words, nothing is added. */
-async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean }> {
+async function connectByCode(input: string, ring: Ring, name: string, where: string): Promise<AddFailure | { person: Person; existed: boolean; previous?: string }> {
   const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
@@ -1321,7 +1322,7 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
   }
   save()
   applyHeldContact(peer, person)
-  return { person, existed }
+  return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
 }
 
 /** The sheet after a scan (connect_add_view.ts): the person is connected; pick the ring, correct the name, then their card opens. */
@@ -2021,6 +2022,7 @@ function addPersonSheet(ring: Ring): void {
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
+  let after: (() => void) | null = null // set once a person was added and a note still shows: the button then only closes
   const addByCode = async (): Promise<void> => {
     busy = true
     addBtn.setAttribute('disabled', '')
@@ -2029,13 +2031,22 @@ function addPersonSheet(ring: Ring): void {
     busy = false
     addBtn.removeAttribute('disabled')
     if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
-    closeSheet()
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
     render()
-    personSheet(out.person.id)
+    // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
+    const noteId = out.previous === undefined ? null : namePreviousId(out.previous)
+    if (noteId === null || !noticeShown(st(), noteId)) { closeSheet(); personSheet(out.person.id); return }
+    const note = el('p', { class: 'meta', role: 'status', 'data-name-previous': '' }, [
+      S.namePreviousHolder,
+      el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => { dismissNotice(st(), noteId); save(); note.remove() } }, ['×']),
+    ])
+    codeStatus.replaceWith(note)
+    addBtn.textContent = S.addDone
+    after = () => { closeSheet(); personSheet(out.person.id) }
   }
   const add = (): void => {
     if (busy) return
+    if (after) { after(); return }
     if (code.value.trim()) { void addByCode(); return }
     const n = name.value.trim()
     if (!n) { name.focus(); return }
@@ -5027,6 +5038,10 @@ function settingsSheet(): void {
       // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
       onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
     }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
+    el('button', {
+      class: 'radio' + (noticesOff(s) ? ' on' : ''), 'aria-pressed': String(noticesOff(s)), 'data-notices-off': '1',
+      onclick: () => { setNoticesOff(s, !noticesOff(s)); save(); settingsSheet() },
+    }, [el('b', {}, [S.setNoNotices]), el('small', {}, [S.setNoNoticesHint])]),
     solo ? null : el('button', {
       class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
       // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).

@@ -29,6 +29,7 @@ import { CODE_RE, isNameShape, squash } from './connect_names.mjs'
 import { newSecret, SECRET_RE } from './connect_store.mjs'
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'
 import { createWindowLimiter, ipKey } from './limits.mjs'
+import { capFor } from './name_cap.mjs'
 import { notFoundPage, originAllowed, readJsonObject, validLongUrl } from './links.mjs'
 
 /** What a store refusal answers on POST /name: [status, error]. The `field` is always "name". */
@@ -106,7 +107,15 @@ function redirect(res, location) {
   return 302
 }
 
-export function createConnect({ cfg, store, clientOf, now = Date.now }) {
+/** `url` with prev=1 in its query when `prev` (the name had another holder lately: the app shows a dismissible note); the fragment is kept; `url` itself if that fails. */
+export function withPrev(url, prev) {
+  if (!prev) return url
+  const u = new URL(url)
+  u.searchParams.set('prev', '1')
+  return u.toString()
+}
+
+export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAllow = { list: () => [] } }) {
   const writeMinute = createWindowLimiter({ limit: cfg.connectPerMinute, windowMs: 60_000, now })
   const writeHour = createWindowLimiter({ limit: cfg.connectPerHour, windowMs: 3_600_000, now })
   const readMinute = createWindowLimiter({ limit: cfg.connectGetPerMinute, windowMs: 60_000, now })
@@ -187,10 +196,10 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
   }
 
   /** The store call of a POST /name intent. */
-  function applyIntent(intent, code, secret) {
+  function applyIntent(intent, code, secret, addr) {
     if (intent.intent === 'read') return store.read(code, secret)
     if (intent.intent === 'release') return store.release(code, secret, intent.name)
-    return store.claim(code, secret, { name: intent.name, alias: intent.alias })
+    return store.claim(code, secret, { name: intent.name, alias: intent.alias, addr, cap: capFor(nameCapAllow.list(), addr, code, cfg.nameCap) })
   }
 
   /** POST /name: claim, release or read (contract 10.9.2). Returns the status it answered. */
@@ -204,11 +213,12 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     if (typeof secret !== 'string' || !SECRET_RE.test(secret)) return jsonError(res, 400, 'bad_request', { field: 'secret' })
     let result
     try {
-      result = await applyIntent(intent, code, secret)
+      result = await applyIntent(intent, code, secret, ipKey(clientOf(req)))
     } catch {
       return jsonError(res, 500, 'server_error')
     }
     if (result.kind === 'forbidden') return jsonError(res, 403, 'forbidden')
+    if (result.kind === 'name_cap') return jsonError(res, 429, 'name-cap', { until: result.until, field: 'name' })
     if (result.kind !== 'named') {
       const [status, error] = NAME_REFUSALS[result.kind]
       return jsonError(res, status, error, { field: 'name' })
@@ -251,7 +261,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now }) {
     const gated = readGate(req, res)
     if (gated !== null) return gated
     const url = checkedUrl(pathname.slice('/c/'.length), { touch: true })
-    return url === null ? notFoundPage(res) : redirect(res, landingFor(req, url))
+    return url === null ? notFoundPage(res) : redirect(res, withPrev(landingFor(req, url), store.hadPreviousHolder(pathname.slice('/c/'.length))))
   }
 
   /** What a person typed or a phone keyboard made of a name: NFKC, lowercase, trailing punctuation and (encoded) spaces dropped. A bad escape stays as is (then not a name). */
