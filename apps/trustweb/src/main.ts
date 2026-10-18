@@ -31,7 +31,7 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
-import { createConnectKeeper, repairConnectRecord } from './connect_code'
+import { canRegister, createConnectKeeper, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
@@ -135,6 +135,8 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
+import { repairOtherCodes } from './sync_code'
+import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
@@ -365,7 +367,7 @@ try {
 try {
   if (state) {
     // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
-    const codeFixed = repairConnectRecord(state)
+    const codeFixed = repairConnectRecord(state) || repairOtherCodes(state)
     // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
     const modesFixed = repairShareFields(state)
     // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
@@ -3111,6 +3113,11 @@ const snapshots = createSnapshotView({
 })
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
+  askDid: () => state?.identity?.did,
+  codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
+    ? { origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save }
+    : null),
+  connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -3914,6 +3921,8 @@ async function ensureConnectCode(): Promise<void> {
   try {
     await net.start()
     await codeKeeper().ensure(net.connectLink(CONNECT_URL))
+    // Wave 15: the records another device owns are kept alive here (the keeper leaves them alone), once per 30 days each.
+    if (state?.connectCode?.owner === 'other' || state?.otherCodes?.length) await careForCodes({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save, log: () => {} })
   } catch { /* the long link stays; the keeper tries again on the next ensure */ }
 }
 

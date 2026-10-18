@@ -14,6 +14,12 @@ import { matchPeople } from './events'
 import { mergePersons, possibleDuplicates } from './same_person'
 import type { SnapshotView } from './snapshot_view'
 import { storageKey } from './store'
+import { heldNames, namesOf } from './names_sync'
+import type { NamesOutcome } from './names_sync'
+import type { ConnectRecord } from './connect_code'
+import { opensOn } from './sync_code'
+import { makePrimary, moveHere, openHere, refreshAll, releaseName, rotateCodes, settleCodes } from './sync_codes'
+import type { CodeOpsDeps } from './sync_codes'
 import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
@@ -35,6 +41,12 @@ export interface SyncViewHooks {
   /** Redraw the app behind the sheet after a merge changed the record. */
   changed: () => void
   snapshots: SnapshotView
+  /** Wave 15: the DID this device asks with (its public link carries it); undefined until it has one. */
+  askDid: () => string | undefined
+  /** Wave 15: what the username actions need (fetch, clock, the record); null where this page may not talk to the service. */
+  codeDeps: () => Omit<CodeOpsDeps, 'log'> | null
+  /** Wave 15: this device's own long connect link, for "Open on this device". */
+  connectLink: () => Promise<string>
 }
 
 export interface SyncView {
@@ -77,14 +89,20 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   let started = false
   const showing = (): boolean => h.sheet.dataset.kind === SHEET_KIND && h.sheet.classList.contains('on')
 
+  const addLog = (line: string): void => {
+    log.unshift(`${new Date().toLocaleTimeString()}  ${line}`)
+    log.length = Math.min(log.length, LOG_MAX)
+    if (showing()) logBox()?.replaceWith(logList())
+  }
+  /** What the username actions run with: the host's deps and this view's log. */
+  const codeDeps = (): CodeOpsDeps | null => { const d = h.codeDeps(); return d && { ...d, log: addLog } }
+
   const link = createSyncLink({
     persona: h.persona, storeCtx: h.storeCtx, state: h.state, save: h.save, deviceName: () => deviceNameOf(nameKey), snapshot: h.snapshots.take,
-    onLog: (line) => {
-      log.unshift(`${new Date().toLocaleTimeString()}  ${line}`)
-      log.length = Math.min(log.length, LOG_MAX)
-      if (showing()) logBox()?.replaceWith(logList())
-    },
+    onLog: (line) => addLog(line),
     onChange: () => { if (showing()) devicesSheet() },
+    askDid: h.askDid,
+    settleCodes: async (merge) => { const deps = codeDeps(); if (deps) await settleCodes(deps, merge) },
     onPairRequest: (r) => confirmSheet(r),
     onIncoming: (i) => incomingSheet(i),
   })
@@ -123,16 +141,18 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       el('p', { class: 'meta' }, [`${p.fp} · ${p.lastSyncAt ? S.dvLast(h.when(p.lastSyncAt)) : S.dvNever}`]),
       failed.has(p.did) ? el('p', { class: 'warn', 'data-sync-failed': p.did }, [failed.get(p.did)]) : null,
       el('button', { class: 'btn btn-electric btn-sm', 'data-sync-now': p.did, onclick: () => void syncNow(p) }, [failed.has(p.did) ? S.dvTryAgain : S.dvSyncNow]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.dvUnlinkConfirm)) { link.unlink(p.did); devicesSheet() } } }, [S.dvUnlink]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.dvUnlinkConfirm)) { link.unlink(p.did); unlinked(p); devicesSheet() } } }, [S.dvUnlink]),
     ]))
     const name = el('input', { class: 'field', value: deviceNameOf(nameKey), maxlength: '40', 'aria-label': S.dvDeviceName, 'data-device-name': '1' })
     open(SHEET_KIND, [
       el('h3', {}, [S.dvTitle]),
       el('p', { class: 'meta' }, [S.dvLead]),
+      el('p', { class: 'meta', 'data-un-honesty': '1' }, [S.unHonesty]),
       el('label', { class: 'meta' }, [S.dvDeviceName]),
       name,
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const v = name.value.trim(); if (v) { try { localStorage.setItem(nameKey, v.slice(0, 40)) } catch { /* kept this visit only */ } } devicesSheet() } }, [S.dvDeviceNameSave]),
       ...(rows.length ? rows : [el('p', { class: 'empty' }, [S.dvNone])]),
+      ...usernameBlock(s),
       el('button', { class: 'btn btn-electric', 'data-link-device': '1', onclick: () => void linkSheet() }, [S.dvLink]),
       el('button', { class: 'btn btn-ghost', 'data-enter-code': '1', onclick: enterSheet }, [S.dvEnter]),
       reviewing || (s && possibleDuplicates(s.people).length) ? el('button', { class: 'btn btn-ghost', 'data-open-review': '1', onclick: reviewSheet }, [reviewing ? `${S.dvReview} (${reviewing})` : S.dvReview]) : null,
@@ -140,6 +160,77 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       ...orphanChats(s),
       el('h4', { class: 'eyebrow' }, [S.dvLogTitle]),
       logList(),
+    ])
+  }
+
+  /** Unlinking takes this side's shared secrets back (a new secret per code); the unlinked device's copy goes stale. Nothing to take back when the code was never shared. */
+  function unlinked(p: Pairing): void {
+    const deps = codeDeps()
+    if (deps && p.shareCode !== false) void rotateCodes(deps).then(() => { if (showing()) devicesSheet() })
+  }
+
+  /** The device a record came from, by its pairing's name; this device when it minted the code itself. */
+  function deviceOf(r: ConnectRecord): string {
+    if (!r.fromDid) return S.unThisDevice
+    return link.pairings().find((p) => p.did === r.fromDid)?.name ?? S.unAnother
+  }
+
+  /** Where the public link opens, in words. */
+  function opensLabel(url: string): string {
+    const on = opensOn(url, h.askDid(), link.pairings())
+    return on.kind === 'this' ? S.unThisDevice : on.kind === 'device' ? link.pairings().find((p) => p.did === on.did)?.name ?? S.unAnother : S.unAnother
+  }
+
+  /** Runs one username action, says why when it fails, and draws the sheet again. */
+  async function act(run: (deps: CodeOpsDeps) => Promise<NamesOutcome | boolean>): Promise<void> {
+    const deps = codeDeps()
+    if (!deps) return
+    const out = await run(deps)
+    if (typeof out === 'boolean') h.toast(out ? S.unOpenHereDone : S.unOpenHereFailed)
+    else if (!out.ok) h.toast(S.usernameFailed[out.error])
+    h.changed()
+    devicesSheet()
+  }
+
+  function nameRow(r: ConnectRecord, name: string, primary: boolean, main: boolean): HTMLElement {
+    const locked = namesOf(r).locked.includes(name)
+    return el('div', { class: 'verse', 'data-un-name': name }, [
+      el('b', {}, [`@${name}${locked ? ' 🔒' : ''}`]),
+      el('p', { class: 'meta' }, [S.unOnDevice(deviceOf(r))]),
+      !main ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-move': name, onclick: () => void act((d) => moveHere(d, name, r)) }, [S.unMoveHere(name)]) : null,
+      !primary ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-primary': name, onclick: () => void act((d) => makePrimary(d, name, main ? null : r)) }, [S.unMakePrimary(name)]) : null,
+      !main && !locked ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-release': name, onclick: () => void act((d) => releaseName(d, name, r)) }, [S.unRelease(name)]) : null,
+    ])
+  }
+
+  /** Settings > My devices > "My username": every name this account holds (this device's code and the others), where the link opens, and the four actions. */
+  function usernameBlock(s: AppState | null): (HTMLElement | null)[] {
+    const main = s?.connectCode
+    const others = s?.otherCodes ?? []
+    if (!main && !others.length) return []
+    const mainNames = main ? heldNames(namesOf(main)) : []
+    const opens = main && !main.stale && mainNames.length ? opensLabel(main.url) : null
+    const movable = main && !main.stale && opensOn(main.url, h.askDid(), link.pairings()).kind !== 'this'
+    return [
+      el('h4', { class: 'eyebrow', 'data-my-username': '1' }, [S.unTitle]),
+      main?.stale ? el('p', { class: 'warn', 'data-un-stale': '1' }, [S.unStale]) : null,
+      opens ? el('p', { 'data-un-opens': '1' }, [S.unOpensOn(mainNames[0], opens)]) : null,
+      opens ? el('p', { class: 'meta' }, [S.unNewOn(opens)]) : null,
+      ...(main && !main.stale ? mainNames.map((n, i) => nameRow(main, n, i === 0, true)) : []),
+      movable ? el('button', { class: 'btn btn-electric btn-sm', 'data-un-open-here': '1', onclick: () => void act(async (d) => openHere(d, await h.connectLink())) }, [S.unOpenHere]) : null,
+      others.some((r) => heldNames(namesOf(r)).length) ? el('p', { class: 'meta' }, [S.unLeft]) : null,
+      ...others.flatMap((r) => (r.stale ? [] : heldNames(namesOf(r)).map((n) => nameRow(r, n, false, false)))),
+    ]
+  }
+
+  /** The one-time sheet of the device that holds the code both now share. */
+  function mergedSheet(): void {
+    const name = h.peek()?.connectCode?.name
+    if (!name) return
+    open('devices-merged', [
+      el('h3', {}, [S.unTitle]),
+      el('p', { 'data-un-merged': '1' }, [S.unMerged(name)]),
+      el('button', { class: 'btn btn-electric', onclick: devicesSheet }, [S.unMergedOk]),
     ])
   }
 
@@ -191,11 +282,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   }
 
   function confirmSheet(r: PairRequest): void {
+    const share = el('input', { type: 'checkbox', id: 'dv-share-code', checked: true, 'data-share-code': '1' }) as HTMLInputElement
     open('devices-confirm', [
       el('h3', {}, [S.dvConfirmTitle]),
       el('p', { class: 'meta' }, [S.dvConfirmLead(r.name)]),
       el('code', { class: 'recovery-key', 'data-fingerprint': r.fp }, [r.fp]),
-      el('button', { class: 'btn btn-electric', 'data-pair-confirm': '1', onclick: () => { r.confirm(); h.toast(S.dvLinked(r.name)); devicesSheet() } }, [S.dvConfirm]),
+      el('label', { class: 'consent' }, [share, el('span', {}, [S.unShareTick])]),
+      el('button', { class: 'btn btn-electric', 'data-pair-confirm': '1', onclick: () => { r.confirm({ shareCode: share.checked }); h.toast(S.dvLinked(r.name)); devicesSheet() } }, [S.dvConfirm]),
       el('button', { class: 'btn btn-ghost', onclick: () => { r.cancel(); devicesSheet() } }, [S.dvCancel]),
     ])
   }
@@ -216,7 +309,8 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     const res = await i.accept(file)
     h.changed()
     h.toast([S.dvMerged(res.added, res.updated), h.snapshots.note()].filter(Boolean).join(' '))
-    if (res.conflicts.length) reviewSheet()
+    if (res.codes?.merged) mergedSheet()
+    else if (res.conflicts.length) reviewSheet()
     else devicesSheet()
   }
 
@@ -291,6 +385,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     open('devices-same', [el('h3', {}, [S.dvSameAs]), input, list, el('button', { class: 'btn btn-ghost btn-sm', onclick: h.closeSheet }, [S.dvCancel])])
   }
 
+  /** Opens the sheet and reads the names of every code again, so what the server holds is on show (silent when it cannot be reached). */
+  function openDevices(): void {
+    devicesSheet()
+    const deps = codeDeps()
+    if (deps && h.peek()?.connectCode) void refreshAll(deps).then(() => { if (showing()) devicesSheet() })
+  }
+
   function start(): void {
     if (started) return
     started = true
@@ -298,11 +399,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   }
 
   return {
-    settingsGroup: () => [
-      el('button', { class: 'radio', 'data-open-devices': '1', onclick: devicesSheet }, [el('b', {}, [S.dvOpen]), el('small', {}, [S.dvOpenHint])]),
-    ],
+    settingsGroup: () => {
+      const row = el('button', { class: 'radio', 'data-open-devices': '1', onclick: openDevices }, [el('b', {}, [S.dvOpen]), el('small', {}, [S.dvOpenHint])])
+      const code = h.peek()?.connectCode
+      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: trustweb.one/${code.name}`])] : [row]
+    },
     start,
-    open: devicesSheet,
+    open: openDevices,
     samePersonPicker,
   }
 }

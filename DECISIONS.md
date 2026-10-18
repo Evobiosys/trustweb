@@ -388,3 +388,22 @@ my own messenger links with their share ticks, chat text, and an owner-declared 
 - R5: `sameAs` (dropped id -> kept id) travels with the sync so a dropped id never comes back.
 - Honest label (I7): chats and messenger links are no longer "this phone only"; the hints now say they also go,
   sealed, to the owner's own linked devices.
+
+## D-username-devices (2026-10-18): one username and one public link for all of the owner's devices
+
+Jakob, memo 2026-10-17 13:39 ("merge and sync multiple devices, including the username; the devices should not be visible from the outside").
+Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
+
+- The connect code (public link + names) travels in the sealed device-sync bundle (SyncVersion stays 2; an older build ignores the fields).
+  The secret of the public link therefore sits on every linked device. Per pairing the owner can tick it off (Pairing.shareCode, default on).
+  I1 reads "the owner's own devices"; nobody else sees anything: links still carry one DID, names resolve as before (I2 untouched).
+- U1/U4 One code per account; a record that came from a sync is `owner: 'other'` (local only): the keeper does nothing with it, never
+  mints on a 403, and the url changes only through "Open on this device". A refused secret marks it stale ("link the devices again").
+- U2 Unlink takes the secret back: POST /connect {code, secret, rotate:true} answers a new secret; the next sync carries it to the rest.
+- U8/U21 The first sync after pairing settles ONE code: more names wins (tie: older updatedAt, then the smaller code); the loser's names move
+  into it by the server's atomic move (POST /name {move, from}); what does not fit (cap: 3 names) stays on the loser's code in `otherCodes`.
+- U9 The same code on both sides: newer updatedAt wins url + secret; names are read from the server, never taken from a bundle as truth.
+- U16 A name moves at most once per 30 days (server side); a move is no claim (the per-address name cap ignores it); a locked name moves with its lock.
+- U10 `me.displayName` travels (newer wins) so the link shows one name; peer ids still differ per device: a contact who connects to the
+  other device gets a second entry until merged with Same person. Said in the honesty text of My devices.
+- U22 The code never enters Review merge, conflicts or the sync log. U27 Local log lines say that a url or a name moved, never which.
