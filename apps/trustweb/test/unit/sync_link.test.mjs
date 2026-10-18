@@ -40,7 +40,7 @@ const until = async (f) => { for (let i = 0; i < 100; i++) { if (f()) return; aw
 describe('pair and sync', () => {
   it('pairs with a code, shows one fingerprint, syncs a record both ways, the relay sees no plaintext', async () => {
     const h = hub()
-    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada', [line('l1')])]), 'mac')
+    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada Lovelace', [line('l1')])]), 'mac')
     const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
     const code = await mac.api.offerCode()
     const mine = await phone.api.join(code)
