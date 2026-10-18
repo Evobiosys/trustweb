@@ -9,11 +9,12 @@
 // ABSOLUTE base, like apps/demo (see its vite.config.ts): a relative base
 // 404s every asset when the page is opened without its trailing slash.
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import path from 'node:path'
-import { readyToGo } from './dev_preview_rules.mjs'
+import { ciDiagnostics, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
@@ -289,6 +290,26 @@ function previewApi() {
         res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.setHeader('Cache-Control', 'no-store')
         res.end(waitPage(readPreview().id))
+      })
+      // GET /__tw/ci/diagnostics?pr=n: the failed jobs + error lines of the PR head's latest run; GET /__tw/ci/devlog: the newest wave folder of DEVLOG.
+      server.middlewares.use('/__tw/ci', async (req, res) => {
+        const text = (s, code = 200) => { res.statusCode = code; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.end(s) }
+        if (req.method !== 'GET' || !loopback(req)) { text('', 403); return }
+        const [sub, query] = (req.url ?? '/').split('?')
+        if (sub === '/devlog') {
+          const root = process.env.TW_DEVLOG ?? path.resolve(here, '../../../../../DEVLOG')
+          try { text(path.join(root, readdirSync(root).filter((n) => /^wave\d+$/.test(n)).sort((a, b) => Number(a.slice(4)) - Number(b.slice(4))).pop() ?? '')) } catch { text('no DEVLOG folder', 404) }
+          return
+        }
+        const pr = /^pr=(\d+)$/.exec(query ?? '')?.[1]
+        if (sub !== '/diagnostics' || !pr) { text('bad request', 400); return }
+        const gh = async (...a) => (await promisify(execFile)('gh', [...a, '--repo', 'Evobiosys/trustweb'], { encoding: 'utf8', maxBuffer: 50e6, timeout: 60000 })).stdout.trim()
+        try {
+          const branch = await gh('pr', 'view', pr, '--json', 'headRefName', '-q', '.headRefName')
+          const run = await gh('run', 'list', '--branch', branch, '--limit', '1', '--json', 'databaseId', '-q', '.[0].databaseId')
+          const jobs = (await gh('run', 'view', run, '--json', 'jobs', '-q', '.jobs[]|select(.conclusion=="failure")|.name')).split('\n').filter(Boolean)
+          text(ciDiagnostics(jobs, await gh('run', 'view', run, '--log-failed')))
+        } catch (e) { text(String(e.stderr || e.message).slice(-600), 500) }
       })
       server.middlewares.use('/__tw/preview', async (req, res) => {
         if (!loopback(req)) { res.statusCode = 403; res.end(); return }
