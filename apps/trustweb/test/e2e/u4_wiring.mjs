@@ -80,7 +80,7 @@ async function w1(jakob) {
   const pastBtn = jakob.locator('.hdr .past-search-btn')
   ok('W1 Record keeps the magnifier for past meetings', /m21 21/.test(await pastBtn.innerHTML()))
   await tab(jakob, 'My Resources')
-  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
+  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await jakob.getByRole('button', { name: 'Settings' }).click()
   await jakob.locator('.sheet.on [data-notes-match]').waitFor({ timeout: 10_000 })
   await jakob.waitForTimeout(400)
@@ -98,7 +98,7 @@ async function w1(jakob) {
   await jakob.reload()
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await tab(jakob, 'My Resources')
-  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
+  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await jakob.getByRole('button', { name: 'Settings' }).click()
   await jakob.locator('.sheet.on [data-notes-match]').waitFor({ timeout: 10_000 })
   ok('W1 with demo content on, the switch is still ON for a personal account', (await jakob.locator('.sheet.on [data-notes-match]').getAttribute('aria-pressed')) === 'true')
@@ -239,7 +239,7 @@ async function w4(jakob, browser) {
 
   // Gina's phone: Settings > Make it your personal account
   await tab(gina, 'My Resources')
-  await gina.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
+  await gina.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await gina.getByRole('button', { name: 'Settings' }).click()
   const ask = gina.locator('.sheet.on [data-keep-ask]')
   await ask.waitFor({ timeout: 10_000 })
@@ -259,7 +259,7 @@ async function w4(jakob, browser) {
   await gina.reload()
   await gina.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await tab(gina, 'My Resources')
-  await gina.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
+  await gina.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await gina.getByRole('button', { name: 'Settings' }).click()
   await gina.locator('.sheet.on').waitFor({ timeout: 5_000 })
   const gtext = await gina.locator('.sheet.on').innerText()
@@ -267,7 +267,7 @@ async function w4(jakob, browser) {
 
   // Jakob's Settings
   await tab(jakob, 'My Resources')
-  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settingsAdvanced', '1')) // Settings > Advanced is folded by default
+  await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await jakob.getByRole('button', { name: 'Settings' }).click()
   const sheet = jakob.locator('.sheet.on')
   await sheet.getByRole('button', { name: 'Keep this account Hugo-demo' }).waitFor({ timeout: 10_000 })

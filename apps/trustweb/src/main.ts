@@ -60,7 +60,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { fingerprint, stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -779,12 +779,12 @@ function recordButton(): HTMLElement {
 
 function renderTabs(): void {
   const web = tabButton(Screen.Web, S.navWeb, 'web')
-  const inv = tabButton(Screen.Inventory, S.navInventory, 'inventory')
+  const inv = state && !featureOn(state, 'inventory') ? null : tabButton(Screen.Inventory, S.navInventory, 'inventory')
   const invLeft = state?.tabOrder === TabOrder.InventoryLeft
   // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
   const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv)
-  tabs.classList.toggle('four', feedTab.length > 0)
+  tabs.replaceChildren(...[invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv].filter((b): b is HTMLElement => b !== null))
+  tabs.classList.toggle('four', tabs.children.length > 3)
 }
 renderTabs()
 
@@ -1940,9 +1940,8 @@ function openEvents(eventId?: string): void {
 function screenWeb(): Node[] {
   const s = shown(st())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
-  const events = iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')
   const right = document.createDocumentFragment()
-  right.append(events, search)
+  right.append(...(featureOn(st(), 'events') ? [iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')] : []), search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2264,7 +2263,7 @@ function leanRow(p: Person): HTMLElement | null {
 
 /** The events this person is tagged with (E1): a chip each, tap opens the event page. */
 function eventChipsRow(p: Person): HTMLElement | null {
-  const evs = (st().events ?? []).filter((e) => p.events?.includes(e.id))
+  const evs = featureOn(st(), 'events') ? (st().events ?? []).filter((e) => p.events?.includes(e.id)) : []
   if (!evs.length) return null
   return el('div', { class: 'chips', 'data-person-events': p.id }, [
     el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
@@ -3428,6 +3427,18 @@ function maybeOpenPendingEvent(): void {
   if (!pendingEvent || !state) return
   const ev = pendingEvent
   pendingEvent = null
+  if (!featureOn(st(), 'events')) {
+    // Events are switched off (Settings > Features): the invite is not dropped, the app asks once whether to turn them on.
+    openSheet([
+      el('h2', {}, [S.featureEventsPrompt]),
+      el('button', {
+        class: 'btn btn-electric wide', 'data-feature-events-on': '',
+        onclick: () => { setFeature(st(), 'events', true); save(); renderTabs(); render(); pendingEvent = ev; maybeOpenPendingEvent() },
+      }, [S.featureEventsOn]),
+      el('button', { class: 'btn btn-ghost wide', 'data-feature-events-later': '', onclick: closeSheet }, [S.featureEventsLater]),
+    ])
+    return
+  }
   if (st().events?.some((e) => e.id === ev.id)) { applyHostLink(st(), ev); save(); openEvents(ev.id); return }
   if (ev.srv && !openedHits.has(ev.srv)) { openedHits.add(ev.srv); sendHit(ev.srv, 'opened') }
   const addBox = el('input', { type: 'checkbox', checked: true, 'data-event-add-inviter': '' }) as HTMLInputElement
@@ -4833,16 +4844,32 @@ function reachOutLink(): string {
   return name ? `trustweb.one/${name}` : 'your link'
 }
 
-const SETTINGS_ADV_KEY = 'trustweb.ui.settingsAdvanced'
-
-/** Settings > Advanced: one folded group; open state is remembered per device. */
-function settingsAdvancedGroup(children: (Node | null)[]): HTMLElement {
-  const d = el('details', { 'data-settings-advanced': '1', class: 'settings-adv' }, [
-    el('summary', { class: 'adv-toggle' }, [S.setAdvanced]), ...children,
-  ]) as HTMLDetailsElement
-  try { d.open = localStorage.getItem(SETTINGS_ADV_KEY) === '1' } catch { /* private mode: stays folded */ }
-  d.addEventListener('toggle', () => { try { localStorage.setItem(SETTINGS_ADV_KEY, d.open ? '1' : '0') } catch { /* ignore */ } })
+/**
+ * Settings sections: a folded <details> each; the open state is remembered per device (trustweb.ui.settings.<key>);
+ * `first` opens when nothing is remembered. An empty section is not drawn.
+ */
+function settingsSection(key: string, title: string, children: (Node | null)[], first = false): Node | null {
+  if (!children.some(Boolean)) return null
+  const attrs: Record<string, string> = { 'data-settings-section': key, class: 'settings-adv' }
+  if (key === 'advanced') attrs['data-settings-advanced'] = '1'
+  const d = el('details', attrs, [el('summary', { class: 'adv-toggle' }, [title]), ...children]) as HTMLDetailsElement
+  const k = `trustweb.ui.settings.${key}`
+  try { const v = localStorage.getItem(k); d.open = v === null ? first : v === '1' } catch { d.open = first }
+  d.addEventListener('toggle', () => { try { localStorage.setItem(k, d.open ? '1' : '0') } catch { /* ignore */ } })
   return d
+}
+
+/** A Settings > Features switch; off is the only stored state (featureOn in model.ts). */
+function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, hint: string): HTMLElement {
+  const on = featureOn(s, key)
+  return el('button', {
+    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), [`data-feature-${key}`]: '1',
+    onclick: () => {
+      setFeature(s, key, !on); save(); renderTabs()
+      if (!featureOn(s, 'inventory') && screen === Screen.Inventory) screen = Screen.Web
+      render(); settingsSheet()
+    },
+  }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
 function settingsSheet(): void {
@@ -4861,12 +4888,14 @@ function settingsSheet(): void {
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
-      el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
-    ]),
-    connectionRow(),
-    ...(solo || s.testOf ? [] : [
-      el('h4', { class: 'eyebrow' }, [S.reachOutsTitle]),
+    settingsSection('you', S.setSecYou, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+      ]),
+      connectionRow(),
+      buildContactBox({}).el,
+    ], true),
+    settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
         onclick: () => { if (s.reachOutsPaused) delete s.reachOutsPaused; else s.reachOutsPaused = true; save(); settingsSheet() },
@@ -4875,12 +4904,15 @@ function settingsSheet(): void {
       s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
     ]),
-    buildContactBox({}).el,
-    ...(connectEligible() ? devices.settingsGroup() : []),
-    notificationsCard(s),
-    ...sourcesGroup(s),
-    settingsAdvancedGroup([
-    ...feed.settingsGroup(),
+    settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
+    settingsSection('devices', S.setSecDevices, connectEligible() ? devices.settingsGroup() : []),
+    settingsSection('features', S.setSecFeatures, [
+      ...feed.settingsGroup(),
+      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
+      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
+    ]),
+    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('advanced', S.setAdvanced, [
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
@@ -4973,7 +5005,6 @@ function sourcesGroup(s: AppState): Node[] {
   const rows = SOURCES.map((kind) => ({ kind, n: sourceCount(s, kind) })).filter((r) => r.n.people || r.n.lines)
   if (!rows.length) return []
   return [
-    el('h4', { class: 'eyebrow' }, [S.setSources]),
     el('p', { class: 'meta' }, [S.setSourcesHint]),
     ...rows.flatMap(({ kind, n }) => [
       el('button', {
