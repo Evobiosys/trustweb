@@ -1,3 +1,7 @@
+Web Curator is its own open-source product, stewarded by trustintheweb.org (the steward of both TrustWeb products, conceptually
+under EvoBioSys; we intend to turn it into a foundation). trustweb.one, the querying app, uses it under the hood;
+trustintheweb.com, a commercial public-benefit company, is the hosting provider.
+
 Web Curator (apps/crm, was TrustWeb CRM)  -  skeleton, 2026-10-06
 
 A personal CRM over TrustWeb's own record: the people in your rings, their note lines, a timeline of when you

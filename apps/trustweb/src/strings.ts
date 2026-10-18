@@ -10,6 +10,7 @@ import { WebSearchError } from './web_results'
 import { DegreesChoice } from './cascade'
 import { HOP_CAP, ReachChoice } from './hops'
 import { ANSWER_WINDOW_MS } from './ask_window'
+import { Norm } from './profile'
 import { ShortLinkError, SHORT_LINK_DAYS } from './short_link'
 import { ModeSharing, ShareMode } from './share_modes'
 import { ClaimError } from './connect_code'
@@ -129,6 +130,29 @@ export const S = {
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
   // Wave 6 (U4 c): the notes on one person, on their card.
   personAdvanced: 'Advanced',
+  // Wave 7 (timeline.ts, timeline_view.ts): what was shared with a person, by channel, newest first.
+  tlTitle: 'Timeline',
+  tlNone: 'Nothing here yet. Add what you shared with them, or import it from a file.',
+  tlAdd: '+ add',
+  tlImport: 'Import',
+  tlSave: 'Save',
+  tlCancel: 'Cancel',
+  tlSummaryPh: 'One line: what was shared',
+  tlWhen: 'When',
+  tlChannel: {
+    email: 'Email', signal: 'Signal', whatsapp: 'WhatsApp', matrix: 'Matrix', call: 'Call', in_person: 'In person', trustweb: 'TrustWeb', note: 'Note',
+  } as Record<string, string>,
+  tlDirection: { in: 'From them', out: 'To them', both: 'Both ways' } as Record<string, string>,
+  tlSource: { manual: 'Added by hand', import: 'Imported', trustweb: 'From TrustWeb' } as Record<string, string>,
+  tlRef: (ref: string) => `Reference: ${ref}`,
+  tlMet: (context: string) => (context ? `Met: ${context}` : 'Met'),
+  tlConnected: 'Connected on TrustWeb',
+  tlAsked: (text: string) => `Asked my web: ${text}`,
+  tlRecording: (min: number) => `Recording kept on the server (${min < 1 ? 'under a minute' : min + ' min'})`,
+  tlImported: (n: number, skipped: number, dupes: number) => `${n} added` + (dupes ? `, ${dupes} already there` : '') + (skipped ? `, ${skipped} skipped` : '') + '.',
+  tlImportBad: 'That file is not a timeline: a JSON list of entries is expected.',
+  tlImportBig: 'That file is too big.',
+  tlFull: 'This timeline is full.',
   generalNoteTitle: 'General notes',
   generalNotePh: (name: string) => `Anything about ${name || 'them'}: how you know them, what they care about, what is on your mind...`,
   generalNoteHint: 'Only me. It stays on your own devices (sealed when it travels between your linked devices, and in your encrypted backup, if you made one): it is never sent in an answer, a share or a search by others.',
@@ -1175,6 +1199,7 @@ export const S = {
   aboutVersion: (sha: string, format: number) => `App version ${sha}, data format v${format}`,
   aboutBy: 'TrustWeb, by ',
   aboutEvoBioSys: 'EvoBioSys',
+  aboutSteward: 'Stewarded by trustintheweb.org, which we intend to turn into a foundation. Hosting, where you have it, comes from trustintheweb.com. The Web Curator, the open-source product underneath, has the same steward.',
   aboutPage: { faq: 'FAQ', feedback: 'Feedback', privacy: 'Privacy', imprint: 'Imprint' } as Record<string, string>,
 
   // Install on the home screen (wave 1733, contract I3).
@@ -1643,4 +1668,54 @@ export const S = {
   // wave 6f: a card made for a connection that had none (peer_cards.ts)
   peerCardRepairedContext: 'Connected on TrustWeb',
   sheetConnectedAs: (name: string) => `connected as ${name}`,
+  // Wave 7: My profile (profile.ts, profile_view.ts)
+  profTitle: 'My profile',
+  profLead: 'What you share about yourself by default: what you can offer, and how you like to be reached. Only people you connect with get it, and only if you tick it.',
+  profOffer: 'What I can offer',
+  profOfferNone: 'Nothing yet. Lines in My Resources that acquaintances may ask about show here.',
+  profOfferEdit: 'Edit in My Resources',
+  profNorms: 'How to reach me',
+  profNormPick: 'Pick a norm',
+  profNormPh: 'Your own words (needed for Custom)',
+  profNormAdd: 'Add',
+  profRemove: 'Remove',
+  profFavourite: 'My favourite way to connect',
+  profFavouritePh: 'For example: a walk, a call on Sundays',
+  profIntro: 'One line about me',
+  profIntroPh: 'One line, in your words',
+  profByMe: 'by me',
+  profByAi: 'by AI',
+  profStale: 'stale, check it still holds',
+  profShareHint: 'Tick “Share my profile when we connect” in the contact box to send the norms, favourite way and one line to people you connect with, in the same share modes as your links (Only TrustWeb sends nothing). A connected person\'s card can also send it once.',
+  profMine: 'My profile',
+  profShareTick: 'Share my profile when we connect',
+  profSendTo: (name: string) => `Send my profile to ${name}`,
+  profEmpty: 'Your profile is empty. Add a norm, a favourite way or a line first.',
+  profSent: (name: string) => `Profile sent to ${name}`,
+  profTheirs: (name: string) => `How ${name} likes to be reached`,
+  profReceivedToast: (name: string) => `${name} shared their profile`,
+  normLabel: {
+    [Norm.TextFirst]: "Text first, don't call",
+    [Norm.CallMe]: "Call me, I don't read texts",
+    [Norm.NoLate]: 'No messages after 21:00',
+    [Norm.VoiceNotes]: 'Voice notes welcome',
+    [Norm.Custom]: 'Custom',
+  } as Record<Norm, string>,
+  // Wave 7: agreements per person (agreements.ts, agreements_view.ts)
+  agrTitle: 'Agreements',
+  agrNone: (name: string) => `No explicit agreements with ${name} yet.`,
+  agrPh: 'For example: call me only for urgent things',
+  agrExpiry: 'Ends on',
+  agrAdd: 'Add agreement',
+  agrAccept: 'Accept',
+  agrResend: 'Send again',
+  agrExpired: 'ended',
+  agrUntil: (date: string) => `until ${date}`,
+  agrMutual: (name: string) => `Mutual: send it to ${name} to accept`,
+  agrMineOnly: 'Only on your phone. Connect on TrustWeb to propose it as mutual.',
+  agrHint: 'Agreements stay on your phone. A proposal goes to this person as one message; nothing else is shared.',
+  agrStatus: (status: string, name: string) => (status === 'mutual' ? 'mutual' : status === 'proposed' ? `waiting for ${name}` : status === 'incoming' ? `proposed by ${name}` : 'mine'),
+  agrSendFailed: 'Not sent. Try “Send again” when you are online.',
+  agrAccepted: (name: string) => `Agreement with ${name} is now mutual`,
+  agrProposedToast: (name: string) => `${name} proposed an agreement`,
 } as const

@@ -38,6 +38,8 @@ import { createNamesView } from './names_view'
 import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
+import { createTimelineSection } from './timeline_view'
+import { addEntries, parseTimelineImport, timelineOf } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -46,7 +48,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, mayShareContact, modePayload, modeSharing, needsCameraApp, parseVia, repairShareFields, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError } from './add_by_code'
 import type { AddFailure } from './add_by_code'
@@ -56,7 +58,7 @@ import type { LinkChooser } from './short_link_view'
 import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
-import { stripUnsafe } from './safe_text'
+import { fingerprint, stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, feedOn, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { channelLink, normalizeHandle } from './channel'
@@ -110,6 +112,11 @@ import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devRecordFile, seedDevRecord } from './dev_record'
 import { initDevFeature } from './dev_feature'
+import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
+import { agreementsSection } from './agreements_view'
+import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import type { MyProfile } from './profile'
+import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { setUpInstall } from './install'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -365,7 +372,11 @@ try {
     const modesFixed = repairShareFields(state)
     // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
     const notesFixed = repairGeneralNotes(state)
-    if (codeFixed || modesFixed || notesFixed) save()
+    // Wave 7 (profile.ts): a stored profile of the wrong shape is dropped.
+    const profileFixed = repairProfile(state)
+    // Wave 7 (agreements.ts): stored agreements that are not well formed are dropped.
+    const agreementsFixed = repairAgreements(state)
+    if (codeFixed || modesFixed || notesFixed || profileFixed || agreementsFixed) save()
   }
 } catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
@@ -521,6 +532,7 @@ const net = new Net({
     if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
+    if (mayAnswerRequest(peer, person) && mayShareContact(shareModeNow())) sendProfileTo(peer, false)
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -2224,6 +2236,10 @@ function personSheet(personId: string): void {
     leanRow(p),
     eventChipsRow(p),
     knowsRow(p, st().people, save, () => personSheet(p.id)),
+    timelineSection(p),
+    theirProfileBlock(p.name, p.theirProfile, Date.now()),
+    p.peerId ? sendProfileRow(p) : null,
+    agreementsFor(p),
     curator.person(p.id, closeSheet),
   ])
   cardOpenFor = p.id
@@ -2277,6 +2293,23 @@ function eventChipsRow(p: Person): HTMLElement | null {
     el('span', { class: 'chips-lbl' }, [S.eventsPersonChips]),
     ...evs.map((e) => el('button', { class: 'chip', 'data-event-chip': e.id, title: eventLabel(e), onclick: () => { closeSheet(); openEvents(e.id) } }, [tagLabel(e)])),
   ])
+}
+
+/** The Timeline of a person (timeline.ts, timeline_view.ts): typed and imported entries live on the person; TrustWeb's own are derived. */
+function timelineSection(p: Person): HTMLElement {
+  // The record may have been replaced since the card opened: write into the person as the record holds it now.
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  return createTimelineSection({
+    entries: () => timelineOf(st(), now()),
+    add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
+    importText: (text) => {
+      const r = parseTimelineImport(text)
+      if (r.unreadable) return S.tlImportBad
+      const n = addEntries(now(), r.entries)
+      if (n) save()
+      return S.tlImported(n, r.skipped, r.entries.length - n)
+    },
+  }, toast)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -2417,8 +2450,36 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
     normalize: normalizeHandle,
     ticks,
     changed: hooks.changed,
+    extra: profileRow,
   })
   return box
+}
+
+/** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
+function profileSheet(): void {
+  const s = st()
+  const mine = (): MyProfile => s.profile ?? { norms: [] }
+  const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); s.profile = p }
+  openSheet(profileSheetNodes({
+    profile: mine, inventory: () => s.inventory, now: Date.now,
+    commit: () => { save(); profileSheet() },
+    addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
+    removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
+    setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
+    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+  }))
+  sheet.dataset.kind = 'profile'
+}
+
+/** Under the contact box: "My profile" and the tick that shares it (norms, favourite way, intro) the same way the links go, in the same share modes. */
+function profileRow(): HTMLElement {
+  const tick = el('input', { type: 'checkbox', 'data-share-profile': '1' })
+  tick.checked = st().profileShare === true
+  tick.addEventListener('change', () => { if (tick.checked) st().profileShare = true; else delete st().profileShare; save() })
+  return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
+    el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
+    el('label', { class: 'chat-row' }, [tick, el('span', {}, [S.profShareTick])]),
+  ])
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -2437,6 +2498,24 @@ function chatIo(): ChatIo {
 
 // Messenger links leave this phone ONLY as the answer to an explicit request (onContactRequest), never at connect time
 // (Jakob 2026-10-15 22:25: a reach-out via trustweb.one/<name> must not be able to get them).
+
+/**
+ * Wave 7 (profile.ts): sends my profile to one connected peer in a chat text: on connect when the "share my profile" tick is on and the
+ * share mode allows it (the caller checks the mode), once per change (profileSent); `force` is the owner's own "Send my profile" tap.
+ */
+function sendProfileTo(peer: Peer, force: boolean): void {
+  const s = st()
+  if (!force && !s.profileShare) return
+  const text = buildProfileText(APP_URL, s.profile)
+  if (!text) { if (force) toast(S.profEmpty); return }
+  const fp = fingerprint(text)
+  if (!force && s.profileSent?.[peer.id] === fp) return
+  net.sendText(peer, text).then(() => {
+    s.profileSent = { ...s.profileSent, [peer.id]: fp }
+    save()
+    if (force) toast(S.profSent(peer.displayName))
+  }).catch(() => { if (force) toast(S.agrSendFailed) })
+}
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -2549,6 +2628,57 @@ function onContactRequest(peer: Peer, text: string): void {
   next(plan.ask)
 }
 
+function sendProfileRow(p: Person): HTMLElement | null {
+  const peer = st().peers.find((x) => x.id === p.peerId)
+  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer, true) }, [S.profSendTo(p.name)]) : null
+}
+
+/** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
+function agreementsFor(p: Person): HTMLElement {
+  const peer = p.peerId ? st().peers.find((x) => x.id === p.peerId) : undefined
+  const find = (id: string) => p.agreements?.find((a) => a.id === id)
+  const redraw = (): void => { save(); personSheet(p.id) }
+  const send = (text: string, onFail: () => void): void => {
+    if (!peer) { onFail(); return }
+    net.sendText(peer, text).catch(() => { onFail(); toast(S.agrSendFailed) })
+  }
+  return agreementsSection({
+    name: p.name, agreements: () => p.agreements ?? [], now: Date.now, canPropose: !!peer,
+    add: (text, expiresAt, propose) => {
+      const a = addAgreement(p, randomId(8), text, Date.now(), { proposed: propose && !!peer, expiresAt })
+      if (a?.status === AgreementStatus.Proposed) send(proposalText(APP_URL, a), () => { /* stays "waiting"; Send again */ })
+      redraw()
+    },
+    remove: (id) => { removeAgreement(p, id); redraw() },
+    accept: (id) => {
+      if (!acceptAgreement(p, id)) return
+      send(acceptText(APP_URL, id), () => { const a = find(id); if (a) { a.status = AgreementStatus.Incoming; redraw() } })
+      redraw()
+    },
+    resend: (id) => { const a = find(id); if (a) send(proposalText(APP_URL, a), () => { /* the toast says so */ }) },
+  })
+}
+
+/** Net: a connected phone proposed an agreement, or said yes to mine. */
+function onAgreementText(peer: Peer, text: string): void {
+  const person = st().people.find((p) => p.peerId === peer.id)
+  const msg = parseAgreementText(APP_URL, text)
+  if (!person || !msg || !receiveAgreement(person, msg, Date.now())) return
+  save()
+  toast(msg.kind === 'accept' ? S.agrAccepted(peer.displayName) : S.agrProposedToast(peer.displayName))
+  if (cardOpenFor === person.id && sheet.classList.contains('on') && !sheet.contains(document.activeElement)) personSheet(person.id)
+  render()
+}
+
+/** Net: a connected phone shared its profile; it lands on their card (profile.ts). Nothing is held for a card that does not exist yet. */
+function onProfileText(peer: Peer, text: string): void {
+  const person = st().people.find((p) => p.peerId === peer.id)
+  if (!person || !receiveProfileText(APP_URL, person, text, Date.now())) return
+  save()
+  toast(S.profReceivedToast(peer.displayName))
+  render()
+}
+
 function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   const s = st()
   const now = Date.now()
@@ -2606,6 +2736,8 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
     case TextKind.ContactRequest: onContactRequest(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
+    case TextKind.Profile: onProfileText(peer, text); return
+    case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }

@@ -16,6 +16,9 @@ import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
+import type { TimelineEntry } from './timeline'
+import type { Agreement } from './agreements'
+import type { MyProfile, SharedProfile } from './profile'
 
 export enum Ring {
   Close = 'close',
@@ -332,6 +335,10 @@ export interface Person {
   theirChannelsAt?: number
   /** Wave 9: when I last asked this connected person for their links (contact_share.ts requestText). */
   contactAsked?: number
+  /** Wave 7: what this person shared of their profile (profile.ts): norms, favourite way, intro. From the wire, validated. This phone only. */
+  theirProfile?: SharedProfile
+  /** Wave 7: explicit agreements with this person (agreements.ts). This phone only; never matched, relayed, exported or shared except as a proposal in a chat text. */
+  agreements?: Agreement[]
   /**
    * Wave 6: their asks may go on through me to my own contacts (hops.ts), when
    * they ask further than one step. Absent: the default (passesAsksOn).
@@ -360,6 +367,8 @@ export interface Person {
   reachedOut?: 'sent' | 'received'
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
+  timeline?: TimelineEntry[]
 }
 
 /** The five steps of the lean score on an acquaintance. */
@@ -831,6 +840,12 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only when `profileShare` is on, to a connected peer, in a chat text. */
+  profile?: MyProfile
+  /** Wave 7: the "share my profile when we connect" tick. Absent: off. */
+  profileShare?: boolean
+  /** peer id -> fingerprint of the profile text already sent to that peer. */
+  profileSent?: Record<string, string>
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
   /**
