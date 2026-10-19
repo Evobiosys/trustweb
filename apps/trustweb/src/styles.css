@@ -415,6 +415,10 @@ textarea.field{resize:vertical; line-height:1.5}
   border:1.5px solid var(--ink-soft); background:var(--card); color:var(--ink-soft); display:grid; place-items:center;
   font:italic 700 11.5px/1 Georgia,"Times New Roman",serif}
 .hint-i.legend-i{position:static; margin:4px auto 0; display:block}
+.wants{margin:14px 12px 0; padding:10px 12px; border:1px solid var(--line); border-radius:14px}
+.wants h3{font-size:13px; margin:0 0 6px}
+.wants-row{display:flex; align-items:center; gap:8px; padding:4px 0}
+.wants-row>span{flex:1; min-width:0}
 .hint-i::before{content:""; position:absolute; inset:-6px}
 .hint-i:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .hint-wrap.hint-off .hint-i{display:none}

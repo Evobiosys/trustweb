@@ -44,6 +44,7 @@ import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
+import { acceptWant, addWant, dismissWant } from './wants_to_connect'
 import { createAdvanced, createShareRow, createSharingLine } from './connect_advanced_view'
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
@@ -528,6 +529,16 @@ const net = new Net({
   },
   onPeerConnected: (peer) => {
     const s = st()
+    // Wave 16 (Jakob 2026-10-19): a reach-out through my link waits under the web for Add or Dismiss, not on the rings.
+    if (peer.reachOut && !s.people.some((p) => p.peerId === peer.id)) {
+      addWant(s, { peerId: peer.id, name: peer.displayName, at: Date.now() })
+      save()
+      sendHelloTo(peer)
+      toast(S.notifBodyConnect(peer.displayName))
+      notify('connect', S.notifBodyConnect(peer.displayName))
+      render()
+      return
+    }
     const byName = draft.name.trim()
     // Wave 6f (peer_cards.ts): the Meet draft's name only claims a card that no connection holds yet; the second person to connect
     // while the code is on screen gets a card of their own (before, they took over the first one's card and never showed).
@@ -538,7 +549,6 @@ const net = new Net({
       s.people.push(person)
     }
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
-    if (peer.reachOut && person.ring === Ring.Intending) person.reachedOut = 'received'
     save()
     sendHelloTo(peer)
     applyHeldContact(peer, person)
@@ -2084,6 +2094,7 @@ function screenWeb(): Node[] {
     network
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
       : ringsView(s, askMarks()),
+    wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
@@ -2096,6 +2107,50 @@ function screenWeb(): Node[] {
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
+}
+
+/** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
+function wantsToConnectSection(): HTMLElement | null {
+  const list = st().wantsToConnect ?? []
+  if (!list.length) return null
+  const now = Date.now()
+  return el('section', { class: 'wants', 'data-wants-to-connect': '' }, [
+    el('h3', {}, [S.wantsTitle]),
+    ...list.map((w) => el('div', { class: 'wants-row', 'data-want': w.peerId }, [
+      el('span', {}, [el('b', {}, [w.name]), ' ', el('small', { class: 'meta' }, [ageLabel(w.at, now)])]),
+      el('button', { class: 'btn btn-sm', 'data-want-add': '', onclick: () => addWantSheet(w.peerId, w.name) }, [S.wantsAdd]),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-want-dismiss': '', onclick: () => dismissWanted(w.peerId) }, [S.wantsDismiss]),
+    ])),
+  ])
+}
+
+/** "Add": the connect-add sheet with their name and the ring radios; Add makes the Person, connected, on the ring picked. */
+function addWantSheet(peerId: string, name: string): void {
+  openSheet(renderConnectAdd({
+    name,
+    ring: Ring.Acquaintance,
+    onAdd: (typed, ring) => {
+      closeSheet()
+      const s = st()
+      const person = acceptWant(s, peerId, typed, ring, randomId(8))
+      if (!person) return
+      const peer = s.peers.find((x) => x.id === peerId)
+      if (peer) { peer.ring = ring; applyHeldContact(peer, person) }
+      save()
+      addedToast(person, ring)
+      render()
+    },
+    onLater: closeSheet,
+  }).nodes)
+}
+
+/** "Dismiss": into the Curator's Archive (not connected, the row kept on it for Restore); the archived toast + pulse as for "Not now". */
+function dismissWanted(peerId: string): void {
+  const p = dismissWant(st(), peerId, randomId(8))
+  if (!p) return
+  save()
+  render()
+  void curator.hide(p.id).then(archivedNotice, (e: unknown) => console.warn('archive reach-out', e))
 }
 
 /**
@@ -3346,6 +3401,7 @@ const curator = createCurator({
   restorePerson: (person) => {
     if (!state) return
     if (person.pendingInvite) { reopenInvite(person.pendingInvite); return }
+    if (person.wantsToConnect) { addWant(state, person.wantsToConnect); save(); if (screen === Screen.Web) render(); return }
     if (state.people.some((x) => x.id === person.id)) return
     state.people.push(person)
     save()
