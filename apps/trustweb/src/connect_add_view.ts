@@ -32,10 +32,16 @@ export interface ConnectAddHandle {
   typed(): string
 }
 
+/** The primary button follows the picked ring (Jakob 2026-10-19): an intending person is not yet in the web. */
+export function addLabel(ring: Ring): string {
+  return ring === Ring.Intending ? S.connectAddAsIntended : S.addSave
+}
+
 export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
   let picked = o.ring
   let given = cleanHelloName(o.name)
   let dirty = false
+  const add = el('button', { class: 'btn btn-electric', 'data-connect-add': '', onclick: () => o.onAdd(name.value.trim().slice(0, 40), picked) }, [addLabel(picked)])
   const title = el('h3', { 'data-connect-add-title': '' }, [S.connectAddTitle(given)])
   const hint = el('p', { class: 'meta', 'data-connect-add-waiting': '', hidden: given !== '' }, [S.connectAddWaitingHint])
   const name = el('input', {
@@ -47,7 +53,7 @@ export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
   const drawRadios = (): void => {
     radios.replaceChildren(...RINGS.map((r) => el('button', {
       class: 'radio' + (picked === r ? ' on' : ''), 'data-ring': r,
-      onclick: () => { picked = r; drawRadios() },
+      onclick: () => { picked = r; drawRadios(); add.textContent = addLabel(r) },
     }, [el('b', {}, [S.ringLabel[r]]), el('small', {}, [S.ringHint[r]])])))
   }
   drawRadios()
@@ -57,7 +63,7 @@ export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
     name,
     hint,
     radios,
-    el('button', { class: 'btn btn-electric', 'data-connect-add': '', onclick: () => o.onAdd(name.value.trim().slice(0, 40), picked) }, [S.addSave]),
+    add,
     el('button', { class: 'btn btn-ghost', 'data-connect-later': '', onclick: o.onLater }, [S.addCancel]),
   ]
   return {

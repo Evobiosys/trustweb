@@ -1292,7 +1292,7 @@ export const S = {
   apkHintNotNow: 'Not now',
   apkHintLaterToast: 'You can still find this at the top of Settings.',
   apkDlTitle: 'Check your Downloads folder on your phone',
-  apkDlBody: 'This is a sideloaded release, not from the Google Play Store, so your phone may ask you to allow installing from this source once.',
+  apkDlBody: 'This is a sideloaded release, not from the Google Play Store, so maybe you need a one-time permission to install from this source.',
   apkDlAfterBefore: 'Afterwards we recommend switching that permission off again, so other apps, which you cannot check the way you can ',
   apkDlCheckOurs: 'check ours (open source on GitHub)',
   apkDlAfterAfter: ', and which might carry malware, are stopped.',
@@ -1649,13 +1649,20 @@ export const S = {
   connectAddLead: 'You are connected. Choose how close you are; you can change it any time on their card.',
   // Wave 16 (Jakob 2026-10-19): a visitor who joined through a link is connected only by "Add to my web".
   connectAddLeadInvite: 'Adding them lets them know you want to connect. Choose how close you are; you can change it any time on their card.',
-  inviteCardTitle: (name: string) => `Add ${name || 'this person'} to your web`,
+  connectAddAsIntended: 'Add as intended',
+  // Wave 16 (Jakob 2026-10-19): the person card's Archive (default) and Delete; the Archive lives in the Web Curator's Settings.
+  personArchive: 'Archive',
+  personDelete: 'Delete',
+  personDeleteAsk: 'Delete for good?',
+  personDeleteYes: 'Yes',
+  personDeleteNo: 'No',
   connectAddNamePh: 'Name',
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
   connectAddedToast: (name: string) => `${name} is in your web.`,
   // Jakob 2026-10-19: an intending person is "not yet in your web" (ringHint), so the toast says only that they were added.
   personAddedToast: (name: string) => `${name} added.`,
+  archivedToast: 'Archived. Find them in the Web Curator.',
   // Wave 6b: "Their TrustWeb code, name or DID" on the add-someone sheet (add_by_code.ts)
   addCodeLabel: 'Their TrustWeb code, name or DID (optional)',
   addCodePh: 'A code or link, @name, or a did:peer:...',

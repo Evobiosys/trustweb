@@ -56,12 +56,12 @@ import type { AddFailure } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
-import { parseConnectLinkParams } from '../../demo/src/connect_link'
+import { parseConnectLinkParams, type ConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -173,6 +173,7 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
+import { createToast, type ToastOpts } from './toast'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 
@@ -663,8 +664,6 @@ function drawCardStack(): void {
   if (!state || screen !== Screen.Web || queryOpen || demoAccounts().some((t) => t.pending)) { cardStackEl.replaceChildren(); cardStackEl.hidden = true; return }
   const cards = stackCards(state, Date.now(), demoPhone(), quietHidden, (peerId) => Boolean(personOf(st().people, peerId)))
   drawStack(cardStackEl, cards, stackDeps)
-  const invite = inviteCard()
-  if (invite) { cardStackEl.prepend(invite); cardStackEl.hidden = false }
   for (const card of cards) if (hidesItself(card)) hideQuietLater(card.key)
 }
 
@@ -719,6 +718,7 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
+const toastShow = createToast(toastEl)
 /** Wave 6i: the notice for a new message (not the toast: a toast never takes taps, this one does). */
 const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-notice': '1' })
 /** Review 6i: declared with the element, ahead of anything that may open a sheet or the prompt (hideMsgNotice reads it). */
@@ -1067,12 +1067,8 @@ function closeSheet(): void {
   if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
 }
 
-let toastTimer: ReturnType<typeof setTimeout> | undefined
-function toast(msg: string): void {
-  toastEl.textContent = msg
-  toastEl.classList.add('on')
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200)
+function toast(msg: string, o?: ToastOpts): void {
+  toastShow(msg, o)
 }
 
 /**
@@ -1347,9 +1343,10 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
   } else if (picked) {
-    toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
+    addedToast(person, ring)
   } else {
-    toast(ring === Ring.Intending ? S.personAddedToast(peer.displayName) : S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+    if (ring === Ring.Intending) addedToast(person, ring, peer.displayName)
+    else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
@@ -1360,9 +1357,16 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   } else openConnectAdd(peer, person, link.from.displayName)
 }
 
+/** After an add: "<name> added." (Intending; tapping it opens their card, Jakob 2026-10-19) or "<name> is in your web." */
+function addedToast(person: Person, ring: Ring, name = person.name): void {
+  const id = person.id
+  if (ring === Ring.Intending) toast(S.personAddedToast(name), { onClick: () => personSheet(id) })
+  else toast(S.connectAddedToast(name))
+}
+
 /**
  * Wave 16 (Jakob 2026-10-19): a visitor who joined through a link starts with an empty web and the add sheet; only "Add to my web"
- * connects (the reach-out, as before). "Not now" keeps the invite as a card above the web until the app is reloaded.
+ * connects (the reach-out, as before). "Not now" archives the inviter with the link (declineInvite); Restore in the Curator reopens this.
  */
 function offerPendingConnect(): void {
   const link = pendingConnect
@@ -1373,17 +1377,35 @@ function offerPendingConnect(): void {
     ring: Ring.Intending,
     lead: S.connectAddLeadInvite,
     onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
-    onLater: closeSheet,
+    onLater: () => { closeSheet(); declineInvite(link) },
   }).nodes)
 }
 
-/** The kept invite ("Not now" on offerPendingConnect's sheet): its card reopens the sheet. */
-function inviteCard(): HTMLElement | null {
-  if (!pendingConnect || !reachOutPending || solo || demoLink) return null
-  return el('div', { class: 'stack-card', 'data-invite-card': '', role: 'group' }, [
-    el('div', { class: 'stack-head' }, [el('b', {}, [S.inviteCardTitle(pendingConnect.from.displayName)])]),
-    el('div', { class: 'stack-actions' }, [el('button', { class: 'btn btn-electric btn-sm', type: 'button', onclick: offerPendingConnect }, [S.addSave])]),
-  ])
+/** "Not now" (Jakob 2026-10-19): the inviter goes to the Curator's Archive, not connected, the link kept on the entry. */
+function declineInvite(link: ConnectLinkParams): void {
+  pendingConnect = null
+  const p = archivedInvite(link, randomId(8), Date.now())
+  st().people.push(p)
+  save()
+  void curator.hide(p.id).then(archivedNotice, (e: unknown) => console.warn('archive invite', e))
+}
+
+/** Restore of an archived invitation in the Curator: its add sheet again; "Add" connects then (a reach-out, as from the link). */
+function reopenInvite(link: ConnectLinkParams): void {
+  pendingConnect = link
+  reachOutPending = true
+  offerPendingConnect()
+}
+
+let curatorPulseUntil = 0
+const CURATOR_PULSE_MS = 4000
+
+/** After an archive: the toast, and the Web header's Curator icon pulses for a while (where to find them again). Elsewhere the toast alone. */
+function archivedNotice(): void {
+  toast(S.archivedToast, { mark: 'archivedToast' })
+  curatorPulseUntil = Date.now() + CURATOR_PULSE_MS
+  phone.querySelector('.curator-btn')?.classList.add('pulse')
+  setTimeout(() => phone.querySelector('.curator-btn')?.classList.remove('pulse'), CURATOR_PULSE_MS)
 }
 
 /** The code carried the meeting too (notes and transcript, encrypted): open it now. True when something opened. */
@@ -1429,7 +1451,7 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       save()
       connectAdd = null
       viaCard.closed(person.id)
-      toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
+      addedToast(person, ring)
       render()
       if (!openPendingShare()) personSheet(person.id)
     },
@@ -1836,7 +1858,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       end(); lifted = false
       setTimeout(() => setDragged(false), 0)
       if (!was) return
-      if (out) { hideOnRings(p); return }
+      if (out) { void hideOnRings(p); return }
       if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); return }
       // The dot keeps the angle it was dropped at.
       if (ring === webSlot(p)) { p.angle = angle; save(); render(); return }
@@ -1899,9 +1921,9 @@ function spaceOutWeb(ring?: Ring): void {
 }
 
 /** A person dragged beyond the outermost ring: hidden like "hide in trustweb" (Curator Settings lists them, with unhide); Undo for 30 s. */
-function hideOnRings(p: Person): void {
+function hideOnRings(p: Person): Promise<void> {
   const name = displayName(p.name).text
-  void curator.hide(p.id).then(() => {
+  return curator.hide(p.id).then(() => {
     showNotice(S.ringsHidden(name), S.ringsHiddenBody, [
       el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-hide': p.id, onclick: () => { hideNotice(); void curator.unhide(p.id) } }, [S.ringsHiddenUndo]),
     ], 30000)
@@ -2048,7 +2070,7 @@ function webViewToggle(network: boolean): HTMLElement {
 
 function screenWeb(): Node[] {
   const s = shown(st())
-  const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn')
+  const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const network = s.people.length > 0 && networkChosen(stored)
@@ -2349,6 +2371,7 @@ function personSheet(personId: string): void {
     curator.person(p.id, closeSheet, { embedded: true }),
     agreementsFor(p),
     blockRow(p),
+    archiveRow(p),
   ])
   cardOpenFor = p.id
 }
@@ -2366,6 +2389,30 @@ function blockRow(p: Person): HTMLElement {
       if (!on) toast(S.blockedToast(p.name))
     },
   }, [on ? S.unblockPerson(p.name) : S.blockPerson(p.name)])
+}
+
+/** Archive (the default) or, quieter, Delete for good after an in-place "Delete for good?" (Jakob 2026-10-19). */
+function archiveRow(p: Person): HTMLElement {
+  const row = el('div', { class: 'archive-row' })
+  const draw = (): void => row.replaceChildren(
+    el('button', { class: 'btn btn-ghost', 'data-archive-person': p.id, onclick: () => { closeSheet(); void hideOnRings(p).then(archivedNotice) } }, [S.personArchive]),
+    el('button', { class: 'btn btn-ghost btn-sm quiet', 'data-delete-person': p.id, onclick: ask }, [S.personDelete]),
+  )
+  const ask = (): void => row.replaceChildren(
+    el('span', { class: 'meta' }, [S.personDeleteAsk]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-yes': p.id, onclick: () => deletePerson(p.id) }, [S.personDeleteYes]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-delete-no': '', onclick: draw }, [S.personDeleteNo]),
+  )
+  draw()
+  return row
+}
+
+function deletePerson(personId: string): void {
+  const s = st()
+  s.people = s.people.filter((x) => x.id !== personId)
+  save()
+  closeSheet()
+  render()
 }
 
 /** Wave 8: how this connection began, when it began as a reach-out through a public link. */
@@ -3297,7 +3344,9 @@ const curator = createCurator({
     if (screen === Screen.Web) render()
   },
   restorePerson: (person) => {
-    if (!state || state.people.some((x) => x.id === person.id)) return
+    if (!state) return
+    if (person.pendingInvite) { reopenInvite(person.pendingInvite); return }
+    if (state.people.some((x) => x.id === person.id)) return
     state.people.push(person)
     save()
     if (screen === Screen.Web) render()

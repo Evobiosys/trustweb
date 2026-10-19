@@ -9,7 +9,7 @@
   import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
-  import { store } from './state.svelte'
+  import { deleteHidden, store } from './state.svelte'
   import { S } from './strings'
   import { flush, sync, unhideInTrustweb } from './sync.svelte'
   import { notes, syncNotes } from './notes_sync.svelte'
@@ -39,6 +39,8 @@
   }
 
   let place = $state('')
+  /** The Archive row asking "Delete for good?" in place. */
+  let deleting = $state<string | null>(null)
 
   function addPlace(): void {
     const p = place.trim()
@@ -133,10 +135,18 @@
   {#if toSort > 0}<button class="btn small sort-banner" data-action="sort-settings" onclick={openSort}>{S.sortBanner(toSort)}</button>{/if}
 
   {#if store.crm.hiddenPeople?.length}
-    <h3 class="screen-title" data-part="hidden-title">{S.hiddenTitle(store.crm.hiddenPeople.length)}</h3>
+    <h3 class="screen-title" data-part="hidden-title" data-archive>{S.hiddenTitle(store.crm.hiddenPeople.length)}</h3>
     <p class="muted">{S.hiddenHint}</p>
     {#each store.crm.hiddenPeople as h (h.id)}
-      <p class="line" data-part="hidden">{h.name.trim() || h.id} <button class="quiet" data-action="unhide" onclick={(): void => unhideInTrustweb(h.id)}>{S.unhide}</button></p>
+      <p class="line" data-part="hidden">{h.name.trim() || h.id}
+        {#if deleting === h.id}
+          {S.archiveDeleteAsk} <button class="quiet" data-action="archive-delete-yes" onclick={(): void => { deleteHidden(h.id); deleting = null }}>{S.archiveYes}</button>
+          <button class="quiet" data-action="archive-delete-no" onclick={(): void => { deleting = null }}>{S.archiveNo}</button>
+        {:else}
+          <button class="quiet" data-action="unhide" onclick={(): void => unhideInTrustweb(h.id)}>{S.unhide}</button>
+          <button class="quiet" data-action="archive-delete" onclick={(): void => { deleting = h.id }}>{S.archiveDelete}</button>
+        {/if}
+      </p>
     {/each}
   {/if}
 

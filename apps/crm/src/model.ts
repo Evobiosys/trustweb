@@ -130,6 +130,11 @@ export interface CrmState {
   merges?: { from: string; into: string }[]
 }
 
+/** Delete for good from the Archive (Jakob 2026-10-19): the entry and the person it keeps go; nothing can restore them after. */
+export function deleteArchived(crm: CrmState, personId: string): void {
+  crm.hiddenPeople = (crm.hiddenPeople ?? []).filter((h) => h.id !== personId)
+}
+
 export function emptyCrm(): CrmState {
   return { v: 1, interactions: [], followUps: [], stages: {}, contactPoints: {} }
 }

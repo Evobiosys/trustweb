@@ -3,7 +3,9 @@
  * iPhone the coming-soon notice, desktop neither. "Not now" holds across a reload; Settings keeps the Android card regardless.
  * Visitor flow: after join the web is empty under "Add Ada to your web?"; only Add connects; the hint comes before the demo card;
  * "Not now" toasts; the APK link opens [data-apk-downloaded]; the Web header has the gear, no ⋮.
- * TW_SHOTS=<dir> saves 390x844 screenshots (default DEVLOG/wave16/screens/visitor-apk-hint).
+ * Visitor archive: "Not now" on the add sheet archives Ada (toast [data-archived-toast], pulsing Curator icon), the Curator's Archive
+ * lists her, Restore brings the add sheet back, whose button reads "Add as intended" on Intending; Add connects.
+ * TW_SHOTS=<dir> saves 390x844 screenshots (default DEVLOG/wave16/screens/visitor-apk-hint; the archive ones in ../visitor-archive).
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<repo>/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/index.mjs npx tsx ../trustweb/test/e2e/visitor_apk_hint.mjs
  */
@@ -173,6 +175,55 @@ async function main() {
     await openSettings(d.page)
     ok('desktop: no Settings card', await count(d.page, '[data-apk-settings-hint]') === 0)
     await d.ctx.close()
+
+    // 5. a visitor declines: Archive, then Restore from the Curator
+    const ARCH = path.join(SHOTS, '../visitor-archive')
+    mkdirSync(ARCH, { recursive: true })
+    const n = await visitor(browser, link, null, 'Nora', errors)
+    await n.page.addStyleTag({ content: '.sheet,.toast{transition:none!important}' })   // headless: transitions stall mid-way
+    await n.join()
+    const addBtn = n.page.locator('.sheet.on [data-connect-add]')
+    await addBtn.waitFor({ timeout: 15_000 })
+    ok('add sheet on Intending: "Add as intended"', (await addBtn.innerText()) === 'Add as intended')
+    await n.page.locator('.sheet.on [data-ring="friend"]').click()
+    ok('picking Friend: "Add to my web"', (await addBtn.innerText()) === 'Add to my web')
+    await n.page.locator('.sheet.on [data-ring="intending"]').click()
+    ok('back on Intending: "Add as intended"', (await addBtn.innerText()) === 'Add as intended')
+    await n.page.waitForTimeout(300)
+    await n.page.screenshot({ path: path.join(ARCH, '03-add-as-intended.png') })
+    await n.page.locator('.sheet.on [data-connect-later]').click()
+    await n.page.locator('.toast.on[data-archived-toast]').waitFor({ timeout: 10_000 })
+    ok('"Not now": toast "Archived. Find them in the Web Curator."', (await n.page.locator('.toast.on').innerText()) === 'Archived. Find them in the Web Curator.')
+    ok('the Curator icon pulses', await count(n.page, '.hdr .search-btn.pulse') === 1)
+    ok('the inviter is not in the web, no invite card', await count(n.page, '.node[data-pid]') === 0 && await count(n.page, '[data-invite-card]') === 0)
+    await n.page.waitForTimeout(400)   // the toast's fade-in, the pulse ring at its widest
+    await n.page.screenshot({ path: path.join(ARCH, '01-not-now-toast.png') })
+    await n.page.waitForTimeout(4_500)
+    ok('the pulse stops after ~4 s', await count(n.page, '.search-btn.pulse') === 0)
+    await n.page.locator('.hdr .search-btn').click()
+    await n.page.locator('.sheet.on .curator .gear').click({ timeout: 15_000 })
+    const row = n.page.locator('.sheet.on .curator [data-part="hidden"]')
+    await row.first().waitFor({ timeout: 10_000 })
+    ok('the Curator\'s Archive lists Ada', /Archive \(1\)/.test(await n.page.locator('.sheet.on .curator [data-archive]').textContent()) && /Ada/.test(await row.first().innerText()))
+    await row.first().scrollIntoViewIfNeeded()
+    await n.page.waitForTimeout(300)
+    await n.page.screenshot({ path: path.join(ARCH, '02-curator-archive.png') })
+    await row.first().locator('[data-action="unhide"]').click()
+    await n.page.locator('.sheet.on [data-connect-add-title]').waitFor({ timeout: 10_000 })
+    ok('Restore brings the add sheet back', (await n.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add Ada to your web?')
+    await n.page.locator('.sheet.on [data-connect-add]').click()
+    await n.page.locator('.node[data-pid]').first().waitFor({ timeout: 15_000 })
+    ok('Add connects: Ada in the web', await count(n.page, '.node[data-pid]') === 1)
+    const card = n.page.locator('.sheet.on .archive-row')
+    await card.waitFor({ timeout: 10_000 })
+    ok('her card: Archive above a quiet Delete', (await card.innerText()).replace(/\s+/g, ' ').trim() === 'Archive Delete')
+    await card.locator('[data-delete-person]').click()
+    ok('Delete asks in place', /Delete for good\?/.test(await card.innerText()))
+    await card.locator('[data-delete-no]').click()
+    await card.locator('[data-archive-person]').click()
+    await n.page.locator('.toast.on[data-archived-toast]').waitFor({ timeout: 10_000 })
+    ok('card Archive: out of the web, the archived toast, the pulse', await count(n.page, '.node[data-pid]') === 0 && await count(n.page, '.hdr .search-btn.pulse') === 1)
+    await n.ctx.close()
 
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
   } finally {

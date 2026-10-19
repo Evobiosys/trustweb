@@ -14,7 +14,7 @@ import { apply } from './import/intake'
 import type { Decision, IntakePlan } from './import/intake'
 import { NONRESP_KEY } from './fields'
 import type { FieldValue, FieldValues } from './fields'
-import { ContactPointKind, InteractionKind, Stage } from './model'
+import { ContactPointKind, deleteArchived, InteractionKind, Stage } from './model'
 import type { CrmState, Curation } from './model'
 import { emptyCuration } from './curation'
 import { joinPoints, linesToAdd, repoint } from './merge'
@@ -201,9 +201,16 @@ export function hidePerson(personId: string): void {
 
 export function unhidePerson(personId: string): void {
   const p = hidden.get(personId) ?? store.crm.hiddenPeople?.find((h) => h.id === personId)?.person
-  if (p) { store.app.people.push(p); host.restorePerson?.(p) }
+  // An archived invitation (trustweb pendingInvite) was never connected: the host reopens its add sheet instead of listing it.
+  if (p) { if (!p.pendingInvite) store.app.people.push(p); host.restorePerson?.(p) }
   hidden.delete(personId)
   store.crm.hiddenPeople = (store.crm.hiddenPeople ?? []).filter((h) => h.id !== personId)
+  persist()
+}
+
+export function deleteHidden(personId: string): void {
+  hidden.delete(personId)
+  deleteArchived(store.crm, personId)
   persist()
 }
 

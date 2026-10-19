@@ -257,6 +257,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
+.toast.on.tap{pointer-events:auto; cursor:pointer}
 /* "We have given you some (imaginary ;) friends :)": demo phones, once, under the header */
 .demo-friends{position:absolute; left:16px; right:16px; top:92px; z-index:30; background:var(--card); color:var(--ink); border-radius:16px;
   padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
@@ -942,3 +943,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .net-pop[hidden]{display:none}
 .net-legend{display:block; margin:4px 0; opacity:.7}
 .net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}
+/* Wave 16 (Jakob 2026-10-19): after an archive the Web header's Curator icon shows where the Archive lives; the card's Archive above a quiet Delete */
+.search-btn.pulse{outline:2px solid var(--electric); outline-offset:2px; animation:curator-pulse 1s ease-out 4}
+@keyframes curator-pulse{0%{box-shadow:0 0 0 0 var(--electric)} 100%{box-shadow:0 0 0 12px transparent}}
+@media (prefers-reduced-motion:reduce){ .search-btn.pulse{animation:none} }
+.archive-row{display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:12px}
+.archive-row .quiet{color:var(--ink-soft); font-weight:400}
