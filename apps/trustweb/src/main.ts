@@ -1212,24 +1212,23 @@ function apkHintEnv(): ApkHintEnv {
 }
 
 /**
- * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon). Seam: after offerNotifications and offerDemoContent
- * had their turn, it takes the top notice only when no other card or sheet is up, and tries again every few seconds while one is.
+ * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon), shown until dismissed (Jakob 2026-10-19). It comes FIRST
+ * (a sheet slides over it); `then` (the demo-content card) runs once it was answered, or at once when no notice applies. While another
+ * card is up it tries again every few seconds.
  */
-/** Jakob 2026-10-19: shown until dismissed. It waits only while another card is up (a sheet slides over it and it is there when the sheet closes). */
-function offerApkHint(): void {
-  setTimeout(() => {
-    if (!state || solo) return
-    const kind = apkHintKind(apkHintEnv())
-    if (!kind) return
-    if (!friendsEl.hidden) { offerApkHint(); return }
-    const android = kind === 'android'
-    const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); hideNotice() }
-    showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
-      ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
-      : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
-    friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
-    friendsEl.classList.add('stack')
-  }, 4500)
+function offerApkHint(then: () => void): void {
+  if (!state || solo) return
+  const kind = apkHintKind(apkHintEnv())
+  if (!kind) { then(); return }
+  if (!friendsEl.hidden) { setTimeout(() => offerApkHint(then), 4500); return }
+  const android = kind === 'android'
+  const answered = (): void => { hideNotice(); then() }
+  const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); answered() }
+  showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
+    ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', onclick: answered }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
+    : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
+  friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
+  friendsEl.classList.add('stack')
 }
 
 function offerDemoContent(): void {
@@ -1471,10 +1470,9 @@ function screenStart(): Node[] {
     screen = Screen.Web
     render()
     if (solo) showDemoFriends()
-    else offerDemoContent()
+    else offerApkHint(offerDemoContent)
     offerNotifications()
     setTimeout(() => void offerApkUpdate(), 4000)
-    offerApkHint()
     void net.start().then(announceLink).then(() => refreshPush())
     if (invite && !solo && !demo) offerPendingConnect()
     else void completePendingConnect()
@@ -5636,10 +5634,9 @@ if (state && !state.testOf?.handedOverAt) {
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
-  offerDemoContent()
+  offerApkHint(offerDemoContent)
   offerNotifications()
   setTimeout(() => void offerApkUpdate(), 4000)
-  offerApkHint()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).
