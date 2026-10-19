@@ -16,6 +16,8 @@ export interface ConnectAddOptions {
   /** The name the link or the handshake gave; '' when none is known yet. */
   name: string
   ring: Ring
+  /** The line under the title; default S.connectAddLead ("You are connected."). */
+  lead?: string
   /** The person pressed "Add to my web": the typed (or given) name, possibly '', and the ring. */
   onAdd: (name: string, ring: Ring) => void
   /** "Not now": the person stays as connected, in the ring they were put in. */
@@ -51,7 +53,7 @@ export function renderConnectAdd(o: ConnectAddOptions): ConnectAddHandle {
   drawRadios()
   const nodes: Node[] = [
     title,
-    el('p', { class: 'meta' }, [S.connectAddLead]),
+    el('p', { class: 'meta' }, [o.lead ?? S.connectAddLead]),
     name,
     hint,
     radios,

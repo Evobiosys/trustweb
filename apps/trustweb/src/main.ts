@@ -663,6 +663,8 @@ function drawCardStack(): void {
   if (!state || screen !== Screen.Web || queryOpen || demoAccounts().some((t) => t.pending)) { cardStackEl.replaceChildren(); cardStackEl.hidden = true; return }
   const cards = stackCards(state, Date.now(), demoPhone(), quietHidden, (peerId) => Boolean(personOf(st().people, peerId)))
   drawStack(cardStackEl, cards, stackDeps)
+  const invite = inviteCard()
+  if (invite) { cardStackEl.prepend(invite); cardStackEl.hidden = false }
   for (const card of cards) if (hidesItself(card)) hideQuietLater(card.key)
 }
 
@@ -1289,19 +1291,24 @@ function announceLink(): void {
   }
 }
 
-async function completePendingConnect(): Promise<void> {
+/** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
+async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
   if (!link || !state) return
   pendingConnect = null
+  drawCardStack()
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
-  const ring = reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance
+  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
   const peer = await net.completeConnect(link, ring, reachOut)
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
-    person = { id: randomId(8), name: peer.displayName, context: '', ring, metAt: Date.now(), lines: [], peerId: peer.id }
+    person = { id: randomId(8), name: picked?.name || peer.displayName, context: '', ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
+  } else if (picked) {
+    if (picked.name) person.name = picked.name
+    person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (sharedNotes) {
@@ -1327,13 +1334,44 @@ async function completePendingConnect(): Promise<void> {
     if (demoLink.peer) await connectDemoPeer(demoLink.peer, person)
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
+  } else if (picked) {
+    toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
   } else {
     toast(ring === Ring.Intending ? S.personAddedToast(peer.displayName) : S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
   if (demoLink || solo) openPendingShare()
-  else openConnectAdd(peer, person, link.from.displayName)
+  else if (picked) {
+    viaCard.closed(person.id)
+    if (!openPendingShare()) personSheet(person.id)
+  } else openConnectAdd(peer, person, link.from.displayName)
+}
+
+/**
+ * Wave 16 (Jakob 2026-10-19): a visitor who joined through a link starts with an empty web and the add sheet; only "Add to my web"
+ * connects (the reach-out, as before). "Not now" keeps the invite as a card above the web until the app is reloaded.
+ */
+function offerPendingConnect(): void {
+  const link = pendingConnect
+  if (!link) return
+  drawCardStack()
+  openSheet(renderConnectAdd({
+    name: link.from.displayName,
+    ring: Ring.Intending,
+    lead: S.connectAddLeadInvite,
+    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
+    onLater: closeSheet,
+  }).nodes)
+}
+
+/** The kept invite ("Not now" on offerPendingConnect's sheet): its card reopens the sheet. */
+function inviteCard(): HTMLElement | null {
+  if (!pendingConnect || !reachOutPending || solo || demoLink) return null
+  return el('div', { class: 'stack-card', 'data-invite-card': '', role: 'group' }, [
+    el('div', { class: 'stack-head' }, [el('b', {}, [S.inviteCardTitle(pendingConnect.from.displayName)])]),
+    el('div', { class: 'stack-actions' }, [el('button', { class: 'btn btn-electric btn-sm', type: 'button', onclick: offerPendingConnect }, [S.addSave])]),
+  ])
 }
 
 /** The code carried the meeting too (notes and transcript, encrypted): open it now. True when something opened. */
@@ -1438,7 +1476,8 @@ function screenStart(): Node[] {
     setTimeout(() => void offerApkUpdate(), 4000)
     offerApkHint()
     void net.start().then(announceLink).then(() => refreshPush())
-    void completePendingConnect()
+    if (invite && !solo && !demo) offerPendingConnect()
+    else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
   }

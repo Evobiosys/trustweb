@@ -1638,6 +1638,9 @@ export const S = {
   connectCodeNote: 'This short link is your connect code: it stays the same when your name changes. Our server keeps your connect link for it (your name, your TrustWeb address, no notes and no messenger links). The long link below works without our server.',
   connectAddTitle: (name: string) => (name ? `Add ${name} to your web?` : 'Add this person to your web?'),
   connectAddLead: 'You are connected. Choose how close you are; you can change it any time on their card.',
+  // Wave 16 (Jakob 2026-10-19): a visitor who joined through a link is connected only by "Add to my web".
+  connectAddLeadInvite: 'Adding them lets them know you want to connect. Choose how close you are; you can change it any time on their card.',
+  inviteCardTitle: (name: string) => `Add ${name || 'this person'} to your web`,
   connectAddNamePh: 'Name',
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
