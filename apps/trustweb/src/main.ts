@@ -144,7 +144,7 @@ import { createSyncView } from './sync_view'
 import { repairOtherCodes } from './sync_code'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { createCurator } from './curator'
+import { createCurator, curatorHiddenIds } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -2079,7 +2079,7 @@ function webViewToggle(network: boolean): HTMLElement {
 }
 
 function screenWeb(): Node[] {
-  const s = shown(st())
+  const s = shown(st(), curatorHiddenIds())
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }

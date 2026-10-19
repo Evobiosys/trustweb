@@ -15,3 +15,10 @@ describe('Archive: Delete for good', () => {
     expect(crm.hiddenPeople).toHaveLength(1)
   })
 })
+
+describe('Archive key read by the trustweb rings (curator.ts CRM_KEY)', () => {
+  it("is crmKey('me')", async () => {
+    const { crmKey } = await import('../../src/storage')
+    expect(crmKey('me')).toBe('trustweb-crm.v1.me')
+  })
+})
