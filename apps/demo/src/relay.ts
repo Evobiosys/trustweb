@@ -350,7 +350,7 @@ export interface RelayChannel {
    * longer counts as handled on its own -- restoring the un-acked/redeliver
    * safety net for the one case it was ever supposed to cover.
    */
-  onRawWire(cb: (fromDid: string, payload: string) => boolean | void): void
+  onRawWire(cb: (fromDid: string, payload: string) => boolean | void | Promise<boolean | void>): void
   /**
    * Registers a callback for connection status changes: `'connecting'` when
    * a drain attempt (first or a reconnect) starts, `'connected'` on
@@ -416,7 +416,7 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
   let backoff = reconnectBaseMs
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let sink: { resolveKey: PairKeyResolver; cb: (envelope: Envelope, fromDid: string) => void } | null = null
-  let rawSink: ((fromDid: string, payload: string) => boolean | void) | null = null
+  let rawSink: ((fromDid: string, payload: string) => boolean | void | Promise<boolean | void>) | null = null
   let statusCb: ((status: RelayStatus, at: number) => void) | null = null
   /** undefined: nothing to tell the relay about push; null: withdraw; else the subscription to keep. */
   let pushSub: PushSubscriptionJson | null | undefined = undefined
@@ -446,7 +446,9 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     if (!outer) return false
     let handled = false
     if (rawSink) {
-      const rawHandled = rawSink(outer.from, outer.payload)
+      // A sink that must open a seal first (TrustWeb's device sync) answers async; await it, else its wires are never acked and
+      // the relay redelivers them on every drain for its whole hold (the "Receive from <phone>?" sheet that came back every time).
+      const rawHandled = await rawSink(outer.from, outer.payload)
       if (rawHandled) handled = true
     }
     if (sink) {
@@ -661,7 +663,7 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     sink = { resolveKey, cb }
   }
 
-  function onRawWire(cb: (fromDid: string, payload: string) => boolean | void): void {
+  function onRawWire(cb: (fromDid: string, payload: string) => boolean | void | Promise<boolean | void>): void {
     rawSink = cb
   }
 

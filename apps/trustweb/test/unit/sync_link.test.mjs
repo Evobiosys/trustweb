@@ -212,3 +212,24 @@ describe('one username for all devices (wave 15)', () => {
     expect(a.state.connectCode.shared).toBe(true)
   })
 })
+
+describe('relay acks (2026-10-19: the "Receive from Phone?" sheet came back on every reconnect)', () => {
+  it('the raw sink answers true for a wire of a linked device (acked, never redelivered) and false for a stranger', async () => {
+    const h = hub()
+    const mac = await device(h, 'Mac', mk('J', []), 'mac')
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
+    const mine = await phone.api.join(await mac.api.offerCode())
+    await until(() => mac.box.requests.length === 1)
+    mine.confirm(); mac.box.requests[0].confirm()
+    const macDid = phone.api.pairings()[0].did
+    const phoneDid = mac.api.pairings()[0].did
+    const paired = h.wires.length // the one-use pair wire before this is refused on replay by design
+    await phone.api.syncNow(macDid)
+    await until(() => mac.box.incoming.length === 1)
+    const toMac = h.wires.slice(paired).filter((w) => w.to === macDid && w.from === phoneDid) // hello + data pieces
+    expect(toMac.length).toBeGreaterThan(0)
+    const macSink = h.sinks.get(macDid)
+    for (const w of toMac) expect(await macSink(w.from, w.payload)).toBe(true)
+    expect(await macSink('did:peer:2.stranger', toMac[0].payload)).toBe(false)
+  })
+})

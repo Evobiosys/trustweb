@@ -245,7 +245,9 @@ export function createSyncLink(d: SyncLinkDeps) {
       store = load()
       identity = deserializeIdentity(store.identity)
       persist()
-      channel.onRawWire((from, payload) => { void handle(from, payload).catch(() => false); return false })
+      // True = this wire was ours and is consumed, so the relay acks it. Anything else stays un-acked and comes again on the next
+      // drain; before this returned false for every wire, so the "Receive from <phone>?" sheet reopened on each reconnect.
+      channel.onRawWire((from, payload) => handle(from, payload).catch(() => false))
       void channel.connect(identity).catch(() => { /* the channel keeps retrying; Sync now says "not on" until it is */ })
     },
     /** The code to show on the device that offers: its DID and a fresh one-time secret (valid 10 minutes, one use). */

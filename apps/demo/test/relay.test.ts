@@ -426,4 +426,17 @@ describe("handleWire's ack decision (via a scripted mock drain socket)", () => {
 
     expect(acksFor(socket, 'wire-004')).toBe(true)
   })
+
+  it('a raw sink that answers async (a Promise of true, as TrustWeb device sync does after opening its seal) is awaited and acked', async () => {
+    const { identity, channel, socket } = await connectedChannel()
+    const wrongKey = await derivePairKey('some-other-nonce', 'entirely-unrelated')
+    channel.onEnvelope(wrongKey, () => { /* not this path */ })
+    channel.onRawWire(async () => { await new Promise((r) => setTimeout(r, 5)); return true })
+    const payload = await encryptEnvelope(makeQuery('qid-async-1'), wrongKey)
+    const outer = buildOuterWire(identity.did, 'did:peer:2.Vsender.Esender.Ssender', payload)
+
+    await pushWireAndSettle(socket, 'wire-005', outer)
+
+    expect(acksFor(socket, 'wire-005')).toBe(true)
+  })
 })
