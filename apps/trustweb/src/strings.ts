@@ -481,7 +481,7 @@ export const S = {
   ringHint: {
     [Ring.Close]: 'the few you would call at 3 am',
     [Ring.Friend]: 'you know each other well',
-    [Ring.Acquaintance]: 'met in person, still getting to know',
+    [Ring.Acquaintance]: 'met at least once, still getting to know',
     [Ring.Intending]: 'someone you plan to meet, not yet in your web',
     [Ring.None]: 'kept for reference, not part of your web',
     [Ring.Family]: 'your family, whatever the closeness',
@@ -1642,6 +1642,8 @@ export const S = {
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
   connectAddedToast: (name: string) => `${name} is in your web.`,
+  // Jakob 2026-10-19: an intending person is "not yet in your web" (ringHint), so the toast says only that they were added.
+  personAddedToast: (name: string) => `${name} added.`,
   // Wave 6b: "Their TrustWeb code, name or DID" on the add-someone sheet (add_by_code.ts)
   addCodeLabel: 'Their TrustWeb code, name or DID (optional)',
   addCodePh: 'A code or link, @name, or a did:peer:...',
