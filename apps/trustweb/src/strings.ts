@@ -110,8 +110,12 @@ export const S = {
   demoOfferYes: 'Add demo friends',
   demoOfferNo: 'No thanks',
   demoAdd: 'Show demo content',
+  // Hide keeps it (demo_hide.ts, 2026-10-19); Remove takes it away.
+  demoHide: 'Hide demo content',
+  demoHidden: 'Demo content hidden.',
   demoRemove: 'Remove demo content',
   demoRemoved: 'Demo content removed.',
+  setDemoRemoveHint: 'Takes the imaginary friends and things away for good.',
   setDemo: 'Demo content',
   setDemoHint: 'Imaginary friends and things, on this phone only.',
   // Demo content next to real people (owner 2026-10-06): every imaginary person and thing says so.

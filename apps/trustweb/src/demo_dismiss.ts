@@ -31,14 +31,17 @@ function idsToRemove(s: AppState, ctx: DemoContext, scope: DismissScope): { peop
   return { people: new Set(s.demo?.people ?? []), inventory: new Set(s.demo?.inventory ?? []) }
 }
 
-/** Removes the dummy people and things of `scope`, forgets the demo marking, and unlinks their past meetings. */
+/** Removes the dummy people and things of `scope` (hidden ones too, demo_hide.ts), forgets the demo marking, and unlinks their past meetings. */
 export function removeDummyContent(s: AppState, ctx: DemoContext, scope: DismissScope): Dismissed {
   const ids = idsToRemove(s, ctx, scope)
   const gone = new Set(s.people.filter((p) => !p.peerId && ids.people.has(p.id)).map((p) => p.id))
-  const before = { people: s.people.length, things: s.inventory.length }
+  const hidden = s.demoHidden ?? { people: [], inventory: [] }
+  const before = { people: s.people.length + hidden.people.length, things: s.inventory.length + hidden.inventory.length }
   s.people = s.people.filter((p) => !gone.has(p.id))
   s.inventory = s.inventory.filter((i) => !ids.inventory.has(i.id))
+  for (const p of hidden.people) gone.add(p.id)
   for (const m of s.meetings ?? []) if (m.personId && gone.has(m.personId)) delete m.personId
+  delete s.demoHidden
   delete s.demo
   return { people: before.people - s.people.length, things: before.things - s.inventory.length }
 }

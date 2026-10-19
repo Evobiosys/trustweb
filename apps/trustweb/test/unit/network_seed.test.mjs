@@ -32,4 +32,17 @@ describe('network demo seed', () => {
     expect(s.people.filter((x) => x.name.startsWith('Dummy'))).toHaveLength(3)
     expect(s.people[0].knows).toEqual([...new Set(s.people[0].knows)])
   })
+
+  it('marks the dummies as demo content (state.demo), so Hide / Remove demo content reach them; existing marks and dummies are kept', () => {
+    const s = state(['Kevin'])
+    addNetworkDemo(s, 1)
+    expect(s.demo.people.sort()).toEqual(['dummy-alpha', 'dummy-beta', 'dummy-gamma'])
+    expect(s.demo.inventory).toEqual([])
+    const marked = { ...state(['Kevin']), demo: { people: ['other'], inventory: ['thing'] } }
+    marked.people.push({ id: 'dummy-alpha', name: 'Dummy Alpha', context: '', ring: Ring.Acquaintance, metAt: 0, lines: [] })
+    expect(addNetworkDemo(marked, 1)).toBe(true)
+    expect(marked.demo.people.sort()).toEqual(['dummy-alpha', 'dummy-beta', 'dummy-gamma', 'other'])
+    expect(marked.demo.inventory).toEqual(['thing'])
+    expect(addNetworkDemo(marked, 1)).toBe(false)
+  })
 })

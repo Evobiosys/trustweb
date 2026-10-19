@@ -14,10 +14,18 @@ function dummy(name: string, now: number): Person {
   }
 }
 
-/** Adds the three dummies and the connections to `s` (mutates); a name that is absent is skipped with a console note. True when anything was added. */
+/**
+ * Adds the three dummies and the connections to `s` (mutates); a name that is absent is skipped with a console note. The dummies are
+ * marked demo content (state.demo), so Hide / Remove demo content reach them (2026-10-19). True when anything was added.
+ */
 export function addNetworkDemo(s: AppState, now = Date.now()): boolean {
   let changed = false
-  for (const n of DUMMIES) if (!s.people.some((p) => p.id === dummy(n, now).id)) { s.people.push(dummy(n, now)); changed = true }
+  for (const n of DUMMIES) {
+    const d = dummy(n, now)
+    if (!s.people.some((p) => p.id === d.id)) { s.people.push(d); changed = true }
+    const demo = (s.demo ??= { people: [], inventory: [] })
+    if (!demo.people.includes(d.id)) { demo.people.push(d.id); changed = true }
+  }
   const find = (name: string): Person | 'me' | undefined =>
     name === 'me' ? 'me' : s.people.find((p) => [p.name, ...p.name.split(/\s+/)].some((w) => w.toLowerCase() === name.toLowerCase()))
   const idOf = (x: Person | 'me'): string => (x === 'me' ? s.me.id : x.id)

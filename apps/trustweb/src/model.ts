@@ -951,6 +951,8 @@ export interface AppState {
    * Absent: none added.
    */
   demo?: { people: string[]; inventory: string[] }
+  /** Demo content taken out of view but kept (demo_hide.ts, 2026-10-19): the people and things themselves. Absent: shown. */
+  demoHidden?: { people: Person[]; inventory: InventoryItem[] }
   /** The phone offered demo content once (popup); absent: not yet. */
   demoOffered?: boolean
   /** Wave 11: the installed app offered notifications once (offerNotifications); the answer is notificationsOn. */

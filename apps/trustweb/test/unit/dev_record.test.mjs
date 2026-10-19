@@ -1,5 +1,9 @@
 /** Dev-only seed (src/dev_record.ts): inert where the build defined no record (every build, and unit tests). */
-import { devRecordFile, keepPlacements, seedDevRecord } from '../../src/dev_record.ts'
+import { devRecordFile, HOSTED_RECORD_PATH, keepPlacements, seedDevRecord, seedHostedDevRecord } from '../../src/dev_record.ts'
+import { hideDemoContent } from '../../src/demo_hide.ts'
+
+const RECORD = JSON.stringify({ v: 1, me: { id: 'x', displayName: 'J' }, people: [], peers: [], inventory: [], log: [], notificationsOn: false })
+const memStorage = () => { const m = new Map(); return { get: m, api: { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) } } }
 
 describe('dev record', () => {
   it('is absent and writes nothing when no record was defined', () => {
@@ -28,6 +32,75 @@ describe('dev record', () => {
     expect(JSON.parse(store.get('trustweb.v1.me')).me.displayName).toBe('Jakob')
     expect(store.get('trustweb.v1.me.before-seed')).toBe('mine')
     vi.unstubAllGlobals()
+  })
+})
+
+describe('dev record and demo content (2026-10-19)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it('a seeded record that carries demo marks is not seeded again while the seed file is unchanged', () => {
+    vi.stubGlobal('__TW_DEV_RECORD__', { file: 'r.json', text: RECORD })
+    const { get, api } = memStorage()
+    vi.stubGlobal('localStorage', api)
+    seedDevRecord('me')
+    const stored = JSON.parse(get.get('trustweb.v1.me'))
+    expect(stored.demo.people).toHaveLength(3)  // the dummies are marked demo content
+    stored.me.displayName = 'edited'
+    get.set('trustweb.v1.me', JSON.stringify(stored))
+    seedDevRecord('me')
+    expect(JSON.parse(get.get('trustweb.v1.me')).me.displayName).toBe('edited')
+  })
+  it('a changed seed keeps the demo content hidden when the phone had hidden it', () => {
+    vi.stubGlobal('__TW_DEV_RECORD__', { file: 'r.json', text: RECORD })
+    const { get, api } = memStorage()
+    vi.stubGlobal('localStorage', api)
+    seedDevRecord('me')
+    const stored = JSON.parse(get.get('trustweb.v1.me'))
+    hideDemoContent(stored)
+    get.set('trustweb.v1.me', JSON.stringify(stored))
+    vi.stubGlobal('__TW_DEV_RECORD__', { file: 'r.json', text: RECORD.replace('"J"', '"Jakob"') })
+    seedDevRecord('me')
+    const next = JSON.parse(get.get('trustweb.v1.me'))
+    expect(next.me.displayName).toBe('Jakob')
+    expect(next.people).toEqual([])
+    expect(next.demoHidden.people.map((p) => p.name)).toEqual(['Dummy Alpha', 'Dummy Beta', 'Dummy Gamma'])
+  })
+})
+
+describe('hosted dev record: a preview slot fetches the record the Mac put on the VM (2026-10-19)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const slotPage = (hasOverlay) => ({ querySelector: (sel) => (hasOverlay && sel.includes('/__tw/overlay.js') ? {} : null) })
+  const response = (status, text, file) => ({ ok: status === 200, status, text: async () => text, headers: { get: (h) => (h === 'X-TW-Record-File' ? file ?? null : null) } })
+  it('fetches nothing where the page is not a preview slot, or where a build-time record is in play', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('localStorage', memStorage().api)
+    expect(await seedHostedDevRecord('me', { fetch, doc: slotPage(false) })).toBe(false)
+    vi.stubGlobal('__TW_DEV_RECORD__', { file: 'r.json', text: RECORD })
+    expect(await seedHostedDevRecord('me', { fetch, doc: slotPage(true) })).toBe(false)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('seeds the slot origin from /__tw/dev-record, remembers the file name, and reports a change only when the stored record changed', async () => {
+    const { get, api } = memStorage()
+    vi.stubGlobal('localStorage', api)
+    const fetch = vi.fn(async () => response(200, RECORD, 'trustweb-record.json'))
+    expect(await seedHostedDevRecord('me', { fetch, doc: slotPage(true) })).toBe(true)
+    expect(fetch).toHaveBeenCalledWith(HOSTED_RECORD_PATH, expect.objectContaining({ credentials: 'same-origin' }))
+    expect(JSON.parse(get.get('trustweb.v1.me')).me.displayName).toBe('J')
+    expect(devRecordFile()).toBe('trustweb-record.json')
+    expect(await seedHostedDevRecord('me', { fetch, doc: slotPage(true) })).toBe(false)
+    fetch.mockResolvedValue(response(200, RECORD.replace('"J"', '"Jakob"'), 'trustweb-record.json'))
+    expect(await seedHostedDevRecord('me', { fetch, doc: slotPage(true) })).toBe(true)
+    expect(JSON.parse(get.get('trustweb.v1.me')).me.displayName).toBe('Jakob')
+  })
+  it('a record taken off the VM (404) or a failed fetch leaves the stored record alone; 404 also forgets the file name', async () => {
+    const { get, api } = memStorage()
+    vi.stubGlobal('localStorage', api)
+    await seedHostedDevRecord('me', { fetch: async () => response(200, RECORD, 'r.json'), doc: slotPage(true) })
+    expect(devRecordFile()).toBe('r.json')
+    expect(await seedHostedDevRecord('me', { fetch: async () => { throw new Error('offline') }, doc: slotPage(true) })).toBe(false)
+    expect(devRecordFile()).toBe('r.json')
+    expect(await seedHostedDevRecord('me', { fetch: async () => response(404, 'nope'), doc: slotPage(true) })).toBe(false)
+    expect(devRecordFile()).toBeNull()
+    expect(JSON.parse(get.get('trustweb.v1.me')).me.displayName).toBe('J')
   })
 })
 

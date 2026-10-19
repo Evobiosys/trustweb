@@ -112,7 +112,9 @@ import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
-import { devRecordFile, seedDevRecord } from './dev_record'
+import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
+import { addNetworkDemo } from './network_seed'
+import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
@@ -341,6 +343,9 @@ const recordKeptAside = wasUnreadable(persona, storeCtx)
 // drawn again once that ends); and: another tab reset this record or gave it another identity, so this tab never saves again.
 let redrawWaiting = false
 let superseded = false
+// A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
+// what is stored, this tab stops saving and reloads into it.
+if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
@@ -741,8 +746,8 @@ const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-n
 let msgNoticeTimer: ReturnType<typeof setTimeout> | undefined
 const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
-/** Desktop, bottom left, outside the phone: add or remove the demo content. */
-const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
+/** Desktop, bottom left, outside the phone: show or hide the demo content (Settings also removes it). */
+const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => toggleDemoContent() })
 /** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. */
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
 let statusPill: HTMLElement | null = null
@@ -1139,10 +1144,23 @@ function addDemoContent(): void {
   s.people.push(...seed.people)
   s.inventory.push(...seed.inventory)
   s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }
+  // With a dev record the Network view's dummies belong to the demo content too (network_seed.ts).
+  if (devRecordFile()) addNetworkDemo(s)
   s.demoOffered = true
   save()
   render()
   showDemoFriends()
+}
+
+/** Show demo content: back from hidden, else added; Hide keeps it out of view (demo_hide.ts, 2026-10-19). */
+function toggleDemoContent(): void {
+  const s = st()
+  if (s.demoHidden) { showDemoContent(s); save(); render(); return }
+  if (!s.demo) { addDemoContent(); return }
+  hideDemoContent(s)
+  save()
+  render()
+  toast(S.demoHidden)
 }
 
 function removeDemoContent(): void {
@@ -1279,7 +1297,7 @@ function offerDemoContent(): void {
 
 function updateDemoToggle(): void {
   demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
-  if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
+  if (state) demoToggle.textContent = demoShown(state) ? S.demoHide : S.demoAdd
   updateDeskToggle()
 }
 
@@ -5291,10 +5309,15 @@ function settingsSheet(): void {
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
-      class: 'radio' + (s.demo ? ' on' : ''),
-      'aria-pressed': String(Boolean(s.demo)),
-      onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
-    }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
+      class: 'radio' + (demoShown(s) ? ' on' : ''),
+      'aria-pressed': String(demoShown(s)),
+      onclick: () => { toggleDemoContent(); settingsSheet() },
+    }, [el('b', {}, [demoShown(s) ? S.demoHide : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
+    demoSettingsShown && s.demo ? el('button', {
+      class: 'radio',
+      'data-remove-demo': '1',
+      onclick: () => { removeDemoContent(); settingsSheet() },
+    }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
