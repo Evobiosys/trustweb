@@ -997,11 +997,12 @@ export class Net {
    * otherwise it carries the reach chosen under "How far?" (none for one step).
    * Wave 6h: every ask carries this phone's window, and is remembered per connection so a later yes can still land (late_answers.ts).
    */
-  async ask(text: string): Promise<AskResult[]> {
+  async ask(text: string, reachOverride?: number): Promise<AskResult[]> {
     await this.start()
     const s = this.hooks.state()
     const freeText = text.trim().slice(0, FREE_TEXT_MAX_LEN)
-    const reach = askReachOf(s)
+    // Wave 16: a together request carries its own reach for this one ask; "Ask only my direct contacts" still wins and the dock's choice is not touched.
+    const reach = reachOverride !== undefined && s.askDirectOnly !== true ? reachOverride : askReachOf(s)
     const root = randomId(12)
     const extra: Partial<QueryEnvelope> = {
       ...directFlag(s.askDirectOnly === true), ...askFields(reach, root, await seenHash(root, s.me.id)), ...windowFields(this.windowMs),
