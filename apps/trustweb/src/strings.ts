@@ -1294,7 +1294,7 @@ export const S = {
   apkDlTitle: 'Check your Downloads folder on your phone',
   apkDlBody: 'This is a sideloaded release, not from the Google Play Store, so your phone may ask you to allow installing from this source once.',
   apkDlAfterBefore: 'Afterwards we recommend switching that permission off again, so other apps, which you cannot check the way you can ',
-  apkDlCheckOurs: 'check ours',
+  apkDlCheckOurs: 'check ours (open source on GitHub)',
   apkDlAfterAfter: ', and which might carry malware, are stopped.',
   apkDlSource: 'TrustWeb is open source on GitHub',
   apkDlOk: 'Got it',
