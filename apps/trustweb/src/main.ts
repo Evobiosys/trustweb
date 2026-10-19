@@ -118,7 +118,7 @@ import { agreementsSection } from './agreements_view'
 import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
-import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, setUpInstall } from './install'
+import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -1201,6 +1201,8 @@ function apkUpdatesRow(s: AppState): HTMLElement[] {
   ]
 }
 
+const TRUSTWEB_SOURCE = 'https://github.com/Evobiosys/trustweb'
+
 /** Wave 16 (apk_hint.ts): what the hint decides from, read now. */
 function apkHintEnv(): ApkHintEnv {
   const e = currentEnv()
@@ -1225,11 +1227,22 @@ function offerApkHint(then: () => void): void {
   const answered = (): void => { hideNotice(); then() }
   const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); answered(); if (android) toast(S.apkHintLaterToast) }
   showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
-    ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', onclick: answered }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
+    ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', onclick: () => { hideNotice(); apkDownloadedSheet(then) } }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
     : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
   friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
   friendsEl.classList.add('stack')
 }
+
+/** Wave 16 (Jakob 2026-10-19): the APK link opens the download and this sheet (sideloading, then the permission off again). `then` after "Got it". */
+function apkDownloadedSheet(then?: () => void): void {
+  openSheet([el('div', { 'data-apk-downloaded': '' }, [
+    el('h3', {}, [S.apkDlTitle]),
+    el('p', {}, [S.apkDlBody]),
+    el('p', {}, [S.apkDlAfterBefore, el('a', { href: TRUSTWEB_SOURCE, rel: 'noopener', target: '_blank', title: S.apkDlSource }, [S.apkDlCheckOurs]), S.apkDlAfterAfter]),
+    el('button', { class: 'btn btn-electric', onclick: () => { closeSheet(); then?.() } }, [S.apkDlOk]),
+  ])])
+}
+onApkDownload(() => apkDownloadedSheet())
 
 function offerDemoContent(): void {
   const s = state
