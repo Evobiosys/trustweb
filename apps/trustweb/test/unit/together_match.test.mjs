@@ -77,10 +77,22 @@ describe('an ordinary ask is never rewritten into a together request', () => {
     'I need someone to fix my bike', 'I would like to know who has a car', 'Ich möchte eine Bohrmaschine ausleihen',
     'Does anyone have loudspeakers I could borrow?', 'Who is hiring?', 'Who wants to play?', 'I want to play',
   ])('%s', (text) => expect(readTogetherRequest(text, NOW)).toBeNull())
-  it('a bare lower-case "in" is not a place', () => {
-    expect(readTogetherRequest('Who wants to do yoga in the park', NOW)).toMatchObject({ activity: 'yoga' })
-    expect(readTogetherRequest('Who wants to do yoga in the park', NOW).area).toBeUndefined()
+  it('a lower-case "in" names a place, a time after it does not', () => {
+    expect(readTogetherRequest('Who wants to do yoga in the park', NOW)).toMatchObject({ activity: 'yoga', area: 'the park' })
     expect(readTogetherRequest('I want to do yoga together in Wien', NOW)).toMatchObject({ activity: 'yoga', area: 'Wien' })
+    expect(readTogetherRequest('I want to cook together in my kitchen tomorrow', NOW)).toMatchObject({ activity: 'cook', area: 'my kitchen' })
+    for (const text of [
+      'I want to run in the morning together', 'I want to run together in the evening', 'Who wants to play padel in 3 days',
+      'Who wants to go hiking in two weeks', 'I want to play padel together in January', 'Wer will im Januar zusammen wandern',
+      'Wer will in der Früh zusammen laufen', 'Wer will in 3 Tagen zusammen laufen', 'Wer will am Abend zusammen laufen',
+    ]) expect(readTogetherRequest(text, NOW).area, text).toBeUndefined()
+  })
+  it('German "in Wien", "im Park", "am See"; "am Samstag" is a day, not a place', () => {
+    expect(readTogetherRequest('Wer will zusammen joggen in Wien 7', NOW).area).toBe('Wien 7')
+    expect(readTogetherRequest('Wer will zusammen joggen im Park', NOW).area).toBe('Park')
+    expect(readTogetherRequest('Wer will zusammen grillen am See', NOW).area).toBe('See')
+    expect(readTogetherRequest('Wer will zusammen grillen am Samstag', NOW)).toMatchObject({ fromAt: midnight(2026, 9, 24) })
+    expect(readTogetherRequest('Wer will zusammen grillen am Samstag', NOW).area).toBeUndefined()
   })
   it('German word order: time words are not the activity', () => {
     expect(readTogetherRequest('Ich will morgen Tennis spielen', NOW)).toMatchObject({ activity: 'tennis' })

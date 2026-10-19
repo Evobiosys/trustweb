@@ -83,14 +83,21 @@ function readReach(t: string): number | undefined {
   return undefined
 }
 
+/** Words after "in"/"am"/"im" that name a time, not a place: "in the morning", "in 3 days", "am Samstag", "im Januar", "in der Früh". */
+const TIME_NOUN = `${WD}|morning|afternoon|evening|night|days?|weeks?|hours?|months?|year|weekend|january|february|march|april|may|june|july|august|september|october|november|december|januar|februar|märz|mai|juni|juli|oktober|dezember|früh|fruh|morgen|vormittag|nachmittag|abend|nacht|wochen?|tag(?:en)?|stunden?|monat(?:en)?|jahr|wochenende`
+const COUNT = '(?:the|a|an|one|two|three|few|couple of|der|die|das|dem|den|einer|einem|ein|zwei|drei|paar|\\d+)'
+const NOT_PLACE = new RegExp(`^(?:${COUNT}\\s+)*(?:${TIME_NOUN})\\b`, 'i')
+
 function readArea(raw: string): { area?: string; radiusKm?: number } {
   const km = /\bwithin\s+(\d{1,3})\s*km\b|\b(\d{1,3})\s*km\b/i.exec(raw)
   const radiusKm = km ? Math.min(TOGETHER_RADIUS_KM_MAX, Number(km[1] ?? km[2])) : undefined
-  const END = '(?=\\s+(?:before|by|until|on|this|next|tomorrow|today|tonight|vor|bis|am|within|with|mit|heute|morgen)\\b|[,.;!?]|$)'
-  // "near Wien 7" always names a place; a bare "in" only before a capitalised word ("in Wien", not "in the band").
+  const END = '(?=\\s+(?:before|by|until|on|this|next|tomorrow|today|tonight|vor|bis|am|within|with|mit|heute|morgen|together|zusammen)\\b|[,.;!?]|$)'
+  // "near Wien 7" always names a place. After "in"/"im"/"am" a run of capitalised words or numbers is one ("in Wien 7", "am See"; a
+  // German verb after it is not: "in Wien kochen"), and after a lower-case "in" the words up to a time or the end ("in the park").
   const near = new RegExp(`\\b(?:near|around|bei|in der nähe von|nahe)\\s+([^,.;!?]+?)${END}`, 'i').exec(raw)
-    ?? new RegExp(`\\bin\\s+([A-ZÄÖÜ][^,.;!?]*?)${END}`).exec(raw)
-  const area = near ? clipText(near[1].trim(), TOGETHER_AREA_MAX) : undefined
+  const prep = new RegExp(`(?<!\\b[Ii]\\s)\\b(?:[Ii][nm]|[Aa]m)\\s+([A-ZÄÖÜ][^\\s,.;!?]*(?:\\s+[A-ZÄÖÜ\\d][^\\s,.;!?]*)*)|\\bin\\s+([^,.;!?]+?)${END}`, 'g')
+  const place = near?.[1] ?? [...raw.matchAll(prep)].map((m) => m[1] ?? m[2]).find((w) => !NOT_PLACE.test(w))
+  const area = place ? clipText(place.trim(), TOGETHER_AREA_MAX) : undefined
   return { ...(area ? { area } : {}), ...(radiusKm !== undefined ? { radiusKm } : {}) }
 }
 
