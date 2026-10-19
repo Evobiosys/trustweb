@@ -236,6 +236,8 @@ export const S = {
   mergeKeep: (name: string) => `Keep ${name}`,
   mergeAdds: (lines: number, events: number, cleared = 0) => `Added to the survivor: ${lines} note line(s), ${events} interaction(s) and follow-up(s).${cleared ? ` ${cleared} field(s) cleared.` : ''}`,
   mergeNeither: 'Neither',
+  mergeCustom: 'Other value',
+  mergeCustomPh: 'Type a value',
   mergeGo: 'Merge',
   mergeBoth: 'Add both',
   mergeDismiss: 'Use neither side for this value',

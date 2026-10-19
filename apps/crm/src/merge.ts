@@ -12,6 +12,8 @@ export enum Pick {
   Both = 'both',
   /** Neither value: the field ends up empty. */
   Neither = 'neither',
+  /** A value typed in the sheet (a name both sides spell wrong, a phone number that changed): not either side's. */
+  Custom = 'custom',
 }
 
 export interface MergeRow {
@@ -44,19 +46,25 @@ export function dismiss(pick: Pick, side: Pick.Keep | Pick.Other): Pick {
 }
 
 /** The value a row ends with under `pick`. */
-function resultOf(r: MergeRow, pick: Pick): FieldValue | undefined {
-  return pick === Pick.Keep ? r.keep : pick === Pick.Other ? r.other : pick === Pick.Both ? joined(r.key, r.keep, r.other) : undefined
+function resultOf(r: MergeRow, pick: Pick, custom: Readonly<Record<string, string>>): FieldValue | undefined {
+  return pick === Pick.Keep ? r.keep : pick === Pick.Other ? r.other : pick === Pick.Both ? joined(r.key, r.keep, r.other) : pick === Pick.Custom ? customText(custom, r.key) : undefined
 }
+
+/** The typed value of `key`, trimmed; '' when nothing was typed (the survivor then keeps what it has). */
+export const customText = (custom: Readonly<Record<string, string>>, key: string): string => (custom[key] ?? '').trim()
+
+/** Whether a value may be typed for `key`: any field but the ring (its values are the rings, not text). */
+export const customAllowed = (key: string): boolean => key !== RING_KEY
 
 const NAME_KEYS: readonly string[] = ['tw-first', LAST_NAME_KEY]
 
 /** Whether "Neither" may be picked for `key`: never for the ring, and for a name part only while the other part keeps a value. `same` holds the values both people share. */
-export function neitherAllowed(key: string, rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>, same: FieldValues): boolean {
+export function neitherAllowed(key: string, rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>, same: FieldValues, custom: Readonly<Record<string, string>> = {}): boolean {
   if (key === RING_KEY) return false
   if (!NAME_KEYS.includes(key)) return true
   const otherKey = NAME_KEYS.find((k) => k !== key) as string
   const row = rows.find((r) => r.key === otherKey)
-  return isSet(row ? resultOf(row, picks[otherKey] ?? row.pick) : same[otherKey])
+  return isSet(row ? resultOf(row, picks[otherKey] ?? row.pick, custom) : same[otherKey])
 }
 
 /** How many fields the merge empties. */
@@ -65,13 +73,14 @@ export function clearedCount(rows: readonly MergeRow[], picks: Readonly<Record<s
 }
 
 /** The field edits that put the survivor's merged values in place (nothing for a kept value). */
-export function mergeEdits(rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>): [string, FieldValue][] {
+export function mergeEdits(rows: readonly MergeRow[], picks: Readonly<Record<string, Pick>>, custom: Readonly<Record<string, string>> = {}): [string, FieldValue][] {
   const edits: [string, FieldValue][] = []
   for (const r of rows) {
     const pick = picks[r.key] ?? r.pick
     if (pick === Pick.Other && r.other !== undefined) edits.push([r.key, r.other])
     else if (pick === Pick.Both) edits.push([r.key, joined(r.key, r.keep, r.other)])
     else if (pick === Pick.Neither) edits.push([r.key, ''])
+    else if (pick === Pick.Custom && customAllowed(r.key) && customText(custom, r.key)) edits.push([r.key, customText(custom, r.key)])
   }
   return edits
 }
