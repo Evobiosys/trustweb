@@ -3,7 +3,7 @@ import { RelayServer } from '../../../../packages/transport/src/relay_server.ts'
 import { InMemoryRelayQueueStore } from '../../../../packages/transport/src/relay_queue_store.ts'
 import { randomId } from '../../../demo/src/crypto.ts'
 import { Net } from '../../src/net.ts'
-import { Ring } from '../../src/model.ts'
+import { reachOutLegendShown, Ring } from '../../src/model.ts'
 
 let relay
 let relayOrigin
@@ -51,5 +51,20 @@ describe('visitor flow: the host side of a reach-out', () => {
     await until(() => host.connected.length === 1)
     expect(host.connected[0]).toMatchObject({ did: visitor.did, ring: Ring.Intending, reachOut: true })
     expect(visitor.state.peers[0]).toMatchObject({ did: host.did, ring: Ring.Friend, reachOut: true })
+  })
+})
+
+describe('visitor flow: the yellow-dot legend', () => {
+  const code = { code: 'abc' }
+  const person = (reachedOut) => ({ ring: Ring.Intending, ...(reachedOut ? { reachedOut } : {}) })
+  it('shows only with a username link and someone who reached out to this phone', () => {
+    expect(reachOutLegendShown({ connectCode: code, people: [person('received')] })).toBe(true)
+    expect(reachOutLegendShown({ people: [person('received')] })).toBe(false)
+    expect(reachOutLegendShown({ connectCode: code, people: [person('sent')] })).toBe(false)
+    expect(reachOutLegendShown({ connectCode: code, people: [person()] })).toBe(false)
+    expect(reachOutLegendShown({ connectCode: code, people: [] })).toBe(false)
+  })
+  it('never for the visitor who only sent one', () => {
+    expect(reachOutLegendShown({ people: [person('sent')] })).toBe(false)
   })
 })
