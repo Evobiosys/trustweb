@@ -88,12 +88,12 @@ async function main() {
     ok('an added device is called Jonas by default', (await jonas.getByLabel('Your first name').inputValue()) === 'Jonas')
     await jonas.getByRole('button', { name: 'Connect', exact: true }).click()
     // Query lives on the Web screen (bottom right) and opens a dock under the rings.
-    await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
+    await jonas.getByRole('button', { name: 'Ask your web' }).click({ timeout: 30_000 })
     ok('Jonas\'s rings stay visible while querying', await jonas.locator('.rings-wrap').isVisible())
-    const askBtn = jonas.getByRole('button', { name: 'Call into my web' })
+    const askBtn = jonas.getByRole('button', { name: 'Ask my web' })
     await page.waitForFunction(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 2")
-      const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Call into my web')
+      const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Ask my web')
       return b && !b.disabled
     }, null, { timeout: 30_000 })
     ok('Jonas is paired with Maya (Ask enabled)', true)

@@ -58,8 +58,8 @@ const web = (names: string[]): string =>
   `<div class="wt-h">Your TrustWeb</div><div class="wt-rings">${names.length ? names.map((n) => `<span>${n}</span>`).join('') : '<em>Nobody yet</em>'}</div>`
 const card = (cls: string, body: string): string => `<div class="wt-card ${cls}">${body}</div>`
 const quiet = (body: string): string => `<div class="wt-quiet">${body}</div>`
-const ask = (q: string, n: number): string => `<div class="wt-h">Call into your web</div>${card('q', `"${q}"`)}<small>Asked ${n === 1 ? '1 person' : `${n} people`} in your web.</small>`
-const waiting = (s: number): string => `<div class="wt-h">Call into your web</div><small>Answers in about ${s} s</small>`
+const ask = (q: string, n: number): string => `<div class="wt-h">Ask your web</div>${card('q', `"${q}"`)}<small>Asked ${n === 1 ? '1 person' : `${n} people`} in your web.</small>`
+const waiting = (s: number): string => `<div class="wt-h">Ask your web</div><small>Answers in about ${s} s</small>`
 const consent = (who: string, q: string, match: string): string =>
   `<div class="wt-cosmic"><b>${who} asks</b><br>"${q}"<br><small>On this phone, this matches:</small>${card('', match)}<span class="wt-btn">Share these</span><span class="wt-btn ghost">Don't share</span></div>`
 const noApp = (body: string): string => `<div class="wt-noapp"><b>No TrustWeb app</b><br>${body}</div>`
@@ -71,7 +71,7 @@ const askDirect = (q: string): string => `${ask(q, 1)}<br><small>${DIRECT_ONLY}<
 /** The friend in the middle, with an ask that says "direct contacts only": checked on his phone, never passed on. */
 const directHere = (who: string): string =>
   `<div class="wt-cosmic"><b>${who} asks you</b><br><small>${who} asks direct contacts only: checked against your own resources, not passed on to your friends.</small>${card('', 'Nothing of yours matches. Nothing is passed on.')}</div>`
-const noMatch = `<div class="wt-h">Call into your web</div>${card('', '<b>No match</b>')}<small>Only your direct contacts were asked.</small>`
+const noMatch = `<div class="wt-h">Ask your web</div>${card('', '<b>No match</b>')}<small>Only your direct contacts were asked.</small>`
 const DIRECT_ONLY = 'Ask only my direct contacts: <b>On</b>'
 const AISHA_REAL = 'In real life: she just opened a small fund for open-source tools.'
 /** The widest tier, as the app names it (wave 2, P22): acquaintances, and through a friend, friends of friends. */
@@ -137,13 +137,13 @@ const MODES: Mode[] = [
       {
         title: 'Jonas gets his answer', changed: ['jonas'], path: ['maya', 'jonas'],
         text: 'He sees what Maya chose to share, and nothing else from her phone.',
-        screens: { jonas: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b><br>${LOUDSPEAKERS}`)}`, maya: web(['Jonas']) },
+        screens: { jonas: `<div class="wt-h">Ask your web</div>${card('ok', `<b>Maya chose to share</b><br>${LOUDSPEAKERS}`)}`, maya: web(['Jonas']) },
       },
       {
         title: 'Not sharing looks the same as having nothing', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
         text: 'Jonas asks for a spare room. Maya has one noted, shared with nobody, so her phone stays silent and Jonas sees "No match". He cannot tell "nobody had one" from "somebody chose not to share".',
         screens: {
-          jonas: `<div class="wt-h">Call into your web</div>${card('q', '"Who has a spare room in Vienna?"')}${card('', '<b>No match</b><br><small>You do not learn why.</small>')}`,
+          jonas: `<div class="wt-h">Ask your web</div>${card('q', '"Who has a spare room in Vienna?"')}${card('', '<b>No match</b><br><small>You do not learn why.</small>')}`,
           maya: `${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}${quiet('Silent: nothing leaves this phone.')}`,
         },
       },
@@ -190,7 +190,7 @@ const MODES: Mode[] = [
       {
         title: 'Sam has a job lead', changed: ['sam'], path: ['jonas', 'sam'],
         text: 'Through a friend of an acquaintance, months after meeting, without anyone broadcasting anything. It was not in Jonas\'s resources but in Maya\'s, and the answer says so: "through Jonas". Next, Sam can ask Jonas for an introduction to Maya.',
-        screens: { sam: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's resources: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
+        screens: { sam: `<div class="wt-h">Ask your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${POSITION}<br><small>Not in Jonas's resources: in Maya's, his friend's.</small>`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Sam', 'Maya']), maya: web(['Jonas']) },
       },
     ],
     direct: [
@@ -262,7 +262,7 @@ const MODES: Mode[] = [
       {
         title: 'Lena finds a funder, through Jonas and Maya', changed: ['lena'], path: ['jonas', 'lena'],
         text: 'Lena has never met Aisha, and neither has Jonas. Lena can now ask Jonas to ask Maya for an introduction.',
-        screens: { lena: `<div class="wt-h">Call into your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${FUND}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
+        screens: { lena: `<div class="wt-h">Ask your web</div>${card('ok', `<b>Maya chose to share</b> (through Jonas)<br>${FUND}`)}<small>Next: ask Jonas to introduce you to Maya.</small>`, jonas: web(['Lena', 'Maya']), maya: web(['Jonas']), aisha: noApp(AISHA_REAL) },
       },
     ],
     direct: [

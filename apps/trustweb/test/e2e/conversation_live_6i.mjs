@@ -96,9 +96,9 @@ async function toWeb(page) {
 
 async function ask(page, text) {
   await toWeb(page)
-  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
+  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Ask your web', exact: true }).click()
   await page.locator('.query-dock textarea').fill(text)
-  await page.getByRole('button', { name: 'Call into my web' }).click()
+  await page.getByRole('button', { name: 'Ask my web' }).click()
 }
 
 const outcome = (page) => until(async () => { const x = await page.locator('.card.asked .outcome').first().innerText(); return x || null }, 200_000)

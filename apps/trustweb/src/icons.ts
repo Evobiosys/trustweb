@@ -26,7 +26,7 @@ export const ICONS: Record<string, string> = {
   info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
-  // "Call into your web": only the sound waves (owner 2026-10-05: "simpler and
+  // "Ask your web": only the sound waves (owner 2026-10-05: "simpler and
   // less confusing"), the call going out and the resonance coming back.
   call: '<svg viewBox="0 0 24 24"><path d="M5.5 8.5a5 5 0 0 1 0 7"/><path d="M9.5 5.5a9.5 9.5 0 0 1 0 13"/><path d="M13.5 2.8a13.5 13.5 0 0 1 0 18.4"/></svg>',
   // Wave 6h, S3: "Signal" as a plain speech bubble with a dotted rim, drawn in the text colour (no brand asset, no brand colour).

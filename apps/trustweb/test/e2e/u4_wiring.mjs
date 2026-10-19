@@ -1,7 +1,7 @@
 /**
  * Wave 6 (U4 b to f), the app wiring in a real headless browser over the test relay:
  *   W1  the Web header glyph is the outliner (never a magnifier; the magnifier stays on past-meetings search), the search panel
- *       says it only looks through the people and offers "Call into your web instead", a visible Home on every sheet, the rings
+ *       says it only looks through the people and offers "Ask your web instead", a visible Home on every sheet, the rings
  *       stay, the ask dock carries the neighbourhood line, Settings > Advanced "Let asks match my notes too".
  *   W2  a person's card "Your notes on them": every line and past meeting per day, searchable, a meeting opens and goes back to the card.
  *   W3  notes through me: a meeting note answers an ask only with the person's yes; the setting off silences it.
@@ -73,7 +73,7 @@ async function w1(jakob) {
   await shot(jakob, 'u4-w1-search-panel')
   await jakob.locator('[data-search-ask-instead]').click()
   await jakob.locator('.query-dock').waitFor({ timeout: 5_000 })
-  ok('W1 "Call into your web instead" opens the ask dock', true)
+  ok('W1 "Ask your web instead" opens the ask dock', true)
   ok('W1 the dock carries the neighbourhood line and the scope', /like a neighbourhood, just online and much faster/.test(await jakob.locator('.query-dock').innerText()) && /opportunities, resources and wants/.test(await jakob.locator('.query-dock').innerText()))
   await jakob.locator('.query-dock .x').click()
   await tab(jakob, 'Record')
@@ -156,9 +156,9 @@ async function w3(jakob, anna) {
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await connect(jakob, anna, 'Anna', true)
   await tab(anna, 'Web')
-  await anna.getByRole('button', { name: 'Call into your web', exact: true }).click()
+  await anna.getByRole('button', { name: 'Ask your web', exact: true }).click()
   await anna.locator('.query-dock textarea').fill('Does anyone know a sauna raft?')
-  await anna.getByRole('button', { name: 'Call into my web' }).click()
+  await anna.getByRole('button', { name: 'Ask my web' }).click()
   await jakob.locator('.overlay.on').waitFor({ timeout: 25_000 })
   const prompt = await jakob.locator('.overlay').innerText()
   ok('W3 the meeting note goes in front of Jakob for his yes (never auto-answered)', /Anna asks/.test(prompt) && /Cold-water sauna raft/.test(prompt), prompt)
@@ -183,20 +183,20 @@ async function w3(jakob, anna) {
   const typed = (await record(jakob)).meetings.find((m) => (m.lines ?? []).some((l) => /Pickleball court at the lake/.test(l.text)))
   ok('W3 a Review save stores each meeting line WITH its audience (the typed General note: Only me)', typed?.lines.find((l) => /Pickleball/.test(l.text))?.audience === 'me', JSON.stringify(typed?.lines))
   await tab(anna, 'Web')
-  await anna.getByRole('button', { name: /Call into your web again|Close/ }).first().click().catch(() => {})
-  await anna.getByRole('button', { name: 'Call into your web', exact: true }).click().catch(() => {})
+  await anna.getByRole('button', { name: /Ask your web again|Close/ }).first().click().catch(() => {})
+  await anna.getByRole('button', { name: 'Ask your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a pickleball court at the lake?')
-  await anna.getByRole('button', { name: 'Call into my web' }).click()
+  await anna.getByRole('button', { name: 'Ask my web' }).click()
   await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   ok('W3 the Only me General note never answers: Jakob is not asked, Anna sees no match', (await jakob.locator('.overlay.on').count()) === 0 && /No match/.test(await anna.locator('.card.asked').first().innerText()))
   // the setting off: nothing reaches him
   await patch(jakob, 's.asksMatchNotes = false', {})
   await jakob.reload()
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-  await anna.getByRole('button', { name: /Call into your web again|Close/ }).first().click().catch(() => {})
-  await anna.getByRole('button', { name: 'Call into your web', exact: true }).click().catch(() => {})
+  await anna.getByRole('button', { name: /Ask your web again|Close/ }).first().click().catch(() => {})
+  await anna.getByRole('button', { name: 'Ask your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a sauna raft anywhere?')
-  await anna.getByRole('button', { name: 'Call into my web' }).click()
+  await anna.getByRole('button', { name: 'Ask my web' }).click()
   await anna.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
   ok('W3 with the setting off Jakob is not asked and Anna sees no match', (await jakob.locator('.overlay.on').count()) === 0 && /No match/.test(await anna.locator('.card.asked').first().innerText()))
 }

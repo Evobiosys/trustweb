@@ -137,7 +137,7 @@ const [FIRST_ASK, SILENT_ASK, SILENT_WHAT] = ctx === DemoContext.Otf
   ? ['Does anyone know a lawyer for activists?', 'Does anyone know a driver at the border?', 'a contact for exactly that']
   : ['Does anyone have loudspeakers I could borrow?', 'Does anyone have a place for visiting friends?', 'one']
 const liveSteps = h('div', 'live-steps', `<h2>Try it on the live phones below</h2><div class="steps">${[
-  `<b>1.</b> Type a name on the first phone and start it, then <b>Add a device</b> (bottom right; it is called Jonas unless you rename it). On the second phone, tap <b>Call into your web</b> and ask "${FIRST_ASK}"`,
+  `<b>1.</b> Type a name on the first phone and start it, then <b>Add a device</b> (bottom right; it is called Jonas unless you rename it). On the second phone, tap <b>Ask your web</b> and ask "${FIRST_ASK}"`,
   '<b>2.</b> The first phone shows the ask at once, with the line that matched. Its owner chooses: share, or not.',
   '<b>3.</b> After the 30-second window the second phone shows what was shared, or "No match". A decline looks exactly like no match.',
   `<b>4.</b> Now ask "${SILENT_ASK}" The first phone noted ${SILENT_WHAT}, shared with nobody: it stays silent.`,

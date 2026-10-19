@@ -70,12 +70,12 @@ async function setPassOn(page, name, on) {
 /** Ann's ask with the reach chosen in the dock; resolves with the result card's text and how long it took. */
 async function ask(page, text, reachChoice) {
   await tab(page, 'Web')
-  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
+  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Ask your web', exact: true }).click()
   await page.locator('.query-dock').waitFor({ timeout: 5_000 })
   if (reachChoice) await page.locator(`.query-dock [data-reach-choice="${reachChoice}"]`).click()
   await page.locator('.query-dock textarea').fill(text)
   const t0 = Date.now()
-  await page.getByRole('button', { name: 'Call into my web' }).click()
+  await page.getByRole('button', { name: 'Ask my web' }).click()
   // Wave 6h: the asker waits 180 s plus 120 s per extra step, so a three-step ask (the cycle) settles after up to 420 s.
   await page.locator('.card.asked .outcome').waitFor({ timeout: 480_000 })
   return { text: await page.locator('.card.asked').innerText(), ms: Date.now() - t0 }
@@ -148,7 +148,7 @@ async function main() {
 
     // the dock's chooser
     await tab(ann, 'Web')
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     ok('"How far?": my contacts by default, five choices', (await ann.locator('[data-reach-choice]').count()) === 5
       && (await ann.locator('[data-reach-choice="contacts"]').getAttribute('aria-checked')) === 'true' && !('askReach' in (await record(ann))))
     await ann.locator('[data-reach-choice="custom"]').click()
@@ -185,7 +185,7 @@ async function main() {
 
     // 2. my contacts only (the default)
     await ann.locator('.query-dock .x').click()
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     const q2 = 'Anyone with a ladder, just my contacts?'
     const r2 = await ask(ann, q2, 'contacts')
     ok('maxHops 1: nothing comes back', /No match|nothing/i.test(r2.text) && !r2.text.includes(LADDER), r2.text)
@@ -195,7 +195,7 @@ async function main() {
     // 3. Ben's pass-on off: nothing, at the same moment as 1
     await setPassOn(ben, 'Ann', false)
     await ann.locator('.query-dock .x').click()
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     const q3 = 'Ladder again, Ben not passing it on?'
     const r3 = await ask(ann, q3, 'fof')
     ok('Ben\'s "Pass their asks on" off: nothing comes back', !r3.text.includes(LADDER), r3.text)
@@ -207,7 +207,7 @@ async function main() {
     await connect(cleo, ann, 'Ann', false)
     ok('now a triangle', (await record(ann)).peers.length === 2 && (await record(cleo)).peers.length === 2)
     await ann.locator('.query-dock .x').click().catch(() => {})
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     const q4 = 'Ladder in a circle of friends?'
     const cleoSaw4 = answerAsk(cleo, true)
     const annSaw4 = ann.locator('.overlay.on').waitFor({ timeout: 100_000 }).then(() => true).catch(() => false)
@@ -232,7 +232,7 @@ async function main() {
     await until(async () => (await ann.locator('.sheet.on').count()) === 0, 5_000)
     await tab(ann, 'Web')
     await ann.locator('.query-dock .x').click().catch(() => {})
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     ok('direct only: the chooser is held at "My contacts"', await ann.locator('[data-reach-choice="fof"][disabled]').count() === 1)
     const q5 = 'Ladder, direct contacts only?'
     const cleoSaw5 = answerAsk(cleo, false)
