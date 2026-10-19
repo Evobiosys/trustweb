@@ -135,7 +135,8 @@
   {#if toSort > 0}<button class="btn small sort-banner" data-action="sort-settings" onclick={openSort}>{S.sortBanner(toSort)}</button>{/if}
 
   {#if store.crm.hiddenPeople?.length}
-    <h3 class="screen-title" data-part="hidden-title" data-archive>{S.hiddenTitle(store.crm.hiddenPeople.length)}</h3>
+    <details class="archive" data-part="archive">
+    <summary><h3 class="screen-title" data-part="hidden-title" data-archive>{S.hiddenTitle(store.crm.hiddenPeople.length)}</h3></summary>
     <p class="muted">{S.hiddenHint}</p>
     {#each store.crm.hiddenPeople as h (h.id)}
       <p class="line" data-part="hidden">{h.name.trim() || h.id}
@@ -148,6 +149,7 @@
         {/if}
       </p>
     {/each}
+    </details>
   {/if}
 
   <h3 class="screen-title">{S.activityTitle}</h3>

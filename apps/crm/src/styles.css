@@ -45,6 +45,10 @@ h1,h2,h3{font-family:Optima,Candara,"Gill Sans","Segoe UI",sans-serif; font-weig
 .top-btns{display:flex; gap:8px; flex-shrink:0}
 .hdr-icon{width:40px; height:40px; border:0; border-radius:50%; background:var(--card); color:var(--ink); display:flex; align-items:center; justify-content:center; flex-shrink:0}
 .title-row{display:flex; align-items:center; justify-content:space-between}
+.archive>summary{cursor:pointer; list-style:none}
+.archive>summary::-webkit-details-marker{display:none}
+.archive>summary h3::after{content:' ▸'}
+.archive[open]>summary h3::after{content:' ▾'}
 .hdr-icon[aria-current="page"]{background:var(--teal); color:#fff}
 .top h1{font-size:24px}
 .source{font-size:12.5px; color:var(--ink-soft); margin-top:2px}
