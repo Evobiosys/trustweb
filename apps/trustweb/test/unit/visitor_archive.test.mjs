@@ -1,6 +1,6 @@
 /** Wave 16 visitor archive: the add sheet's button label, the clickable toast, the declined invite's archive entry. */
 import { addLabel } from '../../src/connect_add_view.ts'
-import { Ring } from '../../src/model.ts'
+import { archivedInvite, Ring } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
 import { createToast } from '../../src/toast.ts'
 
@@ -58,5 +58,17 @@ describe('toast onClick', () => {
     show(S.archivedToast, { mark: 'archivedToast' })
     show('Other.')
     expect('archivedToast' in t.dataset).toBe(false)
+  })
+})
+
+describe('declined invitation: the Archive entry', () => {
+  const link = { did: 'did:peer:2.Ez6Lx', from: { id: 'jakob1', displayName: 'Jakob' } }
+  it('is the inviter on Intending, not connected, with the link kept through a save (Restore reopens the add sheet from it)', () => {
+    const p = archivedInvite(link, 'p1', 5)
+    expect(p).toMatchObject({ id: 'p1', name: 'Jakob', ring: Ring.Intending, metAt: 5, lines: [] })
+    expect(p.peerId).toBeUndefined()
+    expect(p.reachedOut).toBeUndefined()
+    const stored = JSON.parse(JSON.stringify({ id: p.id, name: p.name, person: p }))   // crm hiddenPeople entry, as persisted
+    expect(stored.person.pendingInvite).toEqual(link)
   })
 })

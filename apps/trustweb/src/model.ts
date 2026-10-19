@@ -12,6 +12,7 @@
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
+import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
@@ -377,6 +378,16 @@ export interface Person {
   knows?: string[]
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
+  /**
+   * Wave 16 (Jakob 2026-10-19): only on a person in the Web Curator's Archive: an invitation link set aside with "Not now", never
+   * connected. Restore reopens its add sheet (main.ts restorePerson); the person never sits in the web. Absent: none.
+   */
+  pendingInvite?: ConnectLinkParams
+}
+
+/** The Archive entry for a declined invitation: the inviter on Intending, not connected (no peerId), the link kept for Restore. */
+export function archivedInvite(link: ConnectLinkParams, id: string, now: number): Person {
+  return { id, name: link.from.displayName, context: '', ring: Ring.Intending, metAt: now, lines: [], pendingInvite: link }
 }
 
 /** The five steps of the lean score on an acquaintance. */

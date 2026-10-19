@@ -1650,7 +1650,12 @@ export const S = {
   // Wave 16 (Jakob 2026-10-19): a visitor who joined through a link is connected only by "Add to my web".
   connectAddLeadInvite: 'Adding them lets them know you want to connect. Choose how close you are; you can change it any time on their card.',
   connectAddAsIntended: 'Add as intended',
-  inviteCardTitle: (name: string) => `Add ${name || 'this person'} to your web`,
+  // Wave 16 (Jakob 2026-10-19): the person card's Archive (default) and Delete; the Archive lives in the Web Curator's Settings.
+  personArchive: 'Archive',
+  personDelete: 'Delete',
+  personDeleteAsk: 'Delete for good?',
+  personDeleteYes: 'Yes',
+  personDeleteNo: 'No',
   connectAddNamePh: 'Name',
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',

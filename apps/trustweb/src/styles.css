@@ -943,3 +943,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .net-pop[hidden]{display:none}
 .net-legend{display:block; margin:4px 0; opacity:.7}
 .net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}
+/* Wave 16 (Jakob 2026-10-19): after an archive the Web header's Curator icon shows where the Archive lives; the card's Archive above a quiet Delete */
+.search-btn.pulse{outline:2px solid var(--electric); outline-offset:2px; animation:curator-pulse 1s ease-out 4}
+@keyframes curator-pulse{0%{box-shadow:0 0 0 0 var(--electric)} 100%{box-shadow:0 0 0 12px transparent}}
+@media (prefers-reduced-motion:reduce){ .search-btn.pulse{animation:none} }
+.archive-row{display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:12px}
+.archive-row .quiet{color:var(--ink-soft); font-weight:400}
