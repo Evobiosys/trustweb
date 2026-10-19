@@ -1292,7 +1292,7 @@ export const S = {
   apkHintNotNow: 'Not now',
   apkHintLaterToast: 'You can still find this at the top of Settings.',
   apkDlTitle: 'Check your Downloads folder on your phone',
-  apkDlBody: 'This is a sideloaded release, not from the Google Play Store, so your phone may ask you to allow installing from this source once.',
+  apkDlBody: 'This is a sideloaded release, not from the Google Play Store, so maybe you need a one-time permission to install from this source.',
   apkDlAfterBefore: 'Afterwards we recommend switching that permission off again, so other apps, which you cannot check the way you can ',
   apkDlCheckOurs: 'check ours (open source on GitHub)',
   apkDlAfterAfter: ', and which might carry malware, are stopped.',
