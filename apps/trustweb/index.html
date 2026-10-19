@@ -10,11 +10,12 @@
   <title>TrustWeb</title>
   <style>
     /* Wave 16: what shows before the bundle runs; the start screen's colours, so the swap is quiet. */
-    [data-loading]{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#F5F0E8;color:#1F2A28;font-family:Inter,Seravek,"Avenir Next","Segoe UI",system-ui,sans-serif}
+    [data-loading]{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#26241F;color:#F1EEE6;font-family:Inter,Seravek,"Avenir Next","Segoe UI",system-ui,sans-serif}
     [data-loading] .logo{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:34px;color:#fff;background:linear-gradient(135deg,#C2573A,#2F6F74)}
     [data-loading] b{font-size:34px;font-weight:600}
-    [data-loading] span{color:#5A6B66;font-size:14px}
-    @media (prefers-color-scheme:dark){[data-loading]{background:#26241F;color:#F1EEE6}[data-loading] span{color:#BDB6A8}}
+    [data-loading] span{color:#BDB6A8;font-size:14px}
+    /* Dark is the app's default; light only when the person chose it (html[data-theme="light"], set by main.ts). */
+    html[data-theme="light"] [data-loading]{background:#F5F0E8;color:#1F2A28} html[data-theme="light"] [data-loading] span{color:#5A6B66}
   </style>
 </head>
 <body>

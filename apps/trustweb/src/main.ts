@@ -1082,6 +1082,7 @@ let friendsTimer: ReturnType<typeof setTimeout> | undefined
 function hideNotice(): void { clearTimeout(friendsTimer); friendsEl.hidden = true }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
+  friendsEl.classList.remove('stack')
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -1224,6 +1225,7 @@ function offerApkHint(tries = 40): void {
       ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
       : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
     friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
+    friendsEl.classList.add('stack')
   }, 4500)
 }
 
