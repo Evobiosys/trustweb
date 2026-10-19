@@ -3,8 +3,8 @@
  * with its own storage record (store.ts) and its own relay identity, paired
  * through the real one-scan connect link.
  *
- * Three demo contexts (DemoContext, chosen by the page's own path -- see
- * solo.ts detectContext()), each its own small, deliberately uncrowded
+ * Four demo contexts (DemoContext, chosen by the page's own path or its
+ * ?for= parameter -- see solo.ts detectContext()), each its own small, deliberately uncrowded
  * network (5-7 people) with queryable-line variety across different Tag
  * types and rings, so a funder trying the Query flow has several different
  * things to ask about without the "People" list feeling like a phonebook:
@@ -17,6 +17,12 @@
  *   - Ea       (ea-demo/):        fictional effective-giving/EA conference
  *                                 personas (researcher, fund manager,
  *                                 community organizer, ...), no real people.
+ *   - Otf      (demo/?for=otf):   fictional internet-freedom personas (journalist,
+ *                                 digital-rights lawyer, security trainer, exiled
+ *                                 blogger, press-freedom NGO), no real people; for
+ *                                 Open Technology Fund reviewers (2026-10-19). Its
+ *                                 "Only me" line (a driver at the border) is the
+ *                                 probe that stays silent, like Maya's spare room.
  *
  * Maya (holder) always carries two things she can lend or offer, Loudspeakers
  * and "Couch when you are in Vienna" (wave 5, owner 2026-10-07: things beyond
@@ -91,12 +97,13 @@ export enum DemoContext {
   Generic = 'generic',
   Emergent = 'emergent',
   Ea = 'ea',
+  Otf = 'otf',
 }
 
-export const DEMO_CONTEXTS: readonly DemoContext[] = [DemoContext.Generic, DemoContext.Emergent, DemoContext.Ea]
+export const DEMO_CONTEXTS: readonly DemoContext[] = [DemoContext.Generic, DemoContext.Emergent, DemoContext.Ea, DemoContext.Otf]
 
 export function isDemoContext(v: string | null): v is DemoContext {
-  return v === DemoContext.Generic || v === DemoContext.Emergent || v === DemoContext.Ea
+  return v !== null && (DEMO_CONTEXTS as readonly string[]).includes(v)
 }
 
 const DAY = 86_400_000
@@ -201,10 +208,34 @@ function eaPeople(now: number): Person[] {
   ]
 }
 
+function otfPeople(now: number): Person[] {
+  return [
+    person('Leyla Haddad', 'investigative journalist, met at a digital-security training', Ring.Close, now - 400 * DAY, [
+      line('Looking for a trusted fixer for a reporting trip', Tag.Looking, Audience.Friends, now - 12 * DAY),
+    ]),
+    person('Daniel Okafor', 'digital-rights lawyer, met at a press-freedom conference', Ring.Acquaintance, now - 120 * DAY, [
+      line('Lawyer who advises activists after a device seizure, pro bono', Tag.Offer, Audience.FriendsOfFriends, now - 30 * DAY),
+    ]),
+    person('Mira Petrova', 'security trainer, met at a newsroom workshop', Ring.Friend, now - 250 * DAY, [
+      line('Runs secure-messaging trainings for newsrooms', Tag.Resource, Audience.FriendsOfFriends, now - 45 * DAY),
+    ]),
+    person('Arash Karimi', 'exiled blogger, met at a digital-rights meetup', Ring.Friend, now - 600 * DAY, [
+      line('Can vouch for two translators who work with exile media', Tag.Talent, Audience.FriendsOfFriends, now - 20 * DAY),
+      // Shared with nobody: the ask for it stays silent (the "Only me" probe of this context, see the module doc).
+      line('Knows a driver who gets people across the border safely', Tag.Note, Audience.OnlyMe, now - 20 * DAY),
+    ]),
+    person('Sofía Ramírez', 'program officer at a press-freedom NGO', Ring.Acquaintance, now - 90 * DAY, [
+      line('Small emergency fund for journalists at risk', Tag.Resource, Audience.FriendsOfFriends, now - 8 * DAY),
+    ]),
+    jakobPerson(now),
+  ]
+}
+
 function peopleFor(context: DemoContext, now: number): Person[] {
   switch (context) {
     case DemoContext.Emergent: return emergentPeople(now)
     case DemoContext.Ea: return eaPeople(now)
+    case DemoContext.Otf: return otfPeople(now)
     case DemoContext.Generic: default: return genericPeople(now)
   }
 }

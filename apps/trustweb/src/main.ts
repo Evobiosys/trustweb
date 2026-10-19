@@ -177,6 +177,9 @@ import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersi
 import { createToast, type ToastOpts } from './toast'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
+// Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
+// imports walkthrough too) ran this whole app without an #app and stayed blank (live 2026-10-19). test/scan_demo_entries.mjs (CI, after the build) guards it.
+import { mountWalkthrough } from './walkthrough'
 
 enum Screen {
   Start = 'start',
@@ -747,7 +750,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
     el('span', { class: 'add-device-plus', 'aria-hidden': 'true' }, ['+']),
     el('span', {}, [S.addDeviceShort]),
   ])
-  const see = el('button', { class: 'see-action', onclick: () => void openWalkthrough() }, [S.seeInAction])
+  const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
   root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle)
 }
@@ -755,10 +758,9 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
 /**
  * Desktop, outside the phone: the scripted walkthrough of the demo page as an
  * overlay over this page (owner 2026-10-05: may be dropped if it does not look
- * good). Loaded on demand; Escape or Close ends it and pauses playback.
+ * good). Escape or Close ends it and pauses playback.
  */
-async function openWalkthrough(): Promise<void> {
-  const { mountWalkthrough } = await import('./walkthrough')
+function openWalkthrough(): void {
   const panel = el('div', { class: 'wt-panel' })
   const layer = el('div', { class: 'wt-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': S.seeInAction })
   const close = (): void => { stop(); layer.remove(); document.removeEventListener('keydown', onKey) }

@@ -4,7 +4,7 @@
  *   Added scope (a live phone): only the ids "Show demo content" recorded; never matched by name or text.
  */
 import { Audience, LineStatus, Ring, Tag } from '../../src/model.ts'
-import { DemoContext, Persona, seedState } from '../../src/seed.ts'
+import { DEMO_CONTEXTS, DemoContext, Persona, seedState } from '../../src/seed.ts'
 import { demoContentForLivePhone } from '../../src/demo_to_live.ts'
 import { DismissScope, removeDummyContent } from '../../src/demo_dismiss.ts'
 
@@ -21,7 +21,7 @@ function demoPhone(ctx = DemoContext.Generic) {
 }
 
 describe('Dismiss them on an embedded demo phone (Seeded)', () => {
-  for (const ctx of [DemoContext.Generic, DemoContext.Emergent, DemoContext.Ea]) {
+  for (const ctx of DEMO_CONTEXTS) {
     it(`takes the seeded web of the ${ctx} demo and leaves what the visitor added and the connected phone`, () => {
       const s = demoPhone(ctx)
       const seeded = seedState(Persona.Holder, 0, ctx)

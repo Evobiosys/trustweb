@@ -15,7 +15,7 @@
  * a camera would open a scanned code, so pairing, asks and consent all go
  * over the live relay.
  */
-import { DemoContext, PERSONA_NAMES, Persona } from './seed'
+import { DemoContext, PERSONA_NAMES, Persona, isDemoContext } from './seed'
 import { storageKey } from './store'
 import { mountWalkthrough } from './walkthrough'
 import { demoInstallBar } from './demo_install_button'
@@ -25,9 +25,13 @@ import { S } from './strings'
 /**
  * One script for four HTML entries (solo.html at the app root, plus demo/,
  * emergent-demo/ and ea-demo/, see vite.config.mjs): the context comes from
- * this page's own path and is forwarded as `ctx` to every phone.
+ * ?for=<context> (demo.trustweb.one/?for=otf keeps its query through the redirect,
+ * so a new context needs no new path and no Caddy rule), else from this page's own
+ * path, and is forwarded as `ctx` to every phone.
  */
 function detectContext(): DemoContext {
+  const wanted = new URLSearchParams(location.search).get('for')
+  if (isDemoContext(wanted)) return wanted
   const path = location.pathname
   if (path.includes('/emergent-demo')) return DemoContext.Emergent
   if (path.includes('/ea-demo')) return DemoContext.Ea
@@ -68,6 +72,10 @@ iframe{width:390px;max-width:calc(100vw - 32px);height:780px;border:0;border-rad
 .restart svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .restart:focus-visible{outline:3px solid #12A8E3;outline-offset:3px}
 @media (max-width:600px){.restart{position:static;margin:14px auto 0}}
+.contexts{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;margin-top:12px;font-size:13px;color:var(--soft)}
+.contexts a{color:var(--ink);text-decoration:none;border:1.5px solid color-mix(in srgb,var(--soft) 45%,transparent);border-radius:999px;padding:4px 12px;font-weight:600}
+.contexts a[aria-current="page"]{background:var(--violet);border-color:var(--violet);color:#fff}
+.contexts a:focus-visible{outline:3px solid #12A8E3;outline-offset:2px}
 .dock{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;align-items:flex-end;gap:10px;z-index:10}
 .dock button{font:inherit;font-weight:700;font-size:14.5px;border:0;border-radius:999px;padding:12px 20px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .dock .add{background:var(--card);color:var(--ink);box-shadow:0 8px 24px rgba(36,27,46,.25)}
@@ -105,17 +113,34 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 }
 
 const phones = h('div', 'phones', '')
-const head = h('div', 'head', '<h1>TrustWeb demo</h1><p>TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.</p>')
+const PHONE_HINT = 'Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.'
+/** The intro under the title; the internet-freedom context says what the app does for people who must not be seen asking. */
+const INTRO = ctx === DemoContext.Otf
+  ? 'For journalists, human rights defenders and organizers who need a fixer, a lawyer or a translator through people they already trust, without broadcasting the ask. What you know about people stays on your phone; a question travels, and only answers its holder approves ever leave it. A decline looks exactly like "no match". ' + PHONE_HINT
+  : 'TrustWeb lets you ask the people you know for help; only answers they approve ever leave their phone. ' + PHONE_HINT
+/** The same app with another seeded web (seed.ts): one tap to the network a visitor recognises (owner 2026-10-19: not only EA, also OTF). */
+const CONTEXT_LINKS: readonly [DemoContext, string, string][] = [
+  [DemoContext.Generic, 'Everyday', 'demo/'],
+  [DemoContext.Otf, 'Internet freedom', 'demo/?for=otf'],
+  [DemoContext.Ea, 'Effective giving', 'ea-demo/'],
+  [DemoContext.Emergent, 'Emergent Ventures', 'emergent-demo/'],
+]
+const contexts = CONTEXT_LINKS.map(([c, label, href]) => `<a href="${BASE}${href}"${c === ctx ? ' aria-current="page"' : ''}>${label}</a>`).join('')
+const head = h('div', 'head', `<h1>TrustWeb demo</h1><p>${INTRO}</p><nav class="contexts" aria-label="Demo network"><span>Seeded web:</span>${contexts}</nav>`)
 
 // "See it in action": the walkthrough and, under it, what to try on the live phones.
 const actionSlot = h('section', 'action-slot', '')
 actionSlot.hidden = true
 const walkSlot = h('div', '', '')
+/** The asks to try; the internet-freedom web answers its own (seed.ts otfPeople, tested in trustweb_match.test.ts). */
+const [FIRST_ASK, SILENT_ASK, SILENT_WHAT] = ctx === DemoContext.Otf
+  ? ['Does anyone know a lawyer for activists?', 'Does anyone know a driver at the border?', 'a contact for exactly that']
+  : ['Does anyone have loudspeakers I could borrow?', 'Does anyone have a place for visiting friends?', 'one']
 const liveSteps = h('div', 'live-steps', `<h2>Try it on the live phones below</h2><div class="steps">${[
-  '<b>1.</b> Type a name on the first phone and start it, then <b>Add a device</b> (bottom right; it is called Jonas unless you rename it). On the second phone, tap <b>Call into your web</b> and ask "Does anyone have loudspeakers I could borrow?"',
+  `<b>1.</b> Type a name on the first phone and start it, then <b>Add a device</b> (bottom right; it is called Jonas unless you rename it). On the second phone, tap <b>Call into your web</b> and ask "${FIRST_ASK}"`,
   '<b>2.</b> The first phone shows the ask at once, with the line that matched. Its owner chooses: share, or not.',
   '<b>3.</b> After the 30-second window the second phone shows what was shared, or "No match". A decline looks exactly like no match.',
-  '<b>4.</b> Now ask "Does anyone have a place for visiting friends?" The first phone noted one, shared with nobody: it stays silent.',
+  `<b>4.</b> Now ask "${SILENT_ASK}" The first phone noted ${SILENT_WHAT}, shared with nobody: it stays silent.`,
 ].map((s) => `<div>${s}</div>`).join('')}</div>`)
 actionSlot.append(walkSlot, liveSteps)
 
