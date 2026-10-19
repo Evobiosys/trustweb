@@ -1,6 +1,8 @@
 /**
  * Wave 16: the visitor's notification hint. A visitor opens a connect link, sees the invite, joins; Android gets the APK notice,
  * iPhone the coming-soon notice, desktop neither. "Not now" holds across a reload; Settings keeps the Android card regardless.
+ * Visitor flow: after join the web is empty under "Add Ada to your web?"; only Add connects; the hint comes before the demo card;
+ * "Not now" toasts; the APK link opens [data-apk-downloaded]; the Web header has the gear, no ⋮.
  * TW_SHOTS=<dir> saves 390x844 screenshots (default DEVLOG/wave16/screens/visitor-apk-hint).
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<repo>/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/index.mjs npx tsx ../trustweb/test/e2e/visitor_apk_hint.mjs
@@ -59,7 +61,7 @@ async function visitor(browser, link, ua, name, errors) {
   return { ctx, page, join: async () => { await page.getByLabel('Your first name').fill(name); await page.locator('.start-form .btn-electric').click() } }
 }
 
-/** The cards that come first for a visitor: the closeness sheet ("Add Ada to your web?") and the demo-content card; the hint waits behind both. */
+/** The visitor's add sheet ("Add Ada to your web?"): Add connects, then their card opens; closed here. */
 async function settle(page) {
   await page.locator('.sheet.on [data-connect-add]').click({ timeout: 20_000 })
   // a tap elsewhere answers the demo-content card with No, so it is usually gone already
@@ -106,14 +108,28 @@ async function main() {
     ok('the loading screen is gone once the app drew', await count(a.page, '[data-loading]') === 0)
     ok('the invite shows', /Ada/.test(await a.page.locator('.invite').innerText()))
     await shot(a.page, '02-invite.png')
+    await a.page.route('https://trustweb.one/apk', (r) => r.fulfill({ status: 200, headers: { 'content-type': 'application/vnd.android.package-archive', 'content-disposition': 'attachment; filename="trustweb.apk"' }, body: 'apk' }))
     await a.join()
-    await settle(a.page)
-    await a.page.locator('[data-apk-hint]').waitFor({ timeout: 20_000 })
+    await a.page.locator('.sheet.on [data-connect-add-title]').waitFor({ timeout: 15_000 })
+    ok('after join: the sheet "Add Ada to your web?"', (await a.page.locator('.sheet.on [data-connect-add-title]').innerText()) === 'Add Ada to your web?')
+    ok('the web has no person until Add', await count(a.page, '.node[data-pid]') === 0)
+    await a.page.locator('[data-apk-hint]').waitFor({ timeout: 5_000 })
     const note = a.page.locator('.demo-friends')
-    ok('Android: the APK notice with the download link', await note.locator('a[href="https://trustweb.one/apk"]').count() === 1 && /Get notifications/.test(await note.innerText()))
+    ok('the APK hint is up at once, before the demo card', !/No thanks/.test(await note.innerText()))
+    await a.page.waitForTimeout(800)
+    await shot(a.page, '06-add-sheet.png')
+    await settle(a.page)
+    await a.page.locator('.node[data-pid]').first().waitFor({ timeout: 15_000 })
+    ok('after Add: Ada is in the web', await count(a.page, '.node[data-pid]') === 1)
+    ok('the visitor sees no yellow-dot legend', await count(a.page, '[data-legend-reach-out]') === 0)
+    ok('Web header: the gear, no ⋮', await count(a.page, '.hdr [aria-label="Settings"]') === 1 && await count(a.page, '.hdr-btn.more') === 0)
+    ok('Android: the APK notice with the download link', await note.locator('a[href="https://trustweb.one/apk"]').count() === 1 && /Get reliable notifications/.test(await note.innerText()))
     ok('Android: no iPhone notice', await count(a.page, '[data-ios-soon]') === 0)
     await shot(a.page, '03-banner-android.png')
     await note.getByRole('button', { name: 'Not now' }).click()
+    ok('"Not now" toasts', /You can still find this at the top of Settings\./.test(await a.page.locator('.toast.on').innerText()))
+    ok('then the demo card', /No thanks/.test(await note.innerText()))
+    await note.getByRole('button', { name: 'No thanks' }).click()
     ok('"Not now" hides it', await note.isHidden())
     await a.page.reload()
     await a.page.locator('nav.tabs').waitFor({ timeout: 15_000 })
@@ -127,6 +143,12 @@ async function main() {
       && /Shown until the app is installed/.test(await a.page.locator('[data-apk-settings-hint]').innerText()))
     await a.page.waitForTimeout(800)
     await shot(a.page, '05-settings-android.png')
+    await a.page.locator('[data-apk-settings-hint] a[href="https://trustweb.one/apk"]').click()
+    await a.page.locator('.sheet.on [data-apk-downloaded]').waitFor({ timeout: 5_000 })
+    ok('Download opens [data-apk-downloaded] with the GitHub link', /Check your Downloads folder on your phone/.test(await a.page.locator('[data-apk-downloaded]').innerText())
+      && await count(a.page, '[data-apk-downloaded] a[href="https://github.com/Evobiosys/trustweb"][target="_blank"]') === 1)
+    await a.page.waitForTimeout(400)
+    await shot(a.page, '07-downloaded.png')
     await a.ctx.close()
 
     // 3. iPhone visitor
@@ -137,7 +159,7 @@ async function main() {
     ok('iPhone: the coming-soon notice, no APK link', /coming soon/.test(await i.page.locator('.demo-friends').innerText()) && await count(i.page, '.demo-friends a') === 0 && await count(i.page, '[data-apk-hint]') === 0)
     await shot(i.page, '04-banner-ios.png')
     await i.page.locator('.demo-friends').getByRole('button', { name: 'Got it' }).click()
-    ok('"Got it" hides it', await i.page.locator('.demo-friends').isHidden())
+    ok('"Got it" hides it, then the demo card', await count(i.page, '[data-ios-soon]') === 0 && /No thanks/.test(await i.page.locator('.demo-friends').innerText()))
     await openSettings(i.page)
     ok('iPhone: no Settings card', await count(i.page, '[data-apk-settings-hint]') === 0)
     await i.ctx.close()

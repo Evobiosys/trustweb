@@ -65,6 +65,11 @@ export function ringColor(p: Pick<Person, 'ring' | 'fields'> & { reachedOut?: Pe
   return RING_COLORS.family[ringSlot(p) as 'close']
 }
 
+/** Wave 16 (Jakob 2026-10-19): the yellow-dot legend "i" only on a phone with a username link, once someone reached out to it. */
+export function reachOutLegendShown(s: Pick<AppState, 'connectCode' | 'people'>): boolean {
+  return Boolean(s.connectCode) && s.people.some((p) => p.reachedOut === 'received')
+}
+
 /** The web search engines of "Search the web instead" (wave 2, B8; web_search.ts). A fixed set. */
 export enum SearchEngine {
   Google = 'google',

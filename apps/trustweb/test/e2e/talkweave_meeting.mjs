@@ -82,8 +82,7 @@ async function main() {
     await page.getByRole('button', { name: 'Start on this phone' }).click()
     // Reaching TalkWeave directly (no same-origin proxy) is opt-in, in Settings.
     if (process.env.TW_DIRECT !== '0') {
-      await page.getByRole('button', { name: 'More' }).click()
-      await page.locator('.menu-item', { hasText: 'Settings' }).click()
+      await page.locator('.hdr [aria-label="Settings"]').click()
       await page.locator('.radio[data-transcription="talkweave"]').click()
       await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     }

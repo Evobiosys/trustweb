@@ -44,9 +44,8 @@ const api = (p, init = {}) => fetch(`http://127.0.0.1:${SWISS}${p}`, { ...init, 
 
 async function openSettings(page) {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
-  await page.getByRole('button', { name: 'More' }).click()
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
-  await page.locator('.menu-item', { hasText: 'Settings' }).click()
+  await page.locator('.hdr [aria-label="Settings"]').click()
   await page.locator('[data-hosting-toggle]').waitFor({ timeout: 10_000 })
 }
 async function saveMemo(page, what) {

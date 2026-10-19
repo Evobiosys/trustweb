@@ -129,8 +129,7 @@ async function partF(browser, base) {
     await shot(page, `f_dock_${installed ? 'installed' : 'browser'}_${label.replace(/[^a-z]+/gi, '-')}.png`)
     t.ok(`f: ${label}: "See it in action" stays`, await page.locator('.see-action').isVisible())
     await page.locator('nav.tabs button', { hasText: 'Web' }).click()
-    await page.getByRole('button', { name: 'More' }).click()
-    await page.getByText('Settings', { exact: true }).first().click().catch(() => {})
+    await page.locator('.hdr [aria-label="Settings"]').click()
     await page.locator('.sheet.on').waitFor({ timeout: 5_000 })
     const settingsHasDemo = await page.locator('.sheet.on').getByText('Show demo content').count() > 0
     t.ok(`f: ${label}: Settings ${installed ? 'offers no' : 'offers'} "Show demo content"`, settingsHasDemo === !installed)

@@ -61,7 +61,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -118,7 +118,7 @@ import { agreementsSection } from './agreements_view'
 import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
-import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, setUpInstall } from './install'
+import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
@@ -663,6 +663,8 @@ function drawCardStack(): void {
   if (!state || screen !== Screen.Web || queryOpen || demoAccounts().some((t) => t.pending)) { cardStackEl.replaceChildren(); cardStackEl.hidden = true; return }
   const cards = stackCards(state, Date.now(), demoPhone(), quietHidden, (peerId) => Boolean(personOf(st().people, peerId)))
   drawStack(cardStackEl, cards, stackDeps)
+  const invite = inviteCard()
+  if (invite) { cardStackEl.prepend(invite); cardStackEl.hidden = false }
   for (const card of cards) if (hidesItself(card)) hideQuietLater(card.key)
 }
 
@@ -1199,6 +1201,8 @@ function apkUpdatesRow(s: AppState): HTMLElement[] {
   ]
 }
 
+const TRUSTWEB_SOURCE = 'https://github.com/Evobiosys/trustweb'
+
 /** Wave 16 (apk_hint.ts): what the hint decides from, read now. */
 function apkHintEnv(): ApkHintEnv {
   const e = currentEnv()
@@ -1210,25 +1214,35 @@ function apkHintEnv(): ApkHintEnv {
 }
 
 /**
- * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon). Seam: after offerNotifications and offerDemoContent
- * had their turn, it takes the top notice only when no other card or sheet is up, and tries again every few seconds while one is.
+ * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon), shown until dismissed (Jakob 2026-10-19). It comes FIRST
+ * (a sheet slides over it); `then` (the demo-content card) runs once it was answered, or at once when no notice applies. While another
+ * card is up it tries again every few seconds.
  */
-/** Jakob 2026-10-19: shown until dismissed. It waits only while another card is up (a sheet slides over it and it is there when the sheet closes). */
-function offerApkHint(): void {
-  setTimeout(() => {
-    if (!state || solo) return
-    const kind = apkHintKind(apkHintEnv())
-    if (!kind) return
-    if (!friendsEl.hidden) { offerApkHint(); return }
-    const android = kind === 'android'
-    const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); hideNotice() }
-    showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
-      ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
-      : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
-    friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
-    friendsEl.classList.add('stack')
-  }, 4500)
+function offerApkHint(then: () => void): void {
+  if (!state || solo) return
+  const kind = apkHintKind(apkHintEnv())
+  if (!kind) { then(); return }
+  if (!friendsEl.hidden) { setTimeout(() => offerApkHint(then), 4500); return }
+  const android = kind === 'android'
+  const answered = (): void => { hideNotice(); then() }
+  const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); answered(); if (android) toast(S.apkHintLaterToast) }
+  showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
+    ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', onclick: () => { hideNotice(); apkDownloadedSheet(then) } }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
+    : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
+  friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
+  friendsEl.classList.add('stack')
 }
+
+/** Wave 16 (Jakob 2026-10-19): the APK link opens the download and this sheet (sideloading, then the permission off again). `then` after "Got it". */
+function apkDownloadedSheet(then?: () => void): void {
+  openSheet([el('div', { 'data-apk-downloaded': '' }, [
+    el('h3', {}, [S.apkDlTitle]),
+    el('p', {}, [S.apkDlBody]),
+    el('p', {}, [S.apkDlAfterBefore, el('a', { href: TRUSTWEB_SOURCE, rel: 'noopener', target: '_blank', title: S.apkDlSource }, [S.apkDlCheckOurs]), S.apkDlAfterAfter]),
+    el('button', { class: 'btn btn-electric', onclick: () => { closeSheet(); then?.() } }, [S.apkDlOk]),
+  ])])
+}
+onApkDownload(() => apkDownloadedSheet())
 
 function offerDemoContent(): void {
   const s = state
@@ -1289,19 +1303,24 @@ function announceLink(): void {
   }
 }
 
-async function completePendingConnect(): Promise<void> {
+/** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
+async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
   if (!link || !state) return
   pendingConnect = null
+  drawCardStack()
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
-  const ring = reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance
+  const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
   const peer = await net.completeConnect(link, ring, reachOut)
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
   if (!person) {
-    person = { id: randomId(8), name: peer.displayName, context: '', ring, metAt: Date.now(), lines: [], peerId: peer.id }
+    person = { id: randomId(8), name: picked?.name || peer.displayName, context: '', ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
+  } else if (picked) {
+    if (picked.name) person.name = picked.name
+    person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (sharedNotes) {
@@ -1327,13 +1346,44 @@ async function completePendingConnect(): Promise<void> {
     if (demoLink.peer) await connectDemoPeer(demoLink.peer, person)
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
+  } else if (picked) {
+    toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
   } else {
     toast(ring === Ring.Intending ? S.personAddedToast(peer.displayName) : S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
   if (demoLink || solo) openPendingShare()
-  else openConnectAdd(peer, person, link.from.displayName)
+  else if (picked) {
+    viaCard.closed(person.id)
+    if (!openPendingShare()) personSheet(person.id)
+  } else openConnectAdd(peer, person, link.from.displayName)
+}
+
+/**
+ * Wave 16 (Jakob 2026-10-19): a visitor who joined through a link starts with an empty web and the add sheet; only "Add to my web"
+ * connects (the reach-out, as before). "Not now" keeps the invite as a card above the web until the app is reloaded.
+ */
+function offerPendingConnect(): void {
+  const link = pendingConnect
+  if (!link) return
+  drawCardStack()
+  openSheet(renderConnectAdd({
+    name: link.from.displayName,
+    ring: Ring.Intending,
+    lead: S.connectAddLeadInvite,
+    onAdd: (name, ring) => { closeSheet(); void completePendingConnect({ name, ring }) },
+    onLater: closeSheet,
+  }).nodes)
+}
+
+/** The kept invite ("Not now" on offerPendingConnect's sheet): its card reopens the sheet. */
+function inviteCard(): HTMLElement | null {
+  if (!pendingConnect || !reachOutPending || solo || demoLink) return null
+  return el('div', { class: 'stack-card', 'data-invite-card': '', role: 'group' }, [
+    el('div', { class: 'stack-head' }, [el('b', {}, [S.inviteCardTitle(pendingConnect.from.displayName)])]),
+    el('div', { class: 'stack-actions' }, [el('button', { class: 'btn btn-electric btn-sm', type: 'button', onclick: offerPendingConnect }, [S.addSave])]),
+  ])
 }
 
 /** The code carried the meeting too (notes and transcript, encrypted): open it now. True when something opened. */
@@ -1433,12 +1483,12 @@ function screenStart(): Node[] {
     screen = Screen.Web
     render()
     if (solo) showDemoFriends()
-    else offerDemoContent()
+    else offerApkHint(offerDemoContent)
     offerNotifications()
     setTimeout(() => void offerApkUpdate(), 4000)
-    offerApkHint()
     void net.start().then(announceLink).then(() => refreshPush())
-    void completePendingConnect()
+    if (invite && !solo && !demo) offerPendingConnect()
+    else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
   }
@@ -2012,13 +2062,14 @@ function screenWeb(): Node[] {
     network
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
       : ringsView(s, askMarks()),
-    s.people.some((p) => p.reachedOut) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
+    reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
   const clip = el('div', { class: 'scroll' }, [layer])
   zoomOnWeb(clip, layer)
   return [
-    header(S.webTitle, { right, more: true }),
+    // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
+    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
     ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
@@ -5017,6 +5068,9 @@ function settingsSheet(): void {
       connectionRow(),
       buildContactBox({}).el,
     ], true),
+    settingsSection('web', S.setSecWeb, [
+      el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+    ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
@@ -5593,10 +5647,9 @@ if (state && !state.testOf?.handedOverAt) {
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
-  offerDemoContent()
+  offerApkHint(offerDemoContent)
   offerNotifications()
   setTimeout(() => void offerApkUpdate(), 4000)
-  offerApkHint()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).

@@ -300,11 +300,10 @@ async function main() {
     await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
 
     // 5. Countdown, extend, end
-    await a.getByRole('button', { name: 'More' }).click().catch(() => {})
+    await a.locator('.sheet-veil.on').click({ position: { x: 20, y: 20 }, timeout: 1_000 }).catch(() => {})
     await a.locator('nav.tabs button', { hasText: 'Web' }).click()
-    await a.getByRole('button', { name: 'More' }).click()
     await a.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
-    await a.locator('.menu-item', { hasText: 'Settings' }).click()
+    await a.locator('.hdr [aria-label="Settings"]').click()
     const settings = a.locator('.sheet')
     ok('Settings > Demo accounts: connected, 7 days left', /DEMO ACCOUNTS/i.test(await text(settings)) && /Anna-demo connected · 7 days left/.test(await text(settings)))
     await settings.getByRole('button', { name: 'Extend a week Anna-demo' }).click()

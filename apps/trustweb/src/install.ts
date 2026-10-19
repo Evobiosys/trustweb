@@ -69,9 +69,13 @@ export function apkPart(lead: string = S.instApkLead): HTMLElement | null {
   if (typeof navigator === 'undefined' || !isAndroidAgent(navigator.userAgent)) return null
   return el('div', { class: 'inst-apk', 'data-install-apk': '' }, [
     el('p', { class: 'meta' }, [lead]),
-    el('a', { class: 'btn btn-ghost btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]),
+    el('a', { class: 'btn btn-ghost btn-sm', href: APK_URL, rel: 'noopener', onclick: () => apkDownloaded?.() }, [S.instApkButton]),
   ])
 }
+
+let apkDownloaded: (() => void) | null = null
+/** Wave 16: what a tap on the APK link does besides the download (main.ts: the "Check your Downloads folder" sheet). */
+export function onApkDownload(fn: () => void): void { apkDownloaded = fn }
 
 let deferred: InstallPromptEvent | null = null
 let installedNow = false
