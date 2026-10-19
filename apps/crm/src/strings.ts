@@ -253,6 +253,8 @@ export const S = {
   ringClose: 'Close without changing',
   ringAdvanced: '▸ Show advanced',
   ringAdvancedHide: '▾ Hide advanced',
+  ringMergeWith: 'Merge with',
+  ringFields: 'Fields',
   ringCloseness: 'Closeness: close friend > friend > acquaintance > intending to connect > unsorted; family is a tag on top of any of them.',
   ringDelete: 'Delete',
   ringUntag: 'Untag #person',
