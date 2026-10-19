@@ -110,7 +110,7 @@ async function main() {
     await settle(a.page)
     await a.page.locator('[data-apk-hint]').waitFor({ timeout: 20_000 })
     const note = a.page.locator('.demo-friends')
-    ok('Android: the APK notice with the download link', await note.locator('a[href="https://trustweb.one/apk"]').count() === 1 && /Get notifications/.test(await note.innerText()))
+    ok('Android: the APK notice with the download link', await note.locator('a[href="https://trustweb.one/apk"]').count() === 1 && /Get reliable notifications/.test(await note.innerText()))
     ok('Android: no iPhone notice', await count(a.page, '[data-ios-soon]') === 0)
     await shot(a.page, '03-banner-android.png')
     await note.getByRole('button', { name: 'Not now' }).click()
