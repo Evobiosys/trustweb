@@ -1285,6 +1285,15 @@ export const S = {
   // Wave 11: the Android app, the same app with notifications while it is closed.
   instApkLead: 'Or install the Android app: the same TrustWeb, with notifications while it is closed. Allow installing from this source once. Update it by installing the new one over it; uninstalling the app deletes its data on this phone (back up first).',
   instApkButton: 'Download the Android app (APK)',
+  // Wave 16: the visitor's hint (apk_hint.ts).
+  apkHintTitle: 'Get notifications',
+  apkHintBody: 'Install the Android app, then TrustWeb can reach you when it is closed.',
+  apkHintNotNow: 'Not now',
+  iosSoonTitle: 'Notifications on iPhone are coming soon',
+  iosSoonBody: 'Until then TrustWeb reaches you while it is open.',
+  iosSoonOk: 'Got it',
+  apkSettingsTitle: 'Install the Android app for notifications',
+  apkSettingsShown: 'Shown until the app is installed.',
   instMenu: 'This browser has not offered a one-tap install. Most browsers can still do it from their menu:',
   instMenuSteps: [
     'Chrome or Edge: the menu (three dots), then "Install app" or "Add to Home screen".',

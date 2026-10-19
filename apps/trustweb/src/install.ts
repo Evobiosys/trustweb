@@ -65,10 +65,10 @@ export function isAndroidAgent(userAgent: string): boolean {
 }
 
 /** The APK offer, on Android outside the installed app only (a desktop has no use for it; iOS cannot run it). */
-function apkPart(): HTMLElement | null {
+export function apkPart(lead: string = S.instApkLead): HTMLElement | null {
   if (typeof navigator === 'undefined' || !isAndroidAgent(navigator.userAgent)) return null
   return el('div', { class: 'inst-apk', 'data-install-apk': '' }, [
-    el('p', { class: 'meta' }, [S.instApkLead]),
+    el('p', { class: 'meta' }, [lead]),
     el('a', { class: 'btn btn-ghost btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]),
   ])
 }

@@ -1,0 +1,43 @@
+visitor-apk-hint result (2026-10-19). Status: built, gates green. Branch wave16/visitor-apk-hint, base 77a5c78.
+HEAD: see "git rev-parse --short=8 HEAD" (report commit on top of d03a04bc). Tag rb-<ts>-visitor-apk-hint-done.
+Commits: 9f127da loading screen; 5e31ba3 hint + helper + Settings card + unit tests; d03a04b e2e + screenshots.
+
+Built
+- index.html: static loading node [data-loading] inside #app (logo, TrustWeb, Loading…, start-screen colours incl. dark); main.ts root.replaceChildren(phone) removes it. <noscript> kept.
+- src/apk_hint.ts: apkHintKind(env) -> 'android'|'ios'|null, apkSettingsRow(env). main.ts apkHintEnv() reads browser + state.dismissed.
+- main.ts offerApkHint(): called right after offerApkUpdate in screenStart submit() and in boot. SEAM: setTimeout 4500 ms (after offerDemoContent / offerNotifications / offerApkUpdate's 4000); shows only when friendsEl is hidden AND no sheet is open, else retries every 4.5 s, 40 times (~3 min). So a visitor who first answers the demo card / closeness sheet gets the hint right after.
+- Android: [data-apk-hint] "Get notifications" + APK link + "Not now" (dismissNotice 'apk-hint'). iPhone: [data-ios-soon] + "Got it" ('ios-soon'). Desktop, APK, standalone: none.
+- Settings top (after title): [data-apk-settings-hint] card, reuses install.ts apkPart(lead) (now exported, optional lead). Android only, dismissed or not.
+- Strings in strings.ts (apkHint*, iosSoon*, apkSettings*). Loading text is plain HTML (no bundle yet).
+
+Files: apps/trustweb/{index.html,src/apk_hint.ts,src/install.ts,src/main.ts,src/strings.ts,test/unit/apk_hint.test.mjs,test/e2e/visitor_apk_hint.mjs}; DEVLOG/wave16/screens/visitor-apk-hint/*.png.
+
+Gates (last lines)
+- tsc --noEmit -p tsconfig.json: exit 0
+- trustweb vitest (apps/demo): Test Files 102 passed (102); Tests 1736 passed (1736)
+- demo vitest: Test Files 41 passed (41); Tests 497 passed (497)
+- vite build + scan: "apps/trustweb/dist: 23 text files scanned, 0 private-line hits"
+- e2e: "visitor-apk-hint: ALL PASS" (13 checks)
+Run e2e: cd apps/demo && PLAYWRIGHT_PACKAGE=<repo>/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/index.mjs npx tsx ../trustweb/test/e2e/visitor_apk_hint.mjs   (own vite on port 5471 via ../crm vite; override TW_PORT; ~1 min)
+Screenshots: DEVLOG/wave16/screens/visitor-apk-hint/ 01-loading 02-invite 03-banner-android 04-banner-ios 05-settings-android (390x844).
+
+Phone test (Android, Chrome, not the APK)
+1. Open trustweb.one/<username> link: see the loading screen, then the invite.
+2. Type a name, tap the join button; answer the "Add to your web?" sheet and the demo card, close the card.
+3. Within ~5 s the top notice "Get notifications" with "Download the Android app (APK)" appears; tap "Not now": gone; reload: stays gone.
+4. My Resources > Settings: the card "Install the Android app for notifications" sits at the top.
+5. iPhone: same steps show "Notifications on iPhone are coming soon" + "Got it"; Settings has no card.
+
+Preview-panel entry
+- Title: Visitors are offered the Android app for notifications
+- Selector: [data-apk-hint]
+- Where: after joining via a link, top of the Web screen (Android browser)
+- Steps: Open an invite link on an Android phone @ .invite; Join and close the cards @ .start-form .btn-electric; See the notice with the APK link @ [data-apk-hint]; Tap Not now @ .demo-friends .btn-ghost; Open Settings, the card stays @ [data-apk-settings-hint]
+- Repo: vanilla
+
+Concerns
+- Headless Chromium stalls the sheet slide-in (computed bottom stays -844px); the e2e turns transitions off for screenshot 05 only. Real phones unaffected as far as seen; not checked on a device.
+- In the e2e the hint appears only after the closeness sheet is closed (joining opens their card): by design (no fighting notices), but a visitor staying in the card sees it only after leaving; retries stop after ~3 min and resume on the next boot.
+- "Get notifications" wraps to two lines in the existing notice grid (narrow title column); cosmetic.
+- apps/demo vite fails in this worktree (svelte plugin / vite mismatch); the e2e uses the crm vite like the build gate.
+- Nothing deleted, nothing archived. No push, no PR. Servers started (port 5471) are killed by the script.
