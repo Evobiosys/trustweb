@@ -1223,7 +1223,7 @@ function offerApkHint(then: () => void): void {
   if (!friendsEl.hidden) { setTimeout(() => offerApkHint(then), 4500); return }
   const android = kind === 'android'
   const answered = (): void => { hideNotice(); then() }
-  const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); answered() }
+  const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); answered(); if (android) toast(S.apkHintLaterToast) }
   showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
     ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener', onclick: answered }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
     : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])

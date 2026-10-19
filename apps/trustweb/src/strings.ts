@@ -1290,6 +1290,7 @@ export const S = {
   apkHintTitle: 'Get reliable notifications',
   apkHintBody: 'Install the Android app, then TrustWeb can reach you when it is closed.',
   apkHintNotNow: 'Not now',
+  apkHintLaterToast: 'You can still find this at the top of Settings.',
   iosSoonTitle: 'Notifications on iPhone are coming soon',
   iosSoonBody: 'Until then TrustWeb reaches you while it is open.',
   iosSoonOk: 'Got it',
