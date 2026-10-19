@@ -80,14 +80,14 @@ async function main() {
     c.ok('the first phone shows the internet-freedom web', people.some((t) => /Leyla/.test(t)) && people.some((t) => /Daniel/.test(t)), JSON.stringify(people))
     await page.getByRole('button', { name: /Add a device/ }).click()
     await jonas.getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
-    await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
+    await jonas.getByRole('button', { name: 'Ask your web' }).click({ timeout: 30_000 })
     await page.waitForFunction(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === 'Device 2')
-      return [...(f?.contentDocument?.querySelectorAll('button') ?? [])].some((x) => x.textContent === 'Call into my web' && !x.disabled)
+      return [...(f?.contentDocument?.querySelectorAll('button') ?? [])].some((x) => x.textContent === 'Ask my web' && !x.disabled)
     }, null, { timeout: 30_000 })
     const ask = async (text) => {
       await jonas.locator('textarea').fill(text)
-      await jonas.getByRole('button', { name: 'Call into my web' }).click()
+      await jonas.getByRole('button', { name: 'Ask my web' }).click()
     }
     const result = async () => {
       await jonas.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
