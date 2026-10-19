@@ -11,14 +11,14 @@ import type { Host } from './bridge'
 import { asShadowCss } from './shadow_css'
 import css from './styles.css?inline'
 
-/** Applied after the page stylesheet, so its `.tabbar{position:fixed}` cannot pull the tab bar out of the sheet. The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The gear rides on the sheet's × row (the host puts the × at the top right), just left of it. */
+/** Applied after the page stylesheet, so its `.tabbar{position:fixed}` cannot pull the tab bar out of the sheet. The shell fills the host's screen; its tab bar sits at the bottom of that, the content scrolls above it. The header buttons (Timeline, ⋮) ride on the sheet's × row (the host puts the × at the top right), just left of it. */
 const HOST_CSS = ':host{all:initial; display:block; height:100%}'
 const EMBED_CSS = `.shell{height:100%; min-height:0; max-width:none; box-shadow:none}
 main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
 .tabbar{position:static; transform:none; max-width:none}
 .shell .top{position:relative; padding-top:4px}
-.shell .top .gear{position:absolute; top:0; right:92px}`
+.shell .top .top-btns{position:absolute; top:0; right:92px}`
 
 function shadowTarget(el: HTMLElement): HTMLElement {
   const root = el.attachShadow({ mode: 'open' })

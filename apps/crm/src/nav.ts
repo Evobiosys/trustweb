@@ -8,7 +8,8 @@ export enum Tab {
 }
 
 /** The bottom bar; Settings sits behind the gear at the top right. Pipeline only with Settings > Advanced on (app.svelte; Jakob 2026-10-16: "hide pipeline for now"). */
-export const TABS: readonly Tab[] = [Tab.People, Tab.Timeline, Tab.Pipeline]
+/** The bottom bar. Timeline is a header icon (Jakob 2026-10-19), still a Tab as a view. */
+export const TABS: readonly Tab[] = [Tab.People, Tab.Pipeline]
 
 export enum Section {
   Overdue = 'overdue',

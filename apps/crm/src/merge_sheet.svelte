@@ -13,10 +13,13 @@
   interface Props {
     /** The person whose card is open; the default survivor. */
     personId: string
+    /** Inside the ring pop's "Merge with" section: the search box shows at once (no "Merge with…" button), also after a cancel. */
+    open?: boolean
   }
-  const { personId }: Props = $props()
+  const { personId, open = false }: Props = $props()
 
-  let searching = $state(false)
+  // svelte-ignore state_referenced_locally
+  let searching = $state(open)
   let query = $state('')
   /** The person picked in the search: the sheet shows when set. */
   let otherId = $state<string | null>(null)
@@ -44,7 +47,7 @@
   const nameOf = (id: string): string => { const p = store.app.people.find((x) => x.id === id); return p ? shownName(effectivePerson(p, store.crm.personFields?.[id]).name) : id }
 
   function reset(): void {
-    searching = false
+    searching = open
     query = ''
     otherId = null
     keepOther = false

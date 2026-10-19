@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Ring } from '../../trustweb/src/model'
   import { closePerson } from './nav.svelte'
+  import MergeSheet from './merge_sheet.svelte'
   import RingAdvanced from './ring_advanced.svelte'
   import RingChips from './ring_chips.svelte'
   import { FAMILY_KEY, RING_COLORS, ringColor } from './rings'
@@ -17,7 +18,6 @@
   const { personId, ring }: Props = $props()
 
   let open = $state(false)
-  let more = $state(false)
   /** The reminder after picking intending to connect (the chooser stays open until it is read). */
   let reminder = $state<string[]>([])
   /** The action waiting for its confirm sheet. */
@@ -46,18 +46,22 @@
 {#if family}<span class="family-dot" data-part="family" style:background={RING_COLORS.family} title={S.familyTag} role="img" aria-label={S.familyTag}></span>{/if}
 {#if open}
   <div class="ring-pop" data-part="ring-pop">
-    <button class="icon-btn ring-x" data-action="ring-close" aria-label={S.ringClose} title={S.ringClose} onclick={(): void => { open = false; more = false; asking = null; reminder = [] }}>✕</button>
+    <button class="icon-btn ring-x" data-action="ring-close" aria-label={S.ringClose} title={S.ringClose} onclick={(): void => { open = false; asking = null; reminder = [] }}>✕</button>
     <RingChips current={ring} {family} onchoose={(c): void => { fileUnder(personId, c); reminder = c === Ring.Intending ? intendingNotice(personId) : []; open = reminder.length > 0 }} onfamily={(on): void => { setFamily(personId, on) }} />
     {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
-    <button class="link" data-action="ring-advanced" aria-expanded={more} onclick={(): void => { more = !more }}>{more ? S.ringAdvancedHide : S.ringAdvanced}</button>
-    {#if more}
+    <details class="ring-section" data-part="merge-with">
+      <summary>{S.ringMergeWith}</summary>
+      <MergeSheet {personId} open />
+    </details>
+    <details class="ring-section" data-part="fields">
+      <summary data-action="ring-advanced">{S.ringFields}</summary>
       <div class="add-actions danger">
         <button class="quiet" data-action="ring-delete" onclick={(): void => { asking = 'delete' }}>{S.ringDelete}</button>
         {#if tanaOn()}<button class="quiet" data-action="ring-untag" onclick={(): void => { asking = 'untag' }}>{S.ringUntag}</button>{/if}
       </div>
       <p class="muted">{S.ringCloseness}</p>
       <RingAdvanced {personId} ongone={gone} />
-    {/if}
+    </details>
     {#if asking}
       <div class="ring-sheet" role="alertdialog" data-part="ring-sheet">
         <p>{asking === 'delete' ? S.ringDeleteAsk(name) : S.ringUntagAsk(name)}</p>

@@ -19,6 +19,23 @@ export interface Curator {
   ring(personId: string, ring: Ring): Promise<void>
 }
 
+/** The Curator's own store (apps/crm storage.ts crmKey('me'); its persona is always 'me'), read without loading the chunk. */
+const CRM_KEY = 'trustweb-crm.v1.me'
+
+/** Ids of the persons in the Curator's Archive (hiddenPeople): the rings leave them out even before the Curator was opened. */
+export function curatorHiddenIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(CRM_KEY)
+    if (raw === lastRaw) return lastIds   // every Web render asks; the store is parsed only when it changed
+    const list = (JSON.parse(raw ?? 'null') as { hiddenPeople?: { id?: unknown }[] } | null)?.hiddenPeople
+    lastIds = new Set(Array.isArray(list) ? list.map((h) => h?.id).filter((id): id is string => typeof id === 'string') : [])
+    lastRaw = raw
+    return lastIds
+  } catch { return new Set() }
+}
+let lastRaw: string | null | undefined
+let lastIds = new Set<string>()
+
 /** A lazy chunk that will not load (usually a page older than a new deploy, whose chunks are gone): say so, offer a reload, never a blank sheet. */
 function loadFailed(target: HTMLElement, err: unknown): void {
   console.error('Web Curator', err)

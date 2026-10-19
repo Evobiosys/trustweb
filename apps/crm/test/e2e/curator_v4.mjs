@@ -22,7 +22,7 @@ try {
   await page.getByRole('searchbox').waitFor()
   check('feature overlay with branch @ sha · personal', /FEATURE · Web Curator: people, rings, sort, Tana sync/.test(await page.locator('.twf').innerText()) && /@ [0-9a-f]+ · \d\d:\d\d · personal/.test(await page.locator('.twf i').innerText()))
   check('dark although the OS is light', await page.evaluate(() => getComputedStyle(document.body).backgroundColor) === 'rgb(18, 12, 26)')
-  check('no Follow-ups tab', (await page.locator('[data-tab="followups"]').count()) === 0 && (await page.locator('.tab').count()) === 2 &&   // Pipeline behind Advanced (2026-10-16) (await page.locator('.gear[data-tab="settings"]').count()) === 1)
+  check('no Follow-ups tab', (await page.locator('[data-tab="followups"]').count()) === 0 && (await page.locator('.tab').count()) === 1 &&   // Pipeline behind Advanced (2026-10-16) (await page.locator('.gear[data-tab="settings"]').count()) === 1)
   check('Filters collapsed: toggle shows, block hidden', (await page.locator('[data-action="toggle-filters"]').innerText()).includes('active') && (await page.locator('[data-part="filters"]').count()) === 0)
   check('sort banner visible above', (await page.locator('[data-action="sort-banner"]').count()) === 1)
   await page.locator('[data-action="toggle-filters"]').click()

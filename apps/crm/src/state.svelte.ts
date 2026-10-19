@@ -201,8 +201,8 @@ export function hidePerson(personId: string): void {
 
 export function unhidePerson(personId: string): void {
   const p = hidden.get(personId) ?? store.crm.hiddenPeople?.find((h) => h.id === personId)?.person
-  // An archived invitation (trustweb pendingInvite) was never connected: the host reopens its add sheet instead of listing it.
-  if (p) { if (!p.pendingInvite) store.app.people.push(p); host.restorePerson?.(p) }
+  // An archived invitation (trustweb pendingInvite) or dismissed reach-out (wantsToConnect) was never connected: the host reopens its add sheet / row instead of listing it.
+  if (p) { if (!p.pendingInvite && !p.wantsToConnect) store.app.people.push(p); host.restorePerson?.(p) }
   hidden.delete(personId)
   store.crm.hiddenPeople = (store.crm.hiddenPeople ?? []).filter((h) => h.id !== personId)
   persist()

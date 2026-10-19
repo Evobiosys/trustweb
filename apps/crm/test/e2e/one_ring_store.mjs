@@ -59,7 +59,7 @@ try {
   await page.getByRole('button', { name: 'Web Curator' }).click()
   const cur = page.locator('.sheet[data-kind=curator] .curator')
   await cur.getByRole('searchbox').waitFor({ timeout: 15_000 })
-  check('Settings is a gear at the top right, bottom tabs People/Timeline/Pipeline', (await cur.locator('.gear').count()) === 1 && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'People,Timeline,Pipeline')
+  check('Settings is ⋮ at the top right next to Timeline, bottom tabs People/Pipeline', (await cur.locator('.gear').count()) === 1 && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'People,Pipeline')
   const gear = await cur.locator('.gear').boundingBox()
   const home = await page.locator('[data-sheet-home]').boundingBox()
   console.log('gear', JSON.stringify(gear), 'home', JSON.stringify(home))

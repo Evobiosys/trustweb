@@ -383,7 +383,12 @@ export interface Person {
    * connected. Restore reopens its add sheet (main.ts restorePerson); the person never sits in the web. Absent: none.
    */
   pendingInvite?: ConnectLinkParams
+  /** Wave 16: only on a person in the Web Curator's Archive: a reach-out I dismissed (wants_to_connect.ts). Restore puts the row back. Absent: none. */
+  wantsToConnect?: WantsToConnect
 }
+
+/** Wave 16: someone who reached out through my link and waits under the web for Add or Dismiss (wants_to_connect.ts). */
+export interface WantsToConnect { peerId: string; name: string; at: number }
 
 /** The Archive entry for a declined invitation: the inviter on Intending, not connected (no peerId), the link kept for Restore. */
 export function archivedInvite(link: ConnectLinkParams, id: string, now: number): Person {
@@ -842,6 +847,8 @@ export interface AppState {
   reachOutLog?: number[]
   reachOutHeld?: number
   reachOutsPaused?: true
+  /** Wave 16: reach-outs waiting for Add or Dismiss under the web (wants_to_connect.ts). This device only. Absent: none; older builds ignore it. */
+  wantsToConnect?: WantsToConnect[]
   me: Me
   identity?: SerializedIdentityV1
   people: Person[]

@@ -118,7 +118,7 @@ export function askSources(s: AppState, ring: Ring, hop: number, scope?: MatchSc
     chats: undefined,
     inventory: s.inventory.filter((item) => itemAdmits(item, ring, hop, askerTags)),
     // The General note (general_notes.ts), the timeline (timeline.ts) and the agreements (agreements.ts) are Only me: this copy of the record holds the admitted lines, never a person's free-text note, timeline, agreements, event tags, where a dot sits in my Web view or the lean score.
-    people: s.people.map(({ generalNote: _private, timeline: _timeline, agreements: _agreements, theirProfile: _theirs, theirChannels: _theirChannels, angle: _angle, lean: _lean, events: _events, reachedOut: _reachedOut, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
+    people: s.people.map(({ generalNote: _private, timeline: _timeline, agreements: _agreements, theirProfile: _theirs, theirChannels: _theirChannels, angle: _angle, lean: _lean, events: _events, reachedOut: _reachedOut, wantsToConnect: _wants, ...p }) => ({ ...p, lines: p.lines.filter((l) => lineAdmits(l, ring, hop)) })),
   }
   const base = threadsForRing(admitted, ring, scope, askerTags)
   const notes = meetingNoteThreads(s, ring, hop, scope)

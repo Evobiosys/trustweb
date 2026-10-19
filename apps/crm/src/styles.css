@@ -42,9 +42,14 @@ h1,h2,h3{font-family:Optima,Candara,"Gill Sans","Segoe UI",sans-serif; font-weig
   display:flex; flex-direction:column; position:relative}
 @media (min-width:480px){ .shell{box-shadow:0 0 0 1px var(--line), 0 24px 60px rgba(36,27,46,.18)} }
 .top{padding:20px 16px 8px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px}
-.gear{width:44px; height:44px; border:0; border-radius:50%; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex-shrink:0}
+.top-btns{display:flex; gap:8px; flex-shrink:0}
+.hdr-icon{width:40px; height:40px; border:0; border-radius:50%; background:var(--card); color:var(--ink); display:flex; align-items:center; justify-content:center; flex-shrink:0}
 .title-row{display:flex; align-items:center; justify-content:space-between}
-.gear[aria-current="page"]{color:var(--teal)}
+.archive>summary{cursor:pointer; list-style:none}
+.archive>summary::-webkit-details-marker{display:none}
+.archive>summary h3::after{content:' ▸'}
+.archive[open]>summary h3::after{content:' ▾'}
+.hdr-icon[aria-current="page"]{background:var(--teal); color:#fff}
 .top h1{font-size:24px}
 .source{font-size:12.5px; color:var(--ink-soft); margin-top:2px}
 .import-row{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px}
@@ -267,6 +272,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .ring-pop{flex-basis:100%; position:relative; padding-right:36px}
 .ring-x{position:absolute; top:4px; right:0; font-size:18px}
 .ring-more{display:grid; gap:8px; margin:8px 0}
+.ring-section{margin:6px 0}
+.ring-section>summary{cursor:pointer; color:var(--teal); font-weight:700; min-height:32px; padding:4px 0}
 .ring-sheet{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--tint-warn); color:var(--warn-ink); font-size:13px}
 .rchip.num{min-width:36px; padding:0 8px}
 .rchip.suggested,.ring-label.suggested{border-style:dashed; border-width:2.5px}

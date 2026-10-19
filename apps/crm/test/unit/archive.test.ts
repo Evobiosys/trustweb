@@ -15,3 +15,19 @@ describe('Archive: Delete for good', () => {
     expect(crm.hiddenPeople).toHaveLength(1)
   })
 })
+
+describe('Archive key read by the trustweb rings (curator.ts CRM_KEY)', () => {
+  it("is crmKey('me')", async () => {
+    const { crmKey } = await import('../../src/storage')
+    expect(crmKey('me')).toBe('trustweb-crm.v1.me')
+  })
+})
+
+describe('Curator chrome (wave16 items 3/5)', () => {
+  it("Settings' Archive reads '📦 Archive (n)'; Timeline left the bottom bar but stays a view", async () => {
+    const [{ S }, { TABS, Tab }] = await Promise.all([import('../../src/strings'), import('../../src/nav')])
+    expect(S.hiddenTitle(2)).toBe('📦 Archive (2)')
+    expect(TABS).toEqual([Tab.People, Tab.Pipeline])
+    expect(Tab.Timeline).toBe('timeline')
+  })
+})

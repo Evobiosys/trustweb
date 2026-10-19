@@ -57,10 +57,12 @@ export function lineShown(s: Pick<AppState, 'hiddenSources'>, l: Pick<NoteLine, 
 }
 
 /**
- * The record as the views draw it: hidden sources' persons left out, their lines left out of everybody else.
+ * The record as the views draw it: hidden sources' persons left out, their lines left out of everybody else; so are the persons the
+ * Web Curator hid (`hiddenIds`, its Archive: a dev seed or a device sync can bring them back into the record, Jakob 2026-10-19).
  * Shallow: the persons kept are the record's own objects, so a tap that edits one edits the record.
  */
-export function shown(s: AppState): AppState {
+export function shown(s: AppState, hiddenIds: ReadonlySet<string> = new Set()): AppState {
+  if (hiddenIds.size) s = { ...s, people: s.people.filter((p) => !hiddenIds.has(p.id)) }
   if (!hiddenSources(s).length) return s
   const people = s.people.filter((p) => personShown(s, p)).map((p) => (p.lines.every((l) => lineShown(s, l, p)) ? p : { ...p, lines: p.lines.filter((l) => lineShown(s, l, p)) }))
   return { ...s, people }

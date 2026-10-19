@@ -1663,6 +1663,9 @@ export const S = {
   // Jakob 2026-10-19: an intending person is "not yet in your web" (ringHint), so the toast says only that they were added.
   personAddedToast: (name: string) => `${name} added.`,
   archivedToast: 'Archived. Find them in the Web Curator.',
+  wantsTitle: 'Wants to connect',
+  wantsAdd: 'Add',
+  wantsDismiss: 'Dismiss',
   // Wave 6b: "Their TrustWeb code, name or DID" on the add-someone sheet (add_by_code.ts)
   addCodeLabel: 'Their TrustWeb code, name or DID (optional)',
   addCodePh: 'A code or link, @name, or a did:peer:...',

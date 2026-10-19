@@ -218,7 +218,7 @@ export const S = {
   sortNoField: 'No details on this person.',
   hideFromTrustweb: 'Hide from TrustWeb',
   // Wave 16 (Jakob 2026-10-19): the hidden list is the Archive: people archived on their card or the web, invitations set aside, Tana's "hide in trustweb".
-  hiddenTitle: (n: number) => `Archive (${n})`,
+  hiddenTitle: (n: number) => `📦 Archive (${n})`,
   hiddenHint: 'People you archived, invitations you set aside with "Not now", and people ticked "hide in trustweb" in Tana. They stay out of every list until you restore them.',
   unhide: 'Restore',
   archiveDelete: 'Delete',
@@ -253,6 +253,8 @@ export const S = {
   ringClose: 'Close without changing',
   ringAdvanced: '▸ Show advanced',
   ringAdvancedHide: '▾ Hide advanced',
+  ringMergeWith: 'Merge with',
+  ringFields: 'Fields',
   ringCloseness: 'Closeness: close friend > friend > acquaintance > intending to connect > unsorted; family is a tag on top of any of them.',
   ringDelete: 'Delete',
   ringUntag: 'Untag #person',
