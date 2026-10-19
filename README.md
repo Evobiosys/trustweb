@@ -120,8 +120,7 @@ The rule behind that choice, so it does not have to be re-decided each time:
 
 - A project the author leads himself ships **AGPL-3.0-or-later**. He is the one carrying it, so it
   can be fully open, and anyone who needs terms outside copyleft can just ask him.
-- A project he does not lead defaults to **AMPL 1.0** instead. That text is kept at
-  [`LICENSE-AMPL-1.0`](LICENSE-AMPL-1.0) and no longer governs this repository.
+- A project he does not lead defaults to [**AMPL 1.0**](https://evobiosys.org/evobiosys/AMPL) instead, which does not govern this repository.
 
 Need terms outside AGPL copyleft, such as [AMPL 1.0](https://evobiosys.org/evobiosys/AMPL)? Write to
 Jakob at **connect@japossert.com**. Nothing is granted automatically: the ask goes through direct
