@@ -262,6 +262,9 @@ textarea.field{resize:vertical; line-height:1.5}
   padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
   font-size:13px; line-height:1.45; animation:tw-pop .25s ease-out}
 .demo-friends[hidden]{display:none}
+/* Jakob 2026-10-19: the card never swallows a tap on the web under it; only its buttons and ticks take taps. */
+.demo-friends{pointer-events:none}
+.demo-friends .notice-actions,.demo-friends .hint-again{pointer-events:auto}
 /* Wave 16 (apk hint): a long title + two buttons: text on top, buttons in a row under it. */
 .demo-friends.stack{grid-template-columns:1fr}
 .demo-friends.stack .notice-actions{grid-column:1; grid-row:auto; flex-direction:row; flex-wrap:wrap; align-items:center; margin-top:6px}

@@ -1213,12 +1213,13 @@ function apkHintEnv(): ApkHintEnv {
  * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon). Seam: after offerNotifications and offerDemoContent
  * had their turn, it takes the top notice only when no other card or sheet is up, and tries again every few seconds while one is.
  */
-function offerApkHint(tries = 40): void {
+/** Jakob 2026-10-19: shown until dismissed. It waits only while another card is up (a sheet slides over it and it is there when the sheet closes). */
+function offerApkHint(): void {
   setTimeout(() => {
     if (!state || solo) return
     const kind = apkHintKind(apkHintEnv())
     if (!kind) return
-    if (!friendsEl.hidden || sheet.classList.contains('on')) { if (tries > 1) offerApkHint(tries - 1); return }
+    if (!friendsEl.hidden) { offerApkHint(); return }
     const android = kind === 'android'
     const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); hideNotice() }
     showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
@@ -1327,7 +1328,7 @@ async function completePendingConnect(): Promise<void> {
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
   } else {
-    toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+    toast(ring === Ring.Intending ? S.personAddedToast(peer.displayName) : S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
@@ -1378,7 +1379,7 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       save()
       connectAdd = null
       viaCard.closed(person.id)
-      toast(S.connectAddedToast(person.name))
+      toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
       render()
       if (!openPendingShare()) personSheet(person.id)
     },
