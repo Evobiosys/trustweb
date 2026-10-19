@@ -777,7 +777,7 @@ function openWalkthrough(): void {
   closeBtn.focus()
 }
 
-/** Which query button the owner chose in Settings (default: call into your web). */
+/** Which query button the owner chose in Settings (default: ask your web). */
 
 function queryStyle(): QueryStyle {
   return state?.queryStyle ?? QueryStyle.Call

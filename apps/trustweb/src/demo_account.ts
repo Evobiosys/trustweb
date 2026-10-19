@@ -3,7 +3,7 @@
  * button, make a dummy connection to an account you name. The name field is
  * prefilled "-demo" with the caret in front of it, so typing gives
  * "<name>-demo"; the suffix can be erased. The account is a separate identity
- * that can call into your web like a connected person, it is taken down after a
+ * that can ask your web like a connected person, it is taken down after a
  * week by default (end it early, extend it), and its connection is active
  * only once you allowed it in your own view, so nobody can exploit the link.
  * Consent per ask stays (the gate in net.ts is untouched).

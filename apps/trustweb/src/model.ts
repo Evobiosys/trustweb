@@ -1192,7 +1192,7 @@ export enum AboutKind {
   What = 'what',
 }
 
-/** The Web screen's query button: calling into the web (default) or the magnifier "Query". */
+/** The Web screen's query button: asking the web (default) or the magnifier "Query". */
 export enum QueryStyle {
   Call = 'call',
   Search = 'search',
