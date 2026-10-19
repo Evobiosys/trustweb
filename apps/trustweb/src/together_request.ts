@@ -88,7 +88,7 @@ const TIME_NOUN = `${WD}|morning|afternoon|evening|night|days?|weeks?|hours?|mon
 const COUNT = '(?:the|a|an|one|two|three|few|couple of|der|die|das|dem|den|einer|einem|ein|zwei|drei|paar|\\d+)'
 const NOT_PLACE = new RegExp(`^(?:${COUNT}\\s+)*(?:${TIME_NOUN})\\b`, 'i')
 
-function readArea(raw: string): { area?: string; radiusKm?: number } {
+function readArea(raw: string, activity: string): { area?: string; radiusKm?: number } {
   const km = /\bwithin\s+(\d{1,3})\s*km\b|\b(\d{1,3})\s*km\b/i.exec(raw)
   const radiusKm = km ? Math.min(TOGETHER_RADIUS_KM_MAX, Number(km[1] ?? km[2])) : undefined
   const END = '(?=\\s+(?:before|by|until|on|this|next|tomorrow|today|tonight|vor|bis|am|within|with|mit|heute|morgen|together|zusammen)\\b|[,.;!?]|$)'
@@ -97,13 +97,16 @@ function readArea(raw: string): { area?: string; radiusKm?: number } {
   const near = new RegExp(`\\b(?:near|around|bei|in der nähe von|nahe)\\s+([^,.;!?]+?)${END}`, 'i').exec(raw)
   const prep = new RegExp(`(?<!\\b[Ii]\\s)\\b(?:[Ii][nm]|[Aa]m)\\s+([A-ZÄÖÜ][^\\s,.;!?]*(?:\\s+[A-ZÄÖÜ\\d][^\\s,.;!?]*)*)|\\bin\\s+([^,.;!?]+?)${END}`, 'g')
   const place = near?.[1] ?? [...raw.matchAll(prep)].map((m) => m[1] ?? m[2]).find((w) => !NOT_PLACE.test(w))
-  const area = place ? clipText(place.trim(), TOGETHER_AREA_MAX) : undefined
+  // A capitalised German noun after the place is the activity, not part of it: "in Wien Padel spielen".
+  const words = place?.trim().split(/\s+/) ?? []
+  if (words.length > 1 && words[words.length - 1].toLowerCase() === activity) words.pop()
+  const area = words.length ? clipText(words.join(' '), TOGETHER_AREA_MAX) : undefined
   return { ...(area ? { area } : {}), ...(radiusKm !== undefined ? { radiusKm } : {}) }
 }
 
 /** A generic leading verb is not the activity: "play padel" and "go hiking" are padel and hiking; "cook" stays cook. */
 const LEAD = /^(?:(?:again|wieder|mal|gerne?)\s+)*(?:(?:play|playing|do|doing|go|going|join|try|have|practice|practise|make)\s+)?(?:(?:some|a|an|the|a game of|a round of|eine runde)\s+)?(?:(?:again|wieder|mal|gerne?)\s+)*/
-const TRAIL = /\s+(?:spielen|machen|gehen)$/
+const TRAIL = /\s+(?:zu\s+)?(?:spielen|machen|gehen)$/
 /** Where the wanted thing ends: the "together" words, a time or a place. */
 const STOP = '(?:together|with(?:\\s+(?:me|someone|anyone|somebody))?|again|wieder|zusammen|mit|before|by|until|till|near|around|in|on|at|this|next|tomorrow|today|within|vor|bis|am|bei|nahe)'
 const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|looking\\s+to|möchte|moechte|möchten|will|wollen|lust\\s+(?:zu|auf))'
@@ -113,16 +116,34 @@ const TOGETHER_MARK = /\b(?:together|with me|with us|who wants|who'?s up for|zus
 const TIME_WORDS = new RegExp(`\\b(?:(?:before|by|until|till|vor|bis(?:\\s+zum)?|on|am|this|diese[nrs]?|next|nächsten?)\\s+(?:${WD}|weekend|wochenende|week|woche)|today|tomorrow|tonight|heute|morgen|mit mir|with me)\\b`, 'g')
 
 /**
+ * German puts the activity last, after time and place: "Ich möchte am Samstag in Wien kochen", "Hat jemand Lust, am Freitag Padel zu
+ * spielen?". After the wish word, times (already out of `bare`), places and filler go; what is left must end in an infinitive.
+ */
+const DE_MARK = /\b(?:ich|wer|jemand|wir|lust|möchte|moechte|würde|zusammen)\b/
+const DE_WANT = /\b(?:möchten?|moechte|will|wollen|würden?\s+gerne?|lust)\b,?\s+([^.;!?]+)/
+const DE_DROP = new RegExp(`\\b(?:(?:in|im|am)\\s+(?:${COUNT}\\s+)*(?:${TIME_NOUN})|(?:in|im|am|beim?|nahe)\\s+[^\\s\\d,]+(?:\\s+\\d+)?|mit uns|zusammen|gerne?|mal|wieder|jemand|ich|wir)\\b`, 'g')
+function readGermanTail(bare: string): string | undefined {
+  if (!DE_MARK.test(bare)) return undefined
+  const tail = DE_WANT.exec(bare)?.[1].replace(DE_DROP, ' ').replace(/[,\s]+/g, ' ').trim()
+  return tail && tail.split(' ').length <= 3 && /(?:en|ern|eln)$/.test(tail) ? tail : undefined
+}
+
+/**
  * Reads one sentence of the pattern "I want to do X together, who wants to do it with me?" (X any activity: padel, hiking, cooking).
  * Returns null when it names no activity (nothing is guessed: the box then asks what to do). `now` is injected so tests and the clock agree.
  */
 export function readTogetherRequest(text: string, now: number): TogetherRequest | null {
   const raw = text.trim()
   const t = raw.toLowerCase()
-  if (!TOGETHER_MARK.test(t)) return null
   const W = '([a-zäöüß][\\wäöüß-]*)'
   const bare = t.replace(TIME_WORDS, ' ').replace(/\s+/g, ' ')
-  let phrase = new RegExp(`\\b${WANT}\\s+(.+?)(?=\\s+${STOP}\\b|[,.;!?]|$)`).exec(bare)?.[1]
+  const de = readGermanTail(bare)
+  const when = readDeadline(t, now)
+  // Unmarked, only a German plan with one bare verb and a time or place counts ("Ich möchte am Samstag in Wien kochen"); one with an
+  // object stays an ordinary ask ("Ich möchte eine Bohrmaschine ausleihen"). The dock shows the compiled sentence before it goes.
+  const plan = de !== undefined && !de.includes(' ') && (when.beforeAt !== undefined || /\b(?:in|im|am|beim?|nahe)\s/.test(bare))
+  if (!TOGETHER_MARK.test(t) && !plan) return null
+  let phrase = de ?? new RegExp(`\\b${WANT}\\s+(.+?)(?=\\s+${STOP}\\b|[,.;!?]|$)`).exec(bare)?.[1]
     ?? new RegExp(`\\bplay(?:ing)?\\s+(?:some\\s+|a\\s+game\\s+of\\s+)?${W}`).exec(bare)?.[0]
     ?? new RegExp(`\\b${W}\\s+(?:(?:wieder|mal|gerne?)\\s+)?spielen\\b`).exec(bare)?.[0]
   if (!phrase?.trim()) return null
@@ -133,8 +154,8 @@ export function readTogetherRequest(text: string, now: number): TogetherRequest 
   return {
     activity: clipText(activity, TOGETHER_ACTIVITY_MAX),
     phrase: clipText(phrase, TOGETHER_ACTIVITY_MAX),
-    ...readDeadline(t, now),
-    ...readArea(raw),
+    ...when,
+    ...readArea(raw, activity),
     ...(reach !== undefined ? { reach } : {}),
   }
 }

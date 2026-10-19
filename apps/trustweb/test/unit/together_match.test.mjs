@@ -100,6 +100,22 @@ describe('an ordinary ask is never rewritten into a together request', () => {
   })
 })
 
+describe('German word order: the activity comes last, after time and place', () => {
+  it('"Ich möchte am Samstag in Wien kochen" is a together request without a together word', () => {
+    expect(readTogetherRequest('Ich möchte am Samstag in Wien kochen', NOW)).toEqual({ activity: 'kochen', phrase: 'kochen', fromAt: midnight(2026, 9, 24), beforeAt: midnight(2026, 9, 25), area: 'Wien' })
+  })
+  it('reads the infinitive at the end', () => {
+    expect(readTogetherRequest('Wer will am Wochenende mit mir wandern gehen?', NOW)).toMatchObject({ activity: 'wandern', phrase: 'wandern gehen', fromAt: midnight(2026, 9, 18) })
+    expect(readTogetherRequest('Ich würde gern nächste Woche zusammen klettern', NOW)).toMatchObject({ activity: 'klettern' })
+    expect(readTogetherRequest('Hat jemand Lust, am Freitag Padel zu spielen?', NOW)).toMatchObject({ activity: 'padel', fromAt: midnight(2026, 9, 23), beforeAt: midnight(2026, 9, 24) })
+    expect(readTogetherRequest('Wer will in Wien Padel spielen', NOW)).toMatchObject({ activity: 'padel', area: 'Wien' })
+  })
+  it('a German wish with an object stays an ordinary ask', () => {
+    expect(readTogetherRequest('Ich möchte am Samstag in Wien eine Wohnung mieten', NOW)).toBeNull()
+    expect(readTogetherRequest('Ich möchte schlafen', NOW)).toBeNull()
+  })
+})
+
 describe('dates are calendar days (clock changes, weekends)', () => {
   const at = (y, m, d, h = 12) => new Date(y, m, d, h).getTime()
   it('"this weekend" on a Saturday or Sunday is the running weekend', () => {
