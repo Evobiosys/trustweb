@@ -1649,6 +1649,7 @@ export const S = {
   connectAddLead: 'You are connected. Choose how close you are; you can change it any time on their card.',
   // Wave 16 (Jakob 2026-10-19): a visitor who joined through a link is connected only by "Add to my web".
   connectAddLeadInvite: 'Adding them lets them know you want to connect. Choose how close you are; you can change it any time on their card.',
+  connectAddAsIntended: 'Add as intended',
   inviteCardTitle: (name: string) => `Add ${name || 'this person'} to your web`,
   connectAddNamePh: 'Name',
   connectAddWaiting: 'Waiting for their name...',
