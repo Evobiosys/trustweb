@@ -5,6 +5,9 @@
  * "Not now" toasts; the APK link opens [data-apk-downloaded]; the Web header has the gear, no ⋮.
  * Visitor archive: "Not now" on the add sheet archives Ada (toast [data-archived-toast], pulsing Curator icon), the Curator's Archive
  * lists her, Restore brings the add sheet back, whose button reads "Add as intended" on Intending; Add connects.
+ * Wants to connect (host side, over a real relay): a visitor's reach-out lands as a row under the host's web, not a dot; Dismiss archives,
+ * Restore brings the row back, Add (Acquaintance by default) puts them on the rings; the Curator header (Timeline icon, ⋮), the collapsed
+ * "📦 Archive (n)" and the ring pop's "Merge with" / "Fields".
  * TW_SHOTS=<dir> saves 390x844 screenshots (default DEVLOG/wave16/screens/visitor-apk-hint; the archive ones in ../visitor-archive).
  *
  *   cd apps/demo && PLAYWRIGHT_PACKAGE=<repo>/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/index.mjs npx tsx ../trustweb/test/e2e/visitor_apk_hint.mjs
@@ -38,19 +41,21 @@ async function waitFor(url, ms = 30_000) {
   throw new Error('server did not come up: ' + url)
 }
 
-/** Ada's long connect link, rewritten to this server's origin. */
-async function inviteLink(browser, base) {
+/** Ada's long connect link, rewritten to this server's origin. `keep`: her phone stays open (the host side), returned with the link. */
+async function inviteLink(browser, base, name = 'Ada', keep = false) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const page = await ctx.newPage()
   await page.goto(base)
-  await page.getByLabel('Your first name').fill('Ada')
+  await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
   await page.locator('.hdr [aria-label^="Show my code"]').click()
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const link = await page.getAttribute('.qrwrap', 'data-payload')
-  await ctx.close()
   if (!link.includes('?connect=')) throw new Error('no long link: ' + link)
-  return base + link.slice(link.indexOf('?'))
+  const url = base + link.slice(link.indexOf('?'))
+  if (keep) { await page.locator('nav.tabs button', { hasText: 'Web' }).click(); return { ctx, page, link: url } }
+  await ctx.close()
+  return url
 }
 
 /** A visitor on `ua` opens the link and joins as `name`. */
@@ -81,8 +86,13 @@ const openSettings = async (page) => {
 
 async function main() {
   mkdirSync(SHOTS, { recursive: true })
+  // A real relay (as acceptance.mjs), so the host phone hears a visitor's reach-out (wants to connect).
+  const { RelayServer } = await import('../../../../packages/transport/src/relay_server.ts')
+  const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
+  const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
+  const { port: relayPort } = await relay.listen(0, '127.0.0.1')
   const viteProc = spawn(process.execPath, [path.join(TW_ROOT, '../crm/node_modules/vite/bin/vite.js'), '--strictPort'], {
-    cwd: TW_ROOT, env: { ...process.env, TW_PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: TW_ROOT, env: { ...process.env, TW_PORT: String(PORT), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` }, stdio: ['ignore', 'pipe', 'pipe'],
   })
   const base = `http://127.0.0.1:${PORT}/`
   let browser = null
@@ -202,6 +212,9 @@ async function main() {
     ok('the pulse stops after ~4 s', await count(n.page, '.search-btn.pulse') === 0)
     await n.page.locator('.hdr .search-btn').click()
     await n.page.locator('.sheet.on .curator .gear').click({ timeout: 15_000 })
+    await n.page.locator('.sheet.on .curator [data-part="archive"]').waitFor({ timeout: 10_000 })
+    ok('the Archive is collapsed at first', !(await n.page.locator('.sheet.on .curator [data-part="archive"]').evaluate((d) => d.open)))
+    await n.page.locator('.sheet.on .curator [data-part="archive"] > summary').click()
     const row = n.page.locator('.sheet.on .curator [data-part="hidden"]')
     await row.first().waitFor({ timeout: 10_000 })
     ok('the Curator\'s Archive lists Ada', /Archive \(1\)/.test(await n.page.locator('.sheet.on .curator [data-archive]').textContent()) && /Ada/.test(await row.first().innerText()))
@@ -225,10 +238,73 @@ async function main() {
     ok('card Archive: out of the web, the archived toast, the pulse', await count(n.page, '.node[data-pid]') === 0 && await count(n.page, '.hdr .search-btn.pulse') === 1)
     await n.ctx.close()
 
+    // 6. the host: a reach-out waits under the web ("Wants to connect"), Dismiss archives, Restore brings the row back, Add makes the person
+    const WTC = path.join(SHOTS, '../wants-to-connect')
+    mkdirSync(WTC, { recursive: true })
+    const h = await inviteLink(browser, base, 'Hana', true)
+    h.page.on('pageerror', (e) => errors.push(e.message))
+    await h.page.addStyleTag({ content: '.sheet,.toast{transition:none!important}' })
+    const v = await visitor(browser, h.link, null, 'Vic', errors)
+    await v.join()
+    await settle(v.page)
+    const wants = h.page.locator('[data-wants-to-connect]')
+    await wants.waitFor({ timeout: 30_000 })
+    ok('host: Vic waits under the web, not on the rings', /Wants to connect/.test(await wants.innerText()) && /Vic/.test(await wants.innerText()) && await count(h.page, '.node[data-pid]') === 0)
+    ok('host: no yellow dot, no reach-out legend, no "reached out to you"', await count(h.page, '[data-legend-reach-out], [data-reached-out]') === 0)
+    await h.page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
+    await wants.scrollIntoViewIfNeeded()
+    await h.page.waitForTimeout(300)
+    await shot(h.page, '../wants-to-connect/01-wants-to-connect.png')
+    await wants.locator('[data-want-dismiss]').click()
+    await h.page.locator('.toast.on[data-archived-toast]').waitFor({ timeout: 10_000 })
+    ok('Dismiss: the row goes, the archived toast, the pulse', await count(h.page, '[data-wants-to-connect]') === 0 && await count(h.page, '.hdr .search-btn.pulse') === 1)
+    await h.page.locator('.hdr .search-btn').click()
+    const cur = h.page.locator('.sheet.on .curator')
+    await cur.locator('.gear').waitFor({ timeout: 15_000 })
+    ok('Curator header: Timeline icon and ⋮ (Settings), bottom bar People only', await cur.locator('.top-btns [data-tab="timeline"]').count() === 1
+      && await cur.locator('.gear').getAttribute('aria-label') === 'Settings' && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'People')
+    await h.page.waitForTimeout(300)
+    await shot(h.page, '../wants-to-connect/02-curator-header.png')
+    await cur.locator('.gear').click()
+    const arch = cur.locator('[data-part="archive"]')
+    await arch.waitFor({ timeout: 10_000 })
+    ok('Settings: "📦 Archive (1)", collapsed', (await arch.locator('[data-archive]').textContent()).trim() === '📦 Archive (1)' && !(await arch.evaluate((d) => d.open)))
+    await arch.scrollIntoViewIfNeeded()
+    await h.page.waitForTimeout(300)
+    await shot(h.page, '../wants-to-connect/04-archive-collapsed.png')
+    await arch.locator('summary').click()
+    await arch.locator('[data-part="hidden"]', { hasText: 'Vic' }).locator('[data-action="unhide"]').click()
+    await h.page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
+    await wants.waitFor({ timeout: 10_000 })
+    ok('Restore: the row is back', /Vic/.test(await wants.innerText()) && await count(h.page, '.node[data-pid]') === 0)
+    await wants.locator('[data-want-add]').click()
+    await h.page.locator('.sheet.on [data-ring="acquaintance"].on').waitFor({ timeout: 5_000 })
+    await h.page.locator('.sheet.on [data-connect-add]').click()
+    await h.page.locator('.node[data-pid]').first().waitFor({ timeout: 10_000 })
+    ok('Add (Acquaintance by default): Vic on the rings, the row gone', await count(h.page, '.node[data-pid]') === 1 && await count(h.page, '[data-wants-to-connect]') === 0)
+    // the Curator person page: under the ring chips "Merge with" and "Fields", both collapsed
+    await h.page.locator('.hdr .search-btn').click()
+    await cur.locator('.tabbar [data-tab="people"]').click({ timeout: 15_000 })
+    await cur.locator('.pr-open', { hasText: 'Vic' }).click({ timeout: 15_000 })
+    await cur.locator('[data-action="ring-label"]').click()
+    const mw = cur.locator('[data-part="merge-with"]')
+    const fl = cur.locator('[data-part="fields"]')
+    ok('ring pop: "Merge with" then "Fields", both collapsed, no Show advanced', await mw.count() === 1 && await fl.count() === 1
+      && !(await mw.evaluate((d) => d.open)) && !(await fl.evaluate((d) => d.open)) && /Merge with/.test(await mw.locator('summary').innerText()) && /Fields/.test(await fl.locator('summary').innerText()))
+    await mw.locator('summary').click()
+    await fl.locator('summary').click()
+    ok('Merge with: the search box at once; Fields: Delete and the flags', await mw.locator('[data-field="merge-search"]').count() === 1 && await fl.locator('[data-action="ring-delete"]').count() === 1 && await fl.locator('[data-part="ring-advanced"]').count() === 1)
+    await mw.scrollIntoViewIfNeeded()
+    await h.page.waitForTimeout(300)
+    await shot(h.page, '../wants-to-connect/03-person-sections.png')
+    await v.ctx.close()
+    await h.ctx.close()
+
     ok('no page errors', errors.length === 0, JSON.stringify(errors))
   } finally {
     await browser?.close()
     viteProc.kill()
+    await relay.close().catch(() => {})
   }
   console.log(failures ? `\n${failures} FAILURE(S)` : '\nvisitor-apk-hint: ALL PASS')
   process.exit(failures ? 1 : 0)
