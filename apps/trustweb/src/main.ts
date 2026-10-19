@@ -2057,7 +2057,8 @@ function screenWeb(): Node[] {
   const clip = el('div', { class: 'scroll' }, [layer])
   zoomOnWeb(clip, layer)
   return [
-    header(S.webTitle, { right, more: true }),
+    // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
+    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
     ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
@@ -5056,6 +5057,9 @@ function settingsSheet(): void {
       connectionRow(),
       buildContactBox({}).el,
     ], true),
+    settingsSection('web', S.setSecWeb, [
+      el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+    ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',

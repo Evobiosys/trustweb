@@ -202,8 +202,7 @@ async function main() {
 
     // 8 Settings holds the same box
     await ada.getByRole('button', { name: 'Back' }).click().catch(() => {})
-    await ada.locator('.hdr-btn.more').first().click()
-    await ada.locator('.menu-item', { hasText: 'Settings' }).click()
+    await ada.locator('.hdr [aria-label="Settings"]').first().click()
     const inSettings = await until(async () => (await ada.locator('.sheet.on [data-contact-box]').count()) === 1)
     ok('8. Settings holds the contact box (Signal, WhatsApp, Matrix)', !!inSettings && (await ada.locator('.sheet.on [data-cb-row]').count()) === 3)
     if (inSettings) {

@@ -30,9 +30,8 @@ async function withPeople(page, base, people, extra = {}) {
 }
 async function openDevices(page) {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
-  await page.getByRole('button', { name: 'More' }).click()
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.devices', '1')) // Settings sections are folded by default
-  await page.locator('.menu-item', { hasText: 'Settings' }).click()
+  await page.locator('.hdr [aria-label="Settings"]').click()
   await page.locator('[data-open-devices]').click()
   await page.getByRole('heading', { name: 'My devices' }).waitFor({ timeout: 10_000 })
 }

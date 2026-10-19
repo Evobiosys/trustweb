@@ -129,6 +129,7 @@ export const S = {
   setSourceRemoved: (people: number, lines: number) => `Removed ${people} ${people === 1 ? 'person' : 'people'} and ${lines} ${lines === 1 ? 'line' : 'lines'}.`,
   setAdvanced: 'Advanced',
   setSecYou: 'You',
+  setSecWeb: 'Your web',
   setSecNotify: 'Notifications',
   setSecDevices: 'Devices and backups',
   setSecFeatures: 'Features',

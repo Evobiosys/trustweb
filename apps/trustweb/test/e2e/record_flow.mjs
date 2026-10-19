@@ -314,8 +314,7 @@ async function main() {
     ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['My Resources', 'Record', 'Web']), JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
     await page.getByRole('button', { name: 'Web', exact: true }).click()
-    await page.getByRole('button', { name: 'More' }).click()
-    await page.locator('.menu-item', { hasText: 'Settings' }).click()
+    await page.locator('.hdr [aria-label="Settings"]').click()
     await page.locator('.radio', { hasText: 'A magnifying glass' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     ok('the Query alternative shows a magnifier "Query" and the Curate list top right',
@@ -409,8 +408,7 @@ async function main() {
     await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
     // The sheet redraws once the server's status is in (no server here: "did not answer"); wait for that, so no click lands on the old sheet.
     const openSettings = async () => {
-      await p3.getByRole('button', { name: 'More' }).click()
-      await p3.locator('.menu-item', { hasText: 'Settings' }).click()
+      await p3.locator('.hdr [aria-label="Settings"]').click()
       await p3.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
     }
     await openSettings()

@@ -45,8 +45,7 @@ async function shot(page, name) {
 
 const openSettings = async (page) => {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()
-  await page.getByRole('button', { name: 'More' }).click()
-  await page.locator('.menu-item', { hasText: 'Settings' }).click()
+  await page.locator('.hdr [aria-label="Settings"]').click()
   await page.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
   // The sheet redraws once the server's status is in: wait for it, so no click lands on the old sheet.
   await page.locator('[data-server-transcribe]').waitFor({ timeout: 10_000 })

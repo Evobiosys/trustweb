@@ -286,8 +286,7 @@ async function main() {
     const sp = await sctx.newPage()
     sp.on('pageerror', (e) => errors.push(e.message))
     await start(sp, base, 'Sara')
-    await sp.getByRole('button', { name: 'More' }).click()
-    await sp.locator('.menu-item', { hasText: 'Settings' }).click()
+    await sp.locator('.hdr [aria-label="Settings"]').click()
     // The sheet redraws once the server's status is in; wait for that, so nothing below lands on the old sheet.
     await sp.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 })
     const about = await sp.locator('.about-link').evaluateAll((as) => as.map((a) => a.getAttribute('href')))
