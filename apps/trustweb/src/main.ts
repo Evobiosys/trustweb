@@ -118,7 +118,8 @@ import { agreementsSection } from './agreements_view'
 import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
-import { setUpInstall } from './install'
+import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, setUpInstall } from './install'
+import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
@@ -172,7 +173,6 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
-import { APK_URL } from './install'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 
@@ -1198,6 +1198,35 @@ function apkUpdatesRow(s: AppState): HTMLElement[] {
   ]
 }
 
+/** Wave 16 (apk_hint.ts): what the hint decides from, read now. */
+function apkHintEnv(): ApkHintEnv {
+  const e = currentEnv()
+  return {
+    android: isAndroidAgent(navigator.userAgent), ios: isIosAgent(navigator.userAgent, navigator.maxTouchPoints ?? 0),
+    apkSession: isApkSession(), standalone: e.standalone,
+    dismissedApk: !noticeShown(st(), 'apk-hint'), dismissedIos: !noticeShown(st(), 'ios-soon'),
+  }
+}
+
+/**
+ * Wave 16: the visitor's notice (Android: get the app; iPhone: coming soon). Seam: after offerNotifications and offerDemoContent
+ * had their turn, it takes the top notice only when no other card or sheet is up, and tries again every few seconds while one is.
+ */
+function offerApkHint(tries = 40): void {
+  setTimeout(() => {
+    if (!state || solo) return
+    const kind = apkHintKind(apkHintEnv())
+    if (!kind) return
+    if (!friendsEl.hidden || sheet.classList.contains('on')) { if (tries > 1) offerApkHint(tries - 1); return }
+    const android = kind === 'android'
+    const dismiss = (): void => { dismissNotice(st(), android ? 'apk-hint' : 'ios-soon'); save(); hideNotice() }
+    showNotice(android ? S.apkHintTitle : S.iosSoonTitle, android ? S.apkHintBody : S.iosSoonBody, android
+      ? [el('a', { class: 'btn btn-electric btn-sm', href: APK_URL, rel: 'noopener' }, [S.instApkButton]), el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.apkHintNotNow])]
+      : [el('button', { class: 'btn btn-ghost btn-sm', onclick: dismiss }, [S.iosSoonOk])])
+    friendsEl.querySelector('span')?.setAttribute(android ? 'data-apk-hint' : 'data-ios-soon', '')
+  }, 4500)
+}
+
 function offerDemoContent(): void {
   const s = state
   if (!s || solo || devRecordFile() || s.testOf || s.demoOffered || s.demo || window.top !== window || !isPhoneWidth() || runsAsInstalledApp()) return
@@ -1404,6 +1433,7 @@ function screenStart(): Node[] {
     else offerDemoContent()
     offerNotifications()
     setTimeout(() => void offerApkUpdate(), 4000)
+    offerApkHint()
     void net.start().then(announceLink).then(() => refreshPush())
     void completePendingConnect()
     maybeOpenPendingShare()
@@ -4972,6 +5002,7 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
+    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
@@ -5562,6 +5593,7 @@ if (state && !state.testOf?.handedOverAt) {
   offerDemoContent()
   offerNotifications()
   setTimeout(() => void offerApkUpdate(), 4000)
+  offerApkHint()
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
   // Wave 6: knowing this site's front door lets its forwarded asks go on through this phone (mayPassOnFrom).
