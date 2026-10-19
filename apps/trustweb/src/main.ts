@@ -173,6 +173,7 @@ import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
+import { createToast, type ToastOpts } from './toast'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 
@@ -719,6 +720,7 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
+const toastShow = createToast(toastEl)
 /** Wave 6i: the notice for a new message (not the toast: a toast never takes taps, this one does). */
 const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-notice': '1' })
 /** Review 6i: declared with the element, ahead of anything that may open a sheet or the prompt (hideMsgNotice reads it). */
@@ -1067,12 +1069,8 @@ function closeSheet(): void {
   if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
 }
 
-let toastTimer: ReturnType<typeof setTimeout> | undefined
-function toast(msg: string): void {
-  toastEl.textContent = msg
-  toastEl.classList.add('on')
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200)
+function toast(msg: string, o?: ToastOpts): void {
+  toastShow(msg, o)
 }
 
 /**
@@ -1347,9 +1345,10 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     queryOpen = true
     toast(S.demoWaitingToast(peer.displayName))
   } else if (picked) {
-    toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
+    addedToast(person, ring)
   } else {
-    toast(ring === Ring.Intending ? S.personAddedToast(peer.displayName) : S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
+    if (ring === Ring.Intending) addedToast(person, ring, peer.displayName)
+    else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
@@ -1358,6 +1357,13 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     viaCard.closed(person.id)
     if (!openPendingShare()) personSheet(person.id)
   } else openConnectAdd(peer, person, link.from.displayName)
+}
+
+/** After an add: "<name> added." (Intending; tapping it opens their card, Jakob 2026-10-19) or "<name> is in your web." */
+function addedToast(person: Person, ring: Ring, name = person.name): void {
+  const id = person.id
+  if (ring === Ring.Intending) toast(S.personAddedToast(name), { onClick: () => personSheet(id) })
+  else toast(S.connectAddedToast(name))
 }
 
 /**
@@ -1429,7 +1435,7 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       save()
       connectAdd = null
       viaCard.closed(person.id)
-      toast(ring === Ring.Intending ? S.personAddedToast(person.name) : S.connectAddedToast(person.name))
+      addedToast(person, ring)
       render()
       if (!openPendingShare()) personSheet(person.id)
     },

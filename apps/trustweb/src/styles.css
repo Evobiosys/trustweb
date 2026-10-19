@@ -257,6 +257,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
+.toast.on.tap{pointer-events:auto; cursor:pointer}
 /* "We have given you some (imaginary ;) friends :)": demo phones, once, under the header */
 .demo-friends{position:absolute; left:16px; right:16px; top:92px; z-index:30; background:var(--card); color:var(--ink); border-radius:16px;
   padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
