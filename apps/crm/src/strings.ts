@@ -24,7 +24,7 @@ export const S = {
   nothingYet: 'Nothing yet',
   tabbar: {
     title: 'Tab bar',
-    hint: 'On hover: the bar slides away and comes back when the pointer (or a finger) reaches the bottom edge. Hidden: use the view switcher at the top right or Settings.',
+    hint: 'On hover: the bar slides away and comes back when the pointer (or a finger) reaches the bottom edge. Hidden: no bar; tap the Timeline or ⋮ icon at the top once more to return to People, or switch the view at the top right.',
     always: 'Always shown',
     hover: 'Show on hover',
     hidden: 'Hidden',
