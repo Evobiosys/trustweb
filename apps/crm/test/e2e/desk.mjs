@@ -116,8 +116,11 @@ try {
   const kit = page.locator('[data-kit="p-benedikt"]')
   ok('keep-in-touch row shows Benedikt with "Every week"', (await kit.innerText()).includes('Every week'))
   await kit.hover()
+  const talks = () => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb-crm.v1.me')).interactions.filter((i) => i.personId === 'p-benedikt').length)
+  const before = await talks()
   await kit.locator('[data-action="mark-contacted"]').click()
   ok('Mark as contacted removes the row', await page.locator('[data-kit="p-benedikt"]').count() === 0)
+  ok('Mark as contacted adds exactly one interaction', (await talks()) === before + 1, `${before} -> ${await talks()}`)
 
   // command box
   await page.locator('[data-field="desk-command"]').fill('remind Aisha about the onboarding screens')
@@ -205,6 +208,7 @@ try {
       person('p-emily', 'Emily Hernandez', 'Asked for an introduction to Jack', 40), person('p-ben', 'Benjamin Thompson', 'Discussed potential partnership in Q1', 45),
       person('p-chris', 'Christopher Anderson', 'Sent pricing details, waiting on feedback', 50), person('p-tay', 'Christopher Taylor', 'Artificial Intelligence Engineer', 60),
       person('p-alex', 'Alexander Hernandez', 'Managing Partner', 60), person('p-sam', 'Samuel Garcia', 'Marketing Director', 60),
+      { ...person('p-dead', 'Dora Verstorben', 'Wrote the seed-library charter', 80), fields: { __XNQ42Dtiwx: true } },
     ]
     localStorage.setItem('trustweb.v1.me', JSON.stringify({
       v: 1, me: { id: 'me', displayName: 'Joseph Moreau' }, people, peers: [], inventory: [], log: [], notificationsOn: false,
@@ -229,6 +233,7 @@ try {
   await fp.waitForSelector('[data-screen="desk-home"]')
   const sections = await fp.locator('.desk-section').evaluateAll((els) => els.map((e) => e.dataset.section))
   ok('full: all five sections in the Dex order', sections.join(',') === 'events,resurface,birthdays,keep-in-touch,reminders', sections.join(','))
+  ok('full: a deceased person is never resurfaced (people list filter)', !(await fp.locator('[data-section="resurface"]').innerText()).includes('Dora'))
   ok('full: events show their time ranges', (await fp.locator('[data-section="events"]').innerText()).includes('09:00–09:45'))
   ok('full: three keep-in-touch rows with "Every week"', await fp.locator('[data-section="keep-in-touch"] .desk-pill', { hasText: 'Every week' }).count() === 3)
   ok('full: two birthdays', await fp.locator('[data-section="birthdays"] .desk-row').count() === 2)

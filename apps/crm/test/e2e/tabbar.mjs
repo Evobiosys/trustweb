@@ -80,6 +80,15 @@ try {
   r = await rect()
   ok('hover: bar re-hides 700 ms after leave', r.top >= r.vh, JSON.stringify(r))
 
+  // A mouse click on a tab focuses it (Chromium): the bar still leaves once the pointer is gone (only keyboard focus keeps it).
+  await page.mouse.move(zone.x + zone.width / 2, zone.y + zone.height / 2)
+  await sleep(250)
+  await page.locator('.tab').first().click()
+  await page.mouse.move(195, 300)
+  await sleep(700 + 250)
+  r = await rect()
+  ok('hover: bar leaves after a tab was clicked', r.top >= r.vh, JSON.stringify(r))
+
   await page.keyboard.press('Tab')
   await page.locator('.tab').first().focus()
   await sleep(250)

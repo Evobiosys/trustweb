@@ -27,13 +27,14 @@
   }
 
   // Hover mode: the bar rides in while the pointer (or a finger, or keyboard focus) is at the bottom edge, and leaves 600 ms after.
+  // Only keyboard focus keeps it: a clicked or tapped tab keeps focus too (Chromium), and the bar must still leave.
   let bar: HTMLElement | undefined = $state()
   let shown = $state(false)
   let hideTimer: ReturnType<typeof setTimeout> | undefined
   function reveal(): void { clearTimeout(hideTimer); shown = true }
   function hideSoon(): void {
     clearTimeout(hideTimer)
-    hideTimer = setTimeout(() => { if (!bar?.matches(':focus-within')) shown = false }, 600)
+    hideTimer = setTimeout(() => { if (!bar?.querySelector(':focus-visible')) shown = false }, 600)
   }
   onDestroy(() => clearTimeout(hideTimer))
 
