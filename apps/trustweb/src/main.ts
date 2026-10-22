@@ -3422,6 +3422,7 @@ const curator = createCurator({
     save()
     if (screen === Screen.Web) render()
   },
+  showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,

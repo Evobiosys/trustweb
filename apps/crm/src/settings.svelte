@@ -6,6 +6,7 @@
   import { PLACE_FIELDS } from './close'
   import { communitiesOf } from './fields'
   import { host } from './bridge'
+  import { TABBAR_MODES } from './tabbar'
   import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
@@ -156,6 +157,13 @@
   <p class="muted">{S.activityHint}</p>
   <label class="fld"><span>{S.activityDays}</span>
     <input class="field" type="number" min="1" data-field="activity-days" value={prefs.activityDays} onchange={setDays} /></label>
+
+  <h3 class="screen-title">{S.tabbar.title}</h3>
+  <p class="muted">{S.tabbar.hint}</p>
+  {#each TABBAR_MODES as m (m)}
+    <label class="fld check"><input type="radio" name="tabbar" data-field="tabbar" value={m} checked={prefs.tabbar === m}
+      onchange={(): void => { prefs.tabbar = m; savePrefs() }} /><span>{S.tabbar[m]}</span></label>
+  {/each}
 
   <h3 class="screen-title">{S.closeTitle}</h3>
   <p class="muted">{S.closeHint}</p>

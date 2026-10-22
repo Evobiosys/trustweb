@@ -602,7 +602,7 @@ export const S = {
     qr: 'Your code: someone scans it, or you send them the link, to connect with you. It is one short link that stays the same when your name changes; our server keeps it for you, and the long link works without the server. Under the arrow you can pin the modes you use most (TrustWeb with Signal, WhatsApp or Matrix), or show only your Signal or WhatsApp link, or only TrustWeb. A moving QR code is coming soon; NFC, Bluetooth and AirDrop come later.',
     'call-web': 'Checking for resonance: call into your web and feel the vibrations come back.',
     'reach-out': 'Yellow dots: people who reached out to you through your trustweb.one link. They sit on the Intending ring until you move them.',
-    'web-tap': 'Tap empty space in the web to add someone. Tap a person to see your notes.',
+    'web-tap': 'Tap empty space inside the rings (trust membranes, also called trust zones) to add someone. Tap a person to see your notes.',
     'about-who': 'Who: the recording is about a person. The notes go to them in your web.',
     'about-what': 'What: the recording is about a thing, a place or a topic. The notes go to My Resources.',
     'rec-advanced': 'Note opportunities, resources, what someone looks for or offers, and talent right away.',

@@ -17,6 +17,12 @@ const EMBED_CSS = `.shell{height:100%; min-height:0; max-width:none; box-shadow:
 main{overflow-y:auto; padding-bottom:12px}
 .privacy{padding-bottom:8px}
 .tabbar{position:static; transform:none; max-width:none}
+.shell{position:relative}
+.shell[data-tabbar] main{padding-bottom:12px}
+.shell[data-tabbar] .privacy{padding-bottom:8px}
+.tabbar[data-mode="hover"]{transform:none; max-height:80px; transition:max-height 180ms ease}
+.tabbar[data-mode="hover"]:not(.shown){max-height:0; overflow:hidden; border-top-width:0}
+.tabbar-hotzone{position:absolute}
 .shell .top{position:relative; padding-top:4px}
 .shell .top .top-btns{position:absolute; top:0; right:92px}`
 

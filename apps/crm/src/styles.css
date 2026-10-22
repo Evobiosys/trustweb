@@ -63,6 +63,11 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .tabbar{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; z-index:5;
   display:grid; grid-template-columns:repeat(3,1fr); background:var(--tab-bg); border-top:1px solid var(--line);
   backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding-bottom:env(safe-area-inset-bottom)}
+.tabbar[data-mode="hover"]{transform:translate(-50%,100%); transition:transform 180ms ease}
+.tabbar[data-mode="hover"].shown{transform:translate(-50%,0)}
+.tabbar-hotzone{position:fixed; left:0; right:0; bottom:0; height:calc(16px + env(safe-area-inset-bottom)); z-index:4}
+.shell[data-tabbar="hover"] main, .shell[data-tabbar="hidden"] main{padding-bottom:24px}
+.shell[data-tabbar="hover"] .privacy, .shell[data-tabbar="hidden"] .privacy{padding-bottom:16px}
 .tab{min-height:56px; border:0; background:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:0 2px}
 .tab[aria-current="page"]{color:var(--teal); box-shadow:inset 0 3px 0 var(--teal)}
 

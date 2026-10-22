@@ -13,6 +13,7 @@ import { SortOrder } from './contacts'
 export const S = {
   appName: 'Web Curator',
   tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', settings: 'Settings' },
+  views: { desk: 'Desk', membranes: 'Trust membranes', classic: 'Web Curator' },
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,
   sortCustom: 'Custom order',
@@ -21,6 +22,13 @@ export const S = {
   openLines: (n: number) => (n === 1 ? '1 note' : `${n} notes`),
   lastActivity: (when: string) => `Last: ${when}`,
   nothingYet: 'Nothing yet',
+  tabbar: {
+    title: 'Tab bar',
+    hint: 'On hover: the bar slides away and comes back when the pointer (or a finger) reaches the bottom edge. Hidden: use the view switcher at the top right or Settings.',
+    always: 'Always shown',
+    hover: 'Show on hover',
+    hidden: 'Hidden',
+  },
   back: 'Back',
   contactInfo: 'Contact info',
   contactInfoMore: 'Show all ways to reach them',
