@@ -44,18 +44,25 @@
   /** One pass per change: the People list's own filter (hidden deceased, famous, sources ...) decides who the Desk lists; `now` is read inside, so a thing logged a second ago counts as past. */
   const data: DeskData = $derived.by(() => {
     const now = Date.now()
-    const people = store.app.people.filter((p) => passesFilters(valuesOf(p.id), prefs.filters, p)).map((p) => effectivePerson(p, edits(p.id)))
+    // Field values once per person per pass: the filter, birthdays, groups, map and members all read them (700 people).
+    const cache = new Map<string, FieldValues>()
+    const values = (id: string): FieldValues => {
+      let v = cache.get(id)
+      if (!v) { v = valuesOf(id); cache.set(id, v) }
+      return v
+    }
+    const people = store.app.people.filter((p) => passesFilters(values(p.id), prefs.filters, p)).map((p) => effectivePerson(p, edits(p.id)))
     const view = { app: { ...store.app, people }, crm: store.crm }
     const past = activityOf(view, now)
     const visible = new Set(people.map((p) => p.id))
-    return { now, view, values: valuesOf, past, reminders: remindersDue(store.crm, now).filter((f) => visible.has(f.personId)), kit: keepInTouchDue(view, past, now) }
+    return { now, view, values, past, reminders: remindersDue(store.crm, now).filter((f) => visible.has(f.personId)), kit: keepInTouchDue(view, past, now) }
   })
   const people = $derived(data.view.app.people)
   const bell = $derived(data.reminders.length + data.kit.filter((r) => r.due).length)
   const steps = $derived(gettingStarted(data.view, prefs.pkms, window.matchMedia?.('(display-mode: standalone)').matches ?? false))
 
   const group = $derived(nav.deskGroup === null ? undefined : loadColourTags().find((t) => t.id === nav.deskGroup))
-  const members = $derived(group ? people.filter((p) => tagsOf({ ring: p.ring, fields: valuesOf(p.id) as TwPerson['fields'] }, [group]).length > 0) : [])
+  const members = $derived(group ? people.filter((p) => tagsOf({ ring: p.ring, fields: data.values(p.id) as TwPerson['fields'] }, [group]).length > 0) : [])
 
   async function focusCommand(): Promise<void> {
     showDeskPage(DeskPage.Home)

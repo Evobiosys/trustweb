@@ -56,7 +56,9 @@ export interface Resurfaced {
 export function resurface(view: CrmView, past: Map<string, number>, now: number, days: number): Resurfaced[] {
   const { crm } = view
   const open = new Set(crm.followUps.filter((f) => !f.doneAt).map((f) => f.personId))
-  const weight = (p: Person): number => p.lines.length + crm.interactions.filter((i) => i.personId === p.id).length
+  const talks = new Map<string, number>()
+  for (const i of crm.interactions) talks.set(i.personId, (talks.get(i.personId) ?? 0) + 1)
+  const weight = (p: Person): number => p.lines.length + (talks.get(p.id) ?? 0)
   const ranked = view.app.people
     .filter((p) => (ringOf(p.ring) !== UNSORTED || baseFields(p)?.[FAMILY_KEY] === true) && !crm.keepInTouch?.[p.id] && !open.has(p.id) && (past.get(p.id) ?? 0) < now - days * DAY)
     .sort((a, b) => weight(b) - weight(a) || (past.get(a.id) ?? 0) - (past.get(b.id) ?? 0) || a.id.localeCompare(b.id))
@@ -166,9 +168,11 @@ const PLACE_LABEL = /resid|city|location|address|lives|wohn/i
 /** People grouped by place, biggest first: the newest interaction's place, else a place-like field, else one of my close places named in any field. No map, no lookup. */
 export function placesOf(view: CrmView, values: (id: string) => FieldValues, close: Close): PlaceGroup[] {
   const groups = new Map<string, PlaceGroup>()
+  const met = new Map<string, { at: number; place: string }>()
+  for (const i of view.crm.interactions) if (i.place && i.at > (met.get(i.personId)?.at ?? -Infinity)) met.set(i.personId, { at: i.at, place: i.place })
   for (const person of view.app.people) {
     const v = values(person.id)
-    const newest = view.crm.interactions.filter((i) => i.personId === person.id && i.place).sort((a, b) => b.at - a.at)[0]?.place
+    const newest = met.get(person.id)?.place
     const field = Object.keys(v).filter((k) => PLACE_LABEL.test(labelOf(k))).map((k) => valueText(v[k])).find(Boolean)
     const texts = Object.values(v).map((x) => valueText(x).toLowerCase())
     const stop = close.places.flatMap(stops).find((s) => texts.some((t) => t.includes(s)))

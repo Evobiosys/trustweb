@@ -63,6 +63,16 @@ describe('resurface', () => {
     expect(out.find((r) => r.person.id === 'many')!.context).toBe('newest')
     expect(out.find((r) => r.person.id === 'few')!.context).toBe('one')
   })
+  it('stays linear at 700 people, 7000 interactions, well under 50 ms (counts once, not per comparison)', () => {
+    const people = Array.from({ length: 700 }, (_, i) => person(`p${i}`, { lines: [line(`l${i}`, 'x', NOW - (30 + (i % 50)) * DAY)] }))
+    const c = { ...emptyCrm(), interactions: Array.from({ length: 7000 }, (_, i) => ({ id: `i${i}`, personId: `p${i % 700}`, at: NOW - 40 * DAY, kind: InteractionKind.Note, text: '' })) }
+    const view = viewOfPeople(people, c)
+    const past = activityOf(view, NOW)
+    const t0 = performance.now()
+    resurface(view, past, NOW, 7)
+    placesOf(view, () => ({}), emptyClose())
+    expect(performance.now() - t0).toBeLessThan(50)
+  })
   it('a due reminder is no contact', () => {
     const c = emptyCrm()
     c.followUps = [{ id: 'f', personId: 'p', text: 't', dueAt: NOW - DAY, createdAt: NOW - 90 * DAY, doneAt: NOW - DAY }]
