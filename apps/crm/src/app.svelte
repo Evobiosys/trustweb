@@ -1,8 +1,9 @@
 <script lang="ts">
   import ContactPage from './contact_page.svelte'
+  import Desk from './desk.svelte'
   import Environment from './environment.svelte'
   import ImportContacts from './import_contacts.svelte'
-  import { Tab, TABS } from './nav'
+  import { Tab, TABS, View } from './nav'
   import { nav, showTab } from './nav.svelte'
   import { prefs } from './prefs.svelte'
   import People from './people.svelte'
@@ -15,6 +16,7 @@
   import { Source } from './storage'
   import { S } from './strings'
   import Timeline from './timeline.svelte'
+  import ViewMenu from './view_menu.svelte'
 
   const TAB_LABEL: Partial<Record<Tab, string>> = {
     [Tab.People]: S.tabs.people,
@@ -23,6 +25,7 @@
   }
 </script>
 
+{#if prefs.view === View.Desk}<Desk />{:else}
 <div class="shell">
   <header class="top">
     <div>
@@ -30,6 +33,7 @@
       <p class="source">{S.source[store.source]}{store.source === Source.Record ? ` (${store.app.people.length})` : ''}</p>
     </div>
     <div class="top-btns">
+      <ViewMenu cls="hdr-icon" />
       <button class="hdr-icon" data-tab={Tab.Timeline} aria-label={S.tabs.timeline} title={S.tabs.timeline} aria-current={nav.tab === Tab.Timeline ? 'page' : undefined} onclick={(): void => showTab(Tab.Timeline)}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M1 12h2.6M8.4 12h1.2M14.4 12h1.2M20.4 12H23" /><circle cx="6" cy="12" r="2.4" /><circle cx="12" cy="12" r="2.4" /><circle cx="18" cy="12" r="2.4" /></svg>
       </button>
@@ -73,3 +77,4 @@
     {/each}
   </nav>
 </div>
+{/if}

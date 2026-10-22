@@ -25,3 +25,21 @@ export enum PersonForm {
   Interaction = 'interaction',
   FollowUp = 'followup',
 }
+
+/** Which face of the Curator shows: the classic phone shell or the three-column Desk. */
+export enum View {
+  Desk = 'desk',
+  Classic = 'classic',
+}
+
+/** The pages in the Desk's sidebar. */
+export enum DeskPage {
+  Home = 'home',
+  Reminders = 'reminders',
+  Contacts = 'contacts',
+  KeepInTouch = 'keepInTouch',
+  Timeline = 'timeline',
+  Map = 'map',
+  Settings = 'settings',
+  Help = 'help',
+}

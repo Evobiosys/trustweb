@@ -4,6 +4,8 @@
  */
 import { host } from './bridge'
 import { DEFAULT_ACTIVITY_DAYS } from './person_view'
+import { viewOf } from './desk'
+import { View } from './nav'
 import { DEV_CLOSE, emptyClose } from './close'
 import type { Close } from './close'
 import { emptyPlacements } from './placement'
@@ -77,11 +79,15 @@ export interface Prefs {
   /** Tana node ids of people created from TrustWeb. */
   nodeIds: Record<string, string>
   log: string[]
+  /** Which face of the Curator shows (chevron menu, Settings > View). */
+  view: View
+  /** Person ids pinned in the Desk's sidebar; a merged person is looked up through crm.merges, nothing is pruned here. */
+  favorites: string[]
 }
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, truth: '', notesUrl: 'http://127.0.0.1:8263', notesToken: '', notesAutoSync: true, activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [] }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [], view: View.Classic, favorites: [] }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined
@@ -91,6 +97,8 @@ function load(): Prefs {
     // Same dev path: Jakob's "Close to me" set until he saved his own.
     const near = saved.close === undefined && __TW_RECORD__ ? { close: DEV_CLOSE } : {}
     const merged = { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement } }
+    // The dev record's own device opens on the Desk until a view was saved.
+    merged.view = viewOf(saved.view ?? (__TW_RECORD__ ? View.Desk : undefined))
     // Same dev path for the notes bridge: its token read from ~/.config/trustweb/notes-bridge.json by the dev server (vite define), until the developer saved one.
     if (__TW_NOTES_TOKEN__ && saved.notesToken === undefined) {
       merged.notesToken = __TW_NOTES_TOKEN__

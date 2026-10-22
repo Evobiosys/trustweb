@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Pick, clearedCount, customAllowed, dismiss, joinPoints, linesToAdd, mergeEdits, mergeRows, neitherAllowed, repoint } from '../../src/merge'
+import { Pick, clearedCount, customAllowed, dismiss, joinPoints, linesToAdd, moveKeepInTouch, mergeEdits, mergeRows, neitherAllowed, repoint } from '../../src/merge'
 import { LAST_NAME_KEY } from '../../src/placement'
 import { ContactPointKind, InteractionKind } from '../../src/model'
 
@@ -54,5 +54,17 @@ describe('merge', () => {
     const both = mergeRows({ 'tw-first': 'Ann', [LAST_NAME_KEY]: 'M' }, { 'tw-first': 'Anna', [LAST_NAME_KEY]: 'Muster' }, true)
     expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Custom }, {}, { 'tw-first': 'Anne' })).toBe(true)
     expect(neitherAllowed(LAST_NAME_KEY, both, { 'tw-first': Pick.Custom }, {}, {})).toBe(false)
+  })
+})
+
+describe('moveKeepInTouch', () => {
+  it('moves the entry to the survivor only when it has none', () => {
+    const k = { from: { everyDays: 7, since: 1 } }
+    expect(moveKeepInTouch(k, 'from', 'into')).toEqual({ everyDays: 7, since: 1 })
+    expect(k).toEqual({ into: { everyDays: 7, since: 1 } })
+    const both = { from: { everyDays: 7, since: 1 }, into: { everyDays: 30, since: 2 } }
+    expect(moveKeepInTouch(both, 'from', 'into')).toBeUndefined()
+    expect(both.into.everyDays).toBe(30)
+    expect(moveKeepInTouch(undefined, 'a', 'b')).toBeUndefined()
   })
 })

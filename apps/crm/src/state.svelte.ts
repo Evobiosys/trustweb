@@ -17,8 +17,9 @@ import type { FieldValue, FieldValues } from './fields'
 import { ContactPointKind, deleteArchived, InteractionKind, Stage } from './model'
 import type { CrmState, Curation } from './model'
 import { emptyCuration } from './curation'
-import { joinPoints, linesToAdd, repoint } from './merge'
+import { joinPoints, linesToAdd, moveKeepInTouch, repoint } from './merge'
 import { sampleApp, sampleCrm } from './sample'
+import { S } from './strings'
 import {
   Source, clearImported, loadCrm, parseImport, readImported, readTrustWeb, saveCrm, saveImported,
 } from './storage'
@@ -142,6 +143,28 @@ export function removeFollowUp(id: string): void {
   persist()
 }
 
+/** A cadence for one person (null: none); it starts counting today. */
+export function setKeepInTouch(personId: string, everyDays: number | null): void {
+  store.crm.keepInTouch ??= {}
+  if (everyDays === null) delete store.crm.keepInTouch[personId]
+  else store.crm.keepInTouch[personId] = { everyDays, since: Date.now() }
+  persist()
+}
+
+export function snoozeKeepInTouch(personId: string, until: number): void {
+  const k = store.crm.keepInTouch?.[personId]
+  if (!k) return
+  k.snoozedUntil = until
+  persist()
+}
+
+/** "Reached out" today: a message in the timeline, which restarts the cadence. */
+export function markContacted(personId: string): void {
+  const k = store.crm.keepInTouch?.[personId]
+  if (k) delete k.snoozedUntil
+  addInteraction(personId, InteractionKind.Message, S.desk.reachedOut)
+}
+
 export function setStage(lineId: string, stage: Stage): void {
   store.crm.stages[lineId] = stage
   persist()
@@ -238,9 +261,11 @@ export function mergeRecords(from: string, into: string): () => void {
   const joined = joinPoints(points[into], points[from])
   delete points[from]
   if (joined.length > 0) points[into] = joined
+  const cadence = moveKeepInTouch(store.crm.keepInTouch, from, into)
   store.crm.merges = [...(store.crm.merges ?? []), { from, into }]
   persist()
   return () => {
+    if (cadence && store.crm.keepInTouch) { store.crm.keepInTouch[from] = cadence; delete store.crm.keepInTouch[into] }
     const keep = store.app.people.find((p) => p.id === into)
     if (keep) keep.lines = keep.lines.filter((l) => !lines.includes(l.id))
     for (const x of store.crm.interactions) if (interactions.includes(x.id)) x.personId = from

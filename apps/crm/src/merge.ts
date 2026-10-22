@@ -3,7 +3,7 @@ import { NOTES_KEY, isSet, valueText } from './fields'
 import { LAST_NAME_KEY } from './placement'
 import { RING_KEY } from './rings'
 import type { FieldValue, FieldValues } from './fields'
-import type { ContactPoint, FollowUp, Interaction } from './model'
+import type { KeepInTouch, ContactPoint, FollowUp, Interaction } from './model'
 
 export enum Pick {
   Keep = 'keep',
@@ -102,4 +102,13 @@ export function joinPoints(a: readonly ContactPoint[] = [], b: readonly ContactP
 export function linesToAdd<L extends { text: string; tag: string }>(keep: readonly L[], other: readonly L[]): L[] {
   const have = new Set(keep.map((l) => `${l.tag}|${l.text}`))
   return other.filter((l) => !l.text.startsWith('ring: ') && !have.has(`${l.tag}|${l.text}`))
+}
+
+/** Moves the keep-in-touch entry of `from` to the survivor when it has none; returns the entry moved (for an undo). */
+export function moveKeepInTouch(kit: Record<string, KeepInTouch> | undefined, from: string, into: string): KeepInTouch | undefined {
+  const moved = kit?.[from]
+  if (!kit || !moved || kit[into]) return undefined
+  kit[into] = moved
+  delete kit[from]
+  return moved
 }
