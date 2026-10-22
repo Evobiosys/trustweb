@@ -11,6 +11,8 @@
   /* TrustWeb's light block defines these as var() of themselves (invalid), so the CRM carries real light values */
   --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
   --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
+  /* the Desk view: page, sidebar, accent, glow, hover, peach blob */
+  --desk-bg:#FAFAFA; --desk-side:#F6F6F4; --desk-accent:#3B6EF5; --desk-glow:rgba(59,110,245,.16); --desk-active:rgba(31,42,40,.07); --desk-peach:rgba(255,170,120,.18);
   color-scheme:light;
 }
 /* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A deep teal night instead of a darkened beige, with the same accents. */
@@ -22,6 +24,7 @@
   --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
   --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;
   --start-end:#1E3A3C;
+  --desk-bg:#1C1B17; --desk-side:#22201C; --desk-accent:#7C9CFF; --desk-glow:rgba(124,156,255,.14); --desk-active:rgba(241,238,230,.09); --desk-peach:rgba(255,179,107,.07);
   color-scheme:dark;
 }
 
@@ -289,3 +292,109 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 
 .suggest-row{flex:1; min-width:0}
 .suggest-actions{display:flex; gap:16px; padding:0 14px 6px}
+
+/* Desk view: a Dex-style three-column face. Container queries, not @media: embedded, the Curator sits in a ~430px sheet of a wide viewport. */
+.desk{container:desk/inline-size; position:relative; height:100dvh; overflow:hidden; background:var(--desk-bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:15px}
+:host .desk{height:100%}
+:host .desk-topbar{padding-right:92px}
+.desk-frame{display:grid; grid-template-columns:minmax(0,1fr); height:100%}
+.desk-side{position:absolute; z-index:30; top:0; bottom:0; left:0; width:min(300px,86%); overflow-y:auto; background:var(--desk-side); border-right:1px solid var(--line); transform:translateX(-102%); transition:transform .2s}
+.desk-side.open{transform:none}
+.desk-scrim{position:absolute; inset:0; z-index:25; border:0; background:rgba(0,0,0,.35)}
+.desk-main{display:flex; flex-direction:column; min-width:0; min-height:0; height:100%}
+.desk-body{flex:1; min-height:0; overflow-y:auto}
+@container desk (min-width:760px){
+  .desk-frame{grid-template-columns:clamp(220px,17%,300px) minmax(0,1fr)}
+  .desk-side{position:static; transform:none; width:auto}
+  .desk-scrim,.desk-circle.desk-burger{display:none}
+  .desk-greeting{font-size:34px; margin-top:48px}
+  .desk-centre{padding:0 24px 48px}
+}
+@container desk (min-width:1100px){
+  .desk-body{display:grid; grid-template-columns:minmax(0,1fr) clamp(280px,23%,360px); overflow:hidden}
+  .desk-centre,.desk-right{overflow-y:auto; min-height:0}
+}
+
+.desk-nav{display:flex; flex-direction:column; min-height:100%; padding:14px 12px 16px}
+.desk-logo-row{display:flex; align-items:center; justify-content:space-between; padding:0 4px 14px}
+.desk-logo{width:44px; height:44px; border-radius:12px; background:var(--desk-accent); color:#fff; display:flex; align-items:center; justify-content:center; font:700 22px "Iowan Old Style",Georgia,serif}
+.desk-items{list-style:none; padding:0}
+.desk-item{display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 12px; border:0; border-radius:10px; background:none; text-align:left; font-size:15px; color:var(--ink)}
+.desk-item:hover,.desk-item[aria-current="page"]{background:var(--desk-active)}
+.desk-sub-item{padding-left:44px}
+.desk-label{font-family:inherit; font-size:13px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--ink-soft); margin:0 0 6px}
+.desk-nav .desk-label{margin:22px 12px 6px}
+.desk-muted{font-size:13px; color:var(--ink-soft); padding:0 12px}
+.desk-bottom{margin-top:auto; padding-top:16px}
+.desk-dot-colour{width:12px; height:12px; border-radius:50%; flex-shrink:0}
+.desk-count{margin-left:auto; font-size:13px; color:var(--ink-soft)}
+.desk .ava{width:28px; height:28px; font-size:11px}
+
+.desk-topbar{display:flex; align-items:center; gap:12px; height:64px; flex-shrink:0; padding:0 16px; border-bottom:1px solid var(--line)}
+.desk-pick{position:relative; flex:1; min-width:0; max-width:520px}
+.desk-input{-webkit-appearance:none; appearance:none; width:100%; height:40px; padding:0 14px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:inherit}
+.desk-input.desk-has-icon{padding-left:40px}
+.desk-input:focus{outline:none; border-color:var(--desk-accent)}
+.desk-pick-icon{position:absolute; left:12px; top:10px; color:var(--ink-soft); pointer-events:none}
+.desk-hits{position:absolute; z-index:20; top:46px; left:0; right:0; list-style:none; padding:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.desk-top-actions{margin-left:auto; display:flex; gap:10px; align-items:center}
+.desk-circle{position:relative; width:36px; height:36px; flex-shrink:0; border:1px solid var(--line); border-radius:50%; background:var(--card); color:var(--ink); display:flex; align-items:center; justify-content:center}
+.desk-badge{position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#D62828; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center}
+.desk-menu-wrap{position:relative}
+.desk-menu{position:absolute; right:0; top:44px; z-index:40; min-width:200px; padding:6px; display:flex; flex-direction:column; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.desk-menu button{display:flex; align-items:center; gap:8px; min-height:40px; padding:0 10px; border:0; border-radius:8px; background:none; text-align:left; white-space:nowrap}
+.desk-menu button:hover,.desk-menu button:focus-visible{background:var(--desk-active)}
+.desk-menu [aria-disabled="true"]{opacity:.5; cursor:not-allowed}
+.desk-check{display:inline-flex; width:16px}
+.desk-icon-btn{width:32px; height:32px; border:0; border-radius:8px; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center}
+.desk-icon-btn:hover{background:var(--desk-active)}
+
+.desk-centre{position:relative; padding:0 14px 48px}
+.desk-centre::before{content:""; position:absolute; inset:0 0 auto 0; height:280px; pointer-events:none; background:radial-gradient(300px 190px at 8% 0%,var(--desk-peach),transparent 70%),radial-gradient(320px 200px at 96% 0%,var(--desk-glow),transparent 70%)}
+.desk-centre-inner{position:relative; max-width:980px; margin:0 auto}
+.desk-greeting{font:500 28px/1.2 "Iowan Old Style","Palatino",Georgia,serif; margin:28px 0 18px}
+.desk-title{font:500 28px/1.2 "Iowan Old Style","Palatino",Georgia,serif; margin:32px 0 8px}
+.desk-command{position:relative; height:150px; background:var(--card); border:1px solid var(--line); border-radius:16px; transition:border-color .15s,box-shadow .15s}
+.desk-command:focus-within{border-color:var(--desk-accent); box-shadow:0 0 0 4px var(--desk-glow),inset 0 -26px 30px -26px var(--desk-glow)}
+.desk-command-input{display:block; width:100%; height:100%; padding:16px 70px 16px 18px; border:0; outline:none; resize:none; background:none; color:inherit; font:inherit}
+.desk-send{position:absolute; right:14px; bottom:14px; width:38px; height:38px; border:0; border-radius:50%; background:var(--desk-accent); color:#fff; display:flex; align-items:center; justify-content:center}
+.desk-send:disabled{opacity:.35; cursor:default}
+.desk-options{list-style:none; padding:6px; margin-top:8px; background:var(--card); border:1px solid var(--line); border-radius:12px}
+.desk-said{margin-top:8px; color:var(--ok-ink); font-size:14px}
+.desk-section{margin-top:28px}
+.desk-row{display:flex; align-items:center; gap:12px; min-height:48px; padding:0 8px; border-radius:10px}
+.desk-row:hover,.desk-row:focus-within{background:var(--desk-active)}
+.desk-link{display:flex; align-items:center; gap:10px; flex:1; min-width:0; min-height:44px; padding:0; border:0; background:none; color:inherit; text-align:left}
+.desk-link strong{font-weight:600; white-space:nowrap}
+.desk-sub{color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14.5px}
+.desk-dot{color:var(--ink-soft)}
+.desk-grow{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.desk-row-icon{display:inline-flex; color:var(--desk-accent)}
+.desk-when{margin-left:auto; flex-shrink:0; font-size:14px}
+.desk-warn{color:var(--warn-ink)}
+.desk-pill{flex-shrink:0; padding:2px 12px; border:1px solid var(--line); border-radius:999px; background:var(--card); font-size:13px; white-space:nowrap}
+.desk-act{display:flex; align-items:center; gap:4px; opacity:0}
+.desk-row:hover .desk-act,.desk-row:focus-within .desk-act{opacity:1}
+@media (hover:none){ .desk-act{opacity:1} }
+.desk-snooze{width:128px; height:32px; padding:0 6px; border:1px solid var(--line); border-radius:8px; background:var(--card); font-size:12px}
+.desk-select{width:auto; min-height:34px; padding:2px 10px; font-size:13px}
+.desk-page{padding-bottom:24px}
+.desk-card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px}
+.desk-card-title{font:600 18px system-ui,sans-serif; margin:0 0 4px}
+.desk-card .desk-sub{white-space:normal}
+.desk-compose{margin:16px 0}
+.desk-place{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-top:12px}
+.desk-faces{display:flex; flex-wrap:wrap; gap:0 14px; margin-top:6px}
+.desk-faces .desk-link{flex:0 0 auto}
+.desk-star{margin-left:auto}
+.desk-star + .hide-btn{margin-left:0}
+
+.desk-right{display:flex; flex-direction:column; gap:16px; padding:16px}
+.desk-steps{list-style:none; padding:0; margin-top:14px; border-top:1px solid var(--line)}
+.desk-steps li{display:flex; align-items:center; gap:12px; min-height:44px; font-size:14.5px}
+.desk-circle-box{width:20px; height:20px; border:1.5px solid var(--line); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; color:#fff; flex-shrink:0}
+.desk-done .desk-circle-box{background:var(--desk-accent); border-color:var(--desk-accent)}
+.desk-mapcard{margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end; min-height:120px; padding:16px; overflow:hidden; text-align:left; color:var(--ink); border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,var(--card),var(--desk-glow))}
+.desk-mapcard-text{display:flex; flex-direction:column; gap:6px; align-items:flex-start}
+.desk-mapcard-text .desk-label{letter-spacing:.12em; font-size:11px}
+.desk-globe{flex-shrink:0; width:110px; height:110px; margin:-10px -26px -34px 0; color:var(--desk-accent); opacity:.55}

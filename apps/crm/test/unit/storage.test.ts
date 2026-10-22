@@ -65,6 +65,14 @@ describe('storage', () => {
     expect(loadCrm('me')).toEqual(emptyCrm())
   })
 
+  it('loads a record saved without keepInTouch and round-trips one with it', () => {
+    saveCrm('me', sampleCrm(NOW))
+    expect(loadCrm('me').keepInTouch).toBeUndefined()
+    const crm = { ...sampleCrm(NOW), keepInTouch: { 'p-lena': { everyDays: 14, since: NOW, snoozedUntil: NOW + 1 } } }
+    saveCrm('me', crm)
+    expect(loadCrm('me').keepInTouch).toEqual(crm.keepInTouch)
+  })
+
   it('survives a browser that blocks storage', () => {
     ;(globalThis as { localStorage?: unknown }).localStorage = {
       getItem(): never { throw new Error('blocked') },

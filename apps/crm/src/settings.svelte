@@ -8,6 +8,7 @@
   import { host } from './bridge'
   import { TABBAR_MODES } from './tabbar'
   import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
+  import { View } from './nav'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
   import { deleteHidden, store } from './state.svelte'
@@ -152,6 +153,13 @@
     {/each}
     </details>
   {/if}
+
+  <h3 class="screen-title">{S.desk.viewSection}</h3>
+  <label class="fld"><span>{S.desk.viewSection}</span>
+    <select class="field" data-field="view" bind:value={prefs.view} onchange={savePrefs}>
+      <option value={View.Desk}>{S.views.desk}</option>
+      <option value={View.Classic}>{S.views.classic}</option>
+    </select></label>
 
   <h3 class="screen-title">{S.activityTitle}</h3>
   <p class="muted">{S.activityHint}</p>

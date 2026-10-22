@@ -13,6 +13,7 @@
  *                   not a parallel "deal" record)
  *   - ContactPoint  phone or email, the two things the roadmap wants collapsed
  *                   under Contact info that Channel (messengers only) lacks
+ *   - KeepInTouch   how often I want to reach a person (the Desk view's keep-in-touch list), keyed by person id
  *
  * Privacy: every CrmState field is this-phone-only by construction. TrustWeb's
  * matcher (model.ts threadsForRing) reads only `people[].lines` and
@@ -108,6 +109,13 @@ export interface Curation {
   admins: { networkId: string; personId?: string; from: number; to: number }[]
 }
 
+/** A cadence I set for one person; `since` anchors the first due date while nothing has happened with them. */
+export interface KeepInTouch {
+  everyDays: number
+  since: number
+  snoozedUntil?: number
+}
+
 export interface CrmState {
   v: 1
   interactions: Interaction[]
@@ -128,6 +136,8 @@ export interface CrmState {
   lineEdits?: Record<string, { text?: string; checkedAt?: number }>
   /** People merged into another (the survivor keeps its id): `from`'s note lines are added to `into` on load, `from` stays in hiddenPeople. */
   merges?: { from: string; into: string }[]
+  /** Person id -> keep-in-touch cadence; absent on records saved before the Desk view. */
+  keepInTouch?: Record<string, KeepInTouch>
 }
 
 /** Delete for good from the Archive (Jakob 2026-10-19): the entry and the person it keeps go; nothing can restore them after. */
