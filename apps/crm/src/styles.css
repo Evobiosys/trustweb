@@ -12,7 +12,7 @@
   --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
   --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
   /* the Desk view: page, sidebar, accent, glow, hover, peach blob */
-  --desk-bg:#FAFAFA; --desk-side:#F6F6F4; --desk-accent:#3B6EF5; --desk-glow:rgba(59,110,245,.16); --desk-active:rgba(31,42,40,.07); --desk-peach:rgba(255,170,120,.18);
+  --desk-bg:#FAFAFA; --desk-side:#F6F6F4; --desk-accent:#3B6EF5; --desk-glow:rgba(59,110,245,.16); --desk-blob:rgba(59,110,245,.16); --desk-active:rgba(31,42,40,.07); --desk-peach:rgba(255,170,120,.18);
   color-scheme:light;
 }
 /* Dark is the default whatever the OS says; only Settings > Light theme (data-theme="light") switches it off. A deep teal night instead of a darkened beige, with the same accents. */
@@ -24,7 +24,7 @@
   --tint-blue:#143A44; --tint-sand:#33301F; --ok-ink:#7BE0B0; --warn-ink:#FFB38F;
   --electric-deep:#7ED9CF; --violet-deep:#8FD0D0; --warm-deep:#FFB36B;
   --start-end:#1E3A3C;
-  --desk-bg:#1C1B17; --desk-side:#22201C; --desk-accent:#7C9CFF; --desk-glow:rgba(124,156,255,.14); --desk-active:rgba(241,238,230,.09); --desk-peach:rgba(255,179,107,.07);
+  --desk-bg:#1C1B17; --desk-side:#22201C; --desk-accent:#7C9CFF; --desk-glow:rgba(124,156,255,.14); --desk-blob:rgba(124,156,255,.08); --desk-active:rgba(241,238,230,.09); --desk-peach:rgba(255,179,107,.07);
   color-scheme:dark;
 }
 
@@ -296,7 +296,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 /* Desk view: a Dex-style three-column face. Container queries, not @media: embedded, the Curator sits in a ~430px sheet of a wide viewport. */
 .desk{container:desk/inline-size; position:relative; height:100dvh; overflow:hidden; background:var(--desk-bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:15px}
 :host .desk{height:100%}
-:host .desk-topbar{padding-right:92px}
+/* Embedded: the host's "× Home" pill sits over the sheet's top right corner; the top bar row goes under it instead of beside it (full-width search). */
+:host .desk-topbar{height:auto; padding:32px 16px 12px}
 .desk-frame{display:grid; grid-template-columns:minmax(0,1fr); height:100%}
 .desk-side{position:absolute; z-index:30; top:0; bottom:0; left:0; width:min(300px,86%); overflow-y:auto; background:var(--desk-side); border-right:1px solid var(--line); transform:translateX(-102%); transition:transform .2s}
 .desk-side.open{transform:none}
@@ -317,7 +318,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 
 .desk-nav{display:flex; flex-direction:column; min-height:100%; padding:14px 12px 16px}
 .desk-logo-row{display:flex; align-items:center; justify-content:space-between; padding:0 4px 14px}
-.desk-logo{width:44px; height:44px; border-radius:12px; background:var(--desk-accent); color:#fff; display:flex; align-items:center; justify-content:center; font:700 22px "Iowan Old Style",Georgia,serif}
+.desk-logo{width:44px; height:44px; border-radius:12px; background:var(--desk-accent); color:var(--card); display:flex; align-items:center; justify-content:center; font:700 22px "Iowan Old Style",Georgia,serif}
 .desk-items{list-style:none; padding:0}
 .desk-item{display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 12px; border:0; border-radius:10px; background:none; text-align:left; font-size:15px; color:var(--ink)}
 .desk-item:hover,.desk-item[aria-current="page"]{background:var(--desk-active)}
@@ -349,15 +350,15 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-icon-btn{width:32px; height:32px; border:0; border-radius:8px; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center}
 .desk-icon-btn:hover{background:var(--desk-active)}
 
-.desk-centre{position:relative; padding:0 14px 48px}
-.desk-centre::before{content:""; position:absolute; inset:0 0 auto 0; height:280px; pointer-events:none; background:radial-gradient(300px 190px at 8% 0%,var(--desk-peach),transparent 70%),radial-gradient(320px 200px at 96% 0%,var(--desk-glow),transparent 70%)}
+.desk-centre{position:relative; display:flow-root; padding:0 14px 48px}
+.desk-centre::before{content:""; position:absolute; inset:0 0 auto 0; height:280px; pointer-events:none; background:radial-gradient(300px 190px at 8% 0%,var(--desk-peach),transparent 70%),radial-gradient(320px 200px at 96% 0%,var(--desk-blob),transparent 70%)}
 .desk-centre-inner{position:relative; max-width:980px; margin:0 auto}
 .desk-greeting{font:500 28px/1.2 "Iowan Old Style","Palatino",Georgia,serif; margin:28px 0 18px}
 .desk-title{font:500 28px/1.2 "Iowan Old Style","Palatino",Georgia,serif; margin:32px 0 8px}
 .desk-command{position:relative; height:150px; background:var(--card); border:1px solid var(--line); border-radius:16px; transition:border-color .15s,box-shadow .15s}
 .desk-command:focus-within{border-color:var(--desk-accent); box-shadow:0 0 0 4px var(--desk-glow),inset 0 -26px 30px -26px var(--desk-glow)}
 .desk-command-input{display:block; width:100%; height:100%; padding:16px 70px 16px 18px; border:0; outline:none; resize:none; background:none; color:inherit; font:inherit}
-.desk-send{position:absolute; right:14px; bottom:14px; width:38px; height:38px; border:0; border-radius:50%; background:var(--desk-accent); color:#fff; display:flex; align-items:center; justify-content:center}
+.desk-send{position:absolute; right:14px; bottom:14px; width:38px; height:38px; border:0; border-radius:50%; background:var(--desk-accent); color:var(--card); display:flex; align-items:center; justify-content:center}
 .desk-send:disabled{opacity:.35; cursor:default}
 .desk-options{list-style:none; padding:6px; margin-top:8px; background:var(--card); border:1px solid var(--line); border-radius:12px}
 .desk-said{margin-top:8px; color:var(--ok-ink); font-size:14px}
@@ -392,7 +393,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-right{display:flex; flex-direction:column; gap:16px; padding:16px}
 .desk-steps{list-style:none; padding:0; margin-top:14px; border-top:1px solid var(--line)}
 .desk-steps li{display:flex; align-items:center; gap:12px; min-height:44px; font-size:14.5px}
-.desk-circle-box{width:20px; height:20px; border:1.5px solid var(--line); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; color:#fff; flex-shrink:0}
+.desk-circle-box{width:20px; height:20px; border:1.5px solid color-mix(in srgb,var(--ink-soft) 55%,transparent); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; color:var(--card); flex-shrink:0}
 .desk-done .desk-circle-box{background:var(--desk-accent); border-color:var(--desk-accent)}
 .desk-mapcard{margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end; min-height:120px; padding:16px; overflow:hidden; text-align:left; color:var(--ink); border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,var(--card),var(--desk-glow))}
 .desk-mapcard-text{display:flex; flex-direction:column; gap:6px; align-items:flex-start}

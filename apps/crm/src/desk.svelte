@@ -70,10 +70,17 @@
     root.querySelector<HTMLElement>('[data-field="desk-command"]')?.focus()
   }
 
-  /** "/" jumps to the search box unless the person is typing somewhere (the shadow root retargets event.target, so read the path). */
+  /** Mounted and in the viewport: the host's closed sheet slides the Curator off-screen (and :host{all:initial} resets the inherited visibility), another sheet detaches it. */
+  function onScreen(): boolean {
+    const r = root.getBoundingClientRect()
+    return root.checkVisibility() && r.bottom > 0 && r.top < window.innerHeight
+  }
+
+  /** "/" jumps to the search box unless the person is typing somewhere (the shadow root retargets event.target, so read the path), or the Desk is out of sight (the host's closed sheet keeps it mounted). */
   function slash(e: KeyboardEvent): void {
     const target = e.composedPath()[0] as HTMLElement
     if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || target.closest?.('input, textarea, select, [contenteditable]')) return
+    if (!onScreen()) return
     e.preventDefault()
     root.querySelector<HTMLElement>('[data-field="desk-search"]')?.focus()
   }
