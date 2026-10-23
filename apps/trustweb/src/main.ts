@@ -5560,7 +5560,7 @@ let togetherPlace: Place | null = null
 /** The dock's "Pick a place": the device position on a tap (together_location.ts geoPicker), with the area words typed so far as its name. */
 async function pickTogetherPlace(): Promise<void> {
   const typed = readTogetherRequest(queryText, Date.now())?.area ?? ''
-  togetherPlace = await geoPicker(navigator.geolocation, S.togetherHere).pick(typed)
+  togetherPlace = await geoPicker(navigator.geolocation).pick(typed)
   render()
 }
 
@@ -5586,7 +5586,7 @@ async function sendFromDock(text: string): Promise<void> {
   // No model call exists in the app yet: draftOrPlain reads plainly while TOGETHER_LLM_DRAFT is off (together_request.ts).
   const read = await draftOrPlain(text, now, async () => null)
   if (!read) { void runAsk(text); return }
-  const req = togetherPlace && !read.area ? { ...read, area: togetherPlace.label } : read
+  const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)
   const ask = togetherAsk(filled, navigator.language)
   queryText = ask.text
@@ -5669,7 +5669,7 @@ function queryDock(s: AppState): HTMLElement {
       box,
       run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
         togetherPlace
-          ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label) + ' ×'])
+          ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label || S.togetherHere) + ' ×'])
           : el('button', { class: 'chip', 'data-together-pick': '1', title: S.togetherPickHint, onclick: () => { void pickTogetherPlace() } }, ['📍 ' + S.togetherPick]),
       ]),
       run ? null : el('div', { class: 'chips' }, [

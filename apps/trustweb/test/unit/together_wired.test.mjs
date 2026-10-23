@@ -12,20 +12,20 @@ const geo = (pos) => ({ getCurrentPosition: (ok, bad) => (pos ? ok({ coords: pos
 
 describe('geoPicker', () => {
   it('uses the device position with the typed label, rounded to ~1 km, no network', async () => {
-    const p = await geoPicker(geo({ latitude: 48.20849, longitude: 16.37208 }), 'Here').pick(' Wien 7 ')
+    const p = await geoPicker(geo({ latitude: 48.20849, longitude: 16.37208 })).pick(' Wien 7 ')
     expect(p).toEqual({ label: 'Wien 7', lat: 48.21, lon: 16.37 })
   })
-  it('names the place "Here" when nothing was typed', async () => {
-    expect(await geoPicker(geo({ latitude: 1, longitude: 2 }), 'Here').pick('  ')).toEqual({ label: 'Here', lat: 1, lon: 2 })
+  it('keeps the label empty when nothing was typed: the coordinates stay local, the ask names no area', async () => {
+    expect(await geoPicker(geo({ latitude: 1, longitude: 2 })).pick('  ')).toEqual({ label: '', lat: 1, lon: 2 })
   })
   it('falls back to the typed words when denied or unavailable, null when there are none', async () => {
-    expect(await geoPicker(geo(null), 'Here').pick('Graz')).toEqual({ label: 'Graz' })
-    expect(await geoPicker(undefined, 'Here').pick('Graz')).toEqual({ label: 'Graz' })
-    expect(await geoPicker(geo(null), 'Here').pick('')).toBeNull()
+    expect(await geoPicker(geo(null)).pick('Graz')).toEqual({ label: 'Graz' })
+    expect(await geoPicker(undefined).pick('Graz')).toEqual({ label: 'Graz' })
+    expect(await geoPicker(geo(null)).pick('')).toBeNull()
   })
   it('asks nothing until pick() is called', () => {
     let calls = 0
-    geoPicker({ getCurrentPosition: () => { calls++ } }, 'Here')
+    geoPicker({ getCurrentPosition: () => { calls++ } })
     expect(calls).toBe(0)
   })
 })
