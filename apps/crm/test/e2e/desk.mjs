@@ -42,9 +42,10 @@ server.stderr.on('data', (d) => process.stderr.write(`[vite] ${d}`))
 let browser
 try {
   await waitForServer(URL)
-  browser = await chromium.launch({ headless: true, args: ['--use-mock-keychain', '--password-store=basic'] })
+  browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--use-mock-keychain', '--password-store=basic'] })
   const errors = []
   const outside = []
+  let mapShown = false   // the Map page draws OpenStreetMap tiles; nothing else may leave
   const watch = (page) => {
     page.addInitScript(() => addEventListener('DOMContentLoaded', () => document.head.append(Object.assign(document.createElement('style'), { textContent: '.twf,.twa{display:none!important}' }))))   // the dev overlay (dev_feature.ts) sits where the burger does
     page.on('pageerror', (e) => errors.push(String(e)))
@@ -130,7 +131,7 @@ try {
   // pages
   await page.click('[data-desk-page="keepInTouch"]')
   ok('Keep in Touch page lists people without a cadence', await page.locator('[data-section="none"] .desk-row').count() >= 5)
-  await page.click('[data-desk-page="map"]')
+  await page.click('[data-desk-page="map"]'); mapShown = true
   ok('Map page groups by place, no tiles', await page.locator('[data-place]').count() >= 2)
   await page.click('[data-desk-page="reminders"]')
   await page.waitForSelector('[data-screen="followups"]')
@@ -255,7 +256,8 @@ try {
   await shot(ep, 'desk_empty')
   await empty.close()
 
-  ok('nothing left 127.0.0.1', outside.length === 0, outside.join(' | '))
+  const stray = outside.filter((u) => !(mapShown && new globalThis.URL(u).hostname === 'tile.openstreetmap.org'))
+  ok('nothing left 127.0.0.1 (map tiles only while the Map page is shown)', stray.length === 0, stray.join(' | '))
   ok('no page errors', errors.length === 0, errors.join(' | '))
   await ctx.close()
 } catch (e) {
