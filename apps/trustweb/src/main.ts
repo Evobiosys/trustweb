@@ -122,7 +122,7 @@ import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DESKTOP_KEY, desktopView } from './desktop_view'
+import { DESKTOP_KEY, desktopView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
@@ -1296,6 +1296,13 @@ function autoDesk(): void {
   updateDeskToggle()
 }
 
+let curatorFace: 'desk' | 'classic' = 'classic'
+/** The Curator sheet takes the whole window only on the Desk face AND while the device does not hold the phone version. */
+function applyDeskWide(): void {
+  sheet.classList.toggle('desk-wide', curatorFace === 'desk' && wideAllowed(storedDesktop(), wideTab(), solo, runsAsInstalledApp()))
+  updateDeskToggle()
+}
+
 function updateDeskToggle(): void {
   deskToggle.hidden = demoToggle.hidden || !wideTab()
   deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
@@ -1308,13 +1315,23 @@ function openDeskSheet(): void {
   updateDeskToggle()
 }
 
+// Escape closes an open sheet, except while typing in a field inside it (the Curator is a shadow root: read the composed path).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !sheet.classList.contains('on')) return
+  const path = e.composedPath()
+  const typing = path.some((n) => n instanceof HTMLElement && (n.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName)))
+  if (!typing && !document.querySelector('.wt-modal')) closeSheet()
+})
+
 function showPhoneVersion(): void {
   try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ }
+  applyDeskWide()
   go(Screen.Web)
 }
 
 function showDesktopVersion(): void {
   try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
+  applyDeskWide()
   openDeskSheet()
 }
 
@@ -3474,7 +3491,7 @@ const curator = createCurator({
   },
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
-  viewChanged: (view) => { sheet.classList.toggle('desk-wide', view === 'desk'); updateDeskToggle() },
+  viewChanged: (view) => { curatorFace = view; applyDeskWide() },
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
