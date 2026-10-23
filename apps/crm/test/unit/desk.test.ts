@@ -3,12 +3,12 @@ import { Audience, LineStatus, Ring, Tag } from '../../../trustweb/src/model'
 import type { NoteLine, Person } from '../../../trustweb/src/model'
 import { emptyClose } from '../../src/close'
 import {
-  activityOf, birthdays, cadenceLabel, commandOptions, deskEvents, favoriteIds, gettingStarted, greeting, keepInTouchDue, placesOf, remindersDue, resurface, toggleFavorite, viewOf,
+  activityOf, birthdays, cadenceLabel, commandOptions, deskEvents, deskStartPage, favoriteIds, gettingStarted, greeting, keepInTouchDue, placesOf, remindersDue, resurface, toggleFavorite, viewOf,
 } from '../../src/desk'
 import type { FieldValues } from '../../src/fields'
 import { InteractionKind, emptyCrm } from '../../src/model'
 import type { CrmView } from '../../src/model'
-import { View } from '../../src/nav'
+import { DeskPage, View } from '../../src/nav'
 import { sampleApp } from '../../src/sample'
 
 const DAY = 86_400_000
@@ -20,6 +20,14 @@ function viewOfPeople(people: Person[], crm = emptyCrm()): CrmView {
   return { app: { ...sampleApp(NOW), people, peers: [], log: [] }, crm }
 }
 const ids = (xs: { person: Person }[]): string[] => xs.map((x) => x.person.id)
+
+describe('deskStartPage', () => {
+  it('opens on Web when the rings hold someone and the host lends them, else on Home', () => {
+    expect(deskStartPage(3, true)).toBe(DeskPage.Web)
+    expect(deskStartPage(0, true)).toBe(DeskPage.Home)
+    expect(deskStartPage(3, false)).toBe(DeskPage.Home)
+  })
+})
 
 describe('viewOf', () => {
   it('accepts desk, else classic', () => {

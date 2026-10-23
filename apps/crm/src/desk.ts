@@ -9,7 +9,7 @@ import { baseFields, fieldById, fieldLabelOf, valueText, ADHOC } from './fields'
 import type { FieldValues } from './fields'
 import { lastPastByPerson } from './display'
 import type { CrmState, CrmView, FollowUp, KeepInTouch } from './model'
-import { View } from './nav'
+import { DeskPage, View } from './nav'
 import { FAMILY_KEY, UNSORTED, ringOf } from './rings'
 import { S } from './strings'
 import { EventKind, dueFollowUps, timeline } from './timeline'
@@ -32,6 +32,9 @@ export interface DeskData {
 export const CADENCES: readonly number[] = [7, 14, 30, 90, 180, 365]
 
 export const viewOf = (x: unknown): View => (x === View.Desk ? View.Desk : View.Classic)
+
+/** The page the Desk opens on: the web with the people list below once the host's rings hold someone, else Home (Getting started). */
+export const deskStartPage = (people: number, rings: boolean): DeskPage => (people > 0 && rings ? DeskPage.Web : DeskPage.Home)
 
 export function greeting(hour: number, name: string): string {
   const g = S.desk.greeting

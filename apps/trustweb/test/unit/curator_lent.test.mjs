@@ -25,4 +25,18 @@ describe('createCurator lends viewChanged', () => {
     createCurator({ record: () => null, setRing: noop, setFamily: noop, setFlag: noop, removePerson: noop, restorePerson: noop, setHiddenSources: noop, addLine: noop, showRings: noop, viewChanged: noop }).openDesk()
     await vi.waitFor(() => expect(desks).toBe(1))
   })
+
+  it('lends renderRings: the Desk gets the host-built rings element, its pick and ring callbacks reach the host builder', async () => {
+    const noop = () => {}
+    const built = { className: 'rings-wrap' }
+    const asked = []
+    const before = lentTo.length
+    createCurator({ record: () => null, setRing: noop, setFamily: noop, setFlag: noop, removePerson: noop, restorePerson: noop, setHiddenSources: noop, addLine: noop, showRings: noop, viewChanged: noop, renderRings: (o) => { asked.push(o); return built } }).open()
+    await vi.waitFor(() => expect(lentTo).toHaveLength(before + 1))
+    const picked = []
+    const opts = { onPick: (id) => picked.push(id) }
+    expect(lentTo[before].renderRings(opts)).toBe(built)
+    asked[0].onPick('p1')
+    expect(picked).toEqual(['p1'])
+  })
 })

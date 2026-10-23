@@ -80,9 +80,10 @@ export async function refreshCurator(): Promise<void> {
   (await import('./state.svelte')).reloadRecord()
 }
 
-/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. */
+/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. Each opening lands on the Desk's start page (desk.ts deskStartPage). */
 export async function showDesk(): Promise<void> {
-  const [{ prefs, savePrefs }, { View }] = await Promise.all([import('./prefs.svelte'), import('./nav')])
+  const [{ prefs, savePrefs }, { View }, { deskStartPage }, { showDeskPage }, { store }] = await Promise.all([import('./prefs.svelte'), import('./nav'), import('./desk'), import('./nav.svelte'), import('./state.svelte')])
   prefs.view = View.Desk
   savePrefs()
+  showDeskPage(deskStartPage(store.app.people.length, host.renderRings !== undefined))
 }

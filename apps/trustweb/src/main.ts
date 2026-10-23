@@ -148,6 +148,7 @@ import { repairOtherCodes } from './sync_code'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
+import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -1075,6 +1076,7 @@ function openSheet(children: (Node | null)[]): void {
 }
 
 function closeSheet(): void {
+  const wasDesk = deskOpen()
   const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
@@ -1089,6 +1091,8 @@ function closeSheet(): void {
   updateDeskToggle()
   // Wave 6f review: a record another tab saved while this sheet was open was taken over then; draw it now (after the handler that closed it).
   if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
+  // The Desk's Web page drew the last rings: the Web screen's own take the geometry back.
+  else if (wasDesk && screen === Screen.Web) render()
 }
 
 function toast(msg: string, o?: ToastOpts): void {
@@ -1711,7 +1715,8 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
 let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
 let ringsK = 1
 
-function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
+/** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
+function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
   const members: Partial<Record<Ring, Person[]>> = {}
@@ -1723,11 +1728,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
   ringsK = k
   const colourTags = loadColourTags()
-  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
+  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', title: desk ? '' : S.hintText[HintId.WebTap] })
   let dragged = false
-  wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
-  ringsMenuOn(wrap, (v) => { dragged = v })
-  if (touchUi() && !hintHidden(HintId.WebTap)) {
+  if (!desk) {
+    wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
+    ringsMenuOn(wrap, (v) => { dragged = v })
+  }
+  if (!desk && touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
       onclick: (e: Event) => { e.stopPropagation(); openHint(HintId.WebTap) },
@@ -1779,14 +1786,14 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
-        onclick: () => { if (!dragged) personSheet(p.id) },
+        onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : personSheet(p.id)) },
       }, [
         face,
         el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
-      contextPress(b, () => curatorPerson(p.id))
+      if (!desk) contextPress(b, () => curatorPerson(p.id))
       b.style.left = x + 'px'
       b.style.top = y + 'px'
       if (arcs) b.style.setProperty('--arcs', arcs)
@@ -1795,11 +1802,11 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet(true) }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { if (!desk) editNameSheet(true) } }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
-  dragOnRings(wrap, s, (v) => { dragged = v })
+  dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
   return wrap
 }
 
@@ -1901,7 +1908,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
  * from the distance to the centre; "intending to connect" first asks how much (0..10, default 5). The ring is the same value the outliner
  * and the CRM use (changeRing / placeOnRing).
  */
-function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void): void {
+function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void, settled?: (personId: string, ring: Ring) => void): void {
   let lifted = false
   wrap.addEventListener('touchmove', (e) => { if (lifted) e.preventDefault() }, { passive: false })
   wrap.addEventListener('pointerdown', (down) => {
@@ -1944,19 +1951,21 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
       wrap.classList.remove('hide-zone')
     }
-    const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) render() }
+    // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
+    const done = (): void => settled?.(p.id, p.ring)
+    const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) { render(); done() } }
     const up = (): void => {
       const was = lifted
       end(); lifted = false
       setTimeout(() => setDragged(false), 0)
       if (!was) return
-      if (out) { void hideOnRings(p); return }
-      if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); return }
+      if (out) { void hideOnRings(p).then(done); return }
+      if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); done(); return }
       // The dot keeps the angle it was dropped at.
-      if (ring === webSlot(p)) { p.angle = angle; save(); render(); return }
-      if (ring === Ring.Unsorted) { p.angle = angle; unplaceOnRings(p); return }
-      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => { p.angle = angle; dropOn(p, ring, v) })
-      else { p.angle = angle; dropOn(p, ring) }
+      if (ring === webSlot(p)) { p.angle = angle; save(); render(); done(); return }
+      if (ring === Ring.Unsorted) { p.angle = angle; unplaceOnRings(p); done(); return }
+      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => { render(); done() }, (v) => { p.angle = angle; dropOn(p, ring, v); done() })
+      else { p.angle = angle; dropOn(p, ring); done() }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -3512,6 +3521,8 @@ const curator = createCurator({
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
   viewChanged: (view) => { curatorFace = view; applyDeskWide() },
+  // The Desk's Web page: the same rings as the Web screen, from the same record (so the shared geometry singletons hold the same values).
+  renderRings: (o) => ringsView(shown(st(), curatorHiddenIds()), askMarks(), o),
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
