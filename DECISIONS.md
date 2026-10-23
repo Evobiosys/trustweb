@@ -416,3 +416,21 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   otherCodes (kept alive) with Release. F10 An old server answers a move as a plain read: no change. F12 The display name merges like a messenger link.
   F16 A relayed otherCodes entry names no device. F17 The demo-account hand-over pack carries no connectCode or otherCodes.
 - U22 The code never enters Review merge, conflicts or the sync log. U27 Local log lines say that a url or a name moved, never which.
+
+## D-together-reader (2026-10-19): together requests are read by plain code only; the unwired parts were removed
+- No LLM hook exists in the app, so the LLM-draft check (acceptTogetherDraft: a model fills the TogetherRequest shape, code range-checks
+  every field and falls back to readTogetherRequest) was removed; it comes back with the first local-model hook. The swappable map picker
+  (LocationPicker/textPicker, distanceKm, isNear) and offerFits had no caller either: an incoming "Looking for company" ask is answered by
+  the ordinary matcher (net.ts matchAsk) and owner lines carry no area to compare, so both were removed with their tests (git f27bb28).
+
+## D-together-wired (2026-10-23): the pieces D-together-reader removed come back, each with a caller (owner 2026-10-23 14:23)
+- Reverted c65bbc8 (together_location.ts, offerFits, acceptTogetherDraft and their tests). D-together-reader above stays as the record of why they went.
+- Location picker: the ask dock has a "Pick a place" button (main.ts pickTogetherPlace). geoPicker uses navigator.geolocation on that tap only (never on load),
+  makes no network call (no geocoder), names the place with the typed area words (else "here"), rounds the position to ~1 km; denied or unavailable: textPicker's
+  words. lat/lon are kept in together prefs (together_prefs.ts) and never sent: the ask carries only the label. The crm Desk "map" (desk_map.svelte) only groups
+  people by place, it has no pick-on-map component, so there is no desktop map picker; geoPicker only.
+- offerFits: an incoming "Looking for company" ask (readTogetherAsk reads togetherAsk's own text) is compared with the owner's OWN together prefs (fitOfAsk:
+  same activity, areas compared only when both have one). A fit adds "Fits your <activity> settings" on the consent prompt and moves the ask ahead of non-fits in
+  the queue; a non-fit changes nothing. Prefs hold no time window, so the window is not compared.
+- LLM draft: no model call the app makes itself exists (web_search.ts fetches search engines, organizer.ts posts org data), so acceptTogetherDraft has ONE call
+  site, draftOrPlain in sendFromDock, behind `TOGETHER_LLM_DRAFT = false` (together_request.ts). OPEN: turn on with the first local-model hook (owner 2026-10-23).
