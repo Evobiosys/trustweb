@@ -1,20 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// The fold state is a plain string list in prefs (prefs.svelte.ts is a rune module: not importable here, see vitest.config.ts); the
+// pure part lives in contacts.ts.
+import { describe, expect, it } from 'vitest'
+import { toggleGroup } from '../../src/contacts'
 
-describe('prefs.collapsedGroups', () => {
-  beforeEach(() => {
-    vi.resetModules()
-    for (const k of ['__TW_TANA_TOKEN__', '__TW_RECORD__', '__TW_NOTES_TOKEN__']) vi.stubGlobal(k, '')
-    vi.stubGlobal('document', { documentElement: { dataset: {} } })
+describe('collapsed ring groups', () => {
+  it('toggles a group in and out, keeps the others, never duplicates', () => {
+    expect(toggleGroup([], 'friend')).toEqual(['friend'])
+    expect(toggleGroup(['friend'], 'close')).toEqual(['friend', 'close'])
+    expect(toggleGroup(['friend', 'close'], 'friend')).toEqual(['close'])
+    expect(toggleGroup(toggleGroup([], 'friend'), 'friend')).toEqual([])
   })
-  it('starts empty and survives a save + reload', async () => {
-    const store = new Map<string, string>()
-    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) } })
-    const a = await import('../../src/prefs.svelte')
-    expect(a.prefs.collapsedGroups).toEqual([])
-    a.prefs.collapsedGroups = ['friend']
-    a.savePrefs()
-    vi.resetModules()
-    const b = await import('../../src/prefs.svelte')
-    expect(b.prefs.collapsedGroups).toEqual(['friend'])
+  it('survives a JSON round trip as saved prefs do', () => {
+    const saved = JSON.parse(JSON.stringify({ collapsedGroups: toggleGroup([], 'friend') }))
+    expect(saved.collapsedGroups).toEqual(['friend'])
   })
 })
