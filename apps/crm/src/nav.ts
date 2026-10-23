@@ -34,6 +34,7 @@ export enum View {
 
 /** The pages in the Desk's sidebar. */
 export enum DeskPage {
+  Web = 'web',
   Home = 'home',
   Reminders = 'reminders',
   Contacts = 'contacts',

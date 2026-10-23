@@ -382,6 +382,9 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-snooze{width:128px; height:32px; padding:0 6px; border:1px solid var(--line); border-radius:8px; background:var(--card); font-size:12px}
 .desk-select{width:auto; min-height:34px; padding:2px 10px; font-size:13px}
 .desk-page{padding-bottom:24px}
+/* The lent rings (trustweb, scaled by desk_web.svelte to this block's width): 352 px at most, 520 px on a three-column Desk. */
+.desk-web-rings{position:relative; width:100%; max-width:352px; height:352px; margin:8px auto 16px}
+@container desk (min-width:1100px){ .desk-web-rings{max-width:520px} }
 .desk-card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px}
 .desk-card-title{font:600 18px system-ui,sans-serif; margin:0 0 4px}
 .desk-card .desk-sub{white-space:normal}

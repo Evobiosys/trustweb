@@ -11,6 +11,7 @@
   import DeskSidebar from './desk_sidebar.svelte'
   import DeskStart from './desk_start.svelte'
   import DeskTopbar from './desk_topbar.svelte'
+  import DeskWeb from './desk_web.svelte'
   import Environment from './environment.svelte'
   import Followups from './followups.svelte'
   import ImportContacts from './import_contacts.svelte'
@@ -20,16 +21,20 @@
   import Settings from './settings.svelte'
   import SortPeople from './sort_people.svelte'
   import Timeline from './timeline.svelte'
-  import { activityOf, gettingStarted, keepInTouchDue, remindersDue } from './desk'
+  import { activityOf, deskStartPage, gettingStarted, keepInTouchDue, remindersDue } from './desk'
   import type { DeskData } from './desk'
   import { baseFields, passesFilters } from './fields'
   import type { FieldValues } from './fields'
+  import { host } from './bridge'
   import { DeskPage } from './nav'
   import { nav, openPerson, showDeskPage } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
   import { prefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
+
+  // The Desk opens on the web (people list below) once the rings hold someone, else on Home with Getting started.
+  showDeskPage(deskStartPage(store.app.people.length, host.renderRings !== undefined))
 
   let drawer = $state(false)
   let compose = $state<'reminder' | 'note' | null>(null)
@@ -110,6 +115,8 @@
           <Environment environmentId={nav.environmentId} />
         {:else if nav.personId !== null}
           <Person personId={nav.personId} />
+        {:else if nav.deskPage === DeskPage.Web}
+          <DeskWeb />
         {:else if nav.deskPage === DeskPage.Home}
           <DeskHome {data} />
         {:else if nav.deskPage === DeskPage.Reminders}
