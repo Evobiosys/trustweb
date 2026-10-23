@@ -35,11 +35,13 @@ describe('rings hide', () => {
   })
 })
 
-import { togglePoint } from '../../src/rings_hide.ts'
-test('ring toggles fan out so near-equal radii never overlap (Jakob 20:05: pressing Intending hid the whole web)', () => {
+import { togglePoints, TOGGLE_GAP } from '../../src/rings_hide.ts'
+test('ring toggles stand in one vertical column above "you"; equal radii are pushed apart (Jakob 20:37)', () => {
   const C = 176, k = 1
-  const a = togglePoint(0, 160, C, k), b = togglePoint(1, 166, C, k)
-  assert.ok(Math.hypot(a.left - b.left, a.top - b.top) > 22, `distance ${Math.hypot(a.left - b.left, a.top - b.top)}`)
-  const first = togglePoint(0, 100, C, k)
-  assert.deepEqual([Math.round(first.left), Math.round(first.top)], [C, C - 100])
+  const same = togglePoints([160, 160, 160], C, k)
+  assert.deepEqual(same.map((p) => p.left), [C, C, C])
+  same.slice(1).forEach((p, i) => assert.ok(same[i].top - p.top >= TOGGLE_GAP, `gap ${same[i].top - p.top}`))
+  const apart = togglePoints([60, 110, 160], C, k)
+  assert.deepEqual(apart.map((p) => p.top), [C - 60, C - 110, C - 160])
+  assert.deepEqual(togglePoints([100, 110], C, 2).map((p) => p.top), [C - 200, C - 200 - TOGGLE_GAP])
 })

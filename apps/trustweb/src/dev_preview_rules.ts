@@ -107,7 +107,7 @@ export function prGate(p: { assembled?: { sha: string } | null; tested?: Tested 
 
 export function testLine(gate: PrGate, tested?: Tested | null): string {
   switch (gate) {
-    case 'untested': return 'Tests not run for this selection'
+    case 'untested': return ''
     case 'running': return 'Running the checks (about 40 s)...'
     case 'failed': return 'Checks failed: see below'
     case 'passed': return `Checks passed for ${tested?.sha ?? '?'}`
@@ -117,13 +117,32 @@ export function testLine(gate: PrGate, tested?: Tested | null): string {
 /** The verdict after a click on a pill: a second click on the active one clears it. */
 export const verdictAfter = (current: Verdict | undefined, clicked: 'merge' | 'needs-work'): Verdict => (current === clicked ? null : clicked)
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): "Merge if tests pass" opens with no test run going, something checked, no checked feature on needs-work and no conflict; the tests run after the press. */
+/** What a row's pills show: approved = verdict merge AND box checked, needs work = verdict needs-work AND box unchecked (the box is what the preview shows). */
+export const shownVerdict = (f: PreviewFeature): Verdict => (f.verdict === 'merge' && f.checked ? 'merge' : f.verdict === 'needs-work' && !f.checked ? 'needs-work' : null)
+
+/** A press on a pill: the verdict to store and, when the box has to change with it (approved checks, needs work unchecks, requires/dependants cascade), the new boxes; null = no re-assembly. Pressing the shown pill again only clears the verdict. */
+export function pillPress(features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): { verdict: Verdict; set: PreviewFeature[] | null } {
+  const f = features.find((x) => x.key === key)!
+  const verdict = verdictAfter(shownVerdict(f), v)
+  const want = v === 'merge'
+  return { verdict, set: verdict === null || f.checked === want ? null : toggled(features, key, want) }
+}
+
+/** Select all / none: every available (not merged) feature checked and approved, or unchecked with the verdict cleared. `verdicts` = what to store per key. */
+export function selectAll(features: PreviewFeature[], on: boolean): { set: PreviewFeature[]; verdicts: Record<string, Verdict> } {
+  const rows = visible(features)
+  return { set: features.map((f) => (f.merged ? f : { ...f, checked: on, verdict: on ? 'merge' : null })), verdicts: Object.fromEntries(rows.map((f) => [f.key, on ? 'merge' : null])) }
+}
+
+export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
+
+export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
+
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, something checked and no conflict; verdicts do not gate (needs-work rows are unchecked), the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[] }): { ok: boolean; hint: string } {
-  const blocking = p.features.filter((f) => f.checked && !f.merged && f.verdict === 'needs-work').map((f) => f.title)
   const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
-    : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature'
-    : blocking.length ? `Mark "merge now" or uncheck: ${blocking.join(', ')}` : ''
+    : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature' : ''
   return { ok: hint === '', hint }
 }
 

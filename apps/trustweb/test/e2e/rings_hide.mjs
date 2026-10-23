@@ -1,4 +1,4 @@
-/** Per-ring hide toggles (⊖/⊕ on the guide circle) (headless, dev only): PORT=5196 [SHOTS=/dir] EXE=<chromium headless shell> node rings_hide.mjs */
+/** Per-ring hide toggles (grey ♦ column straight up from "you") (headless, dev only): PORT=5196 [SHOTS=/dir] EXE=<chromium headless shell> node rings_hide.mjs */
 import { chromium } from 'playwright-core'
 
 const URL = `http://127.0.0.1:${process.env.PORT ?? 5196}/`
@@ -20,6 +20,10 @@ try {
   const guide = (r) => page.locator(`.rings-wrap circle[data-ring="${r}"]`).evaluate((c) => c.style.opacity)
   check('rings are the default view', await page.locator('.rings-wrap[data-view="rings"]').count() === 1)
   check('one ⊖ per ring (five), no chip row', await page.locator('.ring-toggle').count() === 5 && await page.locator('.rings-hide').count() === 0 && await dots() === 5 && (await page.locator('[data-hide-ring="friend"]').textContent()) === '−')
+  const col = await page.evaluate(() => { const c = (e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] }; return { you: c(document.querySelector('.rings-wrap .node.you')), ds: [...document.querySelectorAll('.ring-toggle')].map(c) } })
+  check('diamonds stand in one vertical column above "you"', col.ds.every(([x]) => Math.abs(x - col.you[0]) < 1.5) && col.ds.every(([, y]) => y < col.you[1]))
+  check('no two diamonds overlap (>= 15 px apart)', col.ds.every((a, i) => col.ds.every((b, j) => i === j || Math.hypot(a[0] - b[0], a[1] - b[1]) >= 15)))
+  check('diamond is grey, rotated 45deg', await page.locator('[data-hide-ring="friend"]').evaluate((b) => { const s = getComputedStyle(b, '::before'); return s.transform !== 'none' && s.backgroundColor === 'rgb(138, 143, 148)' }))
   await shot(page, '1-all-shown')
   await page.locator('[data-hide-ring="friend"]').click()
   check('hiding friend removes its people only', await dots() === 4 && await page.locator('[data-pid="f1"]').count() === 0)

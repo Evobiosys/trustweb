@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, personalApprove, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -120,7 +120,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
-  /** "Merge if tests pass": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  /** "Approve": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
   const pollMerge = (since: number): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
@@ -139,16 +139,21 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
     })
     if (preview) {
-      const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: 'Checking…' })
-      const go = btn('Merge if tests pass', 'go big', () => {
+      const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
+      const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
+      // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
+      const go = btn('Approve', 'go big', () => {
         const since = Date.now() - 2000
-        void fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
+        void read().then((q) => {
+          const g = approveGate(q)
+          if (!g.ok) { go.disabled = true; hint.textContent = g.hint; return }
+          return fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
+        }).catch(() => { hint.textContent = 'Preview server not answering' })
       })
-      go.disabled = true
       const refresh = (): void => {
         if (!go.isConnected) return
-        void fetch('/__tw/preview').then((r) => r.json()).then((q: Parameters<typeof approveGate>[0]) => {
-          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, tests, then merges to main and deploys' : g.hint
+        void read().then((q) => {
+          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? APPROVE_HINT : g.hint
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }

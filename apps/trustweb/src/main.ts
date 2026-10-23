@@ -26,7 +26,7 @@ import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
-import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoint, visiblePeople } from './rings_hide'
+import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoints, visiblePeople } from './rings_hide'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1875,8 +1875,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     live.className = fresh.className
     live.replaceChildren(...fresh.childNodes)
   }
+  const column = togglePoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k)
   ringsGeo.rings.forEach((r, i) => {
-    const at = togglePoint(i, ringsGeo.radius[r], C, k)
+    const at = column[i]
     wrap.appendChild(ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap)))
   })
   return wrap

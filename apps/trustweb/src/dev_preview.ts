@@ -10,7 +10,7 @@ import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { createWalker } from './dev_walk'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, verdictAfter, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -199,6 +199,19 @@ export function initDevPreview(): void {
     }
   }
 
+  // A pill stores the verdict (no reload); only a box that has to change re-assembles, as a manual tick does.
+  async function press(key: string, v: 'merge' | 'needs-work'): Promise<void> {
+    const r = pillPress(p!.features, key, v)
+    await act(null, () => call('POST', '/verdict', { feature: key, verdict: r.verdict }))
+    if (!error && r.set) void reassemble(r.set, key)
+  }
+
+  async function pressAll(): Promise<void> {
+    const r = selectAll(p!.features, !allApproved(p!.features))
+    await act(null, async () => { let q = p!; for (const [feature, verdict] of Object.entries(r.verdicts)) q = await call('POST', '/verdict', { feature, verdict }); return q })
+    if (!error && r.set.some((f, i) => f.checked !== p!.features[i].checked)) void reassemble(r.set, 'all')
+  }
+
   function row(n: TreeNode, shown: PreviewFeature[], grey: string[]): HTMLElement {
     const f = n.feature, d = shown.find((x) => x.key === f.key)!
     const hint = needsHint(shown, f.key)
@@ -217,13 +230,13 @@ export function initDevPreview(): void {
     const go = h('button', { className: 'mini', textContent: walking === f.key ? 'Stop' : 'Walk' })
     go.addEventListener('click', (e) => { e.stopPropagation(); if (walking === f.key) { walker.stop(); walking = null; render() } else void walk(f) })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
-      const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (f.verdict === v ? ' on' : ''), textContent: text, disabled: loading() })
-      b.addEventListener('click', (e) => { e.stopPropagation(); void act(null, () => call('POST', '/verdict', { feature: f.key, verdict: verdictAfter(f.verdict, v) })) })
+      const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
+      b.addEventListener('click', (e) => { e.stopPropagation(); void press(f.key, v) })
       return b
     }
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'merge now'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approved'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) void walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
@@ -409,8 +422,11 @@ export function initDevPreview(): void {
           if (!error) location.href = `http://127.0.0.1:${other === 'personal' ? q.port : q.stockPort}/${location.hash}`
         })
       })
+      const all = h('button', { className: 'alt', textContent: allApproved(q.features) ? 'Select none' : 'Select all', disabled: loading() })
+      all.addEventListener('click', () => { void pressAll() })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
+        h('div', { className: 'btns' }, all),
         ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown, grey)) })), q.id),
         ...(ask ? [askBox(ask)] : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),

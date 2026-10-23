@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { approveGate, prGate, testLine, verdictAfter, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -234,7 +234,35 @@ describe('dev preview PR count, block and reviewed rows', () => {
 describe('approve (merge to main) rules', () => {
   const g = (key, checked, verdict, extra = {}) => ({ key, branch: 'b/' + key, title: 'T-' + key, requires: [], checked, verdict, ...extra })
   const passed = { assembled: { sha: 'abc1234', error: null }, tested: { sha: 'abc1234', at: 'x', ok: true, running: false } }
-  it('a pill click sets that verdict, a second click on the active one clears it', () => {
+  it('a pill shows only when verdict and checkbox agree: approved = merge + checked, needs work = needs-work + unchecked', () => {
+    expect(shownVerdict(g('a', true, 'merge'))).toBe('merge')
+    expect(shownVerdict(g('a', false, 'merge'))).toBeNull()
+    expect(shownVerdict(g('a', false, 'needs-work'))).toBe('needs-work')
+    expect(shownVerdict(g('a', true, 'needs-work'))).toBeNull()
+    expect(shownVerdict(g('a', true, null))).toBeNull()
+  })
+  it('approved checks the box (with its requires), needs work unchecks it (with its dependants), a second press on the shown pill clears the verdict only', () => {
+    const list = [g('a', false, null), g('b', true, null, { requires: ['a'] })]
+    const ap = pillPress(list, 'b', 'merge')
+    expect(ap.verdict).toBe('merge'); expect(ap.set).toBeNull()
+    const ap2 = pillPress([g('a', false, null), g('b', false, null, { requires: ['a'] })], 'b', 'merge')
+    expect(ap2.set.map((f) => f.checked)).toEqual([true, true])
+    const nw = pillPress(list.map((f) => ({ ...f, checked: true })), 'a', 'needs-work')
+    expect(nw.verdict).toBe('needs-work'); expect(nw.set.map((f) => f.checked)).toEqual([false, false])
+    const clear = pillPress([g('a', true, 'merge')], 'a', 'merge')
+    expect(clear.verdict).toBeNull(); expect(clear.set).toBeNull()
+    expect(pillPress([g('a', false, 'needs-work')], 'a', 'needs-work')).toEqual({ verdict: null, set: null })
+  })
+  it('select all checks every available feature and approves it; select none unchecks all and clears the verdicts; merged rows are left alone', () => {
+    const list = [g('a', false, 'needs-work'), g('b', true, null), g('m', true, null, { merged: true })]
+    expect(allApproved(list)).toBe(false)
+    const on = selectAll(list, true)
+    expect(on.set.map((f) => f.checked)).toEqual([true, true, true]); expect(on.verdicts).toEqual({ a: 'merge', b: 'merge' })
+    expect(allApproved(on.set.map((f, i) => ({ ...f, verdict: i < 2 ? 'merge' : f.verdict })))).toBe(true)
+    const off = selectAll(on.set, false)
+    expect(off.set.map((f) => f.checked)).toEqual([false, false, true]); expect(off.verdicts).toEqual({ a: null, b: null })
+  })
+  it('a verdict click on the active pill clears it', () => {
     expect(verdictAfter(null, 'merge')).toBe('merge')
     expect(verdictAfter('merge', 'needs-work')).toBe('needs-work')
     expect(verdictAfter('merge', 'merge')).toBeNull()
@@ -246,14 +274,18 @@ describe('approve (merge to main) rules', () => {
     expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
     expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
   })
-  it('"Merge if tests pass" opens with nothing running, something checked, no checked needs-work and no conflict; tests not run or failed do not block; the hint names the blocker', () => {
+  it('Approve opens with nothing running, something checked and no conflict; verdicts, tests not run or failed do not block; the hint names the blocker', () => {
     expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
-    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, null)] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, null)] }).ok).toBe(true)
+    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, 'needs-work')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
-    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, 'needs-work')] }).hint).toBe('Mark "merge now" or uncheck: T-b')
     expect(approveGate({ ...passed, features: [g('a', false, 'merge')] }).hint).toBe('Check at least one feature')
     expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
+  })
+  it('the hint under Approve says what happens and never asks for a test run first', () => {
+    expect(APPROVE_HINT).toBe('Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.')
+    expect(testLine('untested', null)).toBe('')
   })
 })
 
