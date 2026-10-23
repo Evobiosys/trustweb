@@ -8,6 +8,7 @@
   import DeskIcon from './desk_icon.svelte'
   import DeskKeepInTouch from './desk_keep_in_touch.svelte'
   import DeskMap from './desk_map.svelte'
+  import DeskProfile from './desk_profile.svelte'
   import DeskSidebar from './desk_sidebar.svelte'
   import DeskStart from './desk_start.svelte'
   import DeskTopbar from './desk_topbar.svelte'
@@ -135,6 +136,8 @@
           <Timeline />
         {:else if nav.deskPage === DeskPage.Map}
           <DeskMap {data} />
+        {:else if nav.deskPage === DeskPage.Profile}
+          <DeskProfile />
         {:else if nav.deskPage === DeskPage.Settings}
           <Settings />
         {:else}

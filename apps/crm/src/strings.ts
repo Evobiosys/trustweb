@@ -333,6 +333,7 @@ export const S = {
   desk: {
     greeting: { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' },
     switchView: 'Switch view',
+    profile: { button: 'Your profile and settings', mine: 'My profile …', settings: 'Settings', phone: 'Show phone version', close: 'Close the Desk', title: 'My profile' },
     openInside: 'Open inside TrustWeb',
     viewSection: 'View',
     nav: { label: 'Desk', web: 'Web', home: 'Home', reminders: 'Reminders', contacts: 'Contacts', keepInTouch: 'Keep in Touch', timeline: 'Timeline', map: 'Map', settings: 'Settings', import: 'Import', help: 'Help & support', menu: 'Menu', close: 'Close menu' },

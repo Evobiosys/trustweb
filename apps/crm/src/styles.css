@@ -310,8 +310,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
   .desk-scrim,.desk-circle.desk-burger{display:none}
   .desk-greeting{font-size:34px; margin-top:48px}
   .desk-centre{padding:0 24px 48px}
-  /* The host's × Home pill sits at the window's top right: the single-row top bar stops short of it. */
-  :host .desk-topbar{height:64px; padding:0 92px 0 16px}
+  /* Wide, the host hides its × Home pill (wave 19): the profile button takes the top right corner. */
+  :host .desk-topbar{height:64px; padding:0 16px}
 }
 @container desk (min-width:1100px){
   .desk-body{display:grid; grid-template-columns:minmax(0,1fr) clamp(280px,23%,360px); overflow:hidden}
@@ -342,6 +342,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-hits{position:absolute; z-index:20; top:46px; left:0; right:0; list-style:none; padding:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.14)}
 .desk-top-actions{margin-left:auto; display:flex; gap:10px; align-items:center}
 .desk-circle{position:relative; width:36px; height:36px; flex-shrink:0; border:1px solid var(--line); border-radius:50%; background:var(--card); color:var(--ink); display:flex; align-items:center; justify-content:center}
+.desk-profile{font-size:13px; font-weight:700; background:var(--desk-active)}
 .desk-badge{position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#D62828; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center}
 .desk-menu-wrap{position:relative}
 .desk-menu{position:absolute; right:0; top:44px; z-index:40; min-width:200px; padding:6px; display:flex; flex-direction:column; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18)}

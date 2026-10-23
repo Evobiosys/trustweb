@@ -43,4 +43,6 @@ export enum DeskPage {
   Map = 'map',
   Settings = 'settings',
   Help = 'help',
+  /** My profile (the host's editor), from the profile button; not in the sidebar. */
+  Profile = 'profile',
 }
