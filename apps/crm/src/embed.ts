@@ -87,10 +87,10 @@ export async function showClassic(): Promise<void> {
   savePrefs()
 }
 
-/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. Each opening lands on the Desk's start page (desk.ts deskStartPage). */
-export async function showDesk(): Promise<void> {
+/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. `variant` 'dex' or 'desk' (the phone's Settings > View) picks one; without it a device on Dex stays there, else the TrustWeb Desk. Each opening lands on the Desk's start page (desk.ts deskStartPage). */
+export async function showDesk(variant?: string): Promise<void> {
   const [{ prefs, savePrefs }, { View }, { deskStartPage }, { showDeskPage }, { store }] = await Promise.all([import('./prefs.svelte'), import('./nav'), import('./desk'), import('./nav.svelte'), import('./state.svelte')])
-  prefs.view = View.Desk
+  prefs.view = (variant ?? prefs.view) === View.Dex ? View.Dex : View.Desk
   savePrefs()
-  showDeskPage(deskStartPage(store.app.people.length, host.renderRings !== undefined))
+  showDeskPage(deskStartPage(prefs.view, store.app.people.length, host.renderRings !== undefined))
 }

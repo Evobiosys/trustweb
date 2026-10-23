@@ -12,6 +12,7 @@ import type { CrmState, CrmView, FollowUp, KeepInTouch } from './model'
 import { DeskPage, View } from './nav'
 import { FAMILY_KEY, UNSORTED, ringOf } from './rings'
 import { S } from './strings'
+import type { IconName } from './desk_icons'
 import { EventKind, dueFollowUps, timeline } from './timeline'
 
 const DAY = 86_400_000
@@ -31,10 +32,37 @@ export interface DeskData {
 
 export const CADENCES: readonly number[] = [7, 14, 30, 90, 180, 365]
 
-export const viewOf = (x: unknown): View => (x === View.Desk ? View.Desk : View.Classic)
+/** A saved 'desk' (from before the fork) is the TrustWeb Desk. */
+export const viewOf = (x: unknown): View => (x === View.Desk || x === View.Dex ? x : View.Classic)
 
-/** The page the Desk opens on: the web with the people list below once the host's rings hold someone, else Home (Getting started). */
-export const deskStartPage = (people: number, rings: boolean): DeskPage => (people > 0 && rings ? DeskPage.Web : DeskPage.Home)
+/** Dex (vanilla) and the TrustWeb Desk (our fork) are both the Desk face. */
+export const isDesk = (v: View): boolean => v === View.Dex || v === View.Desk
+
+export interface DeskNavItem { page: DeskPage; icon: IconName; label: string; sub?: boolean }
+
+/** The sidebar pages. Dex: every Dex page. TrustWeb Desk (Jakob 2026-10-23): Home is the Web page; Reminders and Keep in touch hidden (still reachable by code). */
+export function deskPages(v: View): DeskNavItem[] {
+  const n = S.desk.nav
+  if (v === View.Desk) return [{ page: DeskPage.Web, icon: 'web', label: n.home }, { page: DeskPage.Contacts, icon: 'contacts', label: n.contacts }, { page: DeskPage.Timeline, icon: 'clock', label: n.timeline }, { page: DeskPage.Map, icon: 'map', label: n.map }]
+  return [
+    { page: DeskPage.Home, icon: 'home', label: n.home },
+    { page: DeskPage.Web, icon: 'web', label: n.web },
+    { page: DeskPage.Reminders, icon: 'alarm', label: n.reminders, sub: true },
+    { page: DeskPage.Contacts, icon: 'contacts', label: n.contacts },
+    { page: DeskPage.KeepInTouch, icon: 'touch', label: n.keepInTouch },
+    { page: DeskPage.Timeline, icon: 'clock', label: n.timeline },
+    { page: DeskPage.Map, icon: 'map', label: n.map },
+  ]
+}
+
+/** The page the Desk opens on. TrustWeb Desk: always the Web page. Dex: the web with the people list below once the host's rings hold someone, else Home (Getting started). */
+export const deskStartPage = (v: View, people: number, rings: boolean): DeskPage => (v === View.Desk || (people > 0 && rings) ? DeskPage.Web : DeskPage.Home)
+
+/** Sidebar Groups: a group with nobody in it is not listed. */
+export const shownGroups = <G extends { count: number }>(groups: readonly G[]): G[] => groups.filter((g) => g.count > 0)
+
+/** Getting started shows while steps remain, unless dismissed with its ×. */
+export const startShown = (steps: readonly { done: boolean }[], dismissed: boolean): boolean => !dismissed && steps.some((s) => !s.done)
 
 export function greeting(hour: number, name: string): string {
   const g = S.desk.greeting

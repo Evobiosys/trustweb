@@ -365,6 +365,11 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .view-dex-info a{color:inherit; text-decoration:underline}
 .desk-icon-btn{width:32px; height:32px; border:0; border-radius:8px; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center}
 .desk-icon-btn:hover{background:var(--desk-active)}
+.desk-start{position:relative}
+.desk-dismiss{position:absolute; top:8px; right:8px; font-size:18px}
+.desk-fold{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:4px; text-decoration:underline}
+.desk-fold[aria-expanded="false"] .desk-fold-chev{transform:rotate(-90deg)}
+.desk-fold:focus-visible{outline:2px solid var(--accent, currentColor); outline-offset:2px}
 
 .desk-centre{position:relative; display:flow-root; padding:0 14px 48px}
 .desk-centre::before{content:""; position:absolute; inset:0 0 auto 0; height:280px; pointer-events:none; background:radial-gradient(300px 190px at 8% 0%,var(--desk-peach),transparent 70%),radial-gradient(320px 200px at 96% 0%,var(--desk-blob),transparent 70%)}

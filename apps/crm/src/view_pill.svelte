@@ -26,11 +26,12 @@
     {#if open}
       <div class="desk-menu" role="menu" aria-label={S.views.pickAria} use:focusFirst>
         {#each views as v (v)}
-          <button role="menuitemradio" aria-checked={prefs.view === v} data-view={v} title={v === View.Desk ? S.views.dexAbout : undefined} aria-describedby={v === View.Desk ? 'view-dex-info' : undefined} onclick={(): void => choose(v)}>
+          <button role="menuitemradio" aria-checked={prefs.view === v} data-view={v} title={v === View.Dex ? S.views.dexAbout : undefined} aria-describedby={v === View.Dex ? 'view-dex-info' : v === View.Desk ? 'view-desk-info' : undefined} onclick={(): void => choose(v)}>
             <span class="desk-check">{#if prefs.view === v}<DeskIcon name="check" size={16} />{/if}</span>{viewLabel(v)}
           </button>
         {/each}
         <p class="muted view-dex-info" id="view-dex-info" data-dex-info><a href={DEX_URL} target="_blank" rel="noopener">{S.views.dexInfo}</a></p>
+        <p class="muted view-dex-info" id="view-desk-info" data-desk-info>{S.views.desk}: {S.views.deskInfo}</p>
       </div>
     {/if}
   </div>

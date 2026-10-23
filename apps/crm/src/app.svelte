@@ -2,7 +2,8 @@
   import { onDestroy } from 'svelte'
   import ClassicBody from './classic_body.svelte'
   import Desk from './desk.svelte'
-  import { Tab, TABS, View } from './nav'
+  import { isDesk } from './desk'
+  import { Tab, TABS } from './nav'
   import { host } from './bridge'
   import { nav, showTab } from './nav.svelte'
   import { prefs } from './prefs.svelte'
@@ -40,7 +41,7 @@
   const headerTab = (tab: Tab): void => showTab(prefs.tabbar === TabbarMode.Hidden && nav.tab === tab ? Tab.People : tab)
 </script>
 
-{#if prefs.view === View.Desk}<Desk />{:else}
+{#if isDesk(prefs.view)}<Desk />{:else}
 <div class="shell" data-tabbar={prefs.tabbar}>
   <header class="top">
     <div>

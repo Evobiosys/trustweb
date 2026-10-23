@@ -155,6 +155,7 @@
   {/if}
 
   <ViewPill />
+  {#if prefs.startDismissed}<button class="link" data-action="show-start" onclick={(): void => { prefs.startDismissed = false; savePrefs() }}>{S.desk.start.again}</button>{/if}
 
   <h3 class="screen-title">{S.activityTitle}</h3>
   <p class="muted">{S.activityHint}</p>

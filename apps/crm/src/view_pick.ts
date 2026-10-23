@@ -6,6 +6,6 @@ import { S } from './strings'
 export { DEX_URL } from '../../trustweb/src/desktop_view'
 
 /** TrustWeb (the phone app) only inside TrustWeb, where the host lends the way there. */
-export const viewChoices = (h: Partial<Pick<Host, 'showPhoneVersion'>>): View[] => [View.Desk, View.Classic, ...(h.showPhoneVersion ? [View.TrustWeb] : [])]
+export const viewChoices = (h: Partial<Pick<Host, 'showPhoneVersion'>>): View[] => [View.Dex, View.Desk, View.Classic, ...(h.showPhoneVersion ? [View.TrustWeb] : [])]
 
-export const viewLabel = (v: View): string => (v === View.Desk ? S.views.dex : v === View.Classic ? S.views.classic : S.views.trustweb)
+export const viewLabel = (v: View): string => S.views[v]
