@@ -1807,7 +1807,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => { if (!desk) editNameSheet(true) } }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
