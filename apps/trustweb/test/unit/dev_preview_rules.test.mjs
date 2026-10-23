@@ -1,6 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
+import { approveGate, prGate, testLine, verdictAfter, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -253,5 +254,63 @@ describe('dev preview PR count, block and reviewed rows', () => {
     expect(typedValue('paste https://wa.me/qr/ABC')).toBe('https://wa.me/qr/ABC')
     expect(typedValue('Type "Manuel"')).toBe('Manuel')
     expect(typedValue('tap Save')).toBeNull()
+  })
+})
+
+describe('approve (merge to main) rules', () => {
+  const g = (key, checked, verdict, extra = {}) => ({ key, branch: 'b/' + key, title: 'T-' + key, requires: [], checked, verdict, ...extra })
+  const passed = { assembled: { sha: 'abc1234', error: null }, tested: { sha: 'abc1234', at: 'x', ok: true, running: false } }
+  it('a pill click sets that verdict, a second click on the active one clears it', () => {
+    expect(verdictAfter(null, 'merge')).toBe('merge')
+    expect(verdictAfter('merge', 'needs-work')).toBe('needs-work')
+    expect(verdictAfter('merge', 'merge')).toBeNull()
+  })
+  it('tests count only for the assembled sha', () => {
+    expect(prGate(passed)).toBe('passed')
+    expect(prGate({ ...passed, tested: { ...passed.tested, sha: 'old' } })).toBe('untested')
+    expect(prGate({ ...passed, tested: { ...passed.tested, running: true } })).toBe('running')
+    expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
+    expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
+  })
+  it('Approve opens only for tested work where every checked feature is "merge"; needs-work ones must be unchecked; the hint says why not', () => {
+    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
+    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).hint).toBe('Run the tests first')
+    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, 'needs-work')] }).hint).toBe('Mark "merge now" or uncheck: T-b')
+    expect(approveGate({ ...passed, features: [g('a', true, null)] }).ok).toBe(false)
+    expect(approveGate({ ...passed, features: [g('a', false, 'merge')] }).hint).toBe('Check at least one feature')
+    expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
+  })
+})
+
+describe('/__tw/approve-merge route', () => {
+  const res = () => { const r = { code: 200, body: '', setHeader() {}, end(b) { r.body = b ?? '' } }; return r }
+  const make = (over = {}) => {
+    const spawned = []
+    const files = {}
+    const h = approveMergeRoute({ loopback: () => true, branch: () => 'preview/261023_1500', cache: '/c', ops: '/ops', wt: '/wt', exists: (f) => f in files, read: (f) => files[f], spawn: (...a) => { spawned.push(a) }, ...over })
+    return { h, spawned, files }
+  }
+  it('POST starts the script detached on the worktree and answers 202', () => {
+    const { h, spawned } = make(); const r = res()
+    h({ method: 'POST' }, r)
+    expect(r.code).toBe(202)
+    expect(spawned).toEqual([['/ops/bin/tw_approve_merge.sh', ['/wt']]])
+  })
+  it('refuses a non-loopback caller and any other method; never spawns', () => {
+    const a = make({ loopback: () => false }), r1 = res(); a.h({ method: 'POST' }, r1)
+    const b = make(), r2 = res(); b.h({ method: 'PUT' }, r2)
+    expect([r1.code, r2.code, a.spawned.length, b.spawned.length]).toEqual([403, 405, 0, 0])
+  })
+  it('GET returns the status file of this branch, or step none', () => {
+    expect(mergeStatusFile('/c', 'preview/261023_1500')).toBe('/c/approvals/preview-261023_1500.merge.json')
+    const { h, files } = make(); const r = res()
+    h({ method: 'GET' }, r); expect(JSON.parse(r.body)).toEqual({ step: 'none' })
+    files['/c/approvals/preview-261023_1500.merge.json'] = '{"step":"released","text":"released abc1234"}'
+    const r2 = res(); h({ method: 'GET' }, r2); expect(JSON.parse(r2.body).step).toBe('released')
+  })
+  it('does not start a second run while the status is still running', () => {
+    const { h, spawned, files } = make(); files['/c/approvals/preview-261023_1500.merge.json'] = JSON.stringify({ step: 'checks', updated: new Date().toISOString() })
+    const r = res(); h({ method: 'POST' }, r)
+    expect([r.code, spawned.length]).toEqual([409, 0])
   })
 })

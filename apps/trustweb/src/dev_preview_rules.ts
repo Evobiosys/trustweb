@@ -1,9 +1,10 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
-export { ciDiagnostics, diagnosticsFor, ghBin, readyToGo } from '../dev_preview_rules.mjs'
+export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict }
+export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
 export function visible(features: PreviewFeature[]): PreviewFeature[] {
@@ -108,6 +109,39 @@ export function prButton(pr: { number: number; sha?: string; merged?: boolean } 
   if (!pr) return `Create PR with ${n} checked`
   if (pr.merged) return `PR #${pr.number} shipped. New preview with ${unshipped} checked`
   return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
+}
+
+export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
+export type PrGate = 'untested' | 'running' | 'failed' | 'passed'
+
+/** What the local checks say about the assembled set: only a run on the same sha counts. */
+export function prGate(p: { assembled?: { sha: string } | null; tested?: Tested | null }): PrGate {
+  const t = p.tested
+  if (!t || !p.assembled || t.sha !== p.assembled.sha) return 'untested'
+  if (t.running) return 'running'
+  return t.ok === true ? 'passed' : t.ok === false ? 'failed' : 'untested'
+}
+
+export function testLine(gate: PrGate, tested?: Tested | null): string {
+  switch (gate) {
+    case 'untested': return 'Tests not run for this selection'
+    case 'running': return 'Running the checks (about 40 s)...'
+    case 'failed': return 'Checks failed: see below'
+    case 'passed': return `Checks passed for ${tested?.sha ?? '?'}`
+  }
+}
+
+/** The verdict after a click on a pill: a second click on the active one clears it. */
+export const verdictAfter = (current: Verdict | undefined, clicked: 'merge' | 'needs-work'): Verdict => (current === clicked ? null : clicked)
+
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): "Approve" (merge to main) needs tested, conflict-free work where every checked feature says "merge". */
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[] }): { ok: boolean; hint: string } {
+  const open = p.features.filter((f) => f.checked && !f.merged && f.verdict !== 'merge').map((f) => f.title)
+  const hint = prGate(p) !== 'passed' ? 'Run the tests first'
+    : p.assembled?.error ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
+    : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature'
+    : open.length ? `Mark "merge now" or uncheck: ${open.join(', ')}` : ''
+  return { ok: hint === '', hint }
 }
 
 export interface TreeNode { feature: PreviewFeature; depth: number; children: TreeNode[] }
