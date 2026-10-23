@@ -119,7 +119,7 @@ async function main() {
     await bo.page.locator('.sheet.on [data-ring="friend"]').click().catch(() => bo.page.getByRole('button', { name: /^Friend/ }).first().click())
     await bo.page.locator('.sheet.on [data-add-person]').click()
     t.ok('1: pressing Add looked @ada up once (GET /who/ada)', !!(await until(async () => server.opens.length === 1)) && server.opens[0].path === '/who/ada', JSON.stringify(server.opens))
-    t.ok('1: Ada\'s card opens', await appears(bo.page.locator('.sheet.on h3', { hasText: 'Ada Lovelace' }), 15_000))
+    t.ok('1: Ada\'s card opens', await appears(bo.page.locator('.sheet.on h2', { hasText: 'Ada Lovelace' }), 15_000))
     const rec = await record(bo.page)
     t.ok('1: Ada is in Bo\'s web, connected, in the ring picked', rec.people.length === 1 && rec.people[0].name === 'Ada Lovelace' && rec.people[0].peerId === rec.peers[0].id && rec.people[0].ring === 'friend' && rec.peers[0].ring === 'friend', JSON.stringify(rec.people).slice(0, 160))
     t.ok('1: Ada\'s phone holds Bo as a connection (added AND connected)', !!(await until(async () => (await record(ada.page)).peers.some((p) => p.displayName === 'Bo Builder'))))
@@ -130,13 +130,13 @@ async function main() {
     await openAddSheet(bo.page)
     await bo.page.locator('.sheet.on [data-add-code]').fill(`${ORIGIN}/c/${cy.code}`)
     await bo.page.locator('.sheet.on [data-add-person]').click()
-    t.ok('2: a pasted /c/<code> link adds Cy', await appears(bo.page.locator('.sheet.on h3', { hasText: 'Cy Coder' }), 15_000) && server.opens.at(-1).path === `/c/${cy.code}`)
+    t.ok('2: a pasted /c/<code> link adds Cy', await appears(bo.page.locator('.sheet.on h2', { hasText: 'Cy Coder' }), 15_000) && server.opens.at(-1).path === `/c/${cy.code}`)
     await bo.page.locator('.sheet.on .sheet-home').click()
     const dee = await phoneWithCode(browser, server, 'Dee Direct')
     await openAddSheet(bo.page)
     await bo.page.locator('.sheet.on [data-add-code]').fill(dee.code)
     await bo.page.locator('.sheet.on [data-add-person]').click()
-    t.ok('2: a bare code adds Dee', await appears(bo.page.locator('.sheet.on h3', { hasText: 'Dee Direct' }), 15_000))
+    t.ok('2: a bare code adds Dee', await appears(bo.page.locator('.sheet.on h2', { hasText: 'Dee Direct' }), 15_000))
     await bo.page.locator('.sheet.on .sheet-home').click()
     const eli = await newPhone(browser, server)
     await startPhone(eli.page, 'Eli Long')
@@ -147,16 +147,49 @@ async function main() {
     await openAddSheet(bo.page)
     await bo.page.locator('.sheet.on [data-add-code]').fill(eliLong)
     await bo.page.locator('.sheet.on [data-add-person]').click()
-    t.ok('2: a pasted long link adds Eli with no server lookup', await appears(bo.page.locator('.sheet.on h3', { hasText: 'Eli Long' }), 15_000) && server.opens.length === before)
+    t.ok('2: a pasted long link adds Eli with no server lookup', await appears(bo.page.locator('.sheet.on h2', { hasText: 'Eli Long' }), 15_000) && server.opens.length === before)
     await bo.page.locator('.sheet.on .sheet-home').click()
     t.ok('2: re-adding someone already in the web says so and adds no second card', await (async () => {
       await openAddSheet(bo.page)
       await bo.page.locator('.sheet.on [data-add-code]').fill('@ada')
       await bo.page.locator('.sheet.on [data-add-person]').click()
-      await bo.page.locator('.sheet.on h3', { hasText: 'Ada Lovelace' }).waitFor({ timeout: 15_000 })
+      await bo.page.locator('.sheet.on h2', { hasText: 'Ada Lovelace' }).waitFor({ timeout: 15_000 })
       return (await record(bo.page)).people.filter((p) => p.name === 'Ada Lovelace').length === 1
     })())
     await bo.page.locator('.sheet.on .sheet-home').click()
+
+    // 2b  wave 20 replay guard: an unstamped link (older app) is accepted and flagged; a stamped one works once; an old one is refused
+    t.ok('2b: the unstamped long link of Eli was accepted and flagged legacy-code', (await record(bo.page)).people.find((p) => p.name === 'Eli Long')?.connectedVia === 'legacy-code')
+    const guard = await phoneWithCode(browser, server, 'Gus Guard')
+    const gusUrl = (await until(async () => (await record(guard.page)).connectCode?.url)) ?? ''
+    const stamped = (ts, nonce) => { const x = new URL(gusUrl); x.searchParams.set('nonce', nonce); x.searchParams.set('ts', String(ts)); return x.toString() }
+    const tryAdd = async (value) => {
+      await openAddSheet(bo.page)
+      await bo.page.locator('.sheet.on [data-add-code]').fill(value)
+      await bo.page.locator('.sheet.on [data-add-person]').click()
+    }
+    await tryAdd(stamped(Date.now() - 25 * 3600_000, 'oldOldOldOldOldOld1'))
+    t.ok('2b: a link older than 24 h says it has expired and adds nobody', !!(await until(async () => /This code has expired, ask for a new one/.test(await bo.page.locator('.sheet.on [data-add-code-status]').innerText()), 10_000)) && !(await record(bo.page)).people.some((p) => p.name === 'Gus Guard'))
+    await shot(bo.page, 'ab_2b_expired.png')
+    await bo.page.locator('.sheet.on .sheet-home').click()
+    const freshLink = stamped(Date.now(), 'freshFreshFreshFr2')
+    await tryAdd(freshLink)
+    t.ok('2b: a fresh stamped link adds Gus, not flagged legacy', await appears(bo.page.locator('.sheet.on h2', { hasText: 'Gus Guard' }), 15_000) && (await record(bo.page)).people.find((p) => p.name === 'Gus Guard')?.connectedVia === undefined)
+    await bo.page.locator('.sheet.on .sheet-home').click()
+    await tryAdd(freshLink)
+    t.ok('2b: the same link a second time says it was already used', !!(await until(async () => /This code was already used/.test(await bo.page.locator('.sheet.on [data-add-code-status]').innerText()), 10_000)))
+    await shot(bo.page, 'ab_2b_used.png')
+    await bo.page.locator('.sheet.on .sheet-home').click()
+
+    // 2c  the same guard on the opening path: a scan of the link in the phone's own camera lands on ?connect=...&nonce=...&ts=...
+    const opened = async (value) => { await bo.page.goto(value); await bo.page.waitForTimeout(1500); return bo.page.locator('body').innerText() }
+    t.ok('2c: opening an expired link says so', /This code has expired, ask for a new one/.test(await opened(stamped(Date.now() - 25 * 3600_000, 'oldOldOldOldOldOld3'))))
+    const openFresh = stamped(Date.now(), 'freshFreshFreshFr4')
+    t.ok('2c: opening a fresh link is not refused', !/already used|has expired/.test(await opened(openFresh)))
+    t.ok('2c: opening the same link again says it was already used', /This code was already used/.test(await opened(openFresh)))
+    t.ok('2c: the refusal toast carries the marker [data-connect-refused]', (await bo.page.locator('[data-connect-refused]').count()) === 1)
+    await shot(bo.page, 'ab_2c_used_on_open.png')
+    await bo.page.goto(ORIGIN + '/')
 
     // 3  mistakes
     const peopleBefore = (await record(bo.page)).people.length
@@ -197,7 +230,7 @@ async function main() {
     await openAddSheet(bo.page)
     await bo.page.locator('.sheet.on [data-add-code]').fill(floDid)
     await bo.page.locator('.sheet.on [data-add-person]').click()
-    t.ok('4: a DID adds a card at once', await appears(bo.page.locator('.sheet.on h3').first(), 15_000))
+    t.ok('4: a DID adds a card at once', await appears(bo.page.locator('.sheet.on h2').first(), 15_000))
     t.ok('4: with NO request to the server for it', server.opens.length === opensBefore && bobLookups.length === 0 && server.posts.length >= postsBefore)
     const floRec = await until(async () => (await record(bo.page)).peers.find((p) => p.did === floDid))
     t.ok('4: the connection is made over the relay (Flo\'s phone holds Bo)', !!(await until(async () => (await record(flo.page)).peers.some((p) => p.displayName === 'Bo Builder'))) && !!floRec)

@@ -16,6 +16,7 @@ import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
+import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
@@ -306,6 +307,8 @@ export interface Person {
   ring: Ring
   metAt: number
   lines: NoteLine[]
+  /** 'legacy-code': connected through a link without a freshness stamp (an older app); accepted for now. Local only. */
+  connectedVia?: 'legacy-code'
   /** Set once this person is also connected on TrustWeb (a paired peer). */
   peerId?: string
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
@@ -898,6 +901,8 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
+  /** Connect nonces this phone accepted (connect_freshness.ts), pruned past the window: a link used once is refused the second time. */
+  seenConnectNonces?: SeenNonce[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.
