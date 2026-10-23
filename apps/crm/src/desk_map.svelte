@@ -61,7 +61,7 @@
     if (!box || !inView || handle || starting) return
     starting = true
     const view = centreOf(liveTogetherPrefs(host.record?.()?.togetherPrefs, Date.now()), prefs.geo, places.map((g) => g.place))
-    void import('./place_map').then(({ createMap }) => createMap(box!, view, openPerson)).then((h) => { handle = h; h.setPins(pins) })
+    void import('./place_map').then(({ createMap }) => createMap(box!, view, openPerson, { on: prefs.mapTiles, onToggle: (on) => { prefs.mapTiles = on; savePrefs() } })).then((h) => { handle = h; h.setPins(pins) })
   })
   $effect(() => { const now = pins; handle?.setPins(now) })
   onDestroy(() => { queue.cancel(); handle?.destroy() })
@@ -69,7 +69,7 @@
 
 <div class="desk-page" data-screen="desk-map">
   <h1 class="desk-title">{S.desk.mapTitle}</h1>
-  <p class="desk-sub">{S.desk.mapNote}</p>
+  <p class="desk-sub">{S.desk.mapNote(prefs.mapTiles)}</p>
   <div class="desk-map" data-map bind:this={box} role="region" aria-label={S.desk.mapAria}></div>
   {#if places.length}
     <div class="desk-map-bar">

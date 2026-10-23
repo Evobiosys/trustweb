@@ -8,6 +8,7 @@ import { viewOf } from './desk'
 import { View } from './nav'
 import { DEV_CLOSE, emptyClose } from './close'
 import type { Close } from './close'
+import { tilesOn } from './place_geo'
 import type { GeoCache } from './place_geo'
 import { emptyPlacements } from './placement'
 import type { Placements } from './placement'
@@ -91,11 +92,13 @@ export interface Prefs {
   collapsedGroups: string[] | null
   /** Desk map: where each place was found (place_geo.ts), looked up at OpenStreetMap only on a tap; this device. */
   geo: GeoCache
+  /** Desk map: the detailed OpenStreetMap tile layer is on (fetches tiles); false = the bundled local outline only. */
+  mapTiles: boolean
 }
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, tabbar: TabbarMode.Always, truth: '', notesUrl: 'http://127.0.0.1:8263', notesToken: '', notesAutoSync: true, activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [], view: View.Classic, favorites: [], collapsedGroups: null, geo: {} }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [], view: View.Classic, favorites: [], collapsedGroups: null, geo: {}, mapTiles: false }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined
@@ -104,7 +107,7 @@ function load(): Prefs {
 
     // Same dev path: Jakob's "Close to me" set until he saved his own.
     const near = saved.close === undefined && __TW_RECORD__ ? { close: DEV_CLOSE } : {}
-    const merged = { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement }, tabbar: tabbarMode(saved.tabbar) }
+    const merged = { ...base, ...preload, ...near, ...saved, filters: { ...base.filters, ...saved.filters }, placement: { ...base.placement, ...saved.placement }, tabbar: tabbarMode(saved.tabbar), mapTiles: tilesOn(saved.mapTiles) }
     // The dev record's own device opens on the Desk until a view was saved.
     merged.view = viewOf(saved.view ?? (__TW_RECORD__ ? View.Desk : undefined))
     // Same dev path for the notes bridge: its token read from ~/.config/trustweb/notes-bridge.json by the dev server (vite define), until the developer saved one.

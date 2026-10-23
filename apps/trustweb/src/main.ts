@@ -759,6 +759,8 @@ const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: (
 // 2026-10-23: only under Settings > View (Jakob).
 const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
+/** Map-local (Jakob 2026-10-23): the TrustWeb view's way back to the Desk, bottom right in the page dock, only on a wide tab while the Desk is closed. */
+const deskViewPill = el('button', { class: 'see-action desk-view-pill', 'data-desktop-view': '', hidden: true, onclick: () => showDesktopVersion() }, [S.showDesktop])
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
 root.replaceChildren(phone)
@@ -771,7 +773,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see, deskViewPill] : [add, see, deskViewPill]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -1338,6 +1340,7 @@ function applyDeskWide(): void {
 function updateDeskToggle(): void {
   deskToggle.hidden = !DESK_PILL_SHOWN || demoToggle.hidden || !wideTab()
   deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
+  deskViewPill.hidden = !wideTab() || deskOpen()
 }
 
 function openDeskSheet(): void {

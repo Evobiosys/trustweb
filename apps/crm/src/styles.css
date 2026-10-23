@@ -405,6 +405,9 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-compose{margin:16px 0}
 .desk-place{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-top:12px}
 .desk-map{height:55vh; min-height:320px; margin-top:12px; border-radius:16px; border:1px solid var(--line); overflow:hidden; z-index:0}
+.desk-map.leaflet-container{background:#0f1722}
+.desk-map-tiles{font:inherit; font-size:13px; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card, #fff); color:var(--ink, #111); text-decoration:underline; cursor:pointer}
+.desk-map-tiles[aria-pressed=true]{font-weight:600}
 .desk-map-bar{display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap}
 .desk-locate{margin-left:8px; padding:2px 10px; font-size:13px}
 .desk-pin{display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:var(--accent, #3b82f6); color:#fff; font-weight:600; font-size:13px; border:2px solid #fff; box-shadow:0 1px 4px #0006}

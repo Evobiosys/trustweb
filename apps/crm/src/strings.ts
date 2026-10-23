@@ -382,7 +382,10 @@ export const S = {
     reachedOut: 'Reached out',
     snooze: 'Snooze until',
     mapTitle: 'Where your people are',
-    mapNote: 'Map tiles by OpenStreetMap; places are looked up only when you tap Locate.',
+    mapNote: (tiles: boolean) => tiles
+      ? 'Detailed map: map tiles are fetched from OpenStreetMap. Places are looked up only when you tap Locate.'
+      : 'Local map: drawn on this device, nothing is sent. Places are looked up only when you tap Locate.',
+    mapTiles: 'Detailed map (OpenStreetMap)',
     mapLocate: 'Locate',
     mapLocated: 'On the map',
     mapNotFound: 'Not found',
@@ -393,6 +396,7 @@ export const S = {
     mapCancel: 'Cancel',
     mapAria: 'Map of your people by place',
     mapAttribution: '© OpenStreetMap contributors',
+    mapLocalAttribution: 'Natural Earth',
     mapEmpty: 'No places yet: log where you met someone, or fill "Residing in".',
     start: { title: 'Getting started', count: (n: number, of: number) => `${n} of ${of} steps completed.${n === 0 ? '' : ' Great start!'}`,
       name: 'Your name is set', ring: 'A person in a trust membrane', contacts: 'Contacts imported', notes: 'Notes sync set up', installed: 'TrustWeb installed' },

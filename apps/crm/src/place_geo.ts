@@ -19,6 +19,8 @@ export interface View {
 
 /** Nominatim's usage policy: at most one request per second. */
 export const GEO_GAP_MS = 1000
+/** The detailed (OpenStreetMap tiles) layer only after an explicit choice; anything else = the bundled local outline. */
+export const tilesOn = (saved: unknown): boolean => saved === true
 export const EUROPE: View = { lat: 48, lon: 14, zoom: 4 }
 
 export const geoKey = (place: string): string => norm(place.trim())
