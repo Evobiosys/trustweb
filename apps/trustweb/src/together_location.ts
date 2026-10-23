@@ -49,3 +49,26 @@ export function isNear(here: Place, there: Place, radiusKm: number): boolean {
   const a = new Set(words(here.label))
   return words(there.label).some((w) => a.has(w))
 }
+
+/** The part of navigator.geolocation the picker needs (injectable for tests). */
+export type GeoLike = Pick<Geolocation, 'getCurrentPosition'>
+
+/**
+ * The device position as the place, asked only when pick() runs (a tap), never on load. Nothing goes to the network (no geocoder): the
+ * label is the typed words (or `hereLabel`), the coordinates are rounded to ~1 km and stay on this phone. Denied, timed out or
+ * unavailable: the typed words alone, as textPicker would.
+ */
+export function geoPicker(geo: GeoLike | undefined, hereLabel: string, timeoutMs = 10_000): LocationPicker {
+  return {
+    pick: (areaText) => new Promise<Place | null>((resolve) => {
+      const label = areaText.trim()
+      const words = (): Promise<Place | null> => textPicker.pick(areaText)
+      if (!geo) { void words().then(resolve); return }
+      geo.getCurrentPosition(
+        ({ coords }) => resolve({ label: label || hereLabel, lat: Math.round(coords.latitude * 100) / 100, lon: Math.round(coords.longitude * 100) / 100 }),
+        () => { void words().then(resolve) },
+        { timeout: timeoutMs, maximumAge: 600_000 },
+      )
+    }),
+  }
+}

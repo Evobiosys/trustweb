@@ -112,6 +112,8 @@ function readArea(raw: string, activity: string): { area?: string; radiusKm?: nu
 /** A generic leading verb is not the activity: "play padel" and "go hiking" are padel and hiking; "cook" stays cook. */
 const LEAD = /^(?:(?:again|wieder|mal|gerne?)\s+)*(?:(?:play|playing|do|doing|go|going|join|try|have|practice|practise|make)\s+)?(?:(?:some|a|an|the|a game of|a round of|eine runde)\s+)?(?:(?:again|wieder|mal|gerne?)\s+)*/
 const TRAIL = /\s+(?:zu\s+)?(?:spielen|machen|gehen)$/
+/** The activity inside a phrase of the person's own words ("play padel" -> "padel"). */
+export const activityOf = (phrase: string): string => phrase.replace(LEAD, '').replace(TRAIL, '').trim()
 /** Where the wanted thing ends: the "together" words, a time or a place. */
 const STOP = '(?:together|with(?:\\s+(?:me|someone|anyone|somebody))?|again|wieder|zusammen|mit|before|by|until|till|near|around|in|on|at|this|next|tomorrow|today|within|vor|bis|am|bei|nahe)'
 const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|looking\\s+to|möchte|moechte|möchten|will|wollen|lust\\s+(?:zu|auf))'
@@ -153,7 +155,7 @@ export function readTogetherRequest(text: string, now: number): TogetherRequest 
     ?? new RegExp(`\\b${W}\\s+(?:(?:wieder|mal|gerne?)\\s+)?spielen\\b`).exec(bare)?.[0]
   if (!phrase?.trim()) return null
   phrase = phrase.trim()
-  const activity = phrase.replace(LEAD, '').replace(TRAIL, '').trim()
+  const activity = activityOf(phrase)
   if (!activity || NOT_ACTIVITY.has(activity)) return null
   const reach = readReach(t)
   return {
@@ -198,3 +200,20 @@ export function acceptTogetherDraft(draft: unknown, now: number): TogetherReques
 /** The JSON shape a model is told to fill (the whole prompt contract: the model interprets, the code decides). */
 export const TOGETHER_DRAFT_SHAPE =
   '{"activity": string, "phrase"?: string, "beforeAt"?: epoch ms, "fromAt"?: epoch ms, "area"?: string, "radiusKm"?: number 1-100, "reach"?: integer 1-6}'
+
+/** owner 2026-10-23: on with the first local-model hook. No model call the app makes itself exists yet; nothing leaves while this is false. */
+export const TOGETHER_LLM_DRAFT = false
+
+/**
+ * The ONE call site of acceptTogetherDraft: when the plain reading leaves the activity or the time empty (and only then) `ask` is
+ * called once with the sentence; the draft is range-checked, the plain reading wins wherever it has a value, and a failed draft falls
+ * back to the plain reading. `ask` is a user action's model call; this never reaches for one itself.
+ */
+export async function draftOrPlain(
+  text: string, now: number, ask: (text: string) => Promise<unknown>, on: boolean = TOGETHER_LLM_DRAFT,
+): Promise<TogetherRequest | null> {
+  const plain = readTogetherRequest(text, now)
+  if (!on || (plain && plain.beforeAt !== undefined)) return plain
+  const draft = acceptTogetherDraft(await ask(text).catch(() => null), now)
+  return draft ? { ...draft, ...plain } : plain
+}

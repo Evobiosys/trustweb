@@ -166,9 +166,11 @@ import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
-import { togetherAsk } from './together_match'
+import { fitOfAsk, togetherAsk } from './together_match'
+import { geoPicker } from './together_location'
+import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
-import { readTogetherRequest } from './together_request'
+import { draftOrPlain, readTogetherRequest } from './together_request'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
@@ -534,7 +536,9 @@ const net = new Net({
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
   onAsk: (ask) => {
-    askQueue.push(ask)
+    // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
+    const at = fitOfAsk(ask.text, st().togetherPrefs, Date.now()) ? askQueue.findIndex((q) => !fitOfAsk(q.text, st().togetherPrefs, Date.now())) : -1
+    if (at >= 0) askQueue.splice(at, 0, ask); else askQueue.push(ask)
     notify('ask', S.notifBodyAsk(ask.fromName))
     if (!askShowing) showNextAsk()
   },
@@ -5538,6 +5542,15 @@ function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
 
 /** A together request waiting for the second tap: the compiled sentence is in the box, its reach and filled settings wait here. */
 let togetherPending: { text: string; reach: number | undefined; filled: TogetherRequest } | null = null
+/** Wave 19: the place picked with the dock's button (on this phone only until a request with it is sent). */
+let togetherPlace: Place | null = null
+
+/** The dock's "Pick a place": the device position on a tap (together_location.ts geoPicker), with the area words typed so far as its name. */
+async function pickTogetherPlace(): Promise<void> {
+  const typed = readTogetherRequest(queryText, Date.now())?.area ?? ''
+  togetherPlace = await geoPicker(navigator.geolocation, S.togetherHere).pick(typed)
+  render()
+}
 
 /**
  * Wave 16: the dock's send. A sentence of the pattern "I want to play padel again before Thursday / who wants to go hiking with me"
@@ -5546,19 +5559,22 @@ let togetherPending: { text: string; reach: number | undefined; filled: Together
  * rides on this one ask only (the dock's "How far?" stays as it was); what it chose becomes the next default only when it is sent.
  * Anything that is not a together request is asked as typed, at once.
  */
-function sendFromDock(text: string): void {
+async function sendFromDock(text: string): Promise<void> {
   const now = Date.now()
   const pending = togetherPending
   togetherPending = null
   if (pending && pending.text === text.trim()) {
     const s = st()
-    s.togetherPrefs = rememberTogether(s.togetherPrefs, pending.filled, now)
+    s.togetherPrefs = rememberTogether(s.togetherPrefs, pending.filled, now, togetherPlace ?? undefined)
+    togetherPlace = null
     save()
     void runAsk(pending.text, pending.reach)
     return
   }
-  const req = readTogetherRequest(text, now)
-  if (!req) { void runAsk(text); return }
+  // No model call exists in the app yet: draftOrPlain reads plainly while TOGETHER_LLM_DRAFT is off (together_request.ts).
+  const read = await draftOrPlain(text, now, async () => null)
+  if (!read) { void runAsk(text); return }
+  const req = togetherPlace && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)
   const ask = togetherAsk(filled, navigator.language)
   queryText = ask.text
@@ -5639,13 +5655,18 @@ function queryDock(s: AppState): HTMLElement {
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
+      run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
+        togetherPlace
+          ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label) + ' ×'])
+          : el('button', { class: 'chip', 'data-together-pick': '1', title: S.togetherPickHint, onclick: () => { void pickTogetherPlace() } }, ['📍 ' + S.togetherPick]),
+      ]),
       run ? null : el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.queryTry]),
         ...SUGGESTIONS.map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
       ]),
       el('button', {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
-        onclick: () => sendFromDock(queryText),
+        onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
@@ -5678,6 +5699,7 @@ function renderAsk(): void {
       el('span', { class: 'eyebrow' }, [a.earlier ? S.askEarlierEyebrow(a.fromName, a.earlier.at !== null ? askWhenLabel(a.earlier.at) : null) : a.arrivedLate ? S.askLateEyebrow : askEyebrow(a)]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
+      fitLine(a),
       decided === null
         ? el('div', {}, [
             el('p', { class: 'ask-lbl' }, [S.askMatches]),
@@ -5694,6 +5716,12 @@ function renderAsk(): void {
           ]),
     ]),
   )
+}
+
+/** Wave 19: "Fits your padel settings" under an incoming together ask that matches one of the person's own (together_match.ts fitOfAsk). */
+function fitLine(a: IncomingAsk): HTMLElement | null {
+  const fit = fitOfAsk(a.text, st().togetherPrefs, Date.now())
+  return fit ? el('p', { class: 'hint', 'data-together-fit': '1' }, [S.askFitsSettings(fit.activity)]) : null
 }
 
 /**

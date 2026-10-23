@@ -5,7 +5,10 @@
  */
 import { HOPS_DEFAULT } from './hops'
 import { isNear } from './together_location'
+import { activityOf } from './together_request'
 import type { TogetherRequest } from './together_request'
+import { liveTogetherPrefs } from './together_prefs'
+import type { TogetherPref } from './together_prefs'
 
 export interface TogetherAsk {
   /** The ask text as it goes out (and as the receiving person reads it). */
@@ -54,4 +57,25 @@ export function offerFits(req: TogetherRequest, offer: TogetherOffer, radiusFall
   if (!has(offer.line, req.activity)) return false
   if (!req.area || !offer.area) return true
   return isNear({ label: req.area }, { label: offer.area }, req.radiusKm ?? radiusFallbackKm)
+}
+
+const ASK_HEAD = 'Looking for company: '
+const ASK_PLACE = /\s+near (.+?)(?: \(within (\d+) km\))?$/
+
+/** Reads back an incoming ask written by togetherAsk(): the activity and the area (the window is words only). Null: not a together ask. */
+export function readTogetherAsk(text: string): TogetherRequest | null {
+  if (!text.startsWith(ASK_HEAD)) return null
+  let rest = text.slice(ASK_HEAD.length)
+  const place = ASK_PLACE.exec(rest)
+  if (place) rest = rest.slice(0, place.index)
+  const activity = activityOf(rest.replace(/\s+(?:on|from|before) .*$/, ''))
+  if (!activity) return null
+  return { activity, ...(place ? { area: place[1], ...(place[2] ? { radiusKm: Number(place[2]) } : {}) } : {}) }
+}
+
+/** The owner's own together setting an incoming together ask fits (same activity; areas compared only when both have one), or null. */
+export function fitOfAsk(text: string, prefs: unknown, now: number): TogetherPref | null {
+  const req = readTogetherAsk(text)
+  if (!req) return null
+  return liveTogetherPrefs(prefs, now).find((p) => offerFits(req, { line: p.activity, ...(p.area ? { area: p.area } : {}) })) ?? null
 }
