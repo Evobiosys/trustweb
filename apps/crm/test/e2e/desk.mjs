@@ -66,13 +66,13 @@ try {
   ok('classic face has the chevron in its header', await page.locator('.top-btns [data-action="view-menu"]').count() === 1)
   await page.click('[data-action="view-menu"]')
   const items = await page.locator('[role="menu"] [role^="menuitem"]').allInnerTexts()
-  ok('menu lists Dex, Contacts (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|Contacts', items.join('|'))
+  ok('menu lists Dex, TrustWeb Desk, Contacts (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|TrustWeb Desk|Contacts', items.join('|'))
   ok('Classic is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Escape')
   ok('Escape closes the menu', await page.locator('[role="menu"]').count() === 0)
   await page.click('[data-action="view-menu"]')
-  await page.click('[data-view="desk"]')
+  await page.click('[data-view="dex"]')
   await page.waitForSelector('[data-screen="desk-home"]')
 
   const greeting = await page.locator('[data-part="desk-greeting"]').innerText()
@@ -166,9 +166,9 @@ try {
   // reload keeps the face; switch back
   await page.reload()
   await page.waitForSelector('[data-screen="desk-home"]')
-  ok('reload keeps prefs.view = desk', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'desk')
+  ok('reload keeps prefs.view = dex', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'dex')
   await page.click('[data-action="view-menu"]')
-  ok('Desk is the checked entry', (await page.locator('[data-view="desk"]').getAttribute('aria-checked')) === 'true')
+  ok('Dex is the checked entry', (await page.locator('[data-view="dex"]').getAttribute('aria-checked')) === 'true')
   await page.click('[data-view="classic"]')
   await page.waitForSelector('.shell')
   ok('Classic brings the classic face back', await page.locator('[data-screen="desk"]').count() === 0)
@@ -178,7 +178,7 @@ try {
 
   // phone with the drawer open
   const phone = await browser.newContext({ viewport: { width: 390, height: 812 }, deviceScaleFactor: 2, colorScheme: 'light' })
-  await phone.addInitScript((k) => { if (!localStorage.getItem(k)) localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true })) }, PREFS)
+  await phone.addInitScript((k) => { if (!localStorage.getItem(k)) localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true })) }, PREFS)
   const pp = await phone.newPage()
   watch(pp)
   await pp.goto(URL)
@@ -224,7 +224,7 @@ try {
       contacts: [{ id: 'local:1', name: 'Christopher Rodriguez', title: 'Web Developer', birthday: `--${md}`, phones: [], emails: [], labels: [], sources: [] }, { id: 'local:2', name: 'Emma Miller', title: 'SQL Developer', birthday: `1990-${md}`, phones: [], emails: [], labels: [], sources: [] }],
       keepInTouch: { 'p-tay': { everyDays: 7, since: now - 20 * DAY }, 'p-alex': { everyDays: 7, since: now - 20 * DAY }, 'p-sam': { everyDays: 7, since: now - 20 * DAY } },
     }))
-    localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true }))
+    localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true }))
   }, PREFS)
   const fp = await full.newPage()
   watch(fp)
@@ -244,7 +244,7 @@ try {
   const empty = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' })
   await empty.addInitScript((k) => {
     localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me', displayName: '' }, people: [], peers: [], inventory: [], log: [], notificationsOn: false }))
-    localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true }))
+    localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true }))
   }, PREFS)
   const ep = await empty.newPage()
   watch(ep)
@@ -252,7 +252,7 @@ try {
   await ep.waitForSelector('[data-screen="desk-home"]')
   ok('empty: greeting without a name', /^Good (morning|afternoon|evening)$/.test(await ep.locator('[data-part="desk-greeting"]').innerText()))
   ok('empty: no section header without rows', await ep.locator('.desk-section').count() === 0)
-  ok('empty: favorites hint', (await ep.locator('[data-part="desk-favorites"]').innerText()).includes('Favorite a person to pin it here.'))
+  ok('empty: no Favorites section without favourites (desk-fork)', await ep.locator('[data-part="desk-favorites"]').count() === 0)
   await shot(ep, 'desk_empty')
   await empty.close()
 
