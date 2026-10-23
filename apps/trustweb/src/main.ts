@@ -1472,6 +1472,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
+  autoShareToPerson(person)
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -1583,6 +1585,7 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
     person = { id: randomId(8), name: name || peer.displayName, context: where, ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
   }
+  autoShareToPerson(person)
   save()
   applyHeldContact(peer, person)
   return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
@@ -1634,6 +1637,7 @@ async function connectDemoPeer(ref: DemoPeerRef, inviter?: Person): Promise<void
   if (!personOfPeer(s, peer.id) && !joinFrontDoor(inviter, peer.id, peer.displayName)) {
     s.people.push({ id: randomId(8), name: peer.displayName, context: S.demoPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
   }
+  void autoShareProfile(peer, 'public')
   save()
 }
 
