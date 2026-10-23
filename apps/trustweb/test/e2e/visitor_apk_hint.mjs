@@ -53,7 +53,7 @@ async function inviteLink(browser, base, name = 'Ada', keep = false) {
   const link = await page.getAttribute('.qrwrap', 'data-payload')
   if (!link.includes('?connect=')) throw new Error('no long link: ' + link)
   const url = base + link.slice(link.indexOf('?'))
-  if (keep) { await page.locator('nav.tabs button', { hasText: 'Web' }).click(); return { ctx, page, link: url } }
+  if (keep) { await page.locator('nav.tabs button', { hasText: 'Membranes' }).click(); return { ctx, page, link: url } }
   await ctx.close()
   return url
 }

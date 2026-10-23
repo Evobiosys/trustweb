@@ -122,6 +122,7 @@ import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
+import { DESKTOP_KEY, desktopView } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
@@ -737,6 +738,8 @@ const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 /** Desktop, bottom left, outside the phone: add or remove the demo content. */
 const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
+/** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. */
+const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
 root.replaceChildren(phone)
@@ -749,7 +752,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: () => void openWalkthrough() }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle)
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, deskToggle)
 }
 
 /**
@@ -1034,6 +1037,7 @@ function render(): void {
   host.replaceChildren(...body)
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
+  autoDesk()
 }
 
 // ---------------------------------------------------------------------------
@@ -1073,6 +1077,7 @@ function closeSheet(): void {
   sheet.inert = true
   sheet.classList.remove('on')
   veil.classList.remove('on')
+  updateDeskToggle()
   // Wave 6f review: a record another tab saved while this sheet was open was taken over then; draw it now (after the handler that closed it).
   if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
 }
@@ -1271,6 +1276,41 @@ function offerDemoContent(): void {
 function updateDemoToggle(): void {
   demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
   if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
+  updateDeskToggle()
+}
+
+const wideTab = (): boolean => window.matchMedia('(min-width: 900px)').matches
+const storedDesktop = (): string | null => { try { return window.localStorage.getItem(DESKTOP_KEY) } catch { return null } }
+const deskOpen = (): boolean => sheet.classList.contains('on') && sheet.classList.contains('desk-wide') && sheet.dataset.kind === 'curator'
+const deskWanted = (): boolean => Boolean(state) && screen !== Screen.Start && !state?.testOf && window.top === window && desktopView(storedDesktop(), wideTab(), solo, runsAsInstalledApp()) === 'desk'
+let deskTried = false
+
+/** Wave 18: a device with a record on a wide browser tab opens on the Desk, once, unless it chose the phone version. */
+function autoDesk(): void {
+  if (!deskTried && deskWanted()) { deskTried = true; openDeskSheet() }
+  updateDeskToggle()
+}
+
+function updateDeskToggle(): void {
+  deskToggle.hidden = demoToggle.hidden || !wideTab()
+  deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
+}
+
+function openDeskSheet(): void {
+  openSheet([curator.el])
+  sheet.dataset.kind = 'curator'
+  curator.openDesk()
+  updateDeskToggle()
+}
+
+function showPhoneVersion(): void {
+  try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ }
+  go(Screen.Web)
+}
+
+function showDesktopVersion(): void {
+  try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
+  openDeskSheet()
 }
 
 /**
@@ -2067,14 +2107,19 @@ function openEvents(eventId?: string): void {
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 
-function webViewToggle(network: boolean): HTMLElement {
+function webViewToggle(network: boolean, anyone: boolean): HTMLElement {
   const pick = (value: 'rings' | 'network'): void => {
     try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
     render()
   }
-  return el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
-    el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
-    el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+  return el('div', { class: 'web-view-row' }, [
+    anyone ? el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
+      el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
+      el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
+    ]) : el('span', { class: 'web-view' }),
+    el('div', { class: 'seg desk-side', role: 'group', 'aria-label': S.deskSideAria }, [
+      el('button', { 'data-desk-side': '', onclick: openDeskSheet }, [S.deskSide]),
+    ]),
   ])
 }
 
@@ -2103,7 +2148,7 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    ...(s.people.length === 0 ? [] : [webViewToggle(network)]),
+    webViewToggle(network, s.people.length > 0),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -3424,7 +3469,7 @@ const curator = createCurator({
   },
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
-  viewChanged: (view) => sheet.classList.toggle('desk-wide', view === 'desk'),
+  viewChanged: (view) => { sheet.classList.toggle('desk-wide', view === 'desk'); updateDeskToggle() },
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,

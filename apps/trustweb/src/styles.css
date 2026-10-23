@@ -158,7 +158,10 @@ textarea.field{resize:vertical; line-height:1.5}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
 .net-search{padding:8px 12px; font-size:14px}
 .net-canvas{display:block; touch-action:none; -webkit-touch-callout:none; user-select:none; border-radius:16px; background:var(--card); cursor:grab}
-.web-view{margin:6px 16px 0}
+.web-view-row{display:flex; gap:8px; margin:6px 16px 0}
+.web-view-row .web-view{flex:1}
+.desk-side button{padding:8px 16px}
+.web-view-row span.web-view{display:block}
 .ppl{padding:8px 16px 0}
 .prow{display:flex; align-items:center; gap:13px; background:var(--card); border-radius:16px; padding:12px 14px; margin:0 0 10px; box-shadow:0 2px 12px rgba(36,27,46,.06); cursor:pointer; width:100%; border:0; text-align:left}
 .prow .who{flex:1; min-width:0}
@@ -316,6 +319,8 @@ textarea.field{resize:vertical; line-height:1.5}
   cursor:pointer; background:var(--card); color:var(--ink); box-shadow:0 8px 24px rgba(36,27,46,.25)}
 .demo-toggle[hidden]{display:none}
 .demo-toggle:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
+/* Wave 18: the Desk / phone pill stacks above it (z-index over the full-window Desk) */
+.demo-toggle.desk-toggle{bottom:80px; z-index:100001}
 @media (max-width:960px){ .demo-toggle{display:none} }
 @keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
 /* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */

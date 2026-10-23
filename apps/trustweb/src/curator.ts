@@ -10,6 +10,8 @@ import { S } from './strings'
 export interface Curator {
   el: HTMLElement
   open(): void
+  /** Open, then switch the Curator to the Desk face (the host sizes the sheet from viewChanged). */
+  openDesk(): void
   /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
   person(personId: string, onclose: () => void, opts?: { embedded?: boolean }): HTMLElement
   /** Hide in trustweb (Tana checkbox through the Curator's sync, removed from this record) and its Undo. */
@@ -46,16 +48,21 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
   const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged }
-  return {
-    el: root,
-    open() {
-      void import('@web-curator').then(async (m) => {
-        if (mounted) { await m.refreshCurator(); return }
+  const open = (desk: boolean): void => {
+    void import('@web-curator').then(async (m) => {
+      if (mounted) await m.refreshCurator()
+      else {
         mounted = true
         root.replaceChildren()
         await m.mountCurator(root, lent)
-      }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
-    },
+      }
+      if (desk) await m.showDesk()
+    }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
+  }
+  return {
+    el: root,
+    open: () => open(false),
+    openDesk: () => open(true),
     person(personId, onclose, opts) {
       const page = el('div', { class: 'curator-person' }, [S.curatorLoading])
       void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose, opts?.embedded) }).catch((e: unknown) => loadFailed(page, e))

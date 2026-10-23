@@ -102,7 +102,7 @@ async function addResource(page, text) {
   await page.getByPlaceholder(/Motorbike/).fill(text)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await page.locator('.inv', { hasText: text }).waitFor({ timeout: 5000 })
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
 }
 
 async function closeSheets(page) {
@@ -112,7 +112,7 @@ async function closeSheets(page) {
 /** B asks; returns the time it was sent. */
 async function ask(page, text) {
   await closeSheets(page)
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await page.locator('.query-dock textarea').fill(text)
   const t0 = Date.now()

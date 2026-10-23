@@ -29,7 +29,7 @@ async function withPeople(page, base, people, extra = {}) {
   await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
 }
 async function openDevices(page) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.devices', '1')) // Settings sections are folded by default
   await page.locator('.hdr [aria-label="Settings"]').click()
   await page.locator('[data-open-devices]').click()

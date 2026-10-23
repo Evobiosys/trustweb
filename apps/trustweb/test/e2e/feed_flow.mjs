@@ -80,7 +80,7 @@ function fakeInstance(port, cors) {
 }
 
 async function addAddress(page, personName, address) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.locator('.node', { hasText: personName }).first().click()
   if (await page.locator('.sheet.on [data-fed-add]').count()) await page.locator('.sheet.on [data-fed-add]').click()
   else await page.locator('.sheet.on [data-fed-row] .mini').click()
@@ -135,7 +135,7 @@ async function main() {
     await b.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     await b.getByLabel('e.g. Motorbike, can lend it for a weekend').fill('Cargo bike to lend on weekends')
     await b.getByRole('button', { name: 'Add', exact: true }).click()
-    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await a.getByRole('button', { name: 'Call into your web' }).click()
     await a.locator('.query-dock textarea').fill('Does anyone have a cargo bike?')
     await a.getByRole('button', { name: 'Call into my web' }).click()
@@ -157,7 +157,7 @@ async function main() {
     await closeSheet(a)
     await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000)
     await a.reload()
-    await a.locator('nav.tabs button', { hasText: 'Web' }).waitFor({ timeout: 15_000 })
+    await a.locator('nav.tabs button', { hasText: 'Membranes' }).waitFor({ timeout: 15_000 })
     await a.getByRole('button', { name: 'Call into your web', exact: true }).click()
     const earlier = a.locator('.query-dock [data-earlier-answers]')
     await earlier.waitFor({ timeout: 10_000 })
@@ -168,7 +168,7 @@ async function main() {
     await a.locator('[data-feed-toggle]').click()
     await closeSheet(a)
     await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000) // the Settings redraw race (A2): closed for real
-    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await a.getByRole('button', { name: 'Call into your web', exact: true }).click()
     ok('Feed on: the dock does not repeat them (they are in the Feed)', await a.locator('.query-dock [data-earlier-answers]').count() === 0)
     await a.locator('.query-dock .x').click()
@@ -231,7 +231,7 @@ async function main() {
     await closeSheet(a)
     await a.locator('nav.tabs button', { hasText: 'Feed' }).click()
     await until(async () => (await record(a)).people.find((p) => p.name === 'Ben').fediverse.reach === 'link', 15_000)
-    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await a.locator('.node', { hasText: 'Ben' }).first().click()
     await a.locator('.sheet.on [data-fed-reach="link"]').waitFor({ timeout: 15_000 })
     ok('an instance that refuses this page (CORS): kept as a link out, "Open their profile"', (await record(a)).people.find((p) => p.name === 'Ben').fediverse.reach === 'link' && /Open their profile/.test(await a.locator('.sheet.on [data-fed-row]').innerText()))

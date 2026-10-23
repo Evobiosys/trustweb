@@ -183,7 +183,7 @@ async function main() {
     await shot(page, 'record_paused')
     await page.locator('.rec-circle').click()
     await page.waitForTimeout(1200)
-    await page.getByRole('button', { name: 'Web' }).click()
+    await page.getByRole('button', { name: 'Membranes' }).click()
     ok('the pill follows you to Web', await page.locator('.status-pill.rec').isVisible())
     await page.locator('.status-pill.rec').click()
     await page.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 5_000 })
@@ -293,7 +293,7 @@ async function main() {
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // QR from a header: no notes, generic title
-    await page.getByRole('button', { name: 'Web' }).click()
+    await page.getByRole('button', { name: 'Membranes' }).click()
     await page.locator('.hdr .status-pill.qr').click()
     await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
     const qrLink = await page.getAttribute('.qrwrap', 'data-payload')
@@ -311,9 +311,9 @@ async function main() {
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
     const tabs = (await page.locator('nav.tabs button').allInnerTexts()).map((t) => t.trim())
     // Wave 2 (P9): the Feed is off by default, so the bar is the old three.
-    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['My Resources', 'Record', 'Web']), JSON.stringify(tabs))
+    ok('settings swap Web and Inventory around Record', JSON.stringify(tabs) === JSON.stringify(['My Resources', 'Record', 'Membranes']), JSON.stringify(tabs))
     // the alternative: magnifier "Query", Curate list top right; switched in the ⋮ menu's Settings
-    await page.getByRole('button', { name: 'Web', exact: true }).click()
+    await page.getByRole('button', { name: 'Membranes', exact: true }).click()
     await page.locator('.hdr [aria-label="Settings"]').click()
     await page.locator('.radio', { hasText: 'A magnifying glass' }).click()
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
@@ -438,7 +438,7 @@ async function main() {
     ok('a note started from a person opens solo Record even with "A meeting"', true)
     p3.on('dialog', (d) => void d.accept())
     await p3.getByRole('button', { name: 'Discard' }).click()
-    await p3.getByRole('button', { name: 'Web', exact: true }).click()
+    await p3.getByRole('button', { name: 'Membranes', exact: true }).click()
     await p3.locator('nav.tabs .tab-record').click()
     await p3.getByRole('heading', { name: 'Record', exact: true }).waitFor({ timeout: 5_000 })
     ok('from Web, the Record tab opens "Just me" even with "A meeting" in Settings (the origin wins)', true)

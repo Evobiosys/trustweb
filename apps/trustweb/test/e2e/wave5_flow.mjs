@@ -128,7 +128,7 @@ async function partF(browser, base) {
     t.ok(`f: ${label}: "Show demo content" (dock) is ${installed ? 'hidden' : 'shown'}`, toggleVisible === !installed)
     await shot(page, `f_dock_${installed ? 'installed' : 'browser'}_${label.replace(/[^a-z]+/gi, '-')}.png`)
     t.ok(`f: ${label}: "See it in action" stays`, await page.locator('.see-action').isVisible())
-    await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await page.locator('.hdr [aria-label="Settings"]').click()
     await page.locator('.sheet.on').waitFor({ timeout: 5_000 })
     const settingsHasDemo = await page.locator('.sheet.on').getByText('Show demo content').count() > 0
@@ -191,7 +191,7 @@ const stateOf = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('t
 
 /** Record from Web opens "just me" (from Inventory it would open a meeting: record_origin.ts). */
 async function toRecord(page) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.rec-circle').waitFor()
 }
@@ -216,7 +216,7 @@ async function partD(browser, base) {
   t.ok('d: typing keeps the caret (no redraw): the field is still focused and holds all of it', await page.evaluate(() => document.activeElement?.matches('[data-general-notes]')) && (await notes.inputValue()) === 'Met at the station. She runs a repair cafe.')
   await shot(page, 'd_record_general_notes_typed_390x844.png')
   t.ok('d: send and discard come on as soon as something is typed', await page.locator('[data-record-send]').isEnabled() && await page.locator('[data-record-discard]').isEnabled())
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await toRecord(page)
   t.ok('d: the typed notes are still there after leaving Record and coming back', (await page.locator('[data-general-notes]').inputValue()) === 'Met at the station. She runs a repair cafe.')
   await page.locator('[data-record-send]').click()

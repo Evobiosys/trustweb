@@ -43,13 +43,13 @@ const accountOf = (secret) => ({ account: derive(secret, 'trustweb-hosted/v1/acc
 const api = (p, init = {}) => fetch(`http://127.0.0.1:${SWISS}${p}`, { ...init, headers: { Host: '127.0.0.1', ...(init.headers ?? {}) } })
 
 async function openSettings(page) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await page.locator('.hdr [aria-label="Settings"]').click()
   await page.locator('[data-hosting-toggle]').waitFor({ timeout: 10_000 })
 }
 async function saveMemo(page, what) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
   await page.getByLabel('What was this about?').fill(what)

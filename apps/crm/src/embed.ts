@@ -79,3 +79,10 @@ export async function ringFromRings(lent: Omit<Host, 'root'>, personId: string, 
 export async function refreshCurator(): Promise<void> {
   (await import('./state.svelte')).reloadRecord()
 }
+
+/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. */
+export async function showDesk(): Promise<void> {
+  const [{ prefs, savePrefs }, { View }] = await Promise.all([import('./prefs.svelte'), import('./nav')])
+  prefs.view = View.Desk
+  savePrefs()
+}

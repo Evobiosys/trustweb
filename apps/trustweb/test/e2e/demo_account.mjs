@@ -286,7 +286,7 @@ async function main() {
     await b.locator('nav.tabs .tab-record').click()
     await b.getByRole('heading', { name: 'Record' }).waitFor({ timeout: 10_000 })
     ok('Anna\'s Record screen links to Past meetings (1)', /Past meetings \(1\)/.test(await b.locator('.past-link').innerText()))
-    await b.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await b.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await b.locator('.query-dock textarea').waitFor({ timeout: 10_000 })
     // Jakob's own phone kept the meeting too (End meeting wrote it, before any notes)
     const aKept = await stored(a)
@@ -301,7 +301,7 @@ async function main() {
 
     // 5. Countdown, extend, end
     await a.locator('.sheet-veil.on').click({ position: { x: 20, y: 20 }, timeout: 1_000 }).catch(() => {})
-    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await a.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await a.locator('.hdr [aria-label="Settings"]').click()
     const settings = a.locator('.sheet')

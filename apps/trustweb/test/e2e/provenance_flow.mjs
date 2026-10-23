@@ -234,7 +234,7 @@ async function main() {
       const all = await new Promise((res) => { const r = db.transaction('audio').objectStore('audio').getAll(); r.onsuccess = () => res(r.result) })
       return all.reduce((n, e) => n + e.bytes, 0)
     }, audioDb)
-    await page.getByRole('button', { name: 'Web', exact: true }).click()
+    await page.getByRole('button', { name: 'Membranes', exact: true }).click()
     await page.locator('.hdr [aria-label="Settings"]').click()
     await page.waitForFunction(() => /Recordings kept on this phone: \d/.test(document.querySelector('[data-audio-kept]')?.textContent ?? ''), null, { timeout: 5_000 })
     const keptLine = await page.locator('[data-audio-kept]').innerText()

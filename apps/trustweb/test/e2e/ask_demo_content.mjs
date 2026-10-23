@@ -66,7 +66,7 @@ async function sectionDemoPage(browser, base) {
   await maya.getByPlaceholder(/Motorbike/).fill('Pfanne')
   await maya.getByRole('button', { name: 'Add', exact: true }).click()
   await maya.locator('.inv', { hasText: 'Pfanne' }).waitFor({ timeout: 5_000 })
-  await maya.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await maya.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.getByRole('button', { name: /Add a device/ }).click()
   await jonas.getByRole('button', { name: 'Connect', exact: true }).waitFor({ timeout: 30_000 })
   await jonas.getByRole('button', { name: 'Connect', exact: true }).click()

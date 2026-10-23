@@ -91,7 +91,7 @@ async function closeSheets(page) {
 
 async function toWeb(page) {
   await closeSheets(page)
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
 }
 
 async function ask(page, text) {

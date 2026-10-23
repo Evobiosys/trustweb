@@ -227,7 +227,7 @@ async function partE(browser) {
   await a.page.close()
   // Bo asks while Ada is away (his ask waits its window and ends with no answer)
   await b.page.locator('.sheet.on .sheet-home').click().catch(() => {})
-  await b.page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await b.page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   if (await b.page.locator('.query-dock').count() === 0) await b.page.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await b.page.locator('.query-dock textarea').fill('does anyone have a ladder')
   await b.page.getByRole('button', { name: 'Call into my web' }).click()

@@ -44,7 +44,7 @@ async function shot(page, name) {
 }
 
 const openSettings = async (page) => {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.locator('.hdr [aria-label="Settings"]').click()
   await page.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
   // The sheet redraws once the server's status is in: wait for it, so no click lands on the old sheet.
@@ -80,7 +80,7 @@ const until = async (fn, ms = 30_000, step = 200) => {
 
 /** A solo memo about a thing, recorded for `ms` and sent (Record > what > Send). */
 async function recordMemo(page, what, ms) {
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
   await page.getByLabel('What was this about?').fill(what)
@@ -380,7 +380,7 @@ async function partD(browser, base, provider) {
   provider.state.hold = false
   const sent = await until(async () => { const m = (await record(a)).meetings[0]; return m.serverJob?.state === 'done' && !m.outbox && m.fullSentAt ? m : null }, 45_000)
   ok('the transcript is done: the sender replaced the pack under the same key and dropped the key', Boolean(sent) && sent.transcript.length === 2)
-  await a.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   await a.locator('nav.tabs .tab-record').click()
   await a.locator('.past-link').click()
   await a.locator('.pm-row', { hasText: 'Anna' }).first().click()

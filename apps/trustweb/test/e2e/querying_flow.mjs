@@ -126,7 +126,7 @@ async function closeSheets(page) {
 /** Bo asks; resolves at once (the dock keeps waiting on its own). */
 async function ask(page, text) {
   await closeSheets(page)
-  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
   if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await page.locator('.query-dock textarea').fill(text)
   await page.getByRole('button', { name: 'Call into my web' }).click()
