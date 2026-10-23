@@ -2794,7 +2794,7 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
 /** Wave 19: my profile picture, kept in image_store.ts (this phone only); `ownPictureUrl` is its blob: URL for the rings' you-node and the Desk's button. */
 let ownPictureUrl: string | undefined
 async function refreshOwnPicture(): Promise<void> {
-  const id = st().profile?.pictureId
+  const id = state?.profile?.pictureId
   const blob = id ? await images.get(id) : null
   const old = ownPictureUrl
   ownPictureUrl = blob ? URL.createObjectURL(blob) : undefined
