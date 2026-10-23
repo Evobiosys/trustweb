@@ -26,8 +26,9 @@ export enum PersonForm {
   FollowUp = 'followup',
 }
 
-/** Which face of the Curator shows: the classic phone shell or the three-column Desk (Dex). TrustWeb = the host's phone app: a choice in the switch, never stored in prefs.view. */
+/** Which face of the Curator shows: the classic phone shell or the three-column Desk, as Dex (vanilla) or the TrustWeb Desk (our fork; 'desk' kept so a saved choice from before lands there). TrustWeb = the host's phone app: a choice in the switch, never stored in prefs.view. */
 export enum View {
+  Dex = 'dex',
   Desk = 'desk',
   Classic = 'classic',
   TrustWeb = 'trustweb',

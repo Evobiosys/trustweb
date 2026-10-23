@@ -14,12 +14,12 @@
   import LogNow from './log_now.svelte'
   import EntityFields from './entity_fields.svelte'
   import { norm } from './contacts'
-  import { favoriteIds, toggleFavorite } from './desk'
+  import { favoriteIds, isDesk, toggleFavorite } from './desk'
   import KeepSelect from './keep_select.svelte'
   import { NONRESP_KEY, SINCE_KEY, baseFields, intendingOf, isSet, valueText } from './fields'
   import { Kind } from './placement'
   import { effectivePerson, entityValues } from './person_view'
-  import { PersonForm, View } from './nav'
+  import { PersonForm } from './nav'
   import { closePerson } from './nav.svelte'
   import { prefs, savePrefs } from './prefs.svelte'
   import { editLine, store } from './state.svelte'
@@ -120,7 +120,7 @@
         <p class="meta-line">{person.peerId ? S.sheetConnected : S.sheetNotesOnly}</p>
         {#if values[NONRESP_KEY] === true}<p class="meta-line" data-part="nonresp">{S.noAnswer}</p>{/if}
       </div>
-      {#if prefs.view === View.Desk}
+      {#if isDesk(prefs.view)}
         <button class="icon-btn desk-star" data-action="favorite" aria-pressed={favorite} aria-label={favorite ? S.desk.unfavorite : S.desk.favorite} title={favorite ? S.desk.unfavorite : S.desk.favorite} onclick={toggleStar}>{favorite ? '★' : '☆'}</button>
       {/if}
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
@@ -133,7 +133,7 @@
     <MergeSheet personId={person.id} />
 
     <ContactInfo {person} />
-    {#if prefs.view === View.Desk}
+    {#if isDesk(prefs.view)}
       <label class="fld"><span>{S.desk.keepLabel}</span><KeepSelect personId={person.id} /></label>
     {/if}
 

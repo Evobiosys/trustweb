@@ -23,14 +23,14 @@ const ids = (xs: { person: Person }[]): string[] => xs.map((x) => x.person.id)
 
 describe('deskStartPage', () => {
   it('opens on Web when the rings hold someone and the host lends them, else on Home', () => {
-    expect(deskStartPage(3, true)).toBe(DeskPage.Web)
-    expect(deskStartPage(0, true)).toBe(DeskPage.Home)
-    expect(deskStartPage(3, false)).toBe(DeskPage.Home)
+    expect(deskStartPage(View.Dex, 3, true)).toBe(DeskPage.Web)
+    expect(deskStartPage(View.Dex, 0, true)).toBe(DeskPage.Home)
+    expect(deskStartPage(View.Dex, 3, false)).toBe(DeskPage.Home)
   })
 })
 
 describe('viewOf', () => {
-  it('accepts desk, else classic', () => {
+  it('accepts desk and dex, else classic', () => {
     expect(viewOf('desk')).toBe(View.Desk)
     expect(viewOf('classic')).toBe(View.Classic)
     expect(viewOf(undefined)).toBe(View.Classic)

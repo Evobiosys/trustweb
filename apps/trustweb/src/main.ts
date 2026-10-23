@@ -1340,10 +1340,10 @@ function updateDeskToggle(): void {
   deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
 }
 
-function openDeskSheet(): void {
+function openDeskSheet(variant?: UiView): void {
   openSheet([curator.el])
   sheet.dataset.kind = 'curator'
-  curator.openDesk()
+  curator.openDesk(variant)
   updateDeskToggle()
 }
 
@@ -1372,12 +1372,13 @@ function openClassicSheet(): void {
 function viewRow(): HTMLElement {
   const items = UI_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
-    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : {}),
-    onclick: () => { if (v === UiView.Dex) showDesktopVersion(); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
+    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
     el('p', { class: 'meta view-dex-info', id: 'view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
+    el('p', { class: 'meta view-dex-info', id: 'view-desk-info', 'data-desk-info': '' }, [`${S.views.desk}: ${S.views.deskInfo}`]),
   ])
   const pill = el('button', { class: 'view-pill', 'data-view-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.views.pickAria}: ${S.views.trustweb}`, onclick: () => toggle(menu.hidden) }, [
     el('span', {}, [S.views.trustweb]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾']),
@@ -1396,10 +1397,11 @@ function viewRow(): HTMLElement {
   return el('div', { class: 'view-row', 'data-view-row': '' }, [el('b', {}, [S.views.label]), el('div', { class: 'view-pick' }, [pill, menu])])
 }
 
-function showDesktopVersion(): void {
+/** `variant`: the phone's Settings > View picked Dex or the TrustWeb Desk; absent, the Desk opens on this device's saved one. */
+function showDesktopVersion(variant?: UiView): void {
   try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
   applyDeskWide()
-  openDeskSheet()
+  openDeskSheet(variant)
 }
 
 /**
@@ -2219,7 +2221,7 @@ function webViewToggle(network: boolean, anyone: boolean): HTMLElement {
       el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
     ]) : el('span', { class: 'web-view' }),
     el('div', { class: 'seg desk-side', role: 'group', 'aria-label': S.deskSideAria }, [
-      el('button', { 'data-desk-side': '', onclick: openDeskSheet }, [S.deskSide]),
+      el('button', { 'data-desk-side': '', onclick: () => openDeskSheet() }, [S.deskSide]),
     ]),
   ])
 }

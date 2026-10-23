@@ -10,8 +10,8 @@ import { S } from './strings'
 export interface Curator {
   el: HTMLElement
   open(): void
-  /** Open, then switch the Curator to the Desk face (the host sizes the sheet from viewChanged). */
-  openDesk(): void
+  /** Open, then switch the Curator to the Desk face (the host sizes the sheet from viewChanged); `variant` 'dex' | 'desk' picks Dex or the TrustWeb Desk. */
+  openDesk(variant?: string): void
   /** Wave 19: Settings > View > Classic. */
   openClassic(): void
   /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
@@ -61,7 +61,7 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
   const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged, renderRings: opts.renderRings, renderProfile: opts.renderProfile, myPicture: opts.myPicture, closeDesk: opts.closeDesk, showPhoneVersion: opts.showPhoneVersion }
-  const open = (face?: 'desk' | 'classic'): void => {
+  const open = (face?: 'desk' | 'classic', variant?: string): void => {
     void import('@web-curator').then(async (m) => {
       if (mounted) await m.refreshCurator()
       else {
@@ -69,14 +69,14 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
         root.replaceChildren()
         await m.mountCurator(root, lent)
       }
-      if (face === 'desk') await m.showDesk()
+      if (face === 'desk') await m.showDesk(variant)
       else if (face === 'classic') await m.showClassic()
     }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
   }
   return {
     el: root,
     open: () => open(),
-    openDesk: () => open('desk'),
+    openDesk: (variant) => open('desk', variant),
     openClassic: () => open('classic'),
     person(personId, onclose, opts) {
       const page = el('div', { class: 'curator-person' }, [S.curatorLoading])

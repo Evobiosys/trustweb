@@ -1,4 +1,4 @@
-/** Wave 19 (Jakob 2026-10-23): one view switch, three views (Dex, Classic, TrustWeb), one naming; Settings > View is a half pill. */
+/** Wave 19 (Jakob 2026-10-23): one view switch, four views (Dex, TrustWeb Desk, Classic, TrustWeb), one naming; Settings > View is a half pill. */
 import { describe, expect, it } from 'vitest'
 import { View } from '../../src/nav'
 import { S } from '../../src/strings'
@@ -9,13 +9,13 @@ const src = (f: string): string => files[`../../src/${f}`] ?? ''
 const noop = (): void => {}
 
 describe('viewChoices', () => {
-  it('inside TrustWeb: Dex, Classic, TrustWeb', () => expect(viewChoices({ showPhoneVersion: noop })).toEqual([View.Desk, View.Classic, View.TrustWeb]))
-  it('standalone: Dex and Classic', () => expect(viewChoices({})).toEqual([View.Desk, View.Classic]))
+  it('inside TrustWeb: Dex, TrustWeb Desk, Classic, TrustWeb', () => expect(viewChoices({ showPhoneVersion: noop })).toEqual([View.Dex, View.Desk, View.Classic, View.TrustWeb]))
+  it('standalone: Dex, TrustWeb Desk and Classic', () => expect(viewChoices({})).toEqual([View.Dex, View.Desk, View.Classic]))
 })
 
 describe('one naming', () => {
   it('labels', () => {
-    expect([View.Desk, View.Classic, View.TrustWeb].map(viewLabel)).toEqual(['Dex', 'Contacts', 'TrustWeb'])
+    expect([View.Dex, View.Desk, View.Classic, View.TrustWeb].map(viewLabel)).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
     expect(S.views).toMatchObject({ dex: 'Dex', classic: 'Contacts', trustweb: 'TrustWeb', dexInfo: 'Dex-inspired' })
   })
   it('the profile menu item is "TrustWeb view"', () => expect(S.desk.profile.phone).toBe('TrustWeb view'))

@@ -395,7 +395,7 @@ export const S = {
     mapAttribution: '© OpenStreetMap contributors',
     mapEmpty: 'No places yet: log where you met someone, or fill "Residing in".',
     start: { title: 'Getting started', count: (n: number, of: number) => `${n} of ${of} steps completed.${n === 0 ? '' : ' Great start!'}`,
-      name: 'Your name is set', ring: 'A person in a trust membrane', contacts: 'Contacts imported', notes: 'Notes sync set up', installed: 'TrustWeb installed' },
+      name: 'Your name is set', ring: 'A person in a trust membrane', contacts: 'Contacts imported', notes: 'Notes sync set up', installed: 'TrustWeb installed', dismiss: 'Dismiss getting started', again: 'Show getting started again' },
     mapCard: { label: 'MAP VIEW', text: 'See your network on the map' },
     helpTitle: 'Help & support',
     helpSettings: 'Open Settings',

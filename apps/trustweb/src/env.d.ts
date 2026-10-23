@@ -8,7 +8,7 @@ declare module '@web-curator' {
   export function mountCurator(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }): Promise<void>
   export function mountCuratorPerson(el: HTMLElement, lent: { record(): import('./model').AppState | null; setRing(personId: string, ring: string): void }, personId: string, onclose: () => void, embedded?: boolean): Promise<void>
   export function refreshCurator(): Promise<void>
-  export function showDesk(): Promise<void>
+  export function showDesk(variant?: string): Promise<void>
   export function showClassic(): Promise<void>
   export function hideFromRings(lent: unknown, personId: string): Promise<void>
   export function unhideFromRings(lent: unknown, personId: string): Promise<void>

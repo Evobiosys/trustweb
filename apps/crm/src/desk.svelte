@@ -22,7 +22,7 @@
   import Settings from './settings.svelte'
   import SortPeople from './sort_people.svelte'
   import Timeline from './timeline.svelte'
-  import { activityOf, deskStartPage, gettingStarted, keepInTouchDue, remindersDue } from './desk'
+  import { activityOf, deskStartPage, gettingStarted, keepInTouchDue, remindersDue, startShown } from './desk'
   import type { DeskData } from './desk'
   import { baseFields, passesFilters } from './fields'
   import type { FieldValues } from './fields'
@@ -34,8 +34,8 @@
   import { store } from './state.svelte'
   import { S } from './strings'
 
-  // The Desk opens on the web (people list below) once the rings hold someone, else on Home with Getting started.
-  showDeskPage(deskStartPage(store.app.people.length, host.renderRings !== undefined))
+  // TrustWeb Desk: on the Web page. Dex: on the web (people list below) once the rings hold someone, else on Home with Getting started.
+  showDeskPage(deskStartPage(prefs.view, store.app.people.length, host.renderRings !== undefined))
 
   let drawer = $state(false)
   let compose = $state<'reminder' | 'note' | null>(null)
@@ -150,7 +150,7 @@
       </div>
     </div>
     <aside class="desk-right">
-      {#if steps.some((s) => !s.done)}<DeskStart {steps} />{/if}
+      {#if startShown(steps, prefs.startDismissed)}<DeskStart {steps} />{/if}
       <button class="desk-mapcard" data-action="desk-mapcard" onclick={(): void => showDeskPage(DeskPage.Map)}>
         <span class="desk-mapcard-text">
           <span class="desk-label">{S.desk.mapCard.label}</span>
