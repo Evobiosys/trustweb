@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SortOrder, contactRows, groupByRing, inCustomOrder, moveInOrder, visibleContacts } from './contacts'
+  import { SortOrder, contactRows, groupByRing, inCustomOrder, moveInOrder, toggleAll, toggleGroup, visibleContacts } from './contacts'
   import { lastActivityText, lastPastByPerson } from './display'
   import Avatar from './avatar.svelte'
   import EmptyState from './empty_state.svelte'
@@ -60,6 +60,12 @@
   const toSort = $derived(unsortedIds().length)
   const lastPast = $derived(lastPastByPerson(timeline(view), now))
 
+  const allHidden = $derived(groups.length > 0 && groups.every((g) => prefs.collapsedGroups.includes(g.ring)))
+  function fold(next: string[]): void {
+    prefs.collapsedGroups = next
+    savePrefs()
+  }
+
   function pick(next: SortOrder): void {
     order = next
   }
@@ -114,11 +120,14 @@
     {#each SORTS as s (s)}
       <button aria-pressed={order === s} onclick={(): void => pick(s)}>{s === SortOrder.Recent && hasCustom ? S.sortCustom : S.sort[s]}</button>
     {/each}
+    {#if groups.length}<button class="quiet" data-action="toggle-all-groups" onclick={(): void => fold(toggleAll(prefs.collapsedGroups, groups.map((g) => g.ring)))}>{allHidden ? S.showAllGroups : S.hideAllGroups}</button>{/if}
   </div>
   {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
   {#each groups as g (g.ring)}
-    <h3 class="ring-heading"><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</h3>
+    {@const shut = prefs.collapsedGroups.includes(g.ring)}
     <div class="zone" class:over={drag.key !== null && drag.zone === g.ring} data-zone={g.ring}>
+    <h3 class="ring-heading"><button class="ring-toggle" data-group-toggle={g.ring} aria-expanded={!shut} onclick={(): void => fold(toggleGroup(prefs.collapsedGroups, g.ring))}><span class="chevron" aria-hidden="true">{shut ? '▸' : '▾'}</span><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</button></h3>
+    {#if !shut}
     {#each g.rows as row (row.person.id)}
       {@const values = valuesOf(row.person.id)}
       <div class="slot" class:before={drag.key !== null && drag.before === row.person.id} class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
@@ -127,6 +136,7 @@
         ring={row.person.ring} nonresp={values[NONRESP_KEY] === true} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
       </div>
     {/each}
+    {/if}
     </div>
   {/each}
   {#if notPlaced.length}

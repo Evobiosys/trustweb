@@ -285,6 +285,8 @@ export const S = {
   monthShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   navLabel: 'Sections',
   sortLabel: 'Sort order',
+  hideAllGroups: 'Hide all',
+  showAllGroups: 'Show all',
   channelEmpty: 'Not added',
   contactPointBad: {
     [ContactPointKind.Phone]: 'Enter a phone number with at least 5 digits.',

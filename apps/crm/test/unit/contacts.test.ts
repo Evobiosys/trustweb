@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Ring } from '../../../trustweb/src/model'
-import { SortOrder, byStage, contactRows, groupByRing, inCustomOrder, matches, moveInOrder, pipeline } from '../../src/contacts'
+import { SortOrder, byStage, contactRows, groupByRing, inCustomOrder, matches, moveInOrder, pipeline, toggleAll, toggleGroup } from '../../src/contacts'
 import { Stage } from '../../src/model'
 import type { CrmView } from '../../src/model'
 import { sampleApp, sampleCrm } from '../../src/sample'
@@ -65,5 +65,19 @@ describe('custom order', () => {
   it('sorts by the stored order; ids it lacks follow in their current order', () => {
     expect(inCustomOrder(ids, (x) => x, ['c', 'a'])).toEqual(['c', 'a', 'b', 'd'])
     expect(inCustomOrder(ids, (x) => x, undefined)).toEqual(ids)
+  })
+})
+
+describe('collapsed ring groups', () => {
+  it('toggleGroup adds a missing key and removes a present one, without mutating', () => {
+    const a = ['close']
+    expect(toggleGroup(a, 'friend')).toEqual(['close', 'friend'])
+    expect(toggleGroup(['close', 'friend'], 'close')).toEqual(['friend'])
+    expect(a).toEqual(['close'])
+  })
+  it('toggleAll hides every group unless all are hidden already', () => {
+    expect(toggleAll(['close'], ['close', 'friend'])).toEqual(['close', 'friend'])
+    expect(toggleAll(['close', 'friend'], ['close', 'friend'])).toEqual([])
+    expect(toggleAll([], [])).toEqual([])
   })
 })

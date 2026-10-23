@@ -23,8 +23,8 @@
   const { data, onnavigate, oncommand }: Props = $props()
 
   const PAGES: { page: DeskPage; icon: IconName; label: string; sub?: boolean }[] = [
-    { page: DeskPage.Web, icon: 'web', label: S.desk.nav.web },
     { page: DeskPage.Home, icon: 'home', label: S.desk.nav.home },
+    { page: DeskPage.Web, icon: 'web', label: S.desk.nav.web },
     { page: DeskPage.Reminders, icon: 'alarm', label: S.desk.nav.reminders, sub: true },
     { page: DeskPage.Contacts, icon: 'contacts', label: S.desk.nav.contacts },
     { page: DeskPage.KeepInTouch, icon: 'touch', label: S.desk.nav.keepInTouch },

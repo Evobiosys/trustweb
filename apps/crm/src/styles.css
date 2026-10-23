@@ -99,6 +99,8 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 .seg button[aria-pressed="true"]{border-color:var(--teal); background:var(--tint-teal); color:var(--teal)}
 
 /* people */
+.ring-toggle{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:6px; text-decoration:underline}
+.ring-toggle:focus-visible{outline:2px solid var(--electric); outline-offset:2px}
 .ring-heading{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin:20px 2px 6px; font-family:inherit; font-weight:700}
 .person-row{display:flex; gap:12px; align-items:center; width:100%; min-height:64px; padding:10px 12px; margin-bottom:8px;
   border:0; border-radius:16px; background:var(--card); text-align:left; box-shadow:0 1px 6px rgba(36,27,46,.08)}
