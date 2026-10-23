@@ -136,6 +136,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .node.tagged .ava::after{content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--arcs); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px))}
 .node.lifted{z-index:5; cursor:grabbing; touch-action:none}
 .node.lifted .ava{transform:scale(1.25)}
+.rings-hide{position:absolute; top:0; left:0; right:0; display:flex; flex-wrap:wrap; gap:4px; justify-content:center; z-index:3}
+.rchip-hide{font:inherit; font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--rc); background:var(--card); color:inherit; text-decoration:underline; cursor:pointer}
+.rchip-hide.off{text-decoration:underline line-through; opacity:.6}
 .rings-wrap.hide-zone{outline:2px dashed #c62828; outline-offset:4px; border-radius:50%}
 .rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}
 .ctx-menu{position:absolute; z-index:7; display:flex; flex-direction:column; gap:2px; background:var(--card); border-radius:12px; padding:6px; box-shadow:0 4px 20px rgba(36,27,46,.3)}
