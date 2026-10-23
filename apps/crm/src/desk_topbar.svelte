@@ -6,6 +6,7 @@
   import { DeskPage } from './nav'
   import { nav, openImport, openPerson, showDeskPage } from './nav.svelte'
   import { S } from './strings'
+  import ProfileMenu from './profile_menu.svelte'
   import ViewMenu from './view_menu.svelte'
 
   interface Props {
@@ -42,5 +43,6 @@
       {/if}
     </div>
     <ViewMenu cls="desk-circle" />
+    <ProfileMenu />
   </div>
 </header>

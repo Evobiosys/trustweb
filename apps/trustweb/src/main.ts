@@ -2783,19 +2783,33 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
   return box
 }
 
-/** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
-function profileSheet(): void {
+/** Wave 7: the profile editor (profile.ts); `redraw` draws it again after a saved change. One editor for the phone's sheet and the Desk (wave 19). */
+function profileNodes(redraw: () => void): Node[] {
   const mine = (): MyProfile => st().profile ?? { norms: [] }
   const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); st().profile = p }
-  openSheet(profileSheetNodes({
+  return profileSheetNodes({
     profile: mine, inventory: () => st().inventory, now: Date.now,
-    commit: () => { save(); profileSheet() },
+    commit: () => { save(); redraw() },
     addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
     setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
+    setAudience: (section, a) => withProfile((p) => { p.audience = { ...p.audience, [section]: a } }),
     openInventory: () => { closeSheet(); go(Screen.Inventory) },
-  }))
+  })
+}
+
+/** Wave 7: the "My profile" sheet, opened from the contact box. */
+function profileSheet(): void {
+  openSheet(profileNodes(profileSheet))
   sheet.dataset.kind = 'profile'
+}
+
+/** Wave 19: the same editor as an element the Desk's profile page shows (lent to the Curator). */
+function profileEditor(): HTMLElement {
+  const box = el('div', { class: 'prof-editor', 'data-profile-editor': '1' })
+  const draw = (): void => box.replaceChildren(...profileNodes(draw))
+  draw()
+  return box
 }
 
 /** Under the contact box: "My profile" (norms, favourite way, intro). It leaves this phone only on the owner's tap "Send my profile" on a card. */
@@ -2825,11 +2839,12 @@ function chatIo(): ChatIo {
 /** The demo persona, a solo tab and demo accounts never send anything to a phone (hello, profile). */
 const noSendTo = (peer: Peer): boolean => isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)
 
-/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. */
+/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. Wave 19: only the sections their ring may see. */
 function sendProfileTo(peer: Peer): void {
   if (noSendTo(peer)) return
-  const text = buildProfileText(APP_URL, st().profile)
-  if (!text) { toast(S.profEmpty); return }
+  const person = st().people.find((x) => x.peerId === peer.id)
+  const text = person ? buildProfileText(APP_URL, st().profile, person) : null
+  if (!text) { toast(buildProfileText(APP_URL, st().profile) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
   net.sendText(peer, text).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
@@ -3528,6 +3543,10 @@ const curator = createCurator({
   viewChanged: (view) => { curatorFace = view; applyDeskWide() },
   // The Desk's Web page: the same rings as the Web screen, from the same record (so the shared geometry singletons hold the same values).
   renderRings: (o) => ringsView(shown(st(), curatorHiddenIds()), askMarks(), o),
+  // Wave 19: the Desk's profile button (top right) replaces the sheet's "× Home" on a wide tab.
+  renderProfile: profileEditor,
+  closeDesk: closeSheet,
+  showPhoneVersion,
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,

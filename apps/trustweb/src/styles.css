@@ -490,6 +490,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .rec-status{font-size:13px; color:var(--ink-soft); line-height:1.45}
 .seg{display:flex; background:var(--mist); border-radius:999px; padding:3px}
 .seg button{flex:1; border:0; background:transparent; border-radius:999px; padding:8px 0; font-size:13.5px; font-weight:600; color:var(--ink-soft); cursor:pointer}
+.prof-audience{display:flex; align-items:center; gap:8px; margin:6px 0 12px}
+.prof-audience .seg{flex:1}
+.prof-audience .seg button{padding:6px 0; font-size:12.5px}
 .seg button.on{background:var(--card); color:var(--ink); box-shadow:0 1px 6px rgba(36,27,46,.15)}
 .seg button[disabled]{cursor:default}
 .seg button:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
@@ -964,7 +967,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (min-width:900px){
   .sheet.desk-wide.on[data-kind=curator]{position:fixed; inset:0; width:100vw; height:100dvh; max-height:none; border-radius:0; padding:0; overflow:hidden; z-index:100000; box-shadow:none}
   .sheet.desk-wide.on[data-kind=curator] .grab{display:none}
-  .sheet.desk-wide.on[data-kind=curator] .sheet-bar{top:20px}
+  .sheet.desk-wide.on[data-kind=curator] .sheet-bar{display:none}
   .sheet.desk-wide.on[data-kind=curator] [data-view=curator]{height:100%}
   body:has(.sheet.desk-wide.on[data-kind=curator]){overflow:hidden}
   /* the pill sits beside the Desk's sidebar (crm .desk-frame column), not over its Settings / Import */
