@@ -367,7 +367,7 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-icon-btn:hover{background:var(--desk-active)}
 .desk-start{position:relative}
 .desk-dismiss{position:absolute; top:8px; right:8px; font-size:18px}
-.desk-fold{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:4px}
+.desk-fold{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:4px; text-decoration:underline}
 .desk-fold[aria-expanded="false"] .desk-fold-chev{transform:rotate(-90deg)}
 .desk-fold:focus-visible{outline:2px solid var(--accent, currentColor); outline-offset:2px}
 
