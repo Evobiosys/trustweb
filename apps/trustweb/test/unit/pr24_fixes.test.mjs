@@ -20,8 +20,8 @@ describe('profile and agreements guards in main.ts', () => {
   it('wave 20: the automatic zone slice refuses demo phones, honours the Settings switch and is sent from the connect and ring-change hooks only', () => {
     expect(body('autoShareProfile')).toContain('!s.profileAutoOff && !noSendTo(peer)')
     expect(body('autoShareProfile')).toContain('autoSendRank(')
-    expect([...main.matchAll(/autoShareProfile\(peer, 'public'\)/g)]).toHaveLength(2) // both onPeerConnected branches
-    expect([...main.matchAll(/autoShareToPerson\(/g)]).toHaveLength(4) // changeRing, both add sheets, the curator
+    expect([...main.matchAll(/autoShareProfile\(peer, 'public'\)/g)]).toHaveLength(3) // both onPeerConnected branches + restored invitation
+    expect([...main.matchAll(/autoShareToPerson\(/g)]).toHaveLength(6) // changeRing, both add sheets, the curator, the two scanner-side connects (Jakob 21:42)
   })
   it('R9: incoming agreement texts are dropped for reach-out senders', () => {
     expect(body('onAgreementText')).toContain('!mayAnswerRequest(peer, person)')
