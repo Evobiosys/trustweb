@@ -1,6 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
-import { cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
+import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -145,22 +146,7 @@ describe('dev preview collapse store and PR status', () => {
 })
 
 describe('dev preview PR update', () => {
-  it('prNeedsUpdate: only with a PR that has no sha or another sha', () => {
-    expect(prNeedsUpdate(null, 'abc')).toBe(false)
-    expect(prNeedsUpdate({}, 'abc')).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, 'def')).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, undefined)).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, 'abc')).toBe(false)
-  })
-  it('prButton: create, update or nothing', () => {
-    expect(prButton(null, 9, 'abc', 9)).toBe('Create PR with 9 checked')
-    expect(prButton({ number: 8, sha: 'x' }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8 }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8, sha: 'abc' }, 9, 'abc', 9)).toBe('')
-  })
-  it('prButton and prMerged: a merged PR never offers Update, whatever the sha', () => {
-    expect(prButton({ number: 14, sha: 'x', merged: true }, 3, 'abc', 1)).toBe('PR #14 shipped. New preview with 1 checked')
-    expect(prButton({ number: 14, sha: 'abc', merged: true }, 3, 'abc', 2)).toBe('PR #14 shipped. New preview with 2 checked')
+  it('prMerged: true only when the registry says the PR is merged', () => {
     expect(prMerged({ pr: { merged: true } })).toBe(true)
     expect(prMerged({ pr: {} })).toBe(false)
     expect(prMerged({ pr: null })).toBe(false)
@@ -181,17 +167,6 @@ describe('merged features', () => {
 
 describe('dev preview PR count, block and reviewed rows', () => {
   const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
-  it('prCount counts the checked boxes that show', () => {
-    expect(prCount(list)).toBe(1)
-    expect(prCount(toggled(list, 'b', true))).toBe(2)
-    expect(prCount([])).toBe(0)
-  })
-  it('prBlocked only while a draft differs from the assembled set', () => {
-    expect(prBlocked(null, list)).toBe(false)
-    expect(prBlocked(list, list)).toBe(false)
-    expect(prBlocked(toggled(list, 'a', false), list)).toBe(true)
-    expect(prBlocked(toggled(list, 'a', false), toggled(list, 'a', false))).toBe(false)
-  })
   it('seenState: first mark, same ref, one change, two changes, re-mark', () => {
     expect(seenState({}, 'a', 'r1')).toEqual({ italic: false, prefix: '', next: {} })
     const marked = tapSeen({}, 'a', 'r1')
@@ -253,5 +228,118 @@ describe('dev preview PR count, block and reviewed rows', () => {
     expect(typedValue('paste https://wa.me/qr/ABC')).toBe('https://wa.me/qr/ABC')
     expect(typedValue('Type "Manuel"')).toBe('Manuel')
     expect(typedValue('tap Save')).toBeNull()
+  })
+})
+
+describe('approve (merge to main) rules', () => {
+  const g = (key, checked, verdict, extra = {}) => ({ key, branch: 'b/' + key, title: 'T-' + key, requires: [], checked, verdict, ...extra })
+  const passed = { assembled: { sha: 'abc1234', error: null }, tested: { sha: 'abc1234', at: 'x', ok: true, running: false } }
+  it('a pill shows only when verdict and checkbox agree: approved = merge + checked, needs work = needs-work + unchecked', () => {
+    expect(shownVerdict(g('a', true, 'merge'))).toBe('merge')
+    expect(shownVerdict(g('a', false, 'merge'))).toBeNull()
+    expect(shownVerdict(g('a', false, 'needs-work'))).toBe('needs-work')
+    expect(shownVerdict(g('a', true, 'needs-work'))).toBeNull()
+    expect(shownVerdict(g('a', true, null))).toBeNull()
+  })
+  it('a press on a pill gives the verdict to store (the server checks/unchecks the box and cascades); the shown pill pressed again clears it', () => {
+    expect(pillPress([g('a', false, null)], 'a', 'merge')).toBe('merge')
+    expect(pillPress([g('a', true, 'merge')], 'a', 'merge')).toBeNull()
+    expect(pillPress([g('a', true, 'merge')], 'a', 'needs-work')).toBe('needs-work')
+    expect(pillPress([g('a', false, 'needs-work')], 'a', 'needs-work')).toBeNull()
+  })
+  it('select all = the exact boxes that approve every available row; select none unchecks them; merged rows stay as they are', () => {
+    const list = [g('a', false, 'needs-work'), g('b', true, null), g('m', true, null, { merged: true })]
+    expect(allApproved(list)).toBe(false)
+    expect(selectAll(list, true)).toEqual({ a: true, b: true, m: true })
+    expect(selectAll(list, false)).toEqual({ a: false, b: false, m: true })
+    expect(allApproved([g('a', true, 'merge'), g('m', true, null, { merged: true })])).toBe(true)
+  })
+  it('approved = checked + verdict merge; the pending count is the approved set against the assembled set', () => {
+    const list = [g('a', true, 'merge'), g('b', true, null), g('c', false, 'needs-work'), g('d', true, 'merge')]
+    expect(approvedKeys(list)).toEqual(['a', 'd'])
+    expect(pendingCount({ features: list, assembled: { set: ['a', 'd'] } })).toBe(0)
+    expect(pendingCount({ features: list, assembled: { set: ['a', 'x'] } })).toBe(2)
+    expect(pendingCount({ features: list, assembled: { set: [] } })).toBe(2)
+    expect(pendingCount({ features: list, assembled: null })).toBe(1)   // no assembled.set (older registry): its checked rows a, b, d against the approved a, d
+    expect(pendingText(1)).toBe('1 change not applied'); expect(pendingText(3)).toBe('3 changes not applied')
+  })
+  it('the apply counts as stuck when the registry did not change for 90 s', () => {
+    const p = { pending: true, assembled: { at: 't1', set: [] }, features: [g('a', true, 'merge')] }
+    expect(applyStamp(p)).toBe(applyStamp({ ...p }))
+    expect(applyStamp(p)).not.toBe(applyStamp({ ...p, assembled: { at: 't2', set: [] } }))
+    expect(applyStuck(1000, 1000 + 89e3)).toBe(false); expect(applyStuck(1000, 1000 + 91e3)).toBe(true)
+  })
+  it('a verdict click on the active pill clears it', () => {
+    expect(verdictAfter(null, 'merge')).toBe('merge')
+    expect(verdictAfter('merge', 'needs-work')).toBe('needs-work')
+    expect(verdictAfter('merge', 'merge')).toBeNull()
+  })
+  it('tests count only for the assembled sha', () => {
+    expect(prGate(passed)).toBe('passed')
+    expect(prGate({ ...passed, tested: { ...passed.tested, sha: 'old' } })).toBe('untested')
+    expect(prGate({ ...passed, tested: { ...passed.tested, running: true } })).toBe('running')
+    expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
+    expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
+  })
+  it('Approve opens with nothing running, >= 1 approved row and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
+    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
+    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, pending: true, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
+    expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Approve at least one feature')
+    expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
+    expect(approveGate({ ...passed, pending: true, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).ok).toBe(true)
+  })
+  it('the hint under Approve says what happens and never asks for a test run first', () => {
+    expect(APPROVE_HINT).toBe('Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.')
+    expect(testLine('untested', null)).toBe('')
+  })
+})
+
+describe('/__tw/approve-merge route', () => {
+  const res = () => { const r = { code: 200, body: '', setHeader() {}, end(b) { r.body = b ?? '' } }; return r }
+  const make = (over = {}) => {
+    const spawned = []
+    const files = {}
+    const h = approveMergeRoute({ loopback: () => true, branch: () => 'preview/261023_1500', cache: '/c', ops: '/ops', wt: '/wt', exists: (f) => f in files, read: (f) => files[f], spawn: (...a) => { spawned.push(a) }, ...over })
+    return { h, spawned, files }
+  }
+  it('POST starts the script detached on the worktree and answers 202', () => {
+    const { h, spawned } = make(); const r = res()
+    h({ method: 'POST' }, r)
+    expect(r.code).toBe(202)
+    expect(spawned).toEqual([['/ops/bin/tw_approve_merge.sh', ['/wt']]])
+  })
+  it('refuses a non-loopback caller and any other method; never spawns', () => {
+    const a = make({ loopback: () => false }), r1 = res(); a.h({ method: 'POST' }, r1)
+    const b = make(), r2 = res(); b.h({ method: 'PUT' }, r2)
+    expect([r1.code, r2.code, a.spawned.length, b.spawned.length]).toEqual([403, 405, 0, 0])
+  })
+  it('GET returns the status file of this branch, or step none', () => {
+    expect(mergeStatusFile('/c', 'preview/261023_1500')).toBe('/c/approvals/preview-261023_1500.merge.json')
+    const { h, files } = make(); const r = res()
+    h({ method: 'GET' }, r); expect(JSON.parse(r.body)).toEqual({ step: 'none' })
+    files['/c/approvals/preview-261023_1500.merge.json'] = '{"step":"released","text":"released abc1234"}'
+    const r2 = res(); h({ method: 'GET' }, r2); expect(JSON.parse(r2.body).step).toBe('released')
+  })
+  it('does not start a second run while the status is still running', () => {
+    const { h, spawned, files } = make(); files['/c/approvals/preview-261023_1500.merge.json'] = JSON.stringify({ step: 'checks', updated: new Date().toISOString() })
+    const r = res(); h({ method: 'POST' }, r)
+    expect([r.code, spawned.length]).toEqual([409, 0])
+  })
+})
+
+describe('Approve personal view (the one button that pushes, opens the PR and shares on dev)', () => {
+  const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
+  it('a registry preview goes through `preview <id> pr`, a plain worktree through its own approve route', () => {
+    expect(personalApprove(true, list).url).toBe('/__tw/preview/pr')
+    expect(personalApprove(false, list).url).toBe('/__tw/approve')
+  })
+  it('a registry preview needs one checked feature that is not on main yet', () => {
+    expect(personalApprove(true, list).ok).toBe(true)
+    expect(personalApprove(true, [f('b', [], false), { ...f('c'), merged: true }]).ok).toBe(false)
+    expect(personalApprove(true, []).ok).toBe(false)
+    expect(personalApprove(false, []).ok).toBe(true)
   })
 })

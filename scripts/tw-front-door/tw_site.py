@@ -223,6 +223,12 @@ ORG_PAGES: tuple[Page, ...] = (
         "pages/feedback.body.html",
     ),
     Page(
+        "inspect",
+        "Inspect us",
+        "Code you can read, servers you can visit, GDPR rights for everyone we serve. The checkable reasons to trust TrustWeb.",
+        "pages/inspect.body.html",
+    ),
+    Page(
         "faq",
         "FAQ",
         "Questions people ask about TrustWeb, answered as it works today.",
