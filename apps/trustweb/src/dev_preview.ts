@@ -3,19 +3,21 @@
  * previews-interface.txt) only for `vite serve` with TW_PREVIEW set; in every build it is null and nothing below runs.
  * Top-left, draggable by its header (twp-pos), collapsible to a pill with the id (twp-collapsed): the feature checkboxes of this
  * preview and the personal/stock switch (the PR itself starts from "Approve personal view" in dev_feature.ts). The FEATURE box (dev_feature.ts) sits below it via --twp-h.
- * A tap on a row points at the UI the feature adds (its `selector`); a tap on a checkbox asks first, then re-assembles and reloads.
+ * A tap on a row points at the UI the feature adds (its `selector`). A box or pill writes the registry at once and never assembles: a sticky bar
+ * "n changes not applied" offers "Reload with approved" (POST /__tw/preview/apply, then reload); nothing reloads by itself.
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { createWalker } from './dev_walk'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { applyStamp, applyStuck, approvedKeys, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, pendingCount, pendingText, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
-  assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
+  assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
+  pending?: boolean
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
   next?: { id: string; port: number }
   tested?: Tested | null
@@ -44,6 +46,8 @@ const CSS = `
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
 .twp .pills{flex:none;display:flex;gap:3px}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
 .twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
+.twp .bar{position:sticky;bottom:0;margin:4px 0 0;padding:6px 10px;background:#3a2c48;display:grid;gap:5px;border-top:1px solid #7a6a8c}.twp .bar div{display:flex;gap:6px;align-items:center}.twp .bar button{text-decoration:underline}
+.twp .upd{margin-left:4px;padding:0 4px;border-radius:4px;background:#ffbf47;color:#241b2e;font-weight:700}
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
@@ -84,12 +88,12 @@ export function initDevPreview(): void {
   // The serve-start copy of the registry can be stale: refs are compared only once the server has answered.
   let fresh = false
   let busy: string | null = null
-  let waiting = false
   let since = 0
   let prStep = ''
   let lit: string | null = null
-  // The boxes as the user set them while the confirm is open: `last` is the box ticked most recently, `grey` what its cascade flipped.
-  let ask: { draft: PreviewFeature[]; last: string; grey: string[] } | null = null
+  // "Reload with approved" running: the registry stamp last seen and when it last moved (stuck after 90 s without a change); "Later" hides the bar for the approved set it was pressed on.
+  let applying: { stamp: string; moved: number; stuck: boolean } | null = null
+  let later: string | null = null
   let error = ''
   let prText = ''
   let prUrl = ''
@@ -179,49 +183,56 @@ export function initDevPreview(): void {
     render()
   }
 
-  // The toggle restarts vite (the worktree's vite.config.mjs changes), so the POST may die mid-flight: poll until the server answers
-  // with an assembled.at newer than the POST start (the CLI writes assembled{} last), then reload; an assembled.error is shown instead.
-  async function reassemble(draft: PreviewFeature[], key: string): Promise<void> {
-    const start = Math.floor(Date.now() / 1000) * 1000
-    ask = null; busy = key; error = ''; begin(); render()
-    try { await call('POST', '', { set: setMap(draft) }) } catch (e) {
-      if (e instanceof ApiError) { error = e.message; busy = null; render(); return }
-      waiting = true; render()
-    }
+  // A box or pill only writes the registry (the CLI cascades requires/dependants); the server answers with the new registry.
+  const setVerdict = (feature: string, verdict: 'merge' | 'needs-work' | null): Promise<void> => act(null, () => call('POST', '/verdict', { feature, verdict }))
+  const press = (key: string, v: 'merge' | 'needs-work'): Promise<void> => setVerdict(key, pillPress(p!.features, key, v))
+  const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allApproved(p!.features)) }))
+
+  // "Reload with approved": assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
+  // (pending / assembled.at) and reload when it is done; no registry change for 90 s = stuck, "Retry" asks again.
+  async function apply(): Promise<void> {
+    const start = Date.now()
+    applying = { stamp: applyStamp(p!), moved: start, stuck: false }; error = ''; render()
+    try { await call('POST', '/apply', {}) } catch (e) { error = (e as Error).message; applying = null; render(); return }
     for (;;) {
-      const q = await call('GET', '').catch(() => null)
-      if (q?.assembled && Date.parse(q.assembled.at) > start) {
-        // Never reload into a dead server: the waiting page polls until a server that started after the POST (none when no restart is coming) answers.
-        if (!q.assembled.error) { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${q.assembled.restart === false ? 0 : start}`; return }
-        p = q; busy = null; waiting = false; render(); return
-      }
       await new Promise((r) => setTimeout(r, 500))
+      const q = await call('GET', '').catch(() => null)   // null while the server restarts
+      if (q) {
+        p = q
+        const stamp = applyStamp(q)
+        if (stamp !== applying.stamp) applying = { ...applying, stamp, moved: Date.now() }
+        if (!q.pending && q.assembled && Date.parse(q.assembled.at) > start) {
+          applying = null
+          // Never reload into a dead server: the waiting page polls until a server that started after the apply (none when no restart is coming) answers.
+          if (!q.assembled.error) { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${q.assembled.restart === false ? 0 : start}`; return }
+          render(); return
+        }
+      }
+      if (applyStuck(applying.moved, Date.now())) { applying.stuck = true; render(); return }
+      render()
     }
   }
 
-  // A pill stores the verdict (no reload); only a box that has to change re-assembles, as a manual tick does.
-  async function press(key: string, v: 'merge' | 'needs-work'): Promise<void> {
-    const r = pillPress(p!.features, key, v)
-    await act(null, () => call('POST', '/verdict', { feature: key, verdict: r.verdict }))
-    if (!error && r.set) void reassemble(r.set, key)
+  /** Sticky at the bottom of the panel: the changes the page does not show yet. Nothing reloads until the owner presses. */
+  function pendingBar(q: Preview): HTMLElement | null {
+    const n = pendingCount(q), key = approvedKeys(q.features).join()
+    if (later !== key) later = null   // "Later" holds only for the approved set it was pressed on
+    if (!applying && (n === 0 || later !== null)) return null
+    const go = h('button', { textContent: 'Reload with approved' }), no = h('button', { className: 'alt', textContent: 'Later' }), retry = h('button', { textContent: 'Retry' })
+    go.addEventListener('click', () => { void apply() })
+    no.addEventListener('click', () => { later = key; render() })
+    retry.addEventListener('click', () => { void apply() })
+    if (applying?.stuck) return h('div', { className: 'bar' }, 'Apply seems stuck — ', retry)
+    if (applying) return h('div', { className: 'bar' }, h('i', { className: 'spin' }), ' Assembling…')
+    return h('div', { className: 'bar' }, `${pendingText(n)} — `, h('div', {}, go, no))
   }
 
-  async function pressAll(): Promise<void> {
-    const r = selectAll(p!.features, !allApproved(p!.features))
-    await act(null, async () => { let q = p!; for (const [feature, verdict] of Object.entries(r.verdicts)) q = await call('POST', '/verdict', { feature, verdict }); return q })
-    if (!error && r.set.some((f, i) => f.checked !== p!.features[i].checked)) void reassemble(r.set, 'all')
-  }
-
-  function row(n: TreeNode, shown: PreviewFeature[], grey: string[]): HTMLElement {
+  function row(n: TreeNode, shown: PreviewFeature[]): HTMLElement {
     const f = n.feature, d = shown.find((x) => x.key === f.key)!
     const hint = needsHint(shown, f.key)
-    const off = loading() || hint !== null || grey.includes(f.key)
+    const off = loading() || hint !== null
     const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
-    box.addEventListener('change', () => {
-      const from = ask?.draft ?? p!.features
-      ask = { draft: toggled(from, f.key, box.checked), last: f.key, grey: cascaded(from, f.key, box.checked) }
-      render()
-    })
+    box.addEventListener('change', () => { void setVerdict(f.key, box.checked ? 'merge' : null) })
     const mark = seenState(seen, f.key, fresh ? f.ref ?? '' : seen[f.key]?.ref ?? '')
     if (mark.next !== seen) { seen = mark.next; store.set(seenKey(p!.id), JSON.stringify(seen)) }
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
@@ -236,17 +247,9 @@ export function initDevPreview(): void {
     }
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approved'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) void walk(f) })
-    return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
-  }
-
-  function askBox(a: NonNullable<typeof ask>): HTMLElement {
-    const go = h('button', { textContent: 'Reload' })
-    go.addEventListener('click', () => { void reassemble(a.draft, a.last) })
-    const no = h('button', { className: 'alt', textContent: 'Cancel' })
-    no.addEventListener('click', () => { ask = null; render() })
-    return h('div', { className: 'ask' }, confirmText(p!.features.find((f) => f.key === a.last)!.title, a.draft.find((f) => f.key === a.last)!.checked, a.draft.filter((f, i) => f.checked !== p!.features[i].checked).length, p!.pr?.number), h('div', {}, go, no))
+    return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
 
   function slow(): HTMLElement {
@@ -339,7 +342,7 @@ export function initDevPreview(): void {
     }).catch((e: Error) => { error = e.message }).finally(() => { testing = false; render() })
   }
 
-  /** The local checks of the assembled set: an optional pre-check: "Merge if tests pass" runs them itself. */
+  /** The local checks of the assembled set: an optional pre-check: "Approve" runs them itself. */
   function gate(): HTMLElement {
     const g = prGate(p!), running = testing || g === 'running'
     const run = h('button', { className: 'alt', textContent: 'Run tests now (optional)', disabled: running || loading() })
@@ -408,13 +411,13 @@ export function initDevPreview(): void {
       close.addEventListener('click', () => { tab.hide(); render() })
       x.addEventListener('click', () => setCollapsed(true))
       const idEl = h('b', { textContent: q.id, title: 'Double-click copies the id' })
-      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, waiting ? 'server restarting...' : busy ? 'assembling...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
+      const header = h('header', {}, idEl, ...(loading() ? [h('i', { className: 'spin' })] : []), h('span', {}, applying ? 'assembling...' : busy ? 'saving...' : loading() ? 'creating PR...' : links().length ? '' : mode + ' preview', ...(loading() ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : []), ...(loading() ? [] : links())), x, close)
       const hs = drag(root.appendChild(header))
       // pointerdown, not click: the header captures the pointer while dragging, so clicks land on the header, never on the id.
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
-      const shown = ask?.draft ?? q.features
-      const grey = ask?.grey ?? []
+      const shown = q.features
       const prStatusEl = prStatus()
+      const bar = pendingBar(q)
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -427,12 +430,11 @@ export function initDevPreview(): void {
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
         h('div', { className: 'btns' }, all),
-        ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown, grey)) })), q.id),
-        ...(ask ? [askBox(ask)] : []),
+        ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) })), q.id),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        gate(), ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw),
+        gate(), ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw), ...(bar ? [bar] : []),
       )
     }
     const pos = store.get(POS)

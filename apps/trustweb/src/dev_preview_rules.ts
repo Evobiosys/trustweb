@@ -3,7 +3,7 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
@@ -120,29 +120,35 @@ export const verdictAfter = (current: Verdict | undefined, clicked: 'merge' | 'n
 /** What a row's pills show: approved = verdict merge AND box checked, needs work = verdict needs-work AND box unchecked (the box is what the preview shows). */
 export const shownVerdict = (f: PreviewFeature): Verdict => (f.verdict === 'merge' && f.checked ? 'merge' : f.verdict === 'needs-work' && !f.checked ? 'needs-work' : null)
 
-/** A press on a pill: the verdict to store and, when the box has to change with it (approved checks, needs work unchecks, requires/dependants cascade), the new boxes; null = no re-assembly. Pressing the shown pill again only clears the verdict. */
-export function pillPress(features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): { verdict: Verdict; set: PreviewFeature[] | null } {
-  const f = features.find((x) => x.key === key)!
-  const verdict = verdictAfter(shownVerdict(f), v)
-  const want = v === 'merge'
-  return { verdict, set: verdict === null || f.checked === want ? null : toggled(features, key, want) }
-}
+/** A press on a pill: the verdict to store (the registry checks/unchecks the box and cascades over requires/dependants itself; nothing assembles). Pressing the shown pill again clears it. */
+export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): Verdict => verdictAfter(shownVerdict(features.find((x) => x.key === key)!), v)
 
-/** Select all / none: every available (not merged) feature checked and approved, or unchecked with the verdict cleared. `verdicts` = what to store per key. */
-export function selectAll(features: PreviewFeature[], on: boolean): { set: PreviewFeature[]; verdicts: Record<string, Verdict> } {
-  const rows = visible(features)
-  return { set: features.map((f) => (f.merged ? f : { ...f, checked: on, verdict: on ? 'merge' : null })), verdicts: Object.fromEntries(rows.map((f) => [f.key, on ? 'merge' : null])) }
-}
+/** Select all / none as the exact boxes to POST: every available (not merged) row on = approved, or off; merged rows keep their box. */
+export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
 
 export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
 
+/** In the preview and in the merge only what is checked AND approved (verdict merge). Mirror of approvedKeys in the ops repo. */
+export const approvedKeys = (features: PreviewFeature[]): string[] => visible(features).filter((f) => f.checked && f.verdict === 'merge').map((f) => f.key)
+
+/** Changes not yet applied: the approved set against the set the worktree was assembled with (assembled.set; an older registry: its checked rows). */
+export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?: string[] } | null }): number {
+  const now = approvedKeys(p.features), was = p.assembled?.set ?? visible(p.features).filter((f) => f.checked).map((f) => f.key)
+  return now.filter((k) => !was.includes(k)).length + was.filter((k) => !now.includes(k)).length
+}
+export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
+
+/** What moves while an apply runs; unchanged for 90 s = stuck. */
+export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
+export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
+
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, something checked and no conflict; verdicts do not gate (needs-work rows are unchecked), the tests run after the press. */
-export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[] }): { ok: boolean; hint: string } {
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'
-    : p.assembled?.error ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
-    : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature' : ''
+    : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
+    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature' : ''
   return { ok: hint === '', hint }
 }
 

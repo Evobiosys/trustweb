@@ -36,6 +36,15 @@ describe('rings hide', () => {
 })
 
 import { togglePoints, TOGGLE_GAP } from '../../src/rings_hide.ts'
+test('ring toggles are small: column spacing >= 16 px, diamond 12 px across (side 8.5 px), glyph 9 px', async () => {
+  const css = (await import('node:fs')).readFileSync(new URL('../../src/styles.css', import.meta.url), 'utf8')
+  const rule = (sel) => css.split('\n').find((l) => l.startsWith(sel + '{')) ?? ''
+  assert.ok(TOGGLE_GAP >= 16 && TOGGLE_GAP < 22, `gap ${TOGGLE_GAP}`)
+  assert.match(rule('.ring-toggle::before'), /width:8\.5px; height:8\.5px/)
+  assert.match(rule('.ring-toggle'), /font-size:9px/)
+  assert.match(rule('.ring-toggle'), /width:16px; height:16px/)
+})
+
 test('ring toggles stand in one vertical column above "you"; equal radii are pushed apart (Jakob 20:37)', () => {
   const C = 176, k = 1
   const same = togglePoints([160, 160, 160], C, k)
@@ -43,5 +52,5 @@ test('ring toggles stand in one vertical column above "you"; equal radii are pus
   same.slice(1).forEach((p, i) => assert.ok(same[i].top - p.top >= TOGGLE_GAP, `gap ${same[i].top - p.top}`))
   const apart = togglePoints([60, 110, 160], C, k)
   assert.deepEqual(apart.map((p) => p.top), [C - 60, C - 110, C - 160])
-  assert.deepEqual(togglePoints([100, 110], C, 2).map((p) => p.top), [C - 200, C - 200 - TOGGLE_GAP])
+  assert.deepEqual(togglePoints([100, 101], C, 2).map((p) => p.top), [C - 200, C - 200 - TOGGLE_GAP])
 })

@@ -317,7 +317,7 @@ function previewApi() {
         const sub = (req.url ?? '/').split('?')[0]
         if (req.method === 'GET' && sub === '/') { json(res, { ...readPreview(), serverStarted }); return }
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
-        if (sub === '/pr' || sub === '/test') {
+        if (sub === '/pr' || sub === '/test' || sub === '/apply') {   // /apply = `preview <id> apply`: assemble the approved set (the panel's "Reload with approved")
           spawn(bin(), [readPreview().id, sub.slice(1)], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
           json(res, { started: true })
           return

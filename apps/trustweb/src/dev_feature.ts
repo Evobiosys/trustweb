@@ -25,6 +25,8 @@ const CSS = `
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
 
+const POS_KEY = 'twf-ok-pos'
+
 export function initDevFeature(): void {
   if (window.top !== window) return // inside the second-device iframe: not the reviewer's page
   const f = typeof __TW_FEATURE__ === 'undefined' ? null : __TW_FEATURE__
@@ -175,7 +177,12 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     const clamp = (v: number, size: number, room: number): number => Math.max(0, Math.min(v, room - size))
     const move = (e: PointerEvent): void => { Object.assign(bar.style, { left: clamp(e.clientX - dx, bar.offsetWidth, innerWidth) + 'px', top: clamp(e.clientY - dy, bar.offsetHeight, innerHeight) + 'px', right: 'auto', bottom: 'auto' }) }
     head.addEventListener('pointermove', move)
-    head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true })
+    head.addEventListener('pointerup', () => { head.removeEventListener('pointermove', move); try { localStorage.setItem(POS_KEY, JSON.stringify({ left: bar.style.left, top: bar.style.top })) } catch { /* not remembered */ } }, { once: true })
   })
+  // The dragged place is remembered per window (origin), pulled back inside a smaller viewport.
+  try {
+    const at = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null') as { left: string; top: string } | null
+    if (at) Object.assign(bar.style, { left: Math.max(0, Math.min(parseFloat(at.left), innerWidth - 120)) + 'px', top: Math.max(0, Math.min(parseFloat(at.top), innerHeight - 60)) + 'px', right: 'auto', bottom: 'auto' })
+  } catch { /* nothing stored */ }
   return bar
 }

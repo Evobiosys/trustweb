@@ -27,7 +27,7 @@ export const guideDimmed = (hidden: boolean, dragging: boolean): boolean => hidd
 
 /** Where the ring toggles sit: one vertical column straight up from "you" (left = centre), each at its own ring radius (radii inner to outer);
  *  a crowded web packs rings together, so a diamond that would sit less than TOGGLE_GAP below the previous one is pushed outward. */
-export const TOGGLE_GAP = 22
+export const TOGGLE_GAP = 16
 export function togglePoints(radii: readonly number[], centre: number, k: number): { left: number; top: number }[] {
   let prev = Infinity
   return radii.map((r) => {

@@ -136,8 +136,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .node.tagged .ava::after{content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--arcs); -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px))}
 .node.lifted{z-index:5; cursor:grabbing; touch-action:none}
 .node.lifted .ava{transform:scale(1.25)}
-.ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:26px; height:26px; padding:0; border:0; background:none; color:#fff; font-size:12px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
-.ring-toggle::before{content:''; position:absolute; width:18px; height:18px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
+.ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:0; background:none; color:#fff; font-size:9px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
+.ring-toggle::before{content:''; position:absolute; box-sizing:border-box; width:8.5px; height:8.5px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
