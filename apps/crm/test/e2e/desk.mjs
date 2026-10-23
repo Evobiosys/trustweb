@@ -65,10 +65,8 @@ try {
   ok('classic face has the chevron in its header', await page.locator('.top-btns [data-action="view-menu"]').count() === 1)
   await page.click('[data-action="view-menu"]')
   const items = await page.locator('[role="menu"] [role^="menuitem"]').allInnerTexts()
-  ok('menu lists Desk, Trust membranes, Web Curator', items.map((t) => t.trim()).join('|') === 'Desk|Trust membranes|Web Curator', items.join('|'))
-  ok('Trust membranes is disabled standalone', (await page.locator('[data-view="membranes"]').getAttribute('aria-disabled')) === 'true'
-    && (await page.locator('[data-view="membranes"]').getAttribute('title')) === 'Open inside TrustWeb')
-  ok('Web Curator is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
+  ok('menu lists Dex, Classic (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|Classic', items.join('|'))
+  ok('Classic is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Escape')
   ok('Escape closes the menu', await page.locator('[role="menu"]').count() === 0)
@@ -143,7 +141,7 @@ try {
   await page.click('[data-desk-page="help"]')
   ok('Help shows the privacy line', (await page.locator('[data-screen="desk-help"]').innerText()).includes('Everything stays on this phone'))
   await page.click('[data-desk-page="settings"]')
-  ok('Settings has a View select', (await page.locator('[data-field="view"]').inputValue()) === 'desk')
+  ok('Settings has the View half pill on Dex', (await page.locator('[data-view-pill]').innerText()).trim() === 'Dex')
 
   // dark follows the Curator's theme
   await page.click('[data-field="light-theme"]')
@@ -172,7 +170,7 @@ try {
   ok('Desk is the checked entry', (await page.locator('[data-view="desk"]').getAttribute('aria-checked')) === 'true')
   await page.click('[data-view="classic"]')
   await page.waitForSelector('.shell')
-  ok('Web Curator brings the classic face back', await page.locator('[data-screen="desk"]').count() === 0)
+  ok('Classic brings the classic face back', await page.locator('[data-screen="desk"]').count() === 0)
   await page.reload()
   await page.waitForSelector('.shell')
   ok('and a reload keeps it', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'classic')

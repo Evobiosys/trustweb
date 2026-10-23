@@ -130,4 +130,10 @@ export function savePrefs(): void {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch { /* browser refused: kept in memory */ }
 }
 
+/** Wave 19: Settings > View and the chevron. Dex and Classic are this Curator's faces; TrustWeb hands over to the host's phone app. */
+export function chooseView(v: View): void {
+  if (v === View.TrustWeb) host.showPhoneVersion?.()
+  else { prefs.view = v; savePrefs() }
+}
+
 export const tanaOn = (): boolean => prefs.pkms.includes(Pkm.Tana)

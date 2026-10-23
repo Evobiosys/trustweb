@@ -3,7 +3,8 @@ import { createCurator } from '../../src/curator.ts'
 
 const lentTo = []
 let desks = 0
-vi.mock('@web-curator', () => ({ mountCurator: async (_root, lent) => { lentTo.push(lent) }, refreshCurator: async () => {}, showDesk: async () => { desks++ } }))
+let classics = 0
+vi.mock('@web-curator', () => ({ mountCurator: async (_root, lent) => { lentTo.push(lent) }, refreshCurator: async () => {}, showDesk: async () => { desks++ }, showClassic: async () => { classics++ } }))
 
 const node = () => ({ className: '', setAttribute() {}, appendChild() {}, addEventListener() {}, replaceChildren() {} })
 
@@ -24,6 +25,14 @@ describe('createCurator lends viewChanged', () => {
     const noop = () => {}
     createCurator({ record: () => null, setRing: noop, setFamily: noop, setFlag: noop, removePerson: noop, restorePerson: noop, setHiddenSources: noop, addLine: noop, showRings: noop, viewChanged: noop }).openDesk()
     await vi.waitFor(() => expect(desks).toBe(1))
+  })
+
+  it('openClassic (Settings > View > Classic) switches the Curator to its classic face, not the Desk', async () => {
+    const noop = () => {}
+    const before = desks
+    createCurator({ record: () => null, setRing: noop, setFamily: noop, setFlag: noop, removePerson: noop, restorePerson: noop, setHiddenSources: noop, addLine: noop, showRings: noop, viewChanged: noop }).openClassic()
+    await vi.waitFor(() => expect(classics).toBe(1))
+    expect(desks).toBe(before)
   })
 
   it('lends renderRings: the Desk gets the host-built rings element, its pick and ring callbacks reach the host builder', async () => {

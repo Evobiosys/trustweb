@@ -13,7 +13,7 @@ import { SortOrder } from './contacts'
 export const S = {
   appName: 'Web Curator',
   tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', settings: 'Settings' },
-  views: { desk: 'Desk', membranes: 'Trust membranes', classic: 'Web Curator' },
+  views: TW.views,
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,
   sortCustom: 'Custom order',
@@ -335,7 +335,7 @@ export const S = {
   desk: {
     greeting: { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' },
     switchView: 'Switch view',
-    profile: { button: 'Your profile and settings', mine: 'My profile …', settings: 'Settings', phone: 'Show phone version', close: 'Close the Desk', title: 'My profile' },
+    profile: { button: 'Your profile and settings', mine: 'My profile …', settings: 'Settings', phone: `${TW.views.trustweb} view`, close: 'Close the Desk', title: 'My profile' },
     openInside: 'Open inside TrustWeb',
     viewSection: 'View',
     nav: { label: 'Desk', web: 'Web', home: 'Home', reminders: 'Reminders', contacts: 'Contacts', keepInTouch: 'Keep in Touch', timeline: 'Timeline', map: 'Map', settings: 'Settings', import: 'Import', help: 'Help & support', menu: 'Menu', close: 'Close menu' },

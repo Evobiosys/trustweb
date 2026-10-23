@@ -9,6 +9,12 @@ describe('viewNotifier', () => {
     for (const v of [View.Classic, View.Classic, View.Desk, View.Desk, View.Classic]) notify(v)
     expect(seen).toEqual(['classic', 'desk', 'classic'])
   })
+  it('never reports TrustWeb (the host app, not a Curator face)', () => {
+    const seen: string[] = []
+    const notify = viewNotifier((face) => seen.push(face))
+    for (const v of [View.Desk, View.TrustWeb]) notify(v)
+    expect(seen).toEqual(['desk'])
+  })
   it('is a no-op standalone', () => {
     expect(() => viewNotifier(undefined)(View.Desk)).not.toThrow()
   })

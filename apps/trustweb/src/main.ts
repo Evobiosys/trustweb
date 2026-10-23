@@ -124,7 +124,7 @@ import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DESKTOP_KEY, desktopView, wideAllowed } from './desktop_view'
+import { DESKTOP_KEY, DEX_URL, UI_VIEWS, UiView, desktopView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
@@ -754,7 +754,9 @@ const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
 /** Desktop, bottom left, outside the phone: show or hide the demo content (Settings also removes it). */
 const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => toggleDemoContent() })
-/** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. */
+/** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. Kept built, never shown: */
+// 2026-10-23: only under Settings > View (Jakob).
+const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
@@ -768,7 +770,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, deskToggle)
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -1333,7 +1335,7 @@ function applyDeskWide(): void {
 }
 
 function updateDeskToggle(): void {
-  deskToggle.hidden = demoToggle.hidden || !wideTab()
+  deskToggle.hidden = !DESK_PILL_SHOWN || demoToggle.hidden || !wideTab()
   deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
 }
 
@@ -1356,6 +1358,41 @@ function showPhoneVersion(): void {
   try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ }
   applyDeskWide()
   go(Screen.Web)
+}
+
+/** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
+function openClassicSheet(): void {
+  openSheet([curator.el])
+  sheet.dataset.kind = 'curator'
+  curator.openClassic()
+}
+
+/** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
+function viewRow(): HTMLElement {
+  const items = UI_VIEWS.map((v) => el('button', {
+    role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
+    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : {}),
+    onclick: () => { if (v === UiView.Dex) showDesktopVersion(); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+  }, [S.views[v]]))
+  const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
+    ...items,
+    el('p', { class: 'meta view-dex-info', id: 'view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
+  ])
+  const pill = el('button', { class: 'view-pill', 'data-view-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.views.pickAria}: ${S.views.trustweb}`, onclick: () => toggle(menu.hidden) }, [
+    el('span', {}, [S.views.trustweb]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾']),
+  ])
+  function toggle(on: boolean): void {
+    menu.hidden = !on
+    pill.setAttribute('aria-expanded', String(on))
+    if (on) items[0].focus()
+  }
+  menu.addEventListener('keydown', (e) => {
+    const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    items[(items.indexOf(document.activeElement as HTMLButtonElement) + step + items.length) % items.length].focus()
+  })
+  return el('div', { class: 'view-row', 'data-view-row': '' }, [el('b', {}, [S.views.label]), el('div', { class: 'view-pick' }, [pill, menu])])
 }
 
 function showDesktopVersion(): void {
@@ -5286,6 +5323,7 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
+    viewRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
