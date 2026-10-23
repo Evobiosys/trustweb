@@ -186,7 +186,7 @@ export interface NetHooks {
   /** Ids of the colour tags the person behind this peer holds (colour_tags.ts): an item shared with "selected tags" answers them. */
   askerTags?(peer: Peer): string[]
   /** A connected peer sent a text inside TrustWeb (today: a link to a meeting they shared). `re` (wave 6i): the ask a chat message answers. */
-  onText(peer: Peer, text: string, ts: number, re?: ChatRe): void
+  onText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?: string): void
   /** Wave 6: may this peer's asks go on through this phone to its other contacts (one_jakob.ts passOnAllowed)? */
   mayPassOnFrom(peer: Peer): boolean
   /**
@@ -226,14 +226,20 @@ export interface NetOptions {
   relayOrigin?: string
 }
 
+/**
+ * Matched by DID only (review 2026-10-19): `id` travels in cleartext (a link, a connect-ack the relay never authenticates), so a
+ * forged one naming another connection's id must not take that record over, nor bind the new connection to that person's card.
+ * A newcomer whose id collides with a held one gets an id of its own; lookups here go by DID, the id only links the person's card.
+ */
 function upsertPeer(s: AppState, p: Peer): Peer {
-  const i = s.peers.findIndex((x) => x.did === p.did || x.id === p.id)
+  const i = s.peers.findIndex((x) => x.did === p.did)
   if (i >= 0) {
-    s.peers[i] = { ...s.peers[i], ...p, ring: s.peers[i].ring }
+    s.peers[i] = { ...s.peers[i], ...p, id: s.peers[i].id, ring: s.peers[i].ring }
     return s.peers[i]
   }
-  s.peers.push(p)
-  return p
+  const peer = s.peers.some((x) => x.id === p.id) ? { ...p, id: randomId(12) } : p
+  s.peers.push(peer)
+  return peer
 }
 
 /** apps/demo's prune(): keep the relevance band, at most three lines. */
@@ -483,9 +489,12 @@ export class Net {
     if (!env || env.t !== 'connect-ack' || env.did !== fromDid) return false
     const s = this.hooks.state()
     const known = this.peerByDid(env.did)
+    // Review 2026-10-19: the outer `from` is not authenticated by the relay, so a repeated ack never renames or re-ids a held
+    // connection (a name is told inside the sealed hello, hello.ts); it only fills a name this phone never had.
+    const told = cleanHelloName(env.from.displayName) || NAMELESS_PEER
     const incoming: Peer = {
-      id: env.from.id,
-      displayName: cleanHelloName(env.from.displayName) || NAMELESS_PEER,
+      id: known?.id ?? env.from.id,
+      displayName: known && known.displayName !== NAMELESS_PEER ? known.displayName : told,
       did: env.did,
       ring: known?.ring ?? this.hooks.ringForNewPeer(),
       connectedAt: Date.now(),
@@ -528,7 +537,7 @@ export class Net {
     if (env.t === 'query') await this.handleQuery(env, fromDid)
     if (env.t === 'chat') {
       const peer = this.peerByDid(fromDid)
-      if (peer) this.hooks.onText(peer, env.text, env.ts, env.re)
+      if (peer) this.hooks.onText(peer, env.text, env.ts, env.re, env.pic)
     }
     if (env.t === 'ask-again' && from) await this.onAskAgain(from)
     // ping is deliberately ignored: no chat in this build, only a shared meeting's link.
@@ -538,12 +547,12 @@ export class Net {
    * A short text to one connected peer, sealed with the pair key (apps/demo's chat envelope, 500 characters at most). `ts` defaults to now;
    * a retry of a waiting chat message passes its ORIGINAL ts so the receiver can drop a duplicate (chat.ts).
    */
-  async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe): Promise<void> {
+  async sendText(peer: Peer, text: string, ts: number = Date.now(), re?: ChatRe, pic?: string): Promise<void> {
     // Wave 15: nothing leaves for a blocked person (links, profile, agreements, events, chat): one choke point, no notice.
     if (this.blockedPeer(peer)) throw new Error('blocked')
     await this.start()
     // Wave 6i: `re`, the ask this message answers (chat_re.ts makeRe built it), travels inside the same sealed envelope.
-    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts, ...(re ? { re } : {}) }
+    const env: ChatEnvelope = { v: 1, t: 'chat', from: this.hooks.state().me, text, ts, ...(re ? { re } : {}), ...(pic ? { pic } : {}) }
     const key = await this.pairKey(peer)
     if (!this.channel) throw new Error('relay not connected')
     await this.channel.send(peer.did, env, key)

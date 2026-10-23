@@ -112,17 +112,20 @@ import { createBackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
-import { devRecordFile, seedDevRecord } from './dev_record'
+import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
+import { addNetworkDemo } from './network_seed'
+import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
-import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { isJpegDataUrl } from '../../demo/src/types'
+import { addNorm, buildProfileText, profileFor, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DESKTOP_KEY, desktopView, wideAllowed } from './desktop_view'
+import { DESKTOP_KEY, DEX_URL, UI_VIEWS, UiView, desktopView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
@@ -146,6 +149,7 @@ import { repairOtherCodes } from './sync_code'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
+import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -154,7 +158,7 @@ import { contextPress } from './context_press'
 import { decodeEventLink, linkOrigin } from './event_link'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
-import { ImageStore } from './image_store'
+import { ImageStore, SHARE_SIDE, shrink } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
@@ -164,9 +168,11 @@ import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
-import { togetherAsk } from './together_match'
+import { fitOfAsk, queueAsk, togetherAsk } from './together_match'
+import { geoPicker } from './together_location'
+import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
-import { readTogetherRequest } from './together_request'
+import { draftOrPlain, readTogetherRequest } from './together_request'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
@@ -341,6 +347,9 @@ const recordKeptAside = wasUnreadable(persona, storeCtx)
 // drawn again once that ends); and: another tab reset this record or gave it another identity, so this tab never saves again.
 let redrawWaiting = false
 let superseded = false
+// A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
+// what is stored, this tab stops saving and reloads into it.
+if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
 // The demo's carry-over (demo_to_live.ts): the demo page's Install button left
 // the person's own content for the live app. Applied to the live app's own
 // record only; at once where nothing would be overwritten, else after asking.
@@ -477,6 +486,8 @@ let askRun: {
   reach: number
 } | null = null
 const askQueue: IncomingAsk[] = []
+/** Asks a fitting together ask already went ahead of (together_match.ts queueAsk). */
+const askOvertaken = new WeakSet<IncomingAsk>()
 let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
 /** Wave 6h: the decision on the prompt went as a late answer. */
@@ -529,7 +540,8 @@ const net = new Net({
   onStatus: (s) => { relayStatus = s; updateStatusPill(); updateConnectionRow(); if (s === 'connected') void flushAllChats() },
   onPush: (outcome) => { pushState = outcome },
   onAsk: (ask) => {
-    askQueue.push(ask)
+    // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
+    queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken)
     notify('ask', S.notifBodyAsk(ask.fromName))
     if (!askShowing) showNextAsk()
   },
@@ -602,7 +614,7 @@ const net = new Net({
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
-  onText: (peer, text, ts, re) => onIncomingText(peer, text, ts, re),
+  onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -741,10 +753,14 @@ const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-n
 let msgNoticeTimer: ReturnType<typeof setTimeout> | undefined
 const MSG_NOTICE_MS = 6_000
 const friendsEl = el('div', { class: 'demo-friends', role: 'status', 'aria-live': 'polite', hidden: true })
-/** Desktop, bottom left, outside the phone: add or remove the demo content. */
-const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => (st().demo ? removeDemoContent() : addDemoContent()) })
-/** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. */
+/** Desktop, bottom left, outside the phone: show or hide the demo content (Settings also removes it). */
+const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: () => toggleDemoContent() })
+/** Wave 18: above it, only on a wide browser tab: the Desk (full window) <-> the phone version. Kept built, never shown: */
+// 2026-10-23: only under Settings > View (Jakob).
+const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
+/** Map-local (Jakob 2026-10-23): the TrustWeb view's way back to the Desk, bottom right in the page dock, only on a wide tab while the Desk is closed. */
+const deskViewPill = el('button', { class: 'see-action desk-view-pill', 'data-desktop-view': '', hidden: true, onclick: () => showDesktopVersion() }, [S.showDesktop])
 let statusPill: HTMLElement | null = null
 phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
 root.replaceChildren(phone)
@@ -757,7 +773,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, deskToggle)
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see, deskViewPill] : [add, see, deskViewPill]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -1070,6 +1086,7 @@ function openSheet(children: (Node | null)[]): void {
 }
 
 function closeSheet(): void {
+  const wasDesk = deskOpen()
   const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
@@ -1084,6 +1101,8 @@ function closeSheet(): void {
   updateDeskToggle()
   // Wave 6f review: a record another tab saved while this sheet was open was taken over then; draw it now (after the handler that closed it).
   if (redrawWaiting) setTimeout(redrawAfterAdoption, 0)
+  // The Desk's Web page drew the last rings: the Web screen's own take the geometry back.
+  else if (wasDesk && screen === Screen.Web) render()
 }
 
 function toast(msg: string, o?: ToastOpts): void {
@@ -1139,10 +1158,23 @@ function addDemoContent(): void {
   s.people.push(...seed.people)
   s.inventory.push(...seed.inventory)
   s.demo = { people: seed.people.map((p) => p.id), inventory: seed.inventory.map((i) => i.id) }
+  // With a dev record the Network view's dummies belong to the demo content too (network_seed.ts).
+  if (devRecordFile()) addNetworkDemo(s)
   s.demoOffered = true
   save()
   render()
   showDemoFriends()
+}
+
+/** Show demo content: back from hidden, else added; Hide keeps it out of view (demo_hide.ts, 2026-10-19). */
+function toggleDemoContent(): void {
+  const s = st()
+  if (s.demoHidden) { showDemoContent(s); save(); render(); return }
+  if (!s.demo) { addDemoContent(); return }
+  hideDemoContent(s)
+  save()
+  render()
+  toast(S.demoHidden)
 }
 
 function removeDemoContent(): void {
@@ -1279,7 +1311,7 @@ function offerDemoContent(): void {
 
 function updateDemoToggle(): void {
   demoToggle.hidden = !state || solo || Boolean(state.testOf) || window.top !== window || runsAsInstalledApp()
-  if (state) demoToggle.textContent = state.demo ? S.demoRemove : S.demoAdd
+  if (state) demoToggle.textContent = demoShown(state) ? S.demoHide : S.demoAdd
   updateDeskToggle()
 }
 
@@ -1306,14 +1338,15 @@ function applyDeskWide(): void {
 }
 
 function updateDeskToggle(): void {
-  deskToggle.hidden = demoToggle.hidden || !wideTab()
+  deskToggle.hidden = !DESK_PILL_SHOWN || demoToggle.hidden || !wideTab()
   deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
+  deskViewPill.hidden = !wideTab() || deskOpen()
 }
 
-function openDeskSheet(): void {
+function openDeskSheet(variant?: UiView): void {
   openSheet([curator.el])
   sheet.dataset.kind = 'curator'
-  curator.openDesk()
+  curator.openDesk(variant)
   updateDeskToggle()
 }
 
@@ -1331,10 +1364,47 @@ function showPhoneVersion(): void {
   go(Screen.Web)
 }
 
-function showDesktopVersion(): void {
+/** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
+function openClassicSheet(): void {
+  openSheet([curator.el])
+  sheet.dataset.kind = 'curator'
+  curator.openClassic()
+}
+
+/** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
+function viewRow(): HTMLElement {
+  const items = UI_VIEWS.map((v) => el('button', {
+    role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
+    ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
+    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+  }, [S.views[v]]))
+  const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
+    ...items,
+    el('p', { class: 'meta view-dex-info', id: 'view-dex-info', 'data-dex-info': '' }, [el('a', { href: DEX_URL, target: '_blank', rel: 'noopener' }, [S.views.dexInfo])]),
+    el('p', { class: 'meta view-dex-info', id: 'view-desk-info', 'data-desk-info': '' }, [`${S.views.desk}: ${S.views.deskInfo}`]),
+  ])
+  const pill = el('button', { class: 'view-pill', 'data-view-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': `${S.views.pickAria}: ${S.views.trustweb}`, onclick: () => toggle(menu.hidden) }, [
+    el('span', {}, [S.views.trustweb]), el('span', { class: 'view-pill-half', 'aria-hidden': 'true' }, ['▾']),
+  ])
+  function toggle(on: boolean): void {
+    menu.hidden = !on
+    pill.setAttribute('aria-expanded', String(on))
+    if (on) items[0].focus()
+  }
+  menu.addEventListener('keydown', (e) => {
+    const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    items[(items.indexOf(document.activeElement as HTMLButtonElement) + step + items.length) % items.length].focus()
+  })
+  return el('div', { class: 'view-row', 'data-view-row': '' }, [el('b', {}, [S.views.label]), el('div', { class: 'view-pick' }, [pill, menu])])
+}
+
+/** `variant`: the phone's Settings > View picked Dex or the TrustWeb Desk; absent, the Desk opens on this device's saved one. */
+function showDesktopVersion(variant?: UiView): void {
   try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
   applyDeskWide()
-  openDeskSheet()
+  openDeskSheet(variant)
 }
 
 /**
@@ -1689,11 +1759,18 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
+/** Wave 19: a picture in place of the initials (my own, a blob: URL; or one a person sent, a validated JPEG data URL). */
+function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
+  if (url) { face.style.background = `url("${url}") center/cover`; face.textContent = '' }
+  return face
+}
+
 /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
 let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
 let ringsK = 1
 
-function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map()): HTMLElement {
+/** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
+function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
   const members: Partial<Record<Ring, Person[]>> = {}
@@ -1705,11 +1782,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
   ringsK = k
   const colourTags = loadColourTags()
-  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP ? ' compact' : ''), 'data-view': 'rings', title: S.hintText[HintId.WebTap] })
+  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', title: desk ? '' : S.hintText[HintId.WebTap] })
   let dragged = false
-  wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
-  ringsMenuOn(wrap, (v) => { dragged = v })
-  if (touchUi() && !hintHidden(HintId.WebTap)) {
+  if (!desk) {
+    wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
+    ringsMenuOn(wrap, (v) => { dragged = v })
+  }
+  if (!desk && touchUi() && !hintHidden(HintId.WebTap)) {
     wrap.appendChild(el('button', {
       class: 'hint-i rings-hint', 'aria-label': S.hintOpen(S.hintLabel[HintId.WebTap]),
       onclick: (e: Event) => { e.stopPropagation(); openHint(HintId.WebTap) },
@@ -1759,16 +1838,17 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+      pictured(face, p.theirProfile?.picture)
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
-        onclick: () => { if (!dragged) personSheet(p.id) },
+        onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : personSheet(p.id)) },
       }, [
         face,
         el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
-      contextPress(b, () => curatorPerson(p.id))
+      if (!desk) contextPress(b, () => curatorPerson(p.id))
       b.style.left = x + 'px'
       b.style.top = y + 'px'
       if (arcs) b.style.setProperty('--arcs', arcs)
@@ -1777,11 +1857,11 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet(true) }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
-  dragOnRings(wrap, s, (v) => { dragged = v })
+  dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
   return wrap
 }
 
@@ -1883,7 +1963,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
  * from the distance to the centre; "intending to connect" first asks how much (0..10, default 5). The ring is the same value the outliner
  * and the CRM use (changeRing / placeOnRing).
  */
-function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void): void {
+function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) => void, settled?: (personId: string, ring: Ring) => void): void {
   let lifted = false
   wrap.addEventListener('touchmove', (e) => { if (lifted) e.preventDefault() }, { passive: false })
   wrap.addEventListener('pointerdown', (down) => {
@@ -1926,19 +2006,21 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
       wrap.classList.remove('hide-zone')
     }
-    const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) render() }
+    // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
+    const done = (): void => settled?.(p.id, p.ring)
+    const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) { render(); done() } }
     const up = (): void => {
       const was = lifted
       end(); lifted = false
       setTimeout(() => setDragged(false), 0)
       if (!was) return
-      if (out) { void hideOnRings(p); return }
-      if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); return }
+      if (out) { void hideOnRings(p).then(done); return }
+      if (ring === Ring.Unsorted && p.ring === Ring.Family) { render(); done(); return }
       // The dot keeps the angle it was dropped at.
-      if (ring === webSlot(p)) { p.angle = angle; save(); render(); return }
-      if (ring === Ring.Unsorted) { p.angle = angle; unplaceOnRings(p); return }
-      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => render(), (v) => { p.angle = angle; dropOn(p, ring, v) })
-      else { p.angle = angle; dropOn(p, ring) }
+      if (ring === webSlot(p)) { p.angle = angle; save(); render(); done(); return }
+      if (ring === Ring.Unsorted) { p.angle = angle; unplaceOnRings(p); done(); return }
+      if (ring === Ring.Intending) askDesire(wrap, p, intendingReminder(displayName(p.name).text, knownWays(p), lastMessagedAt(s.chats?.[p.peerId ?? ''])), () => { render(); done() }, (v) => { p.angle = angle; dropOn(p, ring, v); done() })
+      else { p.angle = angle; dropOn(p, ring); done() }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -2142,7 +2224,7 @@ function webViewToggle(network: boolean, anyone: boolean): HTMLElement {
       el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
     ]) : el('span', { class: 'web-view' }),
     el('div', { class: 'seg desk-side', role: 'group', 'aria-label': S.deskSideAria }, [
-      el('button', { 'data-desk-side': '', onclick: openDeskSheet }, [S.deskSide]),
+      el('button', { 'data-desk-side': '', onclick: () => openDeskSheet() }, [S.deskSide]),
     ]),
   ])
 }
@@ -2751,19 +2833,88 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
   return box
 }
 
-/** Wave 7: the "My profile" sheet (profile.ts), opened from the contact box. */
-function profileSheet(): void {
+/** Wave 19: my profile picture, kept in image_store.ts (this phone only); `ownPictureUrl` is its blob: URL for the rings' you-node and the Desk's button. */
+let ownPictureUrl: string | undefined
+async function refreshOwnPicture(): Promise<void> {
+  const id = state?.profile?.pictureId
+  const blob = id ? await images.get(id) : null
+  const old = ownPictureUrl
+  ownPictureUrl = blob ? URL.createObjectURL(blob) : undefined
+  if (old) URL.revokeObjectURL(old)
+  window.dispatchEvent(new Event('tw:picture-changed'))
+  if (old || ownPictureUrl) render()
+}
+
+async function setOwnPicture(file: File): Promise<void> {
+  const p = st().profile ?? { norms: [] }
+  const id = `profile-picture-${Date.now()}`
+  await images.put(id, await shrink(file))
+  if (p.pictureId) void images.remove(p.pictureId)
+  p.pictureId = id
+  p.pictureAt = Date.now()
+  st().profile = p
+  save()
+  await refreshOwnPicture()
+}
+
+async function removeOwnPicture(): Promise<void> {
+  const p = st().profile
+  if (!p?.pictureId) return
+  void images.remove(p.pictureId)
+  delete p.pictureId
+  delete p.pictureAt
+  save()
+  await refreshOwnPicture()
+}
+
+/** The small copy of my picture that may travel (SHARE_SIDE, JPEG data URL), or undefined: none set, or it would not fit the wire cap. */
+async function sharePicture(): Promise<string | undefined> {
+  const id = st().profile?.pictureId
+  const blob = id ? await images.get(id) : null
+  if (!blob) return undefined
+  const small = await shrink(blob, SHARE_SIDE).catch(() => null)
+  if (!small) return undefined
+  const url = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = (): void => resolve(String(r.result))
+    r.onerror = (): void => reject(r.error)
+    r.readAsDataURL(small)
+  }).catch(() => '')
+  return isJpegDataUrl(url) ? url : undefined
+}
+
+/** Wave 7: the profile editor (profile.ts); `redraw` draws it again after a saved change. One editor for the phone's sheet and the Desk (wave 19). */
+function profileNodes(redraw: () => void): Node[] {
   const mine = (): MyProfile => st().profile ?? { norms: [] }
   const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); st().profile = p }
-  openSheet(profileSheetNodes({
+  return profileSheetNodes({
     profile: mine, inventory: () => st().inventory, now: Date.now,
-    commit: () => { save(); profileSheet() },
+    commit: () => { save(); redraw() },
     addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
     setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
-    openInventory: () => { closeSheet(); go(Screen.Inventory) },
-  }))
+    setAudience: (section, a) => withProfile((p) => { p.audience = { ...p.audience, [section]: a } }),
+    picture: {
+      face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl),
+      has: () => Boolean(mine().pictureId),
+      choose: (file) => { void setOwnPicture(file).then(redraw, () => toast(S.agrSendFailed)) },
+      remove: () => { void removeOwnPicture().then(redraw) },
+    },    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+  })
+}
+
+/** Wave 7: the "My profile" sheet, opened from the contact box. */
+function profileSheet(): void {
+  openSheet(profileNodes(profileSheet))
   sheet.dataset.kind = 'profile'
+}
+
+/** Wave 19: the same editor as an element the Desk's profile page shows (lent to the Curator). */
+function profileEditor(): HTMLElement {
+  const box = el('div', { class: 'prof-editor', 'data-profile-editor': '1' })
+  const draw = (): void => box.replaceChildren(...profileNodes(draw))
+  draw()
+  return box
 }
 
 /** Under the contact box: "My profile" (norms, favourite way, intro). It leaves this phone only on the owner's tap "Send my profile" on a card. */
@@ -2793,12 +2944,18 @@ function chatIo(): ChatIo {
 /** The demo persona, a solo tab and demo accounts never send anything to a phone (hello, profile). */
 const noSendTo = (peer: Peer): boolean => isDemoPersona(persona) || solo || demoAccounts().some((t) => t.peerId === peer.id)
 
-/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. */
+/** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. Wave 19: only the sections their ring may see. */
 function sendProfileTo(peer: Peer): void {
   if (noSendTo(peer)) return
-  const text = buildProfileText(APP_URL, st().profile)
-  if (!text) { toast(S.profEmpty); return }
-  net.sendText(peer, text).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
+  void sendProfile(peer)
+}
+
+async function sendProfile(peer: Peer): Promise<void> {
+  const person = st().people.find((x) => x.peerId === peer.id)
+  const pic = await sharePicture()
+  const text = person ? buildProfileText(APP_URL, st().profile, person, pic) : null
+  if (!text) { toast(buildProfileText(APP_URL, st().profile, undefined, pic) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
+  net.sendText(peer, text, Date.now(), undefined, profileFor(st().profile, person!, pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
@@ -2961,9 +3118,9 @@ function onAgreementText(peer: Peer, text: string): void {
 }
 
 /** Net: a connected phone shared its profile; it lands on their card (profile.ts). Nothing is held for a card that does not exist yet. */
-function onProfileText(peer: Peer, text: string): void {
+function onProfileText(peer: Peer, text: string, pic?: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
-  if (!person || !receiveProfileText(APP_URL, person, text, Date.now())) return
+  if (!person || !receiveProfileText(APP_URL, person, text, Date.now(), pic)) return
   save()
   toast(S.profReceivedToast(peer.displayName))
   render()
@@ -3020,7 +3177,7 @@ function hideMsgNotice(): void {
 }
 
 /** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
-function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
+function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?: string): void {
   const kind = routeText(APP_URL, text)
   // Wave 15: a blocked person's chat texts are stored (onChatText) but nothing else of theirs is acted on.
   if (kind !== TextKind.Chat && isBlocked(personOf(st().people, peer.id))) return
@@ -3030,7 +3187,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
     case TextKind.ContactRequest: onContactRequest(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
-    case TextKind.Profile: onProfileText(peer, text); return
+    case TextKind.Profile: onProfileText(peer, text, pic); return
     case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
@@ -3494,6 +3651,13 @@ const curator = createCurator({
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
   viewChanged: (view) => { curatorFace = view; applyDeskWide() },
+  // The Desk's Web page: the same rings as the Web screen, from the same record (so the shared geometry singletons hold the same values).
+  renderRings: (o) => ringsView(shown(st(), curatorHiddenIds()), askMarks(), o),
+  // Wave 19: the Desk's profile button (top right) replaces the sheet's "× Home" on a wide tab.
+  renderProfile: profileEditor,
+  myPicture: () => ownPictureUrl,
+  closeDesk: closeSheet,
+  showPhoneVersion,
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
@@ -5233,6 +5397,7 @@ function settingsSheet(): void {
   }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
+    viewRow(),
     apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
     s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
@@ -5291,10 +5456,15 @@ function settingsSheet(): void {
     // The installed app offers no demo content (owner 2026-10-07); where some is already on, removing it stays possible.
     demoSettingsShown ? el('h4', { class: 'eyebrow' }, [S.setDemo]) : null,
     demoSettingsShown ? el('button', {
-      class: 'radio' + (s.demo ? ' on' : ''),
-      'aria-pressed': String(Boolean(s.demo)),
-      onclick: () => { if (s.demo) removeDemoContent(); else addDemoContent(); settingsSheet() },
-    }, [el('b', {}, [s.demo ? S.demoRemove : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
+      class: 'radio' + (demoShown(s) ? ' on' : ''),
+      'aria-pressed': String(demoShown(s)),
+      onclick: () => { toggleDemoContent(); settingsSheet() },
+    }, [el('b', {}, [demoShown(s) ? S.demoHide : S.demoAdd]), el('small', {}, [S.setDemoHint])]) : null,
+    demoSettingsShown && s.demo ? el('button', {
+      class: 'radio',
+      'data-remove-demo': '1',
+      onclick: () => { removeDemoContent(); settingsSheet() },
+    }, [el('b', {}, [S.demoRemove]), el('small', {}, [S.setDemoRemoveHint])]) : null,
     channelsView(myChannels(), { title: S.myTitleMore, add: S.myAdd, hint: S.myHint }, CHANNELS_OTHER),
     el('div', { 'data-blocked-list': '1' }, [
       el('b', {}, [S.blockedTitle]),
@@ -5515,6 +5685,15 @@ function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
 
 /** A together request waiting for the second tap: the compiled sentence is in the box, its reach and filled settings wait here. */
 let togetherPending: { text: string; reach: number | undefined; filled: TogetherRequest } | null = null
+/** Wave 19: the place picked with the dock's button (on this phone only until a request with it is sent). */
+let togetherPlace: Place | null = null
+
+/** The dock's "Pick a place": the device position on a tap (together_location.ts geoPicker), with the area words typed so far as its name. */
+async function pickTogetherPlace(): Promise<void> {
+  const typed = readTogetherRequest(queryText, Date.now())?.area ?? ''
+  togetherPlace = await geoPicker(navigator.geolocation).pick(typed)
+  render()
+}
 
 /**
  * Wave 16: the dock's send. A sentence of the pattern "I want to play padel again before Thursday / who wants to go hiking with me"
@@ -5523,19 +5702,22 @@ let togetherPending: { text: string; reach: number | undefined; filled: Together
  * rides on this one ask only (the dock's "How far?" stays as it was); what it chose becomes the next default only when it is sent.
  * Anything that is not a together request is asked as typed, at once.
  */
-function sendFromDock(text: string): void {
+async function sendFromDock(text: string): Promise<void> {
   const now = Date.now()
   const pending = togetherPending
   togetherPending = null
   if (pending && pending.text === text.trim()) {
     const s = st()
-    s.togetherPrefs = rememberTogether(s.togetherPrefs, pending.filled, now)
+    s.togetherPrefs = rememberTogether(s.togetherPrefs, pending.filled, now, togetherPlace ?? undefined)
+    togetherPlace = null
     save()
     void runAsk(pending.text, pending.reach)
     return
   }
-  const req = readTogetherRequest(text, now)
-  if (!req) { void runAsk(text); return }
+  // No model call exists in the app yet: draftOrPlain reads plainly while TOGETHER_LLM_DRAFT is off (together_request.ts).
+  const read = await draftOrPlain(text, now, async () => null)
+  if (!read) { void runAsk(text); return }
+  const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)
   const ask = togetherAsk(filled, navigator.language)
   queryText = ask.text
@@ -5616,13 +5798,18 @@ function queryDock(s: AppState): HTMLElement {
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
+      run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
+        togetherPlace
+          ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label || S.togetherHere) + ' ×'])
+          : el('button', { class: 'chip', 'data-together-pick': '1', title: S.togetherPickHint, onclick: () => { void pickTogetherPlace() } }, ['📍 ' + S.togetherPick]),
+      ]),
       run ? null : el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.queryTry]),
         ...SUGGESTIONS.map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
       ]),
       el('button', {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,
-        onclick: () => sendFromDock(queryText),
+        onclick: () => { void sendFromDock(queryText) },
       }, [S.querySend]),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
@@ -5655,6 +5842,7 @@ function renderAsk(): void {
       el('span', { class: 'eyebrow' }, [a.earlier ? S.askEarlierEyebrow(a.fromName, a.earlier.at !== null ? askWhenLabel(a.earlier.at) : null) : a.arrivedLate ? S.askLateEyebrow : askEyebrow(a)]),
       el('h2', {}, [S.askFrom(a.fromName)]),
       el('p', { class: 'ask-q' }, ['"' + a.text + '"']),
+      fitLine(a),
       decided === null
         ? el('div', {}, [
             el('p', { class: 'ask-lbl' }, [S.askMatches]),
@@ -5671,6 +5859,12 @@ function renderAsk(): void {
           ]),
     ]),
   )
+}
+
+/** Wave 19: "Fits your padel settings" under an incoming together ask that matches one of the person's own (together_match.ts fitOfAsk). */
+function fitLine(a: IncomingAsk): HTMLElement | null {
+  const fit = fitOfAsk(a.text, st().togetherPrefs, Date.now())
+  return fit ? el('p', { class: 'hint', 'data-together-fit': '1' }, [S.askFitsSettings(fit.activity)]) : null
 }
 
 /**
@@ -5804,6 +5998,7 @@ window.addEventListener('storage', (e) => {
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 render()
+void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
 const afterCarry = (): void => { if (installable && wantInstall) openInstallSheet() }
 if (pendingCarry) installSheets.carryAsk(pendingCarry, () => { pendingCarry = null; afterCarry() })

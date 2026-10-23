@@ -378,6 +378,9 @@ export interface ChatRe {
 
 /** The longest ChatRe.text: an ask's own bound (FREE_TEXT_MAX_LEN). */
 export const RE_TEXT_MAX = 200
+/** Wave 19: a profile picture rides beside a chat text as a small JPEG data URL (ChatEnvelope.pic), at most this many characters. */
+export const PIC_MAX_LEN = 24 * 1024
+export const isJpegDataUrl = (v: unknown): v is string => typeof v === 'string' && v.length <= PIC_MAX_LEN && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(v)
 /** A qid as this app mints it (crypto.ts randomId: base64url), bounded. Also ReaskRef.originalQid. */
 export const QID_RE = /^[A-Za-z0-9_-]{1,64}$/
 
@@ -467,6 +470,8 @@ export interface ChatEnvelope {
   ts: number
   /** TrustWeb wave 6i: the ask this message answers. Optional; older builds' parseChat drop it and show the text alone. */
   re?: ChatRe
+  /** TrustWeb wave 19: the sender's profile picture (isJpegDataUrl), sent only on the owner's tap "Send my profile". Older builds' parseChat drop it. */
+  pic?: string
 }
 
 /**

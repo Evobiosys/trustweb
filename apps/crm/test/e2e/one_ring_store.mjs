@@ -56,7 +56,7 @@ try {
   check('Web rings: five circles', (await page.locator('.rings-wrap circle').count()) === 5)
   check('Web rings: no spoke for unconnected people when crowded', (await page.locator('.rings-wrap path').count()) < 5)
   const manuelWeb = nearest(await radius(MANUEL))
-  await page.getByRole('button', { name: 'Web Curator' }).click()
+  await page.getByRole('button', { name: 'Contacts', exact: true }).click()
   const cur = page.locator('.sheet[data-kind=curator] .curator')
   await cur.getByRole('searchbox').waitFor({ timeout: 15_000 })
   check('Settings is ⋮ at the top right next to Timeline, bottom tabs People/Pipeline', (await cur.locator('.gear').count()) === 1 && (await cur.locator('.tabbar .tab').allInnerTexts()).join() === 'People,Pipeline')

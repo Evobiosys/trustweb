@@ -2,34 +2,40 @@
   import { tick } from 'svelte'
   import { loadColourTags, tagsOf } from '../../trustweb/src/colour_tags'
   import type { Person as TwPerson } from '../../trustweb/src/model'
+  import ClassicBody from './classic_body.svelte'
   import ContactPage from './contact_page.svelte'
   import DeskCompose from './desk_compose.svelte'
   import DeskHome from './desk_home.svelte'
   import DeskIcon from './desk_icon.svelte'
   import DeskKeepInTouch from './desk_keep_in_touch.svelte'
   import DeskMap from './desk_map.svelte'
+  import DeskProfile from './desk_profile.svelte'
   import DeskSidebar from './desk_sidebar.svelte'
   import DeskStart from './desk_start.svelte'
   import DeskTopbar from './desk_topbar.svelte'
+  import DeskWeb from './desk_web.svelte'
   import Environment from './environment.svelte'
   import Followups from './followups.svelte'
   import ImportContacts from './import_contacts.svelte'
-  import People from './people.svelte'
   import PersonRow from './person_row.svelte'
   import Person from './person.svelte'
   import Settings from './settings.svelte'
   import SortPeople from './sort_people.svelte'
   import Timeline from './timeline.svelte'
-  import { activityOf, gettingStarted, keepInTouchDue, remindersDue } from './desk'
+  import { activityOf, deskStartPage, gettingStarted, keepInTouchDue, remindersDue, startShown } from './desk'
   import type { DeskData } from './desk'
   import { baseFields, passesFilters } from './fields'
   import type { FieldValues } from './fields'
+  import { host } from './bridge'
   import { DeskPage } from './nav'
   import { nav, openPerson, showDeskPage } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
   import { prefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
+
+  // TrustWeb Desk: on the Web page. Dex: on the web (people list below) once the rings hold someone, else on Home with Getting started.
+  showDeskPage(deskStartPage(prefs.view, store.app.people.length, host.renderRings !== undefined))
 
   let drawer = $state(false)
   let compose = $state<'reminder' | 'note' | null>(null)
@@ -110,6 +116,8 @@
           <Environment environmentId={nav.environmentId} />
         {:else if nav.personId !== null}
           <Person personId={nav.personId} />
+        {:else if nav.deskPage === DeskPage.Web}
+          <DeskWeb />
         {:else if nav.deskPage === DeskPage.Home}
           <DeskHome {data} />
         {:else if nav.deskPage === DeskPage.Reminders}
@@ -118,16 +126,18 @@
           <div class="desk-page" data-screen="desk-group">
             <h1 class="desk-title">{S.desk.group(group.label ?? group.id)}</h1>
             <button class="quiet" data-action="desk-all-contacts" onclick={(): void => showDeskPage(DeskPage.Contacts)}>{S.desk.allContacts}</button>
-            {#each members as p (p.id)}<PersonRow id={p.id} name={p.name} context={p.context} onopen={openPerson} />{/each}
+            {#each members as p (p.id)}<PersonRow id={p.id} name={p.name} picture={p.theirProfile?.picture} context={p.context} onopen={openPerson} />{/each}
           </div>
         {:else if nav.deskPage === DeskPage.Contacts}
-          <People />
+          <div class="desk-page" data-screen="desk-contacts"><h1 class="desk-title">{S.appName}</h1><ClassicBody /></div>
         {:else if nav.deskPage === DeskPage.KeepInTouch}
           <DeskKeepInTouch {data} />
         {:else if nav.deskPage === DeskPage.Timeline}
           <Timeline />
         {:else if nav.deskPage === DeskPage.Map}
           <DeskMap {data} />
+        {:else if nav.deskPage === DeskPage.Profile}
+          <DeskProfile />
         {:else if nav.deskPage === DeskPage.Settings}
           <Settings />
         {:else}
@@ -140,7 +150,7 @@
       </div>
     </div>
     <aside class="desk-right">
-      {#if steps.some((s) => !s.done)}<DeskStart {steps} />{/if}
+      {#if startShown(steps, prefs.startDismissed)}<DeskStart {steps} />{/if}
       <button class="desk-mapcard" data-action="desk-mapcard" onclick={(): void => showDeskPage(DeskPage.Map)}>
         <span class="desk-mapcard-text">
           <span class="desk-label">{S.desk.mapCard.label}</span>

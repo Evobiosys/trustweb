@@ -229,7 +229,7 @@ async function main() {
     const tb = await toggle.boundingBox()
     ok('desktop: demo content button bottom left, no popup', tb.x < 100 && tb.y > 700 && await desk.locator('.demo-friends').isHidden())
     await toggle.click()
-    ok('desktop: it adds the demo content', await desk.locator('.node:not(.you)').count() > 0 && (await toggle.innerText()) === 'Remove demo content')
+    ok('desktop: it adds the demo content', await desk.locator('.node:not(.you)').count() > 0 && (await toggle.innerText()) === 'Hide demo content')
     await see.click()
     await desk.locator('.wt-modal .wt-banner').waitFor({ timeout: 10_000 })
     ok('desktop: it opens the walkthrough as an overlay', /This happened now/i.test(await desk.locator('.wt-modal').innerText()))

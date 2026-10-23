@@ -4,10 +4,14 @@
  * request never carries a place on the wire beyond the area words the person chose (I1: where someone plays stays on their phone
  * until they answer yes).
  *
- * readTogetherRequest() is a deterministic reader (English + German); it works with no LLM at all (DECISIONS.md D-together-reader).
+ * Two readers fill the SAME preset shape, so the cheapest model is enough and none is required:
+ *   - readTogetherRequest(): a deterministic reader (English + German); works with no LLM at all.
+ *   - acceptTogetherDraft(): checks whatever a local or hosted LLM returned for that shape; anything out of range is dropped, never
+ *     trusted, and a draft that fails entirely falls back to the deterministic reader.
  * Pure and DOM-free.
  */
-import { clipText } from './kept_list'
+import { clipText, isRecord } from './kept_list'
+import { HOP_CAP } from '../../demo/src/types'
 
 export const TOGETHER_ACTIVITY_MAX = 40
 export const TOGETHER_AREA_MAX = 80
@@ -24,13 +28,14 @@ export interface TogetherRequest {
   beforeAt?: number
   /** Earliest moment (now by default); only set when the sentence names a start ("from Monday"). */
   fromAt?: number
-  /** Free area words ("Wien 7", "near Schwedenplatz"); sent as words, never as coordinates. */
+  /** Free area words ("Wien 7", "near Schwedenplatz"); resolved by a LocationPicker, never sent as coordinates. */
   area?: string
   radiusKm?: number
   /** Friend degree as ask reach: 1 = direct contacts, 2 = friends of friends ... up to HOP_CAP. */
   reach?: number
 }
 
+const DAY_MS = 86_400_000 // only for the plausibility range of an LLM draft; calendar maths uses addDays
 /** Words that follow "play" / precede "spielen" without naming what is played. */
 const NOT_ACTIVITY = new Set(['play', 'playing', 'spielen', 'in', 'be', 'again', 'wieder', 'with', 'a', 'the', 'some', 'bis', 'vor', 'am', 'mal', 'gern', 'gerne', 'to', 'before', 'by', 'on'])
 const WEEKDAYS: Record<string, number> = {
@@ -107,6 +112,8 @@ function readArea(raw: string, activity: string): { area?: string; radiusKm?: nu
 /** A generic leading verb is not the activity: "play padel" and "go hiking" are padel and hiking; "cook" stays cook. */
 const LEAD = /^(?:(?:again|wieder|mal|gerne?)\s+)*(?:(?:play|playing|do|doing|go|going|join|try|have|practice|practise|make)\s+)?(?:(?:some|a|an|the|a game of|a round of|eine runde)\s+)?(?:(?:again|wieder|mal|gerne?)\s+)*/
 const TRAIL = /\s+(?:zu\s+)?(?:spielen|machen|gehen)$/
+/** The activity inside a phrase of the person's own words ("play padel" -> "padel"). */
+export const activityOf = (phrase: string): string => phrase.replace(LEAD, '').replace(TRAIL, '').trim()
 /** Where the wanted thing ends: the "together" words, a time or a place. */
 const STOP = '(?:together|with(?:\\s+(?:me|someone|anyone|somebody))?|again|wieder|zusammen|mit|before|by|until|till|near|around|in|on|at|this|next|tomorrow|today|within|vor|bis|am|bei|nahe)'
 const WANT = '(?:want(?:s)?\\s+to|wanna|would\\s+like\\s+to|looking\\s+to|möchte|moechte|möchten|will|wollen|lust\\s+(?:zu|auf))'
@@ -148,7 +155,7 @@ export function readTogetherRequest(text: string, now: number): TogetherRequest 
     ?? new RegExp(`\\b${W}\\s+(?:(?:wieder|mal|gerne?)\\s+)?spielen\\b`).exec(bare)?.[0]
   if (!phrase?.trim()) return null
   phrase = phrase.trim()
-  const activity = phrase.replace(LEAD, '').replace(TRAIL, '').trim()
+  const activity = activityOf(phrase)
   if (!activity || NOT_ACTIVITY.has(activity)) return null
   const reach = readReach(t)
   return {
@@ -158,4 +165,55 @@ export function readTogetherRequest(text: string, now: number): TogetherRequest 
     ...readArea(raw, activity),
     ...(reach !== undefined ? { reach } : {}),
   }
+}
+
+const finiteIn = (v: unknown, lo: number, hi: number): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : undefined
+
+/**
+ * Checks what an LLM returned for the TogetherRequest shape (an object, or a JSON string). Unknown keys are ignored, out-of-range values
+ * dropped. Null when no usable activity came back, so the caller falls back to readTogetherRequest().
+ */
+export function acceptTogetherDraft(draft: unknown, now: number): TogetherRequest | null {
+  let d = draft
+  if (typeof d === 'string') {
+    try { d = JSON.parse(d) } catch { return null }
+  }
+  if (!isRecord(d) || typeof d.activity !== 'string' || !d.activity.trim()) return null
+  const horizon = now + 365 * DAY_MS
+  const area = typeof d.area === 'string' && d.area.trim() ? clipText(d.area.trim(), TOGETHER_AREA_MAX) : undefined
+  const beforeAt = finiteIn(d.beforeAt, now - DAY_MS, horizon)
+  const fromAt = finiteIn(d.fromAt, now - DAY_MS, horizon)
+  const radiusKm = finiteIn(d.radiusKm, 1, TOGETHER_RADIUS_KM_MAX)
+  const reach = finiteIn(d.reach, 1, HOP_CAP)
+  return {
+    activity: clipText(d.activity.trim().toLowerCase(), TOGETHER_ACTIVITY_MAX),
+    ...(typeof d.phrase === 'string' && d.phrase.trim() ? { phrase: clipText(d.phrase.trim(), TOGETHER_ACTIVITY_MAX) } : {}),
+    ...(beforeAt !== undefined ? { beforeAt } : {}),
+    ...(fromAt !== undefined ? { fromAt } : {}),
+    ...(area ? { area } : {}),
+    ...(radiusKm !== undefined ? { radiusKm } : {}),
+    ...(reach !== undefined && Number.isInteger(reach) ? { reach } : {}),
+  }
+}
+
+/** The JSON shape a model is told to fill (the whole prompt contract: the model interprets, the code decides). */
+export const TOGETHER_DRAFT_SHAPE =
+  '{"activity": string, "phrase"?: string, "beforeAt"?: epoch ms, "fromAt"?: epoch ms, "area"?: string, "radiusKm"?: number 1-100, "reach"?: integer 1-6}'
+
+/** owner 2026-10-23: on with the first local-model hook. No model call the app makes itself exists yet; nothing leaves while this is false. */
+export const TOGETHER_LLM_DRAFT = false
+
+/**
+ * The ONE call site of acceptTogetherDraft: when the plain reading leaves the activity or the time empty (and only then) `ask` is
+ * called once with the sentence; the draft is range-checked, the plain reading wins wherever it has a value, and a failed draft falls
+ * back to the plain reading. `ask` is a user action's model call; this never reaches for one itself.
+ */
+export async function draftOrPlain(
+  text: string, now: number, ask: (text: string) => Promise<unknown>, on: boolean = TOGETHER_LLM_DRAFT,
+): Promise<TogetherRequest | null> {
+  const plain = readTogetherRequest(text, now)
+  if (!on || (plain && plain.beforeAt !== undefined)) return plain
+  const draft = acceptTogetherDraft(await ask(text).catch(() => null), now)
+  return draft ? { ...draft, ...plain } : plain
 }

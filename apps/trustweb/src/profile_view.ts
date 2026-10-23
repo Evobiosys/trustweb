@@ -5,8 +5,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { Audience } from './model'
 import type { InventoryItem } from './model'
-import { NORMS, Norm, isStale } from './profile'
-import type { Dated, MyProfile, SharedProfile } from './profile'
+import { NORMS, Norm, PROFILE_AUDIENCES, audienceOf, isStale } from './profile'
+import type { Dated, MyProfile, ProfileAudience, ProfileSection, SharedProfile } from './profile'
 import { S } from './strings'
 
 export interface ProfileViewDeps {
@@ -18,6 +18,9 @@ export interface ProfileViewDeps {
   addNorm: (norm: Norm, text: string) => void
   removeNorm: (index: number) => void
   setOne: (key: 'favourite' | 'intro', text: string) => void
+  setAudience: (section: ProfileSection, audience: ProfileAudience) => void
+  /** My picture (wave 19): the round face (initials or the picture), pick a file, remove it. `has`: one is set. */
+  picture: { face(): HTMLElement; has(): boolean; choose(file: File): void; remove(): void }
   openInventory: () => void
 }
 
@@ -34,6 +37,35 @@ export function offerLines(items: readonly InventoryItem[]): InventoryItem[] {
   return items.filter((i) => i.included && i.audience === Audience.FriendsOfFriends)
 }
 
+/** Under each section: "Share with: Close | Friends | Acquaintances | Nobody" (profile.ts profileFor). */
+function audienceSeg(d: ProfileViewDeps, section: ProfileSection): HTMLElement {
+  const cur = audienceOf(d.profile(), section)
+  return el('div', { class: 'prof-audience' }, [
+    el('small', { class: 'meta' }, [section === 'picture' ? S.profPictureReach : S.profShareWith]),
+    el('div', { class: 'seg', role: 'group', 'aria-label': S.profShareWith, [`data-audience-${section}`]: cur }, PROFILE_AUDIENCES.map((a) => el('button', {
+      type: 'button', class: a === cur ? 'on' : '', 'aria-pressed': String(a === cur), 'data-audience': a,
+      onclick: () => { d.setAudience(section, a); d.commit() },
+    }, [S.profAudience[a]]))),
+  ])
+}
+
+/** The top of the editor: the face, "Choose a picture" (capture is left to the phone's own picker), "Remove", and who might reach me with it. */
+function pictureSection(d: ProfileViewDeps): HTMLElement {
+  const input = el('input', { type: 'file', accept: 'image/*', hidden: '', 'aria-label': S.profPictureChoose, 'data-prof-picture-input': '1' }) as HTMLInputElement
+  input.addEventListener('change', () => { const f = input.files?.[0]; if (f) d.picture.choose(f) })
+  return el('div', { class: 'prof-picture', 'data-prof-picture': d.picture.has() ? 'set' : 'none' }, [
+    el('h4', { class: 'eyebrow' }, [S.profPicture]),
+    el('div', { class: 'prof-picture-row' }, [
+      d.picture.face(),
+      el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-prof-picture-choose': '1', onclick: () => input.click() }, [d.picture.has() ? S.profPictureChange : S.profPictureChoose]),
+      d.picture.has() ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-prof-picture-remove': '1', onclick: d.picture.remove }, [S.profPictureRemove]) : null,
+      input,
+    ]),
+    audienceSeg(d, 'picture'),
+    el('p', { class: 'meta' }, [S.profPictureHint]),
+  ])
+}
+
 function oneField(d: ProfileViewDeps, key: 'favourite' | 'intro', label: string, ph: string, max: number): HTMLElement {
   const cur = d.profile()[key]
   const input = el('input', { class: 'field', placeholder: ph, maxlength: String(max), value: cur?.text ?? '', 'aria-label': label, 'data-prof-input': key })
@@ -42,6 +74,7 @@ function oneField(d: ProfileViewDeps, key: 'favourite' | 'intro', label: string,
   return el('div', { class: 'prof-one' }, [
     el('h4', { class: 'eyebrow' }, [label]), input,
     el('div', { class: 'rec-saves' }, [el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-prof-save': key, onclick: save }, [S.chSave]), cur ? stamp(cur, d.now()) : null]),
+    audienceSeg(d, key),
   ])
 }
 
@@ -54,6 +87,7 @@ export function profileSheetNodes(d: ProfileViewDeps): Node[] {
   return [
     el('h3', {}, [S.profTitle]),
     el('p', { class: 'meta' }, [S.profLead]),
+    pictureSection(d),
     el('h4', { class: 'eyebrow' }, [S.profOffer]),
     offers.length ? el('ul', { class: 'prof-offers', 'data-prof-offers': '1' }, offers.map((i) => el('li', {}, [i.text]))) : el('p', { class: 'meta' }, [S.profOfferNone]),
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: d.openInventory }, [S.profOfferEdit]),
@@ -63,6 +97,7 @@ export function profileSheetNodes(d: ProfileViewDeps): Node[] {
       el('button', { class: 'mini', type: 'button', 'aria-label': S.profRemove, onclick: () => { d.removeNorm(i); d.commit() } }, ['×']),
     ])),
     el('div', { class: 'cb-row editing' }, [pick, text, el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-prof-norm-add': '1', onclick: add }, [S.profNormAdd])]),
+    audienceSeg(d, 'norms'),
     oneField(d, 'favourite', S.profFavourite, S.profFavouritePh, 40),
     oneField(d, 'intro', S.profIntro, S.profIntroPh, 100),
     el('p', { class: 'meta' }, [S.profShareHint]),
@@ -75,6 +110,7 @@ export function theirProfileBlock(name: string, t: SharedProfile | undefined, no
   return el('div', { class: 'prof-their', 'data-their-profile': '1' }, [
     el('h4', { class: 'eyebrow' }, [S.profTheirs(name)]),
     ...t.norms.map((n) => el('div', { class: 'prof-line', 'data-their-norm': n.norm }, [normName(n.norm, n.text)])),
+    t.picture ? el('img', { class: 'prof-their-pic', src: t.picture, alt: S.profPictureOf(name), 'data-their-picture': '1' }) : null,
     t.favourite ? el('div', { class: 'prof-line' }, [S.profFavourite + ': ' + t.favourite]) : null,
     t.intro ? el('div', { class: 'prof-line' }, [t.intro]) : null,
     stamp({ text: '', at: t.at, by: 'me' }, now),

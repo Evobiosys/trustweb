@@ -42,9 +42,10 @@ server.stderr.on('data', (d) => process.stderr.write(`[vite] ${d}`))
 let browser
 try {
   await waitForServer(URL)
-  browser = await chromium.launch({ headless: true, args: ['--use-mock-keychain', '--password-store=basic'] })
+  browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--use-mock-keychain', '--password-store=basic'] })
   const errors = []
   const outside = []
+  let mapShown = false   // the Map page draws OpenStreetMap tiles; nothing else may leave
   const watch = (page) => {
     page.addInitScript(() => addEventListener('DOMContentLoaded', () => document.head.append(Object.assign(document.createElement('style'), { textContent: '.twf,.twa{display:none!important}' }))))   // the dev overlay (dev_feature.ts) sits where the burger does
     page.on('pageerror', (e) => errors.push(String(e)))
@@ -65,15 +66,13 @@ try {
   ok('classic face has the chevron in its header', await page.locator('.top-btns [data-action="view-menu"]').count() === 1)
   await page.click('[data-action="view-menu"]')
   const items = await page.locator('[role="menu"] [role^="menuitem"]').allInnerTexts()
-  ok('menu lists Desk, Trust membranes, Web Curator', items.map((t) => t.trim()).join('|') === 'Desk|Trust membranes|Web Curator', items.join('|'))
-  ok('Trust membranes is disabled standalone', (await page.locator('[data-view="membranes"]').getAttribute('aria-disabled')) === 'true'
-    && (await page.locator('[data-view="membranes"]').getAttribute('title')) === 'Open inside TrustWeb')
-  ok('Web Curator is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
+  ok('menu lists Dex, TrustWeb Desk, Contacts (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|TrustWeb Desk|Contacts', items.join('|'))
+  ok('Classic is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Escape')
   ok('Escape closes the menu', await page.locator('[role="menu"]').count() === 0)
   await page.click('[data-action="view-menu"]')
-  await page.click('[data-view="desk"]')
+  await page.click('[data-view="dex"]')
   await page.waitForSelector('[data-screen="desk-home"]')
 
   const greeting = await page.locator('[data-part="desk-greeting"]').innerText()
@@ -132,7 +131,7 @@ try {
   // pages
   await page.click('[data-desk-page="keepInTouch"]')
   ok('Keep in Touch page lists people without a cadence', await page.locator('[data-section="none"] .desk-row').count() >= 5)
-  await page.click('[data-desk-page="map"]')
+  await page.click('[data-desk-page="map"]'); mapShown = true
   ok('Map page groups by place, no tiles', await page.locator('[data-place]').count() >= 2)
   await page.click('[data-desk-page="reminders"]')
   await page.waitForSelector('[data-screen="followups"]')
@@ -143,7 +142,7 @@ try {
   await page.click('[data-desk-page="help"]')
   ok('Help shows the privacy line', (await page.locator('[data-screen="desk-help"]').innerText()).includes('Everything stays on this phone'))
   await page.click('[data-desk-page="settings"]')
-  ok('Settings has a View select', (await page.locator('[data-field="view"]').inputValue()) === 'desk')
+  ok('Settings has the View half pill on Dex', (await page.locator('[data-view-pill]').innerText()).trim() === 'Dex')
 
   // dark follows the Curator's theme
   await page.click('[data-field="light-theme"]')
@@ -167,19 +166,19 @@ try {
   // reload keeps the face; switch back
   await page.reload()
   await page.waitForSelector('[data-screen="desk-home"]')
-  ok('reload keeps prefs.view = desk', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'desk')
+  ok('reload keeps prefs.view = dex', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'dex')
   await page.click('[data-action="view-menu"]')
-  ok('Desk is the checked entry', (await page.locator('[data-view="desk"]').getAttribute('aria-checked')) === 'true')
+  ok('Dex is the checked entry', (await page.locator('[data-view="dex"]').getAttribute('aria-checked')) === 'true')
   await page.click('[data-view="classic"]')
   await page.waitForSelector('.shell')
-  ok('Web Curator brings the classic face back', await page.locator('[data-screen="desk"]').count() === 0)
+  ok('Classic brings the classic face back', await page.locator('[data-screen="desk"]').count() === 0)
   await page.reload()
   await page.waitForSelector('.shell')
   ok('and a reload keeps it', (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).view, PREFS)) === 'classic')
 
   // phone with the drawer open
   const phone = await browser.newContext({ viewport: { width: 390, height: 812 }, deviceScaleFactor: 2, colorScheme: 'light' })
-  await phone.addInitScript((k) => { if (!localStorage.getItem(k)) localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true })) }, PREFS)
+  await phone.addInitScript((k) => { if (!localStorage.getItem(k)) localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true })) }, PREFS)
   const pp = await phone.newPage()
   watch(pp)
   await pp.goto(URL)
@@ -225,7 +224,7 @@ try {
       contacts: [{ id: 'local:1', name: 'Christopher Rodriguez', title: 'Web Developer', birthday: `--${md}`, phones: [], emails: [], labels: [], sources: [] }, { id: 'local:2', name: 'Emma Miller', title: 'SQL Developer', birthday: `1990-${md}`, phones: [], emails: [], labels: [], sources: [] }],
       keepInTouch: { 'p-tay': { everyDays: 7, since: now - 20 * DAY }, 'p-alex': { everyDays: 7, since: now - 20 * DAY }, 'p-sam': { everyDays: 7, since: now - 20 * DAY } },
     }))
-    localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true }))
+    localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true }))
   }, PREFS)
   const fp = await full.newPage()
   watch(fp)
@@ -245,7 +244,7 @@ try {
   const empty = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' })
   await empty.addInitScript((k) => {
     localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me', displayName: '' }, people: [], peers: [], inventory: [], log: [], notificationsOn: false }))
-    localStorage.setItem(k, JSON.stringify({ view: 'desk', light: true }))
+    localStorage.setItem(k, JSON.stringify({ view: 'dex', light: true }))
   }, PREFS)
   const ep = await empty.newPage()
   watch(ep)
@@ -253,11 +252,12 @@ try {
   await ep.waitForSelector('[data-screen="desk-home"]')
   ok('empty: greeting without a name', /^Good (morning|afternoon|evening)$/.test(await ep.locator('[data-part="desk-greeting"]').innerText()))
   ok('empty: no section header without rows', await ep.locator('.desk-section').count() === 0)
-  ok('empty: favorites hint', (await ep.locator('[data-part="desk-favorites"]').innerText()).includes('Favorite a person to pin it here.'))
+  ok('empty: no Favorites section without favourites (desk-fork)', await ep.locator('[data-part="desk-favorites"]').count() === 0)
   await shot(ep, 'desk_empty')
   await empty.close()
 
-  ok('nothing left 127.0.0.1', outside.length === 0, outside.join(' | '))
+  const stray = outside.filter((u) => !(mapShown && new globalThis.URL(u).hostname === 'tile.openstreetmap.org'))
+  ok('nothing left 127.0.0.1 (map tiles only while the Map page is shown)', stray.length === 0, stray.join(' | '))
   ok('no page errors', errors.length === 0, errors.join(' | '))
   await ctx.close()
 } catch (e) {

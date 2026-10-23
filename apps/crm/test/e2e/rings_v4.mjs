@@ -77,7 +77,7 @@ try {
   // Curator: unplaced people sit in a collapsed list, the chooser offers the four rings and out of my web
   await page.reload()
   await page.locator('.rings-wrap').waitFor()
-  await page.getByRole('button', { name: 'Web Curator' }).click()
+  await page.getByRole('button', { name: 'Contacts', exact: true }).click()
   const cur = page.locator('.sheet[data-kind=curator] .curator')
   await cur.getByRole('searchbox').waitFor({ timeout: 15_000 })
   const np = cur.locator('[data-part=not-placed]')

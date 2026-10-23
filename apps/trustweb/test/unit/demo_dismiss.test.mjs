@@ -86,3 +86,16 @@ describe('Dismiss them on a live phone (Added)', () => {
     expect(JSON.stringify(s)).toBe(before)
   })
 })
+
+describe('Remove demo content while it is hidden (2026-10-19)', () => {
+  it('takes the hidden stash away too and counts it', () => {
+    const s = { v: 1, me: { id: 'me', displayName: 'V' }, peers: [], log: [], notificationsOn: false,
+      people: [{ id: 'own-1', name: 'Max', context: '', ring: Ring.Friend, metAt: NOW, lines: [] }], inventory: [],
+      demo: { people: ['d1'], inventory: ['t1'] },
+      demoHidden: { people: [{ id: 'd1', name: 'Dummy', context: '', ring: Ring.Friend, metAt: NOW, lines: [] }], inventory: [{ id: 't1', text: 'thing', audience: Audience.Friends, included: true, createdAt: NOW }] } }
+    expect(removeDummyContent(s, DemoContext.Generic, DismissScope.Added)).toEqual({ people: 1, things: 1 })
+    expect(s.demoHidden).toBeUndefined()
+    expect(s.demo).toBeUndefined()
+    expect(s.people.map((p) => p.id)).toEqual(['own-1'])
+  })
+})

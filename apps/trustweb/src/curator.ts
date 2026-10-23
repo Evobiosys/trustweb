@@ -10,8 +10,10 @@ import { S } from './strings'
 export interface Curator {
   el: HTMLElement
   open(): void
-  /** Open, then switch the Curator to the Desk face (the host sizes the sheet from viewChanged). */
-  openDesk(): void
+  /** Open, then switch the Curator to the Desk face (the host sizes the sheet from viewChanged); `variant` 'dex' | 'desk' picks Dex or the TrustWeb Desk. */
+  openDesk(variant?: string): void
+  /** Wave 19: Settings > View > Classic. */
+  openClassic(): void
   /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
   person(personId: string, onclose: () => void, opts?: { embedded?: boolean }): HTMLElement
   /** Hide in trustweb (Tana checkbox through the Curator's sync, removed from this record) and its Undo. */
@@ -23,6 +25,17 @@ export interface Curator {
 
 /** The Curator's own store (apps/crm storage.ts crmKey('me'); its persona is always 'me'), read without loading the chunk. */
 const CRM_KEY = 'trustweb-crm.v1.me'
+
+/** The Desk's Web page asks the host for its rings: a tap on a person picks them in the Desk, a drop on a ring tells it the record changed. */
+export interface LentRings {
+  onPick(personId: string): void
+  onRing?(personId: string, ring: Ring): void
+  /** Labels only on hover, as on a crowded web. */
+  compact?: boolean
+}
+
+/** What the Desk's profile button asks of the host (wave 19): the profile editor, the phone version, and the close that "× Home" did. */
+export interface LentDesk { renderProfile(): HTMLElement; myPicture(): string | undefined; closeDesk(): void; showPhoneVersion(): void }
 
 /** Ids of the persons in the Curator's Archive (hiddenPeople): the rings leave them out even before the Curator was opened. */
 export function curatorHiddenIds(): Set<string> {
@@ -44,11 +57,11 @@ function loadFailed(target: HTMLElement, err: unknown): void {
   target.replaceChildren(el('p', { class: 'curator-error' }, [S.curatorLoadFailed]), el('button', { class: 'btn btn-sm', onclick: () => location.reload() }, [S.curatorReload]))
 }
 
-export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void; setHiddenSources(kinds: readonly string[]): void; addLine(personId: string, line: NoteLine): void; showRings(): void; viewChanged(view: 'desk' | 'classic'): void }): Curator {
+export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void; setHiddenSources(kinds: readonly string[]): void; addLine(personId: string, line: NoteLine): void; showRings(): void; viewChanged(view: 'desk' | 'classic'): void; renderRings(o: LentRings): HTMLElement } & LentDesk): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
-  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged }
-  const open = (desk: boolean): void => {
+  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged, renderRings: opts.renderRings, renderProfile: opts.renderProfile, myPicture: opts.myPicture, closeDesk: opts.closeDesk, showPhoneVersion: opts.showPhoneVersion }
+  const open = (face?: 'desk' | 'classic', variant?: string): void => {
     void import('@web-curator').then(async (m) => {
       if (mounted) await m.refreshCurator()
       else {
@@ -56,13 +69,15 @@ export function createCurator(opts: { record(): AppState | null; setRing(personI
         root.replaceChildren()
         await m.mountCurator(root, lent)
       }
-      if (desk) await m.showDesk()
+      if (face === 'desk') await m.showDesk(variant)
+      else if (face === 'classic') await m.showClassic()
     }).catch((e: unknown) => { mounted = false; loadFailed(root, e) })   // the next open tries again
   }
   return {
     el: root,
-    open: () => open(false),
-    openDesk: () => open(true),
+    open: () => open(),
+    openDesk: (variant) => open('desk', variant),
+    openClassic: () => open('classic'),
     person(personId, onclose, opts) {
       const page = el('div', { class: 'curator-person' }, [S.curatorLoading])
       void import('@web-curator').then(async (m) => { page.replaceChildren(); await m.mountCuratorPerson(page, lent, personId, onclose, opts?.embedded) }).catch((e: unknown) => loadFailed(page, e))

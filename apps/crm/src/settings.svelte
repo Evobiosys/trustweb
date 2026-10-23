@@ -8,11 +8,11 @@
   import { host } from './bridge'
   import { TABBAR_MODES } from './tabbar'
   import { PKMS, PKM_SOURCE, Pkm, applyTheme, prefs, savePrefs } from './prefs.svelte'
-  import { View } from './nav'
   import { openSort } from './nav.svelte'
   import { unsortedIds } from './sorting.svelte'
   import { deleteHidden, store } from './state.svelte'
   import { S } from './strings'
+  import ViewPill from './view_pill.svelte'
   import { flush, sync, unhideInTrustweb } from './sync.svelte'
   import { notes, syncNotes } from './notes_sync.svelte'
   import { manualItems } from './tana_sync'
@@ -154,12 +154,8 @@
     </details>
   {/if}
 
-  <h3 class="screen-title">{S.desk.viewSection}</h3>
-  <label class="fld"><span>{S.desk.viewSection}</span>
-    <select class="field" data-field="view" bind:value={prefs.view} onchange={savePrefs}>
-      <option value={View.Desk}>{S.views.desk}</option>
-      <option value={View.Classic}>{S.views.classic}</option>
-    </select></label>
+  <ViewPill />
+  {#if prefs.startDismissed}<button class="link" data-action="show-start" onclick={(): void => { prefs.startDismissed = false; savePrefs() }}>{S.desk.start.again}</button>{/if}
 
   <h3 class="screen-title">{S.activityTitle}</h3>
   <p class="muted">{S.activityHint}</p>

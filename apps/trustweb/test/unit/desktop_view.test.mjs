@@ -1,5 +1,7 @@
 /** Wave 18: which face a device opens on (src/desktop_view.ts): the Desk on a wide browser tab unless the device chose the phone version. */
-import { desktopView, wideAllowed } from '../../src/desktop_view.ts'
+import { readFileSync } from 'node:fs'
+import { UI_VIEWS, UiView, desktopView, wideAllowed } from '../../src/desktop_view.ts'
+import { S } from '../../src/strings.ts'
 
 describe('desktopView', () => {
   it('absent choice on a wide browser tab -> desk', () => expect(desktopView(null, true, false, false)).toBe('desk'))
@@ -19,5 +21,20 @@ describe('wideAllowed', () => {
     expect(wideAllowed('desk', true, true, false)).toBe(false)
     expect(wideAllowed('desk', true, false, true)).toBe(false)
     expect(wideAllowed('desk', false, false, false)).toBe(false)
+  })
+})
+
+/** Wave 19 (Jakob 2026-10-23): Settings > View, the three views; the bottom-left pill only under Settings > View. */
+
+describe('views', () => {
+  it('Dex, TrustWeb Desk, Classic, TrustWeb, in that order, one naming', () => {
+    expect(UI_VIEWS).toEqual([UiView.Dex, UiView.Desk, UiView.Classic, UiView.TrustWeb])
+    expect(UI_VIEWS.map((v) => S.views[v])).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
+    expect(S.views.deskInfo).toBe('Our take on Dex')
+  })
+  it('the phone Settings has the View row; the bottom-left desk pill is never shown', () => {
+    const main = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')
+    expect(main).toMatch(/const DESK_PILL_SHOWN = false/)
+    expect(main).toMatch(/settingsSheet[\s\S]*viewRow\(\)/)
   })
 })

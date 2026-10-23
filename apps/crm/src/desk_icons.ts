@@ -1,5 +1,6 @@
 /** Inline 24px line icons for the Desk, drawn here so nothing is fetched (I1). Inner SVG markup, rendered by desk_icon.svelte. */
 export const ICONS = {
+  web: '<circle cx="12" cy="12" r="2.2"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="9"/>',
   home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   contacts: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.6"/><path d="M17 14.5a5.5 5.5 0 0 1 4.5 5.5"/>',
   touch: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.4A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SortOrder, contactRows, groupByRing, inCustomOrder, moveInOrder, visibleContacts } from './contacts'
+  import { SortOrder, contactRows, foldedKeys, groupByRing, inCustomOrder, moveInOrder, toggleAll, toggleGroup, visibleContacts } from './contacts'
   import { lastActivityText, lastPastByPerson } from './display'
   import Avatar from './avatar.svelte'
   import EmptyState from './empty_state.svelte'
@@ -60,6 +60,13 @@
   const toSort = $derived(unsortedIds().length)
   const lastPast = $derived(lastPastByPerson(timeline(view), now))
 
+  const folded = $derived(foldedKeys(prefs.collapsedGroups, groups.map((g) => g.ring)))
+  const allHidden = $derived(groups.length > 0 && groups.every((g) => folded.includes(g.ring)))
+  function fold(next: string[]): void {
+    prefs.collapsedGroups = next
+    savePrefs()
+  }
+
   function pick(next: SortOrder): void {
     order = next
   }
@@ -114,19 +121,23 @@
     {#each SORTS as s (s)}
       <button aria-pressed={order === s} onclick={(): void => pick(s)}>{s === SortOrder.Recent && hasCustom ? S.sortCustom : S.sort[s]}</button>
     {/each}
+    {#if groups.length}<button class="quiet" data-action="toggle-all-groups" onclick={(): void => fold(toggleAll(folded, groups.map((g) => g.ring)))}>{allHidden ? S.showAllGroups : S.hideAllGroups}</button>{/if}
   </div>
   {#each reminder as line (line)}<p class="reminder" data-part="reminder">{line}</p>{/each}
   {#each groups as g (g.ring)}
-    <h3 class="ring-heading"><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</h3>
+    {@const shut = folded.includes(g.ring)}
     <div class="zone" class:over={drag.key !== null && drag.zone === g.ring} data-zone={g.ring}>
+    <h3 class="ring-heading"><button class="ring-toggle" data-group-toggle={g.ring} aria-expanded={!shut} onclick={(): void => fold(toggleGroup(folded, g.ring))}><span class="chevron" aria-hidden="true">{shut ? '▸' : '▾'}</span><span class="ring-dot" style:background={ringColor(g.ring)}></span>{S.ringLabel[g.ring]} ({g.rows.length})</button></h3>
+    {#if !shut}
     {#each g.rows as row (row.person.id)}
       {@const values = valuesOf(row.person.id)}
       <div class="slot" class:before={drag.key !== null && drag.before === row.person.id} class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
-      <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+      <PersonRow id={row.person.id} name={row.person.name} picture={row.person.theirProfile?.picture} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
         extra={extraFor(Kind.Person, values)} presence={presence(row.person, lastPast.get(row.person.id), prefs.activityDays, now)}
         ring={row.person.ring} nonresp={values[NONRESP_KEY] === true} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
       </div>
     {/each}
+    {/if}
     </div>
   {/each}
   {#if notPlaced.length}
@@ -140,7 +151,7 @@
           {#each sec.items as row (row.person.id)}
             <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
             <div class="suggest-row">
-            <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+            <PersonRow id={row.person.id} name={row.person.name} picture={row.person.theirProfile?.picture} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
               ring={row.person.ring} nonresp={valuesOf(row.person.id)[NONRESP_KEY] === true} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
             {#if sec.ring !== UNSORTED}
               <div class="suggest-actions">

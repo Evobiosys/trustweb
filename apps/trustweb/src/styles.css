@@ -323,6 +323,18 @@ textarea.field{resize:vertical; line-height:1.5}
 @media (max-width:960px){ .demo-toggle:not(.desk-toggle){display:none} }
 /* the Desk opens from 900 px (desktop_view.ts), so its way back shows from there too */
 @media (max-width:899px){ .desk-toggle{display:none} }
+/* Wave 19: Settings > View, a half pill (current view | chevron) and its menu. */
+.view-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 12px}
+.view-pick{position:relative}
+.view-pill{display:inline-flex; align-items:stretch; padding:0; border:1.5px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink); font:inherit; font-weight:600; text-decoration:underline; cursor:pointer; overflow:hidden}
+.view-pill > span:first-child{padding:8px 12px}
+.view-pill-half{display:inline-flex; align-items:center; padding:0 12px; border-left:1.5px solid var(--line); background:var(--mist)}
+.view-menu{position:absolute; right:0; top:calc(100% + 6px); z-index:5; min-width:190px; padding:6px; display:flex; flex-direction:column; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.view-menu[hidden]{display:none}
+.view-menu button{min-height:40px; padding:0 10px; border:0; border-radius:8px; background:none; color:var(--ink); font:inherit; text-align:left; text-decoration:underline; cursor:pointer}
+.view-menu button[aria-checked=true]{background:var(--mist); font-weight:600}
+.view-dex-info{margin:4px 10px 2px; font-size:12px}
+.view-dex-info a{color:inherit; text-decoration:underline}
 @keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
 /* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */
 .ripple{position:absolute; z-index:45; width:0; height:0; pointer-events:none}
@@ -490,6 +502,12 @@ textarea.field{resize:vertical; line-height:1.5}
 .rec-status{font-size:13px; color:var(--ink-soft); line-height:1.45}
 .seg{display:flex; background:var(--mist); border-radius:999px; padding:3px}
 .seg button{flex:1; border:0; background:transparent; border-radius:999px; padding:8px 0; font-size:13.5px; font-weight:600; color:var(--ink-soft); cursor:pointer}
+.prof-picture-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0}
+.prof-picture-row .ava{width:56px; height:56px; font-size:22px}
+.prof-their-pic{width:64px; height:64px; border-radius:50%; object-fit:cover; display:block; margin:4px 0}
+.prof-audience{display:flex; align-items:center; gap:8px; margin:6px 0 12px}
+.prof-audience .seg{flex:1}
+.prof-audience .seg button{padding:6px 0; font-size:12.5px}
 .seg button.on{background:var(--card); color:var(--ink); box-shadow:0 1px 6px rgba(36,27,46,.15)}
 .seg button[disabled]{cursor:default}
 .seg button:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
@@ -683,6 +701,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .see-action{font:inherit; font-weight:700; font-size:14px; border:0; border-radius:999px; padding:12px 20px; cursor:pointer; color:#fff;
   background:linear-gradient(135deg,var(--coral),var(--violet)); box-shadow:0 8px 24px rgba(23,143,134,.35)}
 .see-action:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
+.desk-view-pill{text-decoration:underline}
 @media (max-width:960px){ .page-dock{display:none} }
 .wt-modal{position:fixed; inset:0; z-index:100; background:rgba(18,12,26,.62); display:grid; place-items:start center; overflow-y:auto; padding:32px 16px}
 .wt-panel{--bg:var(--linen); --soft:var(--ink-soft); position:relative; width:min(1100px,100%); background:var(--linen); color:var(--ink); border-radius:24px; padding:52px 20px 20px; box-shadow:0 30px 90px rgba(0,0,0,.4)}
@@ -964,9 +983,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (min-width:900px){
   .sheet.desk-wide.on[data-kind=curator]{position:fixed; inset:0; width:100vw; height:100dvh; max-height:none; border-radius:0; padding:0; overflow:hidden; z-index:100000; box-shadow:none}
   .sheet.desk-wide.on[data-kind=curator] .grab{display:none}
-  .sheet.desk-wide.on[data-kind=curator] .sheet-bar{top:20px}
+  .sheet.desk-wide.on[data-kind=curator] .sheet-bar{display:none}
   .sheet.desk-wide.on[data-kind=curator] [data-view=curator]{height:100%}
   body:has(.sheet.desk-wide.on[data-kind=curator]){overflow:hidden}
   /* the pill sits beside the Desk's sidebar (crm .desk-frame column), not over its Settings / Import */
   body:has(.sheet.desk-wide.on[data-kind=curator]) .desk-toggle{left:calc(clamp(220px,17vw,300px) + 24px); bottom:24px}
+  /* Review wave 19: toasts and Undo notices (a drag on the Desk's rings) show above the Desk, bottom right */
+  body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }

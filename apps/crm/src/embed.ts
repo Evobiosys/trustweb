@@ -80,9 +80,17 @@ export async function refreshCurator(): Promise<void> {
   (await import('./state.svelte')).reloadRecord()
 }
 
-/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. */
-export async function showDesk(): Promise<void> {
+/** Wave 19: the host's Settings > View > Classic opens the Curator on its classic face. */
+export async function showClassic(): Promise<void> {
   const [{ prefs, savePrefs }, { View }] = await Promise.all([import('./prefs.svelte'), import('./nav')])
-  prefs.view = View.Desk
+  prefs.view = View.Classic
   savePrefs()
+}
+
+/** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. `variant` 'dex' or 'desk' (the phone's Settings > View) picks one; without it a device on Dex stays there, else the TrustWeb Desk. Each opening lands on the Desk's start page (desk.ts deskStartPage). */
+export async function showDesk(variant?: string): Promise<void> {
+  const [{ prefs, savePrefs }, { View }, { deskStartPage }, { showDeskPage }, { store }] = await Promise.all([import('./prefs.svelte'), import('./nav'), import('./desk'), import('./nav.svelte'), import('./state.svelte')])
+  prefs.view = (variant ?? prefs.view) === View.Dex ? View.Dex : View.Desk
+  savePrefs()
+  showDeskPage(deskStartPage(prefs.view, store.app.people.length, host.renderRings !== undefined))
 }

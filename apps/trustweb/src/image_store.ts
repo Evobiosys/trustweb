@@ -13,6 +13,8 @@
 import { clampAudioPlan } from './audio_plan'
 
 export const MAX_SIDE = 1280
+/** The longest side of the picture that travels to another phone (profile picture, wave 19). */
+export const SHARE_SIDE = 160
 export const MAX_IMAGES = 60
 export const MAX_TOTAL_BYTES = 60 * 1024 * 1024
 const JPEG_QUALITY = 0.82
@@ -37,13 +39,17 @@ function request<T>(r: IDBRequest<T>): Promise<T> {
   })
 }
 
-/** Scales a picture down to MAX_SIDE (JPEG). A browser that cannot decode it keeps nothing. */
-export async function shrink(file: Blob): Promise<Blob> {
+/** Scales (w, h) down so the longer side is at most `side`; never up, ratio kept, at least 1 px. */
+export function fitSize(w: number, h: number, side: number): { w: number; h: number } {
+  const scale = Math.min(1, side / Math.max(w, h))
+  return { w: Math.max(1, Math.round(w * scale)), h: Math.max(1, Math.round(h * scale)) }
+}
+
+/** Scales a picture down to `side` (default MAX_SIDE) as JPEG. A browser that cannot decode it keeps nothing. */
+export async function shrink(file: Blob, side: number = MAX_SIDE): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
   try {
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height))
-    const w = Math.max(1, Math.round(bitmap.width * scale))
-    const h = Math.max(1, Math.round(bitmap.height * scale))
+    const { w, h } = fitSize(bitmap.width, bitmap.height, side)
     const canvas = document.createElement('canvas')
     canvas.width = w
     canvas.height = h

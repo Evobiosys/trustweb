@@ -1,9 +1,10 @@
 /**
- * Wave 16: "I want to play padel again before Thursday" (src/together_request.ts, together_prefs.ts, together_match.ts).
+ * Wave 16: "I want to play padel again before Thursday" (src/together_request.ts, together_prefs.ts, together_location.ts, together_match.ts).
  */
-import { readTogetherRequest } from '../../src/together_request.ts'
+import { acceptTogetherDraft, readTogetherRequest } from '../../src/together_request.ts'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from '../../src/together_prefs.ts'
-import { togetherAsk } from '../../src/together_match.ts'
+import { distanceKm, isNear, textPicker } from '../../src/together_location.ts'
+import { offerFits, togetherAsk } from '../../src/together_match.ts'
 
 // Sunday 2026-10-18 17:00 local.
 const NOW = new Date(2026, 9, 18, 17, 0).getTime()
@@ -36,6 +37,17 @@ describe('readTogetherRequest: no model needed', () => {
   })
   it('tomorrow is a window, not a deadline', () => {
     expect(readTogetherRequest('play padel tomorrow', NOW)).toMatchObject({ fromAt: midnight(2026, 9, 19), beforeAt: midnight(2026, 9, 20) })
+  })
+})
+
+describe('acceptTogetherDraft: a model fills the shape, the code decides', () => {
+  it('takes a valid draft, as object or JSON, and drops out-of-range fields', () => {
+    const d = { activity: ' Padel ', beforeAt: NOW + 3 * 86_400_000, radiusKm: 9999, reach: 99, area: 'Wien', extra: 'x' }
+    expect(acceptTogetherDraft(d, NOW)).toEqual({ activity: 'padel', beforeAt: NOW + 3 * 86_400_000, area: 'Wien' })
+    expect(acceptTogetherDraft(JSON.stringify({ activity: 'padel', reach: 2 }), NOW)).toEqual({ activity: 'padel', reach: 2 })
+  })
+  it('rejects garbage so the caller falls back to the deterministic reader', () => {
+    for (const bad of [null, 5, 'not json', '{}', { activity: '' }, { activity: 3 }]) expect(acceptTogetherDraft(bad, NOW)).toBeNull()
   })
 })
 
@@ -131,7 +143,24 @@ describe('dates are calendar days (clock changes, weekends)', () => {
   })
 })
 
-describe('togetherAsk', () => {
+describe('location: the words are the place until a picker knows more', () => {
+  it('the text picker returns the words, or null for nothing', async () => {
+    expect(await textPicker.pick('  Wien 7 ')).toEqual({ label: 'Wien 7' })
+    expect(await textPicker.pick('  ')).toBeNull()
+  })
+  it('distance with coordinates, word overlap without', () => {
+    const wien = { label: 'Wien', lat: 48.2082, lon: 16.3738 }
+    const graz = { label: 'Graz', lat: 47.0707, lon: 15.4395 }
+    expect(Math.round(distanceKm(wien, graz))).toBe(145)
+    expect(isNear(wien, graz, 50)).toBe(false)
+    expect(isNear(wien, graz, 200)).toBe(true)
+    expect(distanceKm({ label: 'a' }, wien)).toBeNull()
+    expect(isNear({ label: 'Wien 7' }, { label: 'Wien' }, 5)).toBe(true)
+    expect(isNear({ label: 'Graz' }, { label: 'Wien' }, 5)).toBe(false)
+  })
+})
+
+describe('togetherAsk / offerFits', () => {
   it('compiles the request to an ordinary ask with the friend degree as reach (default 1)', () => {
     const r = { activity: 'padel', beforeAt: midnight(2026, 9, 22), area: 'Wien 7', radiusKm: 5 }
     expect(togetherAsk(r, 'en')).toEqual({ text: 'Looking for company: padel before Thu, Oct 22 near Wien 7 (within 5 km)', reach: 1 })
@@ -140,5 +169,17 @@ describe('togetherAsk', () => {
   it('says "on <day>" for one day and "from X to Y" for a span', () => {
     expect(togetherAsk({ activity: 'padel', fromAt: midnight(2026, 9, 23), beforeAt: midnight(2026, 9, 24) }, 'en').text).toBe('Looking for company: padel on Fri, Oct 23')
     expect(togetherAsk({ activity: 'padel', fromAt: midnight(2026, 9, 24), beforeAt: midnight(2026, 9, 26) }, 'en').text).toBe('Looking for company: padel from Sat, Oct 24 to Sun, Oct 25')
+  })
+  it('an offer matches whole words only', () => {
+    expect(offerFits({ activity: 'cook' }, { line: 'I love a cookie' })).toBe(false)
+    expect(offerFits({ activity: 'hiking' }, { line: 'weekend hikes' })).toBe(false)
+    expect(offerFits({ activity: 'cook' }, { line: 'I cook on Sundays' })).toBe(true)
+  })
+  it('an offer fits on activity; areas are compared only when both sides state one', () => {
+    const req = { activity: 'padel', area: 'Wien 7', radiusKm: 5 }
+    expect(offerFits(req, { line: 'I play padel on weekday evenings' })).toBe(true)
+    expect(offerFits(req, { line: 'I play padel', area: 'Wien' })).toBe(true)
+    expect(offerFits(req, { line: 'I play padel', area: 'Graz' })).toBe(false)
+    expect(offerFits(req, { line: 'I play tennis', area: 'Wien' })).toBe(false)
   })
 })

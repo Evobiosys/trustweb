@@ -3,7 +3,11 @@ const ITEM = '[role^="menuitem"]'
 
 export function menuKeys(wrap: HTMLElement, close: () => void): { destroy(): void } {
   const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') { close(); wrap.querySelector<HTMLElement>('[aria-haspopup]')?.focus(); return }
+    if (e.key === 'Escape') {
+      // An open menu takes the Escape; the host's Escape (close the Desk) waits for the next one.
+      if (wrap.querySelector('[role=menu]')) e.stopPropagation()
+      close(); wrap.querySelector<HTMLElement>('[aria-haspopup]')?.focus(); return
+    }
     const items = [...wrap.querySelectorAll<HTMLElement>(ITEM)]
     const at = items.indexOf(e.composedPath()[0] as HTMLElement)
     const next = e.key === 'ArrowDown' ? at + 1 : e.key === 'ArrowUp' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null

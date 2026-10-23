@@ -6,6 +6,7 @@
  */
 import { clipText, isRecord, keptList } from './kept_list'
 import type { Kept, KeepRule } from './kept_list'
+import type { Place } from './together_location'
 import { HOP_CAP } from '../../demo/src/types'
 import { TOGETHER_ACTIVITY_MAX, TOGETHER_AREA_MAX, TOGETHER_RADIUS_KM_DEFAULT, TOGETHER_RADIUS_KM_MAX } from './together_request'
 import type { TogetherRequest } from './together_request'
@@ -13,6 +14,9 @@ import type { TogetherRequest } from './together_request'
 export interface TogetherPref extends Kept {
   activity: string
   area?: string
+  /** Of the picked place (together_location.ts geoPicker); stay on this phone, the ask carries only the label. */
+  lat?: number
+  lon?: number
   radiusKm?: number
   reach?: number
 }
@@ -24,6 +28,8 @@ const RULE: KeepRule<TogetherPref> = {
   is: (v): v is TogetherPref =>
     isRecord(v) && typeof v.at === 'number' && Number.isFinite(v.at) && typeof v.activity === 'string' && v.activity !== '' &&
     (v.area === undefined || typeof v.area === 'string') &&
+    (v.lat === undefined || (typeof v.lat === 'number' && Math.abs(v.lat) <= 90)) &&
+    (v.lon === undefined || (typeof v.lon === 'number' && Math.abs(v.lon) <= 180)) &&
     (v.radiusKm === undefined || (typeof v.radiusKm === 'number' && v.radiusKm >= 1 && v.radiusKm <= TOGETHER_RADIUS_KM_MAX)) &&
     (v.reach === undefined || (typeof v.reach === 'number' && Number.isInteger(v.reach) && v.reach >= 1 && v.reach <= HOP_CAP)),
   keepMs: TOGETHER_PREFS_KEEP_MS,
@@ -33,13 +39,14 @@ const RULE: KeepRule<TogetherPref> = {
 /** Entries stamped in the future (a clock that jumped) never expire, so they are not kept. */
 export const liveTogetherPrefs = (list: unknown, now: number): TogetherPref[] => keptList(list, RULE, now).filter((p) => p.at <= now + 60_000)
 
-/** Remembers what this request chose (one entry per activity, the newest wins). Returns the new list. */
-export function rememberTogether(list: unknown, req: TogetherRequest, now: number): TogetherPref[] {
+/** Remembers what this request chose (one entry per activity, the newest wins). `place` adds its coordinates when it IS the area. Returns the new list. */
+export function rememberTogether(list: unknown, req: TogetherRequest, now: number, place?: Place): TogetherPref[] {
   const rest = liveTogetherPrefs(list, now).filter((p) => p.activity !== req.activity)
   const pref: TogetherPref = {
     at: now,
     activity: clipText(req.activity, TOGETHER_ACTIVITY_MAX),
     ...(req.area ? { area: clipText(req.area, TOGETHER_AREA_MAX) } : {}),
+    ...(place && req.area && place.label === req.area && place.lat !== undefined && place.lon !== undefined ? { lat: place.lat, lon: place.lon } : {}),
     ...(req.radiusKm !== undefined ? { radiusKm: req.radiusKm } : {}),
     ...(req.reach !== undefined ? { reach: req.reach } : {}),
   }
