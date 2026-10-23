@@ -969,4 +969,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   body:has(.sheet.desk-wide.on[data-kind=curator]){overflow:hidden}
   /* the pill sits beside the Desk's sidebar (crm .desk-frame column), not over its Settings / Import */
   body:has(.sheet.desk-wide.on[data-kind=curator]) .desk-toggle{left:calc(clamp(220px,17vw,300px) + 24px); bottom:24px}
+  /* Review wave 19: toasts and Undo notices (a drag on the Desk's rings) show above the Desk, bottom right */
+  body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }
