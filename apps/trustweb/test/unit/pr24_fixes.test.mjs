@@ -17,6 +17,12 @@ describe('profile and agreements guards in main.ts', () => {
     expect(body('sendHelloTo')).toContain('noSendTo(peer)')
     expect(main).toMatch(/const noSendTo = \(peer: Peer\): boolean => isDemoPersona\(persona\) \|\| solo \|\| demoAccounts\(\)/)
   })
+  it('wave 20: the automatic zone slice refuses demo phones, honours the Settings switch and is sent from the connect and ring-change hooks only', () => {
+    expect(body('autoShareProfile')).toContain('!s.profileAutoOff && !noSendTo(peer)')
+    expect(body('autoShareProfile')).toContain('autoSendRank(')
+    expect([...main.matchAll(/autoShareProfile\(peer, 'public'\)/g)]).toHaveLength(2) // both onPeerConnected branches
+    expect([...main.matchAll(/autoShareToPerson\(/g)]).toHaveLength(4) // changeRing, both add sheets, the curator
+  })
   it('R9: incoming agreement texts are dropped for reach-out senders', () => {
     expect(body('onAgreementText')).toContain('!mayAnswerRequest(peer, person)')
   })
