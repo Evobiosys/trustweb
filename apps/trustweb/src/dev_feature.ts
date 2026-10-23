@@ -28,10 +28,14 @@ const CSS = `
 export function initDevFeature(): void {
   if (window.top !== window) return // inside the second-device iframe: not the reviewer's page
   const f = typeof __TW_FEATURE__ === 'undefined' ? null : __TW_FEATURE__
-  if (!f || (f as unknown) === 'null' || !f.title) return
-  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
-  const box = Object.assign(document.createElement('div'), { className: 'twf' })
   const bld = typeof __TW_BUILD__ === 'undefined' ? null : __TW_BUILD__
+  const feature = !!f && (f as unknown) !== 'null' && !!f.title
+  if (!feature && bld?.mode !== 'personal') return
+  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
+  // The Approve box belongs to every personal window, registry previews (TW_FEATURE=null) included; the FEATURE box needs a title.
+  if (bld?.mode === 'personal') document.body.append(approveBar(bld, typeof __TW_PREVIEW__ === 'undefined' || !__TW_PREVIEW__))
+  if (!f || (f as unknown) === 'null' || !f.title) return
+  const box = Object.assign(document.createElement('div'), { className: 'twf' })
   box.innerHTML = '<b></b><i></i><span></span>'
   box.children[0].textContent = 'FEATURE · ' + f.title
   if (bld?.n && bld.n >= 2) box.children[0].prepend(Object.assign(document.createElement('span'), { className: 'twf-new', textContent: 'NEW ' + bld.n }))
@@ -64,7 +68,6 @@ export function initDevFeature(): void {
     box.addEventListener('pointermove', move)
     box.addEventListener('pointerup', () => box.removeEventListener('pointermove', move), { once: true })
   })
-  if (bld?.mode === 'personal') document.body.append(approveBar(bld, typeof __TW_PREVIEW__ === 'undefined' || !__TW_PREVIEW__))
   let hidden = false
   try { hidden = !!sessionStorage.getItem('twf-hidden') } catch { /* ignore */ }
   show(!hidden)
