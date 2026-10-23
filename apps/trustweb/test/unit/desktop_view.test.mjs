@@ -29,7 +29,7 @@ describe('wideAllowed', () => {
 describe('views', () => {
   it('Dex, Classic, TrustWeb, in that order, one naming', () => {
     expect(UI_VIEWS).toEqual([UiView.Dex, UiView.Classic, UiView.TrustWeb])
-    expect(UI_VIEWS.map((v) => S.views[v])).toEqual(['Dex', 'Classic', 'TrustWeb'])
+    expect(UI_VIEWS.map((v) => S.views[v])).toEqual(['Dex', 'Contacts', 'TrustWeb'])
   })
   it('the phone Settings has the View row; the bottom-left desk pill is never shown', () => {
     const main = readFileSync(new URL('../../src/main.ts', import.meta.url), 'utf8')

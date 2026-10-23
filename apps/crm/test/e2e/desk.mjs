@@ -65,7 +65,7 @@ try {
   ok('classic face has the chevron in its header', await page.locator('.top-btns [data-action="view-menu"]').count() === 1)
   await page.click('[data-action="view-menu"]')
   const items = await page.locator('[role="menu"] [role^="menuitem"]').allInnerTexts()
-  ok('menu lists Dex, Classic (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|Classic', items.join('|'))
+  ok('menu lists Dex, Contacts (TrustWeb only inside TrustWeb)', items.map((t) => t.trim()).join('|') === 'Dex|Contacts', items.join('|'))
   ok('Classic is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Escape')

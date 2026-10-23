@@ -276,7 +276,7 @@ export const S = {
   deskSideAria: 'Desk, the actionable view',
   showPhone: 'Show phone version',
   /** Wave 19 (Jakob 2026-10-23): Settings > View, one naming for the three views (the crm reads these too). */
-  views: { label: 'View', pickAria: 'Choose a view', dex: 'Dex', classic: 'Classic', trustweb: 'TrustWeb', dexInfo: 'Dex-inspired', dexAbout: 'Dex-inspired: modelled on Dex, the personal CRM (getdex.com)' },
+  views: { label: 'View', pickAria: 'Choose a view', dex: 'Dex', classic: 'Contacts', trustweb: 'TrustWeb', dexInfo: 'Dex-inspired', dexAbout: 'Dex-inspired: modelled on Dex, the personal CRM (getdex.com)' },
   showDesktop: 'Show desktop view',
   netSearchPh: 'Find someone in the network',
   netShake: 'Shake',
