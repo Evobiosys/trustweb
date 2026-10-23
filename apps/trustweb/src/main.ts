@@ -1889,6 +1889,8 @@ function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggl
   const b = el('button', {
     class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
     'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), title: S.ringLabel[ring],
+    // The zoom/pan layer captures every pointer on the rings (setPointerCapture), which retargets the click away from this button.
+    onpointerdown: (e: Event) => { e.stopPropagation() },
     onclick: (e: Event) => { e.stopPropagation(); onToggle() },
   }, [off ? '+' : '−'])
   return b
