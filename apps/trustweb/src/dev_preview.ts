@@ -10,7 +10,7 @@ import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { createWalker } from './dev_walk'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prMerged, prRunning, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prGate, prMerged, prRunning, testLine, verdictAfter, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -18,6 +18,7 @@ interface Preview {
   assembled: { sha: string; at: string; error: string | null; restart?: boolean } | null
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
   next?: { id: string; port: number }
+  tested?: Tested | null
   session?: { id: string; path: string }
 }
 declare const __TW_PREVIEW__: Preview | null | undefined
@@ -41,6 +42,8 @@ const CSS = `
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
 .twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
+.twp .pills{flex:none;display:flex;gap:3px}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
+.twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
 .twp .where{display:block;color:#9a9aa6;font-size:10px}
 .twp .sec{font:700 10px system-ui;letter-spacing:.04em;opacity:.7;margin:4px 0 2px}
 .see-action{display:none!important}
@@ -96,6 +99,7 @@ export function initDevPreview(): void {
   let opening: ReturnType<typeof setTimeout> | null = null
   let making = false
   let pointing = false
+  let testing = false
   let walking: string | null = null
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
@@ -213,9 +217,14 @@ export function initDevPreview(): void {
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
     const go = h('button', { className: 'mini', textContent: walking === f.key ? 'Stop' : 'Walk' })
     go.addEventListener('click', (e) => { e.stopPropagation(); if (walking === f.key) { walker.stop(); walking = null; render() } else void walk(f) })
+    const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
+      const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (f.verdict === v ? ' on' : ''), textContent: text, disabled: loading() })
+      b.addEventListener('click', (e) => { e.stopPropagation(); void act(null, () => call('POST', '/verdict', { feature: f.key, verdict: verdictAfter(f.verdict, v) })) })
+      return b
+    }
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', ...(f.steps?.length ? [go, how] : []))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'merge now'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
     label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) void walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown, grey)))] : []))
   }
@@ -330,6 +339,27 @@ export function initDevPreview(): void {
     return h('div', { className: 'btns' }, diag, open)
   }
 
+  // Runs the CLI's checks (no vite touched, the preview keeps showing) and polls until a run newer than this click is done.
+  function runTests(): void {
+    const click = Date.now()
+    testing = true; begin(); render()
+    void call('POST', '/test', {}).then(async () => {
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2000))
+        const q = await call('GET', '').catch(() => null)
+        if (q?.tested && !q.tested.running && Date.parse(q.tested.at) >= click - 1000) { p = q; break }
+      }
+    }).catch((e: Error) => { error = e.message }).finally(() => { testing = false; render() })
+  }
+
+  /** The local checks of the assembled set: "Approve" (merge to main) opens only on a pass. */
+  function gate(): HTMLElement {
+    const g = prGate(p!), running = testing || g === 'running'
+    const run = h('button', { className: 'alt', textContent: 'Run tests (needed for Approve)', disabled: running || loading() })
+    run.addEventListener('click', runTests)
+    return h('div', { className: 'btns' }, h('div', {}, testLine(running ? 'running' : g, p!.tested), ...(running ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), run, ...(g === 'failed' && p!.tested?.tail ? [h('pre', { className: 'log', textContent: p!.tested.tail })] : []))
+  }
+
   function prPart(n: number, blocked: boolean): HTMLElement {
     if (prMerged(p!)) return mergedPart(n)
     const label = prButton(p!.pr, n, p!.assembled?.sha, n)
@@ -416,7 +446,7 @@ export function initDevPreview(): void {
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
+        gate(), prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
       )
     }
     const pos = store.get(POS)

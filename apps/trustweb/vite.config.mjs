@@ -14,7 +14,7 @@ import os from 'node:os'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
-import { diagnosticsFor, ghBin, readyToGo } from './dev_preview_rules.mjs'
+import { approveMergeRoute, diagnosticsFor, ghBin, readyToGo } from './dev_preview_rules.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
@@ -209,6 +209,11 @@ function approveApi() {
         const file = path.join(CACHE, 'approvals', slug(git('rev-parse', '--abbrev-ref', 'HEAD')) + '.json')
         json(res, existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { step: 'none' })
       })
+      server.middlewares.use('/__tw/approve-merge', approveMergeRoute({
+        loopback, branch: () => git('rev-parse', '--abbrev-ref', 'HEAD'), cache: CACHE, ops: process.env.TW_OPS ?? '', wt: path.join(here, '../..'),
+        exists: existsSync, read: (f) => readFileSync(f, 'utf8'),
+        spawn: (cmd, args) => { spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref() },
+      }))
       server.middlewares.use('/__tw/approve', (req, res) => {
         if (req.method !== 'POST' || !loopback(req)) { res.statusCode = req.method !== 'POST' ? 405 : 403; res.end(); return }
         const [branch, sha] = [git('rev-parse', '--abbrev-ref', 'HEAD'), git('rev-parse', '--short', 'HEAD')]
@@ -322,6 +327,7 @@ function previewApi() {
         if (sub === '/' && typeof b?.feature === 'string' && typeof b.checked === 'boolean' && readPreview().features.some((f) => f.key === b.feature)) args = ['toggle', b.feature, b.checked ? 'on' : 'off']
         const keys = readPreview().features.map((f) => f.key)
         if (sub === '/' && b?.set && keys.length === Object.keys(b.set).length && keys.every((k) => typeof b.set[k] === 'boolean')) args = ['set', keys.map((k) => `${k}=${b.set[k] ? 'on' : 'off'}`).join(',')]
+        if (sub === '/verdict' && typeof b?.feature === 'string' && readPreview().features.some((f) => f.key === b.feature) && [null, 'merge', 'needs-work'].includes(b.verdict)) args = ['verdict', b.feature, b.verdict ?? 'clear']
         if (sub === '/mode' && (b?.mode === 'personal' || b?.mode === 'stock')) args = ['mode', b.mode]
         if (!args) { json(res, { error: 'bad request' }, 400); return }
         const error = run(args)

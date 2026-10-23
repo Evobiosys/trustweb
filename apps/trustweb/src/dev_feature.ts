@@ -4,6 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
+import { approveGate, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -20,7 +21,7 @@ const CSS = `
 .twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
-.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
+.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
 
@@ -69,14 +70,16 @@ export function initDevFeature(): void {
   show(!hidden)
 }
 
-export interface ApprovalStatus { step: string; text?: string; url?: string; pr?: number | null; started?: string; etaSeconds?: number }
+export interface ApprovalStatus { step: string; text?: string; url?: string; pr?: number | null; started?: string; etaSeconds?: number; updated?: string; sha?: string }
 
-/** Polls GET /__tw/status every 5 s and hands each answer to `on`, until the flow has 'failed' or is 'ready' with its url. */
-export function pollStatus(on: (j: ApprovalStatus) => void): void {
+const personalDone = (j: ApprovalStatus): boolean => j.step === 'failed' || (j.step === 'ready' && !!j.url)
+
+/** Polls a status url (default GET /__tw/status) every 5 s and hands each answer to `on`, until `done` says the flow has ended. */
+export function pollStatus(on: (j: ApprovalStatus) => void, url = '/__tw/status', done = personalDone): void {
   const tick = (): void => {
-    void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
+    void fetch(url).then((r) => r.json()).then((j: ApprovalStatus) => {
       on(j)
-      if (j.step !== 'failed' && !(j.step === 'ready' && j.url)) setTimeout(tick, 5000)
+      if (!done(j)) setTimeout(tick, 5000)
     }).catch(() => setTimeout(tick, 5000))
   }
   tick()
@@ -84,7 +87,7 @@ export function pollStatus(on: (j: ApprovalStatus) => void): void {
 
 /** Bottom right, amber, shaped like the dev slot's approve box (controller/overlay.js): the owner's yes for this build, the stock twin one tap away.
  *  A press starts the check flow on the dev server (POST /__tw/approve); the box then turns grey "IN PROGRESS" and polls /__tw/status every 5 s. */
-function approveBar(bld: { stockUrl: string; approved?: string | null }, stockLink: boolean): HTMLElement {
+function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | null }, stockLink: boolean): HTMLElement {
   const bar = Object.assign(document.createElement('div'), { className: 'twf-ok' })
   bar.innerHTML = '<header></header><div class="body"></div>'
   const [head, body] = [bar.children[0] as HTMLElement, bar.children[1] as HTMLElement]
@@ -110,12 +113,46 @@ function approveBar(bld: { stockUrl: string; approved?: string | null }, stockLi
   hx.addEventListener('click', () => { bar.hidden = true; try { sessionStorage.setItem('twf-ok-hidden', '1') } catch { /* not remembered */ } })
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
-  if (bld.approved) poll()
-  else {
-    body.append(btn('Approve personal preview', 'go', () => {
+  const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
+  /** "Approve": Touch ID, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  const pollMerge = (since: number): void => {
+    bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
+    const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
+    pollStatus((j) => {
+      if (stale(j)) return
+      body.replaceChildren(j.text ?? 'starting')
+      if (j.url) body.append(' ', Object.assign(document.createElement('a'), { href: j.url, target: '_blank', textContent: 'open' }))
+      if (j.step === 'checks-failed' || j.step === 'failed') body.className = 'body warn'
+      if (MERGE_DONE.includes(j.step) && j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
+    }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
+  }
+  function buttons(): void {
+    bar.classList.remove('prog'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
+    if (preview) {
+      const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: 'Checking…' })
+      const go = btn('Approve', 'go big', () => {
+        const since = Date.now() - 2000
+        void fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
+      })
+      go.disabled = true
+      const refresh = (): void => {
+        if (!go.isConnected) return
+        void fetch('/__tw/preview').then((r) => r.json()).then((q: Parameters<typeof approveGate>[0]) => {
+          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, then merges to main and deploys' : g.hint
+        }).catch(() => { /* server restarting: the next tick asks again */ })
+      }
+      body.append(go, hint); refresh(); const t = setInterval(() => { if (!go.isConnected) clearInterval(t); else refresh() }, 3000)
+    }
+    body.append(btn('Approve personal view', preview ? 'alt small' : 'go', () => {
       void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.ok && poll())
     }))
     if (stockLink && bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
+  }
+  if (bld.approved) poll()
+  else {
+    buttons()
+    // A reload while a run is going (or ended for this very commit) shows its line again.
+    if (preview) void fetch('/__tw/approve-merge').then((r) => r.json()).then((j: ApprovalStatus) => { if (j.step !== 'none' && (!bld.sha || !j.sha || j.sha.startsWith(bld.sha))) pollMerge(0) }).catch(() => { /* no status: buttons stay */ })
   }
   head.addEventListener('pointerdown', (down) => {
     const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop
