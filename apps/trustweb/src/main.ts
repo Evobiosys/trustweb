@@ -613,7 +613,7 @@ const net = new Net({
   // against the dummy content only (owner 2026-10-06: Max is not part of the demo).
   askerTags: (peer) => { const tags = loadColourTags(); const who = st().people.find((p) => p.peerId === peer.id); return who ? tagsOf(who, tags).map((t) => t.id) : [] },
   askScope: (peer) => (demoAccounts().some((t) => t.peerId === peer.id) ? demoAccountScope(st()) : undefined),
-  onText: (peer, text, ts, re) => onIncomingText(peer, text, ts, re),
+  onText: (peer, text, ts, re, pic) => onIncomingText(peer, text, ts, re, pic),
   // Wave 6 (one_jakob.ts): this site's front door (demo-peer.json) counts as this phone's own when it carries this phone's name.
   mayPassOnFrom: (peer) => passOnAllowed(st(), peer, ownDoorDid()),
   samePerson: (target, sender) => samePersonTarget(st(), target, sender, ownDoorDid()),
@@ -3008,9 +3008,9 @@ function onAgreementText(peer: Peer, text: string): void {
 }
 
 /** Net: a connected phone shared its profile; it lands on their card (profile.ts). Nothing is held for a card that does not exist yet. */
-function onProfileText(peer: Peer, text: string): void {
+function onProfileText(peer: Peer, text: string, pic?: string): void {
   const person = st().people.find((p) => p.peerId === peer.id)
-  if (!person || !receiveProfileText(APP_URL, person, text, Date.now())) return
+  if (!person || !receiveProfileText(APP_URL, person, text, Date.now(), pic)) return
   save()
   toast(S.profReceivedToast(peer.displayName))
   render()
@@ -3067,7 +3067,7 @@ function hideMsgNotice(): void {
 }
 
 /** Net onText: share link / contact payload / chat message; malformed protocol text is shown nowhere. */
-function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
+function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?: string): void {
   const kind = routeText(APP_URL, text)
   // Wave 15: a blocked person's chat texts are stored (onChatText) but nothing else of theirs is acted on.
   if (kind !== TextKind.Chat && isBlocked(personOf(st().people, peer.id))) return
@@ -3077,7 +3077,7 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe): void
     case TextKind.ContactRequest: onContactRequest(peer, text); return
     case TextKind.Keep: onKeepText(peer, text); return
     case TextKind.Hello: onHelloText(peer, text); return
-    case TextKind.Profile: onProfileText(peer, text); return
+    case TextKind.Profile: onProfileText(peer, text, pic); return
     case TextKind.Agreement: onAgreementText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return

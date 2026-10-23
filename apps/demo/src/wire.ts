@@ -12,7 +12,7 @@
  */
 
 import type { AnswerEnvelope, AskAgainEnvelope, ChatEnvelope, ChatRe, ConnectAckEnvelope, ConnectEnvelope, PingEnvelope, QueryEnvelope, ReaskRef } from './types'
-import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
+import { ANSWER_WINDOW_MS_MAX, FREE_TEXT_MAX_LEN, isJpegDataUrl, HOP_CAP, HOPS_UNBOUNDED, QID_RE, RE_TEXT_MAX, ROOT_RE, SEEN_ID_RE, SEEN_MAX, VIA_NAME_MAX, WIRE_VERSION } from './types'
 
 /** Free text is the one unbounded field on the wire, so it gets a bound. */
 export const CHAT_MAX_LEN = 500
@@ -212,7 +212,9 @@ function parseChat(o: Record<string, unknown>): ChatEnvelope | null {
     if (r === null) return null
     re = r
   }
-  return { v: WIRE_VERSION, t: 'chat', from: o.from, text: o.text, ts: o.ts, ...(re ? { re } : {}) }
+  // Wave 19: the profile picture, strict like `re`: present and not a small JPEG data URL rejects the envelope.
+  if ('pic' in o && !isJpegDataUrl(o.pic)) return null
+  return { v: WIRE_VERSION, t: 'chat', from: o.from, text: o.text, ts: o.ts, ...(re ? { re } : {}), ...('pic' in o ? { pic: o.pic as string } : {}) }
 }
 
 function parsePing(o: Record<string, unknown>): PingEnvelope | null {
