@@ -132,7 +132,7 @@
     {#each g.rows as row (row.person.id)}
       {@const values = valuesOf(row.person.id)}
       <div class="slot" class:before={drag.key !== null && drag.before === row.person.id} class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
-      <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+      <PersonRow id={row.person.id} name={row.person.name} picture={row.person.theirProfile?.picture} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
         extra={extraFor(Kind.Person, values)} presence={presence(row.person, lastPast.get(row.person.id), prefs.activityDays, now)}
         ring={row.person.ring} nonresp={values[NONRESP_KEY] === true} fav={favLink(row.person, values, store.crm.contactPoints[row.person.id])} ondrop={reorder(g.ring, g.rows.map((r) => r.person.id))} onopen={openPerson} />
       </div>
@@ -151,7 +151,7 @@
           {#each sec.items as row (row.person.id)}
             <div class="slot" class:lifted={drag.key === row.person.id} data-slot={row.person.id}>
             <div class="suggest-row">
-            <PersonRow id={row.person.id} name={row.person.name} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
+            <PersonRow id={row.person.id} name={row.person.name} picture={row.person.theirProfile?.picture} context={row.person.context} meta={metaFor(row.person.id, row.lastAt, row.openLines)}
               ring={row.person.ring} nonresp={valuesOf(row.person.id)[NONRESP_KEY] === true} fav={favLink(row.person, valuesOf(row.person.id), store.crm.contactPoints[row.person.id])} ondrop={reorder(UNSORTED, [])} onopen={openPerson} />
             {#if sec.ring !== UNSORTED}
               <div class="suggest-actions">

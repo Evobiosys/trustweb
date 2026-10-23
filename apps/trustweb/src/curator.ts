@@ -35,7 +35,7 @@ export interface LentRings {
 }
 
 /** What the Desk's profile button asks of the host (wave 19): the profile editor, the phone version, and the close that "× Home" did. */
-export interface LentDesk { renderProfile(): HTMLElement; closeDesk(): void; showPhoneVersion(): void }
+export interface LentDesk { renderProfile(): HTMLElement; myPicture(): string | undefined; closeDesk(): void; showPhoneVersion(): void }
 
 /** Ids of the persons in the Curator's Archive (hiddenPeople): the rings leave them out even before the Curator was opened. */
 export function curatorHiddenIds(): Set<string> {
@@ -60,7 +60,7 @@ function loadFailed(target: HTMLElement, err: unknown): void {
 export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void; setHiddenSources(kinds: readonly string[]): void; addLine(personId: string, line: NoteLine): void; showRings(): void; viewChanged(view: 'desk' | 'classic'): void; renderRings(o: LentRings): HTMLElement } & LentDesk): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
-  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged, renderRings: opts.renderRings, renderProfile: opts.renderProfile, closeDesk: opts.closeDesk, showPhoneVersion: opts.showPhoneVersion }
+  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged, renderRings: opts.renderRings, renderProfile: opts.renderProfile, myPicture: opts.myPicture, closeDesk: opts.closeDesk, showPhoneVersion: opts.showPhoneVersion }
   const open = (face?: 'desk' | 'classic'): void => {
     void import('@web-curator').then(async (m) => {
       if (mounted) await m.refreshCurator()
