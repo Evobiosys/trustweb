@@ -34,7 +34,8 @@ function devRecord(): DevRecord | null {
 
 const stored = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
-  set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* storage blocked */ } },
+  /** False when the write failed (storage blocked or full). */
+  set: (k: string, v: string): boolean => { try { localStorage.setItem(k, v); return true } catch { return false } },
   remove: (k: string): void => { try { localStorage.removeItem(k) } catch { /* storage blocked */ } },
 }
 
@@ -92,9 +93,8 @@ function applySeed(persona: string, rec: DevRecord): boolean {
   const now = stamp(rec.text)
   if (had !== null && stored.get(key + '.seed') === now) return false
   if (had !== null && had !== rec.text) stored.set(key + '.before-seed', had)
-  stored.set(key, withKeptEvents(rec.text, had))
-  stored.set(key + '.seed', now)
-  return true
+  // Review wave 19: a record that could not be stored is not "applied" (else a slot would reload into it on every boot).
+  return stored.set(key, withKeptEvents(rec.text, had)) && stored.set(key + '.seed', now)
 }
 
 /** Build-time record (`vite serve` with TW_DEV_RECORD). Call before the first loadState. */

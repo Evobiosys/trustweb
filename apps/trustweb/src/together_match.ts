@@ -79,3 +79,16 @@ export function fitOfAsk(text: string, prefs: unknown, now: number): TogetherPre
   if (!req) return null
   return liveTogetherPrefs(prefs, now).find((p) => offerFits(req, { line: p.activity, ...(p.area ? { area: p.area } : {}) })) ?? null
 }
+
+/**
+ * Queues an incoming ask: a fitting one goes ahead of the waiting non-fitting ones, but each non-fitting ask is overtaken at most once
+ * (`jumped` remembers them), so a stream of fitting asks cannot starve it.
+ */
+export function queueAsk<T extends object>(queue: T[], ask: T, fits: (a: T) => boolean, jumped: WeakSet<T>): void {
+  let from = 0
+  queue.forEach((q, i) => { if (jumped.has(q)) from = i + 1 })
+  const at = fits(ask) ? queue.findIndex((q, i) => i >= from && !fits(q)) : -1
+  if (at < 0) { queue.push(ask); return }
+  for (const q of queue.slice(at)) if (!fits(q)) jumped.add(q)
+  queue.splice(at, 0, ask)
+}

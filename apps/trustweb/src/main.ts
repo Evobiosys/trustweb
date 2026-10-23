@@ -167,7 +167,7 @@ import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
-import { fitOfAsk, togetherAsk } from './together_match'
+import { fitOfAsk, queueAsk, togetherAsk } from './together_match'
 import { geoPicker } from './together_location'
 import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
@@ -485,6 +485,8 @@ let askRun: {
   reach: number
 } | null = null
 const askQueue: IncomingAsk[] = []
+/** Asks a fitting together ask already went ahead of (together_match.ts queueAsk). */
+const askOvertaken = new WeakSet<IncomingAsk>()
 let askShowing: IncomingAsk | null = null
 let askDecision: boolean | null = null
 /** Wave 6h: the decision on the prompt went as a late answer. */
@@ -538,8 +540,7 @@ const net = new Net({
   onPush: (outcome) => { pushState = outcome },
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
-    const at = fitOfAsk(ask.text, st().togetherPrefs, Date.now()) ? askQueue.findIndex((q) => !fitOfAsk(q.text, st().togetherPrefs, Date.now())) : -1
-    if (at >= 0) askQueue.splice(at, 0, ask); else askQueue.push(ask)
+    queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken)
     notify('ask', S.notifBodyAsk(ask.fromName))
     if (!askShowing) showNextAsk()
   },
