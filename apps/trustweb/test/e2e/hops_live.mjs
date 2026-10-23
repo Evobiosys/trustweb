@@ -45,7 +45,7 @@ async function shot(page, what) {
 
 /** `joiner` opens `host`'s code and connects (one scan): both hold the other as an acquaintance. */
 async function connect(host, joiner, joinerName, hostName) {
-  await tab(host, 'Web')
+  await tab(host, 'Membranes')
   await host.locator('.hdr [aria-label^="Show my code"]').click()
   await host.locator('.qrwrap canvas').waitFor({ timeout: 20_000 })
   const url = await host.getAttribute('.qrwrap', 'data-payload')
@@ -61,7 +61,7 @@ async function connect(host, joiner, joinerName, hostName) {
 
 /** On `page`, the person card of `name`: switch "Pass their asks on" to `on`. */
 async function setPassOn(page, name, on) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.node', { hasText: name }).first().click()
   const row = page.locator('.sheet.on [data-pass-on]')
   await row.waitFor({ timeout: 10_000 })
@@ -72,7 +72,7 @@ async function setPassOn(page, name, on) {
 
 /** Ann's ask with the reach chosen in the dock; resolves with the result card's text and how long it took. */
 async function ask(page, text, reachChoice) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await page.locator('.query-dock').waitFor({ timeout: 10_000 })
   await page.locator(`.query-dock [data-reach-choice="${reachChoice}"]`).click()
@@ -123,7 +123,7 @@ async function main() {
     ok('Cleo\'s ladder travels one degree by default (friends of friends)', /\+1 degree/.test(await row.locator('.inv-actions').innerText()))
 
     // 1. friends of friends, Ben passing Ann's asks on (on by default since 2026-10-09)
-    await tab(ann, 'Web')
+    await tab(ann, 'Membranes')
     await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
     ok('"How far?": my contacts by default, five choices', (await ann.locator('[data-reach-choice]').count()) === 5
       && (await ann.locator('[data-reach-choice="contacts"]').getAttribute('aria-checked')) === 'true')

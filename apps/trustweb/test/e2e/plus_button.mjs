@@ -1,7 +1,7 @@
 /**
  * Web -> search -> Curate your web -> "Add someone" and a tap on empty space in the web open the
  * same "Add someone to your web?" sheet, and saving puts the person on the
- * rings. Also pins the 2026-10-05 nav: exactly Web | Record | My Resources, Query
+ * rings. Also pins the 2026-10-05 nav: exactly Membranes | Record | My Resources, Query
  * on the Web screen, a QR button in the header instead of "Online".
  *
  * Local only (spins up a real RelayServer + Vite dev server), single phone.
@@ -68,7 +68,7 @@ async function main() {
     ok('the QR button carries no status dot', await page.locator('.hdr .relay-dot').count() === 0)
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
     // Wave 2 (P9): the Feed is optional and off by default, so the bar is the old one; feed_flow switches it on.
-    ok('nav is exactly Web | Record | My Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Web', 'Record', 'My Resources']), JSON.stringify(tabs))
+    ok('nav is exactly Membranes | Record | My Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(tabs))
     ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
     const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
     ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
@@ -217,6 +217,8 @@ async function main() {
     // desktop: outside the phone, "Add a device" and "See it in action" (an overlay)
     const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     desk.on('pageerror', (e) => console.log('  [pageerror desktop]', e.message))
+    // Wave 18: a wide tab opens on the Desk; the phone frame is the subject here.
+    await desk.addInitScript(() => localStorage.setItem('trustweb.ui.desktop', 'phone'))
     await desk.goto(base)
     const see = desk.getByRole('button', { name: 'See it in action' })
     ok('desktop: "Add a device" and "See it in action" sit outside the phone', await see.isVisible() && (await desk.locator('.page-dock .add-device').innerText()).includes('Add a device'))

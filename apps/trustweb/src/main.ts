@@ -314,6 +314,8 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 const wantInstall = params.get('install') === '1'
+/** Wave 18 review b: a page opened by a link (connect, share, event, hand-over, install) shows what the link is for; the Desk does not open under it. */
+const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || handover || wantInstall)
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
@@ -1282,12 +1284,15 @@ function updateDemoToggle(): void {
 const wideTab = (): boolean => window.matchMedia('(min-width: 900px)').matches
 const storedDesktop = (): string | null => { try { return window.localStorage.getItem(DESKTOP_KEY) } catch { return null } }
 const deskOpen = (): boolean => sheet.classList.contains('on') && sheet.classList.contains('desk-wide') && sheet.dataset.kind === 'curator'
-const deskWanted = (): boolean => Boolean(state) && screen !== Screen.Start && !state?.testOf && window.top === window && desktopView(storedDesktop(), wideTab(), solo, runsAsInstalledApp()) === 'desk'
-let deskTried = false
+const deskWanted = (): boolean => Boolean(state) && screen !== Screen.Start && !state?.testOf && !isDemoPersona(persona) && window.top === window && desktopView(storedDesktop(), wideTab(), solo, runsAsInstalledApp()) === 'desk'
+let deskTried = openedByLink
 
-/** Wave 18: a device with a record on a wide browser tab opens on the Desk, once, unless it chose the phone version. */
+/** Wave 18: a device with a record on a wide browser tab opens on the Desk, unless it chose the phone version. Decided once, at the first render with a record: a window widened later stays as it is. */
 function autoDesk(): void {
-  if (!deskTried && deskWanted()) { deskTried = true; openDeskSheet() }
+  if (!deskTried && state && screen !== Screen.Start) {
+    deskTried = true
+    if (deskWanted()) openDeskSheet()
+  }
   updateDeskToggle()
 }
 

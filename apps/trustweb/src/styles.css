@@ -161,7 +161,6 @@ textarea.field{resize:vertical; line-height:1.5}
 .web-view-row{display:flex; gap:8px; margin:6px 16px 0}
 .web-view-row .web-view{flex:1}
 .desk-side button{padding:8px 16px}
-.web-view-row span.web-view{display:block}
 .ppl{padding:8px 16px 0}
 .prow{display:flex; align-items:center; gap:13px; background:var(--card); border-radius:16px; padding:12px 14px; margin:0 0 10px; box-shadow:0 2px 12px rgba(36,27,46,.06); cursor:pointer; width:100%; border:0; text-align:left}
 .prow .who{flex:1; min-width:0}
@@ -321,7 +320,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .demo-toggle:focus-visible{outline:3px solid var(--electric); outline-offset:3px}
 /* Wave 18: the Desk / phone pill stacks above it (z-index over the full-window Desk) */
 .demo-toggle.desk-toggle{bottom:80px; z-index:100001}
-@media (max-width:960px){ .demo-toggle{display:none} }
+@media (max-width:960px){ .demo-toggle:not(.desk-toggle){display:none} }
+/* the Desk opens from 900 px (desktop_view.ts), so its way back shows from there too */
+@media (max-width:899px){ .desk-toggle{display:none} }
 @keyframes tw-pop{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
 /* tap ripple on the web: questhub.eco's gold ground ripple, as a circle */
 .ripple{position:absolute; z-index:45; width:0; height:0; pointer-events:none}
@@ -966,4 +967,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   .sheet.desk-wide.on[data-kind=curator] .sheet-bar{top:20px}
   .sheet.desk-wide.on[data-kind=curator] [data-view=curator]{height:100%}
   body:has(.sheet.desk-wide.on[data-kind=curator]){overflow:hidden}
+  /* the pill sits beside the Desk's sidebar (crm .desk-frame column), not over its Settings / Import */
+  body:has(.sheet.desk-wide.on[data-kind=curator]) .desk-toggle{left:calc(clamp(220px,17vw,300px) + 24px); bottom:24px}
 }

@@ -33,7 +33,7 @@ const until = async (fn, ms = 20_000) => {
 }
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }) }
 async function showCode(page) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.hdr [aria-label^="Show my code"]').click()
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   return page.getAttribute('.qrwrap', 'data-payload')

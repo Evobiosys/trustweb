@@ -40,7 +40,7 @@ async function shot(page, name) {
 
 /** `joiner` opens `host`'s code and connects (one scan): both hold the other as an acquaintance. */
 async function connect(host, joiner, joinerName, fresh) {
-  await tab(host, 'Web')
+  await tab(host, 'Membranes')
   await host.locator('.hdr [aria-label^="Show my code"]').click()
   await host.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const url = await host.getAttribute('.qrwrap', 'data-payload')
@@ -58,7 +58,7 @@ async function connect(host, joiner, joinerName, fresh) {
 
 /** On `page`, the person card of `name`: switch "Pass their asks on" to `on`. */
 async function setPassOn(page, name, on) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.node', { hasText: name }).first().click()
   const row = page.locator('.sheet.on [data-pass-on]')
   await row.waitFor({ timeout: 5_000 })
@@ -69,7 +69,7 @@ async function setPassOn(page, name, on) {
 
 /** Ann's ask with the reach chosen in the dock; resolves with the result card's text and how long it took. */
 async function ask(page, text, reachChoice) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await page.locator('.query-dock').waitFor({ timeout: 5_000 })
   if (reachChoice) await page.locator(`.query-dock [data-reach-choice="${reachChoice}"]`).click()
@@ -147,7 +147,7 @@ async function main() {
     await itemSheetChecks(cleo)
 
     // the dock's chooser
-    await tab(ann, 'Web')
+    await tab(ann, 'Membranes')
     await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
     ok('"How far?": my contacts by default, five choices', (await ann.locator('[data-reach-choice]').count()) === 5
       && (await ann.locator('[data-reach-choice="contacts"]').getAttribute('aria-checked')) === 'true' && !('askReach' in (await record(ann))))
@@ -230,7 +230,7 @@ async function main() {
     await ann.locator('.sheet.on [data-direct-only][aria-pressed="true"]').waitFor({ timeout: 5_000 })
     await closeSheet(ann)
     await until(async () => (await ann.locator('.sheet.on').count()) === 0, 5_000)
-    await tab(ann, 'Web')
+    await tab(ann, 'Membranes')
     await ann.locator('.query-dock .x').click().catch(() => {})
     await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
     ok('direct only: the chooser is held at "My contacts"', await ann.locator('[data-reach-choice="fof"][disabled]').count() === 1)

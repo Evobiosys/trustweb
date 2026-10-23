@@ -101,11 +101,11 @@ async function main() {
     await startPhone(a, vite.base, 'Jakob')
 
     // 1. the bar, the empty Feed, nothing sent. Wave 2 (P9): the Feed is optional and early, OFF by default.
-    ok('the bar by default: Web | Record | My Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
+    ok('the bar by default: Membranes | Record | My Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
     await openSettings(a)
     ok('Settings > Feed stays, says "optional, early" and is off', /optional, early/.test(await a.locator('[data-feed-toggle]').innerText()) && (await a.locator('[data-feed-toggle]').getAttribute('aria-pressed')) === 'false')
     await a.locator('[data-feed-toggle]').click()
-    ok('switched on: Web | Record | Feed | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'My Resources']) && (await record(a)).feed.on === true)
+    ok('switched on: Membranes | Record | Feed | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'My Resources']) && (await record(a)).feed.on === true)
     await closeSheet(a)
     const sent = []
     a.on('request', (r) => sent.push(r.method() + ' ' + r.url()))
@@ -117,9 +117,9 @@ async function main() {
     await shot(a, '17-feed-empty')
     await openSettings(a)
     await a.locator('[data-feed-toggle]').click()
-    ok('Settings > Feed off: the bar is exactly as before (Web | Record | My Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'My Resources']) && (await record(a)).feed.on === false)
+    ok('Settings > Feed off: the bar is exactly as before (Membranes | Record | My Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']) && (await record(a)).feed.on === false)
     await a.locator('[data-feed-toggle]').click()
-    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'My Resources']))
+    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'My Resources']))
     await closeSheet(a)
 
     // 2. posts from a second phone

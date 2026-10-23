@@ -45,7 +45,7 @@ const dockOpen = async (page) => (await page.locator('.query-dock').count()) ===
 
 /** Item 1: Feed off, the query one tap away from Web and Inventory. */
 async function partQuery(a) {
-  ok('the bar is the old one by default: Web | Record | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
+  ok('the bar is the old one by default: Membranes | Record | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
   await a.locator('[data-open-query="1"]').click()
   ok('Web: one tap on "Call into your web" opens the query', await dockOpen(a))
   await a.locator('.query-dock .x').click()
@@ -66,7 +66,7 @@ async function partQuery(a) {
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Query$/ }) }).click()
   await closeSheet(a)
-  await tab(a, 'Web')
+  await tab(a, 'Membranes')
   await a.locator('[data-open-query="1"]').click()
   ok('query style "search": one tap still opens the query', await dockOpen(a))
   await a.locator('.query-dock .x').click()
@@ -112,7 +112,7 @@ async function partWebSearch(browser, base, a) {
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Call into your web$/ }) }).click()
   await closeSheet(a)
-  await tab(a, 'Web')
+  await tab(a, 'Membranes')
   await a.getByRole('button', { name: 'Search contacts' }).click()
   ok('no words, no web row', await a.locator('[data-web-search]').isHidden())
   await a.locator('.search-field').fill('cargo  bike & trailer')
@@ -139,7 +139,7 @@ async function partWebSearch(browser, base, a) {
   await acceptAdd(b)
   await until(async () => (await record(a)).peers.length === 1)
   await a.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await tab(a, 'Web')
+  await tab(a, 'Membranes')
   await a.locator('[data-open-query="1"]').click()
   await a.locator('.query-dock textarea').fill('Does anyone have a sailing boat?')
   await a.getByRole('button', { name: 'Call into my web' }).click()

@@ -38,7 +38,7 @@ const patch = (page, src, arg) => page.evaluate(([code, a]) => {
 }, [src, arg])
 const personOf = async (page, name) => (await record(page)).people.find((p) => p.name === name)
 const openPerson = async (page, name) => {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.node', { hasText: name }).first().click()
   await page.locator('.sheet.on [data-person-advanced]').waitFor({ timeout: 8_000 })
 }

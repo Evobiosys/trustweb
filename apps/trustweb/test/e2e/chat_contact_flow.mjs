@@ -48,7 +48,7 @@ async function startRelayOn(store, port = 0) {
 
 /** Opens the Meet page (the one code; wave 6b removed the Signal tab). */
 async function openSignalTab(page) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.hdr [aria-label^="Show my code"]').click()
   await page.locator('.meet-page').waitFor({ timeout: 10_000 })
 }
@@ -66,7 +66,7 @@ async function chooseMode(page, mode) {
 
 /** `joiner` opens `host`'s TrustWeb code and connects (one scan). */
 async function connect(host, joiner, joinerName, fresh) {
-  await tab(host, 'Web')
+  await tab(host, 'Membranes')
   await host.locator('.hdr [aria-label^="Show my code"]').click()
   await host.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const url = await host.getAttribute('.qrwrap', 'data-payload')
@@ -83,7 +83,7 @@ async function connect(host, joiner, joinerName, fresh) {
 }
 
 async function openPerson(page, name) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.node', { hasText: name }).first().click()
   await page.locator('.sheet.on').waitFor({ timeout: 5_000 })
 }

@@ -50,7 +50,7 @@ const openSettings = async (page) => {
 
 /** Ben connects to Jakob with Jakob's code and notes a cargo bike anyone in his web may ask about. */
 async function connectBen(browser, a) {
-  await tab(a, 'Web')
+  await tab(a, 'Membranes')
   await a.locator('.hdr [aria-label^="Show my code"]').click()
   await a.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const url = await a.getAttribute('.qrwrap', 'data-payload')
@@ -83,7 +83,7 @@ async function partDirect(browser, a) {
   await closeSheet(a)
 
   const b = await connectBen(browser, a)
-  await tab(a, 'Web')
+  await tab(a, 'Membranes')
   await a.locator('[data-open-query="1"]').click()
   ok('the query dock says only direct contacts are asked', /Only your direct contacts are asked/.test(await a.locator('.query-dock [data-direct-note]').innerText()))
   await a.locator('.query-dock textarea').fill('Does anyone have a cargo bike?')

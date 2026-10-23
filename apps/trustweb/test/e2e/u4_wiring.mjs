@@ -40,7 +40,7 @@ const patch = (page, fn, arg) => page.evaluate(([src, a]) => {
 }, [fn, arg])
 
 async function connect(host, joiner, joinerName, fresh) {
-  await tab(host, 'Web')
+  await tab(host, 'Membranes')
   await host.locator('.hdr [aria-label^="Show my code"]').click()
   await host.getByRole('tab', { name: 'TrustWeb' }).click()
   await host.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
@@ -60,7 +60,7 @@ async function connect(host, joiner, joinerName, fresh) {
 // ---------------------------------------------------------------------------
 async function w1(jakob) {
   console.log('W1 glyphs, search panel, Home, Settings')
-  await tab(jakob, 'Web')
+  await tab(jakob, 'Membranes')
   const webBtn = jakob.locator('.hdr .search-btn')
   const webSvg = await webBtn.innerHTML()
   ok('W1 the Web header button is the outliner glyph (three dots, three lines), not a magnifier', /cx="4.5"/.test(webSvg) && /M9 6h11M9 12h11M9 18h11/.test(webSvg) && !/m21 21/.test(webSvg), webSvg)
@@ -122,7 +122,7 @@ async function w2(jakob) {
   `, { now, day: DAY })
   await jakob.reload()
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
-  await tab(jakob, 'Web')
+  await tab(jakob, 'Membranes')
   await jakob.locator('.node', { hasText: 'Anna Berger' }).first().click()
   const sec = jakob.locator('.sheet.on [data-person-notes]')
   await sec.waitFor({ timeout: 5_000 })
@@ -155,7 +155,7 @@ async function w3(jakob, anna) {
   await jakob.reload()
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   await connect(jakob, anna, 'Anna', true)
-  await tab(anna, 'Web')
+  await tab(anna, 'Membranes')
   await anna.getByRole('button', { name: 'Call into your web', exact: true }).click()
   await anna.locator('.query-dock textarea').fill('Does anyone know a sauna raft?')
   await anna.getByRole('button', { name: 'Call into my web' }).click()
@@ -171,7 +171,7 @@ async function w3(jakob, anna) {
   ok('W3 Anna gets the one line, with the generic context', /Cold-water sauna raft/.test(got) && /A note I took in a meeting/.test(got) && !/Private sauna/.test(got), got)
   await jakob.getByRole('button', { name: 'Back to the app' }).click({ timeout: 10_000 }).catch(() => {})
   // a General note typed on Record is saved WITH its audience (Only me until widened) and never answers an ask
-  await tab(jakob, 'Web') // Record opens "Just me" from Web (a meeting from Inventory or Meet)
+  await tab(jakob, 'Membranes') // Record opens "Just me" from Web (a meeting from Inventory or Meet)
   await tab(jakob, 'Record')
   await jakob.locator('[data-general-notes]').fill('Pickleball court at the lake, Fridays')
   await jakob.getByRole('button', { name: 'Send' }).click()
@@ -182,7 +182,7 @@ async function w3(jakob, anna) {
   await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
   const typed = (await record(jakob)).meetings.find((m) => (m.lines ?? []).some((l) => /Pickleball court at the lake/.test(l.text)))
   ok('W3 a Review save stores each meeting line WITH its audience (the typed General note: Only me)', typed?.lines.find((l) => /Pickleball/.test(l.text))?.audience === 'me', JSON.stringify(typed?.lines))
-  await tab(anna, 'Web')
+  await tab(anna, 'Membranes')
   await anna.getByRole('button', { name: /Call into your web again|Close/ }).first().click().catch(() => {})
   await anna.getByRole('button', { name: 'Call into your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a pickleball court at the lake?')
@@ -203,7 +203,7 @@ async function w3(jakob, anna) {
 
 // ---------------------------------------------------------------------------
 async function makeAccount(jakob, first) {
-  await tab(jakob, 'Web')
+  await tab(jakob, 'Membranes')
   await jakob.locator('.hdr [aria-label^="Show my code"]').click()
   await jakob.getByRole('tab', { name: 'Demo account' }).click()
   const field = jakob.getByLabel('Name of the demo account')

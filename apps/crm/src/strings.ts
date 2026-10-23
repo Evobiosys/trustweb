@@ -151,7 +151,7 @@ export const S = {
   themeToLight: 'Switch to light theme',
   themeToDark: 'Switch to dark theme',
   colourTagsTitle: 'Colour tags',
-  colourTagsHint: 'Everyone is green on the Web view. A tag you pick here adds its own colour as an arc around the avatar; several tags show side by side.',
+  colourTagsHint: 'Everyone is green on the Membranes view. A tag you pick here adds its own colour as an arc around the avatar; several tags show side by side.',
   colourOf: (label: string) => `Colour of ${label}`,
   ringSuggestedTip: 'Suggested ring: tap to confirm it or change it',
   filtersToggle: (n: number) => `Filters (${n} active)`,

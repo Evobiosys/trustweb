@@ -43,7 +43,7 @@ const payload = (page) => page.getAttribute('.qrwrap', 'data-payload')
 const personOf = async (page, name) => (await record(page)).people.find((p) => p.name === name)
 
 async function openMeet(page) {
-  await tab(page, 'Web')
+  await tab(page, 'Membranes')
   await page.locator('.hdr [aria-label^="Show my code"]').click()
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
 }
