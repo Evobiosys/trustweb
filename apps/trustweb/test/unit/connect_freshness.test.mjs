@@ -2,7 +2,7 @@
  * Wave 20 qr-replay-guard: a connect link the app issues carries a nonce and an issue time; the receiver refuses an old or a used one.
  * A link without them (older app) is accepted and flagged; the public address (/c/<code>, /who/<name>) stays reusable.
  */
-import { CONNECT_WINDOW_MS, check, issue, prune, readStamp, remember, stampUrl } from '../../src/connect_freshness.ts'
+import { CONNECT_WINDOW_MS, check, issue, issueLink, prune, readStamp, remember, stampUrl } from '../../src/connect_freshness.ts'
 import { parseAddInput, AddKind } from '../../src/add_by_code.ts'
 import { createIdentity } from '../../../demo/src/did.ts'
 import { buildConnectLinkUrl } from '../../../demo/src/connect_link.ts'
@@ -72,5 +72,19 @@ describe('add_by_code keeps the stamp of a pasted long link', () => {
   it('an unstamped link parses without them', () => {
     const p = parseAddInput(LONG, ORIGIN)
     expect(p.ok && p.kind === AddKind.LongLink && p.link.nonce === undefined).toBe(true)
+  })
+})
+
+describe('issueLink: the long link carries a stamp only while it expires', () => {
+  const bytes = new Uint8Array(12).fill(7)
+  it('expiring (the default): nonce= and ts= are on the link and read back', () => {
+    const url = issueLink(LONG, true, NOW, bytes)
+    expect(readStamp(new URL(url).search)).toEqual({ nonce: issue(NOW, bytes).nonce, issuedAt: NOW })
+  })
+  it('never expires: the link goes out unchanged, no nonce, no ts; the receiver reads it as an unstamped (legacy-code) link and accepts it at any age', () => {
+    const url = issueLink(LONG, false, NOW, bytes)
+    expect(url).toBe(LONG)
+    expect(new URL(url).searchParams.has('nonce')).toBe(false); expect(new URL(url).searchParams.has('ts')).toBe(false)
+    expect(check(readStamp(new URL(url).search), [], NOW + 400 * CONNECT_WINDOW_MS)).toEqual({ ok: true, legacy: true })
   })
 })
