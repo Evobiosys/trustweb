@@ -416,9 +416,3 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   otherCodes (kept alive) with Release. F10 An old server answers a move as a plain read: no change. F12 The display name merges like a messenger link.
   F16 A relayed otherCodes entry names no device. F17 The demo-account hand-over pack carries no connectCode or otherCodes.
 - U22 The code never enters Review merge, conflicts or the sync log. U27 Local log lines say that a url or a name moved, never which.
-
-## D-together-reader (2026-10-19): together requests are read by plain code only; the unwired parts were removed
-- No LLM hook exists in the app, so the LLM-draft check (acceptTogetherDraft: a model fills the TogetherRequest shape, code range-checks
-  every field and falls back to readTogetherRequest) was removed; it comes back with the first local-model hook. The swappable map picker
-  (LocationPicker/textPicker, distanceKm, isNear) and offerFits had no caller either: an incoming "Looking for company" ask is answered by
-  the ordinary matcher (net.ts matchAsk) and owner lines carry no area to compare, so both were removed with their tests (git f27bb28).
