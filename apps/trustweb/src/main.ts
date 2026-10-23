@@ -1867,16 +1867,17 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   you.style.top = C + 'px'
   wrap.appendChild(you)
   dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
-  const toggle = (next: ReadonlySet<Ring>): void => {
+  // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
+  // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
+  const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
     try { window.localStorage.setItem(RINGS_HIDDEN_KEY, serializeHidden(next)) } catch { /* not remembered */ }
     const fresh = ringsView(s, marks, desk)
-    const zoom = wrap.getAttribute('data-rings-zoom')
-    if (zoom) fresh.setAttribute('data-rings-zoom', zoom)
-    wrap.replaceWith(fresh)
+    live.className = fresh.className
+    live.replaceChildren(...fresh.childNodes)
   }
   ringsGeo.rings.forEach((r, i) => {
     const at = togglePoint(i, ringsGeo.radius[r], C, k)
-    wrap.appendChild(ringToggle(r, hidden.has(r), at.top, at.left, () => toggle(toggleHidden(hidden, r))))
+    wrap.appendChild(ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap)))
   })
   return wrap
 }
@@ -1888,13 +1889,13 @@ function loadHiddenRings(): ReadonlySet<Ring> {
 }
 
 /** The small round button on a ring's guide circle at 12 o'clock: ⊖ while the ring's people show, ⊕ while they are hidden. */
-function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: () => void): HTMLElement {
+function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: (btn: HTMLElement) => void): HTMLElement {
   const b = el('button', {
     class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
     'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), title: S.ringLabel[ring],
     // The zoom/pan layer captures every pointer on the rings (setPointerCapture), which retargets the click away from this button.
     onpointerdown: (e: Event) => { e.stopPropagation() },
-    onclick: (e: Event) => { e.stopPropagation(); onToggle() },
+    onclick: (e: Event) => { e.stopPropagation(); onToggle(e.currentTarget as HTMLElement) },
   }, [off ? '+' : '−'])
   return b
 }
