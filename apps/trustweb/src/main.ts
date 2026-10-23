@@ -1088,6 +1088,7 @@ function openSheet(children: (Node | null)[]): void {
 
 function closeSheet(): void {
   const wasDesk = deskOpen()
+  if (wasDesk) { try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ } }
   const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
@@ -1345,6 +1346,10 @@ function updateDeskToggle(): void {
 }
 
 function openDeskSheet(variant?: UiView): void {
+  // The face last seen is the face the next wide load opens (Jakob 2026-10-23 21:42): every way into the Desk remembers 'desk',
+  // closing it remembers 'phone' (closeSheet). Before, only the Settings pill wrote the key, so a Desk opened from the Web side bar
+  // or at boot still reopened as the phone next time once 'phone' had been stored.
+  try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
   openSheet([curator.el])
   sheet.dataset.kind = 'curator'
   curator.openDesk(variant)
