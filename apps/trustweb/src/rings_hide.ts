@@ -24,3 +24,11 @@ export const visiblePeople = <P extends Pick<Person, 'ring' | 'fields' | 'ringSu
 
 /** A hidden ring's guide circle stays drawn, dimmed, and shows in full while a person is dragged so the drop target is visible. */
 export const guideDimmed = (hidden: boolean, dragging: boolean): boolean => hidden && !dragging
+
+/** Where a ring's toggle sits: the innermost at 12 o'clock, each further ring 25° clockwise on its own circle, so two rings of
+ *  near-equal radius (a crowded web packs Intending and Unsorted together) never stack their buttons. */
+export const TOGGLE_FAN_DEG = 25
+export function togglePoint(index: number, radius: number, centre: number, k: number): { left: number; top: number } {
+  const a = ((-90 + TOGGLE_FAN_DEG * index) * Math.PI) / 180
+  return { left: centre + radius * k * Math.cos(a), top: centre + radius * k * Math.sin(a) }
+}
