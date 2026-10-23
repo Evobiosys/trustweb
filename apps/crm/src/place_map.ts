@@ -3,6 +3,7 @@
  * its own chunk); the only requests it makes are tile images from tile.openstreetmap.org. Pins are divIcons (no marker png assets).
  */
 import type { Map as LeafletMap, LayerGroup } from 'leaflet'
+import { onResizeFrame } from './desk'
 import { S } from './strings'
 import type { View } from './place_geo'
 
@@ -42,7 +43,8 @@ export async function createMap(el: HTMLElement, view: View, onPick: (id: string
   const map: LeafletMap = L.map(el, { zoomControl: true }).setView([view.lat, view.lon], view.zoom)
   L.tileLayer(TILES, { maxZoom: 19, attribution: S.desk.mapAttribution }).addTo(map)
   const layer: LayerGroup = L.layerGroup().addTo(map)
-  const resize = new ResizeObserver(() => map.invalidateSize())
+  let live = true
+  const resize = new ResizeObserver(onResizeFrame(() => { if (live) map.invalidateSize() }))
   resize.observe(el)
   return {
     setPins(pins) {
@@ -57,6 +59,6 @@ export async function createMap(el: HTMLElement, view: View, onPick: (id: string
       }
     },
     setView: (v) => { map.setView([v.lat, v.lon], v.zoom) },
-    destroy() { resize.disconnect(); map.remove() },
+    destroy() { live = false; resize.disconnect(); map.remove() },
   }
 }

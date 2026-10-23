@@ -11,9 +11,9 @@ import { Source } from './storage'
 import { SortOrder } from './contacts'
 
 export const S = {
-  appName: 'Web Curator',
+  appName: 'Contacts',
   tabs: { people: 'People', timeline: 'Timeline', pipeline: 'Pipeline', settings: 'Settings' },
-  views: { desk: 'Desk', membranes: 'Trust membranes', classic: 'Web Curator' },
+  views: { desk: 'Desk', membranes: 'Trust membranes', classic: 'Contacts' },
   search: 'Search people, notes, tags',
   sort: { [SortOrder.Recent]: 'Recent first', [SortOrder.Name]: 'By name' } as Record<SortOrder, string>,
   sortCustom: 'Custom order',
@@ -333,6 +333,7 @@ export const S = {
   undoImport: (added: number) => `Undo last import (${added} added)`,
   undoFailed: 'Could not undo: this phone refused to store the change.',
   desk: {
+    brand: 'TrustWeb',
     greeting: { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening' },
     switchView: 'Switch view',
     profile: { button: 'Your profile and settings', mine: 'My profile …', settings: 'Settings', phone: 'Show phone version', close: 'Close the Desk', title: 'My profile' },

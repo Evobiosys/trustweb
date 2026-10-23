@@ -2,6 +2,7 @@
   import { tick } from 'svelte'
   import { loadColourTags, tagsOf } from '../../trustweb/src/colour_tags'
   import type { Person as TwPerson } from '../../trustweb/src/model'
+  import ClassicBody from './classic_body.svelte'
   import ContactPage from './contact_page.svelte'
   import DeskCompose from './desk_compose.svelte'
   import DeskHome from './desk_home.svelte'
@@ -16,7 +17,6 @@
   import Environment from './environment.svelte'
   import Followups from './followups.svelte'
   import ImportContacts from './import_contacts.svelte'
-  import People from './people.svelte'
   import PersonRow from './person_row.svelte'
   import Person from './person.svelte'
   import Settings from './settings.svelte'
@@ -129,7 +129,7 @@
             {#each members as p (p.id)}<PersonRow id={p.id} name={p.name} context={p.context} onopen={openPerson} />{/each}
           </div>
         {:else if nav.deskPage === DeskPage.Contacts}
-          <People />
+          <div class="desk-page" data-screen="desk-contacts"><h1 class="desk-title">{S.appName}</h1><ClassicBody /></div>
         {:else if nav.deskPage === DeskPage.KeepInTouch}
           <DeskKeepInTouch {data} />
         {:else if nav.deskPage === DeskPage.Timeline}

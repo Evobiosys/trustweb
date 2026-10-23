@@ -1,5 +1,6 @@
 <script lang="ts">
   import { host } from './bridge'
+  import { onResizeFrame } from './desk'
   import { openPerson } from './nav.svelte'
   import People from './people.svelte'
   import { reloadRecord, store } from './state.svelte'
@@ -25,7 +26,7 @@
 
   $effect(() => {
     block.append(Object.assign(document.createElement('slot'), { name: SLOT }))
-    const ro = new ResizeObserver(fit)
+    const ro = new ResizeObserver(onResizeFrame(fit))
     ro.observe(block)
     return (): void => ro.disconnect()
   })

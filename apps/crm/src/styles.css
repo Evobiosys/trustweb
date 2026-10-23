@@ -322,7 +322,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 
 .desk-nav{display:flex; flex-direction:column; min-height:100%; padding:14px 12px 16px}
 .desk-logo-row{display:flex; align-items:center; justify-content:space-between; padding:0 4px 14px}
-.desk-logo{width:44px; height:44px; border-radius:12px; background:var(--desk-accent); color:var(--card); display:flex; align-items:center; justify-content:center; font:700 22px "Iowan Old Style",Georgia,serif}
+.desk-brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:17px}
+.desk-logo{flex:none}
 .desk-items{list-style:none; padding:0}
 .desk-item{display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 12px; border:0; border-radius:10px; background:none; text-align:left; font-size:15px; color:var(--ink)}
 .desk-item:hover,.desk-item[aria-current="page"]{background:var(--desk-active)}

@@ -59,7 +59,7 @@ try {
   // Curator panel
   const tabsHidden = async () => page.evaluate(() => { const c = document.querySelector('.curator'); const t = c?.shadowRoot?.querySelector('.tabbar'); return !t || !t.getClientRects().length || !c.getClientRects().length })
   check('Curator tabs not rendered while the panel is closed', await tabsHidden())
-  await page.getByRole('button', { name: 'Web Curator' }).click()
+  await page.getByRole('button', { name: 'Contacts', exact: true }).click()
   const cur = page.locator('.sheet[data-kind=curator] .curator')
   await cur.getByRole('searchbox').waitFor({ timeout: 15_000 })
   const inside = await page.evaluate(() => {

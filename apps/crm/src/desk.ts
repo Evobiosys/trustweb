@@ -253,3 +253,14 @@ export function toggleFavorite(favs: readonly string[], merges: readonly { from:
   const s = survivor(merges, id)
   return favoriteIds(favs, merges).includes(s) ? favs.filter((f) => survivor(merges, f) !== s) : [...favs, s]
 }
+
+/** ResizeObserver callback that runs `fn` on the next frame, one pending frame at a time, and skips zero-size boxes
+ *  (a synchronous invalidateSize inside the observer raises "ResizeObserver loop completed with undelivered notifications"). */
+export function onResizeFrame(fn: () => void, raf: (f: () => void) => unknown = requestAnimationFrame): (e: readonly { contentRect: { width: number; height: number } }[]) => void {
+  let pending = false
+  return (entries) => {
+    if (pending || !entries.some((e) => e.contentRect.width > 0 && e.contentRect.height > 0)) return
+    pending = true
+    raf(() => { pending = false; fn() })
+  }
+}

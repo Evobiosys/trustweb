@@ -17,7 +17,7 @@ const ok = (name, cond) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); 
 await page.goto(url)
 ok('bottom bar: three tabs', (await page.locator('.tabs [data-go]').count()) === 3)
 ok('no Web Curator tab', (await page.locator('.tabs [data-go=curator]').count()) === 0)
-await page.getByRole('button', { name: 'Web Curator' }).click()
+await page.getByRole('button', { name: 'Contacts', exact: true }).click()
 const people = page.locator('.sheet[data-kind=curator] .curator')
 await people.getByText('Andrew Hasse').first().waitFor({ timeout: 15_000 })
 ok('glyph: People list with Andrew Hasse', true)

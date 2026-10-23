@@ -5,6 +5,7 @@
   import { favoriteIds } from './desk'
   import type { DeskData } from './desk'
   import DeskIcon from './desk_icon.svelte'
+  import DeskLogo from './desk_logo.svelte'
   import type { IconName } from './desk_icons'
   import { shownName } from './display'
   import { DeskPage } from './nav'
@@ -51,7 +52,7 @@
 
 <nav class="desk-nav" aria-label={S.desk.nav.label}>
   <div class="desk-logo-row">
-    <span class="desk-logo" aria-hidden="true">W</span>
+    <span class="desk-brand"><DeskLogo />{S.desk.brand}</span>
     <button class="desk-icon-btn" data-action="desk-command" aria-label={S.desk.commandPh} title={S.desk.commandPh} onclick={(): void => go(oncommand)}><DeskIcon name="terminal" /></button>
   </div>
   <ul class="desk-items">

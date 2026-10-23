@@ -251,9 +251,9 @@ export const S = {
 
   navWeb: 'Membranes',
   navInventory: 'My Resources',
-  navCurator: 'Web Curator',
-  curatorLoading: 'Opening the Web Curator ...',
-  curatorLoadFailed: 'The Web Curator could not load: this page is older than the build on the server.',
+  navCurator: 'Contacts',
+  curatorLoading: 'Opening Contacts ...',
+  curatorLoadFailed: 'Contacts could not load: this page is older than the build on the server.',
   curatorReload: 'Reload',
   navRecord: 'Record',
 
@@ -373,7 +373,7 @@ export const S = {
   evOrgCounts: 'The organizer sees counts only: how many opened, joined and tagged. Never who.',
   eventLinkHostNames: 'The host names the tag for this event.',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
-  searchOpen: 'Web Curator',
+  searchOpen: 'Contacts',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
   olWants: (n: number) => `wants ${n}/10`,
@@ -381,7 +381,7 @@ export const S = {
   alreadyHaveDetails: (name: string, ways: string) => `You already have contact details for ${name} (${ways})`,
   alreadyMessaged: (name: string, date: string) => `You already messaged ${name} here (${date})`,
   ringsHidden: (name: string) => `${name} hidden`,
-  ringsHiddenBody: 'Hidden in TrustWeb. Curator > Settings lists them, with unhide.',
+  ringsHiddenBody: 'Hidden in TrustWeb. Contacts > Settings lists them, with unhide.',
   ringsHiddenUndo: 'Undo',
   ringsConfirmed: (name: string, ring: string) => `${name}: ${ring}`,
   ringsSpaceRing: (ring: string) => `Space out this ring (${ring})`,
@@ -389,7 +389,7 @@ export const S = {
   ringsSpaced: 'Spaced out',
   myWebTitle: 'My web',
   ringsUnplaced: (name: string) => `${name} not placed yet`,
-  ringsUnplacedBody: 'Moved to the grey ring. Curator > Not placed yet lists them.',
+  ringsUnplacedBody: 'Moved to the grey ring. Contacts > Not placed yet lists them.',
   desireMove: 'Move here',
   leanAddNote: 'Add a note',
   leanFriend: 'friend',
@@ -517,7 +517,7 @@ export const S = {
   } as Record<Audience, string>,
   itemAudienceTitle: 'Who can ask about it',
   itemTagsTitle: 'And people with these tags',
-  itemTagsNone: 'No colour tags chosen yet (Curator > Settings > Colour tags).',
+  itemTagsNone: 'No colour tags chosen yet (Contacts > Settings > Colour tags).',
   tagLabel: {
     [Tag.Looking]: 'Looking for',
     [Tag.Offer]: 'Can offer',
@@ -1676,7 +1676,7 @@ export const S = {
   connectAddedToast: (name: string) => `${name} is in your web.`,
   // Jakob 2026-10-19: an intending person is "not yet in your web" (ringHint), so the toast says only that they were added.
   personAddedToast: (name: string) => `${name} added.`,
-  archivedToast: 'Archived. Find them in the Web Curator.',
+  archivedToast: 'Archived. Find them in Contacts.',
   wantsTitle: 'Wants to connect',
   wantsAdd: 'Add',
   wantsDismiss: 'Dismiss',

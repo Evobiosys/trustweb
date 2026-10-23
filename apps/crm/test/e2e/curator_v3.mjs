@@ -63,7 +63,7 @@ const waitTana = async (re) => { for (let i = 0; i < 20; i++) { const t = await 
 try {
   await page.goto(URL)
   await page.getByRole('searchbox').waitFor()
-  check('title Web Curator', (await page.title()) === 'Web Curator' && (await page.locator('h1').innerText()) === 'Web Curator')
+  check('title Web Curator, heading Contacts', (await page.title()) === 'Web Curator' && (await page.locator('h1').innerText()) === 'Contacts')
   check('import is not in the header', (await page.locator('header.top input[type=file]').count()) === 0)
   const heads = await page.locator('h3.ring-heading').allInnerTexts()
   console.log('headings:', heads.join(' | '))

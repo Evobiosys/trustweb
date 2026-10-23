@@ -59,6 +59,9 @@ export function moveInOrder(current: string[], id: string, before: string | null
   return rest
 }
 
+/** The folded ring groups: null = this device never chose, so every group starts folded; a saved [] = the user opened all. */
+export const foldedKeys = (collapsed: readonly string[] | null, keys: readonly string[]): string[] => [...(collapsed ?? keys)]
+
 /** The collapsed ring groups after `key` was toggled. */
 export const toggleGroup = (collapsed: readonly string[], key: string): string[] =>
   collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key]

@@ -87,15 +87,15 @@ export interface Prefs {
   view: View
   /** Person ids pinned in the Desk's sidebar; a merged person is looked up through crm.merges, nothing is pruned here. */
   favorites: string[]
-  /** People list: ring groups folded shut (ring ids), this device. */
-  collapsedGroups: string[]
+  /** People list: ring groups folded shut (ring ids), this device; null = never chosen, every group folded. */
+  collapsedGroups: string[] | null
   /** Desk map: where each place was found (place_geo.ts), looked up at OpenStreetMap only on a tap; this device. */
   geo: GeoCache
 }
 
 function load(): Prefs {
   const base: Prefs = { placement: emptyPlacements(), close: emptyClose(), scope: [], advancedOrder: [], customOrder: {}, pkms: [], advanced: false, tabbar: TabbarMode.Always, truth: '', notesUrl: 'http://127.0.0.1:8263', notesToken: '', notesAutoSync: true, activityDays: DEFAULT_ACTIVITY_DAYS,
-    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [], view: View.Classic, favorites: [], collapsedGroups: [], geo: {} }
+    filters: { hideDeceased: true, hideFamous: true, onlyConnection: false, onlyClose: false, rules: [], hideSources: [], hideCommunities: [] }, light: false, autoSync: false, token: '', workspaceId: '', parentNodeId: '', queue: [], suggestedQueued: [], ringQueued: [], nodeIds: {}, log: [], view: View.Classic, favorites: [], collapsedGroups: null, geo: {} }
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
     const first = saved.pkms === undefined

@@ -203,7 +203,7 @@ async function main() {
     await n.page.screenshot({ path: path.join(ARCH, '03-add-as-intended.png') })
     await n.page.locator('.sheet.on [data-connect-later]').click()
     await n.page.locator('.toast.on[data-archived-toast]').waitFor({ timeout: 10_000 })
-    ok('"Not now": toast "Archived. Find them in the Web Curator."', (await n.page.locator('.toast.on').innerText()) === 'Archived. Find them in the Web Curator.')
+    ok('"Not now": toast "Archived. Find them in Contacts."', (await n.page.locator('.toast.on').innerText()) === 'Archived. Find them in Contacts.')
     ok('the Curator icon pulses', await count(n.page, '.hdr .search-btn.pulse') === 1)
     ok('the inviter is not in the web, no invite card', await count(n.page, '.node[data-pid]') === 0 && await count(n.page, '[data-invite-card]') === 0)
     await n.page.waitForTimeout(400)   // the toast's fade-in, the pulse ring at its widest

@@ -1,24 +1,16 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import ContactPage from './contact_page.svelte'
+  import ClassicBody from './classic_body.svelte'
   import Desk from './desk.svelte'
-  import Environment from './environment.svelte'
-  import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS, View } from './nav'
   import { host } from './bridge'
   import { nav, showTab } from './nav.svelte'
   import { prefs } from './prefs.svelte'
-  import People from './people.svelte'
   import MergeToast from './merge_toast.svelte'
-  import Person from './person.svelte'
-  import SortPeople from './sort_people.svelte'
-  import Pipeline from './pipeline.svelte'
-  import Settings from './settings.svelte'
   import { store } from './state.svelte'
   import { Source } from './storage'
   import { S } from './strings'
   import { TabbarMode } from './tabbar'
-  import Timeline from './timeline.svelte'
   import ViewMenu from './view_menu.svelte'
   import { viewNotifier } from './view_notify'
 
@@ -67,25 +59,7 @@
   </header>
 
   <main>
-    {#if nav.sorting}
-      <SortPeople />
-    {:else if nav.importing}
-      <ImportContacts />
-    {:else if nav.contactId !== null}
-      <ContactPage contactId={nav.contactId} />
-    {:else if nav.environmentId !== null}
-      <Environment environmentId={nav.environmentId} />
-    {:else if nav.personId !== null}
-      <Person personId={nav.personId} />
-    {:else if nav.tab === Tab.People}
-      <People />
-    {:else if nav.tab === Tab.Timeline}
-      <Timeline />
-    {:else if nav.tab === Tab.Pipeline}
-      <Pipeline />
-    {:else}
-      <Settings />
-    {/if}
+    <ClassicBody />
   </main>
 
   <MergeToast />

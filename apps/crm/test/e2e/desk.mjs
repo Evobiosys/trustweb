@@ -65,7 +65,7 @@ try {
   ok('classic face has the chevron in its header', await page.locator('.top-btns [data-action="view-menu"]').count() === 1)
   await page.click('[data-action="view-menu"]')
   const items = await page.locator('[role="menu"] [role^="menuitem"]').allInnerTexts()
-  ok('menu lists Desk, Trust membranes, Web Curator', items.map((t) => t.trim()).join('|') === 'Desk|Trust membranes|Web Curator', items.join('|'))
+  ok('menu lists Desk, Trust membranes, Contacts', items.map((t) => t.trim()).join('|') === 'Desk|Trust membranes|Contacts', items.join('|'))
   ok('Trust membranes is disabled standalone', (await page.locator('[data-view="membranes"]').getAttribute('aria-disabled')) === 'true'
     && (await page.locator('[data-view="membranes"]').getAttribute('title')) === 'Open inside TrustWeb')
   ok('Web Curator is the checked entry', (await page.locator('[data-view="classic"]').getAttribute('aria-checked')) === 'true')
