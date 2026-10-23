@@ -21,6 +21,8 @@ export interface Host {
   renderRings?(o: { onPick(personId: string): void; onRing?(personId: string, ring: string): void; compact?: boolean }): HTMLElement
   /** The host's profile editor (wave 19), the same element its phone sheet shows; the Desk's profile page slots it in. Absent standalone. */
   renderProfile?(): HTMLElement
+  /** The owner's profile picture as an image URL (wave 19), undefined when none is set; the host fires `tw:picture-changed` on window when it changes. Absent standalone. */
+  myPicture?(): string | undefined
   /** Close the Desk back to the phone (what the sheet's "× Home" does). Absent standalone. */
   closeDesk?(): void
   /** The host's "Show phone version": this device keeps the phone face from now on. Absent standalone. */

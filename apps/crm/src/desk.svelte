@@ -126,7 +126,7 @@
           <div class="desk-page" data-screen="desk-group">
             <h1 class="desk-title">{S.desk.group(group.label ?? group.id)}</h1>
             <button class="quiet" data-action="desk-all-contacts" onclick={(): void => showDeskPage(DeskPage.Contacts)}>{S.desk.allContacts}</button>
-            {#each members as p (p.id)}<PersonRow id={p.id} name={p.name} context={p.context} onopen={openPerson} />{/each}
+            {#each members as p (p.id)}<PersonRow id={p.id} name={p.name} picture={p.theirProfile?.picture} context={p.context} onopen={openPerson} />{/each}
           </div>
         {:else if nav.deskPage === DeskPage.Contacts}
           <People />

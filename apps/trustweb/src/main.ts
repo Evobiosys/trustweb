@@ -118,7 +118,8 @@ import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
-import { addNorm, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { isJpegDataUrl } from '../../demo/src/types'
+import { addNorm, buildProfileText, profileFor, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
@@ -157,7 +158,7 @@ import { contextPress } from './context_press'
 import { decodeEventLink, linkOrigin } from './event_link'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
-import { ImageStore } from './image_store'
+import { ImageStore, SHARE_SIDE, shrink } from './image_store'
 import { PersistState, persistState } from './storage_persist'
 import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
@@ -1716,6 +1717,12 @@ function avatar(name: string, id: string, cls = 'ava'): HTMLElement {
   return a
 }
 
+/** Wave 19: a picture in place of the initials (my own, a blob: URL; or one a person sent, a validated JPEG data URL). */
+function pictured(face: HTMLElement, url: string | undefined): HTMLElement {
+  if (url) { face.style.background = `url("${url}") center/cover`; face.textContent = '' }
+  return face
+}
+
 /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
 let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
 let ringsK = 1
@@ -1789,6 +1796,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+      pictured(face, p.theirProfile?.picture)
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : personSheet(p.id)) },
@@ -1807,7 +1815,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [avatar(s.me.displayName, s.me.id), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [s.me.displayName])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
@@ -2783,6 +2791,56 @@ function buildContactBox(hooks: { changed?: (ch: Channel) => void; ticked?: () =
   return box
 }
 
+/** Wave 19: my profile picture, kept in image_store.ts (this phone only); `ownPictureUrl` is its blob: URL for the rings' you-node and the Desk's button. */
+let ownPictureUrl: string | undefined
+async function refreshOwnPicture(): Promise<void> {
+  const id = st().profile?.pictureId
+  const blob = id ? await images.get(id) : null
+  const old = ownPictureUrl
+  ownPictureUrl = blob ? URL.createObjectURL(blob) : undefined
+  if (old) URL.revokeObjectURL(old)
+  window.dispatchEvent(new Event('tw:picture-changed'))
+  if (old || ownPictureUrl) render()
+}
+
+async function setOwnPicture(file: File): Promise<void> {
+  const p = st().profile ?? { norms: [] }
+  const id = `profile-picture-${Date.now()}`
+  await images.put(id, await shrink(file))
+  if (p.pictureId) void images.remove(p.pictureId)
+  p.pictureId = id
+  p.pictureAt = Date.now()
+  st().profile = p
+  save()
+  await refreshOwnPicture()
+}
+
+async function removeOwnPicture(): Promise<void> {
+  const p = st().profile
+  if (!p?.pictureId) return
+  void images.remove(p.pictureId)
+  delete p.pictureId
+  delete p.pictureAt
+  save()
+  await refreshOwnPicture()
+}
+
+/** The small copy of my picture that may travel (SHARE_SIDE, JPEG data URL), or undefined: none set, or it would not fit the wire cap. */
+async function sharePicture(): Promise<string | undefined> {
+  const id = st().profile?.pictureId
+  const blob = id ? await images.get(id) : null
+  if (!blob) return undefined
+  const small = await shrink(blob, SHARE_SIDE).catch(() => null)
+  if (!small) return undefined
+  const url = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = (): void => resolve(String(r.result))
+    r.onerror = (): void => reject(r.error)
+    r.readAsDataURL(small)
+  }).catch(() => '')
+  return isJpegDataUrl(url) ? url : undefined
+}
+
 /** Wave 7: the profile editor (profile.ts); `redraw` draws it again after a saved change. One editor for the phone's sheet and the Desk (wave 19). */
 function profileNodes(redraw: () => void): Node[] {
   const mine = (): MyProfile => st().profile ?? { norms: [] }
@@ -2794,7 +2852,12 @@ function profileNodes(redraw: () => void): Node[] {
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
     setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
     setAudience: (section, a) => withProfile((p) => { p.audience = { ...p.audience, [section]: a } }),
-    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+    picture: {
+      face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl),
+      has: () => Boolean(mine().pictureId),
+      choose: (file) => { void setOwnPicture(file).then(redraw, () => toast(S.agrSendFailed)) },
+      remove: () => { void removeOwnPicture().then(redraw) },
+    },    openInventory: () => { closeSheet(); go(Screen.Inventory) },
   })
 }
 
@@ -2842,10 +2905,15 @@ const noSendTo = (peer: Peer): boolean => isDemoPersona(persona) || solo || demo
 /** Wave 7 (profile.ts): sends my profile to one connected peer in a chat text. Only the owner's own "Send my profile" tap calls this, never connect. Wave 19: only the sections their ring may see. */
 function sendProfileTo(peer: Peer): void {
   if (noSendTo(peer)) return
+  void sendProfile(peer)
+}
+
+async function sendProfile(peer: Peer): Promise<void> {
   const person = st().people.find((x) => x.peerId === peer.id)
-  const text = person ? buildProfileText(APP_URL, st().profile, person) : null
-  if (!text) { toast(buildProfileText(APP_URL, st().profile) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
-  net.sendText(peer, text).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
+  const pic = await sharePicture()
+  const text = person ? buildProfileText(APP_URL, st().profile, person, pic) : null
+  if (!text) { toast(buildProfileText(APP_URL, st().profile, undefined, pic) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
+  net.sendText(peer, text, Date.now(), undefined, profileFor(st().profile, person!, pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
@@ -3545,6 +3613,7 @@ const curator = createCurator({
   renderRings: (o) => ringsView(shown(st(), curatorHiddenIds()), askMarks(), o),
   // Wave 19: the Desk's profile button (top right) replaces the sheet's "× Home" on a wide tab.
   renderProfile: profileEditor,
+  myPicture: () => ownPictureUrl,
   closeDesk: closeSheet,
   showPhoneVersion,
 })
@@ -5886,6 +5955,7 @@ window.addEventListener('storage', (e) => {
 document.addEventListener('focusout', () => { if (redrawWaiting) setTimeout(redrawAfterAdoption, 0) })
 
 render()
+void refreshOwnPicture()
 if (installable) setUpInstall(APP_URL, () => { if (sheet.dataset.kind === 'install' && sheet.classList.contains('on')) openInstallSheet() })
 const afterCarry = (): void => { if (installable && wantInstall) openInstallSheet() }
 if (pendingCarry) installSheets.carryAsk(pendingCarry, () => { pendingCarry = null; afterCarry() })
