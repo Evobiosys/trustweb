@@ -15,6 +15,8 @@ export interface Host {
   restorePerson(person: Person): void
   /** Leave the Curator and show TrustWeb's rings web ("Trust membranes"). Absent standalone. */
   showRings?(): void
+  /** The Curator's current face, so the host can give the Desk the whole window. Absent standalone. */
+  viewChanged?(view: 'desk' | 'classic'): void
   /** Settings "Hide people known only from …": the hidden sources (sources.ts) go to the host's record, so the Web view drops them at once. */
   setHiddenSources(kinds: readonly string[]): void
   /** A bullet written in the vault (notes_sync.svelte.ts) becomes a line in the host's record, local provenance. */

@@ -5,6 +5,7 @@
   import Environment from './environment.svelte'
   import ImportContacts from './import_contacts.svelte'
   import { Tab, TABS, View } from './nav'
+  import { host } from './bridge'
   import { nav, showTab } from './nav.svelte'
   import { prefs } from './prefs.svelte'
   import People from './people.svelte'
@@ -19,6 +20,7 @@
   import { TabbarMode } from './tabbar'
   import Timeline from './timeline.svelte'
   import ViewMenu from './view_menu.svelte'
+  import { viewNotifier } from './view_notify'
 
   const TAB_LABEL: Partial<Record<Tab, string>> = {
     [Tab.People]: S.tabs.people,
@@ -37,6 +39,10 @@
     hideTimer = setTimeout(() => { if (!bar?.querySelector(':focus-visible')) shown = false }, 600)
   }
   onDestroy(() => clearTimeout(hideTimer))
+
+  // The host (apps/trustweb) gives the Desk the whole browser window; it needs to know which face shows.
+  const notifyView = viewNotifier((face) => host.viewChanged?.(face))
+  $effect(() => notifyView(prefs.view))
 
   // Hidden mode has no bar to come back with: a header icon already showing its page leads to People.
   const headerTab = (tab: Tab): void => showTab(prefs.tabbar === TabbarMode.Hidden && nav.tab === tab ? Tab.People : tab)

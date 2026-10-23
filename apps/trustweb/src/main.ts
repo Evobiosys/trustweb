@@ -3423,6 +3423,8 @@ const curator = createCurator({
     if (screen === Screen.Web) render()
   },
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
+  // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
+  viewChanged: (view) => sheet.classList.toggle('desk-wide', view === 'desk'),
 })
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,

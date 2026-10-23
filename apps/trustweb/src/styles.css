@@ -953,3 +953,12 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 @media (prefers-reduced-motion:reduce){ .search-btn.pulse{animation:none} }
 .archive-row{display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:12px}
 .archive-row .quiet{color:var(--ink-soft); font-weight:400}
+
+/* Wave 18 (Jakob 2026-10-23): on a desktop browser the Curator's Desk fills the whole window, not the phone frame (above the dev overlay, .twf 99999). */
+@media (min-width:900px){
+  .sheet.desk-wide.on[data-kind=curator]{position:fixed; inset:0; width:100vw; height:100dvh; max-height:none; border-radius:0; padding:0; overflow:hidden; z-index:100000; box-shadow:none}
+  .sheet.desk-wide.on[data-kind=curator] .grab{display:none}
+  .sheet.desk-wide.on[data-kind=curator] .sheet-bar{top:20px}
+  .sheet.desk-wide.on[data-kind=curator] [data-view=curator]{height:100%}
+  body:has(.sheet.desk-wide.on[data-kind=curator]){overflow:hidden}
+}

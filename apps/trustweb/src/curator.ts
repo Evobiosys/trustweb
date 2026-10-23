@@ -42,10 +42,10 @@ function loadFailed(target: HTMLElement, err: unknown): void {
   target.replaceChildren(el('p', { class: 'curator-error' }, [S.curatorLoadFailed]), el('button', { class: 'btn btn-sm', onclick: () => location.reload() }, [S.curatorReload]))
 }
 
-export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void; setHiddenSources(kinds: readonly string[]): void; addLine(personId: string, line: NoteLine): void; showRings(): void }): Curator {
+export function createCurator(opts: { record(): AppState | null; setRing(personId: string, ring: Ring): void; setFamily(personId: string, on: boolean): void; setFlag(personId: string, key: string, on: boolean): void; removePerson(personId: string): void; restorePerson(person: Person): void; setHiddenSources(kinds: readonly string[]): void; addLine(personId: string, line: NoteLine): void; showRings(): void; viewChanged(view: 'desk' | 'classic'): void }): Curator {
   const root = el('div', { class: 'curator', 'data-view': 'curator' }, [S.curatorLoading])
   let mounted = false
-  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings }
+  const lent = { record: opts.record, setRing: (id: string, ring: string): void => opts.setRing(id, ring as Ring), setFamily: opts.setFamily, setFlag: opts.setFlag, removePerson: opts.removePerson, restorePerson: opts.restorePerson, setHiddenSources: opts.setHiddenSources, addLine: opts.addLine, showRings: opts.showRings, viewChanged: opts.viewChanged }
   return {
     el: root,
     open() {
