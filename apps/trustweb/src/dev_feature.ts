@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -24,6 +24,8 @@ const CSS = `
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
+
+const POS_KEY = 'twf-ok-pos'
 
 export function initDevFeature(): void {
   if (window.top !== window) return // inside the second-device iframe: not the reviewer's page
@@ -99,16 +101,19 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     b.addEventListener('click', on)
     return b
   }
-  const poll = (): void => {
+  // `since`: a status file older than the press (a run that ended before) is not this run's answer.
+  const poll = (since = 0): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'
+    const stale = (j: ApprovalStatus): boolean => Date.parse(j.updated ?? '') < since
     pollStatus((j) => {
+      if (stale(j)) return
       body.textContent = j.text ?? 'starting'
       if (j.step === 'failed') body.className = 'body warn'
       if (j.step === 'ready' && j.url) {
         body.textContent = `${j.text}. Opening dev in 3 s`
         setTimeout(() => { location.href = j.url! }, 3000)
       }
-    })
+    }, '/__tw/status', (j) => !stale(j) && personalDone(j))
   }
   head.textContent = 'Personal preview'
   const hx = Object.assign(document.createElement('button'), { className: 'hx', textContent: '×', title: 'Hide for this tab' })
@@ -117,7 +122,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
-  /** "Approve": Touch ID, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  /** "Approve": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
   const pollMerge = (since: number): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
@@ -131,24 +136,32 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   }
   function buttons(): void {
     bar.classList.remove('prog'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
+    const personal = btn('Approve and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
+      const since = Date.now() - 2000
+      void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
+    })
     if (preview) {
-      const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: 'Checking…' })
+      const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
+      const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
+      // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
       const go = btn('Approve', 'go big', () => {
         const since = Date.now() - 2000
-        void fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
+        void read().then((q) => {
+          const g = approveGate(q)
+          if (!g.ok) { go.disabled = true; hint.textContent = g.hint; return }
+          return fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
+        }).catch(() => { hint.textContent = 'Preview server not answering' })
       })
-      go.disabled = true
       const refresh = (): void => {
         if (!go.isConnected) return
-        void fetch('/__tw/preview').then((r) => r.json()).then((q: Parameters<typeof approveGate>[0]) => {
-          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, then merges to main and deploys' : g.hint
+        void read().then((q) => {
+          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? APPROVE_HINT : g.hint
+          personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }
       body.append(go, hint); refresh(); const t = setInterval(() => { if (!go.isConnected) clearInterval(t); else refresh() }, 3000)
     }
-    body.append(btn('Approve personal view', preview ? 'alt small' : 'go', () => {
-      void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.ok && poll())
-    }))
+    body.append(personal)
     if (stockLink && bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
   }
   if (bld.approved) poll()
@@ -164,7 +177,12 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     const clamp = (v: number, size: number, room: number): number => Math.max(0, Math.min(v, room - size))
     const move = (e: PointerEvent): void => { Object.assign(bar.style, { left: clamp(e.clientX - dx, bar.offsetWidth, innerWidth) + 'px', top: clamp(e.clientY - dy, bar.offsetHeight, innerHeight) + 'px', right: 'auto', bottom: 'auto' }) }
     head.addEventListener('pointermove', move)
-    head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true })
+    head.addEventListener('pointerup', () => { head.removeEventListener('pointermove', move); try { localStorage.setItem(POS_KEY, JSON.stringify({ left: bar.style.left, top: bar.style.top })) } catch { /* not remembered */ } }, { once: true })
   })
+  // The dragged place is remembered per window (origin), pulled back inside a smaller viewport.
+  try {
+    const at = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null') as { left: string; top: string } | null
+    if (at) Object.assign(bar.style, { left: Math.max(0, Math.min(parseFloat(at.left), innerWidth - 120)) + 'px', top: Math.max(0, Math.min(parseFloat(at.top), innerHeight - 60)) + 'px', right: 'auto', bottom: 'auto' })
+  } catch { /* nothing stored */ }
   return bar
 }

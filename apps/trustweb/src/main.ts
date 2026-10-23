@@ -26,6 +26,7 @@ import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
+import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoints, visiblePeople } from './rings_hide'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
@@ -1087,6 +1088,7 @@ function openSheet(children: (Node | null)[]): void {
 
 function closeSheet(): void {
   const wasDesk = deskOpen()
+  if (wasDesk) { try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ } }
   const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
@@ -1344,6 +1346,10 @@ function updateDeskToggle(): void {
 }
 
 function openDeskSheet(variant?: UiView): void {
+  // The face last seen is the face the next wide load opens (Jakob 2026-10-23 21:42): every way into the Desk remembers 'desk',
+  // closing it remembers 'phone' (closeSheet). Before, only the Settings pill wrote the key, so a Desk opened from the Web side bar
+  // or at boot still reopened as the phone next time once 'phone' had been stored.
+  try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
   openSheet([curator.el])
   sheet.dataset.kind = 'curator'
   curator.openDesk(variant)
@@ -1776,6 +1782,8 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const members: Partial<Record<Ring, Person[]>> = {}
   for (const p of s.people) if (!isBlocked(p)) (members[webSlot(p)] ??= []).push(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
+  // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
+  const hidden = loadHiddenRings()
   const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)]))
   // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
   let k = 1
@@ -1802,12 +1810,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     c.setAttribute('cx', String(C)); c.setAttribute('cy', String(C)); c.setAttribute('r', String(ringsGeo.radius[r] * k)); c.setAttribute('data-ring', r)
     c.setAttribute('fill', 'none'); c.setAttribute('stroke', ringColor({ ring: r })); c.setAttribute('stroke-opacity', r === Ring.Unsorted ? '.35' : '.55')
     c.setAttribute('stroke-width', r === Ring.Close ? '2.2' : r === Ring.Intending ? '1' : '1.4')
+    if (guideDimmed(hidden.has(r), false)) c.style.opacity = HIDDEN_GUIDE_OPACITY
     c.setAttribute('stroke-dasharray', r === Ring.Intending ? '1 6' : r === Ring.Acquaintance ? '2 5' : r === Ring.Friend ? '6 4' : '')
     svg.appendChild(c)
   }
   if (ringsGeo.rings.includes(Ring.Unsorted)) {
     const t = document.createElementNS(NS, 'text')
-    t.setAttribute('x', String(C)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'middle')
+    t.setAttribute('x', String(C + 12)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'start')
     t.setAttribute('font-size', '8'); t.setAttribute('fill', ringColor({ ring: Ring.Unsorted })); t.setAttribute('data-ring-label', Ring.Unsorted)
     t.textContent = S.ringLabel[Ring.Unsorted]
     svg.appendChild(t)
@@ -1815,8 +1824,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   wrap.appendChild(svg)
   for (const ring of ringsGeo.rings) {
     const dot = ringsGeo.dot[ring]
-    ;(members[ring] ?? []).forEach((p, i) => {
-      const lap = ringsGeo.lapOf[ring]![i]
+    const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
+    visiblePeople(members[ring] ?? [], hidden).forEach((p) => {
+      const lap = laps.get(p)!
       const a = ((angleOf(p) - 90) * Math.PI) / 180
       const radius = lapRadius(ringsGeo, ring, lap) * k
       const x = C + radius * Math.cos(a)
@@ -1862,7 +1872,38 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   you.style.top = C + 'px'
   wrap.appendChild(you)
   dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
+  // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
+  // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
+  const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
+    try { window.localStorage.setItem(RINGS_HIDDEN_KEY, serializeHidden(next)) } catch { /* not remembered */ }
+    const fresh = ringsView(s, marks, desk)
+    live.className = fresh.className
+    live.replaceChildren(...fresh.childNodes)
+  }
+  const column = togglePoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k)
+  ringsGeo.rings.forEach((r, i) => {
+    const at = column[i]
+    wrap.appendChild(ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap)))
+  })
   return wrap
+}
+
+const HIDDEN_GUIDE_OPACITY = '.25'
+
+function loadHiddenRings(): ReadonlySet<Ring> {
+  try { return parseHidden(window.localStorage.getItem(RINGS_HIDDEN_KEY)) } catch { return new Set() }
+}
+
+/** The small round button on a ring's guide circle at 12 o'clock: ⊖ while the ring's people show, ⊕ while they are hidden. */
+function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: (btn: HTMLElement) => void): HTMLElement {
+  const b = el('button', {
+    class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
+    'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), title: S.ringLabel[ring],
+    // The zoom/pan layer captures every pointer on the rings (setPointerCapture), which retargets the click away from this button.
+    onpointerdown: (e: Event) => { e.stopPropagation() },
+    onclick: (e: Event) => { e.stopPropagation(); onToggle(e.currentTarget as HTMLElement) },
+  }, [off ? '+' : '−'])
+  return b
 }
 
 /** Zoom and pan of the Web screen's content; survives render() and resets when the Web screen is left. View state only (I1). */
@@ -1973,6 +2014,10 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
     let ring = webSlot(p)
     let out = false
     let angle = angleOf(p)
+    // While a person is held, every ring guide shows in full so the drop target is visible.
+    const hiddenNow = loadHiddenRings()
+    const guides = (dragging: boolean): void => wrap.querySelectorAll<SVGCircleElement>('circle[data-ring]').forEach((c) => { c.style.opacity = guideDimmed(hiddenNow.has(c.getAttribute('data-ring') as Ring), dragging) ? HIDDEN_GUIDE_OPACITY : '' })
+    guides(true)
     const place = (e: PointerEvent): void => {
       const { x, y } = localPoint(e, wrap)
       node.style.left = x + 'px'
@@ -2003,6 +2048,7 @@ function dragOnRings(wrap: HTMLElement, s: AppState, setDragged: (v: boolean) =>
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
       wrap.removeEventListener('pointerdown', second)
+      guides(false)
       wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
       wrap.classList.remove('hide-zone')
     }

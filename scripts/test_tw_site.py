@@ -171,6 +171,12 @@ class Subpages(unittest.TestCase):
         self.assertNotIn("com/theme", org["why.html"])
         self.assertNotIn('data-site="com"', org["why.html"])
 
+    def test_inspect_page_is_built_linked_and_marked_as_ai_formulation(self) -> None:
+        org = pages(site.Site.ORG)
+        self.assertIn("Inspect us", org["inspect.html"])
+        self.assertIn("AI formulation of Jakob", org["inspect.html"])
+        self.assertIn('href="inspect.html"', org["why.html"])
+
     def test_com_carries_its_own_theme_and_org_does_not(self) -> None:
         self.assertIn(':root[data-site="com"]', pages(site.Site.COM)["pricing.html"])
         self.assertNotIn(':root[data-site="com"]', pages(site.Site.ORG)["why.html"])

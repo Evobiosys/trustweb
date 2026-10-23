@@ -3,7 +3,7 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
@@ -29,16 +29,6 @@ export function toggled(features: PreviewFeature[], key: string, checked: boolea
     }
   }
   return features.map((f) => (set.has(f.key) ? { ...f, checked } : f))
-}
-
-/** How many checked boxes the user sees (merged features are not rows). */
-export function prCount(features: PreviewFeature[]): number {
-  return visible(features).filter((f) => f.checked).length
-}
-
-/** True while the boxes on screen (a draft) differ from the assembled set: a PR takes the assembled set, so it waits for the reload. */
-export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeature[]): boolean {
-  return draft !== null && draft.some((f) => f.checked !== assembled.find((a) => a.key === f.key)?.checked)
 }
 
 /** Reviewed rows: key -> the feature ref last reviewed and how many changes came in since (0 = reviewed as it stands). */
@@ -94,21 +84,14 @@ export function confirmText(title: string, checked: boolean, changes = 1, pr?: n
   return typeof pr === 'number' ? `${base} PR #${pr} keeps its current set until you update it.` : base
 }
 
-/** True when a PR exists and may be behind the assembled branch: no recorded sha (older PRs) or a different one. */
-export function prNeedsUpdate(pr: { sha?: string } | null, assembledSha: string | undefined): boolean {
-  return pr !== null && (!pr.sha || pr.sha !== assembledSha)
+/** "Approve personal view": push, open or update the PR, share on dev. A registry preview runs it through the CLI (`preview <id> pr`: PR title, registry record), a plain worktree through its own route; the CLI needs a checked feature that is not on main yet. */
+export function personalApprove(registry: boolean, features: PreviewFeature[]): { url: string; ok: boolean } {
+  return registry ? { url: '/__tw/preview/pr', ok: features.some((f) => f.checked && !f.merged) } : { url: '/__tw/approve', ok: true }
 }
 
 /** True once the PR's branch is contained in main (set by the CLI): the PR can only be left behind, never updated. */
 export function prMerged(p: { pr: { merged?: boolean } | null }): boolean {
   return p.pr?.merged === true
-}
-
-/** The PR button label: create without a PR, a new preview for a merged PR, update when the PR is behind, '' when it holds this set. `unshipped` = checked boxes not yet merged. */
-export function prButton(pr: { number: number; sha?: string; merged?: boolean } | null, n: number, assembledSha: string | undefined, unshipped: number): string {
-  if (!pr) return `Create PR with ${n} checked`
-  if (pr.merged) return `PR #${pr.number} shipped. New preview with ${unshipped} checked`
-  return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
 }
 
 export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
@@ -124,7 +107,7 @@ export function prGate(p: { assembled?: { sha: string } | null; tested?: Tested 
 
 export function testLine(gate: PrGate, tested?: Tested | null): string {
   switch (gate) {
-    case 'untested': return 'Tests not run for this selection'
+    case 'untested': return ''
     case 'running': return 'Running the checks (about 40 s)...'
     case 'failed': return 'Checks failed: see below'
     case 'passed': return `Checks passed for ${tested?.sha ?? '?'}`
@@ -134,13 +117,38 @@ export function testLine(gate: PrGate, tested?: Tested | null): string {
 /** The verdict after a click on a pill: a second click on the active one clears it. */
 export const verdictAfter = (current: Verdict | undefined, clicked: 'merge' | 'needs-work'): Verdict => (current === clicked ? null : clicked)
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): "Approve" (merge to main) needs tested, conflict-free work where every checked feature says "merge". */
-export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[] }): { ok: boolean; hint: string } {
-  const open = p.features.filter((f) => f.checked && !f.merged && f.verdict !== 'merge').map((f) => f.title)
-  const hint = prGate(p) !== 'passed' ? 'Run the tests first'
-    : p.assembled?.error ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
-    : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature'
-    : open.length ? `Mark "merge now" or uncheck: ${open.join(', ')}` : ''
+/** What a row's pills show: approved = verdict merge AND box checked, needs work = verdict needs-work AND box unchecked (the box is what the preview shows). */
+export const shownVerdict = (f: PreviewFeature): Verdict => (f.verdict === 'merge' && f.checked ? 'merge' : f.verdict === 'needs-work' && !f.checked ? 'needs-work' : null)
+
+/** A press on a pill: the verdict to store (the registry checks/unchecks the box and cascades over requires/dependants itself; nothing assembles). Pressing the shown pill again clears it. */
+export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): Verdict => verdictAfter(shownVerdict(features.find((x) => x.key === key)!), v)
+
+/** Select all / none as the exact boxes to POST: every available (not merged) row on = approved, or off; merged rows keep their box. */
+export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
+
+export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
+
+/** In the preview and in the merge only what is checked AND approved (verdict merge). Mirror of approvedKeys in the ops repo. */
+export const approvedKeys = (features: PreviewFeature[]): string[] => visible(features).filter((f) => f.checked && f.verdict === 'merge').map((f) => f.key)
+
+/** Changes not yet applied: the approved set against the set the worktree was assembled with (assembled.set; an older registry: its checked rows). */
+export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?: string[] } | null }): number {
+  const now = approvedKeys(p.features), was = p.assembled?.set ?? visible(p.features).filter((f) => f.checked).map((f) => f.key)
+  return now.filter((k) => !was.includes(k)).length + was.filter((k) => !now.includes(k)).length
+}
+export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
+
+/** What moves while an apply runs; unchanged for 90 s = stuck. */
+export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
+export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
+
+export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
+
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
+  const hint = p.tested?.running ? 'Tests are running'
+    : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
+    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature' : ''
   return { ok: hint === '', hint }
 }
 
@@ -182,7 +190,7 @@ export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { 
   return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) } }
 }
 
-/** True while the "Create PR" flow works: its /__tw/status step is neither none, ready nor failed. */
+/** True while the personal-view PR flow works: its /__tw/status step is neither none, ready nor failed. */
 export function prRunning(step: string): boolean {
   return !['none', 'ready', 'failed'].includes(step)
 }
@@ -198,7 +206,7 @@ export function parseStep(s: string): { text: string; selector: string | null } 
   return i < 0 ? { text: s, selector: null } : { text: s.slice(0, i).trim(), selector: s.slice(i + 3).trim() || null }
 }
 
-/** The Create PR progress line: never a raw step name. `text` is the status file's own wording (used for ci and failed). */
+/** The PR flow progress line: never a raw step name. `text` is the status file's own wording (used for ci and failed). */
 export function stepText(step: string, text: string | undefined, short: string, pr?: number | null): string {
   switch (step) {
     case 'none': return 'starting...'

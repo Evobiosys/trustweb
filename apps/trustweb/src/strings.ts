@@ -271,6 +271,8 @@ export const S = {
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
   netRings: 'Membranes',
   netNetwork: 'Network',
+  ringHideAria: (ring: string) => `Hide ${ring}`,
+  ringShowAria: (ring: string) => `Show ${ring}`,
   netViewAria: 'How your holarchy is drawn',
   deskSide: 'Desk',
   deskSideAria: 'Desk, the actionable view',
