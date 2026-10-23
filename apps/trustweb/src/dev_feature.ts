@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, personalApprove, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -99,16 +99,19 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     b.addEventListener('click', on)
     return b
   }
-  const poll = (): void => {
+  // `since`: a status file older than the press (a run that ended before) is not this run's answer.
+  const poll = (since = 0): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'
+    const stale = (j: ApprovalStatus): boolean => Date.parse(j.updated ?? '') < since
     pollStatus((j) => {
+      if (stale(j)) return
       body.textContent = j.text ?? 'starting'
       if (j.step === 'failed') body.className = 'body warn'
       if (j.step === 'ready' && j.url) {
         body.textContent = `${j.text}. Opening dev in 3 s`
         setTimeout(() => { location.href = j.url! }, 3000)
       }
-    })
+    }, '/__tw/status', (j) => !stale(j) && personalDone(j))
   }
   head.textContent = 'Personal preview'
   const hx = Object.assign(document.createElement('button'), { className: 'hx', textContent: '×', title: 'Hide for this tab' })
@@ -131,6 +134,10 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   }
   function buttons(): void {
     bar.classList.remove('prog'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
+    const personal = btn('Approve personal view', preview ? 'alt small' : 'go', () => {
+      const since = Date.now() - 2000
+      void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
+    })
     if (preview) {
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: 'Checking…' })
       const go = btn('Approve', 'go big', () => {
@@ -142,13 +149,12 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
         if (!go.isConnected) return
         void fetch('/__tw/preview').then((r) => r.json()).then((q: Parameters<typeof approveGate>[0]) => {
           const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, then merges to main and deploys' : g.hint
+          personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }
       body.append(go, hint); refresh(); const t = setInterval(() => { if (!go.isConnected) clearInterval(t); else refresh() }, 3000)
     }
-    body.append(btn('Approve personal view', preview ? 'alt small' : 'go', () => {
-      void fetch('/__tw/approve', { method: 'POST' }).then((r) => r.ok && poll())
-    }))
+    body.append(personal)
     if (stockLink && bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
   }
   if (bld.approved) poll()

@@ -31,16 +31,6 @@ export function toggled(features: PreviewFeature[], key: string, checked: boolea
   return features.map((f) => (set.has(f.key) ? { ...f, checked } : f))
 }
 
-/** How many checked boxes the user sees (merged features are not rows). */
-export function prCount(features: PreviewFeature[]): number {
-  return visible(features).filter((f) => f.checked).length
-}
-
-/** True while the boxes on screen (a draft) differ from the assembled set: a PR takes the assembled set, so it waits for the reload. */
-export function prBlocked(draft: PreviewFeature[] | null, assembled: PreviewFeature[]): boolean {
-  return draft !== null && draft.some((f) => f.checked !== assembled.find((a) => a.key === f.key)?.checked)
-}
-
 /** Reviewed rows: key -> the feature ref last reviewed and how many changes came in since (0 = reviewed as it stands). */
 export type Seen = Record<string, { ref: string; updates: number }>
 
@@ -94,21 +84,14 @@ export function confirmText(title: string, checked: boolean, changes = 1, pr?: n
   return typeof pr === 'number' ? `${base} PR #${pr} keeps its current set until you update it.` : base
 }
 
-/** True when a PR exists and may be behind the assembled branch: no recorded sha (older PRs) or a different one. */
-export function prNeedsUpdate(pr: { sha?: string } | null, assembledSha: string | undefined): boolean {
-  return pr !== null && (!pr.sha || pr.sha !== assembledSha)
+/** "Approve personal view": push, open or update the PR, share on dev. A registry preview runs it through the CLI (`preview <id> pr`: PR title, registry record), a plain worktree through its own route; the CLI needs a checked feature that is not on main yet. */
+export function personalApprove(registry: boolean, features: PreviewFeature[]): { url: string; ok: boolean } {
+  return registry ? { url: '/__tw/preview/pr', ok: features.some((f) => f.checked && !f.merged) } : { url: '/__tw/approve', ok: true }
 }
 
 /** True once the PR's branch is contained in main (set by the CLI): the PR can only be left behind, never updated. */
 export function prMerged(p: { pr: { merged?: boolean } | null }): boolean {
   return p.pr?.merged === true
-}
-
-/** The PR button label: create without a PR, a new preview for a merged PR, update when the PR is behind, '' when it holds this set. `unshipped` = checked boxes not yet merged. */
-export function prButton(pr: { number: number; sha?: string; merged?: boolean } | null, n: number, assembledSha: string | undefined, unshipped: number): string {
-  if (!pr) return `Create PR with ${n} checked`
-  if (pr.merged) return `PR #${pr.number} shipped. New preview with ${unshipped} checked`
-  return prNeedsUpdate(pr, assembledSha) ? `Update PR #${pr.number} with ${n} checked` : ''
 }
 
 export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
@@ -182,7 +165,7 @@ export function collapseStore(storage: Pick<Storage, 'getItem' | 'setItem'>): { 
   return { get: fold.get, set: fold.set, hidden: gone.get, hide: () => { gone.set(true) } }
 }
 
-/** True while the "Create PR" flow works: its /__tw/status step is neither none, ready nor failed. */
+/** True while the personal-view PR flow works: its /__tw/status step is neither none, ready nor failed. */
 export function prRunning(step: string): boolean {
   return !['none', 'ready', 'failed'].includes(step)
 }
@@ -198,7 +181,7 @@ export function parseStep(s: string): { text: string; selector: string | null } 
   return i < 0 ? { text: s, selector: null } : { text: s.slice(0, i).trim(), selector: s.slice(i + 3).trim() || null }
 }
 
-/** The Create PR progress line: never a raw step name. `text` is the status file's own wording (used for ci and failed). */
+/** The PR flow progress line: never a raw step name. `text` is the status file's own wording (used for ci and failed). */
 export function stepText(step: string, text: string | undefined, short: string, pr?: number | null): string {
   switch (step) {
     case 'none': return 'starting...'

@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { approveGate, prGate, testLine, verdictAfter, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, prBlocked, prButton, prCount, prMerged, prNeedsUpdate, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveGate, prGate, testLine, verdictAfter, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -146,22 +146,7 @@ describe('dev preview collapse store and PR status', () => {
 })
 
 describe('dev preview PR update', () => {
-  it('prNeedsUpdate: only with a PR that has no sha or another sha', () => {
-    expect(prNeedsUpdate(null, 'abc')).toBe(false)
-    expect(prNeedsUpdate({}, 'abc')).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, 'def')).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, undefined)).toBe(true)
-    expect(prNeedsUpdate({ sha: 'abc' }, 'abc')).toBe(false)
-  })
-  it('prButton: create, update or nothing', () => {
-    expect(prButton(null, 9, 'abc', 9)).toBe('Create PR with 9 checked')
-    expect(prButton({ number: 8, sha: 'x' }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8 }, 9, 'abc', 9)).toBe('Update PR #8 with 9 checked')
-    expect(prButton({ number: 8, sha: 'abc' }, 9, 'abc', 9)).toBe('')
-  })
-  it('prButton and prMerged: a merged PR never offers Update, whatever the sha', () => {
-    expect(prButton({ number: 14, sha: 'x', merged: true }, 3, 'abc', 1)).toBe('PR #14 shipped. New preview with 1 checked')
-    expect(prButton({ number: 14, sha: 'abc', merged: true }, 3, 'abc', 2)).toBe('PR #14 shipped. New preview with 2 checked')
+  it('prMerged: true only when the registry says the PR is merged', () => {
     expect(prMerged({ pr: { merged: true } })).toBe(true)
     expect(prMerged({ pr: {} })).toBe(false)
     expect(prMerged({ pr: null })).toBe(false)
@@ -182,17 +167,6 @@ describe('merged features', () => {
 
 describe('dev preview PR count, block and reviewed rows', () => {
   const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
-  it('prCount counts the checked boxes that show', () => {
-    expect(prCount(list)).toBe(1)
-    expect(prCount(toggled(list, 'b', true))).toBe(2)
-    expect(prCount([])).toBe(0)
-  })
-  it('prBlocked only while a draft differs from the assembled set', () => {
-    expect(prBlocked(null, list)).toBe(false)
-    expect(prBlocked(list, list)).toBe(false)
-    expect(prBlocked(toggled(list, 'a', false), list)).toBe(true)
-    expect(prBlocked(toggled(list, 'a', false), toggled(list, 'a', false))).toBe(false)
-  })
   it('seenState: first mark, same ref, one change, two changes, re-mark', () => {
     expect(seenState({}, 'a', 'r1')).toEqual({ italic: false, prefix: '', next: {} })
     const marked = tapSeen({}, 'a', 'r1')
@@ -312,5 +286,19 @@ describe('/__tw/approve-merge route', () => {
     const { h, spawned, files } = make(); files['/c/approvals/preview-261023_1500.merge.json'] = JSON.stringify({ step: 'checks', updated: new Date().toISOString() })
     const r = res(); h({ method: 'POST' }, r)
     expect([r.code, spawned.length]).toEqual([409, 0])
+  })
+})
+
+describe('Approve personal view (the one button that pushes, opens the PR and shares on dev)', () => {
+  const list = [f('a'), f('b', [], false), { ...f('c'), merged: true }]
+  it('a registry preview goes through `preview <id> pr`, a plain worktree through its own approve route', () => {
+    expect(personalApprove(true, list).url).toBe('/__tw/preview/pr')
+    expect(personalApprove(false, list).url).toBe('/__tw/approve')
+  })
+  it('a registry preview needs one checked feature that is not on main yet', () => {
+    expect(personalApprove(true, list).ok).toBe(true)
+    expect(personalApprove(true, [f('b', [], false), { ...f('c'), merged: true }]).ok).toBe(false)
+    expect(personalApprove(true, []).ok).toBe(false)
+    expect(personalApprove(false, []).ok).toBe(true)
   })
 })

@@ -2,7 +2,7 @@
  * Dev-only preview panel (wave7/preview-overlay). vite.config.mjs `define`s __TW_PREVIEW__ (the registry file <id>.json, see
  * previews-interface.txt) only for `vite serve` with TW_PREVIEW set; in every build it is null and nothing below runs.
  * Top-left, draggable by its header (twp-pos), collapsible to a pill with the id (twp-collapsed): the feature checkboxes of this
- * preview, the personal/stock switch and "Create PR". The FEATURE box (dev_feature.ts) sits below it via --twp-h.
+ * preview and the personal/stock switch (the PR itself starts from "Approve personal view" in dev_feature.ts). The FEATURE box (dev_feature.ts) sits below it via --twp-h.
  * A tap on a row points at the UI the feature adds (its `selector`); a tap on a checkbox asks first, then re-assembles and reloads.
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
@@ -10,7 +10,7 @@ import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { createWalker } from './dev_walk'
-import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prBlocked, prButton, prCount, prGate, prMerged, prRunning, testLine, verdictAfter, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { cascaded, ciLine, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, verdictAfter, rowPlan, setMap, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, toggled, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -97,7 +97,6 @@ export function initDevPreview(): void {
   let prEta = 0
   let prStarted = ''
   let opening: ReturnType<typeof setTimeout> | null = null
-  let making = false
   let pointing = false
   let testing = false
   let walking: string | null = null
@@ -275,38 +274,13 @@ export function initDevPreview(): void {
     return h('div', {}, `Opening ${what} in 3 s (`, stay, ')')
   }
 
-  function pushPr(): void {
-    void call('POST', '/pr', {}).then(() => {
-      prText = stepText('none', undefined, p!.short); prStep = ''; begin(); render()
-      watchPr()
-    }).catch((e: Error) => { error = e.message; render() })
-  }
-
-  /** A merged PR cannot take more: POST /pr makes the CLI create a new preview from main; poll until it names it (90 s), then go there after 3 s. */
-  function newPreview(): void {
-    making = true; render()
-    void call('POST', '/pr', {}).then(async () => {
-      for (let i = 0; i < 45 && !p!.next; i++) {
-        await new Promise((r) => setTimeout(r, 2000))
-        p = await call('GET', '')
-      }
-      making = false
-      if (p!.next) opening = setTimeout(() => { location.href = `http://127.0.0.1:${p!.next!.port}/` }, 3000)
-      else error = 'No new preview after 90 s'
-      render()
-    }).catch((e: Error) => { making = false; error = e.message; render() })
-  }
-
-  function mergedPart(n: number): HTMLElement {
-    const pr = p!.pr!
+  /** A merged PR: the way on to the preview that carries the unshipped boxes, else "shipped". */
+  function mergedPart(): HTMLElement {
     if (p!.next) {
       const to = h('a', { href: `http://127.0.0.1:${p!.next.port}/`, textContent: `Continue in ${p!.next.id} (port ${p!.next.port})` })
       return h('div', { className: 'btns' }, to, ...(opening ? [staying(p!.next.id)] : []))
     }
-    if (n === 0) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${pr.number} shipped, everything here is live` }))
-    const go = h('button', { textContent: prButton(pr, n, p!.assembled?.sha, n), disabled: loading() || making })
-    go.addEventListener('click', newPreview)
-    return h('div', { className: 'btns' }, go, ...(making ? [h('small', { textContent: 'creating the new preview...' })] : []))
+    return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr!.number} shipped` }))
   }
 
   /** Clipboard API, else a textarea + execCommand('copy'), else the text in a selectable <pre> (the poll re-renders the panel, so it sits beside it). */
@@ -360,16 +334,12 @@ export function initDevPreview(): void {
     return h('div', { className: 'btns' }, h('div', {}, testLine(running ? 'running' : g, p!.tested), ...(running ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), run, ...(g === 'failed' && p!.tested?.tail ? [h('pre', { className: 'log', textContent: p!.tested.tail })] : []))
   }
 
-  function prPart(n: number, blocked: boolean): HTMLElement {
-    if (prMerged(p!)) return mergedPart(n)
-    const label = prButton(p!.pr, n, p!.assembled?.sha, n)
-    const stay = opening ? [staying()] : []
-    if (p!.pr && !label && !prText) return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr.number} holds this set` }), ...stay)
-    const go = h('button', { textContent: label || `Update PR #${p!.pr!.number} with ${n} checked`, disabled: loading() || n === 0 || blocked })
-    go.addEventListener('click', pushPr)
+  /** The PR flow's line (after a reload that finds it running or failed) with the CI diagnostics; the press itself is "Approve personal view". */
+  function prStatus(): HTMLElement | null {
+    if (prMerged(p!)) return mergedPart()
+    if (!prText) return null
     const eta = prEta && loading() ? h('small', { className: 'eta', textContent: ciLine(prEta, prStarted, Date.now()) }) : ''
-    const status = prText ? h('div', {}, prText, ...stay, eta, ...(prStep === 'failed' && (prNum ?? p!.pr?.number) ? [ciFailed(prNum ?? p!.pr!.number)] : [])) : ''
-    return h('div', { className: 'btns' }, ...(p!.pr && !label ? [] : [go]), ...(blocked ? [h('small', { textContent: 'Reload first: the PR takes the assembled set' })] : []), status)
+    return h('div', { className: 'btns' }, h('div', {}, prText, ...(opening ? [staying()] : []), eta, ...(prStep === 'failed' && (prNum ?? p!.pr?.number) ? [ciFailed(prNum ?? p!.pr!.number)] : [])))
   }
 
   function copyId(id: string): void {
@@ -431,7 +401,7 @@ export function initDevPreview(): void {
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
       const shown = ask?.draft ?? q.features
       const grey = ask?.grey ?? []
-      const n = prCount(shown)
+      const prStatusEl = prStatus()
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -446,7 +416,7 @@ export function initDevPreview(): void {
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
-        gate(), prPart(n, prBlocked(ask?.draft ?? null, q.features)), h('div', { className: 'btns' }, sw),
+        gate(), ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw),
       )
     }
     const pos = store.get(POS)
@@ -463,7 +433,7 @@ export function initDevPreview(): void {
   render()
   let resizing: ReturnType<typeof setTimeout> | undefined
   window.addEventListener('resize', () => { clearTimeout(resizing); resizing = setTimeout(() => { if (p) render() }, 150) })
-  // A reload while "Create PR" runs: show the spinner and text again.
+  // A reload while "Approve personal view" runs: show the spinner and text again.
   void fetch('/__tw/status').then((r) => r.json()).then((j: ApprovalStatus) => {
     if (prRunning(j.step)) { applyStatus(j, true); begin(); watchPr() } else if (j.step === 'ready' && j.url) applyStatus(j, false)
   }).catch(() => { /* no status: no flow to show */ })
