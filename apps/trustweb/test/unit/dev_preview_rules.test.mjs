@@ -246,11 +246,12 @@ describe('approve (merge to main) rules', () => {
     expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
     expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
   })
-  it('Approve opens only for tested work where every checked feature is "merge"; needs-work ones must be unchecked; the hint says why not', () => {
+  it('"Merge if tests pass" opens with nothing running, something checked, no checked needs-work and no conflict; tests not run or failed do not block; the hint names the blocker', () => {
     expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
-    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).hint).toBe('Run the tests first')
+    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, null)] }).ok).toBe(true)
+    expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
     expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, 'needs-work')] }).hint).toBe('Mark "merge now" or uncheck: T-b')
-    expect(approveGate({ ...passed, features: [g('a', true, null)] }).ok).toBe(false)
     expect(approveGate({ ...passed, features: [g('a', false, 'merge')] }).hint).toBe('Check at least one feature')
     expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
   })

@@ -1811,7 +1811,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   }
   if (ringsGeo.rings.includes(Ring.Unsorted)) {
     const t = document.createElementNS(NS, 'text')
-    t.setAttribute('x', String(C)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'middle')
+    t.setAttribute('x', String(C + 12)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'start')
     t.setAttribute('font-size', '8'); t.setAttribute('fill', ringColor({ ring: Ring.Unsorted })); t.setAttribute('data-ring-label', Ring.Unsorted)
     t.textContent = S.ringLabel[Ring.Unsorted]
     svg.appendChild(t)
@@ -1820,7 +1820,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   for (const ring of ringsGeo.rings) {
     const dot = ringsGeo.dot[ring]
     const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
-    visiblePeople(members[ring] ?? [], hidden, () => ring).forEach((p) => {
+    visiblePeople(members[ring] ?? [], hidden).forEach((p) => {
       const lap = laps.get(p)!
       const a = ((angleOf(p) - 90) * Math.PI) / 180
       const radius = lapRadius(ringsGeo, ring, lap) * k
@@ -1867,13 +1867,14 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   you.style.top = C + 'px'
   wrap.appendChild(you)
   dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
-  wrap.appendChild(ringHideChips(ringsGeo.rings, hidden, (next) => {
+  const toggle = (next: ReadonlySet<Ring>): void => {
     try { window.localStorage.setItem(RINGS_HIDDEN_KEY, serializeHidden(next)) } catch { /* not remembered */ }
     const fresh = ringsView(s, marks, desk)
     const zoom = wrap.getAttribute('data-rings-zoom')
     if (zoom) fresh.setAttribute('data-rings-zoom', zoom)
     wrap.replaceWith(fresh)
-  }))
+  }
+  for (const r of ringsGeo.rings) wrap.appendChild(ringToggle(r, hidden.has(r), C - ringsGeo.radius[r] * k, C, () => toggle(toggleHidden(hidden, r))))
   return wrap
 }
 
@@ -1883,12 +1884,14 @@ function loadHiddenRings(): ReadonlySet<Ring> {
   try { return parseHidden(window.localStorage.getItem(RINGS_HIDDEN_KEY)) } catch { return new Set() }
 }
 
-/** One underlined chip per ring at the top of the rings: its people are hidden (name struck through) or shown. */
-function ringHideChips(rings: readonly Ring[], hidden: ReadonlySet<Ring>, set: (next: ReadonlySet<Ring>) => void): HTMLElement {
-  return el('div', { class: 'rings-hide', role: 'group', 'aria-label': S.ringsHideAria }, rings.map((r) => el('button', {
-    class: 'rchip-hide' + (hidden.has(r) ? ' off' : ''), 'data-hide-ring': r, 'aria-pressed': String(hidden.has(r)), style: `--rc:${ringColor({ ring: r })}`,
-    onclick: (e: Event) => { e.stopPropagation(); set(toggleHidden(hidden, r)) },
-  }, [S.ringLabel[r]])))
+/** The small round button on a ring's guide circle at 12 o'clock: ⊖ while the ring's people show, ⊕ while they are hidden. */
+function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: () => void): HTMLElement {
+  const b = el('button', {
+    class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
+    'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), title: S.ringLabel[ring],
+    onclick: (e: Event) => { e.stopPropagation(); onToggle() },
+  }, [off ? '+' : '−'])
+  return b
 }
 
 /** Zoom and pan of the Web screen's content; survives render() and resets when the Web screen is left. View state only (I1). */

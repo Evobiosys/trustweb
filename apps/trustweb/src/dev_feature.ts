@@ -120,7 +120,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
-  /** "Approve": Touch ID, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  /** "Merge if tests pass": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
   const pollMerge = (since: number): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
@@ -134,13 +134,13 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   }
   function buttons(): void {
     bar.classList.remove('prog'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
-    const personal = btn('Approve personal view', preview ? 'alt small' : 'go', () => {
+    const personal = btn('Approve and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
       const since = Date.now() - 2000
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
     })
     if (preview) {
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: 'Checking…' })
-      const go = btn('Approve', 'go big', () => {
+      const go = btn('Merge if tests pass', 'go big', () => {
         const since = Date.now() - 2000
         void fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
       })
@@ -148,7 +148,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const refresh = (): void => {
         if (!go.isConnected) return
         void fetch('/__tw/preview').then((r) => r.json()).then((q: Parameters<typeof approveGate>[0]) => {
-          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, then merges to main and deploys' : g.hint
+          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? 'Touch ID, tests, then merges to main and deploys' : g.hint
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }

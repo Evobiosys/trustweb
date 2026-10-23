@@ -326,15 +326,15 @@ export function initDevPreview(): void {
     }).catch((e: Error) => { error = e.message }).finally(() => { testing = false; render() })
   }
 
-  /** The local checks of the assembled set: "Approve" (merge to main) opens only on a pass. */
+  /** The local checks of the assembled set: an optional pre-check: "Merge if tests pass" runs them itself. */
   function gate(): HTMLElement {
     const g = prGate(p!), running = testing || g === 'running'
-    const run = h('button', { className: 'alt', textContent: 'Run tests (needed for Approve)', disabled: running || loading() })
+    const run = h('button', { className: 'alt', textContent: 'Run tests now (optional)', disabled: running || loading() })
     run.addEventListener('click', runTests)
     return h('div', { className: 'btns' }, h('div', {}, testLine(running ? 'running' : g, p!.tested), ...(running ? [' ', h('span', { className: 'clk', textContent: elapsed() + ' s' })] : [])), run, ...(g === 'failed' && p!.tested?.tail ? [h('pre', { className: 'log', textContent: p!.tested.tail })] : []))
   }
 
-  /** The PR flow's line (after a reload that finds it running or failed) with the CI diagnostics; the press itself is "Approve personal view". */
+  /** The PR flow's line (after a reload that finds it running or failed) with the CI diagnostics; the press itself is "Approve and continue to dev.trustweb.one". */
   function prStatus(): HTMLElement | null {
     if (prMerged(p!)) return mergedPart()
     if (!prText) return null

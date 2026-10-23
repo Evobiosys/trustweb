@@ -20,6 +20,14 @@ describe('rings hide', () => {
     expect(visiblePeople(people, new Set(['close']), (p) => p.ring).map((p) => p.id)).toEqual(['b'])
     expect(visiblePeople(people, new Set(), (p) => p.ring)).toHaveLength(3)
   })
+  it('hides a person only with THEIR ring: missing, unsorted, none, suggested and intending rings stay apart', () => {
+    const all = [{ id: 'c' , ring: 'close' }, { id: 'i', ring: 'intending' }, { id: 'u', ring: 'unsorted' }, { id: 'n', ring: undefined }, { id: 'x', ring: 'none' }, { id: 's', ring: 'friend', ringSuggested: 'close' }]
+    const left = (h) => visiblePeople(all, new Set(h)).map((p) => p.id).join('')
+    expect(left(['intending'])).toBe('cunxs')
+    expect(left(['unsorted'])).toBe('ci')
+    expect(left(['friend'])).toBe('ciunxs')
+    expect(left(['close', 'intending', 'unsorted'])).toBe('')
+  })
   it('dims a hidden ring guide unless a person is being dragged', () => {
     expect(guideDimmed(true, false)).toBe(true)
     expect(guideDimmed(true, true)).toBe(false)

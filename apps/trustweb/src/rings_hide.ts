@@ -1,5 +1,6 @@
 /** Per-ring hide toggles of the Web rings: which rings' people are not drawn. View state only (I1), kept per device. */
-import type { Ring } from './model'
+import type { Person, Ring } from './model'
+import { webSlot } from './rings_layout'
 
 export const RINGS_HIDDEN_KEY = 'trustweb.ui.ringsHidden'
 
@@ -18,7 +19,8 @@ export function toggleHidden(hidden: ReadonlySet<Ring>, ring: Ring): ReadonlySet
   return next
 }
 
-export const visiblePeople = <P>(people: readonly P[], hidden: ReadonlySet<Ring>, slotOf: (p: P) => Ring): P[] => people.filter((p) => !hidden.has(slotOf(p)))
+/** A person hides with the ring they are DRAWN on (webSlot: missing, none and suggested rings sit on Unsorted), never with another. */
+export const visiblePeople = <P extends Pick<Person, 'ring' | 'fields' | 'ringSuggested'>>(people: readonly P[], hidden: ReadonlySet<Ring>, slotOf: (p: P) => Ring = webSlot): P[] => people.filter((p) => !hidden.has(slotOf(p)))
 
 /** A hidden ring's guide circle stays drawn, dimmed, and shows in full while a person is dragged so the drop target is visible. */
 export const guideDimmed = (hidden: boolean, dragging: boolean): boolean => hidden && !dragging

@@ -117,13 +117,13 @@ export function testLine(gate: PrGate, tested?: Tested | null): string {
 /** The verdict after a click on a pill: a second click on the active one clears it. */
 export const verdictAfter = (current: Verdict | undefined, clicked: 'merge' | 'needs-work'): Verdict => (current === clicked ? null : clicked)
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): "Approve" (merge to main) needs tested, conflict-free work where every checked feature says "merge". */
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): "Merge if tests pass" opens with no test run going, something checked, no checked feature on needs-work and no conflict; the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[] }): { ok: boolean; hint: string } {
-  const open = p.features.filter((f) => f.checked && !f.merged && f.verdict !== 'merge').map((f) => f.title)
-  const hint = prGate(p) !== 'passed' ? 'Run the tests first'
+  const blocking = p.features.filter((f) => f.checked && !f.merged && f.verdict === 'needs-work').map((f) => f.title)
+  const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
     : !p.features.some((f) => f.checked && !f.merged) ? 'Check at least one feature'
-    : open.length ? `Mark "merge now" or uncheck: ${open.join(', ')}` : ''
+    : blocking.length ? `Mark "merge now" or uncheck: ${blocking.join(', ')}` : ''
   return { ok: hint === '', hint }
 }
 
