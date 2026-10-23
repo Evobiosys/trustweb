@@ -39,4 +39,16 @@ describe('createCurator lends viewChanged', () => {
     asked[0].onPick('p1')
     expect(picked).toEqual(['p1'])
   })
+  it('lends renderProfile, closeDesk and showPhoneVersion: the Desk gets the host-built profile editor and the host\'s close', async () => {
+    const noop = () => {}
+    const editor = { className: 'prof-editor' }
+    const calls = []
+    const before = lentTo.length
+    createCurator({ record: () => null, setRing: noop, setFamily: noop, setFlag: noop, removePerson: noop, restorePerson: noop, setHiddenSources: noop, addLine: noop, showRings: noop, viewChanged: noop, renderRings: noop, renderProfile: () => editor, closeDesk: () => calls.push('close'), showPhoneVersion: () => calls.push('phone') }).open()
+    await vi.waitFor(() => expect(lentTo).toHaveLength(before + 1))
+    expect(lentTo[before].renderProfile()).toBe(editor)
+    lentTo[before].closeDesk()
+    lentTo[before].showPhoneVersion()
+    expect(calls).toEqual(['close', 'phone'])
+  })
 })

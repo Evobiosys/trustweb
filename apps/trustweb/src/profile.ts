@@ -11,6 +11,8 @@
  * Everything received is untrusted: bounded, stripped of control and bidi characters, unknown norms dropped. A build that does not
  * know the text shows it as one chat line, as with hello.ts. Pure and DOM-free.
  */
+import { Ring, ringSlot } from './model'
+import type { Person } from './model'
 import { stripUnsafe } from './safe_text'
 
 export enum Norm {
@@ -33,7 +35,17 @@ const PROFILE_TEXT_MAX = 480
 export interface Dated { text: string; at: number; by: Author }
 /** A norm; `text` is the free text (the whole norm for Custom, an optional note on a pick). */
 export interface NormEntry extends Dated { norm: Norm }
-export interface MyProfile { norms: NormEntry[]; favourite?: Dated; intro?: Dated }
+/**
+ * Wave 19 (Jakob 2026-10-23: "which sections to share with whom"): a ring and every ring closer to me, or nobody. Messenger links are
+ * not part of the profile (they leave only as the answer to an explicit request, contact_request.ts), so they have no audience here.
+ */
+export type ProfileAudience = 'close' | 'friend' | 'acquaintance' | 'nobody'
+export const PROFILE_AUDIENCES: readonly ProfileAudience[] = ['close', 'friend', 'acquaintance', 'nobody']
+export type ProfileSection = 'norms' | 'favourite' | 'intro'
+export const PROFILE_SECTIONS: readonly ProfileSection[] = ['norms', 'favourite', 'intro']
+/** Before wave 19 a tap sent the whole profile to anyone connected: acquaintances and closer keep seeing every section by default. */
+export const DEFAULT_AUDIENCE: ProfileAudience = 'acquaintance'
+export interface MyProfile { norms: NormEntry[]; favourite?: Dated; intro?: Dated; audience?: Partial<Record<ProfileSection, ProfileAudience>> }
 /** What travels and what a connected person's card keeps: no per-entry dates, one date for the set. */
 export interface SharedProfile { norms: Array<{ norm: Norm; text: string }>; favourite?: string; intro?: string; at: number }
 
@@ -72,14 +84,27 @@ export function toShared(p: MyProfile | undefined): SharedProfile | null {
   }
 }
 
+/** How close each audience reaches: a person sees a section when their ring sits at or inside it. Intending, None and Unsorted are outside every audience. */
+const REACH: Partial<Record<Ring, number>> = { [Ring.Close]: 0, [Ring.Friend]: 1, [Ring.Acquaintance]: 2 }
+const isAudience = (v: unknown): v is ProfileAudience => PROFILE_AUDIENCES.includes(v as ProfileAudience)
+export const audienceOf = (p: MyProfile, section: ProfileSection): ProfileAudience => p.audience?.[section] ?? DEFAULT_AUDIENCE
+
+/** What one person may see of my profile, or null for nothing. Family counts as the ring of its closeness (ringSlot). */
+export function profileFor(my: MyProfile | undefined, who: Pick<Person, 'ring' | 'fields'>): SharedProfile | null {
+  if (!my) return null
+  const at = REACH[ringSlot(who)]
+  const open = (k: ProfileSection): boolean => { const a = audienceOf(my, k); return at !== undefined && a !== 'nobody' && at <= (REACH[a as Ring] ?? -1) }
+  return toShared({ norms: open('norms') ? my.norms : [], favourite: open('favourite') ? my.favourite : undefined, intro: open('intro') ? my.intro : undefined })
+}
+
 export function profileText(appUrl: string, s: SharedProfile): string {
   const body = { n: s.norms.map((n) => [n.norm, n.text]), ...(s.favourite ? { f: s.favourite } : {}), ...(s.intro ? { i: s.intro } : {}), at: s.at }
   return `${appUrl}?${PROFILE_PARAM}=1#p=${encodeURIComponent(JSON.stringify(body))}`
 }
 
-/** The text to send, or null for an empty profile; drops the intro, then the favourite way, then the last norms until it fits one message. */
-export function buildProfileText(appUrl: string, p: MyProfile | undefined): string | null {
-  const s = toShared(p)
+/** The text to send (to `who` when given: only what they may see), or null for an empty profile; drops the intro, then the favourite way, then the last norms until it fits one message. */
+export function buildProfileText(appUrl: string, p: MyProfile | undefined, who?: Pick<Person, 'ring' | 'fields'>): string | null {
+  const s = who ? profileFor(p, who) : toShared(p)
   if (!s) return null
   for (;;) {
     const text = profileText(appUrl, s)
@@ -130,7 +155,14 @@ export function repairProfile(state: { profile?: unknown }): boolean {
   if (p === undefined) return false
   const ok = typeof p === 'object' && p !== null && Array.isArray(p.norms) && p.norms.every((n) => n && isNorm(n.norm) && typeof n.text === 'string' && typeof n.at === 'number')
     && [p.favourite, p.intro].every((d) => d === undefined || (typeof d.text === 'string' && typeof d.at === 'number'))
-  if (ok) return false
-  delete state.profile
+  if (!ok) { delete state.profile; return true }
+  // An unknown audience goes on its own (the section falls back to the default); the profile stays.
+  const a: unknown = p.audience
+  if (a === undefined) return false
+  const entries = typeof a === 'object' && a !== null ? Object.entries(a) : []
+  const kept = entries.filter(([k, v]) => PROFILE_SECTIONS.includes(k as ProfileSection) && isAudience(v))
+  if (entries.length && kept.length === entries.length) return false
+  if (kept.length) p.audience = Object.fromEntries(kept)
+  else delete p.audience
   return true
 }
