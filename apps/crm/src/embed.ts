@@ -80,6 +80,13 @@ export async function refreshCurator(): Promise<void> {
   (await import('./state.svelte')).reloadRecord()
 }
 
+/** Wave 19: the host's Settings > View > Classic opens the Curator on its classic face. */
+export async function showClassic(): Promise<void> {
+  const [{ prefs, savePrefs }, { View }] = await Promise.all([import('./prefs.svelte'), import('./nav')])
+  prefs.view = View.Classic
+  savePrefs()
+}
+
 /** The host opens the Curator on the Desk (a wide browser tab's default): the face is this device's choice, saved like the chevron's. Each opening lands on the Desk's start page (desk.ts deskStartPage). */
 export async function showDesk(): Promise<void> {
   const [{ prefs, savePrefs }, { View }, { deskStartPage }, { showDeskPage }, { store }] = await Promise.all([import('./prefs.svelte'), import('./nav'), import('./desk'), import('./nav.svelte'), import('./state.svelte')])

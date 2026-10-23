@@ -5,7 +5,7 @@ import type { Host } from './bridge'
 export function viewNotifier(send: Host['viewChanged']): (view: View) => void {
   let last: View | undefined
   return (view) => {
-    if (view === last) return
+    if (view === last || view === View.TrustWeb) return   // the host's own app, never a Curator face
     last = view
     send?.(view)
   }

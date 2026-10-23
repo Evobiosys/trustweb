@@ -353,6 +353,14 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-menu button:hover,.desk-menu button:focus-visible{background:var(--desk-active)}
 .desk-menu [aria-disabled="true"]{opacity:.5; cursor:not-allowed}
 .desk-check{display:inline-flex; width:16px}
+/* Wave 19: Settings > View, a half pill (current view | chevron) opening the view menu. */
+.fld.view-row{flex-direction:row; align-items:center; justify-content:space-between; min-height:44px}
+.view-pill{display:inline-flex; align-items:stretch; padding:0; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink); font:inherit; font-weight:600; text-decoration:underline; cursor:pointer; overflow:hidden}
+.view-pill > span:first-child{padding:8px 12px}
+.view-pill-half{display:inline-flex; align-items:center; padding:0 10px; border-left:1px solid var(--line); background:var(--desk-active)}
+.view-row .desk-menu button{text-decoration:underline}
+.view-dex-info{margin:4px 10px 2px; font-size:12px}
+.view-dex-info a{color:inherit; text-decoration:underline}
 .desk-icon-btn{width:32px; height:32px; border:0; border-radius:8px; background:none; color:var(--ink-soft); display:flex; align-items:center; justify-content:center}
 .desk-icon-btn:hover{background:var(--desk-active)}
 

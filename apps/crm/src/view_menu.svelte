@@ -2,9 +2,10 @@
   import { host } from './bridge'
   import DeskIcon from './desk_icon.svelte'
   import { focusFirst, menuKeys } from './desk_menu'
-  import { View } from './nav'
-  import { prefs, savePrefs } from './prefs.svelte'
+  import { chooseView, prefs } from './prefs.svelte'
   import { S } from './strings'
+  import { viewChoices, viewLabel } from './view_pick'
+  import type { View } from './nav'
 
   interface Props {
     /** The class of the button: the classic header's round icon or the Desk's circle. */
@@ -13,17 +14,11 @@
   const { cls }: Props = $props()
 
   let open = $state(false)
-  const rings = $derived(host.showRings)
+  const views = viewChoices(host)
 
   function choose(view: View): void {
-    prefs.view = view
-    savePrefs()
     open = false
-  }
-
-  function membranes(): void {
-    open = false
-    rings?.()
+    chooseView(view)
   }
 </script>
 
@@ -33,15 +28,11 @@
   </button>
   {#if open}
     <div class="desk-menu" role="menu" aria-label={S.desk.switchView} use:focusFirst>
-      <button role="menuitemradio" aria-checked={prefs.view === View.Desk} data-view="desk" onclick={(): void => choose(View.Desk)}>
-        <span class="desk-check">{#if prefs.view === View.Desk}<DeskIcon name="check" size={16} />{/if}</span>{S.views.desk}
-      </button>
-      <button role="menuitem" aria-disabled={rings ? undefined : 'true'} title={rings ? undefined : S.desk.openInside} data-view="membranes" onclick={rings ? membranes : undefined}>
-        <span class="desk-check"></span>{S.views.membranes}
-      </button>
-      <button role="menuitemradio" aria-checked={prefs.view === View.Classic} data-view="classic" onclick={(): void => choose(View.Classic)}>
-        <span class="desk-check">{#if prefs.view === View.Classic}<DeskIcon name="check" size={16} />{/if}</span>{S.views.classic}
-      </button>
+      {#each views as v (v)}
+        <button role="menuitemradio" aria-checked={prefs.view === v} data-view={v} onclick={(): void => choose(v)}>
+          <span class="desk-check">{#if prefs.view === v}<DeskIcon name="check" size={16} />{/if}</span>{viewLabel(v)}
+        </button>
+      {/each}
     </div>
   {/if}
 </div>
