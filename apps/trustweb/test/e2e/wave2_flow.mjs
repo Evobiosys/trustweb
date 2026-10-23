@@ -47,12 +47,12 @@ const dockOpen = async (page) => (await page.locator('.query-dock').count()) ===
 async function partQuery(a) {
   ok('the bar is the old one by default: Membranes | Record | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
   await a.locator('[data-open-query="1"]').click()
-  ok('Web: one tap on "Call into your web" opens the query', await dockOpen(a))
+  ok('Web: one tap on "Ask your web" opens the query', await dockOpen(a))
   await a.locator('.query-dock .x').click()
 
   await tab(a, 'My Resources')
   const call = a.locator('[data-open-query="inventory"]')
-  ok('Inventory: "Call into your web" is there', await call.isVisible() && (await call.getAttribute('aria-label')) === 'Call into your web')
+  ok('Inventory: "Ask your web" is there', await call.isVisible() && (await call.getAttribute('aria-label')) === 'Ask your web')
   const [cb, rb] = [await call.boundingBox(), await a.locator('.requests-fab').boundingBox()]
   ok('it sits opposite "Review requests", never over it', Boolean(cb && rb) && cb.x + cb.width <= rb.x, JSON.stringify({ cb, rb }))
   await shot(a, 'w2-01-inventory-call')
@@ -107,10 +107,10 @@ const safeLinks = (ls) => ls.every((l) => l.target === '_blank' && /noopener/.te
 async function partWebSearch(browser, base, a) {
   const engineRequests = []
   a.on('request', (r) => { if (ENGINE_HOSTS.test(new URL(r.url()).hostname)) engineRequests.push(r.url()) })
-  // Back to the "Call into your web" style, where the magnifier searches contacts.
+  // Back to the "Ask your web" style, where the magnifier searches contacts.
   await tab(a, 'My Resources')
   await a.getByRole('button', { name: 'Settings' }).click()
-  await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Call into your web$/ }) }).click()
+  await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Ask your web$/ }) }).click()
   await closeSheet(a)
   await tab(a, 'Membranes')
   await a.getByRole('button', { name: 'Search contacts' }).click()
@@ -142,7 +142,7 @@ async function partWebSearch(browser, base, a) {
   await tab(a, 'Membranes')
   await a.locator('[data-open-query="1"]').click()
   await a.locator('.query-dock textarea').fill('Does anyone have a sailing boat?')
-  await a.getByRole('button', { name: 'Call into my web' }).click()
+  await a.getByRole('button', { name: 'Ask my web' }).click()
   await a.locator('.query-dock [data-web-search]').waitFor({ timeout: 200_000 })
   const ql = await links(a.locator('.query-dock'))
   ok('after the answers (here: nothing found), the same row with the asked words', ql.length === 4 && ql[3].href === 'https://search.brave.com/search?q=Does%20anyone%20have%20a%20sailing%20boat%3F' && safeLinks(ql), JSON.stringify(ql))

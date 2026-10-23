@@ -113,10 +113,10 @@ async function closeSheets(page) {
 async function ask(page, text) {
   await closeSheets(page)
   await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
-  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
+  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Ask your web', exact: true }).click()
   await page.locator('.query-dock textarea').fill(text)
   const t0 = Date.now()
-  await page.getByRole('button', { name: 'Call into my web' }).click()
+  await page.getByRole('button', { name: 'Ask my web' }).click()
   return t0
 }
 

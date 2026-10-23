@@ -73,13 +73,13 @@ async function setPassOn(page, name, on) {
 /** Ann's ask with the reach chosen in the dock; resolves with the result card's text and how long it took. */
 async function ask(page, text, reachChoice) {
   await tab(page, 'Membranes')
-  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Call into your web', exact: true }).click()
+  if (await page.locator('.query-dock').count() === 0) await page.getByRole('button', { name: 'Ask your web', exact: true }).click()
   await page.locator('.query-dock').waitFor({ timeout: 10_000 })
   await page.locator(`.query-dock [data-reach-choice="${reachChoice}"]`).click()
   await page.locator('.query-dock textarea').fill(text)
   await shot(page, `ann_dock_${reachChoice}`)
   const t0 = Date.now()
-  await page.getByRole('button', { name: 'Call into my web' }).click()
+  await page.getByRole('button', { name: 'Ask my web' }).click()
   await page.locator('.card.asked .outcome').waitFor({ timeout: 240_000 })
   return { text: await page.locator('.card.asked').innerText(), ms: Date.now() - t0, sentAt: t0, answeredAt: Date.now() }
 }
@@ -124,7 +124,7 @@ async function main() {
 
     // 1. friends of friends, Ben passing Ann's asks on (on by default since 2026-10-09)
     await tab(ann, 'Membranes')
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     ok('"How far?": my contacts by default, five choices', (await ann.locator('[data-reach-choice]').count()) === 5
       && (await ann.locator('[data-reach-choice="contacts"]').getAttribute('aria-checked')) === 'true')
     const benAnn = (await record(ben)).people.find((p) => p.name === ANN)
@@ -134,7 +134,7 @@ async function main() {
     const q1 = 'Does anyone have a ladder I could borrow?'
     const cleoSaw = answerAsk(cleo, true, 'cleo_prompt')
     const r1 = await ask(ann, q1, 'fof')
-    // The exact send moment is ask()'s own (the click on "Call into my web"), so the elapsed figures start there.
+    // The exact send moment is ask()'s own (the click on "Ask my web"), so the elapsed figures start there.
     stamps.ask1_sent = r1.sentAt
     stamps.ask1_answered = r1.answeredAt
     console.log(`  [t] ask1_sent  ${new Date(r1.sentAt).toISOString()}`)
@@ -153,7 +153,7 @@ async function main() {
 
     // 2. my contacts only (the default): Cleo is never asked
     await ann.locator('.query-dock .x').click().catch(() => {})
-    await ann.getByRole('button', { name: 'Call into your web', exact: true }).click()
+    await ann.getByRole('button', { name: 'Ask your web', exact: true }).click()
     const q2 = 'Anyone with a ladder, just my contacts?'
     const cleoSaw2 = answerAsk(cleo, false, 'cleo_unexpected_prompt', 60_000)
     const r2 = await ask(ann, q2, 'contacts')

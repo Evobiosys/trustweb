@@ -127,6 +127,7 @@ const CONTEXT_QUERYABLE_ASK: Record<DemoContext, string> = {
   [DemoContext.Generic]: 'Who is hiring?',
   [DemoContext.Emergent]: 'Does anyone have interpretability research contacts?',
   [DemoContext.Ea]: 'Does anyone need biosecurity funding?',
+  [DemoContext.Otf]: 'Does anyone know a lawyer for activists?',
 }
 
 describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
@@ -201,6 +202,23 @@ describe('trustweb demo-context seeds (Manifund/EV demo-edit-2)', () => {
       expect(all).not.toMatch(/animal welfare/i)
       expect(all).not.toMatch(/motorbike/i)
     }
+  })
+
+  it('internet freedom (OTF): the asks the demo page suggests surface or stay silent as its steps say', () => {
+    const state = seedState(Persona.Holder, T1, DemoContext.Otf)
+    // solo.ts step 1 and further asks a reviewer is likely to try, at the rings a connected phone can sit in.
+    for (const ring of [Ring.Close, Ring.Friend, Ring.Acquaintance]) {
+      expect(surfaces(state, ring, 'Does anyone know a lawyer for activists?')).toBe(true)
+      expect(surfaces(state, ring, 'Does anyone know a translator?')).toBe(true)
+      expect(surfaces(state, ring, 'Is there an emergency fund for journalists at risk?')).toBe(true)
+      // solo.ts step 4: the border driver is "Only me", so no ring ever reaches it.
+      expect(surfaces(state, ring, 'Does anyone know a driver at the border?')).toBe(false)
+      expect([...threadsForRing(state, ring).refs.values()].map((r) => r.text).join(' | ')).not.toMatch(/border/)
+    }
+    // Leyla's fixer line is for friends: an acquaintance's ask does not reach it.
+    expect(surfaces(state, Ring.Friend, 'Who is looking for a fixer?')).toBe(true)
+    expect(surfaces(state, Ring.Acquaintance, 'Who is looking for a fixer?')).toBe(false)
+    expect(state.people.some((p) => /Tyler Cowen|William MacAskill/.test(p.name))).toBe(false)
   })
 
   it('each context has at least one queryable People line at Ring.Friend', () => {

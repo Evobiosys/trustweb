@@ -38,7 +38,7 @@ async function shot(page, name) {
 /** Jonas asks `text`; Maya's phone must show a prompt holding `expect`; she shares; Jonas's card holds `expect`. */
 async function soloAsk(page, maya, jonas, text, expect, label) {
   await jonas.locator('textarea').fill(text)
-  await jonas.getByRole('button', { name: 'Call into my web' }).click()
+  await jonas.getByRole('button', { name: 'Ask my web' }).click()
   const prompted = await maya.getByText('Jonas asks').waitFor({ timeout: 25_000 }).then(() => true).catch(() => false)
   const lines = prompted ? await maya.locator('.ask-line').allInnerTexts() : []
   ok(`${label}: Maya is asked and her prompt shows the line`, prompted && lines.some((t) => expect.test(t)), JSON.stringify(lines))
@@ -70,10 +70,10 @@ async function sectionDemoPage(browser, base) {
   await page.getByRole('button', { name: /Add a device/ }).click()
   await jonas.getByRole('button', { name: 'Connect', exact: true }).waitFor({ timeout: 30_000 })
   await jonas.getByRole('button', { name: 'Connect', exact: true }).click()
-  await jonas.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
+  await jonas.getByRole('button', { name: 'Ask your web' }).click({ timeout: 30_000 })
   await page.waitForFunction(() => {
     const f = [...document.querySelectorAll('iframe')].find((i) => i.title === 'Device 2')
-    const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Call into my web')
+    const b = [...(f?.contentDocument?.querySelectorAll('button') ?? [])].find((x) => x.textContent === 'Ask my web')
     return b && !b.disabled
   }, null, { timeout: 30_000 })
   await soloAsk(page, maya, jonas, 'Does anyone have a couch I could sleep on?', /Couch when you are in Vienna/, 'couch')
@@ -134,14 +134,14 @@ async function sectionFrontDoor(browser, scratch, publicDir, relay) {
       ['Which map projection do you use for global maps?', /Equal Earth/, 'projection'],
     ]
     for (const [text, expect, label] of asks) {
-      if (await carl.locator('.query-dock').count() === 0) await carl.getByRole('button', { name: /Call into your web/ }).first().click()
+      if (await carl.locator('.query-dock').count() === 0) await carl.getByRole('button', { name: /Ask your web/ }).first().click()
       await carl.locator('.query-dock textarea').fill(text)
-      await carl.getByRole('button', { name: 'Call into my web' }).click()
+      await carl.getByRole('button', { name: 'Ask my web' }).click()
       await carl.locator('.card.asked .outcome').first().waitFor({ timeout: 200_000 })
       const out = await carl.locator('.card.asked').first().innerText()
       ok(`Carl-demo asks about the ${label}: the front door answers with Jakob's public line`, /Jakob chose to share/.test(out) && expect.test(out), out)
       ok(`  and it reads as allowed in advance (${label})`, /Allowed in advance by Jakob/.test(out), out)
-      await carl.getByRole('button', { name: /Call into your web again|Close/ }).first().click().catch(() => {})
+      await carl.getByRole('button', { name: /Ask your web again|Close/ }).first().click().catch(() => {})
     }
     ok('Jakob\'s own phone was never prompted (it holds none of the ten lines)', (await jakob.locator('.overlay.on').count()) === 0)
     const carlState = await record(carl)

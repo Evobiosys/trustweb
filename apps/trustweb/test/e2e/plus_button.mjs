@@ -69,7 +69,7 @@ async function main() {
     const tabs = await page.locator('nav.tabs button').allInnerTexts()
     // Wave 2 (P9): the Feed is optional and off by default, so the bar is the old one; feed_flow switches it on.
     ok('nav is exactly Membranes | Record | My Resources', JSON.stringify(tabs.map((t) => t.trim())) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(tabs))
-    ok('"Call into your web" sits on the Web screen', await page.getByRole('button', { name: 'Call into your web' }).isVisible())
+    ok('"Ask your web" sits on the Web screen', await page.getByRole('button', { name: 'Ask your web' }).isVisible())
     const hdr = await page.locator('.hdr-right > *').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))
     ok('header right reads manage (the outliner glyph, wave 6 N3), QR, more', hdr.length === 3 && /Manage and search contacts/.test(hdr[0]) && /QR/.test(hdr[1]) && /More/.test(hdr[2]), JSON.stringify(hdr))
     ok('no "Online" text in the header', !(await page.locator('.hdr').innerText()).includes('Online'))
@@ -157,16 +157,16 @@ async function main() {
     page.once('dialog', (d) => void d.accept())
     await page.getByRole('button', { name: 'Discard' }).click()
 
-    // Inventory: the cog top right (where ⋮ is on Web), "Review requests" where Web has "Call into your web"
+    // Inventory: the cog top right (where ⋮ is on Web), "Review requests" where Web has "Ask your web"
     await page.getByRole('button', { name: 'Membranes', exact: true }).click()
     const moreOnWeb = await page.locator('.hdr [aria-label="Settings"]').boundingBox()
-    const callOnWeb = await page.getByRole('button', { name: 'Call into your web' }).boundingBox()
+    const callOnWeb = await page.getByRole('button', { name: 'Ask your web' }).boundingBox()
     await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
     const cog = await page.locator('.hdr-right .hdr-btn.icon-only').last().boundingBox()
     ok('Inventory: the cog sits top right, where ⋮ sits on Web', Math.abs(cog.x - moreOnWeb.x) < 1 && Math.abs(cog.y - moreOnWeb.y) < 1, JSON.stringify([moreOnWeb, cog]))
     const req = page.getByRole('button', { name: 'Review requests' })
     const rb = await req.boundingBox()
-    ok('Inventory: "Review / requests" (two lines) sits where "Call into your web" sits', Math.abs(rb.x + rb.width - callOnWeb.x - callOnWeb.width) < 2 && Math.abs(rb.y + rb.height - callOnWeb.y - callOnWeb.height) < 2 && /Review\s*\n\s*requests/.test(await req.innerText()))
+    ok('Inventory: "Review / requests" (two lines) sits where "Ask your web" sits', Math.abs(rb.x + rb.width - callOnWeb.x - callOnWeb.width) < 2 && Math.abs(rb.y + rb.height - callOnWeb.y - callOnWeb.height) < 2 && /Review\s*\n\s*requests/.test(await req.innerText()))
     await req.click()
     ok('it opens the asks people sent you', await page.getByRole('heading', { name: 'Requests to My Resources' }).isVisible())
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })

@@ -36,6 +36,8 @@ jobs:
         run: ../crm/node_modules/.bin/vite build --outDir dist --emptyOutDir
       - name: private-line scan
         run: node apps/trustweb/test/scan_bundle_for_private_lines.mjs apps/trustweb/dist
+      - name: demo pages never load the app entry (they stayed blank when they did, 2026-10-19)
+        run: node apps/trustweb/test/scan_demo_entries.mjs apps/trustweb/dist
       - uses: actions/upload-artifact@v4
         with:
           name: trustweb-${{ github.sha }}

@@ -87,7 +87,7 @@ async function partDirect(browser, a) {
   await a.locator('[data-open-query="1"]').click()
   ok('the query dock says only direct contacts are asked', /Only your direct contacts are asked/.test(await a.locator('.query-dock [data-direct-note]').innerText()))
   await a.locator('.query-dock textarea').fill('Does anyone have a cargo bike?')
-  await a.getByRole('button', { name: 'Call into my web' }).click()
+  await a.getByRole('button', { name: 'Ask my web' }).click()
   const share = b.getByRole('button', { name: 'Share these' })
   await share.waitFor({ timeout: 30_000 }).catch(() => {})
   ok('the direct ask reaches Ben and his phone shows it (the new build reads the flag)', await share.isVisible())

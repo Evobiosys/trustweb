@@ -48,7 +48,7 @@ describe('the data module', () => {
 })
 
 describe('the seed: Jakob in every demo web (allowlist)', () => {
-  const EXPECTED_PEOPLE = { [DemoContext.Generic]: 7, [DemoContext.Emergent]: 7, [DemoContext.Ea]: 8 }
+  const EXPECTED_PEOPLE = { [DemoContext.Generic]: 7, [DemoContext.Emergent]: 7, [DemoContext.Ea]: 8, [DemoContext.Otf]: 6 }
   for (const ctx of DEMO_CONTEXTS) {
     it(`${ctx}: one person Jakob at Ring.Friend with exactly the ten lines, the new people count, Maya's three things`, () => {
       const seed = seedState(Persona.Holder, NOW, ctx)

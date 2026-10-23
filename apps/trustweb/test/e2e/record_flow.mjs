@@ -150,7 +150,7 @@ async function main() {
     await chooseMode(page, 'trustweb-signal')
     ok('the unified code is the TrustWeb code', /connect=|\/c\//.test(await page.getAttribute('.qrwrap', 'data-payload') ?? ''))
     await page.getByRole('button', { name: 'Back' }).click()
-    ok('the call button explains itself on hover', /resonance/.test(await page.getByRole('button', { name: 'Call into your web' }).getAttribute('title') ?? ''))
+    ok('the call button explains itself on hover', /resonance/.test(await page.getByRole('button', { name: 'Ask your web' }).getAttribute('title') ?? ''))
 
     // Record (solo): Tana voice-memo layout
     const qrOnWeb = await page.locator('.status-pill.qr').boundingBox()
@@ -327,7 +327,7 @@ async function main() {
     const maya = demo.frameLocator('iframe[title="Device 1"]')
     await maya.getByLabel('Your first name').fill('Maya')
     await maya.getByRole('button', { name: 'Start on this phone' }).click()
-    await maya.getByRole('button', { name: 'Call into your web' }).click({ timeout: 30_000 })
+    await maya.getByRole('button', { name: 'Ask your web' }).click({ timeout: 30_000 })
     await demo.waitForTimeout(400)
     const fit = await demo.evaluate(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 1")
