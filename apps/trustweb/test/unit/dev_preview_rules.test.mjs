@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -262,6 +262,21 @@ describe('approve (merge to main) rules', () => {
     expect(pendingCount({ features: list, assembled: { set: [] } })).toBe(2)
     expect(pendingCount({ features: list, assembled: null })).toBe(1)   // no assembled.set (older registry): its checked rows a, b, d against the approved a, d
     expect(pendingText(1)).toBe('1 change not applied'); expect(pendingText(3)).toBe('3 changes not applied')
+  })
+  it('no manual reload (Jakob 2026-10-24): a pending registry starts the apply by itself, unless one is going, a test runs, or the last apply got stuck (Retry is the owner\'s)', () => {
+    const pend = { pending: true, tested: null }
+    expect(autoApply(pend, null)).toBe(true)
+    expect(autoApply({ pending: false, tested: null }, null)).toBe(false)
+    expect(autoApply(pend, { stamp: '', moved: 0, stuck: false })).toBe(false)
+    expect(autoApply(pend, { stamp: '', moved: 0, stuck: true })).toBe(false)
+    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: null, running: true } }, null)).toBe(false)
+    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: true, running: false } }, null)).toBe(true)
+  })
+  it('the page reloads itself once the assembled sha moved away from the one it knows (a CLI apply, or the Approve press); unknown or same sha: stay', () => {
+    expect(assemblyMoved('abc1234', { assembled: { sha: 'abc1234' } })).toBe(false)
+    expect(assemblyMoved('abc1234', { assembled: { sha: 'def5678' } })).toBe(true)
+    expect(assemblyMoved(null, { assembled: { sha: 'def5678' } })).toBe(false)
+    expect(assemblyMoved('abc1234', { assembled: null })).toBe(false)
   })
   it('the apply counts as stuck when the registry did not change for 90 s', () => {
     const p = { pending: true, assembled: { at: 't1', set: [] }, features: [g('a', true, 'merge')] }

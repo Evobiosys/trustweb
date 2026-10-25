@@ -138,6 +138,13 @@ export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?
 }
 export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
 
+/** No manual reload (Jakob 2026-10-24): the panel starts `apply` itself whenever the registry says pending and nothing stands in the way: no apply going
+ *  (a stuck one waits for the owner's Retry), no local test run (it reads the assembled worktree). */
+export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null): boolean => !!p.pending && applying === null && !p.tested?.running
+
+/** The assembled sha moved away from the one this page knows (a CLI apply, the Approve press, another tab): the page reloads itself. Unknown = not yet compared. */
+export const assemblyMoved = (known: string | null, p: { assembled?: { sha: string } | null }): boolean => known !== null && !!p.assembled && p.assembled.sha !== known
+
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
