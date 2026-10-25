@@ -54,6 +54,7 @@ import {
 } from './share_modes'
 import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
+import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
