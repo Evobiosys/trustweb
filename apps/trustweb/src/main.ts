@@ -2841,6 +2841,7 @@ const chatStrings = (): ChatStrings => ({
   offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
   re: S.chatRe, replyingTo: S.chatReplyingTo, replyingToDrop: S.chatReplyingToDrop,
+  notDelivered: S.chatNotDelivered, sendVia: (k) => S.chatSendVia(S.chLabel[k === 'signal' ? Channel.Signal : Channel.WhatsApp]),
 })
 
 const shareStrings = (): ShareStrings => ({ tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint })
@@ -3036,7 +3037,8 @@ function chatSheet(personId: string, open: StackOpen = {}): void {
   if (!p) return
   hideMsgNotice()
   const handle = renderChat({
-    ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p) }, S: chatStrings(),
+    ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p), theirChannels: p.theirChannels }, S: chatStrings(),
+    copy: (text) => copyLink(text, S.chatCopied), open: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
     isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo,
   })
   openSheet([handle.el])
