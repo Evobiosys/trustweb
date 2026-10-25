@@ -4525,6 +4525,24 @@ function meetTrustWebPage(): HTMLElement {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
+  const inviteCount = el('p', { class: 'meta', 'data-invite-count': '', hidden: !st().invitesSent }, [S.inviteCount(st().invitesSent ?? 0)])
+  const inviteBtn = el('button', {
+    class: 'btn btn-ghost', 'data-invite-someone': '',
+    onclick: () => {
+      const inv = inviteText(namesSync().names().name ?? null, view.current())
+      void sendInvite(inv, {
+        share: typeof navigator.share === 'function' ? (d) => navigator.share({ title: d.title, text: d.text }) : undefined,
+        copy: (t) => navigator.clipboard.writeText(t),
+      }).then((ok) => {
+        if (!ok) return
+        st().invitesSent = (st().invitesSent ?? 0) + 1
+        save()
+        inviteCount.textContent = S.inviteCount(st().invitesSent ?? 0)
+        inviteCount.hidden = false
+        if (typeof navigator.share !== 'function') toast(S.meetCopied)
+      })
+    },
+  }, [S.inviteButton])
   const nfc = NFC_WRITE_OFFERED && nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
@@ -4630,6 +4648,8 @@ function meetTrustWebPage(): HTMLElement {
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
+    inviteBtn,
+    inviteCount,
     view.el,
     advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),

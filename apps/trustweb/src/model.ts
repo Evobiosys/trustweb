@@ -892,6 +892,8 @@ export interface AppState {
    * unknown value is dropped at boot. An older build ignores both.
    */
   shareMode?: string
+  /** Wave 21: how many invites I sent (a share that resolved or a copy). A number only, no names. Absent: none. */
+  invitesSent?: number
   sharePins?: string[]
   /** Wave 6e: when the small "Is this safe?" link was first shown on the Add sheet after a scan (it shows that once). Absent: not yet. */
   safetyLinkShownAt?: number
