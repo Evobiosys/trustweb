@@ -32,11 +32,11 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
-import { canRegister, createConnectKeeper, repairConnectRecord } from './connect_code'
+import { canRegister, createConnectKeeper } from './connect_code'
 import { createNamesSync } from './names_sync'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
-import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
+import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection } from './timeline_view'
@@ -50,7 +50,7 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, viaFragment,
 } from './share_modes'
 import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
@@ -71,7 +71,7 @@ import {
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
-import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
+import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -86,6 +86,7 @@ import { S } from './strings'
 import { networkChosen } from './network_graph'
 import { createNetworkView } from './network_view'
 import { knowsRow } from './knows_view'
+import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -118,10 +119,10 @@ import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
-import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
+import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
 import { isJpegDataUrl } from '../../demo/src/types'
-import { addNorm, autoSendRank, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne, sliceFor, zoneOf } from './profile'
+import { addNorm, autoSendRank, buildProfileText, receiveProfileText, removeNorm, setOne, sliceFor, zoneOf } from './profile'
 import type { Zone } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
@@ -132,12 +133,12 @@ import { DESKTOP_KEY, DEX_URL, UI_VIEWS, UiView, desktopView, wideAllowed } from
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
-import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields, travelsInPack } from './note_fields'
+import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, travelsInPack } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { KeepNotice, dueForTakeDown, guestAsk, guestAsked, guestEnded, guestGranted, guestKept, isKept, keepAccount, keepText, parseKeepText, unkeepAccount } from './account_keep'
 import { asksMatchNotes, notesMatchDefault } from './notes_source'
-import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
+import { focusFor, linesFromTranscript, markDemo, markReviewed, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
@@ -148,7 +149,6 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
-import { repairOtherCodes } from './sync_code'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -376,37 +376,19 @@ if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
 // A failure leaves the record exactly as loaded (nothing saved) and the app still starts.
 try {
   if (state) {
-    const sourced = migrateSources(state)
-    const noted = normaliseNoteFields(state)
+    const migrated = migrate(state)
     // Wave 6 (N6): a demo account made before had its inviter and his front door as two people; now one (one_jakob.ts).
     const merged = mergeOneJakob(state, S.demoPeerContext)
     // Wave 6 (notes_source.ts): the side-by-side demo phones do not let asks match notes (their content is imaginary); stored once, so it also holds after "Add demo content" changes the default.
     const soloOff = solo && state.asksMatchNotes === undefined
     if (soloOff) state.asksMatchNotes = false
     // Wave 6 (chat.ts): a corrupted `chats` value is repaired, never thrown on.
-    const chatsFixed = migrateChats(state)
-    if (sourced || noted || merged || soloOff || chatsFixed) save()
+    if (migrated || merged || soloOff) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
 }
-// The field repairs of waves 6b and 6e run in their own block, so a failure of a migration above (state reloaded as stored) does not skip
-// them (review 6e). Each never throws on its own; the block is a second net.
-try {
-  if (state) {
-    // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
-    const codeFixed = [repairConnectRecord(state), repairOtherCodes(state)].some(Boolean)
-    // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
-    const modesFixed = repairShareFields(state)
-    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
-    const notesFixed = repairGeneralNotes(state)
-    // Wave 7 (profile.ts): a stored profile of the wrong shape is dropped.
-    const profileFixed = repairProfile(state)
-    // Wave 7 (agreements.ts): stored agreements that are not well formed are dropped.
-    const agreementsFixed = repairAgreements(state)
-    if (codeFixed || modesFixed || notesFixed || profileFixed || agreementsFixed) save()
-  }
-} catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
+// The field repairs of waves 6b to 7 (connect code, share modes, general notes, profile, agreements) run in the migrate() chain above (schema_version.ts).
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
 // A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
 try {

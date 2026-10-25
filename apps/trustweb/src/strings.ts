@@ -833,6 +833,7 @@ export const S = {
   bkRestoreOk: 'Restore',
   bkRestoreConfirm: 'Replace everything on this phone with the backup?',
   bkBadKey: 'That is not a valid recovery key or passphrase.',
+  schemaNewer: (found: number, reads: number) => `This backup comes from a newer TrustWeb (format ${found}, this app reads ${reads}). Update the app first.`,
   bkBadData: 'The backup opened, but it is not a TrustWeb record.',
   bkNotFound: 'No backup found for this key.',
   dvTitle: 'My devices',

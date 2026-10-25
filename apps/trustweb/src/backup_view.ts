@@ -11,6 +11,7 @@ import { el } from '../../demo/src/ui/dom'
 import { BackupNotFound, backupNow, keyFromPassphrase, newRandomKey, parseKeyText, restore } from './backup'
 import type { BackupKey } from './backup'
 import type { AppState } from './model'
+import { SchemaNewerError, assertReadable } from './schema_version'
 import { parseRecord } from './store'
 import { S } from './strings'
 
@@ -124,6 +125,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
       try {
         const data = await restore(key)
         // The same rule as a record on this phone (store.ts): an object at version 1 with an owner.
+        assertReadable((data as { schemaVersion?: unknown } | null)?.schemaVersion)
         const record = typeof data === 'object' && data !== null ? parseRecord(JSON.stringify(data)) : null
         if (!record) { msg.textContent = S.bkBadData; return }
         if (!confirm(S.bkRestoreConfirm)) return
@@ -131,7 +133,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
         saveBackupInfo({ keyText: key.text, fromPassphrase: key.fromPassphrase, lastAt: Date.now(), lastBytes: 0 })
         h.replaceRecord(record)
       } catch (e) {
-        msg.textContent = e instanceof BackupNotFound ? S.bkNotFound : S.bkFailed
+        msg.textContent = e instanceof SchemaNewerError ? (msg.dataset.schemaNewer = String(e.found), S.schemaNewer(e.found, e.reads)) : e instanceof BackupNotFound ? S.bkNotFound : S.bkFailed
       }
     }
     h.openSheet([el('h3', {}, [S.bkRestoreTitle]), msg, input, el('button', { class: 'btn btn-electric', onclick: () => void run() }, [S.bkRestoreOk])])

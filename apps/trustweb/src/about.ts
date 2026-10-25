@@ -8,7 +8,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { devEventsFile } from './dev_events'
 import { devRecordFile } from './dev_record'
-import { RECORD_FORMAT } from './model'
+import { SCHEMA_VERSION } from './schema_version'
 import { S } from './strings'
 
 /** The website of the idea2.site build (app.idea2.site/trustweb/), and the fallback. */
@@ -63,7 +63,7 @@ export function aboutGroup(): (HTMLElement | null)[] {
     el('p', { class: 'meta about-steward' }, [S.aboutSteward]),
     el('div', { class: 'about-links' }, ABOUT_PAGES.map((p) => outLink(aboutUrl(p), S.aboutPage[p], 'about-link'))),
     // Smooth updates are the hosted version's promise (P20): which build this is, and which data format it keeps.
-    el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), RECORD_FORMAT)]),
+    el('p', { class: 'meta about-version', 'data-app-version': appVersion() }, [S.aboutVersion(appVersion(), SCHEMA_VERSION)]),
     devRecordFile() ? el('p', { class: 'meta about-dev-record' }, [`dev record: ${devRecordFile()}`]) : null,
     devEventsFile() ? el('p', { class: 'meta about-dev-events' }, [`dev events: ${devEventsFile()?.events.length}`]) : null,
   ]
