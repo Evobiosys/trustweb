@@ -87,7 +87,7 @@ const MAX_TRACKED_CLIENTS = 10000
 /** The short-link routes: never logged (see the header). */
 const isLinkPath = (pathname) => pathname === '/link' || pathname.startsWith('/l/')
 /** The connect-code and username routes (wave 6b): never logged either. */
-const isConnectPath = (pathname) => pathname === '/connect' || pathname === '/name' || pathname.startsWith('/c/') || pathname.startsWith('/who/')
+const isConnectPath = (pathname) => pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || pathname.startsWith('/c/') || pathname.startsWith('/who/')
 
 function hostOnly(value) {
   const v = String(value).trim().toLowerCase()
@@ -379,7 +379,7 @@ export async function startServer(options = {}) {
     const longRoute = pathname.startsWith('/hosted/') || pathname === '/transcribe'
     // The new routes answer in JSON (services-api-contract.txt); /backup and /health keep their plain-text answers.
     const isWebsearch = pathname === '/websearch' || pathname === '/websearch/engines'
-    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || isOrgPath(pathname)
+    const jsonRoute = longRoute || pathname === '/feedback' || isWebsearch || pathname === '/link' || pathname === '/connect' || pathname === '/name' || pathname === '/names/cap-request' || isOrgPath(pathname)
     const slowDown = () => {
       const retryAfter = Math.ceil(cfg.rateWindowMs / 1000)
       if (jsonRoute) return tooManyRequests(res, 'rate_limited', retryAfter)
@@ -419,6 +419,7 @@ export async function startServer(options = {}) {
     if (pathname.startsWith('/l/')) return links === null ? notFoundPage(res) : links.open(req, res, pathname)
     if (pathname === '/connect') return connect === null ? jsonError(res, 503, 'not_configured') : connect.create(req, res)
     if (pathname === '/name') return connect === null ? jsonError(res, 503, 'not_configured') : connect.name(req, res)
+    if (pathname === '/names/cap-request') return connect === null ? jsonError(res, 503, 'not_configured') : connect.capRequest(req, res)
     if (pathname.startsWith('/c/')) return connect === null ? notFoundPage(res) : connect.open(req, res, pathname)
     if (pathname.startsWith('/who/')) return connect === null ? notFoundPage(res) : connect.who(req, res, pathname)
     if (isOrgPath(pathname)) return organizer === null ? jsonError(res, 503, 'not_configured') : organizer.handle(req, res, pathname)
