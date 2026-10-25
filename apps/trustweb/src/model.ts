@@ -870,6 +870,8 @@ export interface AppState {
   contactShare?: ShareSettings
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
+  /** Settings > Public link "Show my Signal / WhatsApp links to people who connect" (channel_visibility.ts). Absent: on; only false is stored. */
+  showMessengerLinks?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */

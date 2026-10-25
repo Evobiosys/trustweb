@@ -69,6 +69,7 @@ import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
+import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
@@ -3089,6 +3090,7 @@ function onContactText(peer: Peer, text: string): void {
 function sendLinksTo(peer: Peer, channels: Channel[]): void {
   const s = st()
   let settings: ShareSettings | undefined = s.contactShare
+  channels = shownChannels(s.showMessengerLinks, channels)
   for (const ch of channels) settings = withTick(settings, ch, true)
   const built = buildContactPayload(APP_URL, Object.fromEntries(channels.map((ch) => [ch, s.myChannels?.[ch]])), settings)
   if (built) net.sendText(peer, contactText(APP_URL, built.payload)).catch(() => { /* the person asks again */ })
@@ -3097,9 +3099,10 @@ function sendLinksTo(peer: Peer, channels: Channel[]): void {
 /** Wave 9: a paired person asks for my links. Ticked ones go at once, saved-unticked ones are asked one by one, the rest is silence. */
 function onContactRequest(peer: Peer, text: string): void {
   const s = st()
-  const wanted = parseRequestText(APP_URL, text)
+  const asked = parseRequestText(APP_URL, text)
+  const wanted = asked && shownChannels(s.showMessengerLinks, asked)
   const person = s.people.find((p) => p.peerId === peer.id)
-  if (!wanted || !person || noSendTo(peer)) return
+  if (!wanted?.length || !person || noSendTo(peer)) return
   // Someone who came in through the public link stays on Intending until I move them: until then a request is dropped, not answered.
   if (!mayAnswerRequest(peer, person)) return
   const plan = answerPlan(s.myChannels, s.contactShare, wanted)
@@ -4516,8 +4519,9 @@ function meetTrustWebPage(): HTMLElement {
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
     const via = publicLinkVia(mode)
-    publicVia.hidden = !via
-    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
+    const viaShown = via && messengerLinksShown(st()) ? via : null
+    publicVia.hidden = !viaShown
+    publicVia.textContent = viaShown ? S.publicLinkOffers(reachOutLink(), S.chLabel[viaShown]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -5460,6 +5464,10 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
     ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
+      el('button', {
+        class: 'radio' + (messengerLinksShown(s) ? ' on' : ''), 'aria-pressed': String(messengerLinksShown(s)), 'data-signal-visible': '1',
+        onclick: () => { toggleMessengerLinks(s); save(); settingsSheet() },
+      }, [el('b', {}, [S.setMessengerLinks]), el('small', {}, [S.setMessengerLinksHint])]),
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
         onclick: () => { if (s.reachOutsPaused) delete s.reachOutsPaused; else s.reachOutsPaused = true; save(); settingsSheet() },

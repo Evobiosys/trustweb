@@ -1640,6 +1640,8 @@ export const S = {
   consChat: 'Chat on Consensual',
   consPropose: 'Propose on Consensual',
   consHonesty: 'This opens Consensual, a separate app by the Consensual steward; TrustWeb does not read or send anything there.',
+  setMessengerLinks: 'Show my Signal / WhatsApp links to people who connect',
+  setMessengerLinksHint: 'Off: your Signal and WhatsApp links stay out of what people get when they connect or ask for your links. Links already sent stay with them.',
   setConsensual: 'Prefer Consensual for chats',
   setConsensualHint: 'When you hold a person\'s Consensual link, the Chat button on their card opens Consensual; TrustWeb\'s own chat stays one tap below.',
   chatNotConnected: (name: string) => `${name} is not connected on TrustWeb yet. Connect first to chat here.`,
