@@ -261,7 +261,6 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
       const [status, error] = NAME_REFUSALS[result.kind]
       return jsonError(res, status, error, { field: 'name', ...(result.until === undefined ? {} : { until: result.until }) })
     }
-    if (agent && intent.intent === 'claim') cfg.log('name claim agent: true')
     sendJson(res, 200, { name: result.name, aliases: result.aliases, locked: result.locked })
     return 200
   }

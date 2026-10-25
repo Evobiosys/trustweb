@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { call, withServer } from './helpers.mjs'
-import { BASE, T0, claim, mint, send } from './connect_helpers.mjs'
+import { BASE, T0, claim, mint, readStore, send } from './connect_helpers.mjs'
 
 const ask = (port, body, extra) => send(port, '/names/cap-request', body, extra)
 const lines = async (dir) => (await fs.readFile(path.join(dir, 'name_cap_requests.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
@@ -43,12 +43,13 @@ test('cap request: needs the secret, a held name, a reason and a count', async (
 })
 
 test('agent claims count toward their own cap of the same size; manual claims are unchanged', async () => {
-  await withServer(0, { ...BASE, nameCap: 3 }, async ({ srv, lines: log }) => {
+  await withServer(0, { ...BASE, nameCap: 3 }, async ({ srv, backupDir }) => {
     const agent = { headers: { 'X-TW-Agent': '1' } }
     for (const n of ['ada', 'bob', 'cyd']) assert.equal((await claim(srv.port, { name: n, ...(await mint(srv.port)) }, agent)).status, 200, n)
     assert.equal((await claim(srv.port, { name: 'dee', ...(await mint(srv.port)) }, agent)).status, 429, 'the 4th agentic claim')
     for (const n of ['eve', 'fay', 'gil']) assert.equal((await claim(srv.port, { name: n, ...(await mint(srv.port)) })).status, 200, `manual ${n}`)
     assert.equal((await claim(srv.port, { name: 'hal', ...(await mint(srv.port)) })).status, 429, 'the 4th manual claim')
-    assert.equal(log.filter((l) => l.includes('agent: true')).length, 3)
+    const keys = Object.keys((await readStore(backupDir)).claims)
+    assert.equal(keys.filter((k) => k.startsWith('agent:')).length, 1, 'recorded under the agent key')
   })
 })

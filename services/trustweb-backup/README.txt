@@ -72,7 +72,7 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   (a second is 429). It appends one JSON line {at, address, name, reason (280 chars), wanted (50 at most)} to NAME_CAP_REQUESTS (default name_cap_requests.jsonl beside
                   the NAME_CAP_ALLOW file). HOW THE STEWARD ANSWERS: read the file (tail -n 20), mail the organizer, and when approved add {"code":"<their 22-char code>","cap":<wanted>,
                   "note":"..."} to the NAME_CAP_ALLOW file and send SIGHUP (see above); the request file is never read by the server. AGENTIC CLAIMS: a POST /name with the header
-                  X-TW-Agent: 1 (set by agents and scripts, never by the app) counts toward a separate cap of the same size and window (claims key "agent:<address>") and logs `agent: true`.
+                  X-TW-Agent: 1 (set by agents and scripts, never by the app) counts toward a separate cap of the same size and window; the store file's "claims" keeps it under "agent:<address>" (the connect modules log nothing, so that key is the marker).
   usernames, wave 6e (contract section 10.9): a code holds up to 3 names (a primary + 2 aliases; POST /name {"name","alias":true} / {"release":"<name>"} / code+secret
                   alone = READ the names; answers {"name","aliases","locked"}: locked = the held names that are reserved). RESERVED_NAMES (env, production japossert,jakob) + the built-in list answer 409 reserved;
                   a reserved name a code holds was granted by the admin and is LOCKED against the app (409 name_locked). The admin routes POST|DELETE /admin/name and
