@@ -41,6 +41,7 @@ import {
   LadderChannel,
   RelayChannel,
   RelayServer,
+  parseSenderAuthMode,
   SqliteRelayQueueStore,
   HttpPostChannel,
   SqliteDedupStore,
@@ -185,7 +186,7 @@ export async function bootPersonas(personas: PersonaConfig[], opts: BootOptions)
   let relayServer: RelayServer | undefined;
   if (!externalRelayUrl) {
     relayQueueStore = new SqliteRelayQueueStore(join(opts.stateDir, mediatorKey, "relay_queue.db"));
-    relayServer = new RelayServer({ queueStore: relayQueueStore });
+    relayServer = new RelayServer({ queueStore: relayQueueStore, senderAuth: parseSenderAuthMode(process.env.RELAY_SENDER_AUTH) });
   }
 
   // Pass 2: store + transport + daemon + server, per persona.

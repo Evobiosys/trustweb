@@ -47,6 +47,7 @@ import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, type RelayQueueStore } fr
 import type { PushSubscriptionStore } from "./push_store.js";
 import { isApnsTarget, parsePushSubscription, sendWake, type PushSubscriptionJson, type VapidKeys, type WakeOutcome } from "./web_push.js";
 import { sendApns, type ApnsConfig, type ApnsTarget } from "./apns_push.js";
+import { SendAuthVerifier, hasSendAuthHeaders, type SendAuthHeaders, type SenderAuthMode } from "./relay_send_auth.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -69,6 +70,13 @@ function unb64u(s: string): Uint8Array {
 // RelayChannel caller needs it to fall back to the next ladder rung — it
 // signals "this relay won't carry this wire", never presence/volume.
 export type SubmitResult = { routed: "accepted" } | { routed: "rejected"; reason: string };
+
+/**
+ * What POST /relay/send answers. Same as SubmitResult, plus an optional HTTP `status` for refusals that are not
+ * "no route" (401 unsigned/forged/replayed/stale, 403 sender not allowed, 429/503 replay-cache budget). Those say
+ * something about the SUBMITTER only — never about the recipient — so they open no presence or volume oracle.
+ */
+export type IngressResult = { routed: "accepted" } | { routed: "rejected"; reason: string; status?: number };
 
 /** The single non-informative success returned once a wire is accepted (live-flushed or queued — indistinguishable to the submitter). */
 const ACCEPTED: SubmitResult = { routed: "accepted" };
@@ -140,6 +148,16 @@ export interface RelayServerOptions {
   maxQueueGlobal?: number;
   /** Web Push wake-ups (wave 11). Absent: the relay never pushes, phones are reached by their open drain only. */
   push?: RelayPushOptions;
+  /**
+   * Sender authentication on ingress (relay_send_auth.ts). "required" (default): every send needs a valid per-DID
+   * signature. "optional": unsigned sends pass (staged rollout of old clients), but a send that carries credentials
+   * must verify. "off": legacy open ingress.
+   */
+  senderAuth?: SenderAuthMode;
+  /** Clock-skew / replay window for signed sends in ms. Defaults to 5 minutes. */
+  senderAuthWindowMs?: number;
+  /** Authorisation hook, called only for a verified sender DID. Return false to refuse it (403). Default: any authentic DID may send. */
+  isAllowedSender?: (senderDid: string) => boolean;
 }
 
 /**
@@ -203,6 +221,9 @@ export class RelayServer {
   private readonly maxQueuePerDid: number;
   private readonly maxQueueGlobal: number;
   private readonly push: RelayPushOptions | null;
+  private readonly senderAuth: SenderAuthMode;
+  private readonly senderVerifier: SendAuthVerifier;
+  private readonly isAllowedSender: ((senderDid: string) => boolean) | null;
   /** DID -> when its last wake went out (push coalescing). */
   private readonly lastWake = new Map<string, number>();
   /** DIDs with an ack check pending (a wire flushed to an open drain, waiting PUSH_ACK_WAIT_MS before waking). */
@@ -224,6 +245,9 @@ export class RelayServer {
     this.maxQueuePerDid = opts.maxQueuePerDid ?? MAX_QUEUE_PER_DID;
     this.maxQueueGlobal = opts.maxQueueGlobal ?? MAX_QUEUE_GLOBAL;
     this.push = opts.push ?? null;
+    this.senderAuth = opts.senderAuth ?? "required";
+    this.senderVerifier = new SendAuthVerifier({ windowMs: opts.senderAuthWindowMs });
+    this.isAllowedSender = opts.isAllowedSender ?? null;
   }
 
   /** The VAPID public key phones subscribe with; null when this relay does not push. */
@@ -232,6 +256,27 @@ export class RelayServer {
   }
 
   // ---- 6a: ingress -------------------------------------------------------
+
+  /**
+   * The HTTP-facing ingress: authenticate the sender (relay_send_auth.ts), THEN submit(). Authentication runs before
+   * any routing decision, so an unauthenticated caller learns nothing about which recipients this relay routes. The
+   * size cap runs first so no oversize body is ever hashed. submit() stays the unauthenticated core for in-process use.
+   */
+  ingress(rawWire: string, headers: SendAuthHeaders): IngressResult {
+    if (this.senderAuth !== "off") {
+      if (Buffer.byteLength(rawWire, "utf8") > this.maxWireBytes) {
+        return { routed: "rejected", reason: `wire exceeds ${this.maxWireBytes} bytes` };
+      }
+      if (this.senderAuth === "required" || hasSendAuthHeaders(headers)) {
+        const auth = this.senderVerifier.verify(rawWire, headers);
+        if (!auth.ok) return { routed: "rejected", reason: `sender authentication failed: ${auth.code}`, status: auth.status };
+        if (this.isAllowedSender && !this.isAllowedSender(auth.did)) {
+          return { routed: "rejected", reason: "sender not allowed", status: 403 };
+        }
+      }
+    }
+    return this.submit(rawWire);
+  }
 
   /**
    * Accept an opaque wire addressed to a DID. Reads ONLY the outer `to`
@@ -596,10 +641,10 @@ export class RelayServer {
     }
     const rawWire = Buffer.concat(chunks).toString("utf8");
 
-    const result = this.submit(rawWire);
+    const result = this.ingress(rawWire, req.headers);
     if (result.routed === "rejected") {
-      res.writeHead(404, { "content-type": "application/json" });
-      res.end(JSON.stringify(result));
+      res.writeHead(result.status ?? 404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ routed: result.routed, reason: result.reason }));
       return;
     }
     res.writeHead(202, { "content-type": "application/json" });

@@ -18,6 +18,8 @@
 // `Environment=` lines are the single source of truth):
 //   RELAY_PORT      - TCP port to listen on (default 4177).
 //   RELAY_HOST      - bind address (default 127.0.0.1 — see above).
+//   RELAY_SENDER_AUTH - required (default) | optional | off: per-DID signature on POST /relay/send
+//                       (relay_send_auth.ts). "optional" only for rolling out old clients.
 //   RELAY_QUEUE_DB  - path to the SQLite queue file (default
 //                     "<cwd>/queue.db"; pass an absolute path in production).
 //   RELAY_VAPID_FILE    - wave 11: the VAPID key file for Web Push wake-ups (web_push.ts). Created on first start
@@ -42,6 +44,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { RelayServer, type RelayPushOptions } from "./relay_server.js";
+import { parseSenderAuthMode } from "./relay_send_auth.js";
 import { SqliteRelayQueueStore } from "./relay_queue_store.js";
 import { SqlitePushSubscriptionStore } from "./push_store.js";
 import { generateVapidKeys, loadVapidKeys, type VapidKeys } from "./web_push.js";
@@ -70,7 +73,7 @@ async function main(): Promise<void> {
     const apns = existsSync(apnsFile) ? loadApnsConfig(JSON.parse(readFileSync(apnsFile, "utf8"))) : undefined;
     push = { store: new SqlitePushSubscriptionStore(dbPath), vapid, ...(apns ? { apns } : {}) };
   }
-  const relay = new RelayServer({ queueStore, push });
+  const relay = new RelayServer({ queueStore, push, senderAuth: parseSenderAuthMode(process.env.RELAY_SENDER_AUTH) });
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[relay_only] received ${signal}, closing...`);

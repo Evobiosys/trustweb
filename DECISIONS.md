@@ -434,3 +434,12 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   the queue; a non-fit changes nothing. Prefs hold no time window, so the window is not compared.
 - LLM draft: no model call the app makes itself exists (web_search.ts fetches search engines, organizer.ts posts org data), so acceptTogetherDraft has ONE call
   site, draftOrPlain in sendFromDock, behind `TOGETHER_LLM_DRAFT = false` (together_request.ts). OPEN: turn on with the first local-model hook (owner 2026-10-23).
+
+## D-relay-send-auth (2026-10-27): POST /relay/send needs a per-DID signature
+- Problem: ingress took any wire from anyone; the outer envelope names only the recipient, so a relay could not tell who filled a queue (spam, queue-cap exhaustion against one DID).
+- Decision: the sender signs with its did:peer:2 Ed25519 key, in four headers (x-tw-relay-did/-ts/-nonce/-sig), over `trustweb-relay-send/v1 \n did \n ts \n nonce \n sha256hex(body)`. The body is unchanged. The relay resolves the key from the DID, so no registry exists.
+  Valid only within +-5 min of the relay clock and once per (did, nonce); nonces are stored only after the signature verified; the cache is bounded per DID (429) and globally (503) and fails closed.
+  Authentication runs before routing, so an unsigned caller learns nothing about which recipients a relay serves. Modes via RelayServerOptions.senderAuth / env RELAY_SENDER_AUTH: required (default), optional (old clients; a present signature must still verify), off.
+  `isAllowedSender(did)` is an optional authorisation hook (403); without it any authentic DID may send.
+- Not covered: the relay now learns the sender DID (by design); a capture can be replayed to a different relay (audience unbound; the recipient's message-id dedup absorbs it); clock skew beyond 5 min fails.
+- deploy_wot.sh: its relay smoke check now expects 401 for an unsigned POST (was 202).
