@@ -737,6 +737,8 @@ export const S = {
   shortLinkShowLong: 'Show the long link',
   shortLinkHideLong: 'Hide the long link',
   shortLinkCopyLong: 'Copy the long link',
+  linkExpires: 'expires in 24 h',
+  linkNever: 'never expires',
   shortLinkFailed: (e: ShortLinkError, retryAfterSeconds?: number): string => {
     const stays = ' The long link works as before.'
     switch (e) {

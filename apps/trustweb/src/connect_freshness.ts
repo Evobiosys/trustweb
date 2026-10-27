@@ -32,6 +32,12 @@ export function stampUrl(url: string, stamp: { nonce: string; issuedAt: number }
   return u.toString()
 }
 
+/**
+ * The long link as issued: stamped while it expires (the default), unchanged when the owner chose "never expires" (a persistent link).
+ * The receiver reads an unstamped link as `legacy` and records connectedVia 'legacy-code' (kept: no new reason for the persistent link).
+ */
+export const issueLink = (url: string, expiring: boolean, now: number, bytes?: Uint8Array): string => (expiring ? stampUrl(url, issue(now, bytes)) : url)
+
 /** The stamp in a query string; empty when absent or unreadable (check() then refuses a half one). */
 export function readStamp(search: string): Stamp {
   const p = new URLSearchParams(search)
