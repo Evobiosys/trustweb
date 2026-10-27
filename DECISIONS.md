@@ -434,3 +434,8 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   the queue; a non-fit changes nothing. Prefs hold no time window, so the window is not compared.
 - LLM draft: no model call the app makes itself exists (web_search.ts fetches search engines, organizer.ts posts org data), so acceptTogetherDraft has ONE call
   site, draftOrPlain in sendFromDock, behind `TOGETHER_LLM_DRAFT = false` (together_request.ts). OPEN: turn on with the first local-model hook (owner 2026-10-23).
+
+## D-share-sink (2026-10-27): own relation store in the record, Zanzibar-shaped; TrustZones ladder everywhere (Jakob 2026-10-27 11:31)
+- Ladder: public < intending < acquaintance < community < friend < close < closest, plus self; rings can be off; most intimate zone wins.
+- Tuples {subject, relation, object, zone?, tag?, since, until?, by} as JSONL in the TrustWeb record; pure canAccess; md export per person/tag.
+  OpenFGA/SpiceDB and Solid/NextGraph come later as adapters (stubs only). See docs/share-sink/architecture.txt.
