@@ -729,6 +729,10 @@ export const S = {
   meetNfcFailed: 'Could not write the tag.',
   meetCopy: 'Copy link',
   meetCopied: 'Link copied.',
+  inviteButton: 'Invite someone',
+  inviteTitle: 'TrustWeb',
+  inviteText: 'Join my web of trust on TrustWeb:',
+  inviteCount: (n: number) => `${n} invited`,
   // Short connect links (wave 5): an option under the code, never made until tapped; the long link always stays available.
   shortLinkButton: 'Short link',
   shortLinkNote: `A short link stores this link, with your name in it, on our server for ${SHORT_LINK_DAYS} days, then it expires. Without a short link, the link itself is not stored on our server.`,
