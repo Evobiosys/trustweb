@@ -81,3 +81,9 @@ export {
   type VouchVerificationResult,
   type VerifyInboundVouchesOptions,
 } from "./inbound_vouch.js";
+export {
+  IrohRelayChannel,
+  type IrohClient,
+  type IrohPeerAddr,
+  type IrohRelayChannelOptions,
+} from "./iroh_relay_channel.js";
