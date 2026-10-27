@@ -247,6 +247,17 @@ describe('sameAs in sync', () => {
     mergeBundle(mac, refreshStamps(mac, {}, 100, 'Mac'), bundleOf(phone, refreshStamps(phone, {}, 200, 'Phone')), 0)
     expect(mac.people[0].name).toBe('Ada new')
   })
+  it('the incoming `from` follows the id too (p:X -> p:Y): a person new here keeps the device that first made it', () => {
+    const mac = state({ sameAs: { x: 'y' } })
+    const phone = state({ people: [person('x', 'Ada')] })
+    const sp = refreshStamps(phone, {}, 200, 'Phone')
+    sp['p:x'].from = 'Tablet'
+    const bundle = bundleOf(phone, sp)
+    const before = refreshStamps(mac, {}, 100, 'Mac')
+    mergeBundle(mac, before, bundle, 0)
+    expect(mac.people.map((p) => p.id)).toEqual(['y'])
+    expect(stampsAfterMerge(mac, before, bundle, 300, 'Mac', 'Phone')['p:y']).toMatchObject({ from: 'Tablet', by: 'Phone' })
+  })
 })
 
 describe('review fixes (DS-01, DS-02, DS-04, DS-06)', () => {
