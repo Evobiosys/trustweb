@@ -41,9 +41,9 @@ button{font-family:inherit}
   overflow:hidden; overflow:clip; position:relative; flex-shrink:0; color:var(--ink);
 }
 /* overflow:clip, not only hidden: the closed sheet (bottom:-100%) overflows the phone, and a focus or a tap scrolling an overflow:hidden box moved the whole phone up, so the bars and the page misaligned (wave 5, item e) */
+/* Wave 11: the page itself never moves (a drag used to scroll the frame and collapse the browser bar in the Android app). Wave 22: on every width, not only phones: tablets, landscape phones and short desktop windows fit the screen exactly too; inner panes scroll. */
+html:has(.phone),body:has(.phone){overflow:hidden; overscroll-behavior:none; height:100dvh}
 @media (max-width:480px){
-  /* Wave 11: the page itself never moves (a drag used to scroll the frame and collapse the browser bar in the Android app). */
-  html,body{overflow:hidden; overscroll-behavior:none; height:100dvh}
   body{padding:0}
   .phone{position:fixed; inset:0; width:auto; height:auto; max-height:none; border-radius:0; box-shadow:none}
 }
