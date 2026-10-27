@@ -383,8 +383,9 @@ export const S = {
     snooze: 'Snooze until',
     mapTitle: 'Where your people are',
     mapNote: (tiles: boolean) => tiles
-      ? 'Detailed map: map tiles are fetched from OpenStreetMap. Places are looked up only when you tap Locate.'
-      : 'Local map: drawn on this device, nothing is sent. Places are looked up only when you tap Locate.',
+      ? 'Detailed map: map tiles are fetched from OpenStreetMap. Dashed dots are approximate, placed on this device by country or city name; exact places are looked up only when you tap Locate.'
+      : 'Local map: drawn on this device, nothing is sent. Dashed dots are approximate, placed on this device by country or city name; exact places are looked up only when you tap Locate.',
+    mapUnplaced: (n: number) => `${n} not placed yet`,
     mapTiles: 'Detailed map (OpenStreetMap)',
     mapLocate: 'Locate',
     mapLocated: 'On the map',

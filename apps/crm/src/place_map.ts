@@ -14,6 +14,7 @@ export interface Pin {
   lat: number
   lon: number
   people: { id: string; name: string; initials: string }[]
+  approx?: boolean
 }
 export interface MapHandle {
   setPins(pins: Pin[]): void
@@ -70,7 +71,7 @@ export async function createMap(el: HTMLElement, view: View, onPick: (id: string
       for (const pin of pins) {
         const one = pin.people.length === 1
         const dot = document.createElement('span')
-        dot.className = 'desk-pin'
+        dot.className = pin.approx ? 'desk-pin approx' : 'desk-pin'
         dot.textContent = one ? pin.people[0].initials : String(pin.people.length)
         L.marker([pin.lat, pin.lon], { icon: L.divIcon({ html: dot, className: '', iconSize: [34, 34], iconAnchor: [17, 17] }), title: pin.place })
           .bindPopup(popupOf(pin, onPick)).addTo(layer)
