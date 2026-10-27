@@ -7,6 +7,7 @@
  *   Wave 13: events, my messenger link and chat text travel too; a local snapshot exists on both before the merge; the "Also save an
  *   encrypted file" box offers a .twb download; a chat whose connection only the Mac has stays reachable on the Phone; two persons
  *   with one name are listed as possible duplicates and "Same person" makes them one (sameAs written).
+ *   Wave 22: sources carry the creating device (an item typed on the Phone says "Phone" on the Mac; a third device shows "on Mac").
  * Port: Vite 5297 (TW_PORT). Run from apps/demo:
  *   PLAYWRIGHT_PACKAGE=<playwright-core> ../../node_modules/.bin/tsx ../trustweb/test/e2e/device_sync.mjs
  */
@@ -63,6 +64,11 @@ async function main() {
     const macItem = { id: 'r1', text: 'Bike pump', audience: 'close', included: true, createdAt: 1, source: { kind: 'typed', device: 'Mac' } }
     await withPeople(mac, vite.base, [person('a1', 'Ada Mac', 'Mac'), person('b1', 'Bo Mac', 'Mac')], { ...macExtra, inventory: [macItem] })
     await withPeople(phone, vite.base, [person('c1', 'Cy Phone', 'Phone')])
+    // Typed through the UI, so the factory reads the name sync_view set at start (device_name.ts), not a seeded one.
+    await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await phone.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Sewing machine')
+    await phone.getByRole('button', { name: 'Add', exact: true }).click()
+    ok('Wave 22: an item typed on the Phone records device "Phone"', (await record(phone)).inventory.find((i) => i.text === 'Sewing machine')?.source?.device === 'Phone')
 
     await openDevices(mac)
     await mac.locator('[data-link-device]').click()
@@ -85,13 +91,13 @@ async function main() {
 
     await phone.locator('[data-sync-now]').click()
     await mac.locator('[data-receive]').waitFor({ timeout: 40_000 })
-    ok('Mac is asked first, with the counts', await mac.getByText('1 person, 1 line, 0 resources, 0 meetings, 0 events, 0 messages.').isVisible())
+    ok('Mac is asked first, with the counts', await mac.getByText('1 person, 1 line, 1 resource, 0 meetings, 0 events, 0 messages.').isVisible())
     const download = mac.waitForEvent('download', { timeout: 20_000 }).catch(() => null)
     await mac.locator('[data-also-file]').evaluate((e) => e.click())
     await mac.locator('[data-receive]').click()
     ok('"Also save an encrypted file" downloads a .twb', (await download)?.suggestedFilename().endsWith('.twb') === true)
     await phone.locator('[data-receive]').waitFor({ timeout: 40_000 })
-    ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 1 resource, 0 meetings, 1 event, 1 message.').isVisible())
+    ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 2 resources, 0 meetings, 1 event, 1 message.').isVisible())
     await phone.locator('[data-receive]').click()
     const adopted = await until(async () => (await record(phone)).connectCode)
     ok('Wave 15: the Phone adopted the Mac\'s public link as a record of another device (the keeper leaves it alone)', adopted?.owner === 'other' && adopted.name === 'ada' && adopted.code === 'A'.repeat(22), JSON.stringify({ code: adopted?.code, owner: adopted?.owner, name: adopted?.name }))
@@ -105,6 +111,7 @@ async function main() {
     const deviceOf = async (page, pid) => (await record(page)).people.find((p) => p.id === pid)?.lines[0].source?.device
     ok('Wave 22: a line made on Mac arrives on the Phone with device "Mac", and the Phone\'s own line arrives on the Mac with "Phone"', (await deviceOf(phone, 'a1')) === 'Mac' && (await deviceOf(mac, 'c1')) === 'Phone', JSON.stringify([await deviceOf(phone, 'a1'), await deviceOf(mac, 'c1')]))
     ok('Wave 22: an item that existed on the Mac before pairing keeps device "Mac" on the Phone', (await record(phone)).inventory.find((i) => i.id === 'r1')?.source?.device === 'Mac')
+    ok('Wave 22: the item typed on the Phone arrives on the Mac with device "Phone"', (await record(mac)).inventory.find((i) => i.text === 'Sewing machine')?.source?.device === 'Phone')
     const pr = await record(phone)
     ok('Phone got the event, the Signal link and the chat text', pr.events?.length === 1 && pr.myChannels?.signal?.endsWith('abcdEFGH1234') && pr.chats?.['mac-only-peer']?.messages.length === 1, JSON.stringify([pr.events, pr.myChannels]))
     ok('a local snapshot was taken before the merge on both devices', JSON.parse(await mac.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length >= 1 && JSON.parse(await phone.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length >= 1)
@@ -137,6 +144,10 @@ async function main() {
     const fr = await until(async () => { const r = await record(fresh); return r?.people?.length === 3 ? r : null })
     ok('a device with no record links from the welcome screen and receives everything', !!fr && fr.events?.length === 1 && !!fr.myChannels?.signal, JSON.stringify(fr?.people?.length))
     ok('its first snapshot (of the empty record) exists', JSON.parse(await fresh.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length === 1)
+    await fresh.goto(vite.base)
+    await fresh.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await fresh.locator('[data-item="r1"]').click()
+    ok('Wave 22: on a third device the Mac\'s item says "on Mac" in its source row', (await fresh.locator('.src-note[data-device="Mac"]').innerText().catch(() => '')) === 'on Mac')
 
     await mac.context().close()
     await phone.locator('[data-sync-now]').click()
