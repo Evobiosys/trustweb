@@ -8,7 +8,10 @@
     "dev": "vite --host",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview --host",
+    "build:deps": "pnpm --filter \"@ew/demo^...\" build",
+    "pretest": "pnpm build:deps",
     "test": "vitest run",
+    "pretypecheck": "pnpm build:deps",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
