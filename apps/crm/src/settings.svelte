@@ -16,6 +16,7 @@
   import { flush, sync, unhideInTrustweb } from './sync.svelte'
   import { notes, syncNotes } from './notes_sync.svelte'
   import { manualItems } from './tana_sync'
+  import { canRunSource, isPhone } from './sources_here'
 
   const manual = $derived(manualItems(store.app.people, store.crm.personFields))
 
@@ -23,6 +24,9 @@
     prefs.pkms = on ? [...prefs.pkms, p] : prefs.pkms.filter((x) => x !== p)
     savePrefs()
   }
+
+  const phone = isPhone({ coarse: matchMedia('(pointer: coarse)').matches, width: innerWidth })
+  const elsewhere = (p: Pkm): boolean => canRunSource(p, { phone }) === 'elsewhere'
 
   const toSort = $derived(unsortedIds().length)
 
@@ -61,6 +65,51 @@
   }
 </script>
 
+  {#snippet source(p: Pkm)}
+    <label class="fld check">
+      <input type="checkbox" data-pkm={p} checked={prefs.pkms.includes(p)} onchange={(e): void => togglePkm(p, e.currentTarget.checked)} />
+      <span>{S.pkmLabel[p]}</span>
+    </label>
+    {#if PKM_SOURCE[p]}
+      <label class="fld check sub">
+        <input type="checkbox" data-hide-source={PKM_SOURCE[p]} checked={prefs.filters.hideSources.includes(PKM_SOURCE[p])} onchange={(e): void => toggleHideSource(PKM_SOURCE[p] ?? '', e.currentTarget.checked)} />
+        <span>{S.hideOnlyFrom(S.pkmLabel[p])}</span>
+      </label>
+    {/if}
+    {#if prefs.pkms.includes(p)}
+      {#if p === Pkm.Tana}
+        <p class="muted">{S.tanaMcp}</p>
+        <label class="fld check">
+          <input type="checkbox" data-field="auto-sync" bind:checked={prefs.autoSync} onchange={savePrefs} />
+          <span>{S.tanaAutoSync}</span>
+        </label>
+        <label class="fld"><span>{S.tanaToken}</span>
+          <input class="field" type="password" autocomplete="off" data-field="token" bind:value={prefs.token} onchange={savePrefs} /></label>
+        <label class="fld"><span>{S.tanaWorkspace}</span>
+          <input class="field" type="text" data-field="workspace" bind:value={prefs.workspaceId} onchange={savePrefs} /></label>
+        <label class="fld"><span>{S.tanaParent}</span>
+          <input class="field" type="text" data-field="parent" bind:value={prefs.parentNodeId} onchange={savePrefs} /></label>
+        <button class="btn small" data-action="sync-now" disabled={sync.running} onclick={flush}>
+          {sync.running ? S.syncing : S.syncNow(prefs.queue.length)}
+        </button>
+        <h3 class="screen-title">{S.syncLog}</h3>
+        {#each prefs.log as line (line)}<p class="muted">{line}</p>{:else}<p class="muted">{S.syncLogEmpty}</p>{/each}
+      {:else if p === Pkm.Obsidian}
+        <p class="muted">{S.notesBridge}</p>
+        <label class="fld"><span>{S.notesUrl}</span>
+          <input class="field" type="text" data-field="notes-url" bind:value={prefs.notesUrl} onchange={savePrefs} /></label>
+        <label class="fld"><span>{S.notesToken}</span>
+          <input class="field" type="password" autocomplete="off" data-field="notes-token" bind:value={prefs.notesToken} onchange={savePrefs} /></label>
+        <label class="fld check">
+          <input type="checkbox" data-field="notes-auto-sync" bind:checked={prefs.notesAutoSync} onchange={savePrefs} />
+          <span>{S.notesAutoSync}</span>
+        </label>
+        <button class="btn small" data-action="notes-sync-now" disabled={notes.running} onclick={(): void => { void syncNotes() }}>{notes.running ? S.notesSyncing : S.notesSyncNow}</button>
+        {#if notes.last}<p class="muted" data-part="notes-last">{S.notesLast(notes.last)}</p>{/if}
+      {/if}
+    {/if}
+  {/snippet}
+
 <section data-screen="settings">
   <div class="title-row">
     <h2 class="screen-title">{S.settingsTitle}</h2>
@@ -75,51 +124,8 @@
   {#if syncOpen}
   <div data-part="sync">
     <p class="muted">{S.pkmQuestion}</p>
-    {#each PKMS as p (p)}
-      <label class="fld check">
-        <input type="checkbox" data-pkm={p} checked={prefs.pkms.includes(p)} onchange={(e): void => togglePkm(p, e.currentTarget.checked)} />
-        <span>{S.pkmLabel[p]}</span>
-      </label>
-      {#if PKM_SOURCE[p]}
-        <label class="fld check sub">
-          <input type="checkbox" data-hide-source={PKM_SOURCE[p]} checked={prefs.filters.hideSources.includes(PKM_SOURCE[p])} onchange={(e): void => toggleHideSource(PKM_SOURCE[p] ?? '', e.currentTarget.checked)} />
-          <span>{S.hideOnlyFrom(S.pkmLabel[p])}</span>
-        </label>
-      {/if}
-      {#if prefs.pkms.includes(p)}
-        {#if p === Pkm.Tana}
-          <p class="muted">{S.tanaMcp}</p>
-          <label class="fld check">
-            <input type="checkbox" data-field="auto-sync" bind:checked={prefs.autoSync} onchange={savePrefs} />
-            <span>{S.tanaAutoSync}</span>
-          </label>
-          <label class="fld"><span>{S.tanaToken}</span>
-            <input class="field" type="password" autocomplete="off" data-field="token" bind:value={prefs.token} onchange={savePrefs} /></label>
-          <label class="fld"><span>{S.tanaWorkspace}</span>
-            <input class="field" type="text" data-field="workspace" bind:value={prefs.workspaceId} onchange={savePrefs} /></label>
-          <label class="fld"><span>{S.tanaParent}</span>
-            <input class="field" type="text" data-field="parent" bind:value={prefs.parentNodeId} onchange={savePrefs} /></label>
-          <button class="btn small" data-action="sync-now" disabled={sync.running} onclick={flush}>
-            {sync.running ? S.syncing : S.syncNow(prefs.queue.length)}
-          </button>
-          <h3 class="screen-title">{S.syncLog}</h3>
-          {#each prefs.log as line (line)}<p class="muted">{line}</p>{:else}<p class="muted">{S.syncLogEmpty}</p>{/each}
-        {:else if p === Pkm.Obsidian}
-          <p class="muted">{S.notesBridge}</p>
-          <label class="fld"><span>{S.notesUrl}</span>
-            <input class="field" type="text" data-field="notes-url" bind:value={prefs.notesUrl} onchange={savePrefs} /></label>
-          <label class="fld"><span>{S.notesToken}</span>
-            <input class="field" type="password" autocomplete="off" data-field="notes-token" bind:value={prefs.notesToken} onchange={savePrefs} /></label>
-          <label class="fld check">
-            <input type="checkbox" data-field="notes-auto-sync" bind:checked={prefs.notesAutoSync} onchange={savePrefs} />
-            <span>{S.notesAutoSync}</span>
-          </label>
-          <button class="btn small" data-action="notes-sync-now" disabled={notes.running} onclick={(): void => { void syncNotes() }}>{notes.running ? S.notesSyncing : S.notesSyncNow}</button>
-          {#if notes.last}<p class="muted" data-part="notes-last">{S.notesLast(notes.last)}</p>{/if}
-        {:else}
-          <p class="muted">{S.pkmLater}</p>
-        {/if}
-      {/if}
+    {#each PKMS.filter((p) => !elsewhere(p)) as p (p)}
+      {@render source(p)}
     {/each}
     {#if communities.length > 0}
       <h4 class="ring-heading">{S.hideCommunityTitle}</h4>
@@ -196,6 +202,10 @@
   </label>
   <p class="muted">{S.advancedHint}</p>
   {#if prefs.advanced}
+    {#if PKMS.some(elsewhere)}
+      <p class="muted" data-part="sources-elsewhere">{S.sourcesElsewhere}</p>
+      {#each PKMS.filter(elsewhere) as p (p)}{@render source(p)}{/each}
+    {/if}
     {#if prefs.pkms.length > 0}
       <p class="muted">{S.truthTitle}: {S.truthHint}</p>
       <div class="seg" role="group" aria-label={S.truthTitle}>

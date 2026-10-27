@@ -110,8 +110,8 @@ export const S = {
   privacy: 'Everything stays on this phone. Nothing here is ever matched, relayed or shared.',
   settingsTitle: 'Settings',
   pkmQuestion: 'Sync with your personal knowledge management systems',
-  pkmLabel: { tana: 'Tana', 'apple-notes': 'Apple Notes', 'obsidian-logseq': 'Obsidian / Logseq' } as Record<string, string>,
-  pkmLater: 'Coming later.',
+  pkmLabel: { tana: 'Tana', 'apple-notes': 'Apple Notes (coming later)', 'obsidian-logseq': 'Obsidian / Logseq' } as Record<string, string>,
+  sourcesElsewhere: 'Set these up on your computer; what they bring in reaches this phone through My devices sync.',
   // The notes bridge (Jakob 2026-10-16): Obsidian / Logseq two-way through a loopback bridge on this computer.
   syncTitle: 'Sync & sources',
   syncOpen: (n: number) => `Sync & sources (${n} on)`,
