@@ -29,6 +29,7 @@ import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_pe
 import { codesForBundle, parseCodeField, readCodeList, validLongUrl, wireOther } from './sync_code'
 import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
+import { SCHEMA_VERSION } from './schema_version'
 
 /** 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 2
@@ -45,6 +46,8 @@ export type Stamps = Record<string, { h: string; at: number; by: string; from?: 
 
 export interface SyncBundle {
   v: number
+  /** schema_version.ts of the sending build; absent from builds before wave 21. */
+  schemaVersion?: number
   people: Person[]
   inventory: InventoryItem[]
   meetings: PastMeeting[]
@@ -149,6 +152,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   const entries = Object.entries(stamps)
   return {
     v: SYNC_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     people: s.people,
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
@@ -230,6 +234,7 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (!people.every((p) => Array.isArray(p.lines) && typeof p.name === 'string')) return null
   if (!Object.values(v.at).every((n) => Number.isFinite(n)) || Object.keys(v.at).length > AT_MAX) return null
   const out: SyncBundle = { v: v.v, people, inventory: v.inventory as unknown as InventoryItem[], meetings: v.meetings as unknown as PastMeeting[], at: v.at as Record<string, number> }
+  if (typeof v.schemaVersion === 'number') out.schemaVersion = v.schemaVersion
   if (v.v === 1) return out
   const by = v.by === undefined ? {} : strMap(v.by)
   const sameAs = v.sameAs === undefined ? {} : strMap(v.sameAs)

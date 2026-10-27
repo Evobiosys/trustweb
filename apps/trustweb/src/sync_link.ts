@@ -20,6 +20,7 @@ import { createRelayChannel } from '../../demo/src/relay'
 import type { RelayChannel } from '../../demo/src/relay'
 import { deriveEcdhPairKey, fromB64u, open, randomBytes, randomId, seal, toB64u } from '../../demo/src/crypto'
 import type { AppState } from './model'
+import { SCHEMA_VERSION, assertReadable } from './schema_version'
 import { HANDSHAKE_MS, SYNC_TTL_MS, SYNC_VERSION, bundleOf, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parsePairingCode, recordReview, refreshStamps, stampsAfterMerge, toChunks } from './sync_core'
 import type { Counts, MergeResult, Stamps, SyncBundle } from './sync_core'
 import { mergeCodes, withoutCodes } from './sync_code'
@@ -39,7 +40,7 @@ interface Store { identity: SerializedIdentityV1; pairings: Pairing[]; stamps: S
 export interface PairRequest { name: string; fp: string; confirm(opts?: { shareCode?: boolean }): void; cancel(): void }
 
 /** A record that arrived complete and waits for the person's "Confirm". `file`: also hand the person the pre-merge snapshot as an encrypted file (snapshot_view.ts). */
-export interface Incoming { from: Pairing; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
+export interface Incoming { from: Pairing; /** Schema version of a bundle from a newer build: nothing to accept (schema_version.ts). */ newer?: number; counts: Counts; reply: boolean; accept(file: boolean): Promise<MergeResult>; decline(): void }
 
 export interface SyncLinkDeps {
   persona: string
@@ -171,13 +172,14 @@ export function createSyncLink(d: SyncLinkDeps) {
     const bundle = fromChunks(acc.parts)
     if (!bundle) { d.onLog(`Ignored a damaged record from ${p.name}`); return }
     d.onIncoming({
-      from: p, counts: countsOf(bundle), reply: acc.reply,
+      from: p, newer: bundle.schemaVersion !== undefined && bundle.schemaVersion > SCHEMA_VERSION ? bundle.schemaVersion : undefined, counts: countsOf(bundle), reply: acc.reply,
       accept: (file) => accept(p, bundle, acc.reply, file),
       decline: () => d.onLog(`Declined the record from ${p.name}`),
     })
   }
 
   async function accept(p: Pairing, bundle: SyncBundle, reply: boolean, file: boolean): Promise<MergeResult> {
+    assertReadable(bundle.schemaVersion)
     const s = d.state()
     await d.snapshot(`before sync from ${p.name}`, file)
     const t = now()

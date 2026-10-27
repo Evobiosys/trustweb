@@ -846,6 +846,8 @@ export interface NotifyKinds {
 
 export interface AppState {
   v: typeof RECORD_FORMAT
+  /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
+  schemaVersion?: number
   /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
   reachOutLog?: number[]
   reachOutHeld?: number

@@ -24,6 +24,7 @@ import type { CodeOpsDeps } from './sync_codes'
 import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
+import { SCHEMA_VERSION } from './schema_version'
 import { S } from './strings'
 
 export interface SyncViewHooks {
@@ -351,6 +352,10 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   }
 
   function incomingSheet(i: Incoming): void {
+    if (i.newer) {
+      open('devices-incoming', [el('h3', {}, [S.dvReceiveTitle(i.from.name)]), el('p', { 'data-schema-newer': String(i.newer) }, [S.schemaNewer(i.newer, SCHEMA_VERSION)]), el('button', { class: 'btn btn-ghost', onclick: () => { i.decline(); devicesSheet() } }, [S.dvNotNow])])
+      return
+    }
     const file = el('input', { type: 'checkbox', id: 'dv-file', 'data-also-file': '1' })
     open('devices-incoming', [
       el('h3', {}, [S.dvReceiveTitle(i.from.name)]),
