@@ -872,6 +872,10 @@ export interface AppState {
   preferConsensual?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
+  /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
+  autoSentRank?: Record<string, number>
+  /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */
+  profileAutoOff?: true
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
   /**

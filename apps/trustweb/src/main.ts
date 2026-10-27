@@ -120,7 +120,8 @@ import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
 import { agreementsSection } from './agreements_view'
 import { isJpegDataUrl } from '../../demo/src/types'
-import { addNorm, buildProfileText, profileFor, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { addNorm, autoSendRank, buildProfileText, receiveProfileText, removeNorm, repairProfile, setOne, sliceFor, zoneOf } from './profile'
+import type { Zone } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
@@ -553,6 +554,7 @@ const net = new Net({
       addWant(s, { peerId: peer.id, name: peer.displayName, at: Date.now() })
       save()
       sendHelloTo(peer)
+      void autoShareProfile(peer, 'public')
       toast(S.notifBodyConnect(peer.displayName))
       notify('connect', S.notifBodyConnect(peer.displayName))
       render()
@@ -570,6 +572,7 @@ const net = new Net({
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
     save()
     sendHelloTo(peer)
+    void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -1469,6 +1472,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
+  autoShareToPerson(person)
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -1580,6 +1585,7 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
     person = { id: randomId(8), name: name || peer.displayName, context: where, ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
   }
+  autoShareToPerson(person)
   save()
   applyHeldContact(peer, person)
   return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
@@ -1599,6 +1605,7 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       const held = s.peers.find((x) => x.id === peer.id)
       if (held) held.ring = ring
       save()
+      autoShareToPerson(person)
       connectAdd = null
       viaCard.closed(person.id)
       addedToast(person, ring)
@@ -1630,6 +1637,7 @@ async function connectDemoPeer(ref: DemoPeerRef, inviter?: Person): Promise<void
   if (!personOfPeer(s, peer.id) && !joinFrontDoor(inviter, peer.id, peer.displayName)) {
     s.people.push({ id: randomId(8), name: peer.displayName, context: S.demoPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
   }
+  void autoShareProfile(peer, 'public')
   save()
 }
 
@@ -2334,6 +2342,7 @@ function addWantSheet(peerId: string, name: string): void {
       const peer = s.peers.find((x) => x.id === peerId)
       if (peer) { peer.ring = ring; applyHeldContact(peer, person) }
       save()
+      autoShareToPerson(person)
       addedToast(person, ring)
       render()
     },
@@ -3001,8 +3010,26 @@ async function sendProfile(peer: Peer): Promise<void> {
   const pic = await sharePicture()
   const text = person ? buildProfileText(APP_URL, st().profile, person, pic) : null
   if (!text) { toast(buildProfileText(APP_URL, st().profile, undefined, pic) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
-  net.sendText(peer, text, Date.now(), undefined, profileFor(st().profile, person!, pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
+  net.sendText(peer, text, Date.now(), undefined, sliceFor(st().profile, zoneOf(person!), pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
+
+/**
+ * Wave 20 (Jakob 2026-10-23, supersedes the 2026-10-15 tap-only rule for the zone slice): sends the slice of `zone` once when a connection
+ * lands (`public`: only the sections set to Public) and again when the person is placed on a closer ring (changeRing, the add sheets).
+ * Never when switched off in Settings, never to demo phones, never on moving outward. Silent: no toast on this side.
+ */
+async function autoShareProfile(peer: Peer, zone: Zone | null): Promise<void> {
+  const s = st()
+  const rank = zone && !s.profileAutoOff && !noSendTo(peer) ? autoSendRank(s.autoSentRank?.[peer.id], zone) : null
+  if (rank === null || !zone) return
+  const pic = await sharePicture()
+  const slice = sliceFor(s.profile, zone, pic)
+  const text = slice ? buildProfileText(APP_URL, s.profile, zone, pic) : null
+  if (!text) return
+  await net.sendText(peer, text, Date.now(), undefined, slice!.picture).then(() => { s.autoSentRank = { ...s.autoSentRank, [peer.id]: rank }; save() }, () => undefined)
+}
+
+const autoShareToPerson = (p: Person): void => { const peer = st().peers.find((x) => x.id === p.peerId); if (peer) void autoShareProfile(peer, zoneOf(p)) }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -3284,6 +3311,7 @@ function changeRing(p: Person, ring: Ring): void {
   p.ring = ring
   if (peer) peer.ring = ring
   save()
+  autoShareToPerson(p)
   if (peer && before !== undefined && ringRaised(before, ring) && mayAskAgainWith(peer)) { void net.askAgain(peer); return }
   // A tightening that never left (offline) and is undone before it could: nothing goes at all.
   if (peer && peer.askAgainDue !== undefined && before !== undefined && ringRaised(ring, before)) { delete peer.askAgainDue; save() }
@@ -3648,6 +3676,7 @@ const curator = createCurator({
     p.ring = ring
     delete p.ringSuggested
     save()
+    autoShareToPerson(p)
     if (screen === Screen.Web) render()
   },
   setFamily: (id, on) => {
@@ -5455,6 +5484,11 @@ function settingsSheet(): void {
       ]),
       connectionRow(),
       buildContactBox({}).el,
+      el('button', {
+        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
+        // Only "off" is stored: absent means on.
+        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
+      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
     ], true),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
