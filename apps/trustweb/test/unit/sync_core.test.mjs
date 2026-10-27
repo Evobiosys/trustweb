@@ -195,6 +195,22 @@ describe('merge v2: events, channels, chats', () => {
     mergeBundle(b, sb, bundleOf(a, sa), 0)
     expect(stampsAfterMerge(b, sb, bundleOf(a, sa), 9, 'Mac', 'Phone')['p:a']).toMatchObject({ by: 'Phone', from: 'Phone', at: 5 })
   })
+  it('the bundle carries `from`; an incoming `from` is kept for a new entity, our own for a known one; an older bundle without it parses', () => {
+    const a = state({ people: [person('a', 'Ada'), person('c', 'Cy')] })
+    const sa = refreshStamps(a, {}, 5, 'Phone')
+    sa['p:a'].from = 'Tablet'
+    const bundle = bundleOf(a, sa)
+    expect(bundle.from).toMatchObject({ 'p:a': 'Tablet', 'p:c': 'Phone' })
+    expect(parseBundle(JSON.parse(JSON.stringify(bundle))).from).toMatchObject({ 'p:a': 'Tablet' })
+    const { from: _f, ...old } = JSON.parse(JSON.stringify(bundle))
+    expect(parseBundle(old)).not.toBeNull()
+    const b = state({ people: [person('c', 'Cy')] })
+    const sb = refreshStamps(b, {}, 6, 'Mac')
+    mergeBundle(b, sb, bundle, 0)
+    const after = stampsAfterMerge(b, sb, bundle, 9, 'Mac', 'Phone')
+    expect(after['p:a'].from).toBe('Tablet')
+    expect(after['p:c'].from).toBe('Mac')
+  })
   it('recordReview keeps at most 50, newest first, meetings slimmed', () => {
     const s = state()
     const c = (i) => ({ kind: 'meeting', id: 'm' + i, label: 'x', kept: 'mine', mine: { id: 'm' + i, transcript: [1, 2], outbox: [1] }, theirs: {} })

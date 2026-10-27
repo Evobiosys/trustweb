@@ -99,7 +99,7 @@ export async function startRelay() {
 }
 
 export async function startVite(port, { relayPort, backupPort, publicDir } = {}) {
-  const proc = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  const proc = spawn(process.execPath, [process.env.TW_VITE_BIN || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: {
       ...process.env, TW_PORT: String(port),
@@ -147,5 +147,5 @@ export async function startPhone(page, base, name) {
 export async function launch() {
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
   const engine = (pw.chromium ? pw : pw.default).chromium
-  return engine.launch({ headless: true, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] })
+  return engine.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-mock-keychain', '--password-store=basic', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] })
 }

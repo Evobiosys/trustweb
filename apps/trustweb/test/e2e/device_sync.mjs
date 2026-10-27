@@ -21,7 +21,7 @@ const until = async (fn, ms = 30_000) => {
   while (Date.now() - t0 < ms) { const v = await fn().catch(() => null); if (v) return v; await new Promise((r) => setTimeout(r, 200)) }
   return null
 }
-const person = (id, name) => ({ id, name, context: '', ring: 'friend', metAt: Date.now(), lines: [{ id: id + 'l', text: name + ' fixes bikes', tag: 'offer', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1 }] })
+const person = (id, name, device) => ({ id, name, context: '', ring: 'friend', metAt: Date.now(), lines: [{ id: id + 'l', text: name + ' fixes bikes', tag: 'offer', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1, source: { kind: 'typed', device } }] })
 
 async function withPeople(page, base, people, extra = {}) {
   await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
@@ -44,8 +44,9 @@ async function main() {
   const browser = await launch()
   const bodies = []
   try {
-    const mac = await newPhone(browser, errors)
-    const phone = await newPhone(browser, errors)
+    const mobile = { viewport: { width: 390, height: 844 } }
+    const mac = await newPhone(browser, errors, mobile)
+    const phone = await newPhone(browser, errors, mobile)
     for (const p of [mac, phone]) p.on('request', (r) => { if (r.url().includes('/relay/send')) bodies.push(r.postData() ?? '') })
     await startPhone(mac, vite.base, 'Jakob')
     await startPhone(phone, vite.base, 'Jakob')
@@ -56,8 +57,12 @@ async function main() {
       connectCode: { code: 'A'.repeat(22), secret: 'S'.repeat(43), url: 'https://app.trustweb.one/?connect=did%3Apeer%3A2.' + 'z'.repeat(40), updatedAt: 1, name: 'ada' },
       chats: { 'mac-only-peer': { unread: 1, messages: [{ key: 'i:5:x', dir: 'in', text: 'hello from a mac-only connection', at: 5, sentAt: 5, state: 'received' }] } },
     }
-    await withPeople(mac, vite.base, [person('a1', 'Ada Mac'), person('b1', 'Bo Mac')], macExtra)
-    await withPeople(phone, vite.base, [person('c1', 'Cy Phone')])
+    // The device name is what factories write into a source (device_name.ts); fixed here so the origin can be asserted.
+    await mac.evaluate(() => localStorage.setItem('trustweb.v1.me:device-name', 'Mac'))
+    await phone.evaluate(() => localStorage.setItem('trustweb.v1.me:device-name', 'Phone'))
+    const macItem = { id: 'r1', text: 'Bike pump', audience: 'close', included: true, createdAt: 1, source: { kind: 'typed', device: 'Mac' } }
+    await withPeople(mac, vite.base, [person('a1', 'Ada Mac', 'Mac'), person('b1', 'Bo Mac', 'Mac')], { ...macExtra, inventory: [macItem] })
+    await withPeople(phone, vite.base, [person('c1', 'Cy Phone', 'Phone')])
 
     await openDevices(mac)
     await mac.locator('[data-link-device]').click()
@@ -86,7 +91,7 @@ async function main() {
     await mac.locator('[data-receive]').click()
     ok('"Also save an encrypted file" downloads a .twb', (await download)?.suggestedFilename().endsWith('.twb') === true)
     await phone.locator('[data-receive]').waitFor({ timeout: 40_000 })
-    ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 0 resources, 0 meetings, 1 event, 1 message.').isVisible())
+    ok('Phone is asked before it merges what Mac sends back', await phone.getByText('3 people, 3 lines, 1 resource, 0 meetings, 1 event, 1 message.').isVisible())
     await phone.locator('[data-receive]').click()
     const adopted = await until(async () => (await record(phone)).connectCode)
     ok('Wave 15: the Phone adopted the Mac\'s public link as a record of another device (the keeper leaves it alone)', adopted?.owner === 'other' && adopted.name === 'ada' && adopted.code === 'A'.repeat(22), JSON.stringify({ code: adopted?.code, owner: adopted?.owner, name: adopted?.name }))
@@ -97,6 +102,9 @@ async function main() {
     ok('Phone holds all three', JSON.stringify(await names(phone)) === JSON.stringify(both), JSON.stringify(await names(phone)))
     ok('every note line came along', (await record(phone)).people.every((p) => p.lines.length === 1))
     ok('the relay carried sealed text only', bodies.length > 0 && bodies.every((b) => !/Ada Mac|Bo Mac|Cy Phone|fixes bikes/.test(b)), `${bodies.length} bodies`)
+    const deviceOf = async (page, pid) => (await record(page)).people.find((p) => p.id === pid)?.lines[0].source?.device
+    ok('Wave 22: a line made on Mac arrives on the Phone with device "Mac", and the Phone\'s own line arrives on the Mac with "Phone"', (await deviceOf(phone, 'a1')) === 'Mac' && (await deviceOf(mac, 'c1')) === 'Phone', JSON.stringify([await deviceOf(phone, 'a1'), await deviceOf(mac, 'c1')]))
+    ok('Wave 22: an item that existed on the Mac before pairing keeps device "Mac" on the Phone', (await record(phone)).inventory.find((i) => i.id === 'r1')?.source?.device === 'Mac')
     const pr = await record(phone)
     ok('Phone got the event, the Signal link and the chat text', pr.events?.length === 1 && pr.myChannels?.signal?.endsWith('abcdEFGH1234') && pr.chats?.['mac-only-peer']?.messages.length === 1, JSON.stringify([pr.events, pr.myChannels]))
     ok('a local snapshot was taken before the merge on both devices', JSON.parse(await mac.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length >= 1 && JSON.parse(await phone.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length >= 1)

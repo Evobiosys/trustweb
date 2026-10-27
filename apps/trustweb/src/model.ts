@@ -244,6 +244,8 @@ export interface ItemSource {
   line?: number
   /** Shared by a person: who. */
   fromName?: string
+  /** The name of the device where it was created (device_name.ts). Absent: unknown. Travels between the owner's own devices only, NEVER sent to anyone else. */
+  device?: string
   /** Tana: the source node's reference. Local only, NEVER sent to anyone. */
   ref?: string
   /** Tana: the line's own node id (the CRM converter writes it); opens the node in Tana. Local only, NEVER sent to anyone. */
