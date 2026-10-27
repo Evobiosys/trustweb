@@ -96,7 +96,7 @@ export const S = {
   // Wave 2 (B10): lead with what people find, not with "another app".
   startLead: 'Find people and things through people you trust. Ask the people you have actually met, and the people they trust. What you know stays on your phone; a question travels, the data stays.',
   startSolo: 'Try the demo',
-  startSoloSub: 'Start with one phone on this laptop, add more, or watch it in action.',
+  startSoloSub: 'Start with one phone on this laptop, add more, or see TrustWeb in action.',
   startOwn: 'Start on this phone',
   // Shown once on a demo phone, right after its name is typed (owner 2026-10-05).
   demoFriendsTitle: 'We have given you some (imaginary ;) friends :)',
@@ -223,7 +223,7 @@ export const S = {
   meNameSaved: 'Name saved.',
   setYourName: 'Your name',
   setYourNameEdit: 'Change',
-  seeInAction: 'See it in action',
+  seeInAction: 'See TrustWeb in action',
   seeInActionClose: 'Close',
   seeInActionHint: 'Illustration: these phones are scripted, not live. Close this to use the real app.',
   yourName: 'Your first name',
@@ -1118,6 +1118,8 @@ export const S = {
   unOpenHereDone: 'The link now opens on this device. Your other devices learn it at the next sync.',
   unOpenHereFailed: 'Could not update the link. Check the connection and try again.',
   unMoveHere: (name: string) => `Move ${name} here`,
+  unPrimaryHint: '(primary)',
+  unLockedWhy: 'Locked: this name was granted by the operator. The app can neither release nor replace it.',
   unMakePrimary: (name: string) => `Make ${name} the primary`,
   unRelease: (name: string) => `Release ${name}`,
   unStale: 'This link belongs to your other device; link the devices again.',

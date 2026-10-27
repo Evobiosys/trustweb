@@ -227,7 +227,9 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   function nameRow(r: ConnectRecord, name: string, primary: boolean, main: boolean): HTMLElement {
     const locked = namesOf(r).locked.includes(name)
     return el('div', { class: 'verse', 'data-un-name': name }, [
-      el('b', {}, [`@${name}${locked ? ' 🔒' : ''}`]),
+      el('b', {}, [`@${name}`]),
+      locked ? el('button', { class: 'btn-ghost', 'data-un-lock': name, title: S.unLockedWhy, 'aria-label': S.unLockedWhy, onclick: () => h.toast(S.unLockedWhy) }, ['🔒']) : null,
+      primary ? el('span', { class: 'meta', 'data-un-primary-hint': name }, [S.unPrimaryHint]) : null,
       el('p', { class: 'meta' }, [S.unOnDevice(deviceOf(r))]),
       !main ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-move': name, onclick: () => void act((d) => moveHere(d, name, r)) }, [S.unMoveHere(name)]) : null,
       !primary ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-primary': name, onclick: () => void act((d) => makePrimary(d, name, main ? null : r)) }, [S.unMakePrimary(name)]) : null,
