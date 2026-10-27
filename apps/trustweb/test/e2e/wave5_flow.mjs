@@ -127,7 +127,7 @@ async function partF(browser, base) {
     t.ok(`f: ${label}: "Add a device" is ${installed ? 'hidden' : 'shown'}`, addVisible === !installed)
     t.ok(`f: ${label}: "Show demo content" (dock) is ${installed ? 'hidden' : 'shown'}`, toggleVisible === !installed)
     await shot(page, `f_dock_${installed ? 'installed' : 'browser'}_${label.replace(/[^a-z]+/gi, '-')}.png`)
-    t.ok(`f: ${label}: "See it in action" stays`, await page.locator('.see-action').isVisible())
+    t.ok(`f: ${label}: "See TrustWeb in action" stays`, await page.locator('.see-action').isVisible())
     await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
     await page.locator('.hdr [aria-label="Settings"]').click()
     await page.locator('.sheet.on').waitFor({ timeout: 5_000 })
