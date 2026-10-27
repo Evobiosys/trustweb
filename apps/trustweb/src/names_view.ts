@@ -8,12 +8,18 @@
 import { el } from '../../demo/src/ui/dom'
 import { cleanName, isLocked } from './names_sync'
 import type { NamesOutcome, NamesState } from './names_sync'
+import { CAP_REASON_MAX, CAP_WANTED_DEFAULT, CAP_WANTED_MAX } from './name_cap_request'
+import type { CapRequestOutcome } from './name_cap_request'
+import { ClaimError } from './connect_code'
 import { S } from './strings'
 
 export interface NamesViewOptions {
   names: () => NamesState
   claim: (name: string, alias: boolean) => Promise<NamesOutcome>
   release: (name: string) => Promise<NamesOutcome>
+  /** Wave 21: asks the steward for a higher name cap (name_cap_request.ts). */
+  askMore: (reason: string, wanted: number) => Promise<CapRequestOutcome>
+  toast: (message: string) => void
 }
 
 export interface NamesView {
@@ -35,6 +41,24 @@ interface Slot {
 export function createNamesView(o: NamesViewOptions): NamesView {
   const status = el('p', { class: 'meta', role: 'status', 'data-username-status': '' })
   const more = el('div', { class: 'names-more', 'data-names-more': '' })
+
+  // "Ask for more (organizers)": shown under a name-cap refusal; opens a small sheet (reason, how many, Send).
+  const reason = el('textarea', { class: 'field', maxlength: String(CAP_REASON_MAX), rows: '3', 'aria-label': S.nameCapReasonLabel, placeholder: S.nameCapReasonLabel })
+  const wanted = el('input', { class: 'field', type: 'number', min: '1', max: String(CAP_WANTED_MAX), value: String(CAP_WANTED_DEFAULT), 'aria-label': S.nameCapWantedLabel })
+  const sheet = el('div', { class: 'name-cap-sheet', hidden: '' }, [
+    reason, el('label', { class: 'meta' }, [S.nameCapWantedLabel, wanted]),
+    el('button', {
+      class: 'btn btn-sm', type: 'button', 'data-name-cap-send': '',
+      onclick: async () => {
+        const out = await o.askMore(reason.value, Number(wanted.value))
+        o.toast(out === 'sent' ? S.nameCapSent : out === 'throttled' ? S.nameCapThrottled : S.nameCapFailed)
+        if (out === 'sent') { sheet.hidden = true; ask.hidden = true }
+      },
+    }, [S.nameCapSend]),
+  ])
+  const ask = el('button', {
+    class: 'btn btn-ghost btn-sm', type: 'button', hidden: '', 'data-name-cap-request': '', onclick: () => { sheet.hidden = !sheet.hidden },
+  }, [S.nameCapAsk])
 
   const slot = (alias: boolean): Slot => {
     const input = el('input', {
@@ -67,6 +91,7 @@ export function createNamesView(o: NamesViewOptions): NamesView {
   /** The words for an outcome; the held names are redrawn either way (a refusal can teach that a name is locked). */
   async function run(call: () => Promise<NamesOutcome>, isAlias: boolean): Promise<void> {
     const out = await call()
+    ask.hidden = !(!out.ok && out.error === ClaimError.NameCap)
     if (!out.ok) { status.textContent = S.usernameFailed[out.error]; update(); return }
     const now = isAlias ? out.names.aliases[0] ?? '' : out.names.name
     status.textContent = now ? S.usernameHeld(now) : S.usernameReleased
@@ -104,7 +129,7 @@ export function createNamesView(o: NamesViewOptions): NamesView {
   }
 
   const root = el('div', { class: 'names-view', 'data-names': '' }, [
-    primary.root, alias.root, more, status, el('p', { class: 'meta' }, [S.usernameHint]),
+    primary.root, alias.root, more, status, ask, sheet, el('p', { class: 'meta' }, [S.usernameHint]),
   ])
   update()
   return { el: root, update }

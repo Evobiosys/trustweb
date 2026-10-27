@@ -32,8 +32,9 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
-import { canRegister, createConnectKeeper, repairConnectRecord } from './connect_code'
+import { canRegister, createConnectKeeper, readConnectRecord, repairConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
+import { sendCapRequest } from './name_cap_request'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
 import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
@@ -4591,6 +4592,11 @@ function meetTrustWebPage(): HTMLElement {
     names: () => namesSync().names(),
     claim: (name, isAlias) => namesSync().claim(name, isAlias),
     release: (name) => namesSync().release(name),
+    askMore: async (reason, wanted) => {
+      const record = readConnectRecord(st().connectCode)
+      return record ? sendCapRequest({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() }, record, reason, wanted) : 'failed'
+    },
+    toast: toastShow,
   })
   const advanced = createAdvanced({
     modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
