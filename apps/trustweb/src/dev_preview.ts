@@ -3,15 +3,17 @@
  * previews-interface.txt) only for `vite serve` with TW_PREVIEW set; in every build it is null and nothing below runs.
  * Top-left, draggable by its header (twp-pos), collapsible to a pill with the id (twp-collapsed): the feature checkboxes of this
  * preview and the personal/stock switch (the PR itself starts from "Approve personal view" in dev_feature.ts). The FEATURE box (dev_feature.ts) sits below it via --twp-h.
- * A tap on a row points at the UI the feature adds (its `selector`). A box or pill writes the registry at once and never assembles: a sticky bar
- * "n changes not applied" offers "Reload with approved" (POST /__tw/preview/apply, then reload); nothing reloads by itself.
+ * A tap on a row points at the UI the feature adds (its `selector`). A box or pill writes the registry at once; the panel then starts the assembly
+ * itself (POST /__tw/preview/apply) and the page reloads once the assembled sha moved (Jakob 2026-10-24: no manual reload). A sticky bar shows
+ * "Assembling…" meanwhile; only a stuck apply (90 s without a registry change) waits for the owner's Retry. The page also watches the registry
+ * (every 2 s): an assembly made elsewhere (CLI, the Approve press, another tab) reloads it too.
  */
 import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { createWalker } from './dev_walk'
-import { applyStamp, applyStuck, approvedKeys, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, pendingCount, pendingText, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { applyStamp, applyStuck, assemblyMoved, autoApply, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -91,9 +93,10 @@ export function initDevPreview(): void {
   let since = 0
   let prStep = ''
   let lit: string | null = null
-  // "Reload with approved" running: the registry stamp last seen and when it last moved (stuck after 90 s without a change); "Later" hides the bar for the approved set it was pressed on.
+  // An apply running: the registry stamp last seen and when it last moved (stuck after 90 s without a change).
   let applying: { stamp: string; moved: number; stuck: boolean } | null = null
-  let later: string | null = null
+  // The assembled sha this page knows (set once the server answered): a different one in a later answer reloads the page.
+  let known: string | null = null
   let error = ''
   let prText = ''
   let prUrl = ''
@@ -151,6 +154,7 @@ export function initDevPreview(): void {
     busy = key ?? 'x'; error = ''; begin(); render()
     try { p = await run() } catch (e) { error = (e as Error).message }
     busy = null; render()
+    if (p && autoApply(p, applying)) void apply()
   }
 
   const toast = (text: string): void => {
@@ -188,9 +192,10 @@ export function initDevPreview(): void {
   const press = (key: string, v: 'merge' | 'needs-work'): Promise<void> => setVerdict(key, pillPress(p!.features, key, v))
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allApproved(p!.features)) }))
 
-  // "Reload with approved": assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
+  // Assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
   // (pending / assembled.at) and reload when it is done; no registry change for 90 s = stuck, "Retry" asks again.
   async function apply(): Promise<void> {
+    if (applying && !applying.stuck) return
     const start = Date.now()
     applying = { stamp: applyStamp(p!), moved: start, stuck: false }; error = ''; render()
     try { await call('POST', '/apply', {}) } catch (e) { error = (e as Error).message; applying = null; render(); return }
@@ -204,8 +209,8 @@ export function initDevPreview(): void {
         if (!q.pending && q.assembled && Date.parse(q.assembled.at) > start) {
           applying = null
           // Never reload into a dead server: the waiting page polls until a server that started after the apply (none when no restart is coming) answers.
-          if (!q.assembled.error) { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${q.assembled.restart === false ? 0 : start}`; return }
-          render(); return
+          if (!q.assembled.error) { go(q.assembled.restart === false ? 0 : start); return }
+          known = q.assembled.sha; render(); return
         }
       }
       if (applyStuck(applying.moved, Date.now())) { applying.stuck = true; render(); return }
@@ -213,18 +218,29 @@ export function initDevPreview(): void {
     }
   }
 
-  /** Sticky at the bottom of the panel: the changes the page does not show yet. Nothing reloads until the owner presses. */
-  function pendingBar(q: Preview): HTMLElement | null {
-    const n = pendingCount(q), key = approvedKeys(q.features).join()
-    if (later !== key) later = null   // "Later" holds only for the approved set it was pressed on
-    if (!applying && (n === 0 || later !== null)) return null
-    const go = h('button', { textContent: 'Reload with approved' }), no = h('button', { className: 'alt', textContent: 'Later' }), retry = h('button', { textContent: 'Retry' })
-    go.addEventListener('click', () => { void apply() })
-    no.addEventListener('click', () => { later = key; render() })
+  /** To the waiting page, which comes back here once a server (started after `since`; 0 = any) answers three times. */
+  const go = (since: number): void => { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${since}` }
+
+  /** Sticky at the bottom of the panel while an assembly runs; a stuck one offers Retry. Nothing to press otherwise: the apply starts by itself. */
+  function assemblyBar(): HTMLElement | null {
+    if (!applying) return null
+    const retry = h('button', { textContent: 'Retry' })
     retry.addEventListener('click', () => { void apply() })
-    if (applying?.stuck) return h('div', { className: 'bar' }, 'Apply seems stuck — ', retry)
-    if (applying) return h('div', { className: 'bar' }, h('i', { className: 'spin' }), ' Assembling…')
-    return h('div', { className: 'bar' }, `${pendingText(n)} — `, h('div', {}, go, no))
+    if (applying.stuck) return h('div', { className: 'bar' }, 'Apply seems stuck — ', retry)
+    return h('div', { className: 'bar' }, h('i', { className: 'spin' }), ' Assembling…')
+  }
+
+  // The registry watched every 2 s: an assembly made elsewhere reloads the page; a pending set left by the CLI starts the apply here.
+  let last = ''
+  async function watch(): Promise<void> {
+    if (applying || busy !== null || document.hidden) return
+    const q = await call('GET', '').catch(() => null)
+    if (!q || applying || busy !== null) return
+    if (assemblyMoved(known, q)) { go(0); return }
+    known ??= q.assembled?.sha ?? null
+    const stamp = JSON.stringify(q)
+    if (stamp !== last) { last = stamp; p = q; render() }
+    if (autoApply(q, applying)) void apply()
   }
 
   function row(n: TreeNode, shown: PreviewFeature[]): HTMLElement {
@@ -417,7 +433,7 @@ export function initDevPreview(): void {
       idEl.addEventListener('pointerdown', () => idClicked(q.id, hs.moved))
       const shown = q.features
       const prStatusEl = prStatus()
-      const bar = pendingBar(q)
+      const bar = assemblyBar()
       const other = mode === 'personal' ? 'stock' : 'personal'
       const sw = h('button', { className: 'alt', textContent: `Open ${other} preview`, disabled: loading() })
       sw.addEventListener('click', () => {
@@ -458,6 +474,9 @@ export function initDevPreview(): void {
   void call('GET', '').then((q) => {
     p = q
     fresh = true
+    known = q.assembled?.sha ?? null
     render()
+    if (autoApply(q, applying)) void apply()
+    setInterval(() => { void watch() }, 2000)
   }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
