@@ -6,6 +6,8 @@
 import { el } from '../../demo/src/ui/dom'
 import type { ItemSource, PastMeeting } from './model'
 import { Provenance } from './model'
+import { deviceNote } from './provenance'
+import { thisDevice } from './device_name'
 import { S } from './strings'
 
 export interface SourceViewOptions {
@@ -39,5 +41,6 @@ export function sourceView(source: ItemSource | undefined, o: SourceViewOptions)
     if (source.kind === Provenance.SharedByPerson && source.fromName) return el('span', { class: 'src-note' }, [S.provSharedBy(source.fromName)])
     return null
   })()
-  return el('div', { class: 'src' }, [provenanceChip(source), detail])
+  const note = deviceNote(source, thisDevice())
+  return el('div', { class: 'src' }, [provenanceChip(source), detail, note ? el('span', { class: 'src-note', 'data-device': source?.device ?? '' }, [note]) : null])
 }

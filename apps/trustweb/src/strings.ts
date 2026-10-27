@@ -1382,6 +1382,7 @@ export const S = {
   provReviewedDone: 'Marked reviewed.',
   provNoRecording: 'Noted on Record, without a recording.',
   provSharedBy: (name: string) => `Shared by ${name}`,
+  provOnDevice: (device: string) => `on ${device}`,
   itemSheetLead: 'Who can ask about it, and where it came from. Only you see where it came from; an answer never carries it.',
   itemWho: (audience: string) => `Who can ask: ${audience}`,
   itemPaused: 'Paused: nobody can ask about it right now.',

@@ -26,6 +26,7 @@ import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
 import { SCHEMA_VERSION } from './schema_version'
 import { S } from './strings'
+import { setDeviceNameSource } from './device_name'
 
 export interface SyncViewHooks {
   persona: string
@@ -99,6 +100,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   /** What the username actions run with: the host's deps and this view's log. */
   const codeDeps = (): CodeOpsDeps | null => { const d = h.codeDeps(); return d && { ...d, log: addLog } }
 
+  setDeviceNameSource(() => deviceNameOf(nameKey))
   const link = createSyncLink({
     persona: h.persona, storeCtx: h.storeCtx, state: h.state, save: h.save, deviceName: () => deviceNameOf(nameKey), snapshot: h.snapshots.take,
     onLog: (line) => addLog(line),

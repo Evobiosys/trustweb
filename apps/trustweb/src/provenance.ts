@@ -17,7 +17,9 @@
  */
 import type { AppState, InventoryItem, ItemSource, PastMeeting, Person, Tag, TranscriptLine } from './model'
 import { Provenance, PROVENANCES, ProvenanceState } from './model'
+import { S } from './strings'
 import type { Segment } from './meeting_transcriber'
+import { thisDevice } from './device_name'
 import { extractLines } from './notes'
 import { meetingToNoteText, settledSegments } from './sensemeet'
 
@@ -49,9 +51,13 @@ export interface DraftMoment {
   line?: number
 }
 
+/** The device where a source is created, when known. */
+const onDevice = (): { device?: string } => (thisDevice() ? { device: thisDevice() } : {})
+
 /** The source of a line saved from Record: recorded solo or in a meeting, with the meeting and the moment when known. */
 export function recordedSource(meeting: boolean, meetingId: string | undefined, moment: DraftMoment): ItemSource {
   return {
+    ...onDevice(),
     kind: meeting ? Provenance.RecordedMeeting : Provenance.RecordedSolo,
     ...(meetingId ? { meetingId } : {}),
     ...(moment.atMs === undefined ? {} : { atMs: Math.max(0, Math.round(moment.atMs)) }),
@@ -94,11 +100,16 @@ export function markBatchReviewed(s: Pick<AppState, 'inventory' | 'imports'>, ba
 }
 
 export function typedSource(): ItemSource {
-  return { kind: Provenance.Typed }
+  return { kind: Provenance.Typed, ...onDevice() }
 }
 
 export function sharedSource(fromName: string): ItemSource {
-  return { kind: Provenance.SharedByPerson, fromName }
+  return { kind: Provenance.SharedByPerson, fromName, ...onDevice() }
+}
+
+/** "on Mac" for a source created on another of the owner's devices; nothing when it is unknown or this device (no noise). */
+export function deviceNote(source: ItemSource | undefined, here: string): string | null {
+  return source?.device && source.device !== here ? S.provOnDevice(source.device) : null
 }
 
 export function demoSource(): ItemSource {

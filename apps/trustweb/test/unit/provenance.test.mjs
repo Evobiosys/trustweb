@@ -5,7 +5,8 @@
  * opens its meeting at the right line; and NOTHING of a source reaches an asker.
  */
 import { AboutKind, Audience, LineStatus, Provenance, Ring, Tag, sharedItems, threadsForRing } from '../../src/model.ts'
-import { focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, transcriptIndexAt } from '../../src/provenance.ts'
+import { deviceNote, focusFor, linesFromTranscript, markDemo, migrateSources, recordedSource, sharedSource, transcriptIndexAt, typedSource } from '../../src/provenance.ts'
+import { setDeviceNameSource } from '../../src/device_name.ts'
 
 const seg = (id, atMs, text, final = true) => ({ id, speaker: 1, atMs, text, final })
 
@@ -104,13 +105,15 @@ describe('focusFor / transcriptIndexAt', () => {
 })
 
 describe('what an asker receives does not change (no provenance leaks)', () => {
-  const SECRETS = ['m1', 'qAo6KedrMFrC', 'recorded-meeting', 'tana', 'Shared-By-Person', 'Lukas', '20000', 'meetingId', 'source', 'atMs', 'journals/2026_07_11.md', 'haiku']
+  const SECRETS = ['Mac 7f', 'm1', 'qAo6KedrMFrC', 'recorded-meeting', 'tana', 'Shared-By-Person', 'Lukas', '20000', 'meetingId', 'source', 'atMs', 'journals/2026_07_11.md', 'haiku']
   const withSources = () => {
     const s = oldState()
     migrateSources(s)
     s.inventory[0].source = { kind: Provenance.Tana, ref: 'qAo6KedrMFrC' }
     s.people[0].lines[1].source = { kind: Provenance.SharedByPerson, fromName: 'Lukas' }
     s.people[0].lines[0].source = { kind: Provenance.Local, path: 'journals/2026_07_11.md', reader: 'haiku' }
+    s.people[0].lines[1].source.device = 'Mac 7f'
+    s.inventory[0].source.device = 'Mac 7f'
     return s
   }
   const without = () => {
@@ -130,4 +133,22 @@ describe('what an asker receives does not change (no provenance leaks)', () => {
       for (const item of JSON.parse(answer)) expect(Object.keys(item).sort()).toEqual(['context', 'text', 'when'])
     })
   }
+})
+
+describe('which device created it (wave 22)', () => {
+  afterEach(() => setDeviceNameSource(() => ''))
+  it('the factories write this device by name; unknown writes nothing; demo never', () => {
+    setDeviceNameSource(() => 'Phone')
+    expect(typedSource()).toEqual({ kind: Provenance.Typed, device: 'Phone' })
+    expect(sharedSource('Lukas')).toMatchObject({ fromName: 'Lukas', device: 'Phone' })
+    expect(recordedSource(true, 'm1', {})).toMatchObject({ kind: Provenance.RecordedMeeting, device: 'Phone' })
+    setDeviceNameSource(() => '')
+    expect(typedSource()).toEqual({ kind: Provenance.Typed })
+  })
+  it('the note shows only for another, known device', () => {
+    expect(deviceNote({ kind: Provenance.Typed, device: 'Mac' }, 'Phone')).toBe('on Mac')
+    expect(deviceNote({ kind: Provenance.Typed, device: 'Phone' }, 'Phone')).toBeNull()
+    expect(deviceNote({ kind: Provenance.Typed }, 'Phone')).toBeNull()
+    expect(deviceNote(undefined, 'Phone')).toBeNull()
+  })
 })
