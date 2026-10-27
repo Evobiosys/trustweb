@@ -2,12 +2,14 @@
  * The link under the Meet page's QR (wave 6b): ONE link. Once the server answered it is the connect code
  * (https://<host>/c/<code>, connect_code.ts); until then, and in an embedded demo phone, it is the long connect link.
  * The QR, Copy, and NFC all carry whatever is on show (current()). "Show the long link" stays one tap away and
- * always works without our server.
+ * always works without our server. The long link on show carries a nonce and an issue time (connect_freshness.ts, issued again per setLink);
+ * the code link stays reusable and the server holds the link without them.
  *
  * DOM and words only: what to register and when is connect_code.ts, what the QR carries per mode is connect_modes.ts.
  */
 import { el } from '../../demo/src/ui/dom'
 import { canRegister } from './connect_code'
+import { issue, stampUrl } from './connect_freshness'
 import type { ConnectKeeper } from './connect_code'
 import { S } from './strings'
 
@@ -43,6 +45,7 @@ export interface ConnectView {
 
 export function createConnectView(o: ConnectViewOptions): ConnectView {
   let long = ''
+  let issued = ''
   let frag = ''
   let shown = ''
   let short = false
@@ -55,7 +58,7 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
   const note = el('p', { class: 'meta', 'data-code-note': '', hidden: true }, [S.connectCodeNote])
   const longBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'long', 'aria-expanded': 'false', hidden: true }, [S.shortLinkShowLong])
   const longText = el('code', { class: 'long-link', 'data-link': 'long' })
-  const longCopy = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'copy-long', onclick: () => { if (long) o.copy(long + (frag ? '#' + frag : '')) } }, [S.shortLinkCopyLong])
+  const longCopy = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'copy-long', onclick: () => { if (issued) o.copy(issued + (frag ? '#' + frag : '')) } }, [S.shortLinkCopyLong])
   const longBox = el('div', { class: 'long-box', hidden: true }, [longText, longCopy])
   const root = el('div', { class: 'link-choice', 'data-connect-view': '' }, [codeLine, status, note, longBtn, longBox])
 
@@ -72,14 +75,14 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
   const refresh = (): void => {
     if (!long) return
     const code = o.offer ? o.keeper.shortFor(long) : null
-    const mine = withFrag(code ?? long)
+    const mine = withFrag(code ?? issued)
     const next = override ?? mine
     short = code !== null && override === null
     codeLine.hidden = !short
     codeLine.textContent = short ? next : ''
     note.hidden = !short
     status.textContent = override === null && !short && o.offer && canRegister(o.origin) ? S.connectCodePending : ''
-    longText.textContent = withFrag(long)
+    longText.textContent = withFrag(issued)
     o.qr.hidden = qrHidden
     if (next !== shown) { shown = next; showQr(next) }
   }
@@ -101,7 +104,7 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
     el: root,
     current: () => shown,
     isShort: () => short,
-    longLink: () => (long ? withFrag(long) : ''),
+    longLink: () => (issued ? withFrag(issued) : ''),
     setOverride(payload: string | null, hidden = false): void {
       override = payload
       qrHidden = hidden
@@ -109,6 +112,7 @@ export function createConnectView(o: ConnectViewOptions): ConnectView {
     },
     setLink(nextLong: string, nextFrag: string): void {
       long = nextLong
+      issued = stampUrl(nextLong, issue(Date.now()))
       frag = nextFrag
       longBtn.hidden = false
       refresh()

@@ -1690,7 +1690,10 @@ export const S = {
   addCodeHint: 'Paste what they sent you. A code or a name is looked up on our server when you press Add; a DID connects over the relay only, with no server.',
   addCodeBusy: 'Looking them up...',
   addCodeAlready: (name: string) => `${name} is already in your web.`,
+  connectExpired: 'This code has expired, ask for a new one.',
+  connectUsed: 'This code was already used.',
   addCodeFailed: (f: AddFailure): string => {
+    if (f.type === 'stamp') return f.reason === 'expired' ? S.connectExpired : S.connectUsed
     if (f.type === 'did') {
       return f.problem === DidProblem.OtherRelay
         ? `That DID uses the relay at ${f.relayOrigin ?? 'another address'}, which this app cannot reach. It can only reach the relay of the TrustWeb addresses, so ask for their code instead.`

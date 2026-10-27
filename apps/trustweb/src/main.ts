@@ -52,13 +52,14 @@ import type { ContactBox } from './contact_box_view'
 import {
   ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
 } from './share_modes'
-import { resolveAddInput, ParseError } from './add_by_code'
+import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
+import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
-import type { AddFailure } from './add_by_code'
+import type { AddFailure, StampedLink } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
-import { parseConnectLinkParams, type ConnectLinkParams } from '../../demo/src/connect_link'
+import { type ConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -303,7 +304,7 @@ const solo = params.get('solo') === '1' && isPersona(persona)
 const ctxParam = params.get('ctx')
 const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
 const storeCtx = solo ? ctx : undefined
-let pendingConnect = parseConnectLinkParams(location.search)
+let pendingConnect: StampedLink | null = connectLinkOf(location.search)
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -1452,12 +1453,25 @@ function announceLink(): void {
   }
 }
 
+/** connect_freshness.ts: refuses an old or used link before anything is added or sent, and remembers the nonce of one it takes. `legacy`: no stamp (an older app), accepted. */
+function admitLink(link: StampedLink): { ok: true; legacy: boolean } | { ok: false; reason: 'expired' | 'replayed' } {
+  const s = st()
+  const now = Date.now()
+  const v = checkFreshness(link, s.seenConnectNonces ?? [], now)
+  if (!v.ok) return v
+  if (link.nonce !== undefined) { s.seenConnectNonces = rememberNonce(s.seenConnectNonces ?? [], link.nonce, now); save() }
+  if (v.legacy) console.warn('connect link without nonce/ts (older app): accepted, flagged legacy-code')
+  return v
+}
+
 /** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
 async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
+  const admitted = admitLink(link)
+  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); return }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
@@ -1474,6 +1488,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
+  if (admitted.legacy) person.connectedVia = 'legacy-code'
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -1547,7 +1562,7 @@ function declineInvite(link: ConnectLinkParams): void {
 
 /** Restore of an archived invitation in the Curator: its add sheet again; "Add" connects then (a reach-out, as from the link). */
 function reopenInvite(link: ConnectLinkParams): void {
-  pendingConnect = link
+  pendingConnect = { ...link, exempt: true } // an invitation this phone already holds: its stamp is not checked again
   reachOutPending = true
   offerPendingConnect()
 }
@@ -1577,6 +1592,8 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
   const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
+  const admitted = admitLink(out.link)
+  if (!admitted.ok) return { type: 'stamp', reason: admitted.reason }
   const peer = await net.completeConnect(out.link, ring)
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
@@ -1586,6 +1603,7 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
     s.people.push(person)
   }
   autoShareToPerson(person)
+  if (admitted.legacy) person.connectedVia = 'legacy-code'
   save()
   applyHeldContact(peer, person)
   return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
@@ -2406,7 +2424,11 @@ function addPersonSheet(ring: Ring): void {
     const out = await connectByCode(code.value, picked, name.value.trim().slice(0, 40), where.value.trim().slice(0, 80))
     busy = false
     addBtn.removeAttribute('disabled')
-    if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
+    if ('type' in out) {
+      codeStatus.textContent = S.addCodeFailed(out)
+      if (out.type === 'stamp') codeStatus.setAttribute('data-connect-refused', out.reason) // the preview panel's marker
+      return
+    }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.

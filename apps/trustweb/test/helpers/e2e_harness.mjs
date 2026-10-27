@@ -35,7 +35,7 @@ export async function startApp(port) {
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
   const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
-  const vite = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  const vite = spawn(process.execPath, [process.env.TW_VITE || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: { ...process.env, TW_PORT: String(port), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
