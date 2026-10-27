@@ -12,8 +12,7 @@ import { pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { createWalker } from './dev_walk'
-import { applyStamp, applyStuck, assemblyMoved, autoApply, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -29,11 +28,11 @@ declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
 
 const CSS = `
-.twp{position:fixed;left:8px;top:8px;z-index:100000;width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 110px);overflow:auto;border-radius:10px;background:#241b2e;color:#fff;font:11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.twp{position:fixed;left:8px;top:8px;z-index:100000;width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 110px);overflow:hidden auto;border-radius:10px;background:#241b2e;color:#fff;font:11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)}
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
-.twp .feat{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
 .twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .more.less{color:#b7a8c9}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
@@ -46,7 +45,7 @@ const CSS = `
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp a{color:#4fd7a0}
 .twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
-.twp .pills{flex:none;display:flex;gap:3px}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
+.twp .pills{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:3px;padding-left:31px;box-sizing:border-box}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
 .twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
 .twp .bar{position:sticky;bottom:0;margin:4px 0 0;padding:6px 10px;background:#3a2c48;display:grid;gap:5px;border-top:1px solid #7a6a8c}.twp .bar div{display:flex;gap:6px;align-items:center}.twp .bar button{text-decoration:underline}
 .twp .upd{margin-left:4px;padding:0 4px;border-radius:4px;background:#ffbf47;color:#241b2e;font-weight:700}
@@ -106,7 +105,6 @@ export function initDevPreview(): void {
   let opening: ReturnType<typeof setTimeout> | null = null
   let pointing = false
   let testing = false
-  let walking: string | null = null
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
   document.head.appendChild(h('style', { textContent: CSS }))
@@ -163,25 +161,20 @@ export function initDevPreview(): void {
   }
 
   createDevice2(p.id, p.stockPort, mode, toast)
-  const walker = createWalker(toast)
+  // Title tap / Walk: the feature's steps as the yellow card over the phone, always (a step may need the reviewer's own tap, which an
+  // automatic click-through gave up on); a feature without steps is only pointed at.
+  const walk = (f: PreviewFeature): void => { if (lit === f.key) lit = null; tap(f, true) }
 
-  // Title tap / Walk: do the feature's steps in the page; a feature without steps is only pointed at.
-  async function walk(f: PreviewFeature): Promise<void> {
-    if (!f.steps?.length) { tap(f); return }
-    steps.close(); lit = null; walking = f.key; render()
-    await walker.run(f.steps)
-    if (walking === f.key) { walking = null; render() }
-  }
-
-  function tap(f: PreviewFeature): void {
+  function tap(f: PreviewFeature, walking = false): void {
     seen = tapSeen(seen, f.key, f.ref ?? '')
     store.set(seenKey(p!.id), JSON.stringify(seen))
     lit = tapped(lit, f.key)
     steps.close()
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
     if (lit) {
-      const plan = rowPlan(pointer.set(f.selector), f.steps)
-      if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
+      const plan = walking && f.steps?.length ? 'walk' : rowPlan(pointer.set(f.selector), f.steps)
+      if (plan === 'walk') steps.open(f.steps!)
+      else if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
       else if (plan === 'steps') steps.open([...f.steps!, f.selector ? `${f.title} @ ${f.selector}` : f.title])
     }
     render()
@@ -218,8 +211,13 @@ export function initDevPreview(): void {
     }
   }
 
+  const reloaded = reloadMark(sessionStorage, p.id)
+  // The panel's scroll offset survives every reload; a scroll event right after a render is the browser clamping the fresh content, not the reviewer.
+  const scrolled = scrollStore(sessionStorage, p.id)
+  let renderedAt = 0
+  root.addEventListener('scroll', () => { if (!root.classList.contains('pill') && Date.now() - renderedAt > 100) scrolled.set(root.scrollTop) })
   /** To the waiting page, which comes back here once a server (started after `since`; 0 = any) answers three times. */
-  const go = (since: number): void => { location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${since}` }
+  const go = (since: number): void => { reloaded.set({ sha: p!.assembled?.sha ?? '', at: Date.now() }); location.href = `/__tw/wait?to=${encodeURIComponent(location.pathname + location.search + location.hash)}&since=${since}` }
 
   /** Sticky at the bottom of the panel while an assembly runs; a stuck one offers Retry. Nothing to press otherwise: the apply starts by itself. */
   function assemblyBar(): HTMLElement | null {
@@ -236,7 +234,7 @@ export function initDevPreview(): void {
     if (applying || busy !== null || document.hidden) return
     const q = await call('GET', '').catch(() => null)
     if (!q || applying || busy !== null) return
-    if (assemblyMoved(known, q)) { go(0); return }
+    if (shouldReload(known, q.assembled, reloaded.get(), Date.now())) { p = q; go(0); return }
     known ??= q.assembled?.sha ?? null
     const stamp = JSON.stringify(q)
     if (stamp !== last) { last = stamp; p = q; render() }
@@ -254,8 +252,9 @@ export function initDevPreview(): void {
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
-    const go = h('button', { className: 'mini', textContent: walking === f.key ? 'Stop' : 'Walk' })
-    go.addEventListener('click', (e) => { e.stopPropagation(); if (walking === f.key) { walker.stop(); walking = null; render() } else void walk(f) })
+    const walking = lit === f.key && steps.active()
+    const go = h('button', { className: 'mini', textContent: walking ? 'Stop' : 'Walk' })
+    go.addEventListener('click', (e) => { e.stopPropagation(); if (walking) { lit = null; render() } else walk(f) })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
       const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
       b.addEventListener('click', (e) => { e.stopPropagation(); void press(f.key, v) })
@@ -263,8 +262,8 @@ export function initDevPreview(): void {
     }
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), pill('needs-work', 'needs work')), ...(f.steps?.length ? [go, how] : []))
-    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) void walk(f) })
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), pill('needs-work', 'needs work'), ...(f.steps?.length ? [go, how] : [])))
+    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
 
@@ -456,6 +455,8 @@ export function initDevPreview(): void {
     const pos = store.get(POS)
     if (pos) { const { x, y } = JSON.parse(pos) as { x: number; y: number }; place(x, y) }
     sync()
+    renderedAt = Date.now()
+    if (!pill) root.scrollTop = scrolled.get()
     if (!lit) steps.close()
     if (!steps.active()) pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
   }
