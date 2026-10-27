@@ -434,3 +434,7 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   the queue; a non-fit changes nothing. Prefs hold no time window, so the window is not compared.
 - LLM draft: no model call the app makes itself exists (web_search.ts fetches search engines, organizer.ts posts org data), so acceptTogetherDraft has ONE call
   site, draftOrPlain in sendFromDock, behind `TOGETHER_LLM_DRAFT = false` (together_request.ts). OPEN: turn on with the first local-model hook (owner 2026-10-23).
+
+## D-iroh-rung (2026-10-27): iroh relay as an alternative rung behind DeliveryChannel
+
+Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChannel`, `docs/IROH-RELAY.md`). The iroh runtime is injected (`IrohEndpointLike`), no native dependency added. The existing mediator rung stays for offline store-and-forward. No privacy claim beyond today's relay (I7).

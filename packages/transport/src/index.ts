@@ -55,6 +55,13 @@ export {
 export { RelayServer, type RelayServerOptions, type SubmitResult } from "./relay_server.js";
 export { RelayChannel, type RelayChannelOptions, type BackoffOpts } from "./relay_channel.js";
 export {
+  IrohRelayChannel,
+  DEFAULT_MAX_WIRE_BYTES as IROH_DEFAULT_MAX_WIRE_BYTES,
+  type IrohEndpointLike,
+  type IrohPeerAddr,
+  type IrohRelayChannelOptions,
+} from "./iroh_relay_channel.js";
+export {
   LadderChannel,
   type LadderRung,
   type LadderRungName,
