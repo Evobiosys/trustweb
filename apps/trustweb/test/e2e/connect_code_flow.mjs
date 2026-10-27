@@ -26,6 +26,8 @@ const ORIGIN = `https://${HOST}`
 const SHOTS = process.env.TW_SHOTS
 const USERNAME_LINK = 'https://signal.me/#eu/adaUsernameCode0123456789'
 const t = tally()
+/** The long link without its wave 20 freshness stamp: what the server holds under the code. */
+const bare = (u) => { const x = new URL(u); x.searchParams.delete('nonce'); x.searchParams.delete('ts'); return x.toString() }
 const errors = []
 
 /** The registrations only: since wave 6e Meet also READs the names with a POST /name (the names block), which these counts are not about. */
@@ -85,17 +87,18 @@ async function partA(browser) {
   await page.locator('.qrwrap canvas').waitFor({ timeout: 15_000 })
   const first = await payload(page)
   t.ok('a: before the server answers the QR carries the long connect link', /^https:\/\/app\.trustintheweb\.org\/\?connect=did%3Apeer%3A2/.test(first) && first.includes('&id=') && first.includes('&name=Ada'), first.slice(0, 90))
+  t.ok('a: the long link carries a nonce and an issue time (wave 20 replay guard); the server holds it without them', /[?&]nonce=[\w-]{16,}/.test(first) && /[?&]ts=\d{13}/.test(first) && bare(first) !== first)
   t.ok('a: and the page says so ("Long link, until the server answers")', /Long link, until the server answers/.test(await page.locator('[data-code-status]').innerText()))
   t.ok('a: Copy link copies the long link meanwhile', (await page.locator('.meet-page > .btn', { hasText: 'Copy link' }).click(), (await page.evaluate(() => navigator.clipboard.readText())) === first))
   const code = await until(async () => { const c = [...server.codes.keys()][0]; return c && (await payload(page)) === `${ORIGIN}/c/${c}` ? c : null }, 15_000)
   t.ok('a: then the QR carries the code link https://<host>/c/<22 chars>', !!code && /^[A-Za-z0-9_-]{22}$/.test(code), String(code))
   t.ok('a: shown as a line too, and the status line is gone', (await page.locator('[data-link="code"]').innerText()) === `${ORIGIN}/c/${code}` && (await page.locator('[data-code-status]').innerText()) === '')
-  t.ok('a: exactly one POST, holding only the long link (no code, no secret)', connectPosts(server).length === 1 && JSON.stringify(Object.keys(connectPosts(server)[0].body)) === '["url"]' && connectPosts(server)[0].body.url === first.split('#')[0])
+  t.ok('a: exactly one POST, holding only the long link (no code, no secret)', connectPosts(server).length === 1 && JSON.stringify(Object.keys(connectPosts(server)[0].body)) === '["url"]' && connectPosts(server)[0].body.url === bare(first.split('#')[0]))
   t.ok('a: the QR is short now (well under a third of the long link)', (await payload(page)).length < first.length / 3)
   await page.locator('.meet-page > .btn', { hasText: 'Copy link' }).click()
   t.ok('a: Copy link copies the code link', (await page.evaluate(() => navigator.clipboard.readText())) === `${ORIGIN}/c/${code}`)
   const rec = (await record(page)).connectCode
-  t.ok('a: the phone keeps {code, secret, url, updatedAt}', rec && rec.code === code && rec.secret === server.codes.get(code).secret && rec.url === first && typeof rec.updatedAt === 'number')
+  t.ok('a: the phone keeps {code, secret, url, updatedAt}', rec && rec.code === code && rec.secret === server.codes.get(code).secret && rec.url === bare(first) && typeof rec.updatedAt === 'number')
   t.ok('a: the secret is on no page url and in no visible text', !page.url().includes(rec.secret) && !(await page.locator('body').innerText()).includes(rec.secret))
   await page.locator('[data-act="long"]').click()
   t.ok('a: "Show the long link" still shows the long link', (await page.locator('[data-link="long"]').innerText()) === first)
@@ -156,7 +159,7 @@ async function partB(browser) {
   await shot(b.page, 'cc_b_add_sheet.png')
   await b.page.locator('.sheet.on [data-ring="friend"]').click()
   await addToWeb(b.page)
-  t.ok('b: the card of Ada opens', await appears(b.page.locator('.sheet.on h3', { hasText: 'Ada Lovelace' }), 5000))
+  t.ok('b: the card of Ada opens', await appears(b.page.locator('.sheet.on h2', { hasText: 'Ada Lovelace' }), 5000))
   const afterAdd = await record(b.page)
   t.ok('b: she is in the Friend ring, on the person AND on the connection', afterAdd.people[0].ring === 'friend' && afterAdd.peers[0].ring === 'friend')
   const msg = b.page.locator('.sheet.on a', { hasText: 'Message on Signal' })

@@ -35,7 +35,7 @@ export async function startApp(port) {
   const { InMemoryRelayQueueStore } = await import('../../../../packages/transport/src/relay_queue_store.ts')
   const relay = new RelayServer({ queueStore: new InMemoryRelayQueueStore() })
   const { port: relayPort } = await relay.listen(0, '127.0.0.1')
-  const vite = spawn(process.execPath, [path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
+  const vite = spawn(process.execPath, [process.env.TW_VITE || path.join(DEMO_ROOT, 'node_modules/vite/bin/vite.js'), '--strictPort'], {
     cwd: TW_ROOT,
     env: { ...process.env, TW_PORT: String(port), TW_RELAY_PROXY: `http://127.0.0.1:${relayPort}` },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -50,7 +50,7 @@ export async function startApp(port) {
 
 export async function launch(args = []) {
   const pw = await import(process.env.PLAYWRIGHT_PACKAGE || 'playwright')
-  return (pw.chromium ? pw : pw.default).chromium.launch({ headless: true, args })
+  return (pw.chromium ? pw : pw.default).chromium.launch({ headless: true, args, ...(process.env.TW_CHROMIUM_EXE ? { executablePath: process.env.TW_CHROMIUM_EXE } : {}) })
 }
 
 /** Starts a fresh phone: types the name and lands on the Web screen. */

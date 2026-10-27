@@ -16,6 +16,7 @@ import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
+import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
@@ -244,6 +245,8 @@ export interface ItemSource {
   line?: number
   /** Shared by a person: who. */
   fromName?: string
+  /** The name of the device where it was created (device_name.ts). Absent: unknown. Travels between the owner's own devices only, NEVER sent to anyone else. */
+  device?: string
   /** Tana: the source node's reference. Local only, NEVER sent to anyone. */
   ref?: string
   /** Tana: the line's own node id (the CRM converter writes it); opens the node in Tana. Local only, NEVER sent to anyone. */
@@ -306,6 +309,8 @@ export interface Person {
   ring: Ring
   metAt: number
   lines: NoteLine[]
+  /** 'legacy-code': connected through a link without a freshness stamp (an older app); accepted for now. Local only. */
+  connectedVia?: 'legacy-code'
   /** Set once this person is also connected on TrustWeb (a paired peer). */
   peerId?: string
   /** Event ids (AppState.events): the per-event tag, where we met. Local only. */
@@ -843,6 +848,8 @@ export interface NotifyKinds {
 
 export interface AppState {
   v: typeof RECORD_FORMAT
+  /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
+  schemaVersion?: number
   /** Times (ms) of the reach-outs via my link that landed on my web in the last hour (reach_out_guard.ts), how many were held, and the owner's pause. Local only. */
   reachOutLog?: number[]
   reachOutHeld?: number
@@ -870,8 +877,14 @@ export interface AppState {
   contactShare?: ShareSettings
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
+  /** Settings > Public link "Show my Signal / WhatsApp links to people who connect" (channel_visibility.ts). Absent: on; only false is stored. */
+  showMessengerLinks?: false
   /** Wave 7: my profile (profile.ts). Absent: none. Leaves this phone only on the owner's tap "Send my profile" on a card, to that connected peer, in a chat text. */
   profile?: MyProfile
+  /** Wave 20 (profile.ts autoSendRank): peer id -> the widest zone reach whose profile slice already went to that peer automatically. */
+  autoSentRank?: Record<string, number>
+  /** Wave 20: Settings "Share my profile when we connect". Absent: on; only true (off) is stored. */
+  profileAutoOff?: true
   /** peer id -> fingerprint of the contact already sent to that peer (so it is sent once per change). */
   contactSent?: Record<string, string>
   /**
@@ -885,6 +898,8 @@ export interface AppState {
    * unknown value is dropped at boot. An older build ignores both.
    */
   shareMode?: string
+  /** Wave 21: how many invites I sent (a share that resolved or a copy). A number only, no names. Absent: none. */
+  invitesSent?: number
   sharePins?: string[]
   /** Wave 6e: when the small "Is this safe?" link was first shown on the Add sheet after a scan (it shows that once). Absent: not yet. */
   safetyLinkShownAt?: number
@@ -894,6 +909,8 @@ export interface AppState {
    * that is not served from one of the two app origins. Older builds ignore it.
    */
   connectCode?: ConnectRecord
+  /** Connect nonces this phone accepted (connect_freshness.ts), pruned past the window: a link used once is refused the second time. */
+  seenConnectNonces?: SeenNonce[]
   /**
    * Wave 15 (sync_code.ts): further connect codes of this account that linked devices brought (a different code from another device whose names did
    * not all fit into one code). Each keeps its secret, its names and the pairing it came from. Optional; an older build ignores it.

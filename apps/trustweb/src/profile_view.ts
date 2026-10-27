@@ -5,8 +5,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { Audience } from './model'
 import type { InventoryItem } from './model'
-import { NORMS, Norm, PROFILE_AUDIENCES, audienceOf, isStale } from './profile'
-import type { Dated, MyProfile, ProfileAudience, ProfileSection, SharedProfile } from './profile'
+import { NORMS, Norm, ONE_MAX, PROFILE_AUDIENCES, audienceOf, isStale } from './profile'
+import type { Dated, MyProfile, OneKey, ProfileAudience, ProfileSection, SharedProfile } from './profile'
 import { S } from './strings'
 
 export interface ProfileViewDeps {
@@ -17,7 +17,7 @@ export interface ProfileViewDeps {
   commit: () => void
   addNorm: (norm: Norm, text: string) => void
   removeNorm: (index: number) => void
-  setOne: (key: 'favourite' | 'intro', text: string) => void
+  setOne: (key: OneKey, text: string) => void
   setAudience: (section: ProfileSection, audience: ProfileAudience) => void
   /** My picture (wave 19): the round face (initials or the picture), pick a file, remove it. `has`: one is set. */
   picture: { face(): HTMLElement; has(): boolean; choose(file: File): void; remove(): void }
@@ -37,7 +37,7 @@ export function offerLines(items: readonly InventoryItem[]): InventoryItem[] {
   return items.filter((i) => i.included && i.audience === Audience.FriendsOfFriends)
 }
 
-/** Under each section: "Share with: Close | Friends | Acquaintances | Nobody" (profile.ts profileFor). */
+/** Under each section: "Share with: Close | Friends | Acquaintances | Public | Nobody" (profile.ts sliceFor). */
 function audienceSeg(d: ProfileViewDeps, section: ProfileSection): HTMLElement {
   const cur = audienceOf(d.profile(), section)
   return el('div', { class: 'prof-audience' }, [
@@ -66,9 +66,9 @@ function pictureSection(d: ProfileViewDeps): HTMLElement {
   ])
 }
 
-function oneField(d: ProfileViewDeps, key: 'favourite' | 'intro', label: string, ph: string, max: number): HTMLElement {
+function oneField(d: ProfileViewDeps, key: OneKey, label: string, ph: string): HTMLElement {
   const cur = d.profile()[key]
-  const input = el('input', { class: 'field', placeholder: ph, maxlength: String(max), value: cur?.text ?? '', 'aria-label': label, 'data-prof-input': key })
+  const input = el('input', { class: 'field', placeholder: ph, maxlength: String(ONE_MAX[key]), value: cur?.text ?? '', 'aria-label': label, 'data-prof-input': key })
   const save = (): void => { d.setOne(key, input.value); d.commit() }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') save() })
   return el('div', { class: 'prof-one' }, [
@@ -98,8 +98,12 @@ export function profileSheetNodes(d: ProfileViewDeps): Node[] {
     ])),
     el('div', { class: 'cb-row editing' }, [pick, text, el('button', { class: 'btn btn-electric btn-sm', type: 'button', 'data-prof-norm-add': '1', onclick: add }, [S.profNormAdd])]),
     audienceSeg(d, 'norms'),
-    oneField(d, 'favourite', S.profFavourite, S.profFavouritePh, 40),
-    oneField(d, 'intro', S.profIntro, S.profIntroPh, 100),
+    oneField(d, 'favourite', S.profFavourite, S.profFavouritePh),
+    oneField(d, 'intro', S.profIntro, S.profIntroPh),
+    oneField(d, 'website', S.profWebsite, S.profWebsitePh),
+    oneField(d, 'offers', S.profOffers, S.profOffersPh),
+    oneField(d, 'working', S.profWorking, S.profWorkingPh),
+    oneField(d, 'address', S.profAddress, S.profAddressPh),
     el('p', { class: 'meta' }, [S.profShareHint]),
   ]
 }
@@ -113,6 +117,7 @@ export function theirProfileBlock(name: string, t: SharedProfile | undefined, no
     t.picture ? el('img', { class: 'prof-their-pic', src: t.picture, alt: S.profPictureOf(name), 'data-their-picture': '1' }) : null,
     t.favourite ? el('div', { class: 'prof-line' }, [S.profFavourite + ': ' + t.favourite]) : null,
     t.intro ? el('div', { class: 'prof-line' }, [t.intro]) : null,
+    ...(['website', 'offers', 'working', 'address'] as const).map((k) => (t[k] ? el('div', { class: 'prof-line', [`data-their-${k}`]: '1' }, [S.profTheirLabel[k] + ': ' + t[k]]) : null)),
     stamp({ text: '', at: t.at, by: 'me' }, now),
   ])
 }

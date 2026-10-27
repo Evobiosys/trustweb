@@ -113,7 +113,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html: str
 }
 
 const phones = h('div', 'phones', '')
-const PHONE_HINT = 'Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See it in action</b>.'
+const PHONE_HINT = 'Below is a phone running the real app over the live relay: type a name to start. Add more devices next to it, or watch the scripted version with <b>See TrustWeb in action</b>.'
 /** The intro under the title; the internet-freedom context says what the app does for people who must not be seen asking. */
 const INTRO = ctx === DemoContext.Otf
   ? 'For journalists, human rights defenders and organizers who need a fixer, a lawyer or a translator through people they already trust, without broadcasting the ask. What you know about people stays on your phone; a question travels, and only answers its holder approves ever leave it. A decline looks exactly like "no match". ' + PHONE_HINT
@@ -286,12 +286,12 @@ seeBtn.onclick = () => {
   const open = actionSlot.hidden
   actionSlot.hidden = !open
   seeBtn.setAttribute('aria-expanded', String(open))
-  seeBtn.textContent = open ? 'Hide the walkthrough' : 'See it in action'
+  seeBtn.textContent = open ? 'Hide the walkthrough' : 'See TrustWeb in action'
   if (open && !stopWalk) stopWalk = mountWalkthrough(walkSlot)
   if (!open) stopWalk?.()
   if (open) actionSlot.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-seeBtn.textContent = 'See it in action'
+seeBtn.textContent = 'See TrustWeb in action'
 const switchBtn = document.createElement('button')
 switchBtn.className = 'switch'
 switchBtn.dataset.switchDevice = '1'

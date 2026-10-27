@@ -28,6 +28,7 @@
  */
 import { Ring } from './model'
 import type { AppState } from './model'
+import { migrate } from './schema_version'
 
 const PREFIX = 'trustweb.v1.'
 /** Where an unreadable record is kept aside, untouched (one per key; never read by the app). */
@@ -64,15 +65,17 @@ export function unreadableKey(persona: string, context?: string): string {
   return UNREADABLE_PREFIX + storageKey(persona, context).slice(PREFIX.length)
 }
 
-/** A stored record this build can use: an object at version 1 with an owner. */
+/** A stored record this build can use: an object at version 1 with an owner, migrated (schema_version.ts); a newer schema is null. */
 export function parseRecord(raw: string): AppState | null {
   try {
     const s = JSON.parse(raw) as AppState | null
     if (!(s && typeof s === 'object' && s.v === 1 && s.me && typeof s.me === 'object')) return null
     // The ring value of the outliner and the CRM spells close_friend; the record keeps 'close'.
     for (const p of [...(s.people ?? []), ...(s.peers ?? [])]) if ((p.ring as string) === 'close_friend') p.ring = Ring.Close
+    migrate(s)
     return s
   } catch {
+    // Includes a record from a newer build (SchemaNewerError): not read half, kept aside by loadState.
     return null
   }
 }

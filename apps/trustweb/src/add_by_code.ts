@@ -16,10 +16,21 @@ import { parseConnectLinkParams } from '../../demo/src/connect_link'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import { resolveDidPeer } from '../../demo/src/did'
 import { CONNECT_CODE_RE, NAME_RE } from './connect_code'
+import { readStamp } from './connect_freshness'
+import type { Stamped } from './connect_freshness'
 import { fingerprint, stripUnsafe } from './safe_text'
 import { SHORT_LINK_ORIGINS } from './short_link'
 
 export { NAME_RE }
+
+/** A connect link with the freshness stamp of connect_freshness.ts (absent on a link of an older app and on the public address). */
+export type StampedLink = ConnectLinkParams & Stamped
+
+/** The ?connect= link of a query string, with its stamp. */
+export const connectLinkOf = (search: string): StampedLink | null => {
+  const link = parseConnectLinkParams(search)
+  return link && { ...link, ...readStamp(search) }
+}
 /** One lookup waits this long. */
 export const RESOLVE_TIMEOUT_MS = 10_000
 /** A pasted value longer than this is not read (a DID with a service block is a few hundred characters). */
@@ -54,7 +65,7 @@ export type Parsed =
   | { ok: true; kind: AddKind.Name; name: string }
   | { ok: true; kind: AddKind.Code; code: string }
   | { ok: true; kind: AddKind.Did; did: string }
-  | { ok: true; kind: AddKind.LongLink; link: ConnectLinkParams }
+  | { ok: true; kind: AddKind.LongLink; link: StampedLink }
   | { ok: false; error: ParseError }
 
 const fail = (error: ParseError): Parsed => ({ ok: false, error })
@@ -95,7 +106,7 @@ function fromUrl(u: URL, origin: string): Parsed {
     try { decoded = decodeURIComponent(who) } catch { return fail(ParseError.BadName) }
     return nameOf(decoded)
   }
-  const link = parseConnectLinkParams(u.search)
+  const link = connectLinkOf(u.search)
   return link ? { ok: true, kind: AddKind.LongLink, link } : fail(ParseError.NotAConnectLink)
 }
 
@@ -134,7 +145,7 @@ export enum ResolveError {
 }
 
 /** `previous`: the server marked the name as having had another holder lately (prev=1 on the redirect; no identity is told). */
-export type ResolveOutcome = { ok: true; link: ConnectLinkParams; previous?: true } | { ok: false; error: ResolveError }
+export type ResolveOutcome = { ok: true; link: StampedLink; previous?: true } | { ok: false; error: ResolveError }
 
 export interface ResolveDeps {
   /** The page's origin (location.origin): the only host ever asked. */
@@ -144,11 +155,11 @@ export interface ResolveDeps {
 }
 
 /** The connect link at the end of a followed redirect, checked again here: our origins only, the ?connect= shape only. */
-export function linkFromFinalUrl(finalUrl: string, origin: string): ConnectLinkParams | null {
+export function linkFromFinalUrl(finalUrl: string, origin: string): StampedLink | null {
   let u: URL
   try { u = new URL(finalUrl) } catch { return null }
   if (!readsOrigin(u, origin) || u.username || u.password) return null
-  return parseConnectLinkParams(u.search)
+  return connectLinkOf(u.search)
 }
 
 /** Did the server add prev=1 to the connect link it redirected to? */
@@ -239,9 +250,11 @@ export type AddFailure =
   | { type: 'parse'; error: ParseError }
   | { type: 'resolve'; error: ResolveError; kind: AddKind.Code | AddKind.Name }
   | { type: 'did'; problem: DidProblem; relayOrigin?: string }
+  /** connect_freshness.ts: the pasted link is older than its window, or was used before. */
+  | { type: 'stamp'; reason: 'expired' | 'replayed' }
 
 /** `previous`: the typed code or name (the key of the note) when its username had another holder before. */
-export type AddResolved = { ok: true; kind: AddKind; link: ConnectLinkParams; previous?: string } | { ok: false; failure: AddFailure }
+export type AddResolved = { ok: true; kind: AddKind; link: StampedLink; previous?: string } | { ok: false; failure: AddFailure }
 
 /**
  * What the sheet does when "Add to my web" is pressed with the field filled: read it, and for a code or a name ask our server (the only
@@ -254,13 +267,13 @@ export async function resolveAddInput(deps: ResolveDeps, input: string): Promise
     case AddKind.LongLink:
       return reachable(parsed.kind, parsed.link, deps.origin)
     case AddKind.Did:
-      return reachable(parsed.kind, paramsForDid(parsed.did), deps.origin)
+      return reachable(parsed.kind, { ...paramsForDid(parsed.did), exempt: true }, deps.origin)
     case AddKind.Code:
     case AddKind.Name: {
       const out = parsed.kind === AddKind.Code ? await resolveCode(deps, parsed.code) : await resolveName(deps, parsed.name)
       if (!out.ok) return { ok: false, failure: { type: 'resolve', error: out.error, kind: parsed.kind } }
       const key = parsed.kind === AddKind.Code ? parsed.code : parsed.name
-      const got = reachable(parsed.kind, out.link, deps.origin)
+      const got = reachable(parsed.kind, { ...out.link, exempt: true }, deps.origin)
       return got.ok && out.previous ? { ...got, previous: key } : got
     }
   }
@@ -270,7 +283,7 @@ export async function resolveAddInput(deps: ResolveDeps, input: string): Promise
  * Whatever the field turned into, the connection runs over THIS page's relay: a link or DID that names a relay this page cannot reach
  * (didReadiness) would give a card that says "connected" and never answers, so it is stopped here with the reason.
  */
-function reachable(kind: AddKind, link: ConnectLinkParams, origin: string): AddResolved {
+function reachable(kind: AddKind, link: StampedLink, origin: string): AddResolved {
   const ready = didReadiness(link.did, origin)
   if (ready.ok) return { ok: true, kind, link }
   return { ok: false, failure: { type: 'did', problem: ready.problem, ...(ready.relayOrigin ? { relayOrigin: ready.relayOrigin } : {}) } }

@@ -32,11 +32,12 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
-import { canRegister, createConnectKeeper, repairConnectRecord } from './connect_code'
+import { canRegister, createConnectKeeper, readConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
+import { sendCapRequest } from './name_cap_request'
 import type { NamesSync } from './names_sync'
 import { createNamesView } from './names_view'
-import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, repairGeneralNotes, setGeneralNote } from './general_notes'
+import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection } from './timeline_view'
@@ -50,15 +51,17 @@ import { createAdvanced, createShareRow, createSharingLine } from './connect_adv
 import { BOX_CHANNELS, createContactBox } from './contact_box_view'
 import type { ContactBox } from './contact_box_view'
 import {
-  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, repairShareFields, viaFragment,
+  ShareMode, channelOf, advancedModes, defaultModes, effectiveMode, isOnlyMessenger, isShareMode, modePayload, modeSharing, needsCameraApp, parseVia, publicLinkVia, viaFragment,
 } from './share_modes'
-import { resolveAddInput, ParseError } from './add_by_code'
+import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
+import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
+import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
-import type { AddFailure } from './add_by_code'
+import type { AddFailure, StampedLink } from './add_by_code'
 import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
-import { parseConnectLinkParams, type ConnectLinkParams } from '../../demo/src/connect_link'
+import { type ConnectLinkParams } from '../../demo/src/connect_link'
 import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
@@ -69,8 +72,9 @@ import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
+import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
-import { TextKind, markRead, migrateChats, peersWithPending, receiveText, removeThread, routeText } from './chat'
+import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText } from './chat'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -85,6 +89,7 @@ import { S } from './strings'
 import { networkChosen } from './network_graph'
 import { createNetworkView } from './network_view'
 import { knowsRow } from './knows_view'
+import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
 import { cardFor, cardForNewPeer, personOf, repairPeerCards } from './peer_cards'
 import { addAwayAsk, dismissAwayAsk } from './away_asks'
@@ -117,10 +122,11 @@ import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
 import { initDevFeature } from './dev_feature'
-import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement, repairAgreements } from './agreements'
+import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
 import { isJpegDataUrl } from '../../demo/src/types'
-import { addNorm, buildProfileText, profileFor, receiveProfileText, removeNorm, repairProfile, setOne } from './profile'
+import { addNorm, autoSendRank, buildProfileText, receiveProfileText, removeNorm, setOne, sliceFor, zoneOf } from './profile'
+import type { Zone } from './profile'
 import type { MyProfile } from './profile'
 import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
@@ -130,12 +136,12 @@ import { DESKTOP_KEY, DEX_URL, UI_VIEWS, UiView, desktopView, wideAllowed } from
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
-import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, normaliseNoteFields, travelsInPack } from './note_fields'
+import { GENERAL_NOTES_MAX, addContextLines, cleanGeneralNotes, contextOf, noteKey, travelsInPack } from './note_fields'
 import { CarryPlan, carryPlan, demoContentForLivePhone, dropCarry, freshFromCarry, mergeCarryOver, readCarry } from './demo_to_live'
 import type { CarryOver } from './demo_to_live'
 import { KeepNotice, dueForTakeDown, guestAsk, guestAsked, guestEnded, guestGranted, guestKept, isKept, keepAccount, keepText, parseKeepText, unkeepAccount } from './account_keep'
 import { asksMatchNotes, notesMatchDefault } from './notes_source'
-import { focusFor, linesFromTranscript, markDemo, markReviewed, migrateSources, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
+import { focusFor, linesFromTranscript, markDemo, markReviewed, provenanceState, recordedSource, sharedSource, typedSource } from './provenance'
 import { sourceView } from './provenance_view'
 import { AudioStore, MAX_BYTES, MAX_RECORDINGS } from './audio_store'
 import { megabytes } from './audio_plan'
@@ -146,7 +152,6 @@ import { createTranscriptionView } from './transcription_view'
 import { createHostingView } from './hosting_view'
 import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
-import { repairOtherCodes } from './sync_code'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
@@ -302,7 +307,7 @@ const solo = params.get('solo') === '1' && isPersona(persona)
 const ctxParam = params.get('ctx')
 const ctx: DemoContext = isDemoContext(ctxParam) ? ctxParam : DemoContext.Generic
 const storeCtx = solo ? ctx : undefined
-let pendingConnect = parseConnectLinkParams(location.search)
+let pendingConnect: StampedLink | null = connectLinkOf(location.search)
 /** Wave 8: set when the account is made from the start screen of a connect link: that connect is a reach-out, not an invitation. */
 let reachOutPending = false
 let heldToasted = false
@@ -374,37 +379,19 @@ if (pendingCarry && carryPlan(state) !== CarryPlan.Ask) {
 // A failure leaves the record exactly as loaded (nothing saved) and the app still starts.
 try {
   if (state) {
-    const sourced = migrateSources(state)
-    const noted = normaliseNoteFields(state)
+    const migrated = migrate(state)
     // Wave 6 (N6): a demo account made before had its inviter and his front door as two people; now one (one_jakob.ts).
     const merged = mergeOneJakob(state, S.demoPeerContext)
     // Wave 6 (notes_source.ts): the side-by-side demo phones do not let asks match notes (their content is imaginary); stored once, so it also holds after "Add demo content" changes the default.
     const soloOff = solo && state.asksMatchNotes === undefined
     if (soloOff) state.asksMatchNotes = false
     // Wave 6 (chat.ts): a corrupted `chats` value is repaired, never thrown on.
-    const chatsFixed = migrateChats(state)
-    if (sourced || noted || merged || soloOff || chatsFixed) save()
+    if (migrated || merged || soloOff) save()
   }
 } catch {
   state = loadState(persona, storeCtx)
 }
-// The field repairs of waves 6b and 6e run in their own block, so a failure of a migration above (state reloaded as stored) does not skip
-// them (review 6e). Each never throws on its own; the block is a second net.
-try {
-  if (state) {
-    // Wave 6b (connect_code.ts): a stored connect code that is not a well-formed record is dropped.
-    const codeFixed = [repairConnectRecord(state), repairOtherCodes(state)].some(Boolean)
-    // Wave 6e (share_modes.ts): a stored share mode or pin list that is not valid is dropped.
-    const modesFixed = repairShareFields(state)
-    // Wave 6e (general_notes.ts): a stored General note that is not text, too long or empty is repaired.
-    const notesFixed = repairGeneralNotes(state)
-    // Wave 7 (profile.ts): a stored profile of the wrong shape is dropped.
-    const profileFixed = repairProfile(state)
-    // Wave 7 (agreements.ts): stored agreements that are not well formed are dropped.
-    const agreementsFixed = repairAgreements(state)
-    if (codeFixed || modesFixed || notesFixed || profileFixed || agreementsFixed) save()
-  }
-} catch { /* the readers clean these fields themselves (connect_code.ts, share_modes.ts, general_notes.ts) */ }
+// The field repairs of waves 6b to 7 (connect code, share modes, general notes, profile, agreements) run in the migrate() chain above (schema_version.ts).
 // Wave 6f (peer_cards.ts): a card that a later connection took over goes back to its own connection, and every connection has a card.
 // A real phone's own record only (not the side-by-side demo, not a demo account's view). Never throws; a failure changes nothing.
 try {
@@ -553,6 +540,7 @@ const net = new Net({
       addWant(s, { peerId: peer.id, name: peer.displayName, at: Date.now() })
       save()
       sendHelloTo(peer)
+      void autoShareProfile(peer, 'public')
       toast(S.notifBodyConnect(peer.displayName))
       notify('connect', S.notifBodyConnect(peer.displayName))
       render()
@@ -570,6 +558,7 @@ const net = new Net({
     if (person.doorPeerId !== peer.id) person.peerId = peer.id
     save()
     sendHelloTo(peer)
+    void autoShareProfile(peer, 'public')
     applyHeldContact(peer, person)
     closeSheet()
     toast(S.peerConnectedToast(peer.displayName, S.ringLabel[peer.ring]))
@@ -1449,12 +1438,25 @@ function announceLink(): void {
   }
 }
 
+/** connect_freshness.ts: refuses an old or used link before anything is added or sent, and remembers the nonce of one it takes. `legacy`: no stamp (an older app), accepted. */
+function admitLink(link: StampedLink): { ok: true; legacy: boolean } | { ok: false; reason: 'expired' | 'replayed' } {
+  const s = st()
+  const now = Date.now()
+  const v = checkFreshness(link, s.seenConnectNonces ?? [], now)
+  if (!v.ok) return v
+  if (link.nonce !== undefined) { s.seenConnectNonces = rememberNonce(s.seenConnectNonces ?? [], link.nonce, now); save() }
+  if (v.legacy) console.warn('connect link without nonce/ts (older app): accepted, flagged legacy-code')
+  return v
+}
+
 /** `picked`: the visitor's add sheet ran it (offerPendingConnect) with the typed name and the ring; then their card opens, no second sheet. */
 async function completePendingConnect(picked?: { name: string; ring: Ring }): Promise<void> {
   const link = pendingConnect
   if (!link || !state) return
   pendingConnect = null
   drawCardStack()
+  const admitted = admitLink(link)
+  if (!admitted.ok) { toast(admitted.reason === 'expired' ? S.connectExpired : S.connectUsed, { mark: 'connectRefused' }); return }
   const reachOut = reachOutPending && !solo && !demoLink
   reachOutPending = false
   const ring = picked?.ring ?? (reachOut ? Ring.Intending : solo ? Ring.Friend : Ring.Acquaintance)
@@ -1469,6 +1471,9 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
+  autoShareToPerson(person)
+  if (admitted.legacy) person.connectedVia = 'legacy-code'
   if (sharedNotes) {
     const now = Date.now()
     person.context = S.notesReceivedContext(peer.displayName)
@@ -1542,7 +1547,7 @@ function declineInvite(link: ConnectLinkParams): void {
 
 /** Restore of an archived invitation in the Curator: its add sheet again; "Add" connects then (a reach-out, as from the link). */
 function reopenInvite(link: ConnectLinkParams): void {
-  pendingConnect = link
+  pendingConnect = { ...link, exempt: true } // an invitation this phone already holds: its stamp is not checked again
   reachOutPending = true
   offerPendingConnect()
 }
@@ -1572,6 +1577,8 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
   const out = await resolveAddInput({ origin: SERVER_ORIGIN, fetch: (i, init) => fetch(i, init) }, input)
   if (!out.ok) return out.failure
   if (st().identity?.did === out.link.did) return { type: 'parse', error: ParseError.Own }
+  const admitted = admitLink(out.link)
+  if (!admitted.ok) return { type: 'stamp', reason: admitted.reason }
   const peer = await net.completeConnect(out.link, ring)
   const s = st()
   let person = s.people.find((p) => p.peerId === peer.id)
@@ -1580,6 +1587,8 @@ async function connectByCode(input: string, ring: Ring, name: string, where: str
     person = { id: randomId(8), name: name || peer.displayName, context: where, ring, metAt: Date.now(), lines: [], peerId: peer.id }
     s.people.push(person)
   }
+  autoShareToPerson(person)
+  if (admitted.legacy) person.connectedVia = 'legacy-code'
   save()
   applyHeldContact(peer, person)
   return { person, existed, ...(out.previous ? { previous: out.previous } : {}) }
@@ -1599,6 +1608,7 @@ function openConnectAdd(peer: Peer, person: Person, given: string): void {
       const held = s.peers.find((x) => x.id === peer.id)
       if (held) held.ring = ring
       save()
+      autoShareToPerson(person)
       connectAdd = null
       viaCard.closed(person.id)
       addedToast(person, ring)
@@ -1630,6 +1640,7 @@ async function connectDemoPeer(ref: DemoPeerRef, inviter?: Person): Promise<void
   if (!personOfPeer(s, peer.id) && !joinFrontDoor(inviter, peer.id, peer.displayName)) {
     s.people.push({ id: randomId(8), name: peer.displayName, context: S.demoPeerContext, ring: Ring.Acquaintance, metAt: Date.now(), lines: [], peerId: peer.id })
   }
+  void autoShareProfile(peer, 'public')
   save()
 }
 
@@ -2334,6 +2345,7 @@ function addWantSheet(peerId: string, name: string): void {
       const peer = s.peers.find((x) => x.id === peerId)
       if (peer) { peer.ring = ring; applyHeldContact(peer, person) }
       save()
+      autoShareToPerson(person)
       addedToast(person, ring)
       render()
     },
@@ -2397,7 +2409,11 @@ function addPersonSheet(ring: Ring): void {
     const out = await connectByCode(code.value, picked, name.value.trim().slice(0, 40), where.value.trim().slice(0, 80))
     busy = false
     addBtn.removeAttribute('disabled')
-    if ('type' in out) { codeStatus.textContent = S.addCodeFailed(out); return }
+    if ('type' in out) {
+      codeStatus.textContent = S.addCodeFailed(out)
+      if (out.type === 'stamp') codeStatus.setAttribute('data-connect-refused', out.reason) // the preview panel's marker
+      return
+    }
     toast(out.existed ? S.addCodeAlready(out.person.name) : S.savedToast(out.person.name, S.ringLabel[picked]))
     render()
     // The username had another holder lately: the sheet stays for one dismissible line (notices.ts), "Done" opens the card.
@@ -2841,6 +2857,7 @@ const chatStrings = (): ChatStrings => ({
   offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
   re: S.chatRe, replyingTo: S.chatReplyingTo, replyingToDrop: S.chatReplyingToDrop,
+  notDelivered: S.chatNotDelivered, sendVia: (k) => S.chatSendVia(S.chLabel[k === 'signal' ? Channel.Signal : Channel.WhatsApp]),
 })
 
 const shareStrings = (): ShareStrings => ({ tickLabel: S.shareTick, tickPhoneNote: S.shareTickPhone, tickHint: S.shareTickHint })
@@ -3001,8 +3018,26 @@ async function sendProfile(peer: Peer): Promise<void> {
   const pic = await sharePicture()
   const text = person ? buildProfileText(APP_URL, st().profile, person, pic) : null
   if (!text) { toast(buildProfileText(APP_URL, st().profile, undefined, pic) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
-  net.sendText(peer, text, Date.now(), undefined, profileFor(st().profile, person!, pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
+  net.sendText(peer, text, Date.now(), undefined, sliceFor(st().profile, zoneOf(person!), pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
+
+/**
+ * Wave 20 (Jakob 2026-10-23, supersedes the 2026-10-15 tap-only rule for the zone slice): sends the slice of `zone` once when a connection
+ * lands (`public`: only the sections set to Public) and again when the person is placed on a closer ring (changeRing, the add sheets).
+ * Never when switched off in Settings, never to demo phones, never on moving outward. Silent: no toast on this side.
+ */
+async function autoShareProfile(peer: Peer, zone: Zone | null): Promise<void> {
+  const s = st()
+  const rank = zone && !s.profileAutoOff && !noSendTo(peer) ? autoSendRank(s.autoSentRank?.[peer.id], zone) : null
+  if (rank === null || !zone) return
+  const pic = await sharePicture()
+  const slice = sliceFor(s.profile, zone, pic)
+  const text = slice ? buildProfileText(APP_URL, s.profile, zone, pic) : null
+  if (!text) return
+  await net.sendText(peer, text, Date.now(), undefined, slice!.picture).then(() => { s.autoSentRank = { ...s.autoSentRank, [peer.id]: rank }; save() }, () => undefined)
+}
+
+const autoShareToPerson = (p: Person): void => { const peer = st().peers.find((x) => x.id === p.peerId); if (peer) void autoShareProfile(peer, zoneOf(p)) }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -3036,7 +3071,8 @@ function chatSheet(personId: string, open: StackOpen = {}): void {
   if (!p) return
   hideMsgNotice()
   const handle = renderChat({
-    ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p) }, S: chatStrings(),
+    ...chatIo(), doc: document, person: { name: p.name, peerId: p.peerId, reach: primaryReachable(p), theirChannels: p.theirChannels }, S: chatStrings(),
+    copy: (text) => copyLink(text, S.chatCopied), open: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
     isOnline: () => relayStatus === 'connected', context: open.re ?? null, scrollTo: open.scrollTo,
   })
   openSheet([handle.el])
@@ -3089,6 +3125,7 @@ function onContactText(peer: Peer, text: string): void {
 function sendLinksTo(peer: Peer, channels: Channel[]): void {
   const s = st()
   let settings: ShareSettings | undefined = s.contactShare
+  channels = shownChannels(s.showMessengerLinks, channels)
   for (const ch of channels) settings = withTick(settings, ch, true)
   const built = buildContactPayload(APP_URL, Object.fromEntries(channels.map((ch) => [ch, s.myChannels?.[ch]])), settings)
   if (built) net.sendText(peer, contactText(APP_URL, built.payload)).catch(() => { /* the person asks again */ })
@@ -3097,9 +3134,10 @@ function sendLinksTo(peer: Peer, channels: Channel[]): void {
 /** Wave 9: a paired person asks for my links. Ticked ones go at once, saved-unticked ones are asked one by one, the rest is silence. */
 function onContactRequest(peer: Peer, text: string): void {
   const s = st()
-  const wanted = parseRequestText(APP_URL, text)
+  const asked = parseRequestText(APP_URL, text)
+  const wanted = asked && shownChannels(s.showMessengerLinks, asked)
   const person = s.people.find((p) => p.peerId === peer.id)
-  if (!wanted || !person || noSendTo(peer)) return
+  if (!wanted?.length || !person || noSendTo(peer)) return
   // Someone who came in through the public link stays on Intending until I move them: until then a request is dropped, not answered.
   if (!mayAnswerRequest(peer, person)) return
   const plan = answerPlan(s.myChannels, s.contactShare, wanted)
@@ -3284,6 +3322,7 @@ function changeRing(p: Person, ring: Ring): void {
   p.ring = ring
   if (peer) peer.ring = ring
   save()
+  autoShareToPerson(p)
   if (peer && before !== undefined && ringRaised(before, ring) && mayAskAgainWith(peer)) { void net.askAgain(peer); return }
   // A tightening that never left (offline) and is undone before it could: nothing goes at all.
   if (peer && peer.askAgainDue !== undefined && before !== undefined && ringRaised(ring, before)) { delete peer.askAgainDue; save() }
@@ -3648,6 +3687,7 @@ const curator = createCurator({
     p.ring = ring
     delete p.ringSuggested
     save()
+    autoShareToPerson(p)
     if (screen === Screen.Web) render()
   },
   setFamily: (id, on) => {
@@ -4474,6 +4514,24 @@ function meetTrustWebPage(): HTMLElement {
     class: 'btn btn-ghost', disabled: true,
     onclick: () => { if (view.current()) copyLink(view.current()) },
   }, [S.meetCopy])
+  const inviteCount = el('p', { class: 'meta', 'data-invite-count': '', hidden: !st().invitesSent }, [S.inviteCount(st().invitesSent ?? 0)])
+  const inviteBtn = el('button', {
+    class: 'btn btn-ghost', 'data-invite-someone': '',
+    onclick: () => {
+      const inv = inviteText(namesSync().names().name ?? null, view.current())
+      void sendInvite(inv, {
+        share: typeof navigator.share === 'function' ? (d) => navigator.share({ title: d.title, text: d.text }) : undefined,
+        copy: (t) => navigator.clipboard.writeText(t),
+      }).then((ok) => {
+        if (!ok) return
+        st().invitesSent = (st().invitesSent ?? 0) + 1
+        save()
+        inviteCount.textContent = S.inviteCount(st().invitesSent ?? 0)
+        inviteCount.hidden = false
+        if (typeof navigator.share !== 'function') toast(S.meetCopied)
+      })
+    },
+  }, [S.inviteButton])
   const nfc = NFC_WRITE_OFFERED && nfcWriteSupported()
     ? el('button', {
         class: 'btn btn-ghost', disabled: true,
@@ -4516,8 +4574,9 @@ function meetTrustWebPage(): HTMLElement {
     if (nfc) nfc.disabled = !view.current()
     row.refresh()
     const via = publicLinkVia(mode)
-    publicVia.hidden = !via
-    publicVia.textContent = via ? S.publicLinkOffers(reachOutLink(), S.chLabel[via]) : ''
+    const viaShown = via && messengerLinksShown(st()) ? via : null
+    publicVia.hidden = !viaShown
+    publicVia.textContent = viaShown ? S.publicLinkOffers(reachOutLink(), S.chLabel[viaShown]) : ''
     sharing.refresh()
     if (ticksOnly) box.refreshTicks()
     else advanced.refresh()
@@ -4534,6 +4593,11 @@ function meetTrustWebPage(): HTMLElement {
     names: () => namesSync().names(),
     claim: (name, isAlias) => namesSync().claim(name, isAlias),
     release: (name) => namesSync().release(name),
+    askMore: async (reason, wanted) => {
+      const record = readConnectRecord(st().connectCode)
+      return record ? sendCapRequest({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() }, record, reason, wanted) : 'failed'
+    },
+    toast: toastShow,
   })
   const advanced = createAdvanced({
     modes: { list: () => advancedModes(mine()), current: shareModeNow, pick },
@@ -4579,6 +4643,8 @@ function meetTrustWebPage(): HTMLElement {
     ]),
     notes ? el('blockquote', { class: 'shared-notes' }, [notes.slice(0, 300)]) : null,
     copy,
+    inviteBtn,
+    inviteCount,
     view.el,
     advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
@@ -5455,11 +5521,20 @@ function settingsSheet(): void {
       ]),
       connectionRow(),
       buildContactBox({}).el,
+      el('button', {
+        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
+        // Only "off" is stored: absent means on.
+        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
+      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
     ], true),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
     ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
+      el('button', {
+        class: 'radio' + (messengerLinksShown(s) ? ' on' : ''), 'aria-pressed': String(messengerLinksShown(s)), 'data-signal-visible': '1',
+        onclick: () => { toggleMessengerLinks(s); save(); settingsSheet() },
+      }, [el('b', {}, [S.setMessengerLinks]), el('small', {}, [S.setMessengerLinksHint])]),
       el('button', {
         class: 'radio' + (s.reachOutsPaused ? ' on' : ''), 'aria-pressed': String(Boolean(s.reachOutsPaused)), 'data-reach-outs-pause': '1',
         onclick: () => { if (s.reachOutsPaused) delete s.reachOutsPaused; else s.reachOutsPaused = true; save(); settingsSheet() },

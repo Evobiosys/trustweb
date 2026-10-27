@@ -42,18 +42,25 @@ export interface NormEntry extends Dated { norm: Norm }
  * Wave 19 (Jakob 2026-10-23: "which sections to share with whom"): a ring and every ring closer to me, or nobody. Messenger links are
  * not part of the profile (they leave only as the answer to an explicit request, contact_request.ts), so they have no audience here.
  */
-export type ProfileAudience = 'close' | 'friend' | 'acquaintance' | 'nobody'
-export const PROFILE_AUDIENCES: readonly ProfileAudience[] = ['close', 'friend', 'acquaintance', 'nobody']
-export type ProfileSection = 'norms' | 'favourite' | 'intro' | 'picture'
-export const PROFILE_SECTIONS: readonly ProfileSection[] = ['norms', 'favourite', 'intro', 'picture']
+export type ProfileAudience = 'close' | 'friend' | 'acquaintance' | 'public' | 'nobody'
+export const PROFILE_AUDIENCES: readonly ProfileAudience[] = ['close', 'friend', 'acquaintance', 'public', 'nobody']
+/** Wave 20: the one-line sections besides favourite and intro (`website`, `offers` = what I offer, paid, `working` = what I work on and seek investment for, `address`). */
+export type OneKey = 'favourite' | 'intro' | 'website' | 'offers' | 'working' | 'address'
+export const ONE_MAX: Record<OneKey, number> = { favourite: TEXT_MAX, intro: INTRO_MAX, website: 60, offers: INTRO_MAX, working: INTRO_MAX, address: 60 }
+export type ProfileSection = 'norms' | 'picture' | OneKey
+export const PROFILE_SECTIONS: readonly ProfileSection[] = ['norms', 'favourite', 'intro', 'picture', 'website', 'offers', 'working', 'address']
 /** Before wave 19 a tap sent the whole profile to anyone connected: acquaintances and closer keep seeing every section by default. */
 export const DEFAULT_AUDIENCE: ProfileAudience = 'acquaintance'
+/** Wave 20: website, offers and working default to the public profile (anyone who reaches me through my public address), the address to friends. */
+const SECTION_DEFAULT: Partial<Record<ProfileSection, ProfileAudience>> = { website: 'public', offers: 'public', working: 'public', address: 'friend', picture: 'friend' }
 /** Who might reach me with my picture (Jakob 2026-10-23): friends and closer unless changed. */
 export const DEFAULT_PICTURE_AUDIENCE: ProfileAudience = 'friend'
 /** `pictureId`: the picture in image_store.ts (this phone only), `pictureAt` when it was set. */
-export interface MyProfile { norms: NormEntry[]; favourite?: Dated; intro?: Dated; pictureId?: string; pictureAt?: number; audience?: Partial<Record<ProfileSection, ProfileAudience>> }
+export interface MyProfile { norms: NormEntry[]; favourite?: Dated; intro?: Dated; website?: Dated; offers?: Dated; working?: Dated; address?: Dated; pictureId?: string; pictureAt?: number; audience?: Partial<Record<ProfileSection, ProfileAudience>> }
 /** What travels and what a connected person's card keeps: no per-entry dates, one date for the set. */
-export interface SharedProfile { norms: Array<{ norm: Norm; text: string }>; favourite?: string; intro?: string; picture?: string; at: number }
+export interface SharedProfile { norms: Array<{ norm: Norm; text: string }>; favourite?: string; intro?: string; website?: string; offers?: string; working?: string; address?: string; picture?: string; at: number }
+
+const ONE_KEYS = Object.keys(ONE_MAX) as OneKey[]
 
 export const isNorm = (v: unknown): v is Norm => NORMS.includes(v as Norm)
 export const isStale = (at: number, now: number): boolean => now - at > STALE_AFTER_MS
@@ -72,9 +79,9 @@ export function removeNorm(p: MyProfile, index: number): void {
   p.norms.splice(index, 1)
 }
 
-/** Sets or clears (empty text) the favourite way or the intro. */
-export function setOne(p: MyProfile, key: 'favourite' | 'intro', text: string, now: number): void {
-  const t = clean(text, key === 'intro' ? INTRO_MAX : TEXT_MAX)
+/** Sets or clears (empty text) a one-line section. */
+export function setOne(p: MyProfile, key: OneKey, text: string, now: number): void {
+  const t = clean(text, ONE_MAX[key])
   if (t) p[key] = { text: t, at: now, by: 'me' }
   else delete p[key]
 }
@@ -82,41 +89,62 @@ export function setOne(p: MyProfile, key: 'favourite' | 'intro', text: string, n
 /** What would be shared, or null for an empty profile. Dated by the newest entry. `picture`: the share-size data URL of my picture, when it may go. */
 export function toShared(p: MyProfile | undefined, picture?: string): SharedProfile | null {
   if (!p) return null
-  const all = [...p.norms.map((n) => n.at), ...(p.favourite ? [p.favourite.at] : []), ...(p.intro ? [p.intro.at] : []), ...(picture ? [p.pictureAt ?? 0] : [])]
+  const all = [...p.norms.map((n) => n.at), ...ONE_KEYS.flatMap((k) => (p[k] ? [p[k]!.at] : [])), ...(picture ? [p.pictureAt ?? 0] : [])]
   if (!all.length) return null
   return {
-    norms: p.norms.map((n) => ({ norm: n.norm, text: n.text })), favourite: p.favourite?.text, intro: p.intro?.text, picture,
+    norms: p.norms.map((n) => ({ norm: n.norm, text: n.text })), ...Object.fromEntries(ONE_KEYS.flatMap((k) => (p[k] ? [[k, p[k]!.text]] : []))), picture,
     at: Math.max(...all),
   }
 }
 
-/** How close each audience reaches: a person sees a section when their ring sits at or inside it. Intending, None and Unsorted are outside every audience. */
-const REACH: Partial<Record<Ring, number>> = { [Ring.Close]: 0, [Ring.Friend]: 1, [Ring.Acquaintance]: 2 }
+/**
+ * Wave 20 (Jakob 2026-10-23, Tana hBIzFBewt1RL): the trust zones, most intimate wins: close > friend > acquaintance > intending/public.
+ * An audience reaches its zone and every closer one; `public` (people who reached me through trustweb.one/<name>, who land on
+ * Intending) and `intending` share the lowest reach. Unsorted and None have no zone: they get nothing.
+ */
+export type Zone = 'close' | 'friend' | 'acquaintance' | 'intending' | 'public'
+const REACH: Record<Exclude<ProfileAudience, 'nobody'> | Zone, number> = { close: 3, friend: 2, acquaintance: 1, intending: 0, public: 0 }
 const isAudience = (v: unknown): v is ProfileAudience => PROFILE_AUDIENCES.includes(v as ProfileAudience)
-export const audienceOf = (p: MyProfile, section: ProfileSection): ProfileAudience => p.audience?.[section] ?? (section === 'picture' ? DEFAULT_PICTURE_AUDIENCE : DEFAULT_AUDIENCE)
+export const audienceOf = (p: MyProfile, section: ProfileSection): ProfileAudience => p.audience?.[section] ?? SECTION_DEFAULT[section] ?? DEFAULT_AUDIENCE
 
-/** What one person may see of my profile, or null for nothing. Family counts as the ring of its closeness (ringSlot). `picture`: my share-size picture as a data URL (image_store.ts), sent only where its audience admits. */
-export function profileFor(my: MyProfile | undefined, who: Pick<Person, 'ring' | 'fields'>, picture?: string): SharedProfile | null {
-  if (!my) return null
-  const at = REACH[ringSlot(who)]
-  const open = (k: ProfileSection): boolean => { const a = audienceOf(my, k); return at !== undefined && a !== 'nobody' && at <= (REACH[a as Ring] ?? -1) }
-  return toShared({ norms: open('norms') ? my.norms : [], favourite: open('favourite') ? my.favourite : undefined, intro: open('intro') ? my.intro : undefined, pictureAt: my.pictureAt }, open('picture') ? picture : undefined)
+/** A person's zone: Family counts as the ring of its closeness (ringSlot); Intending who reached me through my public address is `public`. */
+export function zoneOf(who: Pick<Person, 'ring'> & Partial<Pick<Person, 'fields' | 'reachedOut'>>): Zone | null {
+  const r = ringSlot({ ring: who.ring, fields: who.fields })
+  if (r === Ring.Intending) return who.reachedOut === 'received' ? 'public' : 'intending'
+  return r === Ring.Close || r === Ring.Friend || r === Ring.Acquaintance ? r : null
 }
 
+/** What a zone may see of my profile, or null for nothing. `picture`: my share-size picture as a data URL (image_store.ts), sent only where its audience admits. */
+export function sliceFor(my: MyProfile | undefined, zone: Zone | null, picture?: string): SharedProfile | null {
+  if (!my || !zone) return null
+  const open = (k: ProfileSection): boolean => { const a = audienceOf(my, k); return a !== 'nobody' && REACH[zone] >= REACH[a] }
+  return toShared({ ...Object.fromEntries(ONE_KEYS.filter(open).map((k) => [k, my[k]])), norms: open('norms') ? my.norms : [], pictureAt: my.pictureAt }, open('picture') ? picture : undefined)
+}
+
+export const profileFor = (my: MyProfile | undefined, who: Parameters<typeof zoneOf>[0], picture?: string): SharedProfile | null => sliceFor(my, zoneOf(who), picture)
+
+/** The reach to record when the slice of `zone` should go out automatically now: the first time, or when the person moved to a closer zone than any sent before; null otherwise (never on moving outward, nothing is recalled). */
+export const autoSendRank = (sent: number | undefined, zone: Zone): number | null => (sent === undefined || REACH[zone] > sent ? REACH[zone] : null)
+
+/** The short key of each one-line section on the wire. */
+const WIRE: Record<OneKey, string> = { favourite: 'f', intro: 'i', website: 'w', offers: 'o', working: 'k', address: 'a' }
 export function profileText(appUrl: string, s: SharedProfile): string {
-  const body = { n: s.norms.map((n) => [n.norm, n.text]), ...(s.favourite ? { f: s.favourite } : {}), ...(s.intro ? { i: s.intro } : {}), ...(s.picture ? { p: 1 } : {}), at: s.at }
+  const body = { n: s.norms.map((n) => [n.norm, n.text]), ...Object.fromEntries(ONE_KEYS.flatMap((k) => (s[k] ? [[WIRE[k], s[k]]] : []))), ...(s.picture ? { p: 1 } : {}), at: s.at }
   return `${appUrl}?${PROFILE_PARAM}=1#p=${encodeURIComponent(JSON.stringify(body))}`
 }
 
-/** The text to send (to `who` when given: only what they may see), or null for an empty profile; drops the intro, then the favourite way, then the last norms until it fits one message. */
-export function buildProfileText(appUrl: string, p: MyProfile | undefined, who?: Pick<Person, 'ring' | 'fields'>, picture?: string): string | null {
-  const s = who ? profileFor(p, who, picture) : toShared(p, picture)
+/** Dropped in this order when the text is too long for one message (what a stranger most needs stays longest). */
+const DROP_ORDER: readonly OneKey[] = ['intro', 'favourite', 'address', 'working', 'offers', 'website']
+
+/** The text to send (to `who`, a person or a zone, when given: only what they may see), or null for an empty profile; drops the one-line sections in DROP_ORDER, then the last norms until it fits one message. */
+export function buildProfileText(appUrl: string, p: MyProfile | undefined, who?: Parameters<typeof zoneOf>[0] | Zone, picture?: string): string | null {
+  const s = who ? (typeof who === 'string' ? sliceFor(p, who, picture) : profileFor(p, who, picture)) : toShared(p, picture)
   if (!s) return null
   for (;;) {
     const text = profileText(appUrl, s)
     if (text.length <= PROFILE_TEXT_MAX) return text
-    if (s.intro) delete s.intro
-    else if (s.favourite) delete s.favourite
+    const k = DROP_ORDER.find((key) => s[key])
+    if (k) delete s[k]
     else if (s.norms.length) s.norms.pop()
     else return null
   }
@@ -135,12 +163,11 @@ export function parseProfileText(appUrl: string, text: string, now: number, pic?
       const text2 = clean(t, TEXT_MAX)
       return isNorm(norm) && (norm !== Norm.Custom || text2) ? [{ norm, text: text2 }] : []
     })
-    const favourite = clean(o.f, TEXT_MAX) || undefined
-    const intro = clean(o.i, INTRO_MAX) || undefined
+    const ones = Object.fromEntries(ONE_KEYS.flatMap((k) => { const t = clean(o[WIRE[k]], ONE_MAX[k]); return t ? [[k, t]] : [] }))
     const picture = isJpegDataUrl(pic) ? pic : undefined
-    if (!norms.length && !favourite && !intro && !picture && o.p !== 1) return null
+    if (!norms.length && !Object.keys(ones).length && !picture && o.p !== 1) return null
     const at = typeof o.at === 'number' && Number.isFinite(o.at) && o.at > 0 ? Math.min(o.at, now) : now
-    return { norms, favourite, intro, ...(picture ? { picture } : {}), at }
+    return { norms, ...ones, ...(picture ? { picture } : {}), at }
   } catch {
     return null
   }
@@ -151,7 +178,7 @@ export interface ProfileCarrier { theirProfile?: SharedProfile }
 /** Stores a received profile on a person. True when the card changed (idempotent). */
 export function receiveProfileText(appUrl: string, person: ProfileCarrier, text: string, now: number, pic?: string): boolean {
   const next = parseProfileText(appUrl, text, now, pic)
-  if (!next || (!next.norms.length && !next.favourite && !next.intro && !next.picture) || JSON.stringify(person.theirProfile) === JSON.stringify(next)) return false
+  if (!next || (!next.norms.length && !ONE_KEYS.some((k) => next[k]) && !next.picture) || JSON.stringify(person.theirProfile) === JSON.stringify(next)) return false
   person.theirProfile = next
   return true
 }
@@ -161,7 +188,7 @@ export function repairProfile(state: { profile?: unknown }): boolean {
   const p = state.profile as Partial<MyProfile> | undefined
   if (p === undefined) return false
   const ok = typeof p === 'object' && p !== null && Array.isArray(p.norms) && p.norms.every((n) => n && isNorm(n.norm) && typeof n.text === 'string' && typeof n.at === 'number')
-    && [p.favourite, p.intro].every((d) => d === undefined || (typeof d.text === 'string' && typeof d.at === 'number'))
+    && ONE_KEYS.map((k) => p[k]).every((d) => d === undefined || (typeof d.text === 'string' && typeof d.at === 'number'))
   if (!ok) { delete state.profile; return true }
   // A bad picture id or an unknown audience goes on its own (the section falls back to the default); the profile stays.
   let changed = false

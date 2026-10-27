@@ -19,9 +19,10 @@ import {
   CHAT_TEXT_MAX, ChatDirection, MessageState, markDelivered, markRead, pendingOutgoing, queueOutgoing,
 } from './chat'
 import type { ChatBook, ChatMessage } from './chat'
+import { fallbackOffers, isStuck } from './chat_fallback'
 import type { ChatRe } from './chat_re'
 import { sharesPhoneNumber, withTick } from './contact_share'
-import type { Reachable, ShareSettings } from './contact_share'
+import type { ChannelMap, Reachable, ShareSettings } from './contact_share'
 import { Channel } from './model'
 
 /** Copy handed in by the app (strings.ts), so this module holds none. */
@@ -45,6 +46,10 @@ export interface ChatStrings {
   replyingTo(text: string, when: string): string
   /** Wave 6i: the label of the small button that takes that ask away again. */
   replyingToDrop: string
+  /** Wave 21: the grey line under a message still waiting after a day. */
+  notDelivered: string
+  /** Wave 21: "Send via Signal" / "Send via WhatsApp". */
+  sendVia(kind: 'signal' | 'whatsapp'): string
 }
 
 export interface ChatViewPerson {
@@ -53,6 +58,8 @@ export interface ChatViewPerson {
   peerId?: string
   /** The best known other way to reach them (contact_share.primaryReachable), if any. */
   reach: Reachable | null
+  /** Wave 21: the channels they shared with me, for the undelivered fallback. */
+  theirChannels?: ChannelMap
 }
 
 export enum ThreadStatus {
@@ -177,6 +184,7 @@ export const CHAT_CSS = `
 .chat-re{display:block; font-size:12px; opacity:.85; border-left:3px solid currentColor; padding:0 0 0 8px; margin:0 0 4px; white-space:normal}
 .chat-context{display:flex; gap:8px; align-items:flex-start; justify-content:space-between; font-size:13px; color:var(--ink-soft); border-left:3px solid var(--electric); padding:4px 0 4px 10px}
 .chat-context button{border:0; background:none; font:inherit; color:var(--ink-soft); cursor:pointer; padding:0 4px; line-height:1}
+.chat-fallback{display:flex; flex-wrap:wrap; gap:6px; align-items:center; align-self:flex-end; font-size:12px; color:var(--ink-soft)}
 .chat-msg.chat-focus{outline:2px solid var(--electric); outline-offset:2px}
 `
 
@@ -196,6 +204,10 @@ export interface ChatViewDeps extends ChatIo {
   context?: ChatRe | null
   /** Wave 6i: the key of the message to scroll to (a "new message" card was tapped). Absent: the newest. */
   scrollTo?: string
+  /** Wave 21: copies a text and says so. */
+  copy(text: string): void
+  /** Wave 21: opens a link outside the app. */
+  open(url: string): void
 }
 
 function rowNode(deps: ChatViewDeps, r: ChatRowModel): HTMLElement {
@@ -207,6 +219,19 @@ function rowNode(deps: ChatViewDeps, r: ChatRowModel): HTMLElement {
     h(doc, 'span', { class: 'chat-text' }, [r.text]),
     h(doc, 'span', { class: 'chat-meta' }, [[who, timeLabel(r.at), state].filter(Boolean).join(' · ')]),
   ])
+}
+
+/** Wave 21: under a message stuck for a day, "Not delivered yet" and one ghost button per messenger the person shared. Delivery is untouched. */
+function fallbackNode(deps: ChatViewDeps, r: ChatRowModel): HTMLElement | null {
+  const { doc, S } = deps
+  const offers = isStuck(r, deps.now()) ? fallbackOffers(deps.person.theirChannels, r.text) : []
+  if (!offers.length) return null
+  const buttons = offers.map((o) => {
+    const b = h(doc, 'button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-chat-fallback': o.kind }, [S.sendVia(o.kind)])
+    b.addEventListener('click', () => { deps.copy(r.text); deps.open(o.url) })
+    return b
+  })
+  return h(doc, 'div', { class: 'chat-fallback', 'data-chat-stuck': r.key }, [h(doc, 'span', {}, [S.notDelivered]), ...buttons])
 }
 
 function statusNote(deps: ChatViewDeps, vm: ChatViewModel): HTMLElement | null {
@@ -288,7 +313,7 @@ export function renderChat(deps: ChatViewDeps): ChatHandle {
     const link = vm.externalLink
       ? h(doc, 'a', { class: 'chat-ext', href: vm.externalLink.href, target: '_blank', rel: 'noopener noreferrer' }, [S.messageOn(vm.externalLink.reach)])
       : null
-    const thread = vm.rows.length ? h(doc, 'div', { class: 'chat-thread', role: 'log' }, vm.rows.map((r) => rowNode(deps, r))) : null
+    const thread = vm.rows.length ? h(doc, 'div', { class: 'chat-thread', role: 'log' }, vm.rows.flatMap((r) => [rowNode(deps, r), fallbackNode(deps, r)].filter((n): n is HTMLElement => n !== null))) : null
     root.replaceChildren(
       ...[h(doc, 'h3', {}, [S.title(person.name)]), link, statusNote(deps, vm), thread, person.peerId ? composer(deps, vm, draw, draft) : null]
         .filter((n): n is HTMLElement => n !== null),

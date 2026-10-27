@@ -1,5 +1,5 @@
 /**
- * "See it in action" on the multi-phone demo page: hidden until asked for,
+ * "See TrustWeb in action" on the multi-phone demo page: hidden until asked for,
  * four phones side by side, a "This happened now" banner, play / pause that
  * advances on its own, milestone ticks you can jump to, and prev / next.
  *
@@ -25,7 +25,7 @@ async function main() {
     const errors = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.goto(BASE + 'demo/')
-    const toggle = page.getByRole('button', { name: 'See it in action' })
+    const toggle = page.getByRole('button', { name: 'See TrustWeb in action' })
     ok('one device by default', await page.locator('iframe').count() === 1)
     ok('no names above the phones, no "own phone" link', await page.locator('.phones .col h2').count() === 0 && await page.getByText('Use TrustWeb on your own phone').count() === 0)
     const restart = page.getByRole('button', { name: 'Start the demo over' })
@@ -50,7 +50,7 @@ async function main() {
     await d1.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
     await page.waitForTimeout(1_000)
     ok('the friends popup does not come back on reload', await d1.locator('.demo-friends').isHidden())
-    ok('the walkthrough and the live-phone steps are hidden behind "See it in action"',
+    ok('the walkthrough and the live-phone steps are hidden behind "See TrustWeb in action"',
       await toggle.isVisible() && await page.locator('.wt').count() === 0 && !(await page.getByText('Try it on the live phones below').isVisible()))
     await toggle.click()
     const title = () => page.locator('.wt-banner h3').innerText()
