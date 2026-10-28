@@ -270,6 +270,31 @@ export enum ProvenanceState {
 }
 
 /**
+ * A light task (wave 24, cal3; feature shape inspired by tasks.org, no code taken). Local plus my own devices (sync_core.ts, sealed): never in a
+ * share, pack, answer or cascade (cascade.ts askSources strips it). due is "YYYY-MM-DD", optionally with "THH:MM"; remindAt is ms.
+ */
+export interface TwTask {
+  id: string
+  title: string
+  due?: string
+  remindAt?: number
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly'
+  /** When it was ticked (ms). */
+  done?: number
+  tags?: string[]
+  list?: string
+  /** One level only: a subtask never has subtasks. */
+  parentId?: string
+  /** Person ids. */
+  people?: string[]
+  /** My Resources item this reminds me about, and whether to share it or ask about it. */
+  resourceId?: string
+  resourceWhy?: 'share' | 'ask'
+  /** Last change (ms). */
+  stamp: number
+}
+
+/**
  * An event I was at or will be at (E1, wave 7). Local only: never sent in a share, pack, answer or cascade
  * (cascade.ts askSources strips it). from/to are "YYYY-MM-DD", optionally with "THH:MM".
  */
@@ -846,6 +871,8 @@ export interface NotifyKinds {
   ask: boolean
   /** A message in a chat. */
   chat: boolean
+  /** A task or resource reminder I set (wave 24). Absent in an older record: on. */
+  reminder: boolean
 }
 
 export interface AppState {
@@ -869,6 +896,8 @@ export interface AppState {
   notifyKinds?: NotifyKinds
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
+  /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
+  tasks?: TwTask[]
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */

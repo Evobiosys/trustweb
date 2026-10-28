@@ -3,20 +3,24 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { acceptPerson } from '../../drag_payload'
 import { matchPeople, todayIso } from '../../events'
-import { ringColor, type Person, type TwEvent } from '../../model'
+import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
-import type { ExtHooks } from '../registry'
+import type { ExtHooks, ExtModule } from '../registry'
 import { addMonths, dayCounts, eventsOn, monthGrid } from './calendar'
+import { createTasks } from './tasks_view'
+import { tasksOn } from './tasks'
 import { addInvitee, inviteText, invitees, removeInvitee } from './invitees'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
 
-export function calendarScreen(h: ExtHooks): { body: () => Node[]; eventSection: (ev: TwEvent) => Node[] } {
+export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   const now = new Date()
   let sel = todayIso(now)
   let shown = { year: now.getFullYear(), month0: now.getMonth() }
 
   let picking = false
+  let mode: 'calendar' | 'tasks' = 'calendar'
+  const tasks = createTasks(h, () => { mode = 'tasks' })
 
   const invite = (ev: TwEvent, id: string): void => {
     if (!h.state().people.some((p) => p.id === id)) return
@@ -66,9 +70,9 @@ export function calendarScreen(h: ExtHooks): { body: () => Node[]; eventSection:
 
   const go = (n: number): void => { shown = addMonths(shown.year, shown.month0, n); h.redraw() }
 
-  function grid(events: TwEvent[]): HTMLElement {
+  function grid(events: TwEvent[], due: TwTask[]): HTMLElement {
     const weeks = monthGrid(shown.year, shown.month0)
-    const counts = dayCounts(events, weeks.flat())
+    const counts = dayCounts(events, weeks.flat(), due)
     const today = todayIso(new Date())
     const cell = (day: string): HTMLElement => el('button', {
       class: 'cal-day' + (day === today ? ' today' : '') + (day === sel ? ' sel' : '') + (Number(day.slice(5, 7)) - 1 === shown.month0 ? '' : ' other'),
@@ -78,10 +82,11 @@ export function calendarScreen(h: ExtHooks): { body: () => Node[]; eventSection:
     return el('div', { class: 'cal-grid' }, [...S.cal.weekdays.map((w) => el('span', { class: 'cal-wd' }, [w])), ...weeks.flat().map(cell)])
   }
 
-  function agenda(events: TwEvent[]): HTMLElement {
+  function agenda(events: TwEvent[], due: TwTask[]): HTMLElement {
     const day = eventsOn(events, sel)
+    const dayTasks = tasksOn(due, sel)
     return el('div', { class: 'cal-agenda' }, [
-      day.length ? null : el('p', { class: 'empty' }, [S.cal.dayEmpty]),
+      day.length || dayTasks.length ? null : el('p', { class: 'empty' }, [S.cal.dayEmpty]),
       ...day.map((ev) => {
         const row = el('button', { class: 'prow', 'data-cal-event': ev.id, onclick: () => h.openEvent(ev.id) }, [
           el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[timeOf(ev), ev.where].filter(Boolean).join(' · ')])]),
@@ -89,21 +94,32 @@ export function calendarScreen(h: ExtHooks): { body: () => Node[]; eventSection:
         acceptPerson(row, (ref) => invite(ev, ref.id))
         return row
       }),
+      ...dayTasks.map(tasks.row),
     ])
   }
 
+  const switcher = (): HTMLElement => el('div', { class: 'cal-modes' }, (['calendar', 'tasks'] as const).map((m) => el('button', {
+    class: 'btn btn-ghost btn-sm' + (mode === m ? ' on' : ''), 'data-cal-mode': m, 'aria-pressed': String(mode === m),
+    onclick: () => { mode = m; h.redraw() },
+  }, [m === 'calendar' ? S.cal.modeCalendar : S.cal.modeTasks])))
+
   return {
     eventSection,
+    itemSection: tasks.itemSection,
+    start: tasks.start,
     body: () => {
       const events = h.state().events ?? []
+      const due = h.state().tasks ?? []
+      if (mode === 'tasks') return [h.header(S.cal.title, { back: h.leave }), el('div', { class: 'scroll cal' }, [switcher(), ...tasks.list()])]
       return [h.header(S.cal.title, { back: h.leave }), el('div', { class: 'scroll cal' }, [
+        switcher(),
         el('div', { class: 'cal-nav' }, [
           el('button', { class: 'btn btn-ghost btn-sm', 'data-cal-prev': '', 'aria-label': S.cal.prev, onclick: () => go(-1) }, ['‹']),
           el('b', {}, [S.cal.monthTitle(shown.year, shown.month0)]),
           el('button', { class: 'btn btn-ghost btn-sm', 'data-cal-next': '', 'aria-label': S.cal.next, onclick: () => go(1) }, ['›']),
         ]),
-        grid(events),
-        agenda(events),
+        grid(events, due),
+        agenda(events, due),
         el('button', { class: 'btn btn-electric wide', 'data-cal-add': '', onclick: () => h.addEvent(sel) }, [S.cal.add]),
         el('button', { class: 'btn btn-ghost wide', 'data-cal-all': '', onclick: h.showList }, [S.cal.allEvents]),
       ])]

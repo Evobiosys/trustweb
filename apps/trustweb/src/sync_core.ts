@@ -20,7 +20,7 @@
  * it in, set once; the bundle's optional `from` carries it, v stays 2: parseBundle ignores unknown fields). Stored beside the record, never in it. CAVEAT: "newer" is a wall-clock comparison between two devices; a device with a
  * wrong clock can win edits it should lose. That is why the loser always stays readable in Review merge and a snapshot is taken before every merge.
  */
-import type { AppState, InventoryItem, PastMeeting, Person, TwEvent } from './model'
+import type { AppState, InventoryItem, PastMeeting, Person, TwEvent, TwTask } from './model'
 import { CHANNELS } from './model'
 import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trimThread } from './chat'
 import type { ChatBook } from './chat'
@@ -40,7 +40,7 @@ export const HANDSHAKE_MS = 30_000
 /** Conflicts kept in AppState.syncReview. */
 export const REVIEW_MAX = 50
 
-export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'channel' | 'sameAs' | 'chat' | 'name'
+export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'channel' | 'sameAs' | 'chat' | 'name'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
 export type Stamps = Record<string, { h: string; at: number; by: string; from?: string }>
 
@@ -59,6 +59,8 @@ export interface SyncBundle {
   from?: Record<string, string>
   channels?: { mine: ChannelMap; share: ShareSettings }
   events?: TwEvent[]
+  /** Wave 24: optional, sent only when I have tasks; a device without the field leaves mine untouched. */
+  tasks?: TwTask[]
   chats?: ChatBook
   sameAs?: Record<string, string>
   /** Wave 15: the public link and username of this account, when the pairing shares them (sync_code.ts), and the others it holds. Never part of a conflict or the sync log. */
@@ -90,9 +92,9 @@ export interface MergeResult {
   codes?: CodeMerge
 }
 
-export interface Counts { people: number; lines: number; resources: number; meetings: number; events: number; messages: number }
+export interface Counts { people: number; lines: number; resources: number; meetings: number; events: number; tasks: number; messages: number }
 
-const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:' } as const
+const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', task: 't:' } as const
 
 /** djb2 over the JSON text: change detection (a stored stamp), and the "identical on both sides" skip in stampsAfterMerge. The merge itself compares the JSON text, so a collision cannot keep an older version. */
 function hashOf(v: unknown): string {
@@ -124,7 +126,7 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
   return { ...rest, transcript: [] }
 }
 
-type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
+type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
 
 function entities(s: Source): [string, unknown][] {
   return [
@@ -132,13 +134,14 @@ function entities(s: Source): [string, unknown][] {
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
+    ...(s.tasks ?? []).map((x): [string, unknown] => [KEY_PREFIX.task + x.id, x]),
     ...Object.entries(s.myChannels ?? {}).filter(([, v]) => v).map(([ch, v]): [string, unknown] => ['c:' + ch, v]),
     ...(s.contactShare ? [['s:share', s.contactShare] as [string, unknown]] : []),
     ...(s.me?.displayName ? [['n:me', s.me.displayName] as [string, unknown]] : []),
   ]
 }
 
-const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
+const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.inventory, meetings: b.meetings, events: b.events, tasks: b.tasks, myChannels: b.channels?.mine, contactShare: b.channels?.share, me: b.displayName ? { displayName: b.displayName } : undefined })
 
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
@@ -163,6 +166,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     ...(entries.some(([, x]) => x.from) ? { from: Object.fromEntries(entries.flatMap(([k, x]) => (x.from ? [[k, x.from]] : []))) } : {}),
     channels: { mine: s.myChannels ?? {}, share: s.contactShare ?? {} },
     events: (s.events ?? []).map(syncEvent),
+    ...(s.tasks?.length ? { tasks: s.tasks } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
     ...codesForBundle(s, shareCode),
@@ -170,13 +174,14 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   }
 }
 
-export function countsOf(b: Pick<SyncBundle, 'people' | 'inventory' | 'meetings' | 'events' | 'chats'>): Counts {
+export function countsOf(b: Pick<SyncBundle, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'chats'>): Counts {
   return {
     people: b.people.length,
     lines: b.people.reduce((n, p) => n + p.lines.length, 0),
     resources: b.inventory.length,
     meetings: b.meetings.length,
     events: b.events?.length ?? 0,
+    tasks: b.tasks?.length ?? 0,
     messages: Object.values(b.chats ?? {}).reduce((n, t) => n + t.messages.length, 0),
   }
 }
@@ -223,6 +228,7 @@ function parseChannels(v: unknown): SyncBundle['channels'] | null {
   return { mine, share: Object.keys(shareOnConnect).length ? { shareOnConnect } : {} }
 }
 
+const isTask = (e: unknown): e is TwTask => isObj(e) && ['id', 'title'].every((k) => typeof e[k] === 'string') && typeof e.stamp === 'number'
 const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from', 'where'].every((k) => typeof e[k] === 'string')
   && typeof e.createdAt === 'number' && typeof e.attended === 'boolean'
 
@@ -244,10 +250,12 @@ export function parseBundle(v: unknown): SyncBundle | null {
   const sameAs = v.sameAs === undefined ? {} : strMap(v.sameAs)
   const channels = parseChannels(v.channels)
   if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
+  if (v.tasks !== undefined && !(isList(v.tasks) && v.tasks.every(isTask))) return null
   out.by = by
   if (Object.keys(from).length) out.from = from
   out.channels = channels
   out.events = (v.events as TwEvent[]).map(syncEvent)
+  if (v.tasks) out.tasks = v.tasks as TwTask[]
   out.chats = sanitizeChatBook(v.chats)
   const map = Object.entries(sameAs).filter(([k, x]) => k !== x)
   if (map.length) out.sameAs = Object.fromEntries(map)
@@ -408,6 +416,8 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   mine.inventory = mergeList('resource', mine.inventory, theirs.inventory.map(withoutImage), c, (x) => x.text, fillMissing)
   mine.meetings = mergeList('meeting', mine.meetings ?? [], theirs.meetings, c, (x) => x.about, fillMissing)
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)
+  // A task is edited whole (ticking removes `done`): the newer version wins as it is, nothing is filled in from the older.
+  if (theirs.tasks?.length) mine.tasks = mergeList('task', mine.tasks ?? [], theirs.tasks, c, (x) => x.title, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
   mergeDisplayName(mine, myStamps, theirs, res)

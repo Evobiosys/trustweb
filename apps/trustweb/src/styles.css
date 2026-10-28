@@ -1010,4 +1010,16 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .cal-day.sel .cal-dot{background:#fff; color:var(--electric)}
 .cal-agenda{margin:0 0 12px}
 .cal-invitees{margin:8px 0}
+.cal-modes{display:flex; gap:6px; margin:0 0 10px}
+.cal-modes .on{background:var(--electric); color:#fff}
+.cal-task{display:flex; align-items:center; gap:8px}
+.cal-task .who{flex:1; min-width:0; text-align:left; background:none; border:0; font:inherit; color:inherit; cursor:pointer}
+.cal-task.done b{text-decoration:line-through; opacity:.6}
+.cal-task.overdue i{color:var(--warn,#b45309); font-weight:600}
+.cal-tick{width:28px; height:28px; flex:none; border-radius:8px; border:2px solid var(--ink-soft); background:none; color:var(--electric); font-size:16px; line-height:1; cursor:pointer}
+.cal-field{display:block; margin:6px 0}
+.cal-field .field{width:100%; box-sizing:border-box}
+.cal-done summary{cursor:pointer; margin:8px 0; text-decoration:underline}
+.cal-err{color:var(--warn,#b45309)}
+.cal-remind{margin:8px 0}
 .cal-drop-over{outline:2px dashed var(--electric); outline-offset:2px}

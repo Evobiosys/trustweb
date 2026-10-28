@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Calendar module (wave 24, cal1): date maths by hand in local time, no DOM. Days are "YYYY-MM-DD". */
 import { todayIso } from '../../events'
-import type { TwEvent } from '../../model'
+import type { TwEvent, TwTask } from '../../model'
+import { tasksOn } from './tasks'
 
 const WEEK = 7
 
@@ -27,11 +28,11 @@ export function eventsOn(events: TwEvent[], day: string): TwEvent[] {
     .sort((a, b) => a.from.localeCompare(b.from))
 }
 
-/** How many events fall on each of the days; days without any are left out. */
-export function dayCounts(events: TwEvent[], days: string[]): Record<string, number> {
+/** How many events (and open tasks with a due) fall on each of the days; days without any are left out. */
+export function dayCounts(events: TwEvent[], days: string[], tasks: TwTask[] = []): Record<string, number> {
   const out: Record<string, number> = {}
   for (const d of days) {
-    const n = eventsOn(events, d).length
+    const n = eventsOn(events, d).length + tasksOn(tasks, d).filter((t) => !t.done).length
     if (n) out[d] = n
   }
   return out

@@ -727,6 +727,19 @@ function notify(kind: NotifyKind, body: string): void {
   if (Notification.permission === 'granted') void showNotification(S.appName, body)
 }
 
+/**
+ * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
+ * are on; page open: a notice with an Open button when the reminder switch is on.
+ */
+function notifyReminder(title: string, body: string, onOpen: () => void): void {
+  if (!state || !kindsOf(state).reminder) return
+  if (document.hidden) {
+    if (wantsKind(state, 'reminder') && typeof Notification !== 'undefined' && Notification.permission === 'granted') void showNotification(S.appName, title)
+    return
+  }
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+}
+
 // ---------------------------------------------------------------------------
 // shell
 // ---------------------------------------------------------------------------
@@ -2550,6 +2563,7 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
+    ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
 }
@@ -3756,9 +3770,11 @@ const curator = createCurator({
   showPhoneVersion,
 })
 const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
+const undoNotice = (title: string, onUndo: () => void): void =>
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
-  undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
+  undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
@@ -3769,6 +3785,10 @@ const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
   avatar,
+  undo: undoNotice,
+  notify: (title, body, onOpen) => notifyReminder(title, body, onOpen),
+  openItem: (id) => { closeSheet(); itemSheet(id) },
+  openCalendar: () => { closeSheet(); go(Screen.Events) },
   eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
   sendInvite: async (personId, text) => {
     const peerId = st().people.find((p) => p.id === personId)?.peerId
@@ -6168,6 +6188,7 @@ if (state && !state.testOf?.handedOverAt) {
   if (state.connectCode) void ensureConnectCode()
   offerApkHint(offerDemoContent)
   offerNotifications()
+  cal?.start?.()
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
