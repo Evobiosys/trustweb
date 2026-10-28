@@ -999,6 +999,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 }
 
 /* ext calendar */
+.cal-outliner{margin:12px 0}
+.cal-outliner>summary{cursor:pointer; font-weight:600; padding:8px 0}
+.cal-orow{display:block; width:100%; text-align:left; background:var(--card); border:0; border-radius:14px; padding:10px 12px; margin:0 0 8px; font:inherit; color:var(--ink); cursor:pointer}
+.cal-orow .cal-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+.cal-orow .cal-chip{font-size:11.5px; color:var(--ink-soft); background:rgba(128,128,128,.18); border-radius:999px; padding:2px 8px; overflow-wrap:anywhere}
 .cal-nav{display:flex; align-items:center; justify-content:space-between; margin:0 0 8px}
 .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin:0 0 12px}
 .cal-wd{text-align:center; font-size:11.5px; color:var(--ink-soft); padding:4px 0}

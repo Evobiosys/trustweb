@@ -18,6 +18,8 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
   list: () => Node[]
   row: (t: TwTask) => HTMLElement
   itemSection: (item: InventoryItem) => Node[]
+  /** Opens that task's edit panel in the Tasks mode. */
+  open: (t: TwTask) => void
   tick: () => void
 } {
   /** The task in the panel ({} = a new one; parentId set for a new subtask), or null while the list shows. */
@@ -140,6 +142,7 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
 
   return {
     list, row, itemSection,
+    open: (t) => { editing = { task: t }; showTasks(); h.openCalendar() },
     tick,
   }
 }

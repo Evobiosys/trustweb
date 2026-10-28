@@ -5817,6 +5817,7 @@ function screenInventory(): Node[] {
           onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
+      ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
     ])
   // A calendar event dragged here (mouse/trackpad; phones keep the pickers) becomes an item tagged with it.

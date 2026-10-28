@@ -8,6 +8,7 @@ import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
 import { addMonths, dayCounts, eventsOn, monthGrid } from './calendar'
 import { createAtEvent } from './at_event_view'
+import { createOutliner } from './outliner_view'
 import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
@@ -27,6 +28,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   const here = createAtEvent(h)
   const scheduling = createScheduling(h)
   const ics = createIcs(h)
+  const outliner = createOutliner(h, tasks.open)
 
   const invite = (ev: TwEvent, id: string): void => {
     if (!personDropOnEvent(h.state(), ev, { id, name: '' })) { h.toast(S.cal.dropUnknown); return }
@@ -113,6 +115,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   return {
     eventSection,
     itemSection: tasks.itemSection,
+    resourcesSection: outliner.section,
     frame: here.frame,
     recordChip: here.recordChip,
     openLink: scheduling.openLink,

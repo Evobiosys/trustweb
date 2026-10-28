@@ -48,6 +48,8 @@ export interface ExtModule {
     eventSection?: (ev: TwEvent) => Node[]
     /** Extra rows on a My Resources item's sheet; removing the module removes them. */
     itemSection?: (item: InventoryItem) => Node[]
+    /** Events and tasks as outliner rows, folded, below the My Resources list; removing the module removes them. */
+    resourcesSection?: () => Node[]
     /** The "I'm at an event" frame for the top of every screen; null when not at an event. */
     frame?: () => HTMLElement | null
     /** The chip on Record and Review: this draft is for the people at that event; drop removes the tag from the draft. Null when the id is unknown. */
