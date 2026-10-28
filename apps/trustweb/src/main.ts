@@ -159,6 +159,7 @@ import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { EXT_MODULES } from './ext/registry'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
 import { decodeEventLink, linkOrigin } from './event_link'
@@ -1041,7 +1042,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return eventsView.body()
+      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
     }
   })()
   host.replaceChildren(...body)
@@ -3750,6 +3751,12 @@ const eventsView = createEventsView({
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: () => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined),
+})
+const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
+  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
+  openEvent: (id) => { eventsView.open(id); render() },
+  addEvent: (fromIso) => eventsView.openForm(fromIso),
+  showList: () => eventsView.showList(),
 })
 
 const feed = createFeedView({

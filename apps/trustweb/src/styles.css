@@ -997,3 +997,15 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   /* Review wave 19: toasts and Undo notices (a drag on the Desk's rings) show above the Desk, bottom right */
   body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }
+
+/* ext calendar */
+.cal-nav{display:flex; align-items:center; justify-content:space-between; margin:0 0 8px}
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin:0 0 12px}
+.cal-wd{text-align:center; font-size:11.5px; color:var(--ink-soft); padding:4px 0}
+.cal-day{position:relative; min-height:44px; border:0; border-radius:12px; background:var(--card); color:var(--ink); font:inherit; font-size:14px; cursor:pointer}
+.cal-day.other{opacity:.4}
+.cal-day.today{box-shadow:inset 0 0 0 2px var(--electric)}
+.cal-day.sel{background:var(--electric); color:#fff}
+.cal-dot{position:absolute; right:4px; bottom:3px; font-style:normal; font-size:10px; line-height:1; background:var(--ink-soft); color:#fff; border-radius:999px; padding:2px 5px}
+.cal-day.sel .cal-dot{background:#fff; color:var(--electric)}
+.cal-agenda{margin:0 0 12px}

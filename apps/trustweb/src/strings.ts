@@ -316,6 +316,18 @@ export const S = {
   addDevice: 'Add another device to see how it works side by side',
   webCallTop: 'Ask',
   webCallBottom: 'your web',
+  // Wave 24: calendar module (src/ext/calendar).
+  cal: {
+    title: 'Calendar',
+    prev: 'Previous month',
+    next: 'Next month',
+    dayEmpty: 'Nothing on this day.',
+    allDay: 'All day',
+    allEvents: 'All events',
+    add: 'Add event',
+    weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+    monthTitle: (year: number, month0: number) => `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month0]} ${year}`,
+  },
   // Wave 7 (E1): events, where and when I met people.
   eventsOpen: 'Events',
   eventsTitle: 'Events',
