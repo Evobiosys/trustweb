@@ -115,7 +115,7 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
-import { RecordOrigin, recordModeFor } from './record_origin'
+import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
@@ -268,6 +268,8 @@ interface Draft {
   plain: boolean
   /** The inventory item picked under "what": the notes are added to it as context instead of making a new line (wave 5). */
   itemId?: string
+  /** Wave 24 (calendar): started while I was at this event; the saved notes carry it. One tap on the chip drops it. */
+  eventId?: string
 }
 
 /** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
@@ -509,7 +511,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false,
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false, eventId: state ? eventForDraft(state) : undefined,
   }
 }
 
@@ -731,10 +733,10 @@ function notify(kind: NotifyKind, body: string): void {
  * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
  * are on; page open: a notice with an Open button when the reminder switch is on.
  */
-function notifyReminder(title: string, body: string, onOpen: () => void): boolean {
-  if (!state || !kindsOf(state).reminder) return false
+function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void): boolean {
+  if (!state || !kindsOf(state)[kind]) return false
   if (document.hidden) {
-    if (!wantsKind(state, 'reminder') || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
+    if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
     void showNotification(S.appName, title)
     return true
   }
@@ -1046,6 +1048,7 @@ function render(): void {
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
+  const frame = screen === Screen.Start ? null : cal?.frame?.()
   const body = (() => {
     if (state?.testOf?.handedOverAt) return screenHandedOver()
     switch (screen) {
@@ -1062,7 +1065,7 @@ function render(): void {
       case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
     }
   })()
-  host.replaceChildren(...body)
+  host.replaceChildren(...(frame ? [frame] : []), ...body)
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   autoDesk()
@@ -3783,12 +3786,13 @@ const eventsView = createEventsView({
 })
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
-  openEvent: (id) => { eventsView.open(id); render() },
+  openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
   avatar,
   undo: undoNotice,
-  notify: (title, body, onOpen) => notifyReminder(title, body, onOpen),
+  notify: notifyKind,
+  atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
   eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
@@ -4113,6 +4117,10 @@ async function sendSolo(): Promise<void> {
   next()
 }
 
+/** The "For the people at <event> ×" chip of a draft started at an event (calendar module); one tap drops the tag. */
+const recEventChip = (): HTMLElement | null =>
+  (draft.eventId ? cal?.recordChip?.(draft.eventId, () => { delete draft.eventId; render() }) : null) ?? null
+
 function screenRecord(): Node[] {
   const live = recorder.live
   const paused = recorder.paused
@@ -4129,6 +4137,7 @@ function screenRecord(): Node[] {
   return [
     header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
     el('div', { class: 'scroll pad memo' }, [
+      recEventChip(),
       el('div', { class: 'memo-hero' }, [
         circle,
         el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(totalMs() + recorder.elapsed())]),
@@ -4369,6 +4378,7 @@ function screenMeeting(): Node[] {
   return [
     header(S.meetingTitle, { right: pastSearchButton(), after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
       el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
@@ -5209,6 +5219,7 @@ function screenReview(): Node[] {
   return [
     header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(recordScreen()) } }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       takes.length ? recordingCard() : null,
       transcriptStillComing(draftMeeting()) ? el('p', { class: 'meta job-state', 'data-job': 'running' }, [S.reviewServerPending]) : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
@@ -5310,6 +5321,7 @@ function saveDraftWhat(): void {
     s.inventory.push({
       id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
       audience: l.audience, included: true, createdAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()
@@ -5346,6 +5358,7 @@ function saveDraft(): void {
     p.lines.push({
       id: l.id, text: l.text.trim(), tag: l.tag, customTag: l.customTag, audience: l.audience,
       status: LineStatus.Current, notedAt: now, checkedAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()

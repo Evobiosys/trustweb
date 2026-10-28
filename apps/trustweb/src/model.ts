@@ -205,6 +205,8 @@ export interface NoteLine {
   source?: ItemSource
   /** Wave 6: how many degrees past my direct contacts it may answer (cascade.ts). Absent: 0 for a note about a person. */
   degrees?: number
+  /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
+  eventId?: string
 }
 
 /** Where an item or a note came from: the chain of proof (wave 1733, owner 2026-10-06). A fixed set. */
@@ -526,6 +528,8 @@ export interface InventoryItem {
    * their ring would not admit them, direct asks only. Absent or empty: the rings alone decide (conservative default, I9).
    */
   tagAudience?: string[]
+  /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
+  eventId?: string
 }
 
 /** One note added as context to an inventory item. */
@@ -873,6 +877,8 @@ export interface NotifyKinds {
   chat: boolean
   /** A task or resource reminder I set (wave 24). Absent in an older record: on. */
   reminder: boolean
+  /** Someone joined or shared at the event I am at (wave 24, calendar at_event.ts); never from a wire. Absent in an older record: on. */
+  event: boolean
 }
 
 export interface AppState {
@@ -898,6 +904,8 @@ export interface AppState {
   events?: TwEvent[]
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
   tasks?: TwTask[]
+  /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
+  atEvent?: { eventId: string; since: number; bell?: boolean }
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */

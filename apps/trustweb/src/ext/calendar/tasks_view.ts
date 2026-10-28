@@ -18,7 +18,7 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
   list: () => Node[]
   row: (t: TwTask) => HTMLElement
   itemSection: (item: InventoryItem) => Node[]
-  start: () => void
+  tick: () => void
 } {
   /** The task in the panel ({} = a new one; parentId set for a new subtask), or null while the list shows. */
   let editing: { task?: TwTask; parentId?: string } | null = null
@@ -110,7 +110,7 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
   function tick(): void {
     const fired = firedIds()
     const shown = dueReminders(tasks(), Date.now(), fired)
-      .filter((t) => h.notify(t.title, S.cal.reminderOpen, () => (t.resourceId ? h.openItem(t.resourceId) : (showTasks(), h.openCalendar()))))
+      .filter((t) => h.notify('reminder', t.title, S.cal.reminderOpen, () => (t.resourceId ? h.openItem(t.resourceId) : (showTasks(), h.openCalendar()))))
     if (!shown.length) return
     try { localStorage.setItem(FIRED_KEY, JSON.stringify([...fired, ...shown.map(fireKey)].slice(-FIRED_KEEP))) } catch { /* fired again next start */ }
   }
@@ -140,6 +140,6 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
 
   return {
     list, row, itemSection,
-    start: () => { tick(); setInterval(tick, 60_000) },
+    tick,
   }
 }

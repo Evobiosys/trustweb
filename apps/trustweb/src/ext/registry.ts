@@ -21,8 +21,10 @@ export interface ExtHooks {
   sendInvite: (personId: string, text: string) => Promise<boolean>
   /** Remove-with-undo notice (30 s). */
   undo: (title: string, onUndo: () => void) => void
-  /** A reminder came due: the host shows it (system notification while hidden, else a notice) when the reminder kind is on; onOpen is its tap. False = not shown (try again later). */
-  notify: (title: string, body: string, onOpen: () => void) => boolean
+  /** Something came due: the host shows it (system notification while hidden, else a notice) when that kind's switch is on; onOpen is its tap. False = not shown (try again later). */
+  notify: (kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void) => boolean
+  /** AtEvent was set or cleared: the host tags a fresh recording draft (or not) to match. */
+  atEventChanged: () => void
   /** Opens a My Resources item. */
   openItem: (id: string) => void
   /** Shows the calendar screen. */
@@ -40,6 +42,10 @@ export interface ExtModule {
     eventSection?: (ev: TwEvent) => Node[]
     /** Extra rows on a My Resources item's sheet; removing the module removes them. */
     itemSection?: (item: InventoryItem) => Node[]
+    /** The "I'm at an event" frame for the top of every screen; null when not at an event. */
+    frame?: () => HTMLElement | null
+    /** The chip on Record and Review: this draft is for the people at that event; drop removes the tag from the draft. Null when the id is unknown. */
+    recordChip?: (eventId: string, drop: () => void) => HTMLElement | null
     /** Called once the record is loaded: starts the module's timers. */
     start?: () => void
   }

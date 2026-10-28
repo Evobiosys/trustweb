@@ -1023,3 +1023,17 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .cal-err{color:var(--warn,#b45309)}
 .cal-remind{margin:8px 0}
 .cal-drop-over{outline:2px dashed var(--electric); outline-offset:2px}
+.at-event-frame{position:relative; z-index:6; flex:none; height:18%; min-height:96px; box-sizing:border-box; padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0; background:var(--electric); color:#fff; display:flex; flex-direction:column; justify-content:space-between}
+.at-event-frame .ae-row{display:flex; align-items:center; gap:6px}
+.at-event-frame .btn-ghost{color:#fff; border-color:rgba(255,255,255,.6)}
+.at-event-frame [aria-pressed="false"]{opacity:.5}
+.ae-name{flex:1; min-width:0; text-align:left; background:none; border:0; color:inherit; font:inherit; cursor:pointer; display:flex; flex-direction:column}
+.ae-name b,.ae-name i{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:normal}
+.ae-name i{font-size:12px; opacity:.85}
+.ae-latch{align-self:center; width:100%; height:28px; background:none; border:0; cursor:grab; touch-action:none; display:flex; align-items:center; justify-content:center}
+.ae-latch span{width:56px; height:5px; border-radius:999px; background:rgba(255,255,255,.8)}
+.ae-panel{display:none; position:absolute; left:0; right:0; top:100%; max-height:46vh; overflow:auto; padding:8px 12px 12px; background:var(--linen); color:var(--ink); box-shadow:0 8px 16px rgba(0,0,0,.2)}
+.at-event-frame.open .ae-panel{display:block}
+.ae-new{font-style:normal; font-size:11px; background:var(--electric); color:#fff; border-radius:999px; padding:2px 8px}
+.ae-chip{display:inline-flex; align-items:center; gap:6px; margin:0 0 8px}
+.ae-chip-x{border:0; background:none; font:inherit; cursor:pointer; min-width:28px; min-height:28px}

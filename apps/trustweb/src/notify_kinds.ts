@@ -8,9 +8,9 @@ import type { NotifyKinds } from './model'
 
 export type NotifyKind = keyof NotifyKinds
 
-export const NOTIFY_KINDS: readonly NotifyKind[] = ['connect', 'ask', 'chat', 'reminder']
+export const NOTIFY_KINDS: readonly NotifyKind[] = ['connect', 'ask', 'chat', 'reminder', 'event']
 
-export const ALL_KINDS_ON: NotifyKinds = { connect: true, ask: true, chat: true, reminder: true }
+export const ALL_KINDS_ON: NotifyKinds = { connect: true, ask: true, chat: true, reminder: true, event: true }
 
 /** An older record has no per-kind switches: all on, as they were. */
 export function kindsOf(s: { notifyKinds?: NotifyKinds }): NotifyKinds {
@@ -39,7 +39,7 @@ export function kindOfWire(t: string): NotifyKind | null {
 export function workerLines(arrivals: { kind: NotifyKind; name: string | null }[], kinds: NotifyKinds): string[] {
   const lines: string[] = []
   for (const kind of NOTIFY_KINDS) {
-    if (kind === 'reminder' || !kinds[kind]) continue // a reminder is this page's own, never a waiting wire
+    if (kind === 'reminder' || kind === 'event' || !kinds[kind]) continue // a reminder or event notice is this page's own, never a waiting wire
     const of = arrivals.filter((a) => a.kind === kind)
     if (!of.length) continue
     const names = [...new Set(of.map((a) => a.name).filter((n): n is string => Boolean(n)))]

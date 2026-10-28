@@ -7,6 +7,7 @@ import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
 import { addMonths, dayCounts, eventsOn, monthGrid } from './calendar'
+import { createAtEvent } from './at_event_view'
 import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { addInvitee, inviteText, invitees, removeInvitee } from './invitees'
@@ -21,6 +22,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   let picking = false
   let mode: 'calendar' | 'tasks' = 'calendar'
   const tasks = createTasks(h, () => { mode = 'tasks' })
+  const here = createAtEvent(h)
 
   const invite = (ev: TwEvent, id: string): void => {
     if (!h.state().people.some((p) => p.id === id)) return
@@ -65,7 +67,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
       picking ? picker(ev) : null,
     ])
     acceptPerson(box, (ref) => invite(ev, ref.id))
-    return [box]
+    return [...here.eventSection(ev), box]
   }
 
   const go = (n: number): void => { shown = addMonths(shown.year, shown.month0, n); h.redraw() }
@@ -106,7 +108,10 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   return {
     eventSection,
     itemSection: tasks.itemSection,
-    start: tasks.start,
+    frame: here.frame,
+    recordChip: here.recordChip,
+    /** One timer for tasks and the event bell: 30 s while I am at an event, else 60 s. */
+    start: () => { const loop = (): void => { tasks.tick(); here.tick(); setTimeout(loop, h.state().atEvent ? 30_000 : 60_000) }; loop() },
     body: () => {
       const events = h.state().events ?? []
       const due = h.state().tasks ?? []
