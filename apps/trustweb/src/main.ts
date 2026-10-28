@@ -59,6 +59,8 @@ import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
+import { CARD_CURATE_KEY, channelEdit, chatButtonKind, curateOpen, curateStored, isConnected } from './card_view'
+import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
@@ -1941,6 +1943,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+      if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
+        face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
+      }
       pictured(face, p.theirProfile?.picture)
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
@@ -2731,8 +2736,8 @@ function personSheet(personId: string): void {
     cardNameHeading(p),
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
-    p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
-    solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
+    cardChannelsRow(p),
+    cardChatButton(p, Boolean(cons)),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -2746,36 +2751,67 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
+    curateSection(p),
+  ])
+  cardOpenFor = p.id
+}
+
+/** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
+function cardChannelsRow(p: Person): HTMLElement | null {
+  const chs = reachableChannels(p)
+  if (!chs.length) return null
+  return el('div', { class: 'card-channels', 'data-card-channels': p.id }, chs.map((r) => {
+    const val = el('span', { class: 'card-ch-val' }, [r.value])
+    if (r.source === 'own') {
+      tapEdit(val, {
+        text: r.value, value: r.value, aria: S.cardChEditAria(chName(r.channel)), attrs: { 'data-card-ch-edit': r.channel },
+        resolve: (typed) => channelEdit(r.channel, r.value, typed),
+        commit: (next) => { const c = { ...p.channels }; if (next) c[r.channel] = next; else delete c[r.channel]; p.channels = c; save(); personSheet(p.id) },
+      })
+    }
+    return el('div', { class: 'card-ch', 'data-card-ch': r.channel }, [
+      el('a', { class: 'btn btn-ghost btn-sm', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel }, [chName(r.channel)]),
+      val,
+    ])
+  }))
+}
+
+/** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
+function cardChatButton(p: Person, quiet: boolean): HTMLElement {
+  const chat = chatButtonKind(p) === 'chat'
+  const b = el('button', {
+    class: 'btn ' + (chat && !quiet ? 'btn-electric' : 'btn-ghost'), 'data-card-chat': p.id, 'data-chat-open': p.id,
+    onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
+  })
+  b.innerHTML = icon('chat')
+  b.append(S.chatOpen)
+  return el('div', { class: 'card-chat' }, [b, chat ? null : el('p', { class: 'meta' }, [S.chatNotConnected(displayName(p.name).text)])])
+}
+
+/** The folded "Curate" section at the bottom of the card: the curation tools, a tap unfolds (remembered per device). */
+function curateSection(p: Person): HTMLElement {
+  const stored = (): string | null => { try { return window.localStorage.getItem(CARD_CURATE_KEY) } catch { return null } }
+  const d = el('details', { class: 'card-curate', 'data-card-curate': p.id }, [
+    el('summary', {}, [S.cardCurate]),
+    solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
   ])
-  cardOpenFor = p.id
+  d.open = curateOpen(stored())
+  d.addEventListener('toggle', () => { try { window.localStorage.setItem(CARD_CURATE_KEY, curateStored(d.open)) } catch { /* not remembered */ } })
+  return d
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
 function cardNameHeading(p: Person): HTMLElement {
   const h = el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` })
-  const show = (): void => h.replaceChildren(el('button', {
-    class: 'card-name-btn', 'aria-label': S.cardNameEditAria(p.name), 'data-card-name-edit': p.id, onclick: edit,
-  }, [displayName(p.name).text]))
-  const edit = (): void => {
-    const input = el('input', { class: 'field card-name-input', 'data-card-name-input': p.id, 'aria-label': S.cardNameEditAria(p.name), maxlength: String(HELLO_NAME_MAX) })
-    input.value = p.name
-    let done = false
-    const finish = (save_: boolean): void => {
-      if (done) return
-      done = true
-      const next = save_ ? renamedTo(p.name, input.value) : null
-      if (next) { p.name = next; save(); render(); personSheet(p.id) } else show()
-    }
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false) })
-    input.addEventListener('blur', () => finish(true))
-    h.replaceChildren(input)
-    input.focus(); input.select()
-  }
+  tapEdit(h, {
+    text: displayName(p.name).text, value: p.name, aria: S.cardNameEditAria(p.name), attrs: { class: 'card-name-btn', 'data-card-name-edit': p.id },
+    maxlength: HELLO_NAME_MAX, resolve: (typed) => renamedTo(p.name, typed),
+    commit: (next) => { p.name = next; save(); render(); personSheet(p.id) },
+  })
   dragPerson(h, p) // calendar module: the heading is a drag source (drop a person onto an event)
-  show()
   return h
 }
 
