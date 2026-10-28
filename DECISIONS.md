@@ -435,6 +435,11 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
 - LLM draft: no model call the app makes itself exists (web_search.ts fetches search engines, organizer.ts posts org data), so acceptTogetherDraft has ONE call
   site, draftOrPlain in sendFromDock, behind `TOGETHER_LLM_DRAFT = false` (together_request.ts). OPEN: turn on with the first local-model hook (owner 2026-10-23).
 
+## D-share-sink (2026-10-27): own relation store in the record, Zanzibar-shaped; TrustZones ladder everywhere (Jakob 2026-10-27 11:31)
+- Ladder: public < intending < acquaintance < community < friend < close < closest, plus self; rings can be off; most intimate zone wins.
+- Tuples {subject, relation, object, zone?, tag?, since, until?, by} as JSONL in the TrustWeb record; pure canAccess; md export per person/tag.
+  OpenFGA/SpiceDB and Solid/NextGraph come later as adapters (stubs only). See docs/share-sink/architecture.txt.
+
 ## D-relay-send-auth (2026-10-27): POST /relay/send needs a per-DID signature
 - Problem: ingress took any wire from anyone; the outer envelope names only the recipient, so a relay could not tell who filled a queue (spam, queue-cap exhaustion against one DID).
 - Decision: the sender signs with its did:peer:2 Ed25519 key, in four headers (x-tw-relay-did/-ts/-nonce/-sig), over `trustweb-relay-send/v1 \n did \n ts \n nonce \n sha256hex(body)`. The body is unchanged. The relay resolves the key from the DID, so no registry exists.

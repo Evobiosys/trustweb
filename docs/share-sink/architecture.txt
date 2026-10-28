@@ -1,0 +1,56 @@
+SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+
+TrustWeb share sink: architecture (wave 23, first slice, 2026-10-27)
+====================================================================
+
+THE LAYER
+One back end decides what is available to whom, by trust zone, tag, individual and group, across all TrustWeb-based
+platforms and other TrustWeb providers (single-sign-on style). Assign a tag to a person: every item carrying that tag,
+from every platform, opens to them. Platforms read through this layer; they never hold their own copy of the rules.
+Local-first: the relation store lives in the owner's TrustWeb record (synced E2EE between the owner's devices, Q2).
+No server.
+
+DATA MODEL (apps/trustweb/src/share_sink/)
+- zones.ts      TrustZones ladder (TrustWeb's adaptation of Social-Fabric's TrustZones, v1.2.2), outer to inner:
+                public < intending < acquaintance < community < friend < close < closest; plus self.
+                Rings can be switched off (public and self cannot). A person in several zones gets the most intimate.
+                An item in a switched-off ring moves one ring IN (never out). App rings map in a table in the file.
+- tuples.ts     Relation store, one JSONL line per tuple:
+                  {subject, relation, object, zone?, tag?, since, until?, by}
+                subject  person:<id> | tag:<id> | zone:<name>
+                relation has_tag | in_zone | may_read | may_write | grants
+                object   item:<id> | file:<id> | tag:<id> | zone:<name> (in_zone only, never zone:self)
+                Zanzibar-shaped (user, relation, object) with typed ids.
+- check.ts      canAccess(store, person, item, now, activeRings) -> {allowed, why[]}. Allowed by individual grant, OR a
+                tag both carry, OR a zone at least as intimate as the item's. why[] = the matching tuples, which is what
+                "what it would mean to share this" shows.
+- export.ts     toJsonl (primary format: the store itself, stable bytes) and toMarkdown (one page per person or tag).
+- suggestions.ts suggestSharing: only on request, pure, no model call. Scores items the person cannot see yet by the
+                tags/zones they share with the item just shared (Jaccard = credence 0..1, rendered as opacity).
+                Credence and why: the owner always; the person it is about only when they sit closer than the zone
+                the suggestion grants; nobody else.
+
+ADAPTERS PLANNED (one-line interface stubs in tuples.ts, none built)
+- OpenFGA / SpiceDB: write tuples, delegate checks. Fast at scale; needs a server, so opt-in per deployment.
+- Solid ACP / WAC: translate the store to pod ACLs for standards-based interop.
+- NextGraph: translate to NextGraph permissions.
+The tuple shape is kept so each adapter is a translation, not a rewrite.
+
+CONSUMERS
+- The Stammbaum (genealogy) ShareSink (its src/ports.ts) is one consumer of this layer, nothing more.
+- Other people's agents are the primary consumers of shared data, not humans reading messages.
+
+BOTS ARE DUAL CITIZENS
+A bot gets access only if it meets BOTH: delegated by a person who has that access (a `grants` tuple from them), AND
+run in a data centre trustworthy for that type of data. Neither alone is enough. (Not enforced in this slice.)
+
+NOT IN THIS SLICE
+- UI (person view, file view, suggestion opacity), wiring into main.ts.
+- Sync of tuples between devices, and where in the record the JSONL sits.
+- Session-memory sorting (pi sessions only, on idle compute, output as note lines with provenance; Q4).
+- Field sets that a tag brings (mandatory, important, optional), groups beyond tags, bot enforcement, any adapter.
+
+OPEN
+- Which zone a suggestion "grants". This slice: the item's least intimate zone (no zone = self). Since a person who
+  sits closer than an item's zone can already see it, the person-side visibility rule only bites once suggestions
+  propose tags or zones, not single items. To decide with Jakob.
