@@ -109,11 +109,11 @@ export function pushBundleOf(s: AppState, relayOrigin: string, appName: string, 
  * A notification from the page while it is hidden. Android Chrome allows `new Notification` from a page no longer
  * (worker only), so the registration shows it when there is one; the constructor stays the fallback for desktop browsers.
  */
-export async function showNotification(title: string, body: string): Promise<void> {
+export async function showNotification(title: string, body: string, offOffer?: string): Promise<void> {
   const reg = pushSupported() ? await workerRegistration() : null
   if (reg) {
     // renotify is missing from the DOM lib's NotificationOptions; browsers honour it.
-    const opts = { body, tag: `trustweb-page-${Date.now()}`, renotify: true, icon: `${import.meta.env.BASE_URL}icons/icon-192.png` } as NotificationOptions
+    const opts = { body, tag: `trustweb-page-${Date.now()}`, renotify: true, icon: `${import.meta.env.BASE_URL}icons/icon-192.png`, ...(offOffer ? { actions: [{ action: 'chat-off', title: offOffer }] } : {}) } as NotificationOptions
     try { await reg.showNotification(title, opts); return } catch { /* falls through */ }
   }
   try { new Notification(title, { body }) } catch { /* nothing more to try */ }
