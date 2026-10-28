@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Calendar module view (wave 24, cal1): month grid and the agenda of the chosen day. Selection lives in this closure, not in the record. */
 import { el } from '../../../../demo/src/ui/dom'
-import { todayIso } from '../../events'
 import { acceptPerson } from '../../drag_payload'
-import { matchPeople } from '../../events'
+import { matchPeople, todayIso } from '../../events'
 import { ringColor, type Person, type TwEvent } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks } from '../registry'

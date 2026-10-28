@@ -332,7 +332,7 @@ export const S = {
     inviteHint: "Sends this event's link in your chat with them. Only the event travels, not who else is invited.",
     notConnected: 'Not on TrustWeb yet: share the event link yourself.',
     inviteText: (eventName: string, link: string) => `You are invited: ${eventName}\n${link}`,
-    inviteSent: 'Invite sent.',
+    inviteSent: 'Invite is in your chat with them; it goes out when they are reachable.',
     weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
     monthTitle: (year: number, month0: number) => `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month0]} ${year}`,
   },
