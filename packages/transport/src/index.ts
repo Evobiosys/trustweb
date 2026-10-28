@@ -56,6 +56,13 @@ export { RelayServer, type RelayServerOptions, type SubmitResult, type IngressRe
 export { SEND_AUTH_HEADERS, SendAuthVerifier, sendSigningInput, signSend, parseSenderAuthMode, type SendAuthHeaders, type SendAuthResult, type SenderAuthMode } from "./relay_send_auth.js";
 export { RelayChannel, type RelayChannelOptions, type BackoffOpts } from "./relay_channel.js";
 export {
+  IrohRelayChannel,
+  DEFAULT_MAX_WIRE_BYTES as IROH_DEFAULT_MAX_WIRE_BYTES,
+  type IrohEndpointLike,
+  type IrohPeerAddr,
+  type IrohRelayChannelOptions,
+} from "./iroh_relay_channel.js";
+export {
   LadderChannel,
   type LadderRung,
   type LadderRungName,

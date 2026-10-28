@@ -443,3 +443,6 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
   `isAllowedSender(did)` is an optional authorisation hook (403); without it any authentic DID may send.
 - Not covered: the relay now learns the sender DID (by design); a capture can be replayed to a different relay (audience unbound; the recipient's message-id dedup absorbs it); clock skew beyond 5 min fails.
 - deploy_wot.sh: its relay smoke check now expects 401 for an unsigned POST (was 202).
+## D-iroh-rung (2026-10-27): iroh relay as an alternative rung behind DeliveryChannel
+
+Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChannel`, `docs/IROH-RELAY.md`). The iroh runtime is injected (`IrohEndpointLike`), no native dependency added. The existing mediator rung stays for offline store-and-forward. No privacy claim beyond today's relay (I7).
