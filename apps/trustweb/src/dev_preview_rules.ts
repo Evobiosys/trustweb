@@ -172,6 +172,9 @@ export const scrollStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: s
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
 
+/** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
+export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
+
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
 /** A name in a conflict text: the file, the first feature (or branch) and the second one (feature or main), each drawn in its own colour (Jakob 2026-10-28). */
@@ -197,11 +200,11 @@ export function conflictParts(text: string): Array<string | ConflictName> {
   return out
 }
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Declare done opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
-    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature' : ''
+    : approvedKeys(p.features).length === 0 ? 'Declare at least one feature done' : ''
   return { ok: hint === '', hint }
 }
 
