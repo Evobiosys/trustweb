@@ -25,6 +25,7 @@ import { createSyncLink } from './sync_link'
 import type { Incoming, PairRequest, Pairing } from './sync_link'
 import type { Conflict } from './sync_core'
 import { SCHEMA_VERSION } from './schema_version'
+import { linkButton } from './link_change_view'
 import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
 
@@ -50,6 +51,8 @@ export interface SyncViewHooks {
   codeDeps: () => Omit<CodeOpsDeps, 'log'> | null
   /** Wave 15: this device's own long connect link, for "Open on this device". */
   connectLink: () => Promise<string>
+  /** Opens the sheet that changes the main name; the shown link becomes a tappable text. */
+  editLink?: () => void
 }
 
 export interface SyncView {
@@ -468,7 +471,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     settingsGroup: () => {
       const row = el('button', { class: 'radio', 'data-open-devices': '1', onclick: openDevices }, [el('b', {}, [S.dvOpen]), el('small', {}, [S.dvOpenHint])])
       const code = h.peek()?.connectCode
-      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: trustweb.one/${code.name}`])] : [row]
+      return code?.name && !code.stale ? [row, el('p', { class: 'meta', 'data-settings-username': '1' }, [`${S.unTitle}: `, h.editLink ? linkButton(code.name, h.editLink) : `trustweb.one/${code.name}`])] : [row]
     },
     start,
     open: openDevices,
