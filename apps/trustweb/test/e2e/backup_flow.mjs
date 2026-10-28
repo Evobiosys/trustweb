@@ -120,7 +120,7 @@ async function main() {
     await p3.getByLabel('Your first name').fill('Pass')
     await p3.getByRole('button', { name: 'Start on this phone' }).click()
     await p3.getByRole('button', { name: 'My Resources', exact: true }).click()
-    await p3.getByRole('button', { name: 'Use my own passphrase instead' }).click()
+    await p3.getByRole('button', { name: 'Choose my own passphrase' }).click()
     await p3.getByPlaceholder('Passphrase').fill('too short')
     await p3.getByRole('button', { name: 'Make my key' }).click()
     ok('a passphrase under 12 characters is refused', await p3.getByText('Use at least 12 characters.').isVisible())
