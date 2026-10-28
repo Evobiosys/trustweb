@@ -9,7 +9,7 @@
  * and stays solo. A draft in progress is never switched (main.ts only asks
  * this for a fresh draft). Pure, so the rule is unit-tested as the app runs it.
  */
-import { DefaultRecording } from './model'
+import { DefaultRecording, type AppState } from './model'
 
 /** Where a Record tap came from, as far as the rule cares. */
 export enum RecordOrigin {
@@ -32,3 +32,6 @@ export function recordModeFor(origin: RecordOrigin, settingsDefault: DefaultReco
       return settingsDefault
   }
 }
+
+/** Wave 24 (calendar "I'm here now"): the event a fresh draft is tagged with, since what is recorded here is for the people here; undefined when not at a known event. */
+export const eventForDraft = (s: AppState): string | undefined => (s.atEvent && s.events?.some((e) => e.id === s.atEvent?.eventId) ? s.atEvent.eventId : undefined)

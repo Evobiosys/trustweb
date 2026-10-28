@@ -15,6 +15,7 @@ try {
   await page.evaluate(([ev, ppl]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, people: ppl, peers: [], log: [], events: [ev] })), [EV, [P('a1', 'Anna Huber', 'friend'), P('b1', 'Ben Gruber', 'none'), P('c1', 'Clara Moser', 'none', [])]])
   await page.reload(); await page.addStyleTag({ content: '.twf { display: none !important }' })
   await page.locator('.events-btn').click(); await page.waitForTimeout(300)
+  await page.locator('[data-cal-all]').click(); await page.waitForTimeout(200)
   await page.locator('[data-event="e1"]').click(); await page.waitForTimeout(300)
 
   const size = (sel) => page.locator(sel).first().evaluate((n) => ({ px: parseFloat(getComputedStyle(n).fontSize), color: getComputedStyle(n).color, y: n.getBoundingClientRect().top }))
@@ -44,6 +45,7 @@ try {
   const payload = JSON.parse(Buffer.from(host.split('#ev_host=')[1], 'base64url').toString())
   const other = `https://app.trustweb.one/#ev_host=${Buffer.from(JSON.stringify({ ...payload, id: 'e9', name: 'Sommerfest Graz' })).toString('base64url')}`
   await page.locator('button.back').first().click(); await page.waitForTimeout(200)
+  await page.locator('[data-cal-all]').click(); await page.waitForTimeout(200)
   await page.locator('[data-event-paste]').fill('nonsense'); await page.locator('[data-event-paste]').press('Enter')
   check('garbage in the paste row is refused', await page.locator('[data-event-paste-error]').isVisible())
   await page.locator('[data-event-paste]').fill(other); await page.locator('[data-event-paste]').press('Enter'); await page.waitForTimeout(400)

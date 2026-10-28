@@ -85,7 +85,7 @@ import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
-import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
+import { askWhenLabel, flushPending, renderChat, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -123,7 +123,7 @@ import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import type { BackupView } from './backup_view'
-import { RecordOrigin, recordModeFor } from './record_origin'
+import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { UpdateResult, createUpdateCheck, reloadFresh } from './app_update'
 import { devicesSectionChildren } from './devices_section'
@@ -170,9 +170,13 @@ import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { EXT_MODULES } from './ext/registry'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
-import { decodeEventLink, linkOrigin } from './event_link'
+import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
+import type { EventBy } from './event_link'
+import { acceptEvent, dragPerson } from './drag_payload'
+import { eventDropItem } from './event_drop'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
@@ -278,6 +282,8 @@ interface Draft {
   plain: boolean
   /** The inventory item picked under "what": the notes are added to it as context instead of making a new line (wave 5). */
   itemId?: string
+  /** Wave 24 (calendar): started while I was at this event; the saved notes carry it. One tap on the chip drops it. */
+  eventId?: string
 }
 
 /** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
@@ -341,9 +347,11 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
+// A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
+let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
 const wantInstall = params.get('install') === '1'
 /** Wave 18 review b: a page opened by a link (connect, share, event, hand-over, install) shows what the link is for; the Desk does not open under it. */
-const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || handover || wantInstall)
+const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || pendingBook || handover || wantInstall)
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
@@ -522,7 +530,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false,
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false, eventId: state ? eventForDraft(state) : undefined,
   }
 }
 
@@ -738,6 +746,21 @@ function ownDoorDid(): string | null {
 function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
   if (Notification.permission === 'granted') void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined)
+}
+
+/**
+ * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
+ * are on; page open: a notice with an Open button when the reminder switch is on.
+ */
+function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void): boolean {
+  if (!state || !kindsOf(state)[kind]) return false
+  if (document.hidden) {
+    if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
+    void showNotification(S.appName, title)
+    return true
+  }
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+  return true
 }
 
 /** "Turn these off" on the first chat notification: the chat switch under Settings > Notifications goes off, with the way back said. */
@@ -1084,6 +1107,7 @@ function render(): void {
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
+  const frame = screen === Screen.Start ? null : cal?.frame?.()
   const body = (() => {
     if (state?.testOf?.handedOverAt) return screenHandedOver()
     switch (screen) {
@@ -1097,11 +1121,11 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return eventsView.body()
+      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
       case Screen.Chat: return screenChat()
     }
   })()
-  host.replaceChildren(...body)
+  host.replaceChildren(...(frame ? [frame] : []), ...body)
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   autoDesk()
@@ -1731,6 +1755,7 @@ function screenStart(): Node[] {
     else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
+    maybeOpenPendingBook()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -2629,6 +2654,7 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
+    ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
 }
@@ -2695,6 +2721,7 @@ function itemTagChips(item: InventoryItem): HTMLElement[] {
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
 let cardOpenFor: string | null = null
 
+/** The card's name heading; draggable onto a calendar event (drag_payload.ts). */
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
@@ -2747,6 +2774,7 @@ function cardNameHeading(p: Person): HTMLElement {
     h.replaceChildren(input)
     input.focus(); input.select()
   }
+  dragPerson(h, p) // calendar module: the heading is a drag source (drop a person onto an event)
   show()
   return h
 }
@@ -3857,11 +3885,36 @@ const curator = createCurator({
   closeDesk: closeSheet,
   showPhoneVersion,
 })
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
+const undoNotice = (title: string, onUndo: () => void): void =>
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
-  undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
+  undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
-  by: () => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined),
+  by: eventsBy,
+  extra: (ev) => cal?.eventSection?.(ev) ?? [],
+})
+const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
+  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
+  openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
+  addEvent: (fromIso) => eventsView.openForm(fromIso),
+  showList: () => eventsView.showList(),
+  avatar,
+  undo: undoNotice,
+  notify: notifyKind,
+  atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
+  openItem: (id) => { closeSheet(); itemSheet(id) },
+  openCalendar: () => { closeSheet(); go(Screen.Events) },
+  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
+  sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
+  me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
+  sendInvite: async (personId, text) => {
+    const peerId = st().people.find((p) => p.id === personId)?.peerId
+    const ok = peerId ? await submitText(chatIo(), peerId, text) : false
+    toast(ok ? S.cal.inviteSent : S.chatOffline)
+    return ok
+  },
 })
 
 const feed = createFeedView({
@@ -4106,6 +4159,13 @@ function maybeOpenPendingShare(): void {
   void openShare(link)
 }
 
+function maybeOpenPendingBook(): void {
+  if (!pendingBook || !state) return
+  const hash = pendingBook
+  pendingBook = ''
+  cal?.openLink?.(hash)
+}
+
 /** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
 function joinLink(text: string): boolean {
   const ev = decodeEventLink(text.slice(Math.max(0, text.indexOf('#'))))
@@ -4177,6 +4237,10 @@ async function sendSolo(): Promise<void> {
   next()
 }
 
+/** The "For the people at <event> ×" chip of a draft started at an event (calendar module); one tap drops the tag. */
+const recEventChip = (): HTMLElement | null =>
+  (draft.eventId ? cal?.recordChip?.(draft.eventId, () => { delete draft.eventId; render() }) : null) ?? null
+
 function screenRecord(): Node[] {
   const live = recorder.live
   const paused = recorder.paused
@@ -4193,6 +4257,7 @@ function screenRecord(): Node[] {
   return [
     header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
     el('div', { class: 'scroll pad memo' }, [
+      recEventChip(),
       el('div', { class: 'memo-hero' }, [
         circle,
         el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(totalMs() + recorder.elapsed())]),
@@ -4433,6 +4498,7 @@ function screenMeeting(): Node[] {
   return [
     header(S.meetingTitle, { right: pastSearchButton(), after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
       el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
@@ -5273,6 +5339,7 @@ function screenReview(): Node[] {
   return [
     header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(recordScreen()) } }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       takes.length ? recordingCard() : null,
       transcriptStillComing(draftMeeting()) ? el('p', { class: 'meta job-state', 'data-job': 'running' }, [S.reviewServerPending]) : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
@@ -5374,6 +5441,7 @@ function saveDraftWhat(): void {
     s.inventory.push({
       id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
       audience: l.audience, included: true, createdAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()
@@ -5410,6 +5478,7 @@ function saveDraft(): void {
     p.lines.push({
       id: l.id, text: l.text.trim(), tag: l.tag, customTag: l.customTag, audience: l.audience,
       status: LineStatus.Current, notedAt: now, checkedAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()
@@ -5888,9 +5957,7 @@ function screenInventory(): Node[] {
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = icon('call')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
-  return [
-    header(S.invTitle, { after: gear }),
-    el('div', { class: 'scroll pad' }, [
+  const list = el('div', { class: 'scroll pad' }, [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -5913,8 +5980,21 @@ function screenInventory(): Node[] {
           onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
+      ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
-    ]),
+    ])
+  // A calendar event dragged here (mouse/trackpad; phones keep the pickers) becomes an item tagged with it.
+  acceptEvent(list, (ref) => {
+    const item = eventDropItem(s, ref, randomId(8), Date.now())
+    if (!item) { toast(S.cal.dropUnknown); return }
+    s.inventory.unshift(item)
+    save()
+    render()
+    undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
+  })
+  return [
+    header(S.invTitle, { after: gear }),
+    list,
     call,
     requests,
   ]
@@ -6306,12 +6386,14 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
+  maybeOpenPendingBook()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
   offerApkHint(offerDemoContent)
   offerNotifications()
+  cal?.start?.()
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)
