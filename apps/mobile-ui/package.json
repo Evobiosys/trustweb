@@ -8,9 +8,12 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
+    "build:deps": "pnpm --filter \"@resource-web/mobile-ui^...\" build",
+    "pretest": "pnpm build:deps",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "node test/live_integration.mjs",
+    "pretypecheck": "pnpm build:deps",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
