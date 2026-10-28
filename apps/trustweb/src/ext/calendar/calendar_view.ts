@@ -12,8 +12,7 @@ import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
 import { createIcs } from './ics_view'
-import { personDropOnEvent } from '../../event_drop'
-import { inviteText, invitees, removeInvitee } from './invitees'
+import { inviteText, invitees, personDropOnEvent, removeInvitee } from './invitees'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
 
