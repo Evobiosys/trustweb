@@ -10,7 +10,8 @@ import { ALL_ZONES, Zone, effectiveZone, mostIntimate, rank } from './zones'
 export interface Access { allowed: boolean; why: Tuple[] }
 
 const zoneOf = (id: string): Zone => id.slice('zone:'.length) as Zone
-const opens = (t: Tuple, itemId: string): boolean => t.object === itemId && (t.relation === 'may_read' || t.relation === 'may_write')
+/** Does this tuple open `itemId` (read or write)? */
+export const opens = (t: Tuple, itemId: string): boolean => t.object === itemId && (t.relation === 'may_read' || t.relation === 'may_write')
 
 /** The person's zone (most intimate of the rings on) and the tuple that puts them there (none: public). */
 export function personZone(store: Store, personId: string, now: Date, active: readonly Zone[] = ALL_ZONES): { zone: Zone; tuple?: Tuple } {

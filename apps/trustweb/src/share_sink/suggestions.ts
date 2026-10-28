@@ -6,7 +6,7 @@
  * suggestion grants is the item's least intimate zone; an item with no zone counts as self (owner only).
  * Credence and why are shown to the owner always, and to the person it is about only when they sit closer than that zone (Q5).
  */
-import { canAccess, personZone } from './check'
+import { canAccess, opens, personZone } from './check'
 import { type Store, type Tuple, isLive } from './tuples'
 import { ALL_ZONES, Zone, effectiveZone, rank } from './zones'
 
@@ -14,7 +14,7 @@ export interface Activity { personId: string; itemId: string }
 export interface Suggestion { personId: string; itemId: string; credence: number; zone: Zone; why: Tuple[] }
 
 const openers = (live: Store, itemId: string): Tuple[] =>
-  live.filter((t) => t.object === itemId && t.relation === 'may_read' && /^(tag|zone):/.test(t.subject))
+  live.filter((t) => opens(t, itemId) && /^(tag|zone):/.test(t.subject))
 
 export function suggestSharing(store: Store, activity: Activity, now: Date, active: readonly Zone[] = ALL_ZONES): Suggestion[] {
   const live = store.filter((t) => isLive(t, now))

@@ -15,6 +15,10 @@ describe('share sink: suggestions', () => {
     expect(s[0].why.map((t) => `${t.subject} ${t.relation} ${t.object}`)).toEqual(['tag:garden may_read item:seeds', 'tag:garden may_read item:tools'])
     expect(s[0].personId).toBe('person:eve')
   })
+  it('a may_write grant counts as an opener, as it does in canAccess (review)', () => {
+    const w = store.map((t) => (t.subject === 'tag:garden' && t.object === 'item:tools' ? { ...t, relation: 'may_write' } : t))
+    expect(suggestSharing(w, { personId: 'person:eve', itemId: 'item:seeds' }, NOW).map((x) => x.itemId)).toEqual(['item:tools'])
+  })
   it('suggests nothing without a shared pattern', () => {
     expect(suggestSharing(store, { personId: 'person:bo', itemId: 'item:recipe' }, NOW)).toEqual([])
   })
