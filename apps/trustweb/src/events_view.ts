@@ -7,6 +7,7 @@ import { el } from '../../demo/src/ui/dom'
 import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
+import { dragPerson } from './drag_payload'
 import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
 import type { AppState, Person, TwEvent } from './model'
@@ -33,6 +34,8 @@ export interface EventsViewHooks {
   origin: string
   /** Who I am to a link's reader: my name and, when I have one, my relay identity. */
   by: () => EventBy | undefined
+  /** Extension modules' sections on the event page (ext/registry.ts), drawn above Advanced. */
+  extra?: (ev: TwEvent) => Node[]
 }
 
 export interface EventsView {
@@ -196,6 +199,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
           onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
         }, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])])
         contextPress(chip, () => h.curatorPerson(p.id))
+        dragPerson(chip, p)
         return chip
       }))
     }
@@ -288,6 +292,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
+      ...(h.extra?.(ev) ?? []),
       advanced(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),

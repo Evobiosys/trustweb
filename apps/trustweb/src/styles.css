@@ -1009,3 +1009,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .cal-dot{position:absolute; right:4px; bottom:3px; font-style:normal; font-size:10px; line-height:1; background:var(--ink-soft); color:#fff; border-radius:999px; padding:2px 5px}
 .cal-day.sel .cal-dot{background:#fff; color:var(--electric)}
 .cal-agenda{margin:0 0 12px}
+.cal-invitees{margin:8px 0}
+.cal-drop-over{outline:2px dashed var(--electric); outline-offset:2px}

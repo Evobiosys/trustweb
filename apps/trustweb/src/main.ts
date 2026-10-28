@@ -78,7 +78,7 @@ import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeT
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
-import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
+import { askWhenLabel, flushPending, renderChat, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -162,7 +162,9 @@ import { createEventsView } from './events_view'
 import { EXT_MODULES } from './ext/registry'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
-import { decodeEventLink, linkOrigin } from './event_link'
+import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
+import type { EventBy } from './event_link'
+import { dragPerson } from './drag_payload'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
@@ -2614,13 +2616,20 @@ function itemTagChips(item: InventoryItem): HTMLElement[] {
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
 let cardOpenFor: string | null = null
 
+/** The card's name heading; draggable onto a calendar event (drag_payload.ts). */
+function cardName(p: Person): HTMLElement {
+  const h2 = el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text])
+  dragPerson(h2, p)
+  return h2
+}
+
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
-    el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text]),
+    cardName(p),
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -3746,17 +3755,27 @@ const curator = createCurator({
   closeDesk: closeSheet,
   showPhoneVersion,
 })
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
   undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
-  by: () => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined),
+  by: eventsBy,
+  extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
   openEvent: (id) => { eventsView.open(id); render() },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
+  avatar,
+  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
+  sendInvite: async (personId, text) => {
+    const peerId = st().people.find((p) => p.id === personId)?.peerId
+    const ok = peerId ? await submitText(chatIo(), peerId, text) : false
+    toast(ok ? S.cal.inviteSent : S.chatOffline)
+    return ok
+  },
 })
 
 const feed = createFeedView({

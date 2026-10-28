@@ -300,6 +300,8 @@ export interface TwEvent {
   srv?: string
   /** The 'tagged' hit went out once already. */
   hitTagged?: boolean
+  /** Wave 24 (ext/calendar): person ids I invited. Absent = none. Travels only between my own devices (sync_core.ts); never in an event link (event_link.ts whitelist). */
+  people?: string[]
 }
 
 export interface Person {
