@@ -31,6 +31,12 @@ export interface ExtHooks {
   openCalendar: () => void
   /** My event link as a peer (event_link.ts); never carries invitees. */
   eventLink: (ev: TwEvent) => string
+  /** Scheduling (cal5): a sheet over the app, its close, a short notice, the origin links carry, and who I am to others. */
+  sheet: (children: (Node | null)[]) => void
+  closeSheet: () => void
+  toast: (msg: string) => void
+  origin: string
+  me: () => { name: string; did?: string }
 }
 
 export interface ExtModule {
@@ -46,6 +52,8 @@ export interface ExtModule {
     frame?: () => HTMLElement | null
     /** The chip on Record and Review: this draft is for the people at that event; drop removes the tag from the draft. Null when the id is unknown. */
     recordChip?: (eventId: string, drop: () => void) => HTMLElement | null
+    /** A #book= or #booked= link opened (calendar scheduling): shows its sheet; false when the hash is not one of the module's. */
+    openLink?: (hash: string) => boolean
     /** Called once the record is loaded: starts the module's timers. */
     start?: () => void
   }

@@ -10,6 +10,7 @@ import { addMonths, dayCounts, eventsOn, monthGrid } from './calendar'
 import { createAtEvent } from './at_event_view'
 import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
+import { createScheduling } from './scheduling_view'
 import { addInvitee, inviteText, invitees, removeInvitee } from './invitees'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
@@ -23,6 +24,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   let mode: 'calendar' | 'tasks' = 'calendar'
   const tasks = createTasks(h, () => { mode = 'tasks' })
   const here = createAtEvent(h)
+  const scheduling = createScheduling(h)
 
   const invite = (ev: TwEvent, id: string): void => {
     if (!h.state().people.some((p) => p.id === id)) return
@@ -110,6 +112,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
     itemSection: tasks.itemSection,
     frame: here.frame,
     recordChip: here.recordChip,
+    openLink: scheduling.openLink,
     /** One timer for tasks and the event bell: 30 s while I am at an event, else 60 s. */
     start: () => { const loop = (): void => { tasks.tick(); here.tick(); setTimeout(loop, h.state().atEvent ? 30_000 : 60_000) }; loop() },
     body: () => {
@@ -126,6 +129,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
         grid(events, due),
         agenda(events, due),
         el('button', { class: 'btn btn-electric wide', 'data-cal-add': '', onclick: () => h.addEvent(sel) }, [S.cal.add]),
+        scheduling.button(),
         el('button', { class: 'btn btn-ghost wide', 'data-cal-all': '', onclick: h.showList }, [S.cal.allEvents]),
       ])]
     },

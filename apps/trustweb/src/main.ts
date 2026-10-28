@@ -333,9 +333,11 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
+// A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
+let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
 const wantInstall = params.get('install') === '1'
 /** Wave 18 review b: a page opened by a link (connect, share, event, hand-over, install) shows what the link is for; the Desk does not open under it. */
-const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || handover || wantInstall)
+const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || pendingBook || handover || wantInstall)
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
@@ -1695,6 +1697,7 @@ function screenStart(): Node[] {
     else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
+    maybeOpenPendingBook()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -3796,6 +3799,8 @@ const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
   eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
+  sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
+  me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {
     const peerId = st().people.find((p) => p.id === personId)?.peerId
     const ok = peerId ? await submitText(chatIo(), peerId, text) : false
@@ -4044,6 +4049,13 @@ function maybeOpenPendingShare(): void {
   const link = pendingShare
   pendingShare = null
   void openShare(link)
+}
+
+function maybeOpenPendingBook(): void {
+  if (!pendingBook || !state) return
+  const hash = pendingBook
+  pendingBook = ''
+  cal?.openLink?.(hash)
 }
 
 /** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
@@ -6197,6 +6209,7 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
+  maybeOpenPendingBook()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.

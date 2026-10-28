@@ -271,6 +271,14 @@ export enum ProvenanceState {
   StepByStep = 'step-by-step',
 }
 
+/** Weekly windows (day 0..6, Monday = 0; "HH:MM" in the owner's zone), slot length (absent 30) and horizon in days (absent 14). */
+export interface Availability { windows: { day: number; from: string; to: string }[]; slotMin?: 30 | 60; horizonDays?: number }
+
+/** What a scheduling link carries of one person: free/busy only, never what the busy times are (I1). */
+export interface AvailSnap { name: string; tz: string; windows: Availability['windows']; slotMin: number; busy: { s: number; e: number }[]; at: number }
+
+export interface HeldAvail { personId?: string; name: string; snap: AvailSnap; at: number }
+
 /**
  * A light task (wave 24, cal3; feature shape inspired by tasks.org, no code taken). Local plus my own devices (sync_core.ts, sealed): never in a
  * share, pack, answer or cascade (cascade.ts askSources strips it). due is "YYYY-MM-DD", optionally with "THH:MM"; remindAt is ms.
@@ -906,6 +914,12 @@ export interface AppState {
   tasks?: TwTask[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
   atEvent?: { eventId: string; since: number; bell?: boolean }
+  /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
+  availability?: Availability
+  /** Other people's availability snapshots I keep (their own book link, one tap). */
+  heldAvailability?: HeldAvail[]
+  /** Scheduling links I made: the id a booking reply must carry, and which held names were ticked into it. */
+  bookLinks?: { id: string; at: number; held: string[] }[]
   /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
   tabOrder?: TabOrder
   /** Absent: QueryStyle.Call. */
