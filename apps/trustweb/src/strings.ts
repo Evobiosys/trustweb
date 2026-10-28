@@ -1111,6 +1111,18 @@ export const S = {
   nameCapFailed: 'Could not send. Try again in a moment.',
   namePreviousHolder: 'This username belonged to someone else before.',
   unTitle: 'My username',
+  unLinkTap: 'Change your link',
+  unLinkTitle: 'Change your link',
+  unLinkLead: (name: string) => `Your link is trustweb.one/${name}. Type the name you want instead.`,
+  unLinkLeadNone: 'Type the name you want for your link.',
+  unLinkGo: 'Change link',
+  unLinkSure: (from: string, to: string) => from
+    ? `Are you sure? Your link becomes trustweb.one/${to}. trustweb.one/${from} is released: it stops working for people who have it, and anyone can then claim that name.`
+    : `Are you sure? Your link becomes trustweb.one/${to}.`,
+  unLinkYes: 'Yes, change it',
+  unLinkNo: 'Cancel',
+  unLinkSame: 'That is already your link.',
+  unLinkDone: (name: string) => `Your link is now trustweb.one/${name}`,
   unNone: 'No username on this device yet. Claim one on the Meet page, under Advanced.',
   unOpensOn: (name: string, device: string) => `trustweb.one/${name} opens on ${device}`,
   unNewOn: (device: string) => `New connections arrive on ${device}`,
@@ -1295,6 +1307,14 @@ export const S = {
 
   // Settings > About (owner 2026-10-06): TrustWeb as part of EvoBioSys, the website's pages.
   aboutGroup: 'About',
+  updBanner: 'New version available',
+  updReload: 'Reload',
+  updCheck: 'Check for updates',
+  updChecking: 'Checking...',
+  updUpToDate: 'Up to date',
+  updFailed: 'Could not check for updates. Try again when you are online.',
+  updNewer: 'A new version is available.',
+  updBuilt: (at: string) => `built ${at}`,
   aboutVersion: (sha: string, format: number) => `App version ${sha}, data format v${format}`,
   aboutBy: 'TrustWeb, by ',
   aboutEvoBioSys: 'EvoBioSys',

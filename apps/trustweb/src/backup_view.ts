@@ -40,8 +40,8 @@ export interface BackupViewHooks {
 }
 
 export interface BackupView {
-  /** The card's slot in Inventory; filled once the server answered. */
-  card(): HTMLElement
+  /** The card's slot, in Inventory (the default) or in Settings (`inSettings`); filled once the server answered. Both may be on screen at once. */
+  card(inSettings?: boolean): HTMLElement
   /** The record was saved: the automatic backup (if the person switched it on) schedules itself. */
   changed(): void
   /** The app went to the background: back up now if something changed. */
@@ -84,7 +84,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     } catch {
       h.toast(S.bkFailed)
     }
-    h.redraw()
+    redraw()
   }
 
   const auto: AutoBackup = createAutoBackup({
@@ -100,9 +100,17 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     onStatus: () => fillSlot(),
   })
 
-  /** Fills the card's slot in place, never a full re-render: that would wipe whatever is being typed on the screen. */
+  /** Fills every card slot in place, never a full re-render: that would wipe whatever is being typed on the screen. */
   function fillSlot(): void {
-    document.getElementById('backup-slot')?.replaceChildren(...[cardInner()].filter((c): c is HTMLElement => c !== null))
+    document.querySelectorAll<HTMLElement>('[data-backup-slot]').forEach((slot) => {
+      slot.replaceChildren(...[cardInner(slot.id !== '')].filter((c): c is HTMLElement => c !== null))
+    })
+  }
+
+  /** The Inventory screen redraws itself; a card in an open Settings sheet is refilled in place. */
+  function redraw(): void {
+    h.redraw()
+    fillSlot()
   }
 
   /** Shows a fresh recovery key; the backup only runs after "I saved it". */
@@ -181,7 +189,8 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     return backupProbe
   }
 
-  function cardInner(): HTMLElement | null {
+  /** `ids`: the Inventory card carries the element ids (one per page); the Settings card, which can sit over it, does not. */
+  function cardInner(ids: boolean): HTMLElement | null {
     if (!backupAvailable) return null
     const info = loadBackupInfo()
     if (!info) {
@@ -197,16 +206,16 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     return el('div', { class: 'verse backup' }, [
       el('h3', {}, [S.bkOn]),
       el('p', {}, [S.bkLast(new Date(info.lastAt).toLocaleString())]),
-      autoSwitch(info),
+      autoSwitch(info, ids),
       key ? el('button', { class: 'btn btn-electric btn-sm', onclick: () => void runBackup(key) }, [S.bkBackUpNow]) : null,
       key ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => recoveryKeySheet(key) }, [S.bkShowKey]) : null,
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.bkForgetConfirm)) { saveBackupInfo(null); h.redraw() } } }, [S.bkForget]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { if (confirm(S.bkForgetConfirm)) { saveBackupInfo(null); redraw() } } }, [S.bkForget]),
     ])
   }
 
   /** The "Automatisch sichern" switch and, under it, when the last backup was or when the next try after a failure is due. */
-  function autoSwitch(info: BackupInfo): HTMLElement {
-    const box = el('input', { type: 'checkbox', id: 'bk-auto', class: 'bk-auto' })
+  function autoSwitch(info: BackupInfo, ids: boolean): HTMLElement {
+    const box = el('input', { type: 'checkbox', ...(ids ? { id: 'bk-auto' } : {}), class: 'bk-auto' })
     box.checked = autoOn(info)
     box.addEventListener('change', () => {
       saveBackupInfo({ ...info, auto: box.checked })
@@ -220,7 +229,7 @@ export function createBackupView(h: BackupViewHooks): BackupView {
       : info.lastAt > 0 ? S.bkAutoLast(Math.max(0, Math.round((Date.now() - info.lastAt) / 60_000))) : null
     return el('div', { class: 'bk-auto-row' }, [
       el('label', { class: 'consent' }, [box, el('span', {}, [S.bkAuto])]),
-      line ? el('p', { class: 'meta', id: 'bk-auto-status' }, [line]) : null,
+      line ? el('p', { class: 'meta', ...(ids ? { id: 'bk-auto-status' } : {}) }, [line]) : null,
     ])
   }
 
@@ -228,10 +237,10 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     changed: () => auto.changed(),
     hidden: () => auto.hidden(),
     backOnline: () => auto.backOnline(),
-    card: () => {
+    card: (inSettings = false) => {
       if (backupAvailable === null) void probe()
-      const inner = cardInner()
-      return el('div', { id: 'backup-slot' }, inner ? [inner] : [])
+      const inner = cardInner(!inSettings)
+      return el('div', { ...(inSettings ? {} : { id: 'backup-slot' }), 'data-backup-slot': inSettings ? 'settings' : 'inventory' }, inner ? [inner] : [])
     },
     probe,
     available: () => backupAvailable,

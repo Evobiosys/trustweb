@@ -997,3 +997,10 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   /* Review wave 19: toasts and Undo notices (a drag on the Desk's rings) show above the Desk, bottom right */
   body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }
+/* Settings: the tappable link and the update banner */
+.link-name{border:0; background:none; padding:2px 0; font:inherit; color:var(--electric-deep); text-decoration:underline; text-underline-offset:2px; cursor:pointer; overflow-wrap:anywhere; text-align:left}
+.link-name:focus-visible{outline:3px solid var(--electric); outline-offset:2px; border-radius:6px}
+.update-banner{position:absolute; left:16px; right:16px; bottom:88px; z-index:31; background:var(--card); color:var(--ink); border-radius:16px; padding:10px 14px;
+  box-shadow:0 10px 30px rgba(36,27,46,.22); display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13.5px; font-weight:600; animation:tw-pop .25s ease-out}
+.update-banner[hidden]{display:none}
+.update-banner .btn{margin:0; white-space:nowrap}
