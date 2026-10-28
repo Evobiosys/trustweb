@@ -373,13 +373,13 @@ relay=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
   "https://$relay_host/relay/send" -H 'content-type: application/json' \
   -d '{"to":"did:peer:2.deploycheck"}' 2>/dev/null || true)
 relay=${relay: -3}
-if [ "$relay" != "401" ]; then
+if [ "$relay" != "202" ] && [ "$relay" != "401" ]; then
   relay=$(rsh "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -X POST https://$relay_host/relay/send -H 'content-type: application/json' -d '{\"to\":\"did:peer:2.deploycheck\"}'" 2>/dev/null || true)
   relay=${relay: -3}
 fi
 printf '  %-46s %s\n' "POST $relay_host/relay/send" "$relay"
-# 401 = ingress is up AND refuses an unsigned send (per-DID sender auth, relay_send_auth.ts). 202 would mean it is open.
-[ "$relay" = "401" ] || fail=1
+# 202 = ingress up, sender auth optional (default during transition); 401 = RELAY_SENDER_AUTH=required refuses an unsigned send.
+{ [ "$relay" = "202" ] || [ "$relay" = "401" ]; } || fail=1
 
 echo "--------"
 if [ "$fail" = "0" ]; then

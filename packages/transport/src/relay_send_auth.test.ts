@@ -166,3 +166,12 @@ describe("signing input", () => {
     expect(sendSigningInput("did:x", "1", "n", WIRE + " ")).not.toEqual(base);
   });
 });
+
+describe("transition default (2026-10-28)", () => {
+  it("parseSenderAuthMode defaults to optional so unsigned clients keep working until all sign", async () => {
+    const { parseSenderAuthMode } = await import("./relay_send_auth.js");
+    expect(parseSenderAuthMode(undefined)).toBe("optional");
+    expect(parseSenderAuthMode("")).toBe("optional");
+    expect(parseSenderAuthMode("required")).toBe("required");
+  });
+});

@@ -245,7 +245,7 @@ export class RelayServer {
     this.maxQueuePerDid = opts.maxQueuePerDid ?? MAX_QUEUE_PER_DID;
     this.maxQueueGlobal = opts.maxQueueGlobal ?? MAX_QUEUE_GLOBAL;
     this.push = opts.push ?? null;
-    this.senderAuth = opts.senderAuth ?? "required";
+    this.senderAuth = opts.senderAuth ?? "optional";
     this.senderVerifier = new SendAuthVerifier({ windowMs: opts.senderAuthWindowMs });
     this.isAllowedSender = opts.isAllowedSender ?? null;
   }

@@ -58,7 +58,7 @@ export type SenderAuthMode = "required" | "optional" | "off";
 
 /** Parses an operator setting (env RELAY_SENDER_AUTH). Unset -> "required"; anything unrecognised throws rather than silently weakening ingress. */
 export function parseSenderAuthMode(value: string | undefined): SenderAuthMode {
-  if (value === undefined || value === "") return "required";
+  if (value === undefined || value === "") return "optional";   // transition: verify signed sends, accept unsigned until every client signs; RELAY_SENDER_AUTH=required then
   if (value === "required" || value === "optional" || value === "off") return value;
   throw new Error(`RELAY_SENDER_AUTH must be required|optional|off, got "${value}"`);
 }

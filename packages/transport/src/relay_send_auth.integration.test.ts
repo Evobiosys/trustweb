@@ -18,7 +18,7 @@ afterEach(async () => {
 
 async function boot(opts?: RelayServerOptions) {
   const queueStore = new InMemoryRelayQueueStore();
-  const relay = new RelayServer({ queueStore, ...opts });
+  const relay = new RelayServer({ queueStore, senderAuth: "required", ...opts });   // these tests pin the strict mode; the server default is "optional" during the transition
   servers.push(relay);
   const { port } = await relay.listen(0, "127.0.0.1");
   return { relay, port, queueStore };
@@ -37,7 +37,7 @@ async function post(port: number, wire: string, headers: Record<string, string> 
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
-describe("POST /relay/send sender authentication (default: required)", () => {
+describe("POST /relay/send sender authentication (mode: required)", () => {
   it("accepts a validly signed send and queues it for the recipient", async () => {
     const { port, queueStore } = await boot();
     const alice = createIdentity("http://127.0.0.1:1");
@@ -81,7 +81,7 @@ describe("POST /relay/send sender authentication (default: required)", () => {
   });
 
   it("rejects a stale capture (timestamp outside the window)", async () => {
-    const { port } = await boot({ senderAuthWindowMs: 60_000 });
+    const { port } = await boot({ senderAuth: "required", senderAuthWindowMs: 60_000 });
     const alice = createIdentity("http://127.0.0.1:1");
     const bob = createIdentity("http://127.0.0.1:2");
     const wire = wireFor(alice, bob);
