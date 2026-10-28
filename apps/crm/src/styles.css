@@ -76,6 +76,7 @@ main{flex:1; padding:8px 16px 96px; min-width:0}
 
 /* buttons and fields */
 .btn{min-height:44px; padding:0 18px; border:0; border-radius:999px; font-weight:600; background:var(--teal); color:#fff}
+a.btn{display:inline-flex; align-items:center; text-decoration:none}
 .btn:disabled{opacity:.45; cursor:default}
 .btn.ghost{background:transparent; color:var(--teal); border:1.5px solid var(--teal)}
 .btn.small{min-height:36px; padding:0 14px; font-size:13.5px}

@@ -58,7 +58,8 @@ import { check as checkFreshness, remember as rememberNonce } from './connect_fr
 import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
-import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import { renamedTo } from './card_name'
+import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
@@ -2631,7 +2632,7 @@ function personSheet(personId: string): void {
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
-    el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text]),
+    cardNameHeading(p),
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -2654,6 +2655,31 @@ function personSheet(personId: string): void {
     archiveRow(p),
   ])
   cardOpenFor = p.id
+}
+
+/** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
+function cardNameHeading(p: Person): HTMLElement {
+  const h = el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` })
+  const show = (): void => h.replaceChildren(el('button', {
+    class: 'card-name-btn', 'aria-label': S.cardNameEditAria(p.name), 'data-card-name-edit': p.id, onclick: edit,
+  }, [displayName(p.name).text]))
+  const edit = (): void => {
+    const input = el('input', { class: 'field card-name-input', 'data-card-name-input': p.id, 'aria-label': S.cardNameEditAria(p.name), maxlength: String(HELLO_NAME_MAX) })
+    input.value = p.name
+    let done = false
+    const finish = (save_: boolean): void => {
+      if (done) return
+      done = true
+      const next = save_ ? renamedTo(p.name, input.value) : null
+      if (next) { p.name = next; save(); render(); personSheet(p.id) } else show()
+    }
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false) })
+    input.addEventListener('blur', () => finish(true))
+    h.replaceChildren(input)
+    input.focus(); input.select()
+  }
+  show()
+  return h
 }
 
 /** Wave 15: Block / Unblock on the card. Blocked: asks unanswered, chat unseen, nothing sent, dot hidden; unblock stores 0 so it wins a sync. */

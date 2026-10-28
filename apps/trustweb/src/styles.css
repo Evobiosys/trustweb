@@ -871,6 +871,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* Wave 6 (N8c): the visible way home on every sheet; (N8a) the search panel says it is not an ask */
 .sheet-bar{display:flex; justify-content:flex-end; margin:-8px 0 2px}
 .card-name{margin:0 0 6px; font-size:22px; line-height:1.2; overflow-wrap:anywhere}
+.card-name-btn{all:unset; cursor:pointer; color:inherit; font:inherit; overflow-wrap:anywhere}
+.card-name-input{font-size:22px; width:100%}
 .sheet-home{border:0; background:var(--card); color:var(--ink-soft); font:inherit; font-size:13px; border-radius:999px; padding:4px 12px; cursor:pointer}
 .sheet-home:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .search-not-ask{margin:2px 0 6px}
