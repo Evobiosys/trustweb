@@ -36,7 +36,9 @@ afterEach(async () => {
 });
 
 async function bootRelay(opts?: RelayServerOptions): Promise<{ relay: RelayServer; port: number }> {
-  const relay = new RelayServer(opts);
+  // These tests exercise queueing/drain/caps over raw unsigned POSTs; sender auth has its own suite
+  // (relay_send_auth.integration.test.ts), so it is switched off here unless a test opts back in.
+  const relay = new RelayServer({ senderAuth: "off", ...opts });
   servers.push(relay);
   const { port } = await relay.listen(0, "127.0.0.1");
   return { relay, port };
@@ -524,7 +526,7 @@ describe("RelayServer — finding 4: durable store-and-forward across a relay re
 
     // Boot #1: Ben is offline; Anna submits — the wire is persisted to SQLite.
     const store1 = new SqliteRelayQueueStore(dbPath);
-    const relay1 = new RelayServer({ queueStore: store1 });
+    const relay1 = new RelayServer({ queueStore: store1, senderAuth: "off" });
     const { port: port1 } = await relay1.listen(0, "127.0.0.1");
     const wire = buildWire(anna, ben, "durable-1");
     expect((await submitOverHttp(port1, wire)).body).toEqual({ routed: "accepted" });
@@ -535,7 +537,7 @@ describe("RelayServer — finding 4: durable store-and-forward across a relay re
 
     // Boot #2: a brand-new RelayServer on the SAME db path — held mail intact.
     const store2 = new SqliteRelayQueueStore(dbPath);
-    const relay2 = new RelayServer({ queueStore: store2 });
+    const relay2 = new RelayServer({ queueStore: store2, senderAuth: "off" });
     const { port: port2 } = await relay2.listen(0, "127.0.0.1");
 
     const drain = openDrain(port2);
