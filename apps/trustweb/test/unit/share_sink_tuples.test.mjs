@@ -22,6 +22,14 @@ describe('share sink: tuples', () => {
     expect(() => parseJsonl('not json')).toThrow(/line 1/)
     expect(() => parseJsonl('{"subject":"person:a","relation":"in_zone","object":"zone:x","since":"2026-01-01T00:00:00.000Z","by":"d"}')).toThrow(/line 1/)
   })
+  it('refuses a zone id that is not on the ladder, a person put in self, and an until that is no date (review)', () => {
+    const t = (o) => JSON.stringify({ subject: 'person:a', relation: 'in_zone', object: 'zone:friend', since: '2026-01-01T00:00:00.000Z', by: 'd', ...o })
+    expect(parseJsonl(t({}))).toHaveLength(1)
+    expect(() => parseJsonl(t({ object: 'friend' }))).toThrow(/line 1/)
+    expect(() => parseJsonl(t({ object: 'zone:self' }))).toThrow(/line 1/)
+    expect(() => parseJsonl(t({ subject: 'zone:frend', relation: 'may_read', object: 'item:x' }))).toThrow(/line 1/)
+    expect(() => parseJsonl(t({ until: 'soon' }))).toThrow(/line 1/)
+  })
   it('a tuple is live from since until until', () => {
     const t = { subject: 'person:a', relation: 'may_read', object: 'item:x', since: '2026-01-01T00:00:00.000Z', until: '2027-01-01T00:00:00.000Z', by: 'd' }
     expect(isLive(t, NOW)).toBe(true)

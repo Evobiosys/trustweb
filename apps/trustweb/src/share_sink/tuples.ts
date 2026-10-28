@@ -6,7 +6,7 @@
  *   person:<id> | tag:<id> | zone:<Zone>  may_read | may_write | grants  item:<id> | file:<id>
  * `zone` and `tag` are optional context, `since`/`until` bound when the tuple counts, `by` is the device that wrote it.
  */
-import { type Zone, isZone } from './zones'
+import { Zone, isZone } from './zones'
 
 export const RELATIONS = ['has_tag', 'in_zone', 'may_read', 'may_write', 'grants'] as const
 export type Relation = (typeof RELATIONS)[number]
@@ -35,13 +35,17 @@ export interface NextGraphAdapter { toPermissions(store: Store): unknown }
 export const isLive = (t: Tuple, now: Date): boolean => Date.parse(t.since) <= +now && (t.until === undefined || +now < Date.parse(t.until))
 
 const str = (v: unknown): v is string => typeof v === 'string' && v !== ''
+const date = (v: unknown): boolean => str(v) && !Number.isNaN(Date.parse(v))
+/** A `zone:` id names a ladder zone; self is the owner alone, so no one is put `in_zone zone:self`. */
+const zoneId = (id: string): boolean => !id.startsWith('zone:') || isZone(id.slice('zone:'.length))
 
 function valid(t: Record<string, unknown>): boolean {
-  if (!str(t.subject) || !str(t.object) || !str(t.since) || !str(t.by)) return false
+  if (!str(t.subject) || !str(t.object) || !date(t.since) || !str(t.by)) return false
   if (!RELATIONS.includes(t.relation as Relation)) return false
-  if (t.relation === 'in_zone' && !isZone(String(t.object).replace(/^zone:/, ''))) return false
+  if (!zoneId(t.subject) || !zoneId(t.object)) return false
+  if (t.relation === 'in_zone' && (!t.object.startsWith('zone:') || t.object === `zone:${Zone.Self}`)) return false
   if (t.zone !== undefined && !isZone(String(t.zone))) return false
-  return [t.tag, t.until].every((v) => v === undefined || str(v)) && !Number.isNaN(Date.parse(t.since))
+  return (t.tag === undefined || str(t.tag)) && (t.until === undefined || date(t.until))
 }
 
 /** One tuple per non-blank line; a line that is not a tuple throws with its number. */

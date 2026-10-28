@@ -19,7 +19,7 @@ DATA MODEL (apps/trustweb/src/share_sink/)
                   {subject, relation, object, zone?, tag?, since, until?, by}
                 subject  person:<id> | tag:<id> | zone:<name>
                 relation has_tag | in_zone | may_read | may_write | grants
-                object   item:<id> | file:<id> | tag:<id> | zone:<name> (in_zone only)
+                object   item:<id> | file:<id> | tag:<id> | zone:<name> (in_zone only, never zone:self)
                 Zanzibar-shaped (user, relation, object) with typed ids.
 - check.ts      canAccess(store, person, item, now, activeRings) -> {allowed, why[]}. Allowed by individual grant, OR a
                 tag both carry, OR a zone at least as intimate as the item's. why[] = the matching tuples, which is what
