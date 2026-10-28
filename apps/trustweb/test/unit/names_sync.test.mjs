@@ -125,7 +125,7 @@ describe('callNames: one POST /name per intent', () => {
     expect(calls[0].body).toEqual({ code: CODE, secret: SECRET })
   })
   it.each([
-    [409, 'name_taken', ClaimError.Taken], [409, 'reserved', ClaimError.Reserved], [409, 'name_locked', ClaimError.NameLocked], [409, 'too_many_names', ClaimError.TooManyNames],
+    [409, 'name_taken', ClaimError.Taken], [409, 'reserved', ClaimError.Reserved], [409, 'name_locked', ClaimError.NameLocked], [409, 'name_held', ClaimError.NameHeld], [409, 'too_many_names', ClaimError.TooManyNames],
     [409, undefined, ClaimError.Taken], [403, 'forbidden', ClaimError.Forgotten], [429, undefined, ClaimError.RateLimited], [429, 'name-cap', ClaimError.NameCap], [400, 'bad_request', ClaimError.BadName],
     [500, undefined, ClaimError.Server], [503, undefined, ClaimError.Server],
   ])('status %i %s is %s', async (status, error, expected) => {

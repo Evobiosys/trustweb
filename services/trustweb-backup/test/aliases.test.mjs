@@ -186,14 +186,14 @@ test('aliases: an alias with no primary becomes the primary; re-claiming a held 
 
 test('aliases: a different primary REPLACES the old one and frees it (6b); the aliases stay; promoting an alias swaps', async () => {
   let t = T0
-  await withServer(0, { ...BASE, now: () => t }, async ({ srv }) => {
+  await withServer(0, { ...BASE, connectTtlDays: 2000, now: () => t }, async ({ srv }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     await claim(srv.port, { name: 'ada', ...a })
     await claim(srv.port, { name: 'ada.two', alias: true, ...a })
     assert.deepEqual((await claim(srv.port, { name: 'grace', ...a })).json, { name: 'grace', aliases: ['ada.two'], locked: [] })
     assert.equal((await who(srv.port, 'ada')).status, 404, 'the replaced primary no longer resolves')
-    t += 31 * DAY // a freed name rests 30 days (wave 15)
+    t += 731 * DAY // the replaced name is held for 2 years (wave 24b)
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
     assert.deepEqual((await claim(srv.port, { name: 'ada.two', ...a })).json, { name: 'ada.two', aliases: ['grace'], locked: [] }, 'PROMOTE: the alias becomes the primary, the old primary an alias')
     await claim(srv.port, { name: 'ada.three', alias: true, ...a })

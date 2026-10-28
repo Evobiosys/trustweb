@@ -31,7 +31,7 @@ export function openLinkChange(h: LinkChangeViewHooks): void {
     const answer = (yes: boolean): void => { if (!yes) openLinkChange(h); resolve(yes) }
     h.openSheet([
       el('h3', {}, [S.unLinkTitle]),
-      el('p', { 'data-link-sure': '1' }, [S.unLinkSure(from, to)]),
+      el('p', { 'data-link-sure': '1', 'data-name-change': '1' }, [S.unLinkSure(from, to)]),
       el('button', { class: 'btn btn-electric', 'data-link-yes': '1', onclick: () => answer(true) }, [S.unLinkYes]),
       el('button', { class: 'btn btn-ghost', 'data-link-no': '1', onclick: () => answer(false) }, [S.unLinkNo]),
     ])

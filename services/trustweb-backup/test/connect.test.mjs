@@ -510,7 +510,7 @@ test('names: release with "" frees the name (200 {name: ""}, idempotent), /who/ 
 
 test('names: a code that claims another name RELEASES the old one in the same write (one name per code)', async () => {
   let t = T0
-  await withServer(0, { ...BASE, now: () => t }, async ({ srv, backupDir }) => {
+  await withServer(0, { ...BASE, connectTtlDays: 2000, now: () => t }, async ({ srv, backupDir }) => {
     const a = await mint(srv.port)
     const b = await mint(srv.port, LONG2)
     assert.equal((await claim(srv.port, { name: 'ada', ...a })).status, 200)
@@ -518,7 +518,7 @@ test('names: a code that claims another name RELEASES the old one in the same wr
     assert.equal((await who(srv.port, 'ada')).status, 404)
     assert.equal((await who(srv.port, 'grace')).status, 302)
     assert.equal((await readStore(backupDir)).codes[a.code].name, 'grace')
-    t += 31 * DAY // a freed name rests 30 days (wave 15)
+    t += 731 * DAY // the replaced name is held for 2 years (wave 24b)
     assert.equal((await claim(srv.port, { name: 'ada', ...b })).status, 200)
   })
 })
@@ -788,7 +788,7 @@ test('store: concurrent mints serialise their writes; prune drops the expired an
     assert.equal(store.codeOf('ada'), made[0].code)
     t = 1100
     assert.equal(await store.prune(), 30)
-    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {}, claims: {}, released: {}, moved: {} })
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { v: 1, codes: {}, claims: {}, released: {}, moved: {}, holds: {} })
     assert.equal(store.codeOf('ada'), null)
     assert.equal(await store.prune(), 0)
   })

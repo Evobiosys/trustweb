@@ -121,6 +121,7 @@ function errorFor(status: number, json: unknown): ClaimError {
     switch (field(json, 'error')) {
       case 'reserved': return ClaimError.Reserved
       case 'name_locked': return ClaimError.NameLocked
+      case 'name_held': return ClaimError.NameHeld
       case 'too_many_names': return ClaimError.TooManyNames
       case 'alias_cap': return ClaimError.AliasCap
       case 'name_moved': return ClaimError.NameMoved
