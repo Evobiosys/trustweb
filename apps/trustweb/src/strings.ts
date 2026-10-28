@@ -1957,6 +1957,17 @@ export const S = {
   awayAskBody: (text: string, more: number) => `“${text}” Your web had something for it. They have stopped waiting, so nothing was sent; write to them if you can help.${more > 0 ? ` (${more} more)` : ''}`,
   awayAskMessage: (name: string) => `Message ${name}`,
   awayAskDismiss: 'Dismiss',
+  // Wave 24b (engagement.ts): close ties expire after n days without contact
+  setEngagement: 'Close ties expire after n days without contact',
+  setEngagementHint: (days: number) => days === 0 ? 'Off: nobody moves outward by themselves.' : `Close and Friend move one ring outward after ${days} days without a message, call, meeting or event together (0 = off). Two days before, you get one reminder at midday.`,
+  shareExpiryHint: (days: number) => days === 0 ? '' : `Close ties expire after ${days} days without contact; what you shared stays shared.`,
+  engagementSoonTitle: (name: string, ringName: string) => `${ringName} tie with ${name} expires in 2 days: write or call to keep it`,
+  engagementSoonOpen: 'Open card',
+  engagementReleased: (name: string, ringName: string) => `Released ${name} to ${ringName}`,
+  engagementReleasedBody: 'No contact for a while. What they can already see stays visible until you revoke it.',
+  engagementUndo: 'Undo',
+  engagementRevoke: 'Revoke what they can see',
+  engagementRevokeHint: (name: string) => `Revoking what ${name} already sees is not built yet: set their zone sections on the card by hand for now.`,
   // Wave 6i, THE ONE THING: an ask and its answer stay one conversation (chat_re.ts, reask.ts, card_stack.ts)
   chatRe: (text: string, when: string) => `Re: “${text}” · ${when}`,
   chatReplyingTo: (text: string, when: string) => `Replying to “${text}” · ${when}`,

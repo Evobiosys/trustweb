@@ -168,6 +168,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
+import { dropRelease, engagementDays, expiringSoon, localDay, noticeDue, parseDays, releaseTies, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES } from './ext/registry'
@@ -723,6 +724,24 @@ const stackDeps = {
   addLine: (): void => go(Screen.Inventory),
   ringLabel: (ring: Ring | undefined): string => S.ringLabel[ring ?? Ring.Acquaintance],
   now: (): number => Date.now(),
+  undoRelease: (personId: string): void => { undoRelease(st(), personId, Date.now()); save(); render() },
+  // The real revoke comes with the share lines; until then the card's sharing section opens with a hint.
+  revokeShares: (personId: string, name: string): void => { personSheet(personId); toast(S.engagementRevokeHint(name)) },
+  openPerson: (personId: string): void => personSheet(personId),
+}
+
+/**
+ * Wave 24b (engagement.ts): ties past their window move one ring outward (card with Undo); at the first check from 12:00 local, once a day,
+ * everyone whose window ends within 48 h gets a reminder (reminder switch, system notification while hidden). At open, on return and every 15 min.
+ */
+function checkEngagement(): void {
+  if (!state || solo || state.testOf) return
+  const now = Date.now()
+  if (releaseTies(state, now).length) { save(); render() }
+  if (!noticeDue(state, new Date(now))) return
+  const soon = expiringSoon(state, now)
+  const shown = soon.map((p) => notifyKind('reminder', S.engagementSoonTitle(p.name, S.ringLabel[p.ring]), S.engagementSoonOpen, () => personSheet(p.id)))
+  if (shown.length === 0 || shown.some(Boolean)) { state.engagementNoticeDay = localDay(new Date(now)); save() }
 }
 
 function dismissCard(card: StackCard): void {
@@ -733,6 +752,7 @@ function dismissCard(card: StackCard): void {
     case StackCardKind.Late: s.lateAnswers = dismissLateAnswer(s.lateAnswers, card.answer.id, now); break
     case StackCardKind.Unmatched: s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, card.ask.id, now); break
     case StackCardKind.Away: s.awayAsks = dismissAwayAsk(s.awayAsks, card.ask.id, now); break
+    case StackCardKind.Released: dropRelease(s, card.tie.personId); break
   }
   save()
 }
@@ -3119,7 +3139,14 @@ function profileEditor(): HTMLElement {
 function profileRow(): HTMLElement {
   return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
+    shareExpiryLine(),
   ])
+}
+
+/** Wave 24b: the grey reminder wherever something is shared with a person (nothing when expiry is off). */
+function shareExpiryLine(): HTMLElement | null {
+  const text = S.shareExpiryHint(engagementDays(st()))
+  return text ? el('p', { class: 'meta', 'data-share-expiry': '1' }, [text]) : null
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -3290,7 +3317,7 @@ function onContactRequest(peer: Peer, text: string): void {
 
 function sendProfileRow(p: Person): HTMLElement | null {
   const peer = st().peers.find((x) => x.id === p.peerId)
-  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]) : null
+  return peer ? el('div', {}, [el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]), shareExpiryLine()]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
@@ -5798,6 +5825,19 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('label', { class: 'radio', 'data-engagement-days': '1' }, [
+      el('b', {}, [S.setEngagement]),
+      el('input', {
+        class: 'field', type: 'number', min: '0', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagement,
+        // Only a change from the default of 30 is stored; empty or junk leaves it as it was.
+        onchange: (e: Event) => {
+          const d = parseDays((e.target as HTMLInputElement).value)
+          if (d !== null) { if (d === 30) delete s.engagementDays; else s.engagementDays = d; save() }
+          settingsSheet()
+        },
+      }),
+      el('small', {}, [S.setEngagementHint(engagementDays(s))]),
+    ]),
     el('button', {
       class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
       // Only "off" is stored: absent means on.
@@ -6348,6 +6388,7 @@ document.addEventListener('visibilitychange', () => {
   hiddenSince = 0
   if (!state || state.testOf?.handedOverAt) return
   // Review 6h: back in front after a long time away is an open too (an installed app on a phone is rarely started afresh).
+  checkEngagement()
   if (slept && appOpened()) showAskCards()
   net.activate(slept || nativeApp)
 })
@@ -6394,6 +6435,8 @@ if (state && !state.testOf?.handedOverAt) {
   offerApkHint(offerDemoContent)
   offerNotifications()
   cal?.start?.()
+  checkEngagement()
+  setInterval(checkEngagement, 15 * 60_000)
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

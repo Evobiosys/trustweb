@@ -14,7 +14,7 @@ import { liveAwayAsks } from './away_asks'
 import { ChatDirection } from './chat'
 import type { ChatBook } from './chat'
 import { shownLateAnswers } from './late_answers'
-import type { AppState, AwayAsk, LateAnswer, UnmatchedAsk } from './model'
+import type { AppState, AwayAsk, LateAnswer, ReleasedTie, UnmatchedAsk } from './model'
 import { liveUnmatchedAsks, showsUnmatched } from './unmatched_asks'
 
 /** The quiet "nothing matched" card hides itself after this long. */
@@ -27,6 +27,8 @@ export enum StackCardKind {
   Late = 'late',
   Unmatched = 'unmatched',
   Away = 'away',
+  /** Wave 24b (engagement.ts): a close tie expired and moved one ring outward. */
+  Released = 'released',
 }
 
 export type StackCard =
@@ -34,8 +36,9 @@ export type StackCard =
   | { kind: StackCardKind.Late; key: string; answer: LateAnswer }
   | { kind: StackCardKind.Unmatched; key: string; ask: UnmatchedAsk; more: number }
   | { kind: StackCardKind.Away; key: string; ask: AwayAsk; more: number }
+  | { kind: StackCardKind.Released; key: string; tie: ReleasedTie }
 
-export type StackState = Pick<AppState, 'chats' | 'lateAnswers' | 'unmatchedAsks' | 'awayAsks' | 'showUnmatchedAsks'>
+export type StackState = Pick<AppState, 'chats' | 'lateAnswers' | 'unmatchedAsks' | 'awayAsks' | 'showUnmatchedAsks' | 'releasedTies'>
 
 /** Threads with unread messages, the one written to last first: one card each, pointing at its newest message from them. */
 export function messageCards(book: ChatBook | undefined, hasCard: (peerId: string) => boolean): StackCard[] {
@@ -64,6 +67,7 @@ export function stackCards(s: StackState, now: number, demoPhone: boolean, hidde
   }
   const away = liveAwayAsks(s.awayAsks, now)
   if (away.length) cards.push({ kind: StackCardKind.Away, key: `away:${away[0].id}`, ask: away[0], more: away.length - 1 })
+  for (const tie of s.releasedTies ?? []) cards.push({ kind: StackCardKind.Released, key: `released:${tie.personId}:${tie.at}`, tie })
   return cards
 }
 
@@ -78,7 +82,8 @@ export function cardAsk(card: StackCard): { peerId: string; qid: string; text: s
     case StackCardKind.Late: return { peerId: card.answer.peerId, qid: card.answer.id, text: card.answer.ask, at: card.answer.askedAt ?? card.answer.at }
     case StackCardKind.Unmatched:
     case StackCardKind.Away: return { peerId: card.ask.peerId, qid: card.ask.id, text: card.ask.text, at: card.ask.at }
-    case StackCardKind.Message: return null
+    case StackCardKind.Message:
+    case StackCardKind.Released: return null
   }
 }
 

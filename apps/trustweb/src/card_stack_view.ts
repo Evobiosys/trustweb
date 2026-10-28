@@ -30,6 +30,10 @@ export interface StackViewDeps {
   /** "My Resources" on the nothing-matched card. */
   addLine(): void
   ringLabel(ring: Ring | undefined): string
+  /** Wave 24b (engagement.ts): the expired tie is put back / the card goes / what they can see is revoked (a stub for now). */
+  undoRelease(personId: string): void
+  revokeShares(personId: string, name: string): void
+  openPerson(personId: string): void
   now(): number
 }
 
@@ -98,6 +102,14 @@ function cardNode(deps: StackViewDeps, card: StackCard): HTMLElement | null {
       const a = card.ask
       return shell(card, S.awayAskTitle(a.from), S.awayAskBody(a.text, card.more),
         [messageButton(deps, card, S.awayAskMessage(a.from)), dismiss(S.awayAskDismiss, 'data-away-dismiss')], openWithAsk(deps, card))
+    }
+    case StackCardKind.Released: {
+      const t = card.tie
+      return shell(card, S.engagementReleased(t.name, deps.ringLabel(t.to)), S.engagementReleasedBody, [
+        button(S.engagementUndo, 'btn btn-electric btn-sm', 'data-release-undo', () => deps.undoRelease(t.personId)),
+        button(S.engagementRevoke, 'btn btn-ghost btn-sm', 'data-release-revoke', () => deps.revokeShares(t.personId, t.name)),
+        dismiss(S.awayAskDismiss, 'data-release-dismiss'),
+      ], () => deps.openPerson(t.personId))
     }
   }
 }
