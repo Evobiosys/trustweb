@@ -52,10 +52,10 @@ const CSS = `
 
 /**
  * The hosted service, where each person's own front door will come from
- * (wave 3: TrustInTheWeb.com = the freemium hosting site). A static link,
+ * (wave 3: trustweb.one = the project's front door). A static link,
  * labelled "coming soon": the site is being made in the same wave.
  */
-const HOSTED_SERVICE_URL = 'https://trustintheweb.com/'
+const HOSTED_SERVICE_URL = 'https://trustweb.one/'
 
 /** Where the live app sits next to the demo pages (the app root under the same base). */
 function liveUrl(base: string): string {

@@ -82,7 +82,7 @@ try {
   check('Settings lists Colour tags with the family preset on', (await cur.locator('[data-colour-tag=LNlpliq4GdNI]').isChecked()) && (await cur.locator('[data-colour-of=LNlpliq4GdNI]').inputValue()) === '#7b1fa2')
   await shot(page, 'settings-390')
   await page.locator('[data-sheet-home]').click()
-  await page.getByRole('button', { name: 'My Resources' }).click()
+  await page.getByRole('button', { name: 'Resources' }).click()
   await page.getByPlaceholder(/Motorbike/).fill('Spare room in Vienna for visitors')
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await page.locator('.inv', { hasText: 'Spare room in Vienna' }).locator('.inv-text').click()

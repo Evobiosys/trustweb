@@ -10,7 +10,7 @@ import { createIdentity } from '../../../demo/src/did.ts'
 import { buildConnectLinkUrl } from '../../../demo/src/connect_link.ts'
 
 const ORIGIN = 'https://app.trustintheweb.org'
-const IDEA2 = 'https://app.idea2.site'
+const ONE = 'https://app.trustweb.one'
 const CODE = 'AbCdEfGhIjKlMnOpQrStUv'
 const DID = createIdentity(`${ORIGIN}/relay`).did
 const OTHER_DID = createIdentity('https://elsewhere.example/relay').did
@@ -25,7 +25,7 @@ describe('parseAddInput: the pinned order', () => {
 
   it('a bare 22 character value is a code (and keeps its case)', () => expect(parse(CODE)).toEqual({ ok: true, kind: AddKind.Code, code: CODE }))
   it('a /c/<code> url on either app host is a code', () => {
-    for (const u of [`${ORIGIN}/c/${CODE}`, `${IDEA2}/c/${CODE}`, `${ORIGIN}/c/${CODE}/`, `${ORIGIN}/c/${CODE}#n=1`, `app.trustintheweb.org/c/${CODE}`]) {
+    for (const u of [`${ORIGIN}/c/${CODE}`, `${ONE}/c/${CODE}`, `${ORIGIN}/c/${CODE}/`, `${ORIGIN}/c/${CODE}#n=1`, `app.trustintheweb.org/c/${CODE}`]) {
       expect(parse(u)).toEqual({ ok: true, kind: AddKind.Code, code: CODE })
     }
   })
@@ -36,7 +36,7 @@ describe('parseAddInput: the pinned order', () => {
     expect(a.ok && a.kind === AddKind.LongLink && a.link.did === DID && a.link.from.id === 'p1p1p1p1p1p1' && a.link.from.displayName === 'Ada Lovelace').toBe(true)
     const noName = parse(LONG.replace(/&name=[^&]*/, ''))
     expect(noName.ok && noName.kind === AddKind.LongLink && noName.link.from.displayName === '').toBe(true)
-    expect(parse(`${IDEA2}/trustweb/?connect=${encodeURIComponent(DID)}&id=abc`).ok).toBe(true)
+    expect(parse(`${ONE}/trustweb/?connect=${encodeURIComponent(DID)}&id=abc`).ok).toBe(true)
   })
   it('"@" wins over everything: @ plus a code-shaped word is a bad name, not a code', () => {
     expect(parse('@' + CODE)).toEqual({ ok: false, error: ParseError.BadName })
@@ -80,7 +80,7 @@ describe('parseAddInput: what is refused', () => {
 describe('linkFromFinalUrl: where a redirect may end', () => {
   it('accepts a connect link on either app origin or this page\'s own', () => {
     expect(linkFromFinalUrl(LONG, ORIGIN)?.did).toBe(DID)
-    expect(linkFromFinalUrl(LONG.replace(ORIGIN, IDEA2), ORIGIN)?.did).toBe(DID)
+    expect(linkFromFinalUrl(LONG.replace(ORIGIN, ONE), ORIGIN)?.did).toBe(DID)
     expect(linkFromFinalUrl('http://127.0.0.1:9/?connect=' + encodeURIComponent(DID) + '&id=x', 'http://127.0.0.1:9')?.did).toBe(DID)
   })
   it.each([
@@ -190,11 +190,11 @@ describe('the DID path: the relay only', () => {
   })
   it('a broken DID cannot', () => expect(didReadiness('did:peer:2.Vz', ORIGIN)).toEqual({ ok: false, problem: DidProblem.BadDid }))
   it('a DID on another APP host can: the app hosts share one relay (review 6b, wave 6c)', () => {
-    const idea2Did = createIdentity('https://app.idea2.site/relay').did
+    const oneDid = createIdentity('https://app.trustweb.one/relay').did
     const orgDid = createIdentity('https://app.trustintheweb.org/relay').did
-    expect(didReadiness(idea2Did, 'https://app.trustweb.one')).toEqual({ ok: true, relayOrigin: 'https://app.idea2.site' })
+    expect(didReadiness(oneDid, 'https://app.trustintheweb.org')).toEqual({ ok: true, relayOrigin: 'https://app.trustweb.one' })
     expect(didReadiness(orgDid, 'https://app.trustweb.one')).toEqual({ ok: true, relayOrigin: 'https://app.trustintheweb.org' })
-    expect(didReadiness(DID, 'https://app.idea2.site')).toEqual({ ok: true, relayOrigin: ORIGIN })
+    expect(didReadiness(DID, 'https://app.trustweb.one')).toEqual({ ok: true, relayOrigin: ORIGIN })
   })
   it('a local or preview build reaches its own relay only, even for an app-host DID', () => {
     expect(didReadiness(DID, 'http://127.0.0.1:8983')).toEqual({ ok: false, problem: DidProblem.OtherRelay, relayOrigin: ORIGIN })

@@ -268,7 +268,7 @@ async function main() {
     await shot(ip, '03_install_ios_move')
     await ip.setViewportSize({ width: 390, height: 844 })
     await ip.getByRole('button', { name: 'Back up first' }).click()
-    await ip.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 5_000 })
+    await ip.getByRole('heading', { name: 'Resources' }).waitFor({ timeout: 5_000 })
     ok('"Back up first" leads to the backup card in Inventory', await ip.getByText('Do you want to back it up on a Swiss server?').isVisible())
     await ios.close()
 

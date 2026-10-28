@@ -86,7 +86,8 @@ describe('shapes, links', () => {
   })
   it('only the two app origins may register', () => {
     expect(canRegister(ORIGIN)).toBe(true)
-    expect(canRegister('https://app.idea2.site')).toBe(true)
+    expect(canRegister('https://app.trustweb.one')).toBe(true)
+    expect(canRegister('https://app.idea2.site')).toBe(false)
     expect(canRegister('http://127.0.0.1:8984')).toBe(false)
     expect(canRegister('https://evil.example')).toBe(false)
   })

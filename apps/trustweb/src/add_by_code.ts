@@ -221,7 +221,7 @@ const isAppHost = (origin: string): boolean => SHORT_LINK_ORIGINS.includes(origi
 /**
  * Can this page connect to this DID? A page always posts to the relay of its own origin (relay.ts resolveRelayOrigin), whatever a DID's
  * service block says. That reaches the DID when the block names this same origin, or when both are app hosts: the app hosts share one
- * relay process (wave 6c verified app.trustweb.one <-> app.idea2.site live). A local or preview build reaches its own relay only.
+ * relay process (wave 6c verified app.trustweb.one <-> app.trustintheweb.org live). A local or preview build reaches its own relay only.
  */
 export function didReadiness(did: string, origin: string): DidReadiness {
   try {

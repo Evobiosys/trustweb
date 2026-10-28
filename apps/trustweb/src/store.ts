@@ -1,6 +1,6 @@
 /**
  * Local persistence, namespaced so this app never reads or writes another
- * app's keys on the shared app.idea2.site origin (apps/demo's IndexedDB
+ * app's keys on the shared app origin (apps/demo's IndexedDB
  * 'wot-demo', its 'wot.lang', mobile-ui's 'resource-web.*'). Every key this
  * app owns starts with "trustweb.v1.", one record per persona, so the solo
  * split view's two phones ("holder" and "seeker") keep two separate
@@ -8,7 +8,7 @@
  *
  * `context` (seed.ts DemoContext: generic/emergent/ea) is OPTIONAL and only
  * ever passed by the solo split view. Passing it adds a namespace segment so
- * the three demo contexts, which all live under the one app.idea2.site
+ * the three demo contexts, which all live under the one app
  * origin, never read or reseed each other's localStorage record. Omitting
  * it (undefined) keeps the original key shape (`trustweb.v1.<persona>`) --
  * load-bearing, not just tidy: a real visitor using TrustWeb on their own
