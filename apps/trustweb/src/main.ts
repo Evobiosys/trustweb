@@ -357,6 +357,8 @@ const recordKeptAside = wasUnreadable(persona, storeCtx)
 // drawn again once that ends); and: another tab reset this record or gave it another identity, so this tab never saves again.
 let redrawWaiting = false
 let superseded = false
+/** Set once the backup card exists (far below); declared here, above the boot-time saves (migration, carry, repair, dev events), so save() can read it from the first call on. */
+let autoBackup: BackupView | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
@@ -418,8 +420,6 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
-/** Set once the backup card exists (below); a save during boot comes earlier and has nothing to tell it. */
-let autoBackup: BackupView | null = null
 function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
