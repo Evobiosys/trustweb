@@ -1007,6 +1007,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }
 
+/* zoom (wave 24b) */
+.zoom-glyph{margin-left:4px}
+.zoom-glyph.on{color:var(--electric,currentColor); background:rgba(128,128,128,.18)}
+.zoom-hint{margin:6px 16px 0; text-align:center}
+.zoom-rows{margin-top:8px}
+.zoom-row{display:block; width:100%; text-align:left; background:var(--card); border:0; border-radius:14px; padding:10px 12px; margin:0 0 8px; font:inherit; color:var(--ink); cursor:pointer}
+.zoom-row .cal-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+.zoom-row .cal-chip{font-size:11.5px; color:var(--ink-soft); background:rgba(128,128,128,.18); border-radius:999px; padding:2px 8px}
 /* ext calendar */
 .cal-outliner{margin:12px 0}
 .cal-outliner>summary{cursor:pointer; font-weight:600; padding:8px 0}

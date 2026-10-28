@@ -39,5 +39,6 @@ export const ICONS: Record<string, string> = {
   inperson: '<svg viewBox="0 0 24 24"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.8L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z"/><path d="M9 9c0 3 3 6 6 6l1-1.5-2-1-1 .8a4 4 0 0 1-2-2l.8-1-1-2Z"/></svg>',
   matrix: '<svg viewBox="0 0 24 24"><path d="M6 3H4v18h2M18 3h2v18h-2"/><path d="M9 8v8M9 9.5a2.5 2.5 0 0 1 5 0V16M14 9.5a2.5 2.5 0 0 1 3 .5"/></svg>',
+  zoom: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
 }

@@ -208,6 +208,7 @@ import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerN
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
 // imports walkthrough too) ran this whole app without an #app and stayed blank (live 2026-10-19). test/scan_demo_entries.mjs (CI, after the build) guards it.
 import { mountWalkthrough } from './walkthrough'
+import { ZOOM_OUT, back as zoomBack, connectedPeople, itemRows, press, type ItemSort, type Zoom, type ZoomTab } from './zoom'
 
 enum Screen {
   Start = 'start',
@@ -852,7 +853,7 @@ function icon(name: string): string {
   return ICONS[name]
 }
 
-function tabButton(target: string, label: string, name: string, onclick: () => void = () => go(target as Screen)): HTMLElement {
+function tabButton(target: string, label: string, name: string, onclick: () => void = () => tabTap(target as Screen)): HTMLElement {
   const b = el('button', { class: 'tab', 'data-go': target, 'aria-label': label, onclick })
   b.innerHTML = icon(name)
   b.append(label)
@@ -946,7 +947,33 @@ function draftInProgress(): boolean {
     || draft.plain || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.generalNotes.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
+/** Wave 24b: the zoom level per tab. Zooming in pushes one history entry, so Back zooms out (popstate below). */
+let zoom: Zoom = ZOOM_OUT
+let resQuery = ''
+let resSort: ItemSort = 'new'
+const zoomedIn = (): boolean => zoom.web || zoom.inventory
+
+/** A tab tap: the second press on the active Membranes or My Resources tab zooms in; everything else goes there as before. */
+function tabTap(target: Screen): void {
+  const next = press(target, screen)
+  if (target !== screen || zoomedIn() || next === ZOOM_OUT) { go(target); return }
+  zoom = next
+  history.pushState({ twZoom: target }, '')
+  render()
+}
+window.addEventListener('popstate', () => { if (zoomedIn()) { zoom = zoomBack(); render() } })
+
+/** The glyph next to the heading: zoomed out it zooms in, zoomed in it is the second way out (Back is the first). */
+function zoomGlyph(tab: ZoomTab): HTMLElement {
+  const on = zoom[tab]
+  const b = iconButton('zoom', on ? S.zoomOutAria : S.zoomInAria, () => (on ? history.back() : tabTap(tab as Screen)), 'zoom-glyph' + (on ? ' on' : ''))
+  b.setAttribute('aria-pressed', String(on))
+  b.dataset.zoomGlyph = tab
+  return b
+}
+
 function go(s: Screen): void {
+  if (s !== screen && zoomedIn()) { zoom = zoomBack(); history.back() }
   // Coming to Record from Inventory means "what", from Web "who" (owner
   // 2026-10-06), whichever of Record or Meeting the tap opens; only while
   // nothing has been named or recorded yet.
@@ -968,7 +995,7 @@ function go(s: Screen): void {
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
  * take is open the QR gives way to the "Recording" pill, on every screen.
  */
-function header(title: string, opts: { back?: () => void; right?: Node | null; after?: Node | null; qr?: boolean; pill?: boolean; more?: boolean } = {}): HTMLElement {
+function header(title: string, opts: { back?: () => void; glyph?: Node | null; right?: Node | null; after?: Node | null; qr?: boolean; pill?: boolean; more?: boolean } = {}): HTMLElement {
   statusPill = el('button', { class: 'status-pill' })
   // Record and Meeting show their own recording state, so the QR stays put there (owner 2026-10-06).
   statusPill.dataset.pill = opts.pill === false ? '0' : '1'
@@ -978,6 +1005,7 @@ function header(title: string, opts: { back?: () => void; right?: Node | null; a
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
+      opts.glyph ?? null,
     ]),
     el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
@@ -2394,13 +2422,16 @@ function screenChat(): Node[] {
 }
 
 function screenWeb(): Node[] {
-  const s = shown(st(), curatorHiddenIds())
+  const full = shown(st(), curatorHiddenIds())
+  const zin = zoom.web
+  // Zoomed out: the people I connect with most; the network option, search and the full list wait one press away.
+  const s = zin ? full : { ...full, people: connectedPeople(full, Date.now()) }
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
-  const network = s.people.length > 0 && networkChosen(stored)
+  const network = zin && s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
-  right.append(search)
+  if (zin) right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2409,16 +2440,17 @@ function screenWeb(): Node[] {
     network
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
       : ringsView(s, askMarks()),
+    s.people.length < full.people.length ? el('p', { class: 'meta zoom-hint', 'data-zoom-hint': '' }, [S.zoomHintWeb]) : null,
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
+  const clip = el('div', { class: 'scroll', 'data-zoom-level': zin ? 'in' : 'out' }, [layer])
   zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
-    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(network, s.people.length > 0),
+    header(S.webTitle, { glyph: zoomGlyph('web'), right, after: iconButton('settings', S.invSettings, settingsSheet) }),
+    ...(zin ? [webViewRow(network, s.people.length > 0)] : []),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -5934,6 +5966,20 @@ const backup = createBackupView({
 })
 autoBackup = backup
 
+/** My Resources zoomed in: one flat outliner over every item, with a search field and a sort; the calendar's rows follow (cal8). */
+function outlinerItems(s: AppState): Node[] {
+  const chip = (t: string): HTMLElement => el('span', { class: 'cal-chip' }, [t])
+  const rows = el('div', { class: 'zoom-rows' })
+  const draw = (): void => rows.replaceChildren(...itemRows(s.inventory, resQuery, resSort).map((i) => el('button', { class: 'prow zoom-row', 'data-item': i.id, onclick: () => itemSheet(i.id) }, [
+    el('b', {}, [i.text]),
+    el('div', { class: 'cal-chips' }, [chip(S.audienceLabel[i.audience]), i.included ? null : chip(S.zoomOff), i.tagAudience?.length ? chip(S.zoomTags(i.tagAudience.length)) : null]),
+  ])))
+  const input = el('input', { class: 'field', type: 'search', placeholder: S.zoomSearchPh, 'aria-label': S.zoomSearchPh, value: resQuery, oninput: (e: Event) => { resQuery = (e.target as HTMLInputElement).value; draw() } })
+  const sort = el('button', { class: 'btn btn-ghost btn-sm', 'data-zoom-sort': '', onclick: () => { resSort = resSort === 'new' ? 'az' : 'new'; sort.textContent = resSort === 'new' ? S.zoomSortNew : S.zoomSortAz; draw() } }, [resSort === 'new' ? S.zoomSortNew : S.zoomSortAz])
+  draw()
+  return [el('div', { class: 'add-row' }, [input, sort]), rows]
+}
+
 function screenInventory(): Node[] {
   const s = st()
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -5957,7 +6003,8 @@ function screenInventory(): Node[] {
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = icon('call')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
-  const list = el('div', { class: 'scroll pad' }, [
+  const zin = zoom.inventory
+  const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -5993,7 +6040,7 @@ function screenInventory(): Node[] {
     undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
   })
   return [
-    header(S.invTitle, { after: gear }),
+    header(S.invTitle, { glyph: zoomGlyph('inventory'), after: gear }),
     list,
     call,
     requests,
