@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, conflictParts, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -23,9 +23,22 @@ const CSS = `
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
+.twc-file,.twc-a,.twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twc-file{color:#0e6b73;background:#d9f3f2}.twc-a{color:#8a4a00;background:#ffe8c7}.twc-b{color:#6a2c9e;background:#efe0fb}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
 
 const POS_KEY = 'twf-ok-pos'
+
+/** A conflict text as nodes: the file and the two features (or branch / main) in their own colours (.twc-file, .twc-a, .twc-b). */
+export function conflictNodes(text: string): (Node | string)[] {
+  return conflictParts(text).map((p) => typeof p === 'string' ? p : Object.assign(document.createElement('span'), { className: `twc-${p.kind}`, textContent: p.text }))
+}
+/** The Approve box's status as ONE line (its body is a grid: loose names would each take a row), with the optional "open" link. */
+export function statusLine(text: string, url?: string): HTMLElement {
+  const line = document.createElement('div')
+  line.append(...conflictNodes(text))
+  if (url) line.append(' ', Object.assign(document.createElement('a'), { href: url, target: '_blank', textContent: 'open' }))
+  return line
+}
 
 export function initDevFeature(): void {
   if (window.top !== window) return // inside the second-device iframe: not the reviewer's page
@@ -128,8 +141,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
     pollStatus((j) => {
       if (stale(j)) return
-      body.replaceChildren(j.text ?? 'starting')
-      if (j.url) body.append(' ', Object.assign(document.createElement('a'), { href: j.url, target: '_blank', textContent: 'open' }))
+      body.replaceChildren(statusLine(j.text ?? 'starting', j.url))
       if (j.step === 'checks-failed' || j.step === 'failed') body.className = 'body warn'
       if (MERGE_DONE.includes(j.step) && j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
     }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
@@ -148,14 +160,14 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
         const since = Date.now() - 2000
         void read().then((q) => {
           const g = approveGate(q)
-          if (!g.ok) { go.disabled = true; hint.textContent = g.hint; return }
+          if (!g.ok) { go.disabled = true; hint.replaceChildren(...conflictNodes(g.hint)); return }
           return fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
         }).catch(() => { hint.textContent = 'Preview server not answering' })
       })
       const refresh = (): void => {
         if (!go.isConnected) return
         void read().then((q) => {
-          const g = approveGate(q); go.disabled = !g.ok; hint.textContent = g.ok ? APPROVE_HINT : g.hint
+          const g = approveGate(q); go.disabled = !g.ok; hint.replaceChildren(...conflictNodes(g.ok ? APPROVE_HINT : g.hint))
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }

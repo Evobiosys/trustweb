@@ -404,6 +404,8 @@ export const S = {
     mapCard: { label: 'MAP VIEW', text: 'See your network on the map' },
     helpTitle: 'Help & support',
     helpSettings: 'Open Settings',
+    helpWrite: 'Write to us',
+    helpWriteHint: 'Opens your mail app. Nothing from your web is attached.',
     noReminders: 'Nothing due.',
   },
   contactsHeading: (n: number) => `Contacts (${n})`,

@@ -205,6 +205,8 @@ export interface NoteLine {
   source?: ItemSource
   /** Wave 6: how many degrees past my direct contacts it may answer (cascade.ts). Absent: 0 for a note about a person. */
   degrees?: number
+  /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
+  eventId?: string
 }
 
 /** Where an item or a note came from: the chain of proof (wave 1733, owner 2026-10-06). A fixed set. */
@@ -269,6 +271,39 @@ export enum ProvenanceState {
   StepByStep = 'step-by-step',
 }
 
+/** Weekly windows (day 0..6, Monday = 0; "HH:MM" in the owner's zone), slot length (absent 30) and horizon in days (absent 14). */
+export interface Availability { windows: { day: number; from: string; to: string }[]; slotMin?: 30 | 60; horizonDays?: number }
+
+/** What a scheduling link carries of one person: free/busy only, never what the busy times are (I1). */
+export interface AvailSnap { name: string; tz: string; windows: Availability['windows']; slotMin: number; busy: { s: number; e: number }[]; at: number }
+
+export interface HeldAvail { personId?: string; name: string; snap: AvailSnap; at: number }
+
+/**
+ * A light task (wave 24, cal3; feature shape inspired by tasks.org, no code taken). Local plus my own devices (sync_core.ts, sealed): never in a
+ * share, pack, answer or cascade (cascade.ts askSources strips it). due is "YYYY-MM-DD", optionally with "THH:MM"; remindAt is ms.
+ */
+export interface TwTask {
+  id: string
+  title: string
+  due?: string
+  remindAt?: number
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly'
+  /** When it was ticked (ms). */
+  done?: number
+  tags?: string[]
+  list?: string
+  /** One level only: a subtask never has subtasks. */
+  parentId?: string
+  /** Person ids. */
+  people?: string[]
+  /** My Resources item this reminds me about, and whether to share it or ask about it. */
+  resourceId?: string
+  resourceWhy?: 'share' | 'ask'
+  /** Last change (ms). */
+  stamp: number
+}
+
 /**
  * An event I was at or will be at (E1, wave 7). Local only: never sent in a share, pack, answer or cascade
  * (cascade.ts askSources strips it). from/to are "YYYY-MM-DD", optionally with "THH:MM".
@@ -300,6 +335,10 @@ export interface TwEvent {
   srv?: string
   /** The 'tagged' hit went out once already. */
   hitTagged?: boolean
+  /** Wave 24 (ext/calendar): person ids I invited. Absent = none. Travels only between my own devices (sync_core.ts); never in an event link (event_link.ts whitelist). */
+  people?: string[]
+  /** Wave 24 (cal6): the UID of the .ics event this was imported from, so a second import updates it. Absent = none. */
+  icsUid?: string
 }
 
 export interface Person {
@@ -499,6 +538,8 @@ export interface InventoryItem {
    * their ring would not admit them, direct asks only. Absent or empty: the rings alone decide (conservative default, I9).
    */
   tagAudience?: string[]
+  /** Wave 24 (calendar at_event.ts): recorded while I was at this event (TwEvent.id). Absent = not tied to an event. Tags only; sends nothing. */
+  eventId?: string
 }
 
 /** One note added as context to an inventory item. */
@@ -823,7 +864,7 @@ export interface ReceivedShare {
   keptAs?: string
 }
 
-/** Which side of the raised Record button each outer tab sits on (Inventory settings). */
+/** Wave 24: no longer read. My Resources is pinned to the far right of the bottom row (tab_row.ts); old records may still carry the value, it changes nothing and is never written again. */
 export enum TabOrder {
   WebLeft = 'web-left',
   InventoryLeft = 'inventory-left',
@@ -844,6 +885,10 @@ export interface NotifyKinds {
   ask: boolean
   /** A message in a chat. */
   chat: boolean
+  /** A task or resource reminder I set (wave 24). Absent in an older record: on. */
+  reminder: boolean
+  /** Someone joined or shared at the event I am at (wave 24, calendar at_event.ts); never from a wire. Absent in an older record: on. */
+  event: boolean
 }
 
 export interface AppState {
@@ -867,8 +912,20 @@ export interface AppState {
   notifyKinds?: NotifyKinds
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
-  /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
+  /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
+  tasks?: TwTask[]
+  /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
+  atEvent?: { eventId: string; since: number; bell?: boolean }
+  /** Scheduling (calendar module, wave 24 cal5). THIS DEVICE ONLY in v1 (not in sync_core's bundle). Absent = not set up; the three fields below likewise = none. */
+  availability?: Availability
+  /** Other people's availability snapshots I keep (their own book link, one tap). */
+  heldAvailability?: HeldAvail[]
+  /** Scheduling links I made: the id a booking reply must carry, and which held names were ticked into it. */
+  bookLinks?: { id: string; at: number; held: string[] }[]
+  /** Wave 24: ignored, see TabOrder. */
   tabOrder?: TabOrder
+  /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
+  tabRow?: string[]
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */

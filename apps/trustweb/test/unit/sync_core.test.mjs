@@ -65,7 +65,7 @@ describe('merge', () => {
     expect(b.people.map((p) => p.id).sort()).toEqual(['a', 'b'])
   })
   it('counts people, lines, resources, meetings', () => {
-    expect(countsOf({ people: [person('a', 'A', [line('1'), line('2')])], inventory: [item('r', 'x')], meetings: [] })).toEqual({ people: 1, lines: 2, resources: 1, meetings: 0, events: 0, messages: 0 })
+    expect(countsOf({ people: [person('a', 'A', [line('1'), line('2')])], inventory: [item('r', 'x')], meetings: [] })).toEqual({ people: 1, lines: 2, resources: 1, meetings: 0, events: 0, tasks: 0, messages: 0 })
   })
 })
 

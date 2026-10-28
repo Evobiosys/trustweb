@@ -58,7 +58,8 @@ import { check as checkFreshness, remember as rememberNonce } from './connect_fr
 import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
-import { cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
+import { renamedTo } from './card_name'
+import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
 import { type ConnectLinkParams } from '../../demo/src/connect_link'
@@ -66,7 +67,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -74,11 +75,17 @@ import {
 } from './contact_share'
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
-import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText } from './chat'
+import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
+import { chatListRows } from './chat_list'
+import { availableTabs, resolveRow, setSlot } from './tab_row'
+import type { TabId } from './tab_row'
+import { viewHeading, viewMenuItems } from './view_menu'
+import type { WebView } from './view_menu'
+import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
-import { askWhenLabel, flushPending, renderChat, renderShareControls } from './chat_view'
+import { askWhenLabel, flushPending, renderChat, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -116,7 +123,7 @@ import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
 import type { BackupView } from './backup_view'
-import { RecordOrigin, recordModeFor } from './record_origin'
+import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { UpdateResult, createUpdateCheck, reloadFresh } from './app_update'
 import { devicesSectionChildren } from './devices_section'
@@ -163,9 +170,13 @@ import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
+import { EXT_MODULES } from './ext/registry'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
-import { decodeEventLink, linkOrigin } from './event_link'
+import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
+import type { EventBy } from './event_link'
+import { acceptEvent, dragPerson } from './drag_payload'
+import { eventDropItem } from './event_drop'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
@@ -212,6 +223,8 @@ enum Screen {
   Feed = 'feed',
   /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
   Events = 'events',
+  /** Wave 24: every chat, newest first (bottom row). */
+  Chat = 'chat',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -269,6 +282,8 @@ interface Draft {
   plain: boolean
   /** The inventory item picked under "what": the notes are added to it as context instead of making a new line (wave 5). */
   itemId?: string
+  /** Wave 24 (calendar): started while I was at this event; the saved notes carry it. One tap on the chip drops it. */
+  eventId?: string
 }
 
 /** A pause in the transcript: after how many segments, at which recording time, and for how long once resumed. */
@@ -332,9 +347,11 @@ let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingC
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
+// A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
+let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
 const wantInstall = params.get('install') === '1'
 /** Wave 18 review b: a page opened by a link (connect, share, event, hand-over, install) shows what the link is for; the Desk does not open under it. */
-const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || handover || wantInstall)
+const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || pendingBook || handover || wantInstall)
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
@@ -357,6 +374,8 @@ const recordKeptAside = wasUnreadable(persona, storeCtx)
 // drawn again once that ends); and: another tab reset this record or gave it another identity, so this tab never saves again.
 let redrawWaiting = false
 let superseded = false
+/** Set once the backup card exists (far below); declared here, above the boot-time saves (migration, carry, repair, dev events), so save() can read it from the first call on. */
+let autoBackup: BackupView | null = null
 // A preview slot (dev.trustweb.one) opens with Jakob's record too (dev_record.ts, 2026-10-19): fetched after boot; when it changed
 // what is stored, this tab stops saving and reloads into it.
 if (!solo) void seedHostedDevRecord(persona).then((changed) => { if (changed) { superseded = true; location.reload() } })
@@ -418,8 +437,6 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
-/** Set once the backup card exists (below); a save during boot comes earlier and has nothing to tell it. */
-let autoBackup: BackupView | null = null
 function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
@@ -513,7 +530,7 @@ function freshDraft(personId?: string): Draft {
   return {
     personId, name: p?.name ?? '', context: p?.context ?? '', text: '',
     mode: RecordMode.Solo, consent: false, points: [], segments: [], lines: [],
-    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false,
+    ring: p?.ring ?? Ring.Acquaintance, about: AboutKind.Who, extraLines: [], pauses: [], generalNotes: '', plain: false, eventId: state ? eventForDraft(state) : undefined,
   }
 }
 
@@ -726,10 +743,35 @@ function ownDoorDid(): string | null {
 }
 
 /** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
-function notify(kind: NotifyKind, body: string): void {
+function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') void showNotification(S.appName, body)
+  if (Notification.permission === 'granted') void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined)
 }
+
+/**
+ * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
+ * are on; page open: a notice with an Open button when the reminder switch is on.
+ */
+function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void): boolean {
+  if (!state || !kindsOf(state)[kind]) return false
+  if (document.hidden) {
+    if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
+    void showNotification(S.appName, title)
+    return true
+  }
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+  return true
+}
+
+/** "Turn these off" on the first chat notification: the chat switch under Settings > Notifications goes off, with the way back said. */
+function turnChatNotificationsOff(): void {
+  const s = st()
+  s.notifyKinds = { ...kindsOf(s), chat: false }
+  save()
+  hideMsgNotice()
+  toast(S.chatNotifOffDone)
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if ((e.data as { t?: string } | null)?.t === 'chat-off' && state) turnChatNotificationsOff() })
 
 // ---------------------------------------------------------------------------
 // shell
@@ -810,8 +852,8 @@ function icon(name: string): string {
   return ICONS[name]
 }
 
-function tabButton(target: Screen, label: string, name: string): HTMLElement {
-  const b = el('button', { class: 'tab', 'data-go': target, onclick: () => go(target) })
+function tabButton(target: string, label: string, name: string, onclick: () => void = () => go(target as Screen)): HTMLElement {
+  const b = el('button', { class: 'tab', 'data-go': target, 'aria-label': label, onclick })
   b.innerHTML = icon(name)
   b.append(label)
   return b
@@ -824,16 +866,39 @@ function recordButton(): HTMLElement {
   return b
 }
 
+const TAB_ICON: Record<Exclude<TabId, 'record'>, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', desk: 'list' }
+
+function tabFor(id: TabId): HTMLElement {
+  if (id === 'record') return recordButton()
+  const label = S.tabLabel[id]
+  switch (id) {
+    case 'events': return tabButton(id, label, TAB_ICON[id], () => openEvents())
+    case 'network': return tabButton(id, label, TAB_ICON[id], () => chooseView('network'))
+    case 'desk': return tabButton(id, label, TAB_ICON[id], () => chooseView('desk'))
+    default: return tabButton(id, label, TAB_ICON[id])
+  }
+}
+
+function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
+  return { events: !state || featureOn(state, 'events'), feed: Boolean(state) && feedOn(state as AppState), inventory: !state || featureOn(state, 'inventory') }
+}
+
 function renderTabs(): void {
-  const web = tabButton(Screen.Web, S.navWeb, 'web')
-  const inv = state && !featureOn(state, 'inventory') ? null : tabButton(Screen.Inventory, S.navInventory, 'inventory')
-  const invLeft = state?.tabOrder === TabOrder.InventoryLeft
-  // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
-  const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(...[invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv].filter((b): b is HTMLElement => b !== null))
+  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | My Resources.
+  tabs.replaceChildren(...resolveRow(state?.tabRow, tabFlags()).map(tabFor))
   tabs.classList.toggle('four', tabs.children.length > 3)
+  updateChatBadge()
 }
 renderTabs()
+
+/** The unread count on the Chat tab: filled in the tab's own colour, never red. */
+function updateChatBadge(): void {
+  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"]')
+  if (!chat) return
+  const n = state ? unreadTotal(state.chats ?? {}) : 0
+  chat.querySelector('.tab-badge')?.remove()
+  if (n > 0) chat.append(el('span', { class: 'tab-badge', role: 'img', 'aria-label': S.chatTabUnread(n) }, [el('b', {}, [n > 99 ? '99+' : String(n)])]))
+}
 
 /** The screen that belongs to the draft's mode: Record (solo) or Meeting. */
 function recordScreen(): Screen {
@@ -846,6 +911,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Web:
     case Screen.StillTrue:
     case Screen.Events:
+    case Screen.Chat:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1035,11 +1101,13 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Events))
+      || (target === Screen.Web && screen === Screen.StillTrue)
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
+  updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
+  const frame = screen === Screen.Start ? null : cal?.frame?.()
   const body = (() => {
     if (state?.testOf?.handedOverAt) return screenHandedOver()
     switch (screen) {
@@ -1053,10 +1121,11 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return eventsView.body()
+      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
+      case Screen.Chat: return screenChat()
     }
   })()
-  host.replaceChildren(...body)
+  host.replaceChildren(...(frame ? [frame] : []), ...body)
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   autoDesk()
@@ -1686,6 +1755,7 @@ function screenStart(): Node[] {
     else void completePendingConnect()
     maybeOpenPendingShare()
     maybeOpenPendingEvent()
+    maybeOpenPendingBook()
   }
   name.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') submit() })
   return [el('div', { class: 'start' }, [
@@ -2282,20 +2352,45 @@ function openEvents(eventId?: string): void {
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 
-function webViewToggle(network: boolean, anyone: boolean): HTMLElement {
-  const pick = (value: 'rings' | 'network'): void => {
-    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
-    render()
-  }
+/** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
+function webViewRow(network: boolean, anyone: boolean): HTMLElement {
+  const heading = viewHeading(network ? 'network' : 'rings')
   return el('div', { class: 'web-view-row' }, [
-    anyone ? el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
-      el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
-      el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
-    ]) : el('span', { class: 'web-view' }),
-    el('div', { class: 'seg desk-side', role: 'group', 'aria-label': S.deskSideAria }, [
-      el('button', { 'data-desk-side': '', onclick: () => openDeskSheet() }, [S.deskSide]),
-    ]),
+    el('span', { class: 'web-view' }, [heading ? S.tabLabel[heading] : '']),
+    iconButton('more', S.viewMenuAria, () => viewSheet(network, anyone), 'view-menu-btn'),
   ])
+}
+
+function viewSheet(network: boolean, anyone: boolean): void {
+  openSheet([
+    el('h3', {}, [S.viewMenuTitle]),
+    ...viewMenuItems(network ? 'network' : 'rings', anyone).map(({ view, on }) => el('button', {
+      class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
+    }, [el('b', {}, [(on ? '✓ ' : '') + (view === 'rings' ? S.netRings : view === 'network' ? S.netNetwork : S.deskSide)])])),
+  ])
+}
+
+/** Membranes and Network are remembered (WEB_VIEW_KEY); Desk opens the Desk sheet as the old side button did. */
+function chooseView(view: WebView): void {
+  if (view === 'desk') { openDeskSheet(); return }
+  try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
+  go(Screen.Web)
+}
+
+/** Wave 24: every chat, newest first; a tap opens the chat sheet. */
+function screenChat(): Node[] {
+  const s = st()
+  const now = Date.now()
+  const rows = chatListRows(s.chats, s.people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
+  return [
+    header(S.chatListTitle),
+    el('div', { class: 'scroll ppl' }, rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+      avatar(r.name, r.personId),
+      el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
+      el('span', { class: 'when' }, [ageLabel(r.at, now)]),
+      r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
+    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])]),
+  ]
 }
 
 function screenWeb(): Node[] {
@@ -2305,7 +2400,7 @@ function screenWeb(): Node[] {
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const network = s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
-  right.append(...(featureOn(st(), 'events') ? [iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')] : []), search)
+  right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2323,7 +2418,7 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewToggle(network, s.people.length > 0),
+    webViewRow(network, s.people.length > 0),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2559,6 +2654,7 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
+    ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
 }
@@ -2625,13 +2721,14 @@ function itemTagChips(item: InventoryItem): HTMLElement[] {
 /** The person whose card is the open sheet, or null (a contact that arrives late redraws it, see applyContact). */
 let cardOpenFor: string | null = null
 
+/** The card's name heading; draggable onto a calendar event (drag_payload.ts). */
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
-    el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` }, [displayName(p.name).text]),
+    cardNameHeading(p),
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
@@ -2654,6 +2751,32 @@ function personSheet(personId: string): void {
     archiveRow(p),
   ])
   cardOpenFor = p.id
+}
+
+/** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
+function cardNameHeading(p: Person): HTMLElement {
+  const h = el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` })
+  const show = (): void => h.replaceChildren(el('button', {
+    class: 'card-name-btn', 'aria-label': S.cardNameEditAria(p.name), 'data-card-name-edit': p.id, onclick: edit,
+  }, [displayName(p.name).text]))
+  const edit = (): void => {
+    const input = el('input', { class: 'field card-name-input', 'data-card-name-input': p.id, 'aria-label': S.cardNameEditAria(p.name), maxlength: String(HELLO_NAME_MAX) })
+    input.value = p.name
+    let done = false
+    const finish = (save_: boolean): void => {
+      if (done) return
+      done = true
+      const next = save_ ? renamedTo(p.name, input.value) : null
+      if (next) { p.name = next; save(); render(); personSheet(p.id) } else show()
+    }
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false) })
+    input.addEventListener('blur', () => finish(true))
+    h.replaceChildren(input)
+    input.focus(); input.select()
+  }
+  dragPerson(h, p) // calendar module: the heading is a drag source (drop a person onto an event)
+  show()
+  return h
 }
 
 /** Wave 15: Block / Unblock on the card. Blocked: asks unanswered, chat unseen, nothing sent, dot hidden; unblock stores 0 so it wins a sync. */
@@ -3232,8 +3355,11 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   save()
   if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
-  notify('chat', S.chatNotifBody(peer.displayName))
-  newMessageNotice(peer, r.message.key)
+  // Wave 24: the first chat notification a device shows carries "Turn these off" (notify_first.ts); a card in the Web stack is no notification.
+  const inCard = screen === Screen.Web && !queryOpen && !sheet.classList.contains('on')
+  const offer = wantsKind(s, 'chat') && (document.hidden || !inCard) && firstChatNotice(window.localStorage)
+  notify('chat', S.chatNotifBody(peer.displayName), offer)
+  newMessageNotice(peer, r.message.key, offer)
 }
 
 /**
@@ -3241,7 +3367,7 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
  * above the rings (it stays until read); anywhere else (or under an open sheet or dock) a notice of its own for a few seconds. Both open
  * the chat at that message.
  */
-function newMessageNotice(peer: Peer, key: string): void {
+function newMessageNotice(peer: Peer, key: string, offerOff = false): void {
   const person = personOf(st().people, peer.id)
   const sheetOpen = sheet.classList.contains('on')
   drawCardStack()
@@ -3250,14 +3376,15 @@ function newMessageNotice(peer: Peer, key: string): void {
   // Review 6i (card_stack.ts msgNoticePlace): never over a control: not over the consent prompt, at the top over an open sheet.
   const place = msgNoticePlace(overlay.classList.contains('on'), sheetOpen)
   if (place === NoticePlace.None) { toast(title); return }
-  showMsgNotice(title, person ? () => chatSheet(person.id, { scrollTo: key }) : null, place)
+  showMsgNotice(title, person ? () => chatSheet(person.id, { scrollTo: key }) : null, place, offerOff)
 }
 
-function showMsgNotice(title: string, open: (() => void) | null, place: NoticePlace): void {
+function showMsgNotice(title: string, open: (() => void) | null, place: NoticePlace, offerOff = false): void {
   const openIt = (): void => { hideMsgNotice(); open?.() }
   msgNoticeEl.replaceChildren(
     el('span', { class: 'msg-notice-text' }, [title]),
     ...(open ? [el('button', { class: 'stack-open', type: 'button', 'data-card-open': 'message', 'aria-label': S.cardOpenAria(title), onclick: openIt }, [S.cardOpen])] : []),
+    ...(offerOff ? [el('button', { class: 'stack-open', type: 'button', 'data-chat-notif-off': '', onclick: turnChatNotificationsOff }, [S.chatNotifOff])] : []),
   )
   msgNoticeEl.onclick = (e) => { if (!(e.target as HTMLElement).closest('button')) openIt() }
   msgNoticeEl.classList.toggle('tappable', open !== null)
@@ -3758,11 +3885,36 @@ const curator = createCurator({
   closeDesk: closeSheet,
   showPhoneVersion,
 })
+const eventsBy = (): EventBy | undefined => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined)
+const undoNotice = (title: string, onUndo: () => void): void =>
+  showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000)
 const eventsView = createEventsView({
   state: st, save, header, leave: () => go(Screen.Web), redraw: render, curatorPerson, avatar,
-  undoNotice: (title, onUndo) => showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-event': '', onclick: () => { hideNotice(); onUndo() } }, [S.eventsUndo])], 30000),
+  undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
-  by: () => (st().me.displayName ? { name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) } : undefined),
+  by: eventsBy,
+  extra: (ev) => cal?.eventSection?.(ev) ?? [],
+})
+const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
+  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
+  openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
+  addEvent: (fromIso) => eventsView.openForm(fromIso),
+  showList: () => eventsView.showList(),
+  avatar,
+  undo: undoNotice,
+  notify: notifyKind,
+  atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
+  openItem: (id) => { closeSheet(); itemSheet(id) },
+  openCalendar: () => { closeSheet(); go(Screen.Events) },
+  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
+  sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
+  me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
+  sendInvite: async (personId, text) => {
+    const peerId = st().people.find((p) => p.id === personId)?.peerId
+    const ok = peerId ? await submitText(chatIo(), peerId, text) : false
+    toast(ok ? S.cal.inviteSent : S.chatOffline)
+    return ok
+  },
 })
 
 const feed = createFeedView({
@@ -4007,6 +4159,13 @@ function maybeOpenPendingShare(): void {
   void openShare(link)
 }
 
+function maybeOpenPendingBook(): void {
+  if (!pendingBook || !state) return
+  const hash = pendingBook
+  pendingBook = ''
+  cal?.openLink?.(hash)
+}
+
 /** A pasted event link (the whole URL or just its fragment): opens the join sheet. */
 function joinLink(text: string): boolean {
   const ev = decodeEventLink(text.slice(Math.max(0, text.indexOf('#'))))
@@ -4078,6 +4237,10 @@ async function sendSolo(): Promise<void> {
   next()
 }
 
+/** The "For the people at <event> ×" chip of a draft started at an event (calendar module); one tap drops the tag. */
+const recEventChip = (): HTMLElement | null =>
+  (draft.eventId ? cal?.recordChip?.(draft.eventId, () => { delete draft.eventId; render() }) : null) ?? null
+
 function screenRecord(): Node[] {
   const live = recorder.live
   const paused = recorder.paused
@@ -4094,6 +4257,7 @@ function screenRecord(): Node[] {
   return [
     header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
     el('div', { class: 'scroll pad memo' }, [
+      recEventChip(),
       el('div', { class: 'memo-hero' }, [
         circle,
         el('span', { class: 'rec-clock', id: 'rec-clock' }, [clock(totalMs() + recorder.elapsed())]),
@@ -4334,6 +4498,7 @@ function screenMeeting(): Node[] {
   return [
     header(S.meetingTitle, { right: pastSearchButton(), after: justMe, pill: false }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       el('label', { class: 'lbl' }, [S.recWho]), who,
       el('label', { class: 'lbl' }, [S.recWhere]), where,
       el('div', { class: 'consent-row' }, [el('label', { class: 'consent' }, [consentBox, consentText]), info]),
@@ -5174,6 +5339,7 @@ function screenReview(): Node[] {
   return [
     header(S.reviewTitle(draft.name.trim()), { back: () => { draft.lines = []; go(recordScreen()) } }),
     el('div', { class: 'scroll pad' }, [
+      recEventChip(),
       takes.length ? recordingCard() : null,
       transcriptStillComing(draftMeeting()) ? el('p', { class: 'meta job-state', 'data-job': 'running' }, [S.reviewServerPending]) : null,
       el('p', { class: 'hint' }, [S.reviewLead]),
@@ -5275,6 +5441,7 @@ function saveDraftWhat(): void {
     s.inventory.push({
       id: randomId(8), text: text.toLowerCase().includes(what.toLowerCase()) ? text : `${what}: ${text}`,
       audience: l.audience, included: true, createdAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()
@@ -5311,6 +5478,7 @@ function saveDraft(): void {
     p.lines.push({
       id: l.id, text: l.text.trim(), tag: l.tag, customTag: l.customTag, audience: l.audience,
       status: LineStatus.Current, notedAt: now, checkedAt: now, source: l.typed ? typedSource() : recordedSource(meeting, draft.meetingId, l),
+      ...(draft.eventId ? { eventId: draft.eventId } : {}),
     })
   }
   save()
@@ -5516,16 +5684,27 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
+/** Settings > Bottom row: one picker per slot; the last slot (My Resources) is locked. */
+function tabRowSettings(s: AppState): (Node | null)[] {
+  const flags = tabFlags()
+  const row = resolveRow(s.tabRow, flags)
+  const locked = flags.inventory
+  const free = locked ? row.length - 1 : row.length
+  return [
+    ...row.slice(0, free).map((id, i) => el('label', { class: 'tab-slot', 'data-tab-slot': String(i) }, [
+      el('small', {}, [S.setTabRowSlot(i + 1)]),
+      el('select', { 'aria-label': S.setTabRowSlot(i + 1), onchange: (e: Event) => { s.tabRow = setSlot(row, i, (e.target as HTMLSelectElement).value, flags); save(); renderTabs(); render(); settingsSheet() } },
+        availableTabs(flags).filter((t) => t !== 'inventory').map((t) => el('option', { value: t, ...(t === id ? { selected: '' } : {}) }, [S.tabLabel[t]]))),
+    ])),
+    locked ? el('p', { class: 'meta', 'data-tab-slot-locked': '' }, [S.tabLabel.inventory + ' · ' + S.setTabRowLocked]) : null,
+  ]
+}
+
 function settingsSheet(): void {
   const s = st()
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
-  const order = s.tabOrder ?? TabOrder.WebLeft
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
-  const pick = (o: TabOrder, label: string): HTMLElement => el('button', {
-    class: 'radio' + (order === o ? ' on' : ''),
-    onclick: () => { s.tabOrder = o; save(); renderTabs(); render(); settingsSheet() },
-  }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
     viewRow(),
@@ -5582,9 +5761,8 @@ function settingsSheet(): void {
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
-    el('h4', { class: 'eyebrow' }, [S.setTabs]),
-    pick(TabOrder.WebLeft, S.setTabsWebLeft),
-    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
+    el('h4', { class: 'eyebrow' }, [S.setTabRow]),
+    ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
     ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
@@ -5779,9 +5957,7 @@ function screenInventory(): Node[] {
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = icon('call')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
-  return [
-    header(S.invTitle, { after: gear }),
-    el('div', { class: 'scroll pad' }, [
+  const list = el('div', { class: 'scroll pad' }, [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -5804,8 +5980,21 @@ function screenInventory(): Node[] {
           onOffSwitch(item.included, () => { item.included = !item.included; save(); render() }),
         ]),
       ])),
+      ...(cal?.resourcesSection?.() ?? []),
       backup.card(),
-    ]),
+    ])
+  // A calendar event dragged here (mouse/trackpad; phones keep the pickers) becomes an item tagged with it.
+  acceptEvent(list, (ref) => {
+    const item = eventDropItem(s, ref, randomId(8), Date.now())
+    if (!item) { toast(S.cal.dropUnknown); return }
+    s.inventory.unshift(item)
+    save()
+    render()
+    undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
+  })
+  return [
+    header(S.invTitle, { after: gear }),
+    list,
     call,
     requests,
   ]
@@ -6197,12 +6386,14 @@ if (state && !state.testOf?.handedOverAt) {
   void completePendingConnect()
   maybeOpenPendingShare()
   maybeOpenPendingEvent()
+  maybeOpenPendingBook()
   // Wave 6f/6h: the cards about asks (late answers, nothing matched, asked while away); asks kept while closed arrive with the drain.
   setTimeout(showAskCards, 1500)
   // The server only learns of this phone when its code is first shown (Meet); a phone that has one keeps it current.
   if (state.connectCode) void ensureConnectCode()
   offerApkHint(offerDemoContent)
   offerNotifications()
+  cal?.start?.()
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

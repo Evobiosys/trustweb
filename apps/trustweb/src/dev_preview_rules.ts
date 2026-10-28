@@ -174,6 +174,29 @@ export const applyStuck = (since: number, now: number): boolean => now - since >
 
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
+/** A name in a conflict text: the file, the first feature (or branch) and the second one (feature or main), each drawn in its own colour (Jakob 2026-10-28). */
+export interface ConflictName { text: string; kind: 'file' | 'a' | 'b' }
+/** Splits the ops status "conflict in <file> between <a> and <b>" and raw git output ("<branch>: CONFLICT …", "Merge conflict in <file>") into plain text and names. */
+export function conflictParts(text: string): Array<string | ConflictName> {
+  const names: Array<{ at: number } & ConflictName> = []
+  const add = (m: RegExpExecArray, kinds: ConflictName['kind'][]): void => {
+    let from = m.index
+    kinds.forEach((kind, i) => { const t = m[i + 1]!; const at = text.indexOf(t, from); names.push({ at, text: t, kind }); from = at + t.length })
+  }
+  for (const m of text.matchAll(/conflict in (\S+) between (\S+) and (\S+)/g)) add(m, ['file', 'a', 'b'])
+  for (const m of text.matchAll(/(?<=^|\s)(\S+): CONFLICT/gm)) add(m, ['a'])
+  for (const m of text.matchAll(/Merge conflict in (\S+)/g)) add(m, ['file'])
+  const out: Array<string | ConflictName> = []
+  let pos = 0
+  for (const n of names.sort((x, y) => x.at - y.at)) {
+    if (n.at < pos) continue
+    if (n.at > pos) out.push(text.slice(pos, n.at))
+    out.push({ text: n.text, kind: n.kind }); pos = n.at + n.text.length
+  }
+  if (pos < text.length) out.push(text.slice(pos))
+  return out
+}
+
 /** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'

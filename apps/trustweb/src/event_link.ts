@@ -18,12 +18,12 @@ export interface EventBy { name: string; did?: string }
 const MAX_BYTES = 4096
 const SRV = /^[0-9a-f]{16}$/
 
-function toBase64Url(text: string): string {
+export function toBase64Url(text: string): string {
   const bin = String.fromCharCode(...new TextEncoder().encode(text))
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function fromBase64Url(b64: string): string {
+export function fromBase64Url(b64: string): string {
   const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'))
   return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
 }

@@ -4,9 +4,10 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
+import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
 import type { AppState, Person, TwEvent } from './model'
@@ -33,6 +34,8 @@ export interface EventsViewHooks {
   origin: string
   /** Who I am to a link's reader: my name and, when I have one, my relay identity. */
   by: () => EventBy | undefined
+  /** Extension modules' sections on the event page (ext/registry.ts), drawn above Advanced. */
+  extra?: (ev: TwEvent) => Node[]
 }
 
 export interface EventsView {
@@ -40,21 +43,29 @@ export interface EventsView {
   body: () => Node[]
   /** Show this event's page, or the list without an id (the next body() draws it). */
   open: (eventId?: string) => void
+  /** Whether the plain list would draw now (the calendar stands in for it unless showList() was asked). */
+  atList: () => boolean
+  /** The add form, From preset to that day. */
+  openForm: (fromIso?: string) => void
+  /** The plain list (search, filter, paste a link) instead of the calendar. */
+  showList: () => void
 }
 
-type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string }
+type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string; from?: string }
 
 const ERRORS: Record<EventError, string> = { name: S.eventsErrName, from: S.eventsErrFrom, to: S.eventsErrTo }
 
 export function createEventsView(h: EventsViewHooks): EventsView {
   let view: View = { kind: 'list' }
+  /** The plain list was asked for from the calendar; any other change of view ends it. */
+  let plain = false
   /** The share toggle "For the event host"; never saved, off whenever a page opens. */
   let hostLink = false
   /** Whether the Advanced disclosure stays open across redraws. */
   let advancedOpen = false
   /** The link copied last on this page, shown under the share button. */
   let lastLink = ''
-  const show = (v: View): void => { view = v; hostLink = false; advancedOpen = false; lastLink = ''; h.redraw() }
+  const show = (v: View): void => { view = v; plain = false; hostLink = false; advancedOpen = false; lastLink = ''; h.redraw() }
   const find = (id: string): TwEvent | undefined => h.state().events?.find((e) => e.id === id)
 
   function row(ev: TwEvent): HTMLElement {
@@ -102,7 +113,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     return [el('label', { class: 'meta' }, [label]), input]
   }
 
-  function form(existing?: TwEvent): Node[] {
+  function form(existing?: TwEvent, presetFrom?: string): Node[] {
     const text = (v = ''): HTMLInputElement => el('input', { class: 'field', value: v })
     const date = (v = ''): HTMLInputElement => el('input', { class: 'field', type: 'date', value: v })
     const name = text(existing?.name)
@@ -110,8 +121,8 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     const showSame = (): void => { tag.placeholder = name.value.trim() || S.eventsTagNameSame }
     name.addEventListener('input', showSame)
     showSame()
-    const from = date(existing?.from ?? todayIso(new Date()))
-    if (!existing) {
+    const from = date(existing?.from ?? presetFrom ?? todayIso(new Date()))
+    if (!existing && !presetFrom) {
       from.classList.add('default')
       from.addEventListener('input', () => from.classList.remove('default'))
     }
@@ -188,6 +199,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
           onclick: () => { tagPerson(h.state(), p.id, ev.id); h.save(); h.redraw() },
         }, [personBadge(p), el('span', { class: 'pwho' }, [p.name, hint(p)])])
         contextPress(chip, () => h.curatorPerson(p.id))
+        dragPerson(chip, p)
         return chip
       }))
     }
@@ -265,7 +277,9 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
-    return [h.header(ev.name, { back: () => show({ kind: 'list' }) }), el('div', { class: 'scroll events-page' }, [
+    const title = h.header(ev.name, { back: () => show({ kind: 'list' }) })
+    dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
+    return [title, el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
       ev.where ? el('p', {}, [ev.where]) : null,
       ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
@@ -280,6 +294,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
       picker(ev),
+      ...(h.extra?.(ev) ?? []),
       advanced(ev),
       el('button', { class: 'btn btn-ghost wide', 'data-event-edit': '', onclick: () => show({ kind: 'form', id: ev.id }) }, [S.eventsEdit]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-delete': '', onclick: () => remove(ev) }, [S.eventsDelete]),
@@ -287,10 +302,13 @@ export function createEventsView(h: EventsViewHooks): EventsView {
   }
 
   return {
+    atList: () => view.kind === 'list' && !plain,
+    openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
+    showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
     open: (id) => { view = id ? { kind: 'page', id } : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')
-      if (view.kind === 'form') return form(ev)
+      if (view.kind === 'form') return form(ev, view.from)
       if (view.kind === 'page' && ev) return page(ev)
       view = { kind: 'list' }
       return list()
