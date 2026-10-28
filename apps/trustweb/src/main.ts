@@ -115,6 +115,7 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
+import type { BackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
@@ -414,11 +415,14 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
+/** Set once the backup card exists (below); a save during boot comes earlier and has nothing to tell it. */
+let autoBackup: BackupView | null = null
 function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
     mirrorPushBundle(state)
+    autoBackup?.changed()
   }
 }
 
@@ -5696,6 +5700,7 @@ const backup = createBackupView({
   beforeRestore: () => snapshots.take(S.snReasonRestore),
   redraw: () => { if (screen === Screen.Inventory) render() },
 })
+autoBackup = backup
 
 function screenInventory(): Node[] {
   const s = st()
@@ -6095,7 +6100,7 @@ const WAKE_FRESH_MS = 60_000
 let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
 document.addEventListener('visibilitychange', () => {
   // Wave 12: the iPhone app in the background holds no drain, so the relay wakes it through Apple (net.ts pause); a fresh one when it is back.
-  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); if (nativeApp) net.pause(); return }
+  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); backup.hidden(); if (nativeApp) net.pause(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
   if (!state || state.testOf?.handedOverAt) return
@@ -6109,6 +6114,8 @@ window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverA
 const refreshDrain = (): void => { if (state && !state.testOf?.handedOverAt) net.refresh() }
 watchWake(refreshDrain, { now: () => Date.now(), every: (fn, ms) => setInterval(fn, ms), stop: (h) => clearInterval(h as ReturnType<typeof setInterval>) })
 window.addEventListener('online', refreshDrain)
+window.addEventListener('online', () => backup.backOnline())
+window.addEventListener('pagehide', () => backup.hidden())
 window.addEventListener('pageshow', (e) => { if (e.persisted) refreshDrain() })
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
 // drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).
