@@ -21,7 +21,7 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)))
   await page.goto(URL); await page.waitForTimeout(1500)
   await page.evaluate((item) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, people: [], peers: [], log: [], inventory: [item] })), ITEM)
-  await page.reload(); await page.addStyleTag({ content: '.twf { display: none !important }' })
+  await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' })
   await page.locator('.events-btn').tap(); await page.waitForTimeout(300)
   await page.locator('[data-cal-mode="tasks"]').tap(); await page.waitForTimeout(200)
   await page.locator('[data-task-add]').tap(); await page.waitForTimeout(200)
@@ -61,7 +61,7 @@ try {
   check('Remind me makes a task linked to the item', !!r && r.resourceWhy === 'ask' && r.title === 'Ask about: Spare bike wheels' && typeof r.remindAt === 'number')
   // a due reminder shows a notice once and opens the item
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.tasks.find((t) => t.resourceId === 'i1').remindAt = 1; localStorage.setItem('trustweb.v1.me', JSON.stringify(s)); localStorage.removeItem('tw-cal-fired') })
-  await page.reload(); await page.addStyleTag({ content: '.twf { display: none !important }' }); await page.waitForTimeout(1500)
+  await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(1500)
   check('a due reminder shows a notice', (await page.locator('[data-reminder-open]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/cal3-reminder.png` })
   await page.locator('[data-reminder-open]').tap(); await page.waitForTimeout(300)

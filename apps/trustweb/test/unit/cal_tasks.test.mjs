@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Calendar tasks (wave 24, cal3): pure rules, sync between own devices, never in an ask, the reminder kind. */
-import { dueReminders, fromInput, newTask, toInput, sortTasks, subtasks, tasksOn, toggleDone } from '../../src/ext/calendar/tasks.ts'
+import { dueReminders, fireKey, fromInput, newTask, toInput, sortTasks, subtasks, tasksOn, toggleDone } from '../../src/ext/calendar/tasks.ts'
 import { dayCounts } from '../../src/ext/calendar/calendar.ts'
 import { bundleOf, countsOf, mergeBundle, parseBundle, refreshStamps } from '../../src/sync_core.ts'
 import { askSources } from '../../src/cascade.ts'
@@ -86,7 +86,11 @@ describe('toggleDone', () => {
 describe('dueReminders', () => {
   it('due, open, not yet fired', () => {
     const ts = [t('a', { remindAt: 5 }), t('b', { remindAt: 50 }), t('c', { remindAt: 1, done: 2 }), t('d', { remindAt: 1 }), t('e')]
-    expect(dueReminders(ts, 10, ['d']).map((x) => x.id)).toEqual(['a'])
+    expect(dueReminders(ts, 10, [fireKey(ts[3])]).map((x) => x.id)).toEqual(['a'])
+  })
+  it('a reminder moved to a new time fires again', () => {
+    const fired = [fireKey(t('a', { remindAt: 5 }))]
+    expect(dueReminders([t('a', { remindAt: 8 })], 10, fired).map((x) => x.id)).toEqual(['a'])
   })
 })
 

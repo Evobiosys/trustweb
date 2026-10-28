@@ -731,13 +731,15 @@ function notify(kind: NotifyKind, body: string): void {
  * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
  * are on; page open: a notice with an Open button when the reminder switch is on.
  */
-function notifyReminder(title: string, body: string, onOpen: () => void): void {
-  if (!state || !kindsOf(state).reminder) return
+function notifyReminder(title: string, body: string, onOpen: () => void): boolean {
+  if (!state || !kindsOf(state).reminder) return false
   if (document.hidden) {
-    if (wantsKind(state, 'reminder') && typeof Notification !== 'undefined' && Notification.permission === 'granted') void showNotification(S.appName, title)
-    return
+    if (!wantsKind(state, 'reminder') || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
+    void showNotification(S.appName, title)
+    return true
   }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+  return true
 }
 
 // ---------------------------------------------------------------------------

@@ -21,8 +21,8 @@ export interface ExtHooks {
   sendInvite: (personId: string, text: string) => Promise<boolean>
   /** Remove-with-undo notice (30 s). */
   undo: (title: string, onUndo: () => void) => void
-  /** A reminder came due: the host shows it (system notification while hidden, else a notice) when the reminder kind is on; onOpen is its tap. */
-  notify: (title: string, body: string, onOpen: () => void) => void
+  /** A reminder came due: the host shows it (system notification while hidden, else a notice) when the reminder kind is on; onOpen is its tap. False = not shown (try again later). */
+  notify: (title: string, body: string, onOpen: () => void) => boolean
   /** Opens a My Resources item. */
   openItem: (id: string) => void
   /** Shows the calendar screen. */

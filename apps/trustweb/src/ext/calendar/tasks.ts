@@ -82,9 +82,12 @@ export function toggleDone(s: Pick<AppState, 'tasks'>, id: string, now: number):
   s.tasks.push(next)
 }
 
+/** What marks a reminder as fired: the task and its time, so a reminder moved to a new time fires again. */
+export const fireKey = (t: TwTask): string => `${t.id}@${t.remindAt ?? ''}`
+
 /** Open tasks whose reminder time has come and that have not fired yet. */
-export const dueReminders = (tasks: TwTask[], now: number, firedIds: readonly string[]): TwTask[] =>
-  tasks.filter((t) => !t.done && t.remindAt !== undefined && t.remindAt <= now && !firedIds.includes(t.id))
+export const dueReminders = (tasks: TwTask[], now: number, fired: readonly string[]): TwTask[] =>
+  tasks.filter((t) => !t.done && t.remindAt !== undefined && t.remindAt <= now && !fired.includes(fireKey(t)))
 
 /** ms <-> the value of a datetime-local input ("YYYY-MM-DDTHH:MM", local time); NaN for an empty or malformed value. */
 export const toInput = (ms: number): string => { const d = new Date(ms); return `${todayIso(d)}T${p2(d.getHours())}:${p2(d.getMinutes())}` }

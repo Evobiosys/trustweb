@@ -19,7 +19,7 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)))
   await page.goto(URL); await page.waitForTimeout(1500)
   await page.evaluate(([ev, people]) => localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Jakob' }, people, peers: [], log: [], events: ev })), [EV, PEOPLE])
-  await page.reload(); await page.addStyleTag({ content: '.twf { display: none !important }' })
+  await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' })
   await page.locator('.events-btn').tap(); await page.waitForTimeout(300)
   // drop on the agenda row
   await page.locator('[data-cal-event="e1"]').evaluate((n) => {

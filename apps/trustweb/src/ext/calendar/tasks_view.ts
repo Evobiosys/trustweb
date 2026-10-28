@@ -5,7 +5,7 @@ import { todayIso } from '../../events'
 import type { InventoryItem, TwTask } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks } from '../registry'
-import { dueReminders, fromInput, isOverdue, newTask, sortTasks, subtasks, toggleDone, toInput } from './tasks'
+import { dueReminders, fireKey, fromInput, isOverdue, newTask, sortTasks, subtasks, toggleDone, toInput } from './tasks'
 
 const FIRED_KEY = 'tw-cal-fired'
 const FIRED_KEEP = 500
@@ -106,13 +106,13 @@ export function createTasks(h: ExtHooks, showTasks: () => void): {
     ].filter((n): n is HTMLElement => n !== null)
   }
 
-  /** Fires each due reminder once (ids kept in localStorage, not in the record) and tells the host. */
+  /** Fires each due reminder once (keys kept in localStorage, not in the record); one the host could not show waits for the next tick. */
   function tick(): void {
     const fired = firedIds()
-    const due = dueReminders(tasks(), Date.now(), fired)
-    if (!due.length) return
-    try { localStorage.setItem(FIRED_KEY, JSON.stringify([...fired, ...due.map((t) => t.id)].slice(-FIRED_KEEP))) } catch { /* fired again next start */ }
-    for (const t of due) h.notify(t.title, S.cal.reminderOpen, () => (t.resourceId ? h.openItem(t.resourceId) : (showTasks(), h.openCalendar())))
+    const shown = dueReminders(tasks(), Date.now(), fired)
+      .filter((t) => h.notify(t.title, S.cal.reminderOpen, () => (t.resourceId ? h.openItem(t.resourceId) : (showTasks(), h.openCalendar()))))
+    if (!shown.length) return
+    try { localStorage.setItem(FIRED_KEY, JSON.stringify([...fired, ...shown.map(fireKey)].slice(-FIRED_KEEP))) } catch { /* fired again next start */ }
   }
 
   function itemSection(item: InventoryItem): Node[] {
