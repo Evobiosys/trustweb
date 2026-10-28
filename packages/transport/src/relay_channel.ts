@@ -50,6 +50,7 @@ import { WebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Identity } from "./did_identity.js";
 import type { DeliveryChannel } from "./delivery_channel.js";
+import { signSend } from "./relay_send_auth.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -273,7 +274,8 @@ export class RelayChannel implements DeliveryChannel {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.ackTimeoutMs);
     try {
-      const res = await fetch(url, { method: "POST", body: wire, signal: controller.signal });
+      // Sender authentication (relay_send_auth.ts): a fresh signature per attempt, so each endpoint sees its own nonce.
+      const res = await fetch(url, { method: "POST", body: wire, headers: signSend(this.identity, wire), signal: controller.signal });
       const body = (await res.json().catch(() => ({}))) as { routed?: string };
       // The mediator's success response is a single non-informative
       // `{ routed: "accepted" }` (relay_server.ts finding 1) — it deliberately
