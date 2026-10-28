@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 24: the bottom row. Five slots by default (Membranes | Chat | Record | Events | My Resources); the owner may re-pick
- * every slot but the last, which stays My Resources. Stored as AppState.tabRow (screen ids); absent = the default.
+ * Wave 24: the bottom row. Five slots by default (Membranes | Chat | Record | Events | Resources); the owner may re-pick
+ * every slot but the last, which stays Resources. Stored as AppState.tabRow (screen ids); absent = the default.
  * An id this build does not know, or whose feature is off, is skipped; duplicates collapse. Pure, no DOM.
  */
 export type TabId = 'web' | 'chat' | 'record' | 'events' | 'inventory' | 'feed' | 'network' | 'desk'
@@ -24,7 +24,7 @@ export function availableTabs(f: TabFlags): TabId[] {
   return ids
 }
 
-/** The row to draw: saved ids that are available, once each, My Resources moved to the far right. */
+/** The row to draw: saved ids that are available, once each, Resources moved to the far right. */
 export function resolveRow(saved: unknown, f: TabFlags): TabId[] {
   const ok = new Set<string>(availableTabs(f))
   const pick = (ids: readonly unknown[]): TabId[] => [...new Set(ids)].filter((id): id is TabId => typeof id === 'string' && ok.has(id))
@@ -34,7 +34,7 @@ export function resolveRow(saved: unknown, f: TabFlags): TabId[] {
   return f.inventory ? [...body(chosen), 'inventory'] : chosen
 }
 
-/** The row after slot `index` takes `id`: the slot that held `id` takes the old one. The last slot (My Resources) is locked. */
+/** The row after slot `index` takes `id`: the slot that held `id` takes the old one. The last slot (Resources) is locked. */
 export function setSlot(row: readonly TabId[], index: number, id: string, f: TabFlags): TabId[] {
   const next = [...row]
   if (!availableTabs(f).includes(id as TabId) || id === 'inventory' || index < 0 || index >= next.length - (f.inventory ? 1 : 0)) return next

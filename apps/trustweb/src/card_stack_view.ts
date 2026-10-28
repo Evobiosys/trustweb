@@ -27,7 +27,7 @@ export interface StackViewDeps {
   openChat(personId: string, open: StackOpen): void
   /** Every dismiss saves and draws the stack again. */
   dismiss(card: StackCard): void
-  /** "My Resources" on the nothing-matched card. */
+  /** "Resources" on the nothing-matched card. */
   addLine(): void
   ringLabel(ring: Ring | undefined): string
   now(): number

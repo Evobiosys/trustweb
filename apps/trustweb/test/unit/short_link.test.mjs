@@ -13,6 +13,7 @@ import { shareFragment, shareUrl } from '../../src/share.ts'
 import { S } from '../../src/strings.ts'
 
 const ORIGIN = 'https://app.trustintheweb.org'
+const ONE = 'https://app.trustweb.one'
 const IDEA2 = 'https://app.idea2.site'
 const DID = 'did:peer:2.Vz6Mk' + 'a'.repeat(40) + '.Ez6LS' + 'b'.repeat(40) + '.SeyJ0IjoiZG0ifQ'
 const KEY = 'TW1R-ABCDE-FGHJK-MNPQR-STVWX-YZ012-3456A-BCDEF-GHJKM-NPQRS-TVWXY-Z'
@@ -27,13 +28,12 @@ const demo = (origin = ORIGIN + '/') => connect(origin) + '#' + demoFragment({
 })
 
 describe('canShorten', () => {
-  it('is true for exactly the three app origins (wave 6c: app.trustweb.one is the canonical one)', () => {
+  it('is true for exactly the two app origins (wave 6c: app.trustweb.one is the canonical one)', () => {
     expect(canShorten(ORIGIN)).toBe(true)
-    expect(canShorten(IDEA2)).toBe(true)
-    expect(canShorten('https://app.trustweb.one')).toBe(true)
+    expect(canShorten(ONE)).toBe(true)
   })
   it.each([
-    'http://127.0.0.1:8984', 'http://localhost:5190', 'null', 'file://', 'https://idea2.site', 'https://trustintheweb.org',
+    IDEA2, 'http://127.0.0.1:8984', 'http://localhost:5190', 'null', 'file://', 'https://idea2.site', 'https://trustintheweb.org',
     'https://www.trustintheweb.org', 'http://app.trustintheweb.org', 'https://app.trustintheweb.org:8443', 'https://evil.example', '',
     'https://app.trustintheweb.org.evil.example', 'https://trustweb.one', 'https://demo.trustweb.one', 'https://app.trustweb.one.evil.example',
     'http://app.trustweb.one', 'https://app.trustweb.one:8443',
@@ -43,7 +43,7 @@ describe('canShorten', () => {
 describe('shareBlock / isShareable', () => {
   it('accepts a plain connect link on either origin (path included)', () => {
     expect(shareBlock(connect(), ORIGIN)).toBeNull()
-    expect(shareBlock(connect(IDEA2 + '/trustweb/'), IDEA2)).toBeNull()
+    expect(shareBlock(connect(ONE + '/'), ONE)).toBeNull()
   })
   it('accepts a demo-account link (account, id, end, demo peer in the fragment)', () => {
     expect(isShareable(demo(), ORIGIN)).toBe(true)
@@ -77,7 +77,7 @@ describe('shareBlock / isShareable', () => {
   })
   it('rejects another origin, a mismatch between link and page, and a url with userinfo', () => {
     expect(shareBlock(connect('http://127.0.0.1:8984/'), 'http://127.0.0.1:8984')).toBe(ShortLinkError.NotHere)
-    expect(shareBlock(connect(IDEA2 + '/'), ORIGIN)).toBe(ShortLinkError.NotHere)
+    expect(shareBlock(connect(ONE + '/'), ORIGIN)).toBe(ShortLinkError.NotHere)
     expect(shareBlock(connect().replace('https://', 'https://u:p@'), ORIGIN)).toBe(ShortLinkError.NotHere)
   })
   it('rejects a url that is not a url, and a url with no (or an empty) connect parameter', () => {
@@ -100,7 +100,7 @@ describe('shareBlock / isShareable', () => {
 describe('buildShort', () => {
   it('is origin + /l/ + id, never the app path', () => {
     expect(buildShort(ORIGIN, ID)).toBe('https://app.trustintheweb.org/l/AbCdEf0123')
-    expect(buildShort(IDEA2, ID)).toBe('https://app.idea2.site/l/AbCdEf0123')
+    expect(buildShort(ONE, ID)).toBe(ONE + '/l/AbCdEf0123')
   })
 })
 
@@ -171,11 +171,11 @@ describe('createShortLinker', () => {
       expect(f.calls[0].init.signal).toBeDefined()
     }
   })
-  it('builds the short link from the page origin (app.idea2.site)', async () => {
+  it('builds the short link from the page origin (app.trustweb.one)', async () => {
     const f = fakeFetch(made())
-    const out = await createShortLinker({ origin: IDEA2, fetch: f, now: () => clock }).shorten(connect(IDEA2 + '/trustweb/'))
-    expect(out.short).toBe('https://app.idea2.site/l/AbCdEf0123')
-    expect(f.calls[0].input).toBe(IDEA2 + '/link')
+    const out = await createShortLinker({ origin: ONE, fetch: f, now: () => clock }).shorten(connect(ONE + '/'))
+    expect(out.short).toBe(ONE + '/l/AbCdEf0123')
+    expect(f.calls[0].input).toBe(ONE + '/link')
   })
   it('asks once per long url for the whole session', async () => {
     const f = fakeFetch(made())

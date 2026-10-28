@@ -39,7 +39,7 @@ const until = async (fn, ms = 20_000) => {
   return null
 }
 const openSettings = async (page) => {
-  await tab(page, 'My Resources')
+  await tab(page, 'Resources')
   await page.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('heading', { name: 'Settings' }).waitFor({ timeout: 5_000 })
@@ -61,7 +61,7 @@ async function connectBen(browser, a) {
   await acceptAdd(b)
   await until(async () => (await record(a)).peers.length === 1)
   await a.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await tab(b, 'My Resources')
+  await tab(b, 'Resources')
   await b.getByPlaceholder(/Motorbike/).fill('Cargo bike, can lend it on weekends')
   await b.getByRole('button', { name: 'Add', exact: true }).click()
   return b

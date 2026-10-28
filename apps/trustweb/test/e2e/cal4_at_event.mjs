@@ -30,7 +30,7 @@ async function run(label, viewport, mobile) {
   await tap('[data-at-event-arrive]'); await page.waitForTimeout(300)
   check(`${label}: frame shows`, (await page.locator('.at-event-frame').count()) === 1)
   check(`${label}: record holds atEvent`, (await rec(page)).atEvent?.eventId === 'e1')
-  for (const [name, sel] of [['Web', '[data-go="web"]'], ['Record', '[data-go="record"]'], ['My Resources', '[data-go="inventory"]']]) {
+  for (const [name, sel] of [['Web', '[data-go="web"]'], ['Record', '[data-go="record"]'], ['Resources', '[data-go="inventory"]']]) {
     await tap(sel); await page.waitForTimeout(300)
     const box = await page.locator('.at-event-frame').boundingBox()
     const phone = await page.locator('.phone').boundingBox()

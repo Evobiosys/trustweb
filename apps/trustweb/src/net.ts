@@ -4,7 +4,7 @@
  *
  * Reused as-is from apps/demo (not copied): the did:peer:2 identity and ECDH
  * pair key (did.ts, crypto.ts), the relay channel (relay.ts, through
- * app.idea2.site/relay/*), the one-scan connect link and its connect-ack
+ * app.trustweb.one/relay/*), the one-scan connect link and its connect-ack
  * (connect_link.ts), the matcher (match/lexical.ts), the surface-or-stay-silent
  * decision (incoming_query.ts) and the sealed, fixed-length answer in which a
  * decline and a no-match are the same bytes (answer_key.ts / gate.ts).

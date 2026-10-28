@@ -1,7 +1,7 @@
 /**
  * Wave 6h LIVE acceptance of THE ONE THING: a connected person's ask reaches me and I can answer, with my tab NOT in front of me.
  * Against a DEPLOYED app, its real connect service and the real relay. Fresh headless phones (390x844), throwaway names only.
- *   1  Phone A ("TW6h Live A <hex>") adds one line in My Resources, shows a REAL connect code; phone B opens it and adds A.
+ *   1  Phone A ("TW6h Live A <hex>") adds one line in Resources, shows a REAL connect code; phone B opens it and adds A.
  *      From here A's tab is behind another window (visibilityState hidden, no focus).
  *   2  B asks "does anyone know a good techsetup": the prompt is in A's hidden tab; A comes back and shares; B sees A's line at the
  *      fixed moment (about 120 s), not before.
@@ -98,7 +98,7 @@ async function addByPaste(page, long) {
 }
 
 async function addResource(page, text) {
-  await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await page.getByPlaceholder(/Motorbike/).fill(text)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await page.locator('.inv', { hasText: text }).waitFor({ timeout: 5000 })

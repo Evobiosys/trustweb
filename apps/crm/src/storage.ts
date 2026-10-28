@@ -2,8 +2,8 @@
  * Where the CRM's data comes from and where its own records go.
  *
  * TrustWeb's record: READ ONLY in this skeleton. On the same origin (the live
- * app sits at app.idea2.site/trustweb/, this one would sit at
- * app.idea2.site/crm/) the CRM reads TrustWeb's localStorage key
+ * app sits at app.trustweb.one/, this one would sit at
+ * app.trustweb.one/crm/) the CRM reads TrustWeb's localStorage key
  * `trustweb.v1.me` directly (store.ts PREFIX + persona 'me'), so the contact
  * list is the same people with no copy and no sync. The CRM never writes that
  * key: TrustWeb keeps its state in memory and saves the whole object on every

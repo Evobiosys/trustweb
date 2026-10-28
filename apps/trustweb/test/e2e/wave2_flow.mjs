@@ -45,12 +45,12 @@ const dockOpen = async (page) => (await page.locator('.query-dock').count()) ===
 
 /** Item 1: Feed off, the query one tap away from Web and Inventory. */
 async function partQuery(a) {
-  ok('the bar is the old one by default: Membranes | Record | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
+  ok('the bar is the old one by default: Membranes | Record | Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Resources']), JSON.stringify(await tabLabels(a)))
   await a.locator('[data-open-query="1"]').click()
   ok('Web: one tap on "Ask your web" opens the query', await dockOpen(a))
   await a.locator('.query-dock .x').click()
 
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   const call = a.locator('[data-open-query="inventory"]')
   ok('Inventory: "Ask your web" is there', await call.isVisible() && (await call.getAttribute('aria-label')) === 'Ask your web')
   const [cb, rb] = [await call.boundingBox(), await a.locator('.requests-fab').boundingBox()]
@@ -62,7 +62,7 @@ async function partQuery(a) {
   await a.locator('.query-dock .x').click()
 
   // The other query style (Settings: the magnifier means querying): still one tap.
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Query$/ }) }).click()
   await closeSheet(a)
@@ -74,7 +74,7 @@ async function partQuery(a) {
 
 /** Item 4: who can ask about an inventory item: acquaintances, friends, close friends, only me. */
 async function partAudience(a) {
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   await a.getByPlaceholder(/Motorbike/).fill('Spare room in Vienna for visitors')
   await a.getByRole('button', { name: 'Add', exact: true }).click()
   const row = a.locator('.inv', { hasText: 'Spare room in Vienna for visitors' })
@@ -108,7 +108,7 @@ async function partWebSearch(browser, base, a) {
   const engineRequests = []
   a.on('request', (r) => { if (ENGINE_HOSTS.test(new URL(r.url()).hostname)) engineRequests.push(r.url()) })
   // Back to the "Ask your web" style, where the magnifier searches contacts.
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('.sheet.on .radio', { has: a.locator('b', { hasText: /^Ask your web$/ }) }).click()
   await closeSheet(a)
@@ -157,7 +157,7 @@ async function partProvenance(a) {
     { key: '0123456789abcdef', text: 'Knows the Graz housing co-op board' },
     { key: 'fedcba9876543210', text: 'Can lend a cargo bike on weekends' },
   ] })
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('[data-import-file]').setInputFiles({ name: 'trustweb-inventory-import.json', mimeType: 'application/json', buffer: Buffer.from(file) })
   await a.locator('[data-import-apply]').click()
@@ -186,7 +186,7 @@ async function partProvenance(a) {
 
 /** Item 9: Settings > About names the build and the data format. */
 async function partAbout(a) {
-  await tab(a, 'My Resources')
+  await tab(a, 'Resources')
   await a.getByRole('button', { name: 'Settings' }).click()
   await a.locator('.sheet.on [data-server-transcribe]').waitFor({ timeout: 10_000 }).catch(() => {})
   const line = a.locator('.sheet.on .about-version')

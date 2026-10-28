@@ -28,3 +28,16 @@ export function chatListRows(book: ChatBook | undefined, people: readonly ChatLi
   }
   return rows.sort((a, b) => b.at - a.at)
 }
+
+export interface ChatPickerRow {
+  personId: string
+  name: string
+  connected: boolean
+}
+
+/** The "New message" picker: connected people first, the others after, each group by name. */
+export function chatPickerRows(people: readonly ChatListPerson[]): ChatPickerRow[] {
+  return people
+    .map((p) => ({ personId: p.id, name: p.name, connected: !!p.peerId }))
+    .sort((a, b) => Number(b.connected) - Number(a.connected) || a.name.localeCompare(b.name))
+}

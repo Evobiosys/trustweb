@@ -53,7 +53,7 @@ async function startHolder(page) {
   await phone.getByPlaceholder('Name').first().fill('Max')
   await phone.getByRole('button', { name: 'Add to my web' }).click()
   await phone.locator('.node', { hasText: 'Max' }).waitFor({ timeout: 5_000 })
-  await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await phone.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await phone.getByPlaceholder(/Motorbike/).fill('Ladder, 3 m, to lend')
   await phone.getByRole('button', { name: 'Add', exact: true }).click()
   await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).waitFor({ timeout: 5_000 })
@@ -85,7 +85,7 @@ async function partComeBack(browser, base) {
   const phone = device(page, 1)
   await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
   ok('second visit: the first phone opens on Jakob\'s web, not the start screen', await phone.locator('.node', { hasText: 'Max' }).count() === 1)
-  await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await phone.locator('nav.tabs button', { hasText: 'Resources' }).click()
   ok('second visit: the thing he noted is still there', await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).count() === 1)
   await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
   ok('second visit: both devices are open again, the second one as it was', await page.locator('iframe').count() === 2)
@@ -107,7 +107,7 @@ async function partComeBack(browser, base) {
   const fdLink = fd.locator('a')
   ok('wave 3: "Your own front door ... comes with the hosted service; coming soon" with a link to TrustInTheWeb.com (new tab, no opener, no referrer)',
     /Your own front door \(your resources, always on, answering while your phone is off\) comes with the hosted service; coming soon/.test(await fd.innerText())
-      && (await fdLink.innerText()) === 'TrustInTheWeb.com' && (await fdLink.getAttribute('href')) === 'https://trustintheweb.com/'
+      && (await fdLink.innerText()) === 'trustweb.one' && (await fdLink.getAttribute('href')) === 'https://trustweb.one/'
       && (await fdLink.getAttribute('target')) === '_blank' && /noopener/.test(await fdLink.getAttribute('rel')) && (await fdLink.getAttribute('referrerpolicy')) === 'no-referrer')
   await shot(page, 'w3-06-front-door-line')
   await page.locator('[data-d2l="clean"]').click()
