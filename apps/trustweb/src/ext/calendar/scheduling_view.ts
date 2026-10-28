@@ -10,7 +10,7 @@ const HORIZON = 14
 const SHOWN = 40
 const DEFAULT_WINDOWS: Availability['windows'] = [0, 1, 2, 3, 4].map((day) => ({ day, from: '09:00', to: '17:00' }))
 const dayLabel = (ms: number): string => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-const timeLabel = (ms: number): string => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+const timeLabel = (ms: number): string => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 
 export function createScheduling(h: ExtHooks): { button: () => HTMLElement; openLink: (hash: string) => boolean } {
   /** Link text with Copy and Share (navigator.share when present). */
@@ -84,7 +84,7 @@ export function createScheduling(h: ExtHooks): { button: () => HTMLElement; open
       let chips: HTMLElement | null = null
       let day = ''
       for (const x of slots.slice(0, shown)) {
-        if (dayLabel(x.s) !== day) { day = dayLabel(x.s); chips = el('div', { class: 'chips' }); rows.push(el('h3', {}, [day]), chips) }
+        if (dayLabel(x.s) !== day) { day = dayLabel(x.s); chips = el('div', { class: 'chips book-slots' }); rows.push(el('h3', {}, [day]), chips) }
         chips?.append(el('button', { class: 'btn btn-ghost btn-sm' + (picked === x.s ? ' on' : ''), 'data-book-slot': String(x.s), 'aria-pressed': String(picked === x.s), onclick: () => { picked = x.s; draw() } }, [timeLabel(x.s)]))
       }
       list.replaceChildren(...(slots.length ? rows : [el('p', { class: 'empty' }, [S.cal.bookEmpty])]),

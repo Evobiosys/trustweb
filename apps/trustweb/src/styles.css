@@ -1037,3 +1037,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ae-new{font-style:normal; font-size:11px; background:var(--electric); color:#fff; border-radius:999px; padding:2px 8px}
 .ae-chip{display:inline-flex; align-items:center; gap:6px; margin:0 0 8px}
 .ae-chip-x{border:0; background:none; font:inherit; cursor:pointer; min-width:28px; min-height:28px}
+.book-slots{display:flex; flex-wrap:wrap; gap:6px}
+.book-slots .btn{width:auto; flex:0 0 auto; min-width:72px}
+.book-slots .btn.on{background:var(--electric); color:#fff}
