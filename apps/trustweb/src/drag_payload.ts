@@ -22,23 +22,29 @@ export function decodeDrag(raw: string): DragRef | null {
   }
 }
 
-/** Makes a node a drag source for a person (HTML5 drag; mouse and trackpad. Touch uses the pickers). */
-export function dragPerson(node: HTMLElement, ref: DragRef): void {
+const dragSource = (mime: string) => (node: HTMLElement, ref: DragRef, label = ref.name): void => {
   node.draggable = true
   node.addEventListener('dragstart', (e) => {
-    e.dataTransfer?.setData(PERSON_MIME, encodeDrag(ref))
-    e.dataTransfer?.setData('text/plain', ref.name)
+    e.dataTransfer?.setData(mime, encodeDrag(ref))
+    e.dataTransfer?.setData('text/plain', label)
   })
 }
 
-/** Makes a node accept a dropped person: dragover only when the type is present, `.cal-drop-over` while hovering. */
-export function acceptPerson(node: HTMLElement, onPerson: (ref: DragRef) => void): void {
-  const has = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes(PERSON_MIME)
+/** Makes a node a drag source for a person or an event (HTML5 drag; mouse and trackpad. Touch uses the pickers). */
+export const dragPerson = dragSource(PERSON_MIME)
+export const dragEvent = dragSource(EVENT_MIME)
+
+const dropTarget = (mime: string) => (node: HTMLElement, onDrop: (ref: DragRef) => void): void => {
+  const has = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes(mime)
   node.addEventListener('dragover', (e) => { if (has(e)) { e.preventDefault(); node.classList.add('cal-drop-over') } })
   node.addEventListener('dragleave', () => node.classList.remove('cal-drop-over'))
   node.addEventListener('drop', (e) => {
     node.classList.remove('cal-drop-over')
-    const ref = has(e) ? decodeDrag(e.dataTransfer?.getData(PERSON_MIME) ?? '') : null
-    if (ref) { e.preventDefault(); onPerson(ref) }
+    const ref = has(e) ? decodeDrag(e.dataTransfer?.getData(mime) ?? '') : null
+    if (ref) { e.preventDefault(); onDrop(ref) }
   })
 }
+
+/** Makes a node accept a dropped person / event: dragover only when the type is present, `.cal-drop-over` while hovering. */
+export const acceptPerson = dropTarget(PERSON_MIME)
+export const acceptEvent = dropTarget(EVENT_MIME)

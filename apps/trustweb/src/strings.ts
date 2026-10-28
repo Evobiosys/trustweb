@@ -340,6 +340,8 @@ export const S = {
     icsImported: (added: number, updated: number) => `Added ${added}, updated ${updated}.`,
     icsSkipped: (n: number) => ` ${n} skipped.`,
     icsFailed: 'That file could not be read.',
+    dropAdded: (label: string) => `Added to My Resources: ${label}`,
+    dropUnknown: 'That is not in this phone\'s record, so nothing was added.',
     modeTasks: 'Tasks',
     tasksEmpty: 'No tasks yet.',
     addTask: 'Add task',

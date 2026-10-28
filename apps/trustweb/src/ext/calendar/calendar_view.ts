@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Calendar module view (wave 24, cal1): month grid and the agenda of the chosen day. Selection lives in this closure, not in the record. */
 import { el } from '../../../../demo/src/ui/dom'
-import { acceptPerson } from '../../drag_payload'
-import { matchPeople, todayIso } from '../../events'
+import { acceptPerson, dragEvent } from '../../drag_payload'
+import { eventLabel, matchPeople, todayIso } from '../../events'
 import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule } from '../registry'
@@ -12,7 +12,8 @@ import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
 import { createIcs } from './ics_view'
-import { addInvitee, inviteText, invitees, removeInvitee } from './invitees'
+import { personDropOnEvent } from '../../event_drop'
+import { inviteText, invitees, removeInvitee } from './invitees'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
 
@@ -29,8 +30,8 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   const ics = createIcs(h)
 
   const invite = (ev: TwEvent, id: string): void => {
-    if (!h.state().people.some((p) => p.id === id)) return
-    addInvitee(ev, id); h.save(); h.redraw()
+    if (!personDropOnEvent(h.state(), ev, { id, name: '' })) { h.toast(S.cal.dropUnknown); return }
+    h.save(); h.redraw()
   }
 
   const badge = (p: Person): HTMLElement =>
@@ -98,6 +99,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
           el('span', { class: 'who' }, [el('b', {}, [ev.name]), el('i', {}, [[timeOf(ev), ev.where].filter(Boolean).join(' · ')])]),
         ])
         acceptPerson(row, (ref) => invite(ev, ref.id))
+        dragEvent(row, { id: ev.id, name: ev.name }, eventLabel(ev))
         return row
       }),
       ...dayTasks.map(tasks.row),

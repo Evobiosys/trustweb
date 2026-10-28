@@ -164,7 +164,8 @@ import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel a
 import { contextPress } from './context_press'
 import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
 import type { EventBy } from './event_link'
-import { dragPerson } from './drag_payload'
+import { acceptEvent, dragPerson } from './drag_payload'
+import { eventDropItem } from './event_drop'
 import { sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
@@ -5793,9 +5794,7 @@ function screenInventory(): Node[] {
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = icon('call')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
-  return [
-    header(S.invTitle, { after: gear }),
-    el('div', { class: 'scroll pad' }, [
+  const list = el('div', { class: 'scroll pad' }, [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -5819,7 +5818,19 @@ function screenInventory(): Node[] {
         ]),
       ])),
       backup.card(),
-    ]),
+    ])
+  // A calendar event dragged here (mouse/trackpad; phones keep the pickers) becomes an item tagged with it.
+  acceptEvent(list, (ref) => {
+    const item = eventDropItem(s, ref, randomId(8), Date.now())
+    if (!item) { toast(S.cal.dropUnknown); return }
+    s.inventory.unshift(item)
+    save()
+    render()
+    undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
+  })
+  return [
+    header(S.invTitle, { after: gear }),
+    list,
     call,
     requests,
   ]

@@ -4,10 +4,10 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
-import { dragPerson } from './drag_payload'
+import { dragEvent, dragPerson } from './drag_payload'
 import { PERSON_GREEN } from './colour_tags'
 import { ringColor } from './model'
 import type { AppState, Person, TwEvent } from './model'
@@ -277,7 +277,9 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       class: 'chip' + (ev.attended ? ' on' : ''), role: 'switch', 'aria-checked': String(ev.attended), 'data-event-attended': '',
       onclick: () => { ev.attended = !ev.attended; h.save(); h.redraw() },
     }, [S.eventsAttended])
-    return [h.header(ev.name, { back: () => show({ kind: 'list' }) }), el('div', { class: 'scroll events-page' }, [
+    const title = h.header(ev.name, { back: () => show({ kind: 'list' }) })
+    dragEvent(title, { id: ev.id, name: ev.name }, eventLabel(ev))
+    return [title, el('div', { class: 'scroll events-page' }, [
       el('p', {}, [el('b', {}, [whenLabel(ev)])]),
       ev.where ? el('p', {}, [ev.where]) : null,
       ev.organizer ? el('p', { class: 'meta' }, [S.eventsOrganizedBy(ev.organizer)]) : null,
