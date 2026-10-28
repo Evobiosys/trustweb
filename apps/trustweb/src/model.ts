@@ -337,6 +337,8 @@ export interface TwEvent {
   hitTagged?: boolean
   /** Wave 24 (ext/calendar): person ids I invited. Absent = none. Travels only between my own devices (sync_core.ts); never in an event link (event_link.ts whitelist). */
   people?: string[]
+  /** Wave 24 (cal6): the UID of the .ics event this was imported from, so a second import updates it. Absent = none. */
+  icsUid?: string
 }
 
 export interface Person {

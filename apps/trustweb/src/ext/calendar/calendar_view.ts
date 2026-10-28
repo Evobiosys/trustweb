@@ -11,6 +11,7 @@ import { createAtEvent } from './at_event_view'
 import { createTasks } from './tasks_view'
 import { tasksOn } from './tasks'
 import { createScheduling } from './scheduling_view'
+import { createIcs } from './ics_view'
 import { addInvitee, inviteText, invitees, removeInvitee } from './invitees'
 
 const timeOf = (ev: TwEvent): string => (ev.from.length > 10 ? ev.from.slice(11) : S.cal.allDay)
@@ -25,6 +26,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   const tasks = createTasks(h, () => { mode = 'tasks' })
   const here = createAtEvent(h)
   const scheduling = createScheduling(h)
+  const ics = createIcs(h)
 
   const invite = (ev: TwEvent, id: string): void => {
     if (!h.state().people.some((p) => p.id === id)) return
@@ -130,6 +132,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
         agenda(events, due),
         el('button', { class: 'btn btn-electric wide', 'data-cal-add': '', onclick: () => h.addEvent(sel) }, [S.cal.add]),
         scheduling.button(),
+        ics.row(),
         el('button', { class: 'btn btn-ghost wide', 'data-cal-all': '', onclick: h.showList }, [S.cal.allEvents]),
       ])]
     },
