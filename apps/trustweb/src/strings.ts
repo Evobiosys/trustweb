@@ -889,6 +889,7 @@ export const S = {
   dvDupLead: 'Same name, different entries. Only you can say whether they are one person.',
   dvSamePerson: 'Same person',
   dvSameAs: 'Same person as…',
+  cardNameEditAria: (name: string): string => `Rename ${name}`,
   dvSamePh: 'Search by name',
   dvSameTitle: 'Which one do you keep?',
   dvSameLead: 'They become one. Notes, tags and fields of both are kept; if they differ, the one you keep wins. A snapshot is saved first.',
