@@ -8,7 +8,7 @@
  * "Assembling…" meanwhile; only a stuck apply (90 s without a registry change) waits for the owner's Retry. The page also watches the registry
  * (every 2 s): an assembly made elsewhere (CLI, the Approve press, another tab) reloads it too.
  */
-import { pollStatus, type ApprovalStatus } from './dev_feature'
+import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
@@ -32,6 +32,7 @@ const CSS = `
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
+.twp .twc-file,.twp .twc-a,.twp .twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twp .twc-file{color:#7ee8de;background:rgba(94,234,212,.16)}.twp .twc-a{color:#ffc65c;background:rgba(251,191,36,.16)}.twp .twc-b{color:#e3a8ff;background:rgba(233,166,255,.16)}
 .twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
 .twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .more.less{color:#b7a8c9}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
@@ -447,7 +448,7 @@ export function initDevPreview(): void {
         h('div', { className: 'btns' }, all),
         ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) })), q.id),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
-        ...(q.assembled?.error ? [h('div', { className: 'row warn', textContent: q.assembled.error })] : []),
+        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, ...conflictNodes(q.assembled.error))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
         gate(), ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw), ...(bar ? [bar] : []),
       )

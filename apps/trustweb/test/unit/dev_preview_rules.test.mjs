@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { conflictParts, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -396,5 +396,25 @@ describe('panel polish: one clean reload, scroll kept', () => {
     const dead = { getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') } }
     expect(scrollStore(dead, 'p').get()).toBe(0)
     expect(() => scrollStore(dead, 'p').set(1)).not.toThrow()
+  })
+})
+
+describe('conflictParts: the names in a conflict text, each with its own colour', () => {
+  it('ops status "conflict in <file> between <feature> and <feature or main>": file, first and second feature', () => {
+    expect(conflictParts('conflict in apps/x.ts between approve-merge and main')).toEqual([
+      'conflict in ', { text: 'apps/x.ts', kind: 'file' }, ' between ', { text: 'approve-merge', kind: 'a' }, ' and ', { text: 'main', kind: 'b' },
+    ])
+  })
+  it('raw git error (assembled.error, the gate hint): branch before the colon, every "Merge conflict in <file>"', () => {
+    expect(conflictParts('Fix the conflict first: wave20/approve-merge: CONFLICT (content): Merge conflict in src/r.ts')).toEqual([
+      'Fix the conflict first: ', { text: 'wave20/approve-merge', kind: 'a' }, ': CONFLICT (content): Merge conflict in ', { text: 'src/r.ts', kind: 'file' },
+    ])
+    expect(conflictParts('b/c: CONFLICT (content): Merge conflict in x.txt\nAuto-merging y\nCONFLICT (content): Merge conflict in y.txt')).toEqual([
+      { text: 'b/c', kind: 'a' }, ': CONFLICT (content): Merge conflict in ', { text: 'x.txt', kind: 'file' }, '\nAuto-merging y\nCONFLICT (content): Merge conflict in ', { text: 'y.txt', kind: 'file' },
+    ])
+  })
+  it('text without a conflict stays one plain string', () => {
+    expect(conflictParts('PR #49: merging')).toEqual(['PR #49: merging'])
+    expect(conflictParts('')).toEqual([])
   })
 })
