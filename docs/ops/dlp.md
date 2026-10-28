@@ -133,6 +133,22 @@ A backup counts only after a restore has been timed and checked. Four levels:
 
 **A failed drill is an incident**: fix the cause, repeat the drill, and only then return to the normal cadence. A drill that was skipped is logged as skipped, not as passed.
 
+### Automated drill tool (integrated from cloud/dlp-backup-restore-drill)
+
+```sh
+node restore_drill.mjs drill /var/lib/trustweb-backup /var/tmp/drill-$(date +%F)   # ok:true, problems:[]
+node restore_drill.mjs verify <snapshot-dir>             # re-hash + header + JSON checks
+node restore_drill.mjs restore <snapshot-dir> <empty-dir> # refuses a non-empty target
+```
+
+Pass criteria: `ok: true`; a throwaway server (`BACKUP_DIR=<restored>`, loopback, other port)
+returns the same ciphertext for a canary id; `restoreMs` recorded against the RTO. Never restore
+over the live directory: restore beside it, then swap by an operator after the drill passes.
+The automated test (`test/restore_drill.test.mjs`) does this end to end with synthetic data.
+
+Quarterly, add a full-host rehearsal from the off-host copy on a fresh machine with only the
+owner's offline key, to prove nothing lives only on the old host.
+
 ### Drill log
 
 Append one row per drill to a log kept next to the runbook (a private place, since it names hosts). Template:
