@@ -488,7 +488,7 @@ export function mountWalkthrough(host: HTMLElement, opts: WalkthroughOptions = {
   const steps = (): Step[] => (directOnly && mode.direct ? mode.direct : mode.steps)
 
   const box = el('section', 'wt')
-  box.setAttribute('aria-label', 'See it in action: TrustWeb on several phones, step by step')
+  box.setAttribute('aria-label', 'See TrustWeb in action: TrustWeb on several phones, step by step')
   const modes = el('div', 'wt-modes')
   modes.setAttribute('role', 'tablist')
   modes.setAttribute('aria-label', 'How many people')

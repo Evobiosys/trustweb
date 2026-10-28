@@ -38,6 +38,7 @@ const S = {
   title: (n) => `Chat with ${n}`, messageOn: () => 'Message on Signal',
   notConnected: (n) => `${n} is not connected yet`, empty: (n) => `Say hello to ${n}`, offline: 'Waiting for a connection',
   placeholder: 'Message', send: 'Send', sendAgain: 'Send again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n} left`, you: 'You',
+  notDelivered: 'Not delivered yet', sendVia: (k) => `Send via ${k}`,
 }
 const T0 = 1_800_000_000_000
 /** Handlers started by a click are fire-and-forget in the view: let their promises finish. */
@@ -45,6 +46,8 @@ const settle = () => new Promise((r) => setTimeout(r, 0))
 
 function harness({ connected = true, reachable = reach, online = true, failSend = false, book = emptyBook() } = {}) {
   const calls = []
+  const copied = []
+  const opened = []
   const state = { book, fail: failSend, saves: 0 }
   const io = {
     getBook: () => state.book,
@@ -53,8 +56,8 @@ function harness({ connected = true, reachable = reach, online = true, failSend 
     now: () => T0 + calls.length * 10,
   }
   const doc = makeDoc()
-  const handle = renderChat({ ...io, doc, person: { name: 'Lena', peerId: connected ? 'p1' : undefined, reach: reachable }, S, isOnline: () => online })
-  return { handle, state, calls, io, doc, root: handle.el }
+  const handle = renderChat({ ...io, doc, person: { name: 'Lena', peerId: connected ? 'p1' : undefined, reach: reachable }, S, isOnline: () => online, copy: (t) => copied.push(t), open: (u) => opened.push(u) })
+  return { copied, opened, handle, state, calls, io, doc, root: handle.el }
 }
 
 describe('safeHref', () => {
@@ -302,5 +305,36 @@ describe('renderShareControls', () => {
     expect(wa('https://wa.me/qr/ABCDEFGH12345').find((n) => n.attrs['data-share'] === 'phone')).toHaveLength(0)
     const mx = renderShareControls({ doc: makeDoc(), channel: Channel.Matrix, getHandle: () => '@lena:matrix.org', getSettings: () => undefined, setSettings: () => {}, S: SS })
     expect(mx.byTag('input')[0].attrs['data-share-tick']).toBe('matrix')
+  })
+})
+
+describe('undelivered fallback', () => {
+  const theirs = { signal: '+436601234567', whatsapp: '+436601234567' }
+  const stuck = () => {
+    const book = queueOutgoing(emptyBook(), 'p1', 'hello', T0 - 25 * 3600_000).book
+    const h = harness({ book })
+    h.handle.refresh() // io.now() is T0
+    return h
+  }
+  it('stuck pending message shows the line and buttons; press copies and opens, delivery unchanged', async () => {
+    const book = queueOutgoing(emptyBook(), 'p1', 'hello', T0 - 25 * 3600_000).book
+    const state = { book }
+    const doc = makeDoc(); const copied = []; const opened = []
+    const handle = renderChat({
+      getBook: () => state.book, setBook: (b) => { state.book = b }, send: async () => {}, now: () => T0, doc, S, isOnline: () => true,
+      person: { name: 'Lena', peerId: 'p1', reach, theirChannels: theirs }, copy: (t) => copied.push(t), open: (u) => opened.push(u),
+    })
+    const btns = handle.el.find((n) => n.attrs['data-chat-fallback'])
+    expect(btns.map((b) => b.attrs['data-chat-fallback'])).toEqual(['signal', 'whatsapp'])
+    expect(handle.el.find((n) => n.attrs['data-chat-stuck'])[0].textContent).toContain('Not delivered yet')
+    await btns[1].fire('click')
+    expect(copied).toEqual(['hello'])
+    expect(opened).toEqual(['https://wa.me/436601234567?text=hello'])
+    expect(state.book.p1.messages[0].state).toBe(MessageState.Pending)
+  })
+  it('fresh message or no channel: nothing', () => {
+    const fresh = harness({ book: queueOutgoing(emptyBook(), 'p1', 'hi', T0).book })
+    expect(fresh.root.find((n) => n.attrs['data-chat-stuck'])).toEqual([])
+    expect(stuck().root.find((n) => n.attrs['data-chat-stuck'])).toEqual([])
   })
 })

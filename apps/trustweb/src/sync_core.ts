@@ -17,7 +17,7 @@
  *
  * Stamps: no entity carries an updatedAt (and 40 edit sites would have to set one), so a stamp is found at sync time: an entity whose
  * content hash differs from the one stored at the last look gets "now" and this device's name (`by`; `from` = the device that first brought
- * it in, set once). Stored beside the record, never in it. CAVEAT: "newer" is a wall-clock comparison between two devices; a device with a
+ * it in, set once; the bundle's optional `from` carries it, v stays 2: parseBundle ignores unknown fields). Stored beside the record, never in it. CAVEAT: "newer" is a wall-clock comparison between two devices; a device with a
  * wrong clock can win edits it should lose. That is why the loser always stays readable in Review merge and a snapshot is taken before every merge.
  */
 import type { AppState, InventoryItem, PastMeeting, Person, TwEvent } from './model'
@@ -29,6 +29,7 @@ import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_pe
 import { codesForBundle, parseCodeField, readCodeList, validLongUrl, wireOther } from './sync_code'
 import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
+import { SCHEMA_VERSION } from './schema_version'
 
 /** 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
 export const SYNC_VERSION = 2
@@ -45,6 +46,8 @@ export type Stamps = Record<string, { h: string; at: number; by: string; from?: 
 
 export interface SyncBundle {
   v: number
+  /** schema_version.ts of the sending build; absent from builds before wave 21. */
+  schemaVersion?: number
   people: Person[]
   inventory: InventoryItem[]
   meetings: PastMeeting[]
@@ -52,6 +55,8 @@ export interface SyncBundle {
   at: Record<string, number>
   /** Entity key -> the sender's device name that kept that version. */
   by?: Record<string, string>
+  /** Entity key -> the device that first brought it in (Stamps.from), so the origin survives a hop through a third device. Optional: an older device sends none. */
+  from?: Record<string, string>
   channels?: { mine: ChannelMap; share: ShareSettings }
   events?: TwEvent[]
   chats?: ChatBook
@@ -149,11 +154,13 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   const entries = Object.entries(stamps)
   return {
     v: SYNC_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     people: s.people,
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
     by: Object.fromEntries(entries.map(([k, x]) => [k, x.by])),
+    ...(entries.some(([, x]) => x.from) ? { from: Object.fromEntries(entries.flatMap(([k, x]) => (x.from ? [[k, x.from]] : []))) } : {}),
     channels: { mine: s.myChannels ?? {}, share: s.contactShare ?? {} },
     events: (s.events ?? []).map(syncEvent),
     chats: sanitizeChatBook(s.chats),
@@ -230,12 +237,15 @@ export function parseBundle(v: unknown): SyncBundle | null {
   if (!people.every((p) => Array.isArray(p.lines) && typeof p.name === 'string')) return null
   if (!Object.values(v.at).every((n) => Number.isFinite(n)) || Object.keys(v.at).length > AT_MAX) return null
   const out: SyncBundle = { v: v.v, people, inventory: v.inventory as unknown as InventoryItem[], meetings: v.meetings as unknown as PastMeeting[], at: v.at as Record<string, number> }
+  if (typeof v.schemaVersion === 'number') out.schemaVersion = v.schemaVersion
   if (v.v === 1) return out
   const by = v.by === undefined ? {} : strMap(v.by)
+  const from = v.from === undefined ? {} : strMap(v.from)
   const sameAs = v.sameAs === undefined ? {} : strMap(v.sameAs)
   const channels = parseChannels(v.channels)
-  if (!by || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
+  if (!by || !from || !sameAs || !channels || !isList(v.events) || !v.events.every(isEvent) || !isObj(v.chats)) return null
   out.by = by
+  if (Object.keys(from).length) out.from = from
   out.channels = channels
   out.events = (v.events as TwEvent[]).map(syncEvent)
   out.chats = sanitizeChatBook(v.chats)
@@ -307,12 +317,17 @@ function remapBundle(b: SyncBundle, map: Record<string, string> | undefined): Sy
   const id = (x: string): string => resolveSameAs(map, x)
   const at: Record<string, number> = {}
   const by: Record<string, string> = {}
+  const from: Record<string, string> = {}
   for (const [k, n] of Object.entries(b.at)) {
     const key = k.startsWith(KEY_PREFIX.person) ? KEY_PREFIX.person + id(k.slice(2)) : k
-    if (at[key] === undefined || n > at[key]) { at[key] = n; if (b.by?.[k] !== undefined) by[key] = b.by[k] }
+    if (at[key] === undefined || n > at[key]) {
+      at[key] = n
+      if (b.by?.[k] !== undefined) by[key] = b.by[k]
+      if (b.from?.[k] !== undefined) from[key] = b.from[k]
+    }
   }
   return {
-    ...b, at, by,
+    ...b, at, by, from,
     people: b.people.map((p) => (id(p.id) === p.id ? p : { ...p, id: id(p.id) })),
     meetings: b.meetings.map((m) => (m.personId && id(m.personId) !== m.personId ? { ...m, personId: id(m.personId) } : m)),
   }
@@ -418,7 +433,7 @@ export function stampsAfterMerge(s: AppState, before: Stamps, incoming: SyncBund
   for (const [key, e] of entities(s)) {
     const at = theirs.at[key]
     if (at === undefined) continue
-    const from = before[key]?.from ?? theirName
+    const from = before[key]?.from ?? theirs.from?.[key] ?? theirName
     if (theirHash.get(key) === hashOf(e)) fresh[key] = { h: hashOf(e), at, by: theirs.by?.[key] ?? theirName, from }
     else fresh[key] = { ...fresh[key], from }
   }

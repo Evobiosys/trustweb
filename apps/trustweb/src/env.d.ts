@@ -17,6 +17,9 @@ declare module '@web-curator' {
 
 /** The git short sha this build was made from (vite.config.mjs `define`); absent outside Vite (unit tests). */
 declare const __APP_VERSION__: string
+/** The release id (full commit sha) this build was made from, and when: the same pair the server publishes in /release.json. */
+declare const __TW_RELEASE__: string
+declare const __TW_BUILT_AT__: string
 
 /** The website the app links to (src/about.ts resolveSiteUrl); set by the app.trustintheweb.org and app.trustweb.one builds only. */
 interface ImportMetaEnv {

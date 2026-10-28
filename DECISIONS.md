@@ -439,3 +439,15 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
 - Ladder: public < intending < acquaintance < community < friend < close < closest, plus self; rings can be off; most intimate zone wins.
 - Tuples {subject, relation, object, zone?, tag?, since, until?, by} as JSONL in the TrustWeb record; pure canAccess; md export per person/tag.
   OpenFGA/SpiceDB and Solid/NextGraph come later as adapters (stubs only). See docs/share-sink/architecture.txt.
+
+## D-relay-send-auth (2026-10-27): POST /relay/send needs a per-DID signature
+- Problem: ingress took any wire from anyone; the outer envelope names only the recipient, so a relay could not tell who filled a queue (spam, queue-cap exhaustion against one DID).
+- Decision: the sender signs with its did:peer:2 Ed25519 key, in four headers (x-tw-relay-did/-ts/-nonce/-sig), over `trustweb-relay-send/v1 \n did \n ts \n nonce \n sha256hex(body)`. The body is unchanged. The relay resolves the key from the DID, so no registry exists.
+  Valid only within +-5 min of the relay clock and once per (did, nonce); nonces are stored only after the signature verified; the cache is bounded per DID (429) and globally (503) and fails closed.
+  Authentication runs before routing, so an unsigned caller learns nothing about which recipients a relay serves. Modes via RelayServerOptions.senderAuth / env RELAY_SENDER_AUTH: required (default), optional (old clients; a present signature must still verify), off.
+  `isAllowedSender(did)` is an optional authorisation hook (403); without it any authentic DID may send.
+- Not covered: the relay now learns the sender DID (by design); a capture can be replayed to a different relay (audience unbound; the recipient's message-id dedup absorbs it); clock skew beyond 5 min fails.
+- deploy_wot.sh: its relay smoke check now expects 401 for an unsigned POST (was 202).
+## D-iroh-rung (2026-10-27): iroh relay as an alternative rung behind DeliveryChannel
+
+Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChannel`, `docs/IROH-RELAY.md`). The iroh runtime is injected (`IrohEndpointLike`), no native dependency added. The existing mediator rung stays for offline store-and-forward. No privacy claim beyond today's relay (I7).

@@ -87,6 +87,8 @@
 //   ORG_HIT_PER_MINUTE               60           POST /org/hit per network address (the attendee phones' counter route)
 //   NAME_CAP                         3            wave 15: names CLAIMED per network address (IPv6: /64) in 30 days (persisted in the connect store); 429 name-cap above
 //   NAME_CAP_ALLOW                   (unset)      wave 15: JSON file of organizers with a higher cap (name_cap.mjs); read at start and on SIGHUP
+//   NAME_CAP_REQUESTS                (unset)      wave 21: JSONL of POST /names/cap-request asks; default name_cap_requests.jsonl beside NAME_CAP_ALLOW (else in BACKUP_DIR)
+//   NAME_CAP_REQUESTS                (unset)      wave 21: JSONL of POST /names/cap-request asks; default name_cap_requests.jsonl beside NAME_CAP_ALLOW (else in BACKUP_DIR)
 //   RESERVED_NAMES                   (empty)      wave 6e: comma list of usernames reserved IN ADDITION to the built-in list (production: japossert,jakob). Trimmed, lowercased,
 //                                                 compared after "." "_" "-" are removed. A reserved name can only be granted through the admin route; held, it is locked.
 //   ADMIN_TOKEN_FILE                 (unset)      wave 6e: JSON {"token": "<64 hex>"} of the admin routes (/admin/name, /admin/names; loopback only, never in Caddy). Unset: the
@@ -274,6 +276,7 @@ export function loadConfig(options = {}) {
     connectSweepMs: pick(options, 'connectSweepMs', 'CONNECT_SWEEP_MS', 3_600_000),
     nameCap: pick(options, 'nameCap', 'NAME_CAP', 3),
     nameCapAllowFile: pick(options, 'nameCapAllow', 'NAME_CAP_ALLOW', '', String),
+    nameCapRequestsFile: pick(options, 'nameCapRequests', 'NAME_CAP_REQUESTS', '', String),
 
     orgMaxEvents: pick(options, 'orgMaxEvents', 'ORG_MAX_EVENTS', 3),
     orgMaxInvitees: pick(options, 'orgMaxInvitees', 'ORG_MAX_INVITEES', 25),

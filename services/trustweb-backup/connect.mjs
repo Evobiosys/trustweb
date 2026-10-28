@@ -27,6 +27,8 @@
 // every /c/ and /who/ answer carries X-Robots-Tag: noindex, nofollow. POST /connect and POST /name share one per-address budget (IPv4 as it is, IPv6 by /64, in memory); GET /c/ and GET /who/ share a more
 // generous one and answer a plain-text 429. Bodies are capped at cfg.connectMaxBytes, JSON only, own-host Origin only, never cross-site.
 
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { CODE_RE, isNameShape, squash } from './connect_names.mjs'
 import { newSecret, SECRET_RE } from './connect_store.mjs'
 import { jsonError, refuse, sendJson, tooManyRequests } from './http_util.mjs'
@@ -132,6 +134,8 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
   const writeHour = createWindowLimiter({ limit: cfg.connectPerHour, windowMs: 3_600_000, now })
   const readMinute = createWindowLimiter({ limit: cfg.connectGetPerMinute, windowMs: 60_000, now })
   const readHour = createWindowLimiter({ limit: cfg.connectGetPerHour, windowMs: 3_600_000, now })
+  const capRequestDay = createWindowLimiter({ limit: 1, windowMs: 86_400_000, now })
+  const capRequestsFile = cfg.nameCapRequestsFile || path.join(cfg.nameCapAllowFile ? path.dirname(cfg.nameCapAllowFile) : cfg.dir, 'name_cap_requests.jsonl')
   const perName = createWindowLimiter({ limit: cfg.whoPerNamePerMinute, windowMs: 60_000, now })
 
   /** The short link the answers carry (informational: the client builds its own from location.origin). */
@@ -226,16 +230,17 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     return code === undefined ? mint(res, req, url) : replace(res, req, code, secret, url)
   }
 
-  /** The store call of a POST /name intent. */
-  function applyIntent(intent, code, secret, addr) {
+  /** The store call of a POST /name intent. `agent`: X-TW-Agent: 1 (an agent or script; the app never sets it): its claims count in a cap of their own. */
+  function applyIntent(intent, code, secret, addr, agent) {
     if (intent.intent === 'read') return store.read(code, secret)
     if (intent.intent === 'release') return store.release(code, secret, intent.name)
     if (intent.intent === 'move') return store.move(code, secret, intent)
-    return store.claim(code, secret, { name: intent.name, alias: intent.alias, addr, cap: capFor(nameCapAllow.list(), addr, code, cfg.nameCap) })
+    return store.claim(code, secret, { name: intent.name, alias: intent.alias, addr: agent ? `agent:${addr}` : addr, cap: capFor(nameCapAllow.list(), addr, code, cfg.nameCap) })
   }
 
   /** POST /name: claim, release or read (contract 10.9.2). Returns the status it answered. */
   async function name(req, res) {
+    const agent = req.headers['x-tw-agent'] === '1'
     const got = await receive(req, res)
     if (got.body === undefined) return got.status
     const { code, secret } = got.body
@@ -246,7 +251,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     if (intent.intent === 'move' && intent.from.code === code) return jsonError(res, 400, 'bad_request', { field: 'from' })
     let result
     try {
-      result = await applyIntent(intent, code, secret, ipKey(clientOf(req)))
+      result = await applyIntent(intent, code, secret, ipKey(clientOf(req)), agent)
     } catch {
       return jsonError(res, 500, 'server_error')
     }
@@ -258,6 +263,35 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     }
     sendJson(res, 200, { name: result.name, aliases: result.aliases, locked: result.locked })
     return 200
+  }
+
+  /**
+   * POST /names/cap-request {code, secret, name, reason, wanted}: an organizer asks the steward for a higher NAME_CAP ahead of an event. Needs the secret of a code
+   * that holds `name`; one request per address (IPv6: /64) per day (a failed ask does not use it up). Appends one JSONL line beside the NAME_CAP_ALLOW file;
+   * the steward reads it and adds an allow entry by hand (README.txt). Answers 202 {at}.
+   */
+  async function capRequest(req, res) {
+    const got = await receive(req, res)
+    if (got.body === undefined) return got.status
+    const { code, secret, name, reason, wanted } = got.body
+    if (typeof code !== 'string' || !CODE_RE.test(code)) return jsonError(res, 400, 'bad_request', { field: 'code' })
+    if (typeof secret !== 'string' || !SECRET_RE.test(secret)) return jsonError(res, 400, 'bad_request', { field: 'secret' })
+    if (typeof reason !== 'string' || reason.trim() === '') return jsonError(res, 400, 'bad_request', { field: 'reason' })
+    if (!Number.isInteger(wanted) || wanted < 1) return jsonError(res, 400, 'bad_request', { field: 'wanted' })
+    const held = await store.read(code, secret)
+    if (held.kind === 'forbidden') return jsonError(res, 403, 'forbidden')
+    if (typeof name !== 'string' || ![held.name, ...held.aliases].includes(name) || name === '') return jsonError(res, 400, 'bad_request', { field: 'name' })
+    const address = ipKey(clientOf(req))
+    const day = capRequestDay.hit(address)
+    if (day.limited) return tooManyRequests(res, 'rate_limited', day.retryAfter)
+    const at = now()
+    try {
+      await fs.appendFile(capRequestsFile, `${JSON.stringify({ at, address, name, reason: reason.trim().slice(0, 280), wanted: Math.min(wanted, 50) })}\n`, { mode: 0o600 })
+    } catch {
+      return jsonError(res, 500, 'server_error')
+    }
+    sendJson(res, 202, { at })
+    return 202
   }
 
   /** GET|HEAD gate: method, then the shared read budget. Returns the status when it answered, else null. */
@@ -319,5 +353,5 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     return redirect(res, `https://${host}/c/${code}`)
   }
 
-  return { create, name, open, who }
+  return { create, name, capRequest, open, who }
 }

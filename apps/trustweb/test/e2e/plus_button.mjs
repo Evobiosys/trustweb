@@ -214,14 +214,14 @@ async function main() {
     ok('touch: Settings > Tutorial brings every hint back', await tp.getByRole('button', { name: 'About Meeting button' }).isVisible())
     await touch.close()
 
-    // desktop: outside the phone, "Add a device" and "See it in action" (an overlay)
+    // desktop: outside the phone, "Add a device" and "See TrustWeb in action" (an overlay)
     const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     desk.on('pageerror', (e) => console.log('  [pageerror desktop]', e.message))
     // Wave 18: a wide tab opens on the Desk; the phone frame is the subject here.
     await desk.addInitScript(() => localStorage.setItem('trustweb.ui.desktop', 'phone'))
     await desk.goto(base)
-    const see = desk.getByRole('button', { name: 'See it in action' })
-    ok('desktop: "Add a device" and "See it in action" sit outside the phone', await see.isVisible() && (await desk.locator('.page-dock .add-device').innerText()).includes('Add a device'))
+    const see = desk.getByRole('button', { name: 'See TrustWeb in action' })
+    ok('desktop: "Add a device" and "See TrustWeb in action" sit outside the phone', await see.isVisible() && (await desk.locator('.page-dock .add-device').innerText()).includes('Add a device'))
     await desk.getByLabel('Your first name').fill('Desk')
     await desk.getByRole('button', { name: 'Start on this phone' }).click()
     const toggle = desk.locator('.demo-toggle')

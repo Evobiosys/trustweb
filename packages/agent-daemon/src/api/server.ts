@@ -1,7 +1,7 @@
 // REST + WS server — implements docs/API.md exactly (paths, shapes, event
 // names). Plain node:http + ws (brief: "keep deps lean"). Binds 127.0.0.1 by
 // default; LAN exposure is opt-in via API_HOST (Task 5), never the default.
-import { createServer, type IncomingMessage, type ServerResponse, type Server as NodeHttpServer } from "node:http";
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse, type Server as NodeHttpServer } from "node:http";
 import { EventEmitter } from "node:events";
 import { WebSocketServer, WebSocket } from "ws";
 import type { TrustLevel } from "@resource-web/protocol";
@@ -31,7 +31,12 @@ export interface RelayMediator {
    * (adversarial-review finding 1). `rejected` (malformed/unroutable/oversize/
    * over-cap) carries a reason only so a RelayChannel caller can fall back.
    */
-  submit(rawWire: string): { routed: "accepted" | "rejected"; reason?: string };
+  /**
+   * Authenticates the sender (per-DID signature headers, see relay_send_auth.ts) and then submits. `status` carries a
+   * non-404 refusal (401 forged/unsigned/replayed, 403 not allowed, 429/503 budget); absent on `rejected` means 404.
+   * The unauthenticated `submit()` is deliberately NOT part of this interface: the HTTP ingress must not reach it.
+   */
+  ingress(rawWire: string, headers: IncomingHttpHeaders): { routed: "accepted" | "rejected"; reason?: string; status?: number };
   /** Mounts the authenticated drain WS onto an existing http.Server (additive `ws` upgrade-path hook). */
   attachDrainWss(httpServer: NodeHttpServer, path?: string): void;
 }
@@ -208,7 +213,8 @@ export interface ServerExtras {
 
 /** CORS headers that never depend on the allowlist mode or the request's origin. */
 const CORS_METHOD_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Headers": "content-type",
+  // x-tw-relay-*: the per-DID signature a browser peer attaches to POST /relay/send (relay_send_auth.ts).
+  "Access-Control-Allow-Headers": "content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig",
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
 };
 
@@ -818,12 +824,12 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
       // (this handler, NOT RelayServer.listen()). Oversize → 413, no submit().
       const rawWire = await readBoundedBody(req, res, RELAY_MAX_BODY_BYTES, baseCorsHeaders());
       if (rawWire === BODY_TOO_LARGE) return; // 413 already written + socket closed
-      const result = extras.relayServer.submit(rawWire);
+      const result = extras.relayServer.ingress(rawWire, req.headers);
       // Non-informative success (finding 1): the mediator returns
       // `{ routed: "accepted" }` for both live and queued — the HTTP status is
       // likewise uniform (202) so it cannot become a side-channel. Only a
       // `rejected` maps to 404 (lets a RelayChannel caller fall back a rung).
-      sendJson(res, result.routed === "rejected" ? 404 : 202, result);
+      sendJson(res, result.routed === "rejected" ? (result.status ?? 404) : 202, { routed: result.routed, ...(result.reason ? { reason: result.reason } : {}) });
       return;
     }
 

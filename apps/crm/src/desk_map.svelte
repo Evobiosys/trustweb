@@ -8,6 +8,7 @@
   import EmptyState from './empty_state.svelte'
   import { openPerson } from './nav.svelte'
   import { centreOf, fetchPlace, geocodeQueue, geoKey, uncached } from './place_geo'
+  import { pinsOf } from './place_gazetteer'
   import type { MapHandle, Pin } from './place_map'
   import { prefs, savePrefs } from './prefs.svelte'
   import { S } from './strings'
@@ -20,10 +21,8 @@
 
   const AVATARS_SHOWN = 8
   const places = $derived(placesOf(data.view, data.values, prefs.close))
-  const pins = $derived<Pin[]>(places.flatMap((g) => {
-    const at = prefs.geo[geoKey(g.place)]
-    return at ? [{ place: g.place, lat: at.lat, lon: at.lon, people: g.people.map((p) => ({ id: p.id, name: shownName(p.name), initials: initials(shownName(p.name)) })) }] : []
-  }))
+  const placed = $derived(pinsOf(places.map((g) => ({ place: g.place, people: g.people.map((p) => ({ id: p.id, name: shownName(p.name), initials: initials(shownName(p.name)) })) })), prefs.geo))
+  const pins = $derived<Pin[]>(placed.pins)
   const todo = $derived(uncached(prefs.geo, places.map((g) => g.place)))
 
   const queue = geocodeQueue({ now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), lookup: fetchPlace })
@@ -51,6 +50,7 @@
   let handle: MapHandle | undefined
   let starting = false
   let inView = $state(false)
+  let ready = $state(false)
   $effect(() => {
     if (!box || typeof IntersectionObserver === 'undefined') return
     const watch = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { inView = true; watch.disconnect() } })
@@ -61,7 +61,7 @@
     if (!box || !inView || handle || starting) return
     starting = true
     const view = centreOf(liveTogetherPrefs(host.record?.()?.togetherPrefs, Date.now()), prefs.geo, places.map((g) => g.place))
-    void import('./place_map').then(({ createMap }) => createMap(box!, view, openPerson, { on: prefs.mapTiles, onToggle: (on) => { prefs.mapTiles = on; savePrefs() } })).then((h) => { handle = h; h.setPins(pins) })
+    void import('./place_map').then(({ createMap }) => createMap(box!, view, openPerson, { on: prefs.mapTiles, onToggle: (on) => { prefs.mapTiles = on; savePrefs() } })).then((h) => { handle = h; h.setPins(pins); ready = true })
   })
   $effect(() => { const now = pins; handle?.setPins(now) })
   onDestroy(() => { queue.cancel(); handle?.destroy() })
@@ -70,7 +70,17 @@
 <div class="desk-page" data-screen="desk-map">
   <h1 class="desk-title">{S.desk.mapTitle}</h1>
   <p class="desk-sub">{S.desk.mapNote(prefs.mapTiles)}</p>
-  <div class="desk-map" data-map bind:this={box} role="region" aria-label={S.desk.mapAria}></div>
+  <div class="desk-map-wrap">
+    <div class="desk-map" data-map bind:this={box} role="region" aria-label={S.desk.mapAria}></div>
+    {#if !ready}
+      <div class="desk-map-ph" data-map-ph aria-hidden="true">
+        {#each pins as pin (pin.place)}
+          <span class={pin.approx ? 'desk-pin approx' : 'desk-pin'} style:left="{(pin.lon + 180) / 3.6}%" style:top="{(90 - pin.lat) / 1.8}%">{pin.people.length === 1 ? pin.people[0].initials : pin.people.length}</span>
+        {/each}
+      </div>
+    {/if}
+  </div>
+  {#if placed.unplaced}<p class="desk-sub" data-map-unplaced>{S.desk.mapUnplaced(placed.unplaced)}</p>{/if}
   {#if places.length}
     <div class="desk-map-bar">
       {#if progress}

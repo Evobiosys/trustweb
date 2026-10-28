@@ -903,7 +903,7 @@ test('NO LOGGING by construction: the connect modules have no logger, no console
   assert.match(store, /crypto\.timingSafeEqual\(hashSecret\(secret\)/)
   assert.doesNotMatch(store.replace(/\/\/.*$/gm, ''), /ecret\)?\s*[!=]==|[!=]==\s*(?:hash)?[sS]ecret/)
   const server = await fs.readFile(path.join(here, '..', 'server.mjs'), 'utf8')
-  assert.match(server, /const isConnectPath = \(pathname\) => pathname === '\/connect' \|\| pathname === '\/name' \|\| pathname\.startsWith\('\/c\/'\) \|\| pathname\.startsWith\('\/who\/'\)/)
+  assert.match(server, /const isConnectPath = \(pathname\) => pathname === '\/connect' \|\| pathname === '\/name' \|\| pathname === '\/names\/cap-request' \|\| pathname\.startsWith\('\/c\/'\) \|\| pathname\.startsWith\('\/who\/'\)/)
   assert.match(server, /const quiet = isLinkPath\(\(req\.url \?\? ''\)\.split\('\?'\)\[0\]\) \|\| isConnectPath\(\(req\.url \?\? ''\)\.split\('\?'\)\[0\]\)/)
 })
 

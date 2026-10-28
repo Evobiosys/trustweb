@@ -24,8 +24,8 @@ interface BootOpts {
   personaName?: string;
   peerId?: string;
   bus?: InMemoryBus;
-  /** When set, the persona hosts the trust-graph mediator: startServer mounts POST /relay/send → relayServer.submit (Task 10 / finding 2). */
-  relayServer?: { submit(rawWire: string): { routed: "accepted" | "rejected"; reason?: string }; attachDrainWss(httpServer: unknown, path?: string): void };
+  /** When set, the persona hosts the trust-graph mediator: startServer mounts POST /relay/send → relayServer.ingress (Task 10 / finding 2). */
+  relayServer?: { ingress(rawWire: string, headers: Record<string, string | string[] | undefined>): { routed: "accepted" | "rejected"; reason?: string; status?: number }; attachDrainWss(httpServer: unknown, path?: string): void };
   /** DID card fields merged into GET /api/card (Task 11's getCardPayload output + Task 5's relay_url). */
   cardExtra?: { did: string; endpoint: string; relays?: string[]; ice_servers?: string[]; relay_url?: string };
   /** Finding 4 (2026-09-06 UH-findings handover): opt-in bearer-token auth. */
@@ -232,7 +232,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/state`);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(res.headers.get("access-control-allow-headers")).toBe("content-type");
+    expect(res.headers.get("access-control-allow-headers")).toBe("content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig");
     expect(res.headers.get("access-control-allow-methods")).toBe("GET,POST,DELETE,OPTIONS");
   });
 
@@ -630,11 +630,11 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
 
   // --------------------------------------- Task 10 / finding 2: relay ingress --
 
-  it("POST /relay/send bounds the body: an oversize wire is rejected 413 and never reaches submit()", async () => {
+  it("POST /relay/send bounds the body: an oversize wire is rejected 413 and never reaches ingress()", async () => {
     const port = nextPort();
     const submitted: string[] = [];
     const relayServer = {
-      submit(rawWire: string): { routed: "accepted" | "rejected"; reason?: string } {
+      ingress(rawWire: string): { routed: "accepted" | "rejected"; reason?: string } {
         submitted.push(rawWire);
         return { routed: "accepted" };
       },
@@ -664,7 +664,7 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
   it("POST /relay/send returns the mediator's non-informative {routed:'accepted'} verbatim (no live/queued oracle)", async () => {
     const port = nextPort();
     const relayServer = {
-      submit(): { routed: "accepted" | "rejected"; reason?: string } {
+      ingress(): { routed: "accepted" | "rejected"; reason?: string } {
         return { routed: "accepted" };
       },
       attachDrainWss(): void {},
@@ -678,6 +678,30 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
     });
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ routed: "accepted" });
+  });
+
+  it("POST /relay/send hands the request headers to ingress() and maps a refusal's status (401 forged/unsigned)", async () => {
+    const port = nextPort();
+    const seen: Array<string | string[] | undefined> = [];
+    const relayServer = {
+      ingress(_rawWire: string, headers: Record<string, string | string[] | undefined>): { routed: "accepted" | "rejected"; reason?: string; status?: number } {
+        seen.push(headers["x-tw-relay-sig"]);
+        return headers["x-tw-relay-sig"] === "good" ? { routed: "accepted" } : { routed: "rejected", reason: "sender authentication failed: bad_signature", status: 401 };
+      },
+      attachDrainWss(): void {},
+    };
+    const { server } = await bootDaemon(port, { relayServer });
+    cleanup = () => server.close();
+
+    const body = JSON.stringify({ to: "did:peer:2.xyz", ciphertext: "c" });
+    const bad = await fetch(`http://127.0.0.1:${port}/relay/send`, { method: "POST", body, headers: { "x-tw-relay-sig": "forged" } });
+    expect(bad.status).toBe(401);
+    expect(await bad.json()).toEqual({ routed: "rejected", reason: "sender authentication failed: bad_signature" });
+    const none = await fetch(`http://127.0.0.1:${port}/relay/send`, { method: "POST", body });
+    expect(none.status).toBe(401);
+    const good = await fetch(`http://127.0.0.1:${port}/relay/send`, { method: "POST", body, headers: { "x-tw-relay-sig": "good" } });
+    expect(good.status).toBe(202);
+    expect(seen).toEqual(["forged", undefined, "good"]);
   });
 
   // ------------------------------ Task 4 (D18/QR): inbound CONNECT consent --

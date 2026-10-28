@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -263,6 +263,21 @@ describe('approve (merge to main) rules', () => {
     expect(pendingCount({ features: list, assembled: null })).toBe(1)   // no assembled.set (older registry): its checked rows a, b, d against the approved a, d
     expect(pendingText(1)).toBe('1 change not applied'); expect(pendingText(3)).toBe('3 changes not applied')
   })
+  it('no manual reload (Jakob 2026-10-24): a pending registry starts the apply by itself, unless one is going, a test runs, or the last apply got stuck (Retry is the owner\'s)', () => {
+    const pend = { pending: true, tested: null }
+    expect(autoApply(pend, null)).toBe(true)
+    expect(autoApply({ pending: false, tested: null }, null)).toBe(false)
+    expect(autoApply(pend, { stamp: '', moved: 0, stuck: false })).toBe(false)
+    expect(autoApply(pend, { stamp: '', moved: 0, stuck: true })).toBe(false)
+    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: null, running: true } }, null)).toBe(false)
+    expect(autoApply({ pending: true, tested: { sha: 'x', at: '', ok: true, running: false } }, null)).toBe(true)
+  })
+  it('the page reloads itself once the assembled sha moved away from the one it knows (a CLI apply, or the Approve press); unknown or same sha: stay', () => {
+    expect(assemblyMoved('abc1234', { assembled: { sha: 'abc1234' } })).toBe(false)
+    expect(assemblyMoved('abc1234', { assembled: { sha: 'def5678' } })).toBe(true)
+    expect(assemblyMoved(null, { assembled: { sha: 'def5678' } })).toBe(false)
+    expect(assemblyMoved('abc1234', { assembled: null })).toBe(false)
+  })
   it('the apply counts as stuck when the registry did not change for 90 s', () => {
     const p = { pending: true, assembled: { at: 't1', set: [] }, features: [g('a', true, 'merge')] }
     expect(applyStamp(p)).toBe(applyStamp({ ...p }))
@@ -341,5 +356,45 @@ describe('Approve personal view (the one button that pushes, opens the PR and sh
     expect(personalApprove(true, [f('b', [], false), { ...f('c'), merged: true }]).ok).toBe(false)
     expect(personalApprove(true, []).ok).toBe(false)
     expect(personalApprove(false, []).ok).toBe(true)
+  })
+})
+
+describe('panel polish: one clean reload, scroll kept', () => {
+  const mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v) } } }
+  const asm = (sha, error = null) => ({ sha, error })
+  it('reloads once a different assembled sha shows, never before the first answer', () => {
+    expect(shouldReload('a', asm('b'), null, 1e6)).toBe(true)
+    expect(shouldReload('a', asm('a'), null, 1e6)).toBe(false)
+    expect(shouldReload(null, asm('b'), null, 1e6)).toBe(false)
+    expect(shouldReload('a', null, null, 1e6)).toBe(false)
+  })
+  it('never while the assembly carries an error', () => {
+    expect(shouldReload('a', asm('b', 'CONFLICT'), null, 1e6)).toBe(false)
+  })
+  it('at most once per distinct sha, and not within 10 s of the last reload', () => {
+    expect(shouldReload('a', asm('b'), { sha: 'b', at: 0 }, 1e6)).toBe(false)
+    expect(shouldReload('a', asm('c'), { sha: 'b', at: 1e6 - RELOAD_GAP_MS + 1 }, 1e6)).toBe(false)
+    expect(shouldReload('a', asm('c'), { sha: 'b', at: 1e6 - RELOAD_GAP_MS }, 1e6)).toBe(true)
+  })
+  it('the reload mark is kept per preview id in the tab store', () => {
+    const s = mem()
+    expect(reloadMark(s, 'p1').get()).toBeNull()
+    reloadMark(s, 'p1').set({ sha: 'b', at: 5 })
+    expect(reloadMark(s, 'p1').get()).toEqual({ sha: 'b', at: 5 })
+    expect(reloadMark(s, 'p2').get()).toBeNull()
+    s.setItem('twp-reload-p3', '{bad')
+    expect(reloadMark(s, 'p3').get()).toBeNull()
+  })
+  it('the panel scroll position is kept per preview id; junk and dead storage read as 0', () => {
+    const s = mem()
+    expect(scrollStore(s, 'p1').get()).toBe(0)
+    scrollStore(s, 'p1').set(240)
+    expect(scrollStore(s, 'p1').get()).toBe(240)
+    expect(scrollStore(s, 'p2').get()).toBe(0)
+    s.setItem('twp-scroll-p3', 'x')
+    expect(scrollStore(s, 'p3').get()).toBe(0)
+    const dead = { getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') } }
+    expect(scrollStore(dead, 'p').get()).toBe(0)
+    expect(() => scrollStore(dead, 'p').set(1)).not.toThrow()
   })
 })

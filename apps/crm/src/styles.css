@@ -411,6 +411,11 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-place{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-top:12px}
 .desk-map{height:55vh; min-height:320px; margin-top:12px; border-radius:16px; border:1px solid var(--line); overflow:hidden; z-index:0}
 .desk-map.leaflet-container{background:#0f1722}
+.desk-map-wrap{position:relative}
+[data-screen=desk-map] > .desk-sub{white-space:normal}
+.desk-map-ph{position:absolute; inset:12px 0 0 0; border-radius:16px; background:#0f1722; overflow:hidden; pointer-events:none}
+.desk-map-ph .desk-pin{position:absolute; transform:translate(-50%,-50%)}
+.desk-pin.approx{background:transparent; color:var(--ink, #fff); border:2px dashed var(--accent, #3b82f6); box-shadow:none}
 .desk-map-tiles{font:inherit; font-size:13px; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card, #fff); color:var(--ink, #111); text-decoration:underline; cursor:pointer}
 .desk-map-tiles[aria-pressed=true]{font-weight:600}
 .desk-map-bar{display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap}

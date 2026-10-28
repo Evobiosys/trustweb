@@ -138,6 +138,36 @@ export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?
 }
 export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
 
+/** No manual reload (Jakob 2026-10-24): the panel starts `apply` itself whenever the registry says pending and nothing stands in the way: no apply going
+ *  (a stuck one waits for the owner's Retry), no local test run (it reads the assembled worktree). */
+export const autoApply = (p: { pending?: boolean; tested?: Tested | null }, applying: { stuck: boolean } | null): boolean => !!p.pending && applying === null && !p.tested?.running
+
+/** The assembled sha moved away from the one this page knows (a CLI apply, the Approve press, another tab): the page reloads itself. Unknown = not yet compared. */
+export const assemblyMoved = (known: string | null, p: { assembled?: { sha: string } | null }): boolean => known !== null && !!p.assembled && p.assembled.sha !== known
+
+/** The sha this tab last reloaded for, and when. */
+export interface ReloadMark { sha: string; at: number }
+export const RELOAD_GAP_MS = 10_000
+
+/** The page reloads for a new assembled sha only: after the first answer, never while the assembly carries an error, once per sha, and 10 s apart: the page shows content or "Assembling…", never a flicker between them. */
+export function shouldReload(served: string | null, assembled: { sha: string; error: string | null } | null | undefined, last: ReloadMark | null, now: number): boolean {
+  if (served === null || !assembled || assembled.error || assembled.sha === served) return false
+  return !last || (last.sha !== assembled.sha && now - last.at >= RELOAD_GAP_MS)
+}
+
+/** A per-preview, per-tab value in sessionStorage (twp-<what>-<id>); unavailable or broken storage reads as `none`. */
+function tabValue<T>(storage: Pick<Storage, 'getItem' | 'setItem'>, key: string, none: T, ok: (v: unknown) => v is T): { get(): T; set(v: T): void } {
+  return {
+    get: (): T => { try { const v: unknown = JSON.parse(storage.getItem(key) ?? 'null'); return ok(v) ? v : none } catch { return none } },
+    set: (v: T): void => { try { storage.setItem(key, JSON.stringify(v)) } catch { /* not remembered */ } },
+  }
+}
+export const reloadMark = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) =>
+  tabValue<ReloadMark | null>(storage, 'twp-reload-' + id, null, (v): v is ReloadMark => typeof v === 'object' && v !== null && typeof (v as ReloadMark).sha === 'string' && typeof (v as ReloadMark).at === 'number')
+/** The panel's scroll offset: kept across the self-reload, a manual reload and an apply round trip. */
+export const scrollStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) =>
+  tabValue<number>(storage, 'twp-scroll-' + id, 0, (v): v is number => typeof v === 'number' && v >= 0)
+
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
