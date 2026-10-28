@@ -2602,7 +2602,7 @@ function queryFab(): HTMLElement {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
     onclick: openQuery,
   })
-  b.innerHTML = icon(call ? 'call' : 'query')
+  b.innerHTML = icon(call ? 'ask' : 'query')
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))
@@ -2848,7 +2848,8 @@ function leanRow(p: Person): HTMLElement | null {
     const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) save() } })
     area.addEventListener('input', () => saver.input(area.value))
     area.addEventListener('blur', () => saver.flush())
-    return area
+    const saveBtn = el('button', { class: 'btn btn-electric btn-sm', 'data-lean-note-save': '', onclick: () => { saver.flush(); toast(S.noteSaved) } }, [S.noteSave])
+    return el('div', { class: 'lean-note' }, [el('label', { class: 'meta' }, [S.noteLabel]), area, saveBtn])
   }
   const draw = (): void => box.replaceChildren(
     el('button', { class: 'btn btn-ghost btn-sm', 'data-lean-add-note': '', onclick: (e: Event) => { (e.currentTarget as HTMLElement).replaceWith(note()); box.querySelector('textarea')?.focus() } }, [S.leanAddNote]),
@@ -2989,7 +2990,7 @@ const NO_CHATS: ChatBook = {}
 
 const chatStrings = (): ChatStrings => ({
   title: S.chatTitle, messageOn: (r) => S.chatMessageOn(reachLabel(r)), notConnected: S.chatNotConnected, empty: S.chatEmpty,
-  offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
+  offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, longHint: S.chatLongHint, sendAgain: S.chatSendAgain, pending: S.chatPending,
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
   re: S.chatRe, replyingTo: S.chatReplyingTo, replyingToDrop: S.chatReplyingToDrop,
   notDelivered: S.chatNotDelivered, sendVia: (k) => S.chatSendVia(S.chLabel[k === 'signal' ? Channel.Signal : Channel.WhatsApp]),
@@ -4276,7 +4277,7 @@ function screenRecord(): Node[] {
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
       roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() && !draft.generalNotes.trim() && !draft.plain, data: 'data-record-discard' }),
-      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
+      roundButton('send', S.recSave, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
     ]),
   ]
 }
@@ -5955,7 +5956,7 @@ function screenInventory(): Node[] {
   ])
   // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
-  call.innerHTML = icon('call')
+  call.innerHTML = icon('ask')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
   const list = el('div', { class: 'scroll pad' }, [
       s.testOf ? foundView(s) : null,
@@ -6072,6 +6073,7 @@ async function pickTogetherPlace(): Promise<void> {
  * Anything that is not a together request is asked as typed, at once.
  */
 async function sendFromDock(text: string): Promise<void> {
+  if (!text.trim()) { toast(S.queryNeedText); return }
   const now = Date.now()
   const pending = togetherPending
   togetherPending = null
@@ -6157,6 +6159,7 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
+      run ? null : el('p', { class: 'hint', 'data-query-sees': '1' }, [S.querySees]),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
@@ -6182,7 +6185,7 @@ function queryDock(s: AppState): HTMLElement {
       }, [S.querySend]),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
-      !run && !feedOn(s) && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryEarlier)]) : null,
+      !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,
     ]),
   ])
 }

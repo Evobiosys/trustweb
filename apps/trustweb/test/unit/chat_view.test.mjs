@@ -37,7 +37,7 @@ const reach = { channel: Channel.Signal, value: USER, link: USER, source: 'their
 const S = {
   title: (n) => `Chat with ${n}`, messageOn: () => 'Message on Signal',
   notConnected: (n) => `${n} is not connected yet`, empty: (n) => `Say hello to ${n}`, offline: 'Waiting for a connection',
-  placeholder: 'Message', send: 'Send', sendAgain: 'Send again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n} left`, you: 'You',
+  placeholder: 'Message', send: 'Send', longHint: 'Signal', sendAgain: 'Send again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n} left`, you: 'You',
   notDelivered: 'Not delivered yet', sendVia: (k) => `Send via ${k}`,
 }
 const T0 = 1_800_000_000_000
