@@ -108,18 +108,24 @@ function appVersion() {
   }
 }
 
-// dist/release.json: the release identifier a deploy's health check compares with the commit it meant to ship.
-// Outside /assets/, so the server sends it no-cache. TW_RELEASE (CI: the full commit sha) wins over git.
+// The release identifier a deploy's health check compares with the commit it meant to ship, and the running app with the published one
+// (src/app_update.ts). TW_RELEASE (CI: the full commit sha) wins over git.
+function releaseId() {
+  let release = process.env.TW_RELEASE ?? ''
+  if (!release) {
+    try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim() } catch { release = 'dev' }
+    if (appVersion().endsWith('-dirty')) release += '-dirty'
+  }
+  return release
+}
+const BUILT_AT = new Date().toISOString()
+
+// dist/release.json, outside /assets/, so the server sends it no-cache.
 function releaseFile() {
   return {
     name: 'trustweb-release-file',
     generateBundle() {
-      let release = process.env.TW_RELEASE ?? ''
-      if (!release) {
-        try { release = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: here, encoding: 'utf8' }).trim() } catch { release = 'dev' }
-        if (appVersion().endsWith('-dirty')) release += '-dirty'
-      }
-      this.emitFile({ type: 'asset', fileName: 'release.json', source: JSON.stringify({ release, built_at: new Date().toISOString() }) + '\n' })
+      this.emitFile({ type: 'asset', fileName: 'release.json', source: JSON.stringify({ release: releaseId(), built_at: BUILT_AT }) + '\n' })
     },
   }
 }
@@ -361,7 +367,7 @@ export default ({ command }) => ({
     // The Curator's build-time hooks (apps/crm/vite.config.ts): its record is this app's (src/curator.ts), so no record file of its own.
     __TW_RECORD__: 'null',
     __TW_SUGGESTIONS__: JSON.stringify(devSuggestions(command)),
-    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
+    __TW_TANA_TOKEN__: JSON.stringify(command === 'serve' ? (process.env.TW_CRM_TANA_TOKEN ?? null) : null), __TW_NOTES_TOKEN__: JSON.stringify(command === 'serve' ? notesToken() : null), __APP_VERSION__: JSON.stringify(appVersion()), __TW_RELEASE__: JSON.stringify(releaseId()), __TW_BUILT_AT__: JSON.stringify(BUILT_AT), __TW_DEV_RECORD__: devRecord(command), __TW_DEV_EVENTS__: devEvents(command), __TW_FEATURE__: devFeature(command), __TW_PREVIEW__: devPreview(command), __TW_BUILD__: devBuild(command) },
   plugins: [svelte({ configFile: false, compilerOptions: { css: 'injected' } }), pwaFiles(), releaseFile(), ...(command === 'serve' ? [approveApi(), previewApi(), eventsApi()] : [])],
   base: command === 'build' ? (process.env.TW_BASE ?? '/trustweb/') : '/',
   // No public/ directory of its own (nothing extra is ever copied into dist/).

@@ -121,8 +121,12 @@ import type { MeetingTranscriber, Segment } from './meeting_transcriber'
 import { meetingToNoteText, meetingToText } from './sensemeet'
 import { backupNow, newRandomKey, parseKeyText, restore } from './backup'
 import { createBackupView } from './backup_view'
+import type { BackupView } from './backup_view'
 import { RecordOrigin, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
+import { UpdateResult, createUpdateCheck, reloadFresh } from './app_update'
+import { devicesSectionChildren } from './devices_section'
+import { linkButton, openLinkChange } from './link_change_view'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
 import { addNetworkDemo } from './network_seed'
@@ -422,11 +426,14 @@ function st(): AppState {
   if (!state) throw new Error('no state yet')
   return state
 }
+/** Set once the backup card exists (below); a save during boot comes earlier and has nothing to tell it. */
+let autoBackup: BackupView | null = null
 function save(): void {
   if (state && !superseded) {
     saveState(persona, state, storeCtx)
     pushDevEvents(state)
     mirrorPushBundle(state)
+    autoBackup?.changed()
   }
 }
 
@@ -770,7 +777,12 @@ const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-t
 /** Map-local (Jakob 2026-10-23): the TrustWeb view's way back to the Desk, bottom right in the page dock, only on a wide tab while the Desk is closed. */
 const deskViewPill = el('button', { class: 'see-action desk-view-pill', 'data-desktop-view': '', hidden: true, onclick: () => showDesktopVersion() }, [S.showDesktop])
 let statusPill: HTMLElement | null = null
-phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl)
+/** A newer build is deployed (app_update.ts): small banner above the tab bar, only its button takes taps. */
+const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-live': 'polite', 'data-update-banner': '1', hidden: true }, [
+  el('span', {}, [S.updBanner]),
+  el('button', { class: 'btn btn-electric btn-sm', 'data-update-reload': '1', onclick: () => void reloadNow() }, [S.updReload]),
+])
+phone.append(host, tabs, veil, sheet, overlay, toastEl, friendsEl, msgNoticeEl, updateBanner)
 root.replaceChildren(phone)
 // On a wide screen, outside the phone: open the side-by-side demo (not inside
 // the demo's own iframes, and not on a real phone, where the app is full screen).
@@ -3740,6 +3752,7 @@ const devices = createSyncView({
     ? { origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save }
     : null),
   connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+  editLink: () => openLinkChange(linkHooks),
 })
 
 /** The record; on a device that has none yet (a new phone linking before it has a name) the empty one is made first, as a fresh personal phone makes it. */
@@ -5536,6 +5549,12 @@ function audioKeptLine(): HTMLElement {
   return line
 }
 
+const linkHooks = {
+  names: () => namesSync().names(),
+  claim: (name: string) => namesSync().claim(name, false),
+  openSheet, closeSheet, toast, settings: () => settingsSheet(),
+}
+
 /** What the owner's public link reads as in Settings: trustweb.one/<primary name> once claimed. */
 function reachOutLink(): string {
   const name = namesSync().names().name
@@ -5603,6 +5622,7 @@ function settingsSheet(): void {
       el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
         el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
       ]),
+      linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
       connectionRow(),
       buildContactBox({}).el,
       el('button', {
@@ -5628,7 +5648,9 @@ function settingsSheet(): void {
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
     ]),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
-    settingsSection('devices', S.setSecDevices, connectEligible() ? devices.settingsGroup() : []),
+    settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
+      eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
+    })),
     settingsSection('features', S.setSecFeatures, [
       ...feed.settingsGroup(),
       featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
@@ -5729,6 +5751,7 @@ function settingsSheet(): void {
     installable && !installedHere() ? el('button', { class: 'btn btn-ghost', 'data-open-install': '1', onclick: openInstallSheet }, [S.setInstall]) : null,
     ...apkUpdatesRow(s),
     ...aboutGroup(),
+    updateRow(),
     // safetyLink(SafetyPlace.Settings, () => openSheet(safetySheetNodes({ place: SafetyPlace.Settings, back: { label: S.safeBackSettings, go: settingsSheet } }))),
     solo ? null : el('button', {
       class: 'btn btn-ghost',
@@ -5770,6 +5793,41 @@ function sourcesGroup(s: AppState): Node[] {
 }
 
 // ---------------------------------------------------------------------------
+// app updates (app_update.ts): /release.json against this build's id
+// ---------------------------------------------------------------------------
+
+const updates = createUpdateCheck({
+  running: typeof __TW_RELEASE__ === 'string' ? __TW_RELEASE__ : 'dev',
+  now: () => Date.now(),
+  fetchLatest: async () => {
+    const r = await fetch('/release.json', { cache: 'no-store' })
+    if (!r.ok) throw new Error(String(r.status))
+    return r.json()
+  },
+  onNewer: () => { updateBanner.hidden = false },
+})
+const reloadNow = (): Promise<void> => reloadFresh({ caches: 'caches' in window ? window.caches : undefined, reload: () => location.reload() })
+void updates.auto()
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void updates.auto() })
+
+/** Settings: the build's version and date, and "Check for updates". */
+function updateRow(): HTMLElement {
+  const status = el('p', { class: 'meta', role: 'status', 'data-update-status': '1' })
+  const builtAt = typeof __TW_BUILT_AT__ === 'string' && __TW_BUILT_AT__ ? new Date(__TW_BUILT_AT__).toLocaleString() : ''
+  const button = el('button', {
+    class: 'btn btn-ghost', 'data-check-updates': '1',
+    onclick: async () => {
+      status.textContent = S.updChecking
+      const r = await updates.check()
+      status.textContent = r === UpdateResult.Current ? S.updUpToDate : r === UpdateResult.Newer ? S.updNewer : S.updFailed
+      status.dataset.result = r
+      if (r === UpdateResult.Newer) status.append(' ', el('button', { class: 'btn btn-electric btn-sm', 'data-update-reload': '1', onclick: () => void reloadNow() }, [S.updReload]))
+    },
+  }, [S.updCheck])
+  return el('div', { 'data-update-row': '1' }, [builtAt ? el('p', { class: 'meta' }, [S.updBuilt(builtAt)]) : null, button, status])
+}
+
+// ---------------------------------------------------------------------------
 // backup: the card in Inventory and its sheets (backup_view.ts)
 // ---------------------------------------------------------------------------
 
@@ -5779,6 +5837,7 @@ const backup = createBackupView({
   beforeRestore: () => snapshots.take(S.snReasonRestore),
   redraw: () => { if (screen === Screen.Inventory) render() },
 })
+autoBackup = backup
 
 function screenInventory(): Node[] {
   const s = st()
@@ -6178,7 +6237,7 @@ const WAKE_FRESH_MS = 60_000
 let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
 document.addEventListener('visibilitychange', () => {
   // Wave 12: the iPhone app in the background holds no drain, so the relay wakes it through Apple (net.ts pause); a fresh one when it is back.
-  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); if (nativeApp) net.pause(); return }
+  if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); backup.hidden(); if (nativeApp) net.pause(); return }
   const slept = hiddenSince > 0 && Date.now() - hiddenSince > WAKE_FRESH_MS
   hiddenSince = 0
   if (!state || state.testOf?.handedOverAt) return
@@ -6192,6 +6251,8 @@ window.addEventListener('focus', () => { if (state && !state.testOf?.handedOverA
 const refreshDrain = (): void => { if (state && !state.testOf?.handedOverAt) net.refresh() }
 watchWake(refreshDrain, { now: () => Date.now(), every: (fn, ms) => setInterval(fn, ms), stop: (h) => clearInterval(h as ReturnType<typeof setInterval>) })
 window.addEventListener('online', refreshDrain)
+window.addEventListener('online', () => backup.backOnline())
+window.addEventListener('pagehide', () => backup.hidden())
 window.addEventListener('pageshow', (e) => { if (e.persisted) refreshDrain() })
 // Wave 6f: another tab (or the installed app) of this profile saved the record, e.g. a new connection it received while it held the
 // drain: this tab takes it over instead of keeping an older copy and writing that back over it on its next save (tab_sync.ts).

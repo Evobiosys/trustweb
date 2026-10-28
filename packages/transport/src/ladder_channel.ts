@@ -6,6 +6,8 @@
 // data plane with two rungs, tried in the order the caller supplies them:
 //
 //   (b) relay      — RelayChannel, a trust-graph mediator (Task 7).
+//   (b') iroh      — IrohRelayChannel, an alternative to (b) over
+//                    interchangeable iroh relays (docs/IROH-RELAY.md).
 //   (c) lan_http    — HttpPostChannel, the LAN HTTP floor (Task 1).
 //
 // LadderChannel is itself just another DeliveryChannel (composable, and in
@@ -39,7 +41,7 @@
 import type { DeliveryChannel } from "./delivery_channel.js";
 
 /** T3' scope: exactly these two data-plane rungs. No "webrtc" — see file header. */
-export type LadderRungName = "relay" | "lan_http";
+export type LadderRungName = "relay" | "iroh" | "lan_http";
 
 export interface LadderRung {
   name: LadderRungName;
@@ -49,6 +51,8 @@ export interface LadderRung {
 export interface LadderBudgets {
   /** Per-attempt budget for the "relay" rung. Unset = no LadderChannel-level timeout (the rung's own internal timeout, if any, still applies). */
   relayAckMs?: number;
+  /** Per-attempt budget for the "iroh" rung (IrohRelayChannel). Unset = no LadderChannel-level timeout. */
+  irohMs?: number;
   /** Per-attempt budget for the "lan_http" rung. Unset = no LadderChannel-level timeout. */
   httpMs?: number;
 }
@@ -60,7 +64,9 @@ export interface LadderOptions {
 }
 
 function budgetFor(name: LadderRungName, budgets: LadderBudgets): number | undefined {
-  return name === "relay" ? budgets.relayAckMs : budgets.httpMs;
+  if (name === "relay") return budgets.relayAckMs;
+  if (name === "iroh") return budgets.irohMs;
+  return budgets.httpMs;
 }
 
 /** Races `fn()` against `ms` (when defined); a timeout counts as that rung failing, exactly like a rejection. */

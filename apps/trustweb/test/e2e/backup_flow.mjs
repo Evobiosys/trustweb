@@ -91,6 +91,22 @@ async function main() {
     ok('the server stored something', blobs.length > 0, JSON.stringify(files))
     ok('nothing on the server contains plaintext', blobs.every((b) => !b.includes('Motorbike') && !b.includes('Jakob')))
 
+    // auto-backup (2026-10-28): on by default once a key is set; a change + the app going to the background backs up again
+    ok('"Automatically back up" is on after the first backup', await page.locator('#bk-auto').isChecked())
+    const before = new Map(filesUnder(dir).filter((f) => !f.endsWith('.tmp')).map((f) => [f, readFileSync(f).toString('base64')]))
+    await page.getByRole('button', { name: 'My Resources', exact: true }).click()
+    await page.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Ladder, three metres')
+    await page.getByRole('button', { name: 'Add', exact: true }).click()
+    await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')) })
+    let changedBlob = false
+    for (let i = 0; i < 40 && !changedBlob; i++) {
+      await page.waitForTimeout(250)
+      changedBlob = filesUnder(dir).filter((f) => !f.endsWith('.tmp')).some((f) => before.get(f) !== readFileSync(f).toString('base64'))
+    }
+    ok('going to the background backs up the change automatically', changedBlob)
+    ok('the automatic backup is encrypted too', filesUnder(dir).filter((f) => !f.endsWith('.tmp')).every((f) => !readFileSync(f).includes('Ladder')))
+    await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }) })
+
     // a fresh phone restores with the key alone
     const fresh = await browser.newContext({ viewport: { width: 430, height: 900 } })
     const p2 = await fresh.newPage()
@@ -120,7 +136,7 @@ async function main() {
     await p3.getByLabel('Your first name').fill('Pass')
     await p3.getByRole('button', { name: 'Start on this phone' }).click()
     await p3.getByRole('button', { name: 'My Resources', exact: true }).click()
-    await p3.getByRole('button', { name: 'Use my own passphrase instead' }).click()
+    await p3.getByRole('button', { name: 'Choose my own passphrase' }).click()
     await p3.getByPlaceholder('Passphrase').fill('too short')
     await p3.getByRole('button', { name: 'Make my key' }).click()
     ok('a passphrase under 12 characters is refused', await p3.getByText('Use at least 12 characters.').isVisible())
