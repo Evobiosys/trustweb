@@ -44,6 +44,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import type { BrowserIdentity } from "./identity.js";
 import { fromBase64url, toBase64url } from "./identity.js";
 import { packMessage, unpackMessage, type JwmMessage } from "./didcomm_crypto.js";
+import { signSend } from "./relay_send_auth.js";
 
 /** JWM `type` discriminator for envelopes sent over this client (mirrors transport's didcomm_transport.ts#ENVELOPE_TYPE). */
 export const ENVELOPE_TYPE = "https://didcomm.org/resource-web/2.0/envelope";
@@ -170,7 +171,7 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
     const wire = packMessage({ sender: identity, recipientDid: toDid, message });
 
     const url = new URL(ingressPath, relayUrl).toString();
-    const res = await fetch(url, { method: "POST", body: wire });
+    const res = await fetch(url, { method: "POST", body: wire, headers: signSend(identity, wire) });
     const parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
     if (parsed.routed === "rejected") {
       throw new Error(`RelayClient.send: relay rejected wire for ${toDid}: ${parsed.reason ?? "no reason given"}`);
