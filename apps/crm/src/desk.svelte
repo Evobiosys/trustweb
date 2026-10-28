@@ -30,6 +30,7 @@
   import { DeskPage } from './nav'
   import { nav, openPerson, showDeskPage } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
+  import { HELP_MAIL } from './help_mail'
   import { prefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
@@ -144,6 +145,8 @@
           <div class="desk-page" data-screen="desk-help">
             <h1 class="desk-title">{S.desk.helpTitle}</h1>
             <p class="privacy">{S.privacy}</p>
+            <p><a class="btn" data-action="help-write" href={HELP_MAIL}>{S.desk.helpWrite}</a></p>
+            <p class="muted">{S.desk.helpWriteHint}</p>
             <button class="btn small" onclick={(): void => showDeskPage(DeskPage.Settings)}>{S.desk.helpSettings}</button>
           </div>
         {/if}
