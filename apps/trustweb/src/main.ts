@@ -168,7 +168,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { dropRelease, engagementDays, expiringSoon, localDay, noticeDue, parseDays, releaseTies, undoRelease } from './engagement'
+import { dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES } from './ext/registry'
@@ -724,9 +724,7 @@ const stackDeps = {
   addLine: (): void => go(Screen.Inventory),
   ringLabel: (ring: Ring | undefined): string => S.ringLabel[ring ?? Ring.Acquaintance],
   now: (): number => Date.now(),
-  undoRelease: (personId: string): void => { undoRelease(st(), personId, Date.now()); save(); render() },
-  // The real revoke comes with the share lines; until then the card's sharing section opens with a hint.
-  revokeShares: (personId: string, name: string): void => { personSheet(personId); toast(S.engagementRevokeHint(name)) },
+  undoAllReleases: (): void => { undoAllReleases(st(), Date.now()); save(); render() },
   openPerson: (personId: string): void => personSheet(personId),
 }
 
@@ -737,11 +735,13 @@ const stackDeps = {
 function checkEngagement(): void {
   if (!state || solo || state.testOf) return
   const now = Date.now()
+  if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
   if (releaseTies(state, now).length) { save(); render() }
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
-  const shown = soon.map((p) => notifyKind('reminder', S.engagementSoonTitle(p.name, S.ringLabel[p.ring]), S.engagementSoonOpen, () => personSheet(p.id)))
-  if (shown.length === 0 || shown.some(Boolean)) { state.engagementNoticeDay = localDay(new Date(now)); save() }
+  const { names, more } = soonNames(soon)
+  const shown = soon.length === 0 || notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id))
+  if (shown) { state.engagementNoticeDay = localDay(new Date(now)); save() }
 }
 
 function dismissCard(card: StackCard): void {
@@ -752,7 +752,7 @@ function dismissCard(card: StackCard): void {
     case StackCardKind.Late: s.lateAnswers = dismissLateAnswer(s.lateAnswers, card.answer.id, now); break
     case StackCardKind.Unmatched: s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, card.ask.id, now); break
     case StackCardKind.Away: s.awayAsks = dismissAwayAsk(s.awayAsks, card.ask.id, now); break
-    case StackCardKind.Released: dropRelease(s, card.tie.personId); break
+    case StackCardKind.Released: dismissReleases(s); break
   }
   save()
 }
@@ -2749,6 +2749,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
+    undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
     p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,

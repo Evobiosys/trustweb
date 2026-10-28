@@ -14,6 +14,7 @@ import { liveAwayAsks } from './away_asks'
 import { ChatDirection } from './chat'
 import type { ChatBook } from './chat'
 import { shownLateAnswers } from './late_answers'
+import { openReleases } from './engagement'
 import type { AppState, AwayAsk, LateAnswer, ReleasedTie, UnmatchedAsk } from './model'
 import { liveUnmatchedAsks, showsUnmatched } from './unmatched_asks'
 
@@ -36,7 +37,7 @@ export type StackCard =
   | { kind: StackCardKind.Late; key: string; answer: LateAnswer }
   | { kind: StackCardKind.Unmatched; key: string; ask: UnmatchedAsk; more: number }
   | { kind: StackCardKind.Away; key: string; ask: AwayAsk; more: number }
-  | { kind: StackCardKind.Released; key: string; tie: ReleasedTie }
+  | { kind: StackCardKind.Released; key: string; ties: ReleasedTie[] }
 
 export type StackState = Pick<AppState, 'chats' | 'lateAnswers' | 'unmatchedAsks' | 'awayAsks' | 'showUnmatchedAsks' | 'releasedTies'>
 
@@ -67,7 +68,8 @@ export function stackCards(s: StackState, now: number, demoPhone: boolean, hidde
   }
   const away = liveAwayAsks(s.awayAsks, now)
   if (away.length) cards.push({ kind: StackCardKind.Away, key: `away:${away[0].id}`, ask: away[0], more: away.length - 1 })
-  for (const tie of s.releasedTies ?? []) cards.push({ kind: StackCardKind.Released, key: `released:${tie.personId}:${tie.at}`, tie })
+  const ties = openReleases(s, now)
+  if (ties.length) cards.push({ kind: StackCardKind.Released, key: `released:${Math.max(...ties.map((t) => t.at))}:${ties.length}`, ties })
   return cards
 }
 

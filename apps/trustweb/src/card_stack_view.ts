@@ -19,6 +19,9 @@ export interface StackOpen {
   scrollTo?: string
 }
 
+/** The summary card names this many people, then "+n more". */
+const RELEASED_NAMES_MAX = 5
+
 export interface StackViewDeps {
   /** The card (person id) of a connection in this web; null: none. */
   personIdOf(peerId: string): string | null
@@ -30,9 +33,8 @@ export interface StackViewDeps {
   /** "My Resources" on the nothing-matched card. */
   addLine(): void
   ringLabel(ring: Ring | undefined): string
-  /** Wave 24b (engagement.ts): the expired tie is put back / the card goes / what they can see is revoked (a stub for now). */
-  undoRelease(personId: string): void
-  revokeShares(personId: string, name: string): void
+  /** Wave 24b (engagement.ts): every open release is put back. */
+  undoAllReleases(): void
   openPerson(personId: string): void
   now(): number
 }
@@ -104,12 +106,16 @@ function cardNode(deps: StackViewDeps, card: StackCard): HTMLElement | null {
         [messageButton(deps, card, S.awayAskMessage(a.from)), dismiss(S.awayAskDismiss, 'data-away-dismiss')], openWithAsk(deps, card))
     }
     case StackCardKind.Released: {
-      const t = card.tie
-      return shell(card, S.engagementReleased(t.name, deps.ringLabel(t.to)), S.engagementReleasedBody, [
-        button(S.engagementUndo, 'btn btn-electric btn-sm', 'data-release-undo', () => deps.undoRelease(t.personId)),
-        button(S.engagementRevoke, 'btn btn-ghost btn-sm', 'data-release-revoke', () => deps.revokeShares(t.personId, t.name)),
+      const shown = card.ties.slice(0, RELEASED_NAMES_MAX)
+      const more = card.ties.length - shown.length
+      return shell(card, S.engagementReleased(card.ties.length), S.engagementReleasedBody, [
+        el('div', { class: 'stack-names' }, [
+          ...shown.map((t) => button(t.name, 'btn btn-ghost btn-sm', 'data-release-name', () => deps.openPerson(t.personId))),
+          more > 0 ? el('small', {}, [S.engagementMore(more)]) : null,
+        ]),
+        button(S.engagementUndoAll, 'btn btn-electric btn-sm', 'data-release-undo-all', () => deps.undoAllReleases()),
         dismiss(S.awayAskDismiss, 'data-release-dismiss'),
-      ], () => deps.openPerson(t.personId))
+      ], null)
     }
   }
 }

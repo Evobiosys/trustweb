@@ -1961,13 +1961,15 @@ export const S = {
   setEngagement: 'Close ties expire after n days without contact',
   setEngagementHint: (days: number) => days === 0 ? 'Off: nobody moves outward by themselves.' : `Close and Friend move one ring outward after ${days} days without a message, call, meeting or event together (0 = off). Two days before, you get one reminder at midday.`,
   shareExpiryHint: (days: number) => days === 0 ? '' : `Close ties expire after ${days} days without contact; what you shared stays shared.`,
-  engagementSoonTitle: (name: string, ringName: string) => `${ringName} tie with ${name} expires in 2 days: write or call to keep it`,
+  engagementSoonTitle: (names: string[], more: number) => names.length === 1 && more === 0
+    ? `Your tie with ${names[0]} expires in 2 days: write or call to keep it`
+    : `Ties with ${names.join(', ')}${more > 0 ? ` and ${more} more` : ''} expire in 2 days: write or call to keep them`,
   engagementSoonOpen: 'Open card',
-  engagementReleased: (name: string, ringName: string) => `Released ${name} to ${ringName}`,
-  engagementReleasedBody: 'No contact for a while. What they can already see stays visible until you revoke it.',
-  engagementUndo: 'Undo',
-  engagementRevoke: 'Revoke what they can see',
-  engagementRevokeHint: (name: string) => `Revoking what ${name} already sees is not built yet: set their zone sections on the card by hand for now.`,
+  engagementReleased: (n: number) => n === 1 ? '1 close tie released' : `${n} close ties released`,
+  engagementReleasedBody: 'No contact for a while, so they moved one ring outward. What they can already see stays visible.',
+  engagementMore: (n: number) => `+${n} more`,
+  engagementUndoAll: 'Undo all',
+  engagementUndoRelease: 'Undo release',
   // Wave 6i, THE ONE THING: an ask and its answer stay one conversation (chat_re.ts, reask.ts, card_stack.ts)
   chatRe: (text: string, when: string) => `Re: “${text}” · ${when}`,
   chatReplyingTo: (text: string, when: string) => `Replying to “${text}” · ${when}`,

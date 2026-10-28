@@ -2,7 +2,7 @@
 /** Wave 24b: close ties expire after n days without contact (engagement.ts). */
 import { ChatDirection } from '../../src/chat.ts'
 import { Ring } from '../../src/model.ts'
-import { DAY_MS, engagementDays, lastContact, noticeDue, parseDays, releaseTies, undoRelease, expiringSoon } from '../../src/engagement.ts'
+import { DAY_MS, engagementDays, lastContact, noticeDue, parseDays, releaseTies, undoRelease, expiringSoon, ensureBaseline, inScope, openReleases, dismissReleases, undoAllReleases, undoOffered, UNDO_DAYS, soonNames } from '../../src/engagement.ts'
 
 const NOW = Date.UTC(2026, 9, 28, 12, 0)
 const person = (o = {}) => ({ id: 'p1', name: 'Anna', context: '', ring: Ring.Close, metAt: 0, peerId: 'pe1', ...o })
@@ -93,11 +93,101 @@ describe('the daily notice', () => {
   })
 })
 
+describe('baseline at the first run', () => {
+  const old = (days) => NOW - days * DAY_MS
+  it('stores engagementSince once and never moves it', () => {
+    const s = state()
+    ensureBaseline(s, NOW)
+    expect(s.engagementSince).toBe(NOW)
+    ensureBaseline(s, NOW + 5)
+    expect(s.engagementSince).toBe(NOW)
+  })
+  it('lastContact is at least engagementSince, so nobody is released for 30 days', () => {
+    const s = state({ engagementSince: NOW, people: [person({ metAt: old(400) })] })
+    expect(lastContact(s, s.people[0], NOW)).toBe(NOW)
+    expect(releaseTies(s, NOW + 29 * DAY_MS)).toEqual([])
+    expect(expiringSoon(s, NOW + 5 * DAY_MS)).toEqual([])
+    expect(expiringSoon(s, NOW + 29 * DAY_MS + 1).map((p) => p.id)).toEqual(['p1'])
+    expect(releaseTies(s, NOW + 31 * DAY_MS)).toHaveLength(1)
+  })
+  it('real contact after the baseline still wins', () => {
+    const s = state({ engagementSince: NOW - DAY_MS, people: [person({ metAt: NOW })] })
+    expect(lastContact(s, s.people[0], NOW)).toBe(NOW)
+  })
+})
+
+describe('scope', () => {
+  const old = NOW - 90 * DAY_MS
+  it('notes-only cards are subject to nothing', () => {
+    const s = state({ people: [person({ peerId: undefined, metAt: old })] })
+    expect(inScope(s, s.people[0])).toBe(false)
+    expect(releaseTies(s, NOW)).toEqual([])
+    expect(expiringSoon(s, NOW)).toEqual([])
+  })
+  it('connected, channel value, chat thread or meeting puts a person in scope', () => {
+    const bare = { peerId: undefined }
+    expect(inScope(state(), person())).toBe(true)
+    expect(inScope(state(), person({ ...bare, channels: { email: 'a@b.c' } }))).toBe(true)
+    expect(inScope(state(), person({ ...bare, channels: { email: '' } }))).toBe(false)
+    expect(inScope(state({ meetings: [{ personId: 'p1', startedAt: 1 }] }), person(bare))).toBe(true)
+    expect(inScope(state({ chats: { pe9: { unread: 0, messages: [{ dir: ChatDirection.In, at: 1 }] } } }), person({ peerId: 'pe9' }))).toBe(true)
+  })
+})
+
+describe('one summary card and per-person undo', () => {
+  const old = (days) => NOW - days * DAY_MS
+  const released = () => {
+    const s = state({ people: [person({ metAt: old(40) }), person({ id: 'p2', name: 'Ben', metAt: old(40) })] })
+    releaseTies(s, NOW)
+    return s
+  }
+  it('open releases are the not-dismissed ones; dismiss keeps the record for the ring row undo', () => {
+    const s = released()
+    expect(openReleases(s, NOW)).toHaveLength(2)
+    dismissReleases(s)
+    expect(openReleases(s, NOW)).toEqual([])
+    expect(undoOffered(s, 'p1', NOW + DAY_MS)).toBe(true)
+  })
+  it('undo offered for 7 days only, and not for others', () => {
+    const s = released()
+    expect(undoOffered(s, 'p1', NOW + (UNDO_DAYS - 1) * DAY_MS)).toBe(true)
+    expect(undoOffered(s, 'p1', NOW + UNDO_DAYS * DAY_MS)).toBe(false)
+    expect(undoOffered(s, 'zz', NOW)).toBe(false)
+    expect(openReleases(s, NOW + UNDO_DAYS * DAY_MS)).toEqual([])
+  })
+  it('undo all restores every open release; undo of one leaves the rest', () => {
+    const s = released()
+    undoRelease(s, 'p1', NOW)
+    expect(s.people.map((p) => p.ring)).toEqual([Ring.Close, Ring.Friend])
+    expect(openReleases(s, NOW).map((r) => r.personId)).toEqual(['p2'])
+    undoAllReleases(s, NOW)
+    expect(s.people.map((p) => p.ring)).toEqual([Ring.Close, Ring.Close])
+    expect(s.releasedTies).toEqual([])
+  })
+  it('a later release of the same person replaces its old record', () => {
+    const s = released()
+    undoRelease(s, 'p1', NOW)
+    s.people[0].engagementKept = NOW - 40 * DAY_MS
+    releaseTies(s, NOW + DAY_MS)
+    expect(s.releasedTies.filter((r) => r.personId === 'p1')).toHaveLength(1)
+  })
+})
+
+describe('the 48 h notice names', () => {
+  it('up to three names, then the count', () => {
+    const ps = ['A', 'B', 'C', 'D', 'E'].map((name) => ({ name }))
+    expect(soonNames(ps.slice(0, 2))).toEqual({ names: ['A', 'B'], more: 0 })
+    expect(soonNames(ps)).toEqual({ names: ['A', 'B', 'C'], more: 2 })
+  })
+})
+
 describe('the Released card in the stack', () => {
-  it('one card per released tie, keyed by person and time', async () => {
+  it('ONE summary card for all open releases, keyed by the newest', async () => {
     const { StackCardKind, stackCards } = await import('../../src/card_stack.ts')
-    const r = { personId: 'p1', name: 'Anna', from: Ring.Close, to: Ring.Friend, at: 5 }
-    const cards = stackCards({ releasedTies: [r] }, NOW, false, new Set(), () => true)
-    expect(cards).toEqual([{ kind: StackCardKind.Released, key: 'released:p1:5', tie: r }])
+    const r = (personId, at) => ({ personId, name: personId, from: Ring.Close, to: Ring.Friend, at })
+    const ties = [r('p1', NOW - 5), r('p2', NOW - 1)]
+    const cards = stackCards({ releasedTies: ties }, NOW, false, new Set(), () => true)
+    expect(cards).toEqual([{ kind: StackCardKind.Released, key: `released:${NOW - 1}:2`, ties }])
+    expect(stackCards({ releasedTies: [{ ...ties[0], seen: true }] }, NOW, false, new Set(), () => true)).toEqual([])
   })
 })
