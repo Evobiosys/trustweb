@@ -67,7 +67,7 @@ import { randomId } from '../../demo/src/crypto'
 import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
-import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, TabOrder, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
+import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, isDemoPerson, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, REACH_OUT_INK, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
 import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
@@ -75,7 +75,13 @@ import {
 } from './contact_share'
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
-import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText } from './chat'
+import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
+import { chatListRows } from './chat_list'
+import { availableTabs, resolveRow, setSlot } from './tab_row'
+import type { TabId } from './tab_row'
+import { viewHeading, viewMenuItems } from './view_menu'
+import type { WebView } from './view_menu'
+import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -213,6 +219,8 @@ enum Screen {
   Feed = 'feed',
   /** Events: where and when I met people (E1, wave 7); opened from the Web screen. */
   Events = 'events',
+  /** Wave 24: every chat, newest first (bottom row). */
+  Chat = 'chat',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -727,10 +735,20 @@ function ownDoorDid(): string | null {
 }
 
 /** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
-function notify(kind: NotifyKind, body: string): void {
+function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') void showNotification(S.appName, body)
+  if (Notification.permission === 'granted') void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined)
 }
+
+/** "Turn these off" on the first chat notification: the chat switch under Settings > Notifications goes off, with the way back said. */
+function turnChatNotificationsOff(): void {
+  const s = st()
+  s.notifyKinds = { ...kindsOf(s), chat: false }
+  save()
+  hideMsgNotice()
+  toast(S.chatNotifOffDone)
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if ((e.data as { t?: string } | null)?.t === 'chat-off' && state) turnChatNotificationsOff() })
 
 // ---------------------------------------------------------------------------
 // shell
@@ -811,8 +829,8 @@ function icon(name: string): string {
   return ICONS[name]
 }
 
-function tabButton(target: Screen, label: string, name: string): HTMLElement {
-  const b = el('button', { class: 'tab', 'data-go': target, onclick: () => go(target) })
+function tabButton(target: string, label: string, name: string, onclick: () => void = () => go(target as Screen)): HTMLElement {
+  const b = el('button', { class: 'tab', 'data-go': target, 'aria-label': label, onclick })
   b.innerHTML = icon(name)
   b.append(label)
   return b
@@ -825,16 +843,39 @@ function recordButton(): HTMLElement {
   return b
 }
 
+const TAB_ICON: Record<Exclude<TabId, 'record'>, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', desk: 'list' }
+
+function tabFor(id: TabId): HTMLElement {
+  if (id === 'record') return recordButton()
+  const label = S.tabLabel[id]
+  switch (id) {
+    case 'events': return tabButton(id, label, TAB_ICON[id], () => openEvents())
+    case 'network': return tabButton(id, label, TAB_ICON[id], () => chooseView('network'))
+    case 'desk': return tabButton(id, label, TAB_ICON[id], () => chooseView('desk'))
+    default: return tabButton(id, label, TAB_ICON[id])
+  }
+}
+
+function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
+  return { events: !state || featureOn(state, 'events'), feed: Boolean(state) && feedOn(state as AppState), inventory: !state || featureOn(state, 'inventory') }
+}
+
 function renderTabs(): void {
-  const web = tabButton(Screen.Web, S.navWeb, 'web')
-  const inv = state && !featureOn(state, 'inventory') ? null : tabButton(Screen.Inventory, S.navInventory, 'inventory')
-  const invLeft = state?.tabOrder === TabOrder.InventoryLeft
-  // Web | Record | Feed | Inventory (round B); with the Feed off, exactly as before.
-  const feedTab = state && feedOn(state) ? [tabButton(Screen.Feed, S.navFeed, 'feed')] : []
-  tabs.replaceChildren(...[invLeft ? inv : web, recordButton(), ...feedTab, invLeft ? web : inv].filter((b): b is HTMLElement => b !== null))
+  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | My Resources.
+  tabs.replaceChildren(...resolveRow(state?.tabRow, tabFlags()).map(tabFor))
   tabs.classList.toggle('four', tabs.children.length > 3)
+  updateChatBadge()
 }
 renderTabs()
+
+/** The unread count on the Chat tab: filled in the tab's own colour, never red. */
+function updateChatBadge(): void {
+  const chat = tabs.querySelector<HTMLElement>('[data-go="chat"]')
+  if (!chat) return
+  const n = state ? unreadTotal(state.chats ?? {}) : 0
+  chat.querySelector('.tab-badge')?.remove()
+  if (n > 0) chat.append(el('span', { class: 'tab-badge', role: 'img', 'aria-label': S.chatTabUnread(n) }, [el('b', {}, [n > 99 ? '99+' : String(n)])]))
+}
 
 /** The screen that belongs to the draft's mode: Record (solo) or Meeting. */
 function recordScreen(): Screen {
@@ -847,6 +888,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Web:
     case Screen.StillTrue:
     case Screen.Events:
+    case Screen.Chat:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1036,10 +1078,11 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.Events))
+      || (target === Screen.Web && screen === Screen.StillTrue)
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
+  updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const body = (() => {
     if (state?.testOf?.handedOverAt) return screenHandedOver()
@@ -1055,6 +1098,7 @@ function render(): void {
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
       case Screen.Events: return eventsView.body()
+      case Screen.Chat: return screenChat()
     }
   })()
   host.replaceChildren(...body)
@@ -2283,20 +2327,45 @@ function openEvents(eventId?: string): void {
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 
-function webViewToggle(network: boolean, anyone: boolean): HTMLElement {
-  const pick = (value: 'rings' | 'network'): void => {
-    try { window.localStorage.setItem(WEB_VIEW_KEY, value) } catch { /* not remembered */ }
-    render()
-  }
+/** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
+function webViewRow(network: boolean, anyone: boolean): HTMLElement {
+  const heading = viewHeading(network ? 'network' : 'rings')
   return el('div', { class: 'web-view-row' }, [
-    anyone ? el('div', { class: 'seg web-view', role: 'group', 'aria-label': S.netViewAria }, [
-      el('button', { class: network ? '' : 'on', 'aria-pressed': String(!network), onclick: () => pick('rings') }, [S.netRings]),
-      el('button', { class: network ? 'on' : '', 'aria-pressed': String(network), onclick: () => pick('network') }, [S.netNetwork]),
-    ]) : el('span', { class: 'web-view' }),
-    el('div', { class: 'seg desk-side', role: 'group', 'aria-label': S.deskSideAria }, [
-      el('button', { 'data-desk-side': '', onclick: () => openDeskSheet() }, [S.deskSide]),
-    ]),
+    el('span', { class: 'web-view' }, [heading ? S.tabLabel[heading] : '']),
+    iconButton('more', S.viewMenuAria, () => viewSheet(network, anyone), 'view-menu-btn'),
   ])
+}
+
+function viewSheet(network: boolean, anyone: boolean): void {
+  openSheet([
+    el('h3', {}, [S.viewMenuTitle]),
+    ...viewMenuItems(network ? 'network' : 'rings', anyone).map(({ view, on }) => el('button', {
+      class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
+    }, [el('b', {}, [(on ? '✓ ' : '') + (view === 'rings' ? S.netRings : view === 'network' ? S.netNetwork : S.deskSide)])])),
+  ])
+}
+
+/** Membranes and Network are remembered (WEB_VIEW_KEY); Desk opens the Desk sheet as the old side button did. */
+function chooseView(view: WebView): void {
+  if (view === 'desk') { openDeskSheet(); return }
+  try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
+  go(Screen.Web)
+}
+
+/** Wave 24: every chat, newest first; a tap opens the chat sheet. */
+function screenChat(): Node[] {
+  const s = st()
+  const now = Date.now()
+  const rows = chatListRows(s.chats, s.people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
+  return [
+    header(S.chatListTitle),
+    el('div', { class: 'scroll ppl' }, rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+      avatar(r.name, r.personId),
+      el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
+      el('span', { class: 'when' }, [ageLabel(r.at, now)]),
+      r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
+    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])]),
+  ]
 }
 
 function screenWeb(): Node[] {
@@ -2306,7 +2375,7 @@ function screenWeb(): Node[] {
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const network = s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
-  right.append(...(featureOn(st(), 'events') ? [iconButton('calendar', S.eventsOpen, () => openEvents(), 'events-btn')] : []), search)
+  right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2324,7 +2393,7 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewToggle(network, s.people.length > 0),
+    webViewRow(network, s.people.length > 0),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -3258,8 +3327,11 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
   save()
   if (isBlocked(personOf(s.people, peer.id))) return
   if (openChat?.peerId === peer.id) { openChat.refresh(); return }
-  notify('chat', S.chatNotifBody(peer.displayName))
-  newMessageNotice(peer, r.message.key)
+  // Wave 24: the first chat notification a device shows carries "Turn these off" (notify_first.ts); a card in the Web stack is no notification.
+  const inCard = screen === Screen.Web && !queryOpen && !sheet.classList.contains('on')
+  const offer = wantsKind(s, 'chat') && (document.hidden || !inCard) && firstChatNotice(window.localStorage)
+  notify('chat', S.chatNotifBody(peer.displayName), offer)
+  newMessageNotice(peer, r.message.key, offer)
 }
 
 /**
@@ -3267,7 +3339,7 @@ function onChatText(peer: Peer, text: string, ts: number, re?: ChatRe): void {
  * above the rings (it stays until read); anywhere else (or under an open sheet or dock) a notice of its own for a few seconds. Both open
  * the chat at that message.
  */
-function newMessageNotice(peer: Peer, key: string): void {
+function newMessageNotice(peer: Peer, key: string, offerOff = false): void {
   const person = personOf(st().people, peer.id)
   const sheetOpen = sheet.classList.contains('on')
   drawCardStack()
@@ -3276,14 +3348,15 @@ function newMessageNotice(peer: Peer, key: string): void {
   // Review 6i (card_stack.ts msgNoticePlace): never over a control: not over the consent prompt, at the top over an open sheet.
   const place = msgNoticePlace(overlay.classList.contains('on'), sheetOpen)
   if (place === NoticePlace.None) { toast(title); return }
-  showMsgNotice(title, person ? () => chatSheet(person.id, { scrollTo: key }) : null, place)
+  showMsgNotice(title, person ? () => chatSheet(person.id, { scrollTo: key }) : null, place, offerOff)
 }
 
-function showMsgNotice(title: string, open: (() => void) | null, place: NoticePlace): void {
+function showMsgNotice(title: string, open: (() => void) | null, place: NoticePlace, offerOff = false): void {
   const openIt = (): void => { hideMsgNotice(); open?.() }
   msgNoticeEl.replaceChildren(
     el('span', { class: 'msg-notice-text' }, [title]),
     ...(open ? [el('button', { class: 'stack-open', type: 'button', 'data-card-open': 'message', 'aria-label': S.cardOpenAria(title), onclick: openIt }, [S.cardOpen])] : []),
+    ...(offerOff ? [el('button', { class: 'stack-open', type: 'button', 'data-chat-notif-off': '', onclick: turnChatNotificationsOff }, [S.chatNotifOff])] : []),
   )
   msgNoticeEl.onclick = (e) => { if (!(e.target as HTMLElement).closest('button')) openIt() }
   msgNoticeEl.classList.toggle('tappable', open !== null)
@@ -5542,16 +5615,27 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
+/** Settings > Bottom row: one picker per slot; the last slot (My Resources) is locked. */
+function tabRowSettings(s: AppState): (Node | null)[] {
+  const flags = tabFlags()
+  const row = resolveRow(s.tabRow, flags)
+  const locked = flags.inventory
+  const free = locked ? row.length - 1 : row.length
+  return [
+    ...row.slice(0, free).map((id, i) => el('label', { class: 'tab-slot', 'data-tab-slot': String(i) }, [
+      el('small', {}, [S.setTabRowSlot(i + 1)]),
+      el('select', { 'aria-label': S.setTabRowSlot(i + 1), onchange: (e: Event) => { s.tabRow = setSlot(row, i, (e.target as HTMLSelectElement).value, flags); save(); renderTabs(); render(); settingsSheet() } },
+        availableTabs(flags).filter((t) => t !== 'inventory').map((t) => el('option', { value: t, ...(t === id ? { selected: '' } : {}) }, [S.tabLabel[t]]))),
+    ])),
+    locked ? el('p', { class: 'meta', 'data-tab-slot-locked': '' }, [S.tabLabel.inventory + ' · ' + S.setTabRowLocked]) : null,
+  ]
+}
+
 function settingsSheet(): void {
   const s = st()
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
-  const order = s.tabOrder ?? TabOrder.WebLeft
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
-  const pick = (o: TabOrder, label: string): HTMLElement => el('button', {
-    class: 'radio' + (order === o ? ' on' : ''),
-    onclick: () => { s.tabOrder = o; save(); renderTabs(); render(); settingsSheet() },
-  }, [el('b', {}, [label])])
   openSheet([
     el('h3', {}, [S.setTitle]),
     viewRow(),
@@ -5608,9 +5692,8 @@ function settingsSheet(): void {
     ...recordingSettings(s),
     ...hosting.settingsGroup(),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
-    el('h4', { class: 'eyebrow' }, [S.setTabs]),
-    pick(TabOrder.WebLeft, S.setTabsWebLeft),
-    pick(TabOrder.InventoryLeft, S.setTabsInvLeft),
+    el('h4', { class: 'eyebrow' }, [S.setTabRow]),
+    ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
     ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),

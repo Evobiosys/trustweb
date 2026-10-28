@@ -823,7 +823,7 @@ export interface ReceivedShare {
   keptAs?: string
 }
 
-/** Which side of the raised Record button each outer tab sits on (Inventory settings). */
+/** Wave 24: no longer read. My Resources is pinned to the far right of the bottom row (tab_row.ts); old records may still carry the value, it changes nothing and is never written again. */
 export enum TabOrder {
   WebLeft = 'web-left',
   InventoryLeft = 'inventory-left',
@@ -867,8 +867,10 @@ export interface AppState {
   notifyKinds?: NotifyKinds
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
-  /** Absent in records saved before it existed: read as TabOrder.WebLeft. */
+  /** Wave 24: ignored, see TabOrder. */
   tabOrder?: TabOrder
+  /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
+  tabRow?: string[]
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */

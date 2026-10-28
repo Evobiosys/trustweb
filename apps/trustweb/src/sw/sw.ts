@@ -19,10 +19,10 @@ import { readPushBundle } from '../push_bundle'
 import type { PushBundle } from '../push_bundle'
 
 /** The worker scope, typed here (tsconfig has the DOM lib, not WebWorker's; both at once clash). */
-interface WindowClientLike { visibilityState?: string; focused?: boolean; focus(): Promise<unknown>; url: string }
+interface WindowClientLike { visibilityState?: string; focused?: boolean; focus(): Promise<unknown>; postMessage(m: unknown): void; url: string }
 interface ClientsLike { matchAll(o: { type: 'window'; includeUncontrolled: boolean }): Promise<WindowClientLike[]>; openWindow(url: string): Promise<unknown>; claim(): Promise<void> }
 interface ExtendableEventLike extends Event { waitUntil(p: Promise<unknown>): void }
-interface NotificationEventLike extends ExtendableEventLike { notification: { close(): void } }
+interface NotificationEventLike extends ExtendableEventLike { notification: { close(): void }; action?: string }
 interface NotificationLike { tag: string; close(): void }
 interface PushManagerLike { subscribe(o: { userVisibleOnly: boolean; applicationServerKey: BufferSource }): Promise<PushSubscription>; getSubscription(): Promise<PushSubscription | null> }
 interface RegistrationLike {
@@ -167,10 +167,11 @@ function appBase(): string {
   return sw.location.pathname.replace(/sw\.js$/, '')
 }
 
-async function focusApp(): Promise<void> {
+/** `chatOff`: the "Turn these off" action; the open page switches the chat kind off (a worker has no record to write). */
+async function focusApp(chatOff = false): Promise<void> {
   const clients = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true })
   const mine = clients.find((c) => c.url.startsWith(sw.location.origin + appBase()))
-  if (mine) { await mine.focus(); return }
+  if (mine) { if (chatOff) mine.postMessage({ t: 'chat-off' }); else await mine.focus(); return }
   await sw.clients.openWindow(sw.location.origin + appBase())
 }
 
@@ -179,5 +180,5 @@ if ('registration' in sw && 'clients' in sw) {
   sw.addEventListener('activate', (e) => { e.waitUntil(sw.clients.claim()) })
   sw.addEventListener('push', (e) => { e.waitUntil(onPush()) })
   sw.addEventListener('pushsubscriptionchange', (e) => { e.waitUntil(onSubscriptionChange()) })
-  sw.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil(focusApp()) })
+  sw.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil(focusApp(e.action === 'chat-off')) })
 }
