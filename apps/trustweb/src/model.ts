@@ -417,6 +417,8 @@ export interface Person {
   ringSuggested?: boolean
   /** Degrees (0 = top, clockwise) where the dot sits on its ring in the Web view: where it was dropped. Local only, never sent. */
   angle?: number
+  /** Wave 25 (membranes_five.ts): a favourite is always among the people shown on its membrane. Absent = false. Owner's own devices only (sync_core). */
+  favourite?: boolean
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -917,6 +919,8 @@ export interface AppState {
   notifyKinds?: NotifyKinds
   /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent = 30, 0 = off. Local; rides the device sync. */
   engagementDays?: number
+  /** Wave 25 (membranes_five.ts): people shown per membrane on the Membranes page. Absent = 5; 1..20. Local; rides the device sync. */
+  membraneLimit?: number
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string

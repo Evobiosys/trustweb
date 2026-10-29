@@ -170,6 +170,9 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag } from './membranes_five'
+import { favouriteButton, membraneAll, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { onHoverOrLongPress, singleOrDouble } from './press'
 import { dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
@@ -1919,15 +1922,27 @@ let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
 let ringsK = 1
 
 /** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
-function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings): HTMLElement {
+function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings, opts: { complete?: boolean } = {}): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
+  const everyone: Partial<Record<Ring, Person[]>> = {}
+  for (const p of s.people) if (!isBlocked(p)) (everyone[webSlot(p)] ??= []).push(p)
+  // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
+  const complete = opts.complete === true || desk !== undefined
   const members: Partial<Record<Ring, Person[]>> = {}
-  for (const p of s.people) if (!isBlocked(p)) (members[webSlot(p)] ??= []).push(p)
+  const rest: Partial<Record<Ring, Person[]>> = {}
+  const slotted = new Map<string, number>()
+  for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
+    if (complete) { members[r] = ps; continue }
+    const f = pickFive(withTag(ps, tagFilter), s, limitOf(s), Date.now())
+    members[r] = f.shown; rest[r] = f.rest
+    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length)))
+  }
+  const angleOfP = (p: Person): number => slotted.get(p.id) ?? angleOf(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
   // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
   const hidden = loadHiddenRings()
-  const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOf)]))
+  const angles = Object.fromEntries(Object.entries(members).map(([r, ps]) => [r, ps.map(angleOfP)]))
   // The close ring depends on the scale (the "you" avatar does not shrink), the scale on the extent: settle on the first scale whose layout still fits.
   let k = 1
   for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
@@ -1960,8 +1975,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   if (ringsGeo.rings.includes(Ring.Unsorted)) {
     const t = document.createElementNS(NS, 'text')
     t.setAttribute('x', String(C + 12)); t.setAttribute('y', String(C - ringsGeo.radius[Ring.Unsorted] * k + 3)); t.setAttribute('text-anchor', 'start')
-    t.setAttribute('font-size', '8'); t.setAttribute('fill', ringColor({ ring: Ring.Unsorted })); t.setAttribute('data-ring-label', Ring.Unsorted)
-    t.textContent = S.ringLabel[Ring.Unsorted]
+    t.setAttribute('font-size', '8'); t.setAttribute('fill', ringColor({ ring: Ring.Unsorted })); t.setAttribute('data-ring-label', Ring.Unsorted); t.setAttribute('aria-label', S.ringLabel[Ring.Unsorted])
     svg.appendChild(t)
   }
   wrap.appendChild(svg)
@@ -1970,7 +1984,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     const laps = new Map((members[ring] ?? []).map((p, i) => [p, ringsGeo.lapOf[ring]![i]]))
     visiblePeople(members[ring] ?? [], hidden).forEach((p) => {
       const lap = laps.get(p)!
-      const a = ((angleOf(p) - 90) * Math.PI) / 180
+      const a = ((angleOfP(p) - 90) * Math.PI) / 180
       const radius = lapRadius(ringsGeo, ring, lap) * k
       const x = C + radius * Math.cos(a)
       const y = C + radius * Math.sin(a)
@@ -1995,9 +2009,10 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
       }
       pictured(face, p.theirProfile?.picture)
+      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => personSheet(p.id))
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
-        onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : personSheet(p.id)) },
+        onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
       }, [
         face,
         el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
@@ -2022,19 +2037,77 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
   const toggle = (next: ReadonlySet<Ring>, live: HTMLElement): void => {
     try { window.localStorage.setItem(RINGS_HIDDEN_KEY, serializeHidden(next)) } catch { /* not remembered */ }
-    const fresh = ringsView(s, marks, desk)
+    const fresh = ringsView(s, marks, desk, opts)
     live.className = fresh.className
     live.replaceChildren(...fresh.childNodes)
+  }
+  // Hover (desktop) == long press (phone) on a membrane's diamond: everyone in that circle, small names; gone on leave or the next press.
+  const hideAll = (): void => { wrap.querySelector('[data-membrane-all]')?.remove() }
+  const showAll = (r: Ring, top: number): void => {
+    hideAll()
+    const box = membraneAll(S.ringLabel[r], everyone[r] ?? [])
+    box.style.top = top + 14 + 'px'
+    wrap.appendChild(box)
   }
   const column = togglePoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k)
   ringsGeo.rings.forEach((r, i) => {
     const at = column[i]
-    wrap.appendChild(ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap)))
+    const diamond = ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
+    wrap.appendChild(diamond)
+    if (!desk) onHoverOrLongPress(diamond, () => showAll(r, at.top), hideAll)
+    if (!hidden.has(r) && rest[r]?.length) wrap.appendChild(ringMore(r, rest[r]!.length, at.top, at.left))
   })
+  wrap.addEventListener('pointerdown', hideAll)
+  // Last in the DOM, so above every dot.
+  if (!desk) wrap.appendChild(el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: (e: Event) => { e.stopPropagation(); addPersonSheet(Ring.Acquaintance) } }, ['+']))
   return wrap
 }
 
 const HIDDEN_GUIDE_OPACITY = '.25'
+
+/** Wave 25: a tag the small card picked; the Membranes show only the people holding it. View state only. */
+let tagFilter: string | null = null
+
+/** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring }
+let webPage: WebPage | null = null
+
+function openWebPage(page: WebPage): void {
+  webPage = page
+  history.pushState({ twPage: page.kind }, '')
+  render()
+}
+window.addEventListener('popstate', () => { if (webPage) { webPage = null; render() } })
+
+/** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
+function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
+  return el('button', {
+    class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${ringColor({ ring })}; left:${left + 16}px; top:${top}px`,
+    'aria-label': S.membraneMoreAria(S.ringLabel[ring]), title: S.membraneRest(S.ringLabel[ring], n),
+    onpointerdown: (e: Event) => { e.stopPropagation() },
+    onclick: (e: Event) => { e.stopPropagation(); openWebPage({ kind: 'more', ring }) },
+  }, ['+'])
+}
+
+/** The page body for `webPage`, with its header and Back. */
+function webPageScreen(page: WebPage): Node[] {
+  const s = shown(st(), curatorHiddenIds())
+  const back = (): void => history.back()
+  if (page.kind === 'more') {
+    const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
+    const { rest } = pickFive(withTag(people, tagFilter), s, limitOf(s), Date.now())
+    return [header(S.ringLabel[page.ring], { back }), el('div', { class: 'scroll' }, [restList(rest, (id) => openWebPage({ kind: 'card', id }))])]
+  }
+  const p = s.people.find((x) => x.id === page.id)
+  if (!p) { webPage = null; return screenWeb() }
+  const tags = loadColourTags()
+  return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
+    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
+    onOpen: () => { webPage = null; render(); personSheet(p.id) },
+    onFavourite: () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render() },
+    onTag: (id) => { tagFilter = id; back() },
+  })])]
+}
 
 function loadHiddenRings(): ReadonlySet<Ring> {
   try { return parseHidden(window.localStorage.getItem(RINGS_HIDDEN_KEY)) } catch { return new Set() }
@@ -2459,6 +2532,7 @@ function chatNewSheet(): void {
 }
 
 function screenWeb(): Node[] {
+  if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
   const zin = zoom.web
   // Zoomed out: the people I connect with most; the network option, search and the full list wait one press away.
@@ -2474,6 +2548,7 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     network
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
       : ringsView(s, askMarks()),
@@ -2798,6 +2873,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
+    favouriteButton(p, () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render(); personSheet(p.id) }),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
@@ -5907,6 +5983,19 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('label', { class: 'radio', 'data-membrane-limit': '1' }, [
+      el('b', {}, [S.setMembraneLimit]),
+      el('input', {
+        class: 'field', type: 'number', min: '1', max: String(LIMIT_MAX), value: String(limitOf(s)), 'aria-label': S.setMembraneLimit,
+        // Only a change from the default of 5 is stored; empty or junk leaves it as it was.
+        onchange: (e: Event) => {
+          const n = parseLimit((e.target as HTMLInputElement).value)
+          if (n !== null) { if (n === 5) delete s.membraneLimit; else s.membraneLimit = n; save(); render() }
+          settingsSheet()
+        },
+      }),
+      el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
+    ]),
     el('label', { class: 'radio', 'data-engagement-days': '1' }, [
       el('b', {}, [S.setEngagement]),
       el('input', {
