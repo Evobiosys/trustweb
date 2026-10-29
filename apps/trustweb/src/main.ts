@@ -100,6 +100,7 @@ import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
+import { peopleListBody, resetPeopleList } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
 import { clearState, isEphemeral, loadState, parseRecord, saveState, storageKey, wasUnreadable } from './store'
@@ -238,6 +239,8 @@ enum Screen {
   Events = 'events',
   /** Wave 24: every chat, newest first (bottom row). */
   Chat = 'chat',
+  /** Wave 25: the people list page (search, trust zones), opened from the Web screen with Back. */
+  People = 'people',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -942,6 +945,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.StillTrue:
     case Screen.Events:
     case Screen.Chat:
+    case Screen.People:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -990,7 +994,22 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', (e) => { if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+
+/** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
+let peoplePage = false
+function openPeople(): void {
+  resetPeopleList()
+  peoplePage = true
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.People)
+}
+function screenPeople(): Node[] {
+  return [
+    header(S.peopleTitle, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [peopleListBody(st, (id) => personSheet(id), !window.matchMedia('(pointer: coarse)').matches)]),
+  ]
+}
 
 /** The glyph next to the heading: zoomed out it zooms in, zoomed in it is the second way out (Back is the first). */
 function zoomGlyph(tab: ZoomTab): HTMLElement {
@@ -1002,7 +1021,9 @@ function zoomGlyph(tab: ZoomTab): HTMLElement {
 }
 
 function go(s: Screen): void {
-  if (s !== screen && zoomedIn()) { zoom = zoomBack(); history.back() }
+  if (s !== Screen.People && peoplePage) { peoplePage = false; history.back() }
+  // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
+  if (s !== screen && zoomedIn() && s !== Screen.People && !(screen === Screen.People && s === Screen.Web)) { zoom = zoomBack(); history.back() }
   // Coming to Record from Inventory means "what", from Web "who" (owner
   // 2026-10-06), whichever of Record or Meeting the tap opens; only while
   // nothing has been named or recorded yet.
@@ -1159,7 +1180,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && screen === Screen.StillTrue)
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -1181,6 +1202,7 @@ function render(): void {
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
       case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
       case Screen.Chat: return screenChat()
+      case Screen.People: return screenPeople()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
@@ -2590,7 +2612,7 @@ function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
   const s = full
-  const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
+  const search = iconButton('list', S.searchOpen, openPeople, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
