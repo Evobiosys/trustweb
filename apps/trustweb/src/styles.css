@@ -127,6 +127,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .ava{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; box-shadow:0 2px 10px rgba(36,27,46,.2); flex-shrink:0}
 .node.nonresp{opacity:.55}
 .node span{font-size:11.5px; font-weight:600; color:var(--ink)}
+.rings-zoom .node:not(.you) span{font-size:calc(11.5px*var(--rz,1))}
+.rings-zoom .node:not(.you) .lvl{font-size:calc(9.5px*var(--rz,1))}
 .node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
 .node:not(.you) .ava{width:var(--d,42px); height:var(--d,42px); font-size:calc(var(--d,42px)*.42)}
 .rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
@@ -162,7 +164,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .screen.querying .rings-wrap{transform-origin:top center}
 .net{padding:0 12px; position:relative}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
-.net-search{padding:8px 12px; font-size:14px}
+.net-search{padding:8px 12px; font-size:14px; flex:1; min-width:0}
 .net-canvas{display:block; touch-action:none; -webkit-touch-callout:none; user-select:none; border-radius:16px; background:var(--card); cursor:grab}
 .web-view-row{display:flex; gap:8px; align-items:center; margin:6px 16px 0}
 .web-view-row .web-view{flex:1; font-size:13px; font-weight:600; color:var(--ink-soft)}

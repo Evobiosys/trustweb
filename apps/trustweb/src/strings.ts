@@ -759,6 +759,7 @@ export const S = {
   hintOpen: (label: string) => `About ${label}`,
   hintAgain: 'Show this hint again',
   hintOk: 'OK',
+  hintDismiss: 'Dismiss this hint (bring it back in Settings: Show all hints again)',
   setTutorial: 'Tutorial',
   setHintsAll: 'Show all hints again',
   setHintsAllHint: 'The small "i" next to things on a touch screen.',
