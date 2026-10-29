@@ -425,6 +425,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
+  links?: { signal?: string; whatsapp?: string; other?: string }
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
   /**
@@ -915,7 +917,7 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
-  /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent = 30, 0 = off. Local; rides the device sync. */
+  /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent or 0 = off (wave 25); the Settings switch stores 30. Local; rides the device sync. */
   engagementDays?: number
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
