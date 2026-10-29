@@ -209,7 +209,7 @@ import { draftOrPlain, readTogetherRequest } from './together_request'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { labelScale } from './ring_spacing'
-import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
+import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
 import type { NotifyKind } from './notify_kinds'
@@ -2176,6 +2176,15 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
   }
   apply(ringsZoom)
   const view = (): ZoomView => ({ w: layer.offsetWidth, h: layer.offsetHeight, cw: clip.clientWidth, ch: clip.clientHeight })
+  // Wave 25: without the phone frame the rings fit the window once (after the layer is in the DOM); a later home (k = 1) is a copy, so it is not refit.
+  if (ringsZoom === RINGS_ZOOM_HOME && currentLayout() === 'trustweb' && !solo) {
+    requestAnimationFrame(() => {
+      const wrap = layer.querySelector<HTMLElement>('.rings-wrap')
+      if (!wrap || ringsZoom !== RINGS_ZOOM_HOME || !clip.isConnected) return
+      const k = fitZoom(wrap.offsetWidth, wrap.offsetHeight, clip.clientWidth, clip.clientHeight)
+      if (k > 1) apply(zoomAt(ringsZoom, k, wrap.offsetLeft + wrap.offsetWidth / 2, wrap.offsetTop + wrap.offsetHeight / 2, view()))
+    })
+  }
   const zoom = (factor: number, e: { clientX: number; clientY: number }): void => {
     if (ringsZoom.k === 1) clip.scrollTop = 0
     const box = layer.getBoundingClientRect()
