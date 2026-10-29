@@ -341,12 +341,17 @@ export interface TwEvent {
   icsUid?: string
 }
 
+/** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
+export interface ReleasedTie { personId: string; name: string; from: Ring; to: Ring; at: number; /** The summary card was dismissed; the ring row keeps its Undo. */ seen?: boolean }
+
 export interface Person {
   id: string
   name: string
   context: string
   ring: Ring
   metAt: number
+  /** Wave 24b: when an expired tie was undone; counts as contact (engagement.ts). Absent: never. */
+  engagementKept?: number
   lines: NoteLine[]
   /** 'legacy-code': connected through a link without a freshness stamp (an older app); accepted for now. Local only. */
   connectedVia?: 'legacy-code'
@@ -910,6 +915,13 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
+  /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent = 30, 0 = off. Local; rides the device sync. */
+  engagementDays?: number
+  /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
+  releasedTies?: ReleasedTie[]
+  engagementNoticeDay?: string
+  /** Wave 24b: when the engagement check first ran here; counts as contact for everybody (engagement.ts). Local only. */
+  engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
