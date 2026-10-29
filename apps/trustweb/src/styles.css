@@ -891,8 +891,20 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-ch{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft)}
 .card-chat{margin:0 0 8px}
 .card-chat .btn svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-3px; margin-right:6px}
-.card-curate{margin-top:12px}
-.card-curate>summary{cursor:pointer; font-weight:600; padding:6px 0}
+.page-layer{position:absolute; inset:0; z-index:60; background:var(--linen); overflow-y:auto; padding:14px 22px 30px}
+.page-bar{display:flex; align-items:center; gap:12px; margin-bottom:12px}
+.page-bar h2{font-size:20px}
+.page-layer .btn{margin-top:8px}
+.card-curate-open{margin-top:12px; width:100%}
+.card-connect{background:none; border:0; padding:0; color:var(--teal); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer}
+.connect-panel{display:flex; flex-direction:column; gap:8px; margin:6px 0 10px}
+.connect-panel[hidden]{display:none}
+.connect-link{word-break:break-all; padding:10px 12px; background:var(--card); border-radius:12px; font-size:13px}
+.connect-panel .card-ch{flex-wrap:wrap}
+.card-links .card-ch a{flex:1 1 60%; min-width:0; word-break:break-all}
+.fold-head{display:flex; align-items:center; gap:8px; margin:12px 0 4px}
+.fold-btn{background:none; border:0; padding:0; font:inherit; font-weight:700; cursor:pointer; color:var(--ink)}
+.days-day h5{margin:8px 0 2px}
 .ava.unconnected{background:transparent; border:2px dashed; color:var(--ink); box-shadow:none}
 .sheet-home{border:0; background:var(--card); color:var(--ink-soft); font:inherit; font-size:13px; border-radius:999px; padding:4px 12px; cursor:pointer}
 .sheet-home:focus-visible{outline:3px solid var(--electric); outline-offset:2px}

@@ -372,7 +372,7 @@ export const S = {
     overdue: 'Overdue',
     cadence: { 7: 'Every week', 14: 'Every 2 weeks', 30: 'Every month', 90: 'Every 3 months', 180: 'Every 6 months', 365: 'Every year' } as Record<number, string>,
     cadenceDays: (n: number) => `Every ${n} days`,
-    cadenceNone: 'Never',
+    cadenceNone: 'Not now',
     keepLabel: 'Keep in touch',
     keepOverdue: 'Overdue',
     keepUpcoming: 'Upcoming',

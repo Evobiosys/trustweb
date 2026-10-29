@@ -59,7 +59,9 @@ import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
-import { CARD_CURATE_KEY, channelEdit, chatButtonKind, curateOpen, curateStored, isConnected } from './card_view'
+import { channelEdit, chatButtonKind, isConnected } from './card_view'
+import { connectBlock, daysSection } from './card_pages_view'
+import { createPages } from './page_view'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -171,7 +173,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
+import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES } from './ext/registry'
@@ -805,6 +807,8 @@ const host = el('div', { class: 'screen on' })
 const tabs = el('nav', { class: 'tabs', 'aria-label': 'Main' })
 const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
+/** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
+const pages = createPages(phone)
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
 const toastShow = createToast(toastEl)
@@ -980,7 +984,7 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', () => { if (zoomedIn()) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
 
 /** The glyph next to the heading: zoomed out it zooms in, zoomed in it is the second way out (Back is the first). */
 function zoomGlyph(tab: ZoomTab): HTMLElement {
@@ -1204,6 +1208,7 @@ function openSheet(children: (Node | null)[]): void {
 }
 
 function closeSheet(): void {
+  pages.closeAll()
   const wasDesk = deskOpen()
   const wasChat = openChat !== null
   openChat = null
@@ -2840,6 +2845,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
+    daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
@@ -2858,7 +2864,7 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
-    curateSection(p),
+    el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
 }
@@ -2892,22 +2898,17 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   })
   b.innerHTML = icon('chat')
   b.append(S.chatOpen)
-  return el('div', { class: 'card-chat' }, [b, chat ? null : el('p', { class: 'meta' }, [S.chatNotConnected(displayName(p.name).text)])])
+  return el('div', { class: 'card-chat' }, [b, chat ? null : connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast })])
 }
 
-/** The folded "Curate" section at the bottom of the card: the curation tools, a tap unfolds (remembered per device). */
-function curateSection(p: Person): HTMLElement {
-  const stored = (): string | null => { try { return window.localStorage.getItem(CARD_CURATE_KEY) } catch { return null } }
-  const d = el('details', { class: 'card-curate', 'data-card-curate': p.id }, [
-    el('summary', {}, [S.cardCurate]),
+/** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
+function curatePage(p: Person): void {
+  pages.open(S.cardCurate, [
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
-  ])
-  d.open = curateOpen(stored())
-  d.addEventListener('toggle', () => { try { window.localStorage.setItem(CARD_CURATE_KEY, curateStored(d.open)) } catch { /* not remembered */ } })
-  return d
+  ].filter((n): n is HTMLElement => n !== null), 'card-curate')
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
@@ -5957,19 +5958,23 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
-    el('label', { class: 'radio', 'data-engagement-days': '1' }, [
-      el('b', {}, [S.setEngagement]),
+    // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
+    el('button', {
+      class: 'radio' + (engagementDays(s) ? ' on' : ''), 'aria-pressed': String(engagementDays(s) > 0), 'data-engagement-switch': '1',
+      onclick: () => { if (engagementDays(s)) delete s.engagementDays; else s.engagementDays = ENGAGEMENT_DEFAULT_DAYS; save(); settingsSheet() },
+    }, [el('b', {}, [S.setEngagement]), el('small', {}, [S.setEngagementHint(engagementDays(s))])]),
+    engagementDays(s) ? el('label', { class: 'radio', 'data-engagement-days': '1' }, [
+      el('b', {}, [S.setEngagementDays]),
       el('input', {
-        class: 'field', type: 'number', min: '0', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagement,
-        // Only a change from the default of 30 is stored; empty or junk leaves it as it was.
+        class: 'field', type: 'number', min: '1', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagementDays,
+        // Empty or junk leaves it as it was; 0 switches it off.
         onchange: (e: Event) => {
           const d = parseDays((e.target as HTMLInputElement).value)
-          if (d !== null) { if (d === 30) delete s.engagementDays; else s.engagementDays = d; save() }
+          if (d !== null) { if (d === 0) delete s.engagementDays; else s.engagementDays = d; save() }
           settingsSheet()
         },
       }),
-      el('small', {}, [S.setEngagementHint(engagementDays(s))]),
-    ]),
+    ]) : null,
     el('button', {
       class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
       // Only "off" is stored: absent means on.
