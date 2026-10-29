@@ -47,8 +47,9 @@ html:has(.phone),body:has(.phone){overflow:hidden; overscroll-behavior:none; hei
   body{padding:0}
   .phone{position:fixed; inset:0; width:auto; height:auto; max-height:none; border-radius:0; box-shadow:none}
 }
-.phone.embedded{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
-body:has(.phone.embedded){padding:0}
+.phone.embedded,.phone.fluid{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
+body:has(.phone.embedded),body:has(.phone.fluid){padding:0}
+body:has(.phone.fluid) .page-dock{display:none}
 
 .screen{position:absolute; inset:0 0 86px; display:flex; flex-direction:column; overflow:hidden; overflow:clip; background:var(--linen)}
 .screen.start{inset:0}
