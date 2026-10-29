@@ -78,7 +78,8 @@ import {
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
-import { chatListRows, chatPickerRows } from './chat_list'
+import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
+import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
 import { viewHeading, viewMenuItems, webViewOf } from './view_menu'
@@ -88,7 +89,7 @@ import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
-import { askWhenLabel, flushPending, renderChat, renderShareControls, submitText } from './chat_view'
+import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
 import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
@@ -914,7 +915,7 @@ renderTabs()
 function updateChatBadge(): void {
   const chat = tabs.querySelector<HTMLElement>('[data-go="chat"]')
   if (!chat) return
-  const n = state ? unreadTotal(state.chats ?? {}) : 0
+  const n = state && !state.chatsHidden ? unreadTotal(state.chats ?? {}) : 0
   chat.querySelector('.tab-badge')?.remove()
   if (n > 0) chat.append(el('span', { class: 'tab-badge', role: 'img', 'aria-label': S.chatTabUnread(n) }, [el('b', {}, [n > 99 ? '99+' : String(n)])]))
 }
@@ -2424,32 +2425,82 @@ function chooseView(view: WebView): void {
   go(Screen.Web)
 }
 
-/** Wave 24: every chat, newest first; a tap opens the chat sheet. */
-function screenChat(): Node[] {
+/** Wave 25: the Chat tab as Signal lays it out: search and the Do Not Disturb moon on top, one row per chat, a folded "find people" section below. */
+let chatQuery = ''
+
+function chatPeople(): ChatListPerson[] {
+  return st().people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text, channels: p.channels }))
+}
+
+/** The small messenger symbols on a row: TrustWeb is the chat itself, Signal / WhatsApp open their link. */
+function messengerChips(p: ChatListPerson): HTMLElement {
+  const label = { trustweb: S.chatViaTrustweb, signal: 'Signal', whatsapp: 'WhatsApp' }
+  return el('span', { class: 'msgr' }, messengerSymbols(p).map((m) => {
+    const href = m.href && safeHref(m.href)
+    const text = label[m.kind].charAt(0)
+    return href
+      ? el('a', { class: 'msgr-ico ' + m.kind, href, target: '_blank', rel: 'noopener', 'data-messenger': m.kind, 'aria-label': S.chatOnMessenger(p.name, label[m.kind]), onclick: (e: Event) => e.stopPropagation() }, [text])
+      : el('span', { class: 'msgr-ico ' + m.kind, 'data-messenger': m.kind, title: label[m.kind] }, [text])
+  }))
+}
+
+function chatListBody(): Node[] {
   const s = st()
+  if (s.chatsHidden) return [el('p', { class: 'empty', 'data-chats-hidden': '' }, [S.chatDndHint])]
   const now = Date.now()
-  const rows = chatListRows(s.chats, s.people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
+  const people = chatPeople()
+  const rows = chatListRows(s.chats, people, { query: chatQuery })
+  const find = chatFindRows(s.chats, people, chatQuery)
   return [
-    header(S.chatListTitle),
-    el('div', { class: 'scroll ppl' }, [el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]), ...(rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+    ...(rows.length ? rows.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
+      messengerChips(people.find((p) => p.id === r.personId) ?? { id: r.personId, name: r.name }),
       el('span', { class: 'when' }, [ageLabel(r.at, now)]),
       r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
-    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])])]),
+    ])) : [el('p', { class: 'empty' }, [chatQuery.trim() ? S.chatNoMatch : S.chatListEmpty])]),
+    el('details', { class: 'chat-find', 'data-chat-find': '' }, [
+      el('summary', {}, [S.chatFindTitle]),
+      ...(find.length ? find.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
+        avatar(r.name, r.personId),
+        el('div', { class: 'who' }, [el('b', {}, [r.name])]),
+      ])) : [el('p', { class: 'meta' }, [S.chatFindEmpty])]),
+    ]),
   ]
 }
 
-/** Chat > New message: pick a person, connected ones first; the rest say they are not on TrustWeb yet. */
+/** Wave 24: every chat, newest first; a tap opens the chat sheet. */
+function screenChat(): Node[] {
+  const s = st()
+  const body = el('div', { class: 'chat-body' }, chatListBody())
+  const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
+  search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
+  const dnd = iconButton('moon', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
+  dnd.setAttribute('data-dnd', '')
+  dnd.setAttribute('aria-pressed', String(!!s.chatsHidden))
+  return [
+    header(S.chatListTitle, { qr: false, right: dnd }),
+    el('div', { class: 'scroll ppl' }, [
+      s.chatsHidden ? null : search,
+      el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
+      body,
+    ]),
+  ]
+}
+
+/** Chat > New message: a search bar, the people who can be chatted with; a typed name that is not connected says to connect first. */
 function chatNewSheet(): void {
-  const rows = chatPickerRows(st().people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
-  openSheet([
-    el('h3', {}, [S.chatNewTitle]),
-    el('div', { class: 'ppl', 'data-chat-picker': '' }, rows.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
+  const list = el('div', { class: 'ppl', 'data-chat-picker': '' })
+  const fill = (q: string): void => {
+    list.replaceChildren(...chatPickerRows(chatPeople(), q).map((r) => el('div', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => { if (r.connected) chatSheet(r.personId) } }, [
       avatar(r.name, r.personId),
-      el('div', { class: 'who' }, [el('b', {}, [r.name]), r.connected ? null : el('i', {}, [S.chatNotOnTrustweb])]),
-    ]))),
-  ])
+      el('div', { class: 'who' }, [el('b', {}, [r.name]), r.connected ? null : el('i', {}, [S.chatConnectFirst, ' ', el('button', { class: 'link', 'data-connect-first': r.personId, onclick: (e: Event) => { e.stopPropagation(); closeSheet(); personSheet(r.personId) } }, [S.chatConnect])])]),
+    ])))
+  }
+  const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '' })
+  search.addEventListener('input', () => fill(search.value))
+  fill('')
+  openSheet([el('h3', {}, [S.chatNewTitle]), search, list])
 }
 
 function screenWeb(): Node[] {

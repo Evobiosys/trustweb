@@ -913,6 +913,8 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
+  chatsHidden?: boolean
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
   /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent = 30, 0 = off. Local; rides the device sync. */
