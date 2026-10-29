@@ -12,7 +12,7 @@ import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -28,14 +28,14 @@ declare const __TW_PREVIEW__: Preview | null | undefined
 declare const __TW_BUILD__: { mode: string } | null | undefined
 
 const CSS = `
-.twp{position:fixed;left:8px;top:8px;z-index:100000;width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 110px);overflow:hidden auto;border-radius:10px;background:#241b2e;color:#fff;font:11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.twp{position:fixed;left:8px;top:8px;z-index:100000;width:300px;max-width:calc(100vw - 16px);max-height:calc(100vh - 110px);overflow:hidden auto;scrollbar-width:thin;scrollbar-color:#7a6a8c transparent;border-radius:10px;background:#241b2e;color:#fff;font:11px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)}
 .twp header{display:flex;align-items:baseline;gap:6px;padding:6px 10px;cursor:grab;touch-action:none;user-select:none}
 .twp header b{font:700 15px ui-monospace,monospace;color:#4fd7a0}.twp header span{flex:1;opacity:.8}
 .twp .row{padding:0 10px 4px}.twp small{opacity:.7}.twp .warn{color:#ff715b;font-weight:600}
 .twp .twc-file,.twp .twc-a,.twp .twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twp .twc-file{color:#7ee8de;background:rgba(94,234,212,.16)}.twp .twc-a{color:#ffc65c;background:rgba(251,191,36,.16)}.twp .twc-b{color:#e3a8ff;background:rgba(233,166,255,.16)}
-.twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
+.twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.twp-active{background:rgba(79,215,160,.22);border-radius:4px}.twp .feat.twp-related{background:rgba(255,198,92,.2);border-radius:4px;box-shadow:inset 3px 0 #ffc65c}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
-.twp .more{display:block;width:100%;text-align:left;padding:2px 0 2px 18px;background:none;color:#e5484d;font-size:12px;font-weight:700;cursor:pointer}.twp .more.less{color:#b7a8c9}.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
+.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
@@ -242,6 +242,7 @@ export function initDevPreview(): void {
     if (autoApply(q, applying)) void apply()
   }
 
+  let related = new Set<string>()
   function row(n: TreeNode, shown: PreviewFeature[]): HTMLElement {
     const f = n.feature, d = shown.find((x) => x.key === f.key)!
     const hint = needsHint(shown, f.key)
@@ -263,8 +264,8 @@ export function initDevPreview(): void {
     }
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), pill('needs-work', 'needs work'), ...(f.steps?.length ? [go, how] : [])))
-    label.addEventListener('click', (e) => { if (e.target !== box && e.target !== chev) walk(f) })
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), pill('needs-work', 'needs work'), ...(f.steps?.length ? [go, how] : [])))
+    label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
 
@@ -385,33 +386,12 @@ export function initDevPreview(): void {
     if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
   }
 
-  /** Rows that fit: the panel may use ~70% of the viewport, one feature row is ~90 px, ~260 px go to header and buttons; never fewer than 3. */
-  const rowsShown = (): number => Math.max(3, Math.floor((window.innerHeight * 0.7 - 260) / 90))
-  /** More than rowsShown() feature rows (over all sections): the rest sits behind "… N more" (remembered per preview, twp-more-<id>). */
-  function fewRows(secs: { sec: HTMLElement; rows: HTMLElement[] }[], id: string): HTMLElement[] {
-    const total = secs.reduce((n, s) => n + s.rows.length, 0)
-    const open = store.get(`twp-more-${id}`) === '1'
-    const shown = rowsShown()
-    if (total <= shown || open) {
-      const out: HTMLElement[] = secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
-      if (total > shown) { const less = h('button', { className: 'more less', textContent: '▴ fewer' }); less.addEventListener('click', () => { store.set(`twp-more-${id}`, '0'); render() }); out.push(less) }
-      return out
-    }
-    const out: HTMLElement[] = []
-    let left = shown
-    for (const s of secs) {
-      if (left <= 0) break
-      out.push(h('div', { className: 'row' }, s.sec, ...s.rows.slice(0, left)))
-      left -= s.rows.length
-    }
-    const more = h('button', { className: 'more', textContent: `… ${total - shown} more` })
-    more.addEventListener('click', () => { store.set(`twp-more-${id}`, '1'); render() })
-    out.push(more)
-    return out
-  }
+  /** All feature rows, section by section; the panel scrolls (max-height from the viewport) when there are more than fit. */
+  const allRows = (secs: { sec: HTMLElement; rows: HTMLElement[] }[]): HTMLElement[] => secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
 
   function render(): void {
     const q = p!
+    related = new Set(lit ? relatedRows(q.features, lit) : [])
     root.hidden = tab.hidden()
     const pill = collapsed()
     root.className = 'twp' + (pill ? ' pill' : '')
@@ -446,7 +426,7 @@ export function initDevPreview(): void {
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
         h('div', { className: 'btns' }, all),
-        ...fewRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) })), q.id),
+        ...allRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn' }, ...conflictNodes(q.assembled.error))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
