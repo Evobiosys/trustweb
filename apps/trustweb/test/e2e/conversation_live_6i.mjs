@@ -79,7 +79,7 @@ async function addByLink(page, link) {
 }
 
 async function addResource(page, text) {
-  await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await page.getByPlaceholder(/Motorbike/).fill(text)
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await page.locator('.inv', { hasText: text }).waitFor({ timeout: 5000 })

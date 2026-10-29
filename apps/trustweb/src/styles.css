@@ -701,7 +701,10 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 /* query button, call style: two short lines next to the calling person */
 .query-fab.call{padding:10px 18px 10px 14px; gap:9px}
 .query-fab.call svg{width:24px; height:24px}
-.fab-two{display:flex; flex-direction:column; line-height:1.1; text-align:left; font-size:13.5px}
+.fab-two{display:flex; flex-direction:column; line-height:1.1; text-align:left; font-size:16px}
+.agr-row b,.agr-row small{min-width:0; overflow-wrap:anywhere}
+.agr-row{min-width:0}
+.lean-note{display:flex; flex-direction:column; gap:6px; align-items:stretch}
 
 /* page-level, outside the phone: open the side-by-side demo */
 .page-dock{position:fixed; right:24px; bottom:24px; display:flex; flex-direction:column; align-items:flex-end; gap:10px}
@@ -880,6 +883,16 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-name{margin:0 0 6px; font-size:22px; line-height:1.2; overflow-wrap:anywhere}
 .card-name-btn{all:unset; cursor:pointer; color:inherit; font:inherit; overflow-wrap:anywhere}
 .card-name-input{font-size:22px; width:100%}
+.tap-edit{all:unset; cursor:pointer; overflow-wrap:anywhere}
+.tap-edit-input{width:100%}
+.card-channels{display:flex; flex-direction:column; gap:4px; margin:0 0 8px}
+.card-ch-val{white-space:nowrap}
+.card-ch{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft)}
+.card-chat{margin:0 0 8px}
+.card-chat .btn svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-3px; margin-right:6px}
+.card-curate{margin-top:12px}
+.card-curate>summary{cursor:pointer; font-weight:600; padding:6px 0}
+.ava.unconnected{background:transparent; border:2px dashed; color:var(--ink); box-shadow:none}
 .sheet-home{border:0; background:var(--card); color:var(--ink-soft); font:inherit; font-size:13px; border-radius:999px; padding:4px 12px; cursor:pointer}
 .sheet-home:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
 .search-not-ask{margin:2px 0 6px}
@@ -1007,6 +1020,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   body:has(.sheet.desk-wide.on[data-kind=curator]) :is(.toast,.msg-notice,.demo-friends){position:fixed; z-index:100002; left:auto; right:24px; top:auto; bottom:24px; width:min(420px, calc(100vw - 48px))}
 }
 
+/* zoom (wave 24b) */
+.zoom-glyph{margin-left:4px}
+.zoom-glyph.on{color:var(--electric,currentColor); background:rgba(128,128,128,.18)}
+.zoom-hint{margin:6px 16px 0; text-align:center}
+.zoom-rows{margin-top:8px}
+.zoom-row{display:block; width:100%; text-align:left; background:var(--card); border:0; border-radius:14px; padding:10px 12px; margin:0 0 8px; font:inherit; color:var(--ink); cursor:pointer}
+.zoom-row .cal-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+.zoom-row .cal-chip{font-size:11.5px; color:var(--ink-soft); background:rgba(128,128,128,.18); border-radius:999px; padding:2px 8px}
 /* ext calendar */
 .cal-outliner{margin:12px 0}
 .cal-outliner>summary{cursor:pointer; font-weight:600; padding:8px 0}

@@ -32,7 +32,7 @@ function stamp(d: Dated, now: number): HTMLElement {
   return el('small', { class: 'meta prof-stamp' }, [`${d.by === 'ai' ? S.profByAi : S.profByMe} · ${day(d.at)}`, isStale(d.at, now) ? el('em', { class: 'prof-stale', 'data-stale': '1' }, [' ' + S.profStale]) : null])
 }
 
-/** What I can offer, read only: the My Resources lines that anyone in my rings may ask about. */
+/** What I can offer, read only: the Resources lines that anyone in my rings may ask about. */
 export function offerLines(items: readonly InventoryItem[]): InventoryItem[] {
   return items.filter((i) => i.included && i.audience === Audience.FriendsOfFriends)
 }

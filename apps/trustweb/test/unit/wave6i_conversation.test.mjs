@@ -189,7 +189,7 @@ const fakeDoc = () => {
 }
 const CS = {
   title: (n) => `Chat with ${n}`, messageOn: () => 'Message on Signal', notConnected: (n) => n, empty: (n) => n, offline: 'off', placeholder: 'Message',
-  send: 'Send', sendAgain: 'Again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n}`, you: 'You',
+  send: 'Send', longHint: 'Signal', sendAgain: 'Again', pending: 'Waiting', sent: 'Sent', charsLeft: (n) => `${n}`, you: 'You',
   re: (t, w) => `Re: “${t}” · ${w}`, replyingTo: (t, w) => `Replying to “${t}” · ${w}`, replyingToDrop: 'Write without this ask',
 }
 

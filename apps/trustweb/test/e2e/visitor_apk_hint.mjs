@@ -79,7 +79,7 @@ async function settle(page) {
 
 const openSettings = async (page) => {
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
-  await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.locator('.sheet.on h3', { hasText: 'Settings' }).waitFor({ timeout: 5_000 })
 }

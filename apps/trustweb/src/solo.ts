@@ -1,5 +1,5 @@
 /**
- * The side-by-side page (app.idea2.site/trustweb/demo/ and its two context
+ * The side-by-side page (app.trustweb.one/demo/ and its two context
  * twins): real TrustWeb phones on one laptop, talking over the live relay.
  *
  * Owner, 2026-10-05: start with ONE device. Bottom right, "Add a device"

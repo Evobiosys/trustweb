@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, conflictParts, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, mergeHead, conflictParts, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -22,7 +22,7 @@ const CSS = `
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
 .twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
-.twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok .warn{color:#a3271f;font-weight:600}
+.twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok.ok{border-color:#1f7a4d}.twf-ok.ok header{background:#1f7a4d}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twc-file,.twc-a,.twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twc-file{color:#0e6b73;background:#d9f3f2}.twc-a{color:#8a4a00;background:#ffe8c7}.twc-b{color:#6a2c9e;background:#efe0fb}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
 
@@ -135,20 +135,21 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
-  /** "Approve": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  /** "Declare done": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
   const pollMerge = (since: number): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
     pollStatus((j) => {
       if (stale(j)) return
+      const h = mergeHead(j.step); head.textContent = h.text; bar.classList.toggle('ok', h.ok); bar.classList.toggle('prog', !h.ok)
       body.replaceChildren(statusLine(j.text ?? 'starting', j.url))
       if (j.step === 'checks-failed' || j.step === 'failed') body.className = 'body warn'
       if (MERGE_DONE.includes(j.step) && j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
     }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
   }
   function buttons(): void {
-    bar.classList.remove('prog'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
-    const personal = btn('Approve and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
+    bar.classList.remove('prog', 'ok'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
+    const personal = btn('Declare done and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
       const since = Date.now() - 2000
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
     })
@@ -156,7 +157,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
       const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
       // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
-      const go = btn('Approve', 'go big', () => {
+      const go = btn('Declare done', 'go big', () => {
         const since = Date.now() - 2000
         void read().then((q) => {
           const g = approveGate(q)

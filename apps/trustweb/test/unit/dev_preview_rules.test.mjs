@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { conflictParts, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { conflictParts, mergeHead, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -302,9 +302,13 @@ describe('approve (merge to main) rules', () => {
     expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, pending: true, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
-    expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Approve at least one feature')
+    expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Declare at least one feature done')
     expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
     expect(approveGate({ ...passed, pending: true, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).ok).toBe(true)
+  })
+  it('the box head says DONE (class ok) once the released step ended the flow, IN PROGRESS before', () => {
+    expect(mergeHead('released')).toEqual({ text: 'DONE', ok: true })
+    for (const step of ['tests', 'merging', 'release-pending', 'failed']) expect(mergeHead(step)).toEqual({ text: 'IN PROGRESS', ok: false })
   })
   it('the hint under Approve says what happens and never asks for a test run first', () => {
     expect(APPROVE_HINT).toBe('Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.')

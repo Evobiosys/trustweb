@@ -282,6 +282,8 @@ export enum ClaimError {
   Reserved = 'reserved',
   /** 409 name_locked: this code holds the name because the operator granted it; the app can neither release nor replace it. */
   NameLocked = 'name-locked',
+  /** 409 name_held: a former name of someone else, blocked for 2 years after their rename. */
+  NameHeld = 'name-held',
   /** 409 too_many_names: the code already holds all three. */
   TooManyNames = 'too-many-names',
   /** 429 name-cap: this network address already claimed its 3 names in 30 days (not the shared cooldown). */

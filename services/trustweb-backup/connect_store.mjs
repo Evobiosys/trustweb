@@ -7,6 +7,7 @@
 //           {"<name>":{"at":<ms>,"code":"<former holder>"}} (a freed name rests REST_MS for everyone but its former holder; kept PREV_MS). A code entry
 //           may carry "previousHolderAt" (when the former holder of its claimed name let go). Older builds ignore all three.
 //           wave 15 (devices): "moved" {"<name>":<ms>} (when a name last moved between two codes of one account, once per MOVE_MS). Older builds ignore it.
+//           wave 24b: "holds" {"<name>":{"until":<ms>,"code":"<former holder>"}} (a name left by a rename is blocked for HOLD_MS). Older builds ignore it.
 //   mode 0600, rewritten atomically (temp file, fsync, rename), writes serialised through one promise queue.
 //
 // Everything lives in memory (at most `max` codes). Each mutation (secret check, uniqueness check, change) is ONE synchronous block with no
@@ -29,6 +30,8 @@ export const CAP_WINDOW_MS = 30 * 86_400_000
 export const PREV_MS = 180 * 86_400_000
 /** A name moves between the codes of one account at most once in this window. */
 export const MOVE_MS = 30 * 86_400_000
+/** A name given up by a rename stays blocked for everyone but its former holder this long (no alias: its link stops at once). */
+export const HOLD_MS = 730 * 86_400_000
 
 export const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
 const HASH_RE = /^[0-9a-f]{64}$/
@@ -66,6 +69,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
   const claims = new Map() // address key -> [ms of each claim in the cap window]
   const released = new Map() // name -> {at, code}: freed lately
   const moved = new Map() // name -> ms of its last move between codes
+  const holds = new Map() // name -> {until, code}: left by a rename, blocked for others until `until`
   let recovered = false
   let chain = Promise.resolve()
 
@@ -94,6 +98,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     for (const [addr, list] of Object.entries(parsed.claims ?? {})) if (Array.isArray(list)) claims.set(addr, list.filter(Number.isFinite))
     for (const [n, r] of Object.entries(parsed.released ?? {})) if (isNameShape(n) && r && Number.isFinite(r.at) && typeof r.code === 'string') released.set(n, { at: r.at, code: r.code })
     for (const [n, at] of Object.entries(parsed.moved ?? {})) if (isNameShape(n) && Number.isFinite(at)) moved.set(n, at)
+    for (const [n, h] of Object.entries(parsed.holds ?? {})) if (isNameShape(n) && h && Number.isFinite(h.until) && typeof h.code === 'string') holds.set(n, { until: h.until, code: h.code })
     forget()
   }
 
@@ -106,6 +111,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
     }
     for (const [n, r] of released) if (r.at <= now() - PREV_MS) released.delete(n)
     for (const [n, at] of moved) if (at <= now() - MOVE_MS) moved.delete(n)
+    for (const [n, h] of holds) if (h.until <= now()) holds.delete(n)
   }
 
   /** The names a loaded entry claims, in order: the primary, then the aliases (anything that is not a string is dropped here, the rest in index). */
@@ -145,7 +151,7 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       const handle = await fs.open(tmp, 'w', 0o600)
       try {
         await handle.chmod(0o600)
-        await handle.writeFile(JSON.stringify({ v: 1, codes: Object.fromEntries(codes), claims: Object.fromEntries(claims), released: Object.fromEntries(released), moved: Object.fromEntries(moved) }))
+        await handle.writeFile(JSON.stringify({ v: 1, codes: Object.fromEntries(codes), claims: Object.fromEntries(claims), released: Object.fromEntries(released), moved: Object.fromEntries(moved), holds: Object.fromEntries(holds) }))
         await handle.sync()
       } finally {
         await handle.close()
@@ -224,11 +230,13 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
   async function change(code, entry, plan, claimed) {
     if (plan.kind === 'noop') return named(entry)
     if (plan.kind !== 'set') return { kind: REFUSALS[plan.kind] }
-    const before = { names: namesOf(entry), seen: entry.seen, previousHolderAt: entry.previousHolderAt, released: new Map(released), claims: claimed && claims.get(claimed.addr) }
+    const before = { names: namesOf(entry), seen: entry.seen, previousHolderAt: entry.previousHolderAt, released: new Map(released), holds: new Map(holds), claims: claimed && claims.get(claimed.addr) }
     applyNames(code, entry, plan.names)
     entry.seen = now()
     for (const n of before.names) if (!plan.names.includes(n)) released.set(n, { at: now(), code })
     if (claimed) {
+      for (const n of before.names) if (!plan.names.includes(n)) holds.set(n, { until: now() + HOLD_MS, code }) // a rename: the old name is held, not freed
+      holds.delete(claimed.name)
       const prior = released.get(claimed.name)
       released.delete(claimed.name)
       if (prior !== undefined && prior.code !== code && prior.at > now() - PREV_MS) entry.previousHolderAt = prior.at
@@ -242,6 +250,8 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       else entry.previousHolderAt = before.previousHolderAt
       released.clear()
       for (const [n, r] of before.released) released.set(n, r)
+      holds.clear()
+      for (const [n, h] of before.holds) holds.set(n, h)
       if (claimed) before.claims === undefined ? claims.delete(claimed.addr) : claims.set(claimed.addr, before.claims)
     })
     return named(entry)
@@ -251,6 +261,12 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
   function resting(code, name) {
     const r = released.get(name)
     return r !== undefined && r.code !== code && r.at > now() - REST_MS
+  }
+
+  /** The hold on `name` for any code but its former holder: {until}, else null. */
+  function heldAgainst(code, name) {
+    const h = holds.get(name)
+    return h !== undefined && h.code !== code && h.until > now() ? { until: h.until } : null
   }
 
   /** The cap check of a claim from `addr`: {until} (ms when the oldest claim leaves the window) when `cap` claims are already in it, else null. */
@@ -306,6 +322,8 @@ export async function createConnectStore({ file, ttlMs, touchMs, max, now = Date
       const entry = live(code)
       if (!secretOpens(entry, secret)) return { kind: 'forbidden' }
       const held = namesOf(entry)
+      const hold = heldAgainst(code, name)
+      if (hold !== null) return { kind: 'held', ...hold }
       const plan = planClaim({ held, name, alias, reserved, takenByOther: takenByOther(code, name) || resting(code, name) || lookalikeOfOther(code, name) })
       const fresh = plan.kind === 'set' && !held.includes(name) && addr !== undefined // a new name; promoting a held alias is no claim
       const hit = fresh ? capHit(addr, cap) : null

@@ -1,5 +1,5 @@
 /**
- * TrustWeb: the one merged demo app (app.idea2.site/trustweb/).
+ * TrustWeb: the one merged demo app (app.trustweb.one/).
  *
  * Substance from apps/demo (relay-mode consent flow, via net.ts); look and
  * nav chrome from apps/mobile-ui (the rings, bottom bar with a raised
@@ -59,6 +59,8 @@ import { inviteText, sendInvite } from './invite'
 import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
+import { CARD_CURATE_KEY, channelEdit, chatButtonKind, curateOpen, curateStored, isConnected } from './card_view'
+import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
 import type { LinkChooser } from './short_link_view'
@@ -76,7 +78,7 @@ import {
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
-import { chatListRows } from './chat_list'
+import { chatListRows, chatPickerRows } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
 import { viewHeading, viewMenuItems } from './view_menu'
@@ -168,6 +170,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
+import { dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES } from './ext/registry'
@@ -208,6 +211,7 @@ import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerN
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
 // imports walkthrough too) ran this whole app without an #app and stayed blank (live 2026-10-19). test/scan_demo_entries.mjs (CI, after the build) guards it.
 import { mountWalkthrough } from './walkthrough'
+import { ZOOM_OUT, back as zoomBack, connectedPeople, itemRows, press, type ItemSort, type Zoom, type ZoomTab } from './zoom'
 
 enum Screen {
   Start = 'start',
@@ -723,6 +727,24 @@ const stackDeps = {
   addLine: (): void => go(Screen.Inventory),
   ringLabel: (ring: Ring | undefined): string => S.ringLabel[ring ?? Ring.Acquaintance],
   now: (): number => Date.now(),
+  undoAllReleases: (): void => { undoAllReleases(st(), Date.now()); save(); render() },
+  openPerson: (personId: string): void => personSheet(personId),
+}
+
+/**
+ * Wave 24b (engagement.ts): ties past their window move one ring outward (card with Undo); at the first check from 12:00 local, once a day,
+ * everyone whose window ends within 48 h gets a reminder (reminder switch, system notification while hidden). At open, on return and every 15 min.
+ */
+function checkEngagement(): void {
+  if (!state || solo || state.testOf) return
+  const now = Date.now()
+  if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
+  if (releaseTies(state, now).length) { save(); render() }
+  if (!noticeDue(state, new Date(now))) return
+  const soon = expiringSoon(state, now)
+  const { names, more } = soonNames(soon)
+  const shown = soon.length === 0 || notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id))
+  if (shown) { state.engagementNoticeDay = localDay(new Date(now)); save() }
 }
 
 function dismissCard(card: StackCard): void {
@@ -733,6 +755,7 @@ function dismissCard(card: StackCard): void {
     case StackCardKind.Late: s.lateAnswers = dismissLateAnswer(s.lateAnswers, card.answer.id, now); break
     case StackCardKind.Unmatched: s.unmatchedAsks = dismissUnmatchedAsk(s.unmatchedAsks, card.ask.id, now); break
     case StackCardKind.Away: s.awayAsks = dismissAwayAsk(s.awayAsks, card.ask.id, now); break
+    case StackCardKind.Released: dismissReleases(s); break
   }
   save()
 }
@@ -852,7 +875,7 @@ function icon(name: string): string {
   return ICONS[name]
 }
 
-function tabButton(target: string, label: string, name: string, onclick: () => void = () => go(target as Screen)): HTMLElement {
+function tabButton(target: string, label: string, name: string, onclick: () => void = () => tabTap(target as Screen)): HTMLElement {
   const b = el('button', { class: 'tab', 'data-go': target, 'aria-label': label, onclick })
   b.innerHTML = icon(name)
   b.append(label)
@@ -884,7 +907,7 @@ function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
 }
 
 function renderTabs(): void {
-  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | My Resources.
+  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | Resources.
   tabs.replaceChildren(...resolveRow(state?.tabRow, tabFlags()).map(tabFor))
   tabs.classList.toggle('four', tabs.children.length > 3)
   updateChatBadge()
@@ -946,7 +969,33 @@ function draftInProgress(): boolean {
     || draft.plain || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.generalNotes.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
+/** Wave 24b: the zoom level per tab. Zooming in pushes one history entry, so Back zooms out (popstate below). */
+let zoom: Zoom = ZOOM_OUT
+let resQuery = ''
+let resSort: ItemSort = 'new'
+const zoomedIn = (): boolean => zoom.web || zoom.inventory
+
+/** A tab tap: the second press on the active Membranes or Resources tab zooms in; everything else goes there as before. */
+function tabTap(target: Screen): void {
+  const next = press(target, screen)
+  if (target !== screen || zoomedIn() || next === ZOOM_OUT) { go(target); return }
+  zoom = next
+  history.pushState({ twZoom: target }, '')
+  render()
+}
+window.addEventListener('popstate', () => { if (zoomedIn()) { zoom = zoomBack(); render() } })
+
+/** The glyph next to the heading: zoomed out it zooms in, zoomed in it is the second way out (Back is the first). */
+function zoomGlyph(tab: ZoomTab): HTMLElement {
+  const on = zoom[tab]
+  const b = iconButton('zoom', on ? S.zoomOutAria : S.zoomInAria, () => (on ? history.back() : tabTap(tab as Screen)), 'zoom-glyph' + (on ? ' on' : ''))
+  b.setAttribute('aria-pressed', String(on))
+  b.dataset.zoomGlyph = tab
+  return b
+}
+
 function go(s: Screen): void {
+  if (s !== screen && zoomedIn()) { zoom = zoomBack(); history.back() }
   // Coming to Record from Inventory means "what", from Web "who" (owner
   // 2026-10-06), whichever of Record or Meeting the tap opens; only while
   // nothing has been named or recorded yet.
@@ -968,7 +1017,7 @@ function go(s: Screen): void {
  * QR button that opens Meet (with a tiny relay-status dot on it). While a
  * take is open the QR gives way to the "Recording" pill, on every screen.
  */
-function header(title: string, opts: { back?: () => void; right?: Node | null; after?: Node | null; qr?: boolean; pill?: boolean; more?: boolean } = {}): HTMLElement {
+function header(title: string, opts: { back?: () => void; glyph?: Node | null; right?: Node | null; after?: Node | null; qr?: boolean; pill?: boolean; more?: boolean } = {}): HTMLElement {
   statusPill = el('button', { class: 'status-pill' })
   // Record and Meeting show their own recording state, so the QR stays put there (owner 2026-10-06).
   statusPill.dataset.pill = opts.pill === false ? '0' : '1'
@@ -978,6 +1027,7 @@ function header(title: string, opts: { back?: () => void; right?: Node | null; a
     el('div', { class: 'hdr-left' }, [
       opts.back ? el('button', { class: 'back', 'aria-label': S.back, onclick: opts.back }, ['‹']) : null,
       el('h2', {}, [title]),
+      opts.glyph ?? null,
     ]),
     el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
@@ -1941,6 +1991,9 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const face = avatar(p.name, p.id)
       face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
+      if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
+        face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
+      }
       pictured(face, p.theirProfile?.picture)
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
@@ -2384,23 +2437,38 @@ function screenChat(): Node[] {
   const rows = chatListRows(s.chats, s.people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
   return [
     header(S.chatListTitle),
-    el('div', { class: 'scroll ppl' }, rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+    el('div', { class: 'scroll ppl' }, [el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]), ...(rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
       el('span', { class: 'when' }, [ageLabel(r.at, now)]),
       r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
-    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])]),
+    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])])]),
   ]
 }
 
+/** Chat > New message: pick a person, connected ones first; the rest say they are not on TrustWeb yet. */
+function chatNewSheet(): void {
+  const rows = chatPickerRows(st().people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
+  openSheet([
+    el('h3', {}, [S.chatNewTitle]),
+    el('div', { class: 'ppl', 'data-chat-picker': '' }, rows.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
+      avatar(r.name, r.personId),
+      el('div', { class: 'who' }, [el('b', {}, [r.name]), r.connected ? null : el('i', {}, [S.chatNotOnTrustweb])]),
+    ]))),
+  ])
+}
+
 function screenWeb(): Node[] {
-  const s = shown(st(), curatorHiddenIds())
+  const full = shown(st(), curatorHiddenIds())
+  const zin = zoom.web
+  // Zoomed out: the people I connect with most; the network option, search and the full list wait one press away.
+  const s = zin ? full : { ...full, people: connectedPeople(full, Date.now()) }
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
-  const network = s.people.length > 0 && networkChosen(stored)
+  const network = zin && s.people.length > 0 && networkChosen(stored)
   const right = document.createDocumentFragment()
-  right.append(search)
+  if (zin) right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2409,16 +2477,17 @@ function screenWeb(): Node[] {
     network
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
       : ringsView(s, askMarks()),
+    s.people.length < full.people.length ? el('p', { class: 'meta zoom-hint', 'data-zoom-hint': '' }, [S.zoomHintWeb]) : null,
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
+  const clip = el('div', { class: 'scroll', 'data-zoom-level': zin ? 'in' : 'out' }, [layer])
   zoomOnWeb(clip, layer)
   return [
-    // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
-    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(network, s.people.length > 0),
+    // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
+    header(S.webTitle, { glyph: zoomGlyph('web'), right, after: iconButton('settings', S.invSettings, settingsSheet) }),
+    ...(zin ? [webViewRow(network, s.people.length > 0)] : []),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2602,7 +2671,7 @@ function queryFab(): HTMLElement {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
     onclick: openQuery,
   })
-  b.innerHTML = icon(call ? 'call' : 'query')
+  b.innerHTML = icon(call ? 'ask' : 'query')
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))
@@ -2729,10 +2798,11 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
+    undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
     cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
-    p.peerId ? el('button', { class: 'btn ' + (cons ? 'btn-ghost' : 'btn-electric'), 'data-chat-open': p.id, onclick: () => chatSheet(p.id) }, [S.chatOpen]) : null,
-    solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
+    cardChannelsRow(p),
+    cardChatButton(p, Boolean(cons)),
     reachedOutRow(p),
     noMessengerRow(p),
     sharedReachRow(p),
@@ -2746,36 +2816,67 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
+    curateSection(p),
+  ])
+  cardOpenFor = p.id
+}
+
+/** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
+function cardChannelsRow(p: Person): HTMLElement | null {
+  const chs = reachableChannels(p)
+  if (!chs.length) return null
+  return el('div', { class: 'card-channels', 'data-card-channels': p.id }, chs.map((r) => {
+    const val = el('span', { class: 'card-ch-val' }, [r.value])
+    if (r.source === 'own') {
+      tapEdit(val, {
+        text: r.value, value: r.value, aria: S.cardChEditAria(chName(r.channel)), attrs: { 'data-card-ch-edit': r.channel },
+        resolve: (typed) => channelEdit(r.channel, r.value, typed),
+        commit: (next) => { const c = { ...p.channels }; if (next) c[r.channel] = next; else delete c[r.channel]; p.channels = c; save(); personSheet(p.id) },
+      })
+    }
+    return el('div', { class: 'card-ch', 'data-card-ch': r.channel }, [
+      el('a', { class: 'btn btn-ghost btn-sm', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel }, [chName(r.channel)]),
+      val,
+    ])
+  }))
+}
+
+/** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
+function cardChatButton(p: Person, quiet: boolean): HTMLElement {
+  const chat = chatButtonKind(p) === 'chat'
+  const b = el('button', {
+    class: 'btn ' + (chat && !quiet ? 'btn-electric' : 'btn-ghost'), 'data-card-chat': p.id, 'data-chat-open': p.id,
+    onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
+  })
+  b.innerHTML = icon('chat')
+  b.append(S.chatOpen)
+  return el('div', { class: 'card-chat' }, [b, chat ? null : el('p', { class: 'meta' }, [S.chatNotConnected(displayName(p.name).text)])])
+}
+
+/** The folded "Curate" section at the bottom of the card: the curation tools, a tap unfolds (remembered per device). */
+function curateSection(p: Person): HTMLElement {
+  const stored = (): string | null => { try { return window.localStorage.getItem(CARD_CURATE_KEY) } catch { return null } }
+  const d = el('details', { class: 'card-curate', 'data-card-curate': p.id }, [
+    el('summary', {}, [S.cardCurate]),
+    solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
   ])
-  cardOpenFor = p.id
+  d.open = curateOpen(stored())
+  d.addEventListener('toggle', () => { try { window.localStorage.setItem(CARD_CURATE_KEY, curateStored(d.open)) } catch { /* not remembered */ } })
+  return d
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
 function cardNameHeading(p: Person): HTMLElement {
   const h = el('h2', { class: 'card-name', 'data-card-name': p.id, style: `color:${ringColor(p)}` })
-  const show = (): void => h.replaceChildren(el('button', {
-    class: 'card-name-btn', 'aria-label': S.cardNameEditAria(p.name), 'data-card-name-edit': p.id, onclick: edit,
-  }, [displayName(p.name).text]))
-  const edit = (): void => {
-    const input = el('input', { class: 'field card-name-input', 'data-card-name-input': p.id, 'aria-label': S.cardNameEditAria(p.name), maxlength: String(HELLO_NAME_MAX) })
-    input.value = p.name
-    let done = false
-    const finish = (save_: boolean): void => {
-      if (done) return
-      done = true
-      const next = save_ ? renamedTo(p.name, input.value) : null
-      if (next) { p.name = next; save(); render(); personSheet(p.id) } else show()
-    }
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false) })
-    input.addEventListener('blur', () => finish(true))
-    h.replaceChildren(input)
-    input.focus(); input.select()
-  }
+  tapEdit(h, {
+    text: displayName(p.name).text, value: p.name, aria: S.cardNameEditAria(p.name), attrs: { class: 'card-name-btn', 'data-card-name-edit': p.id },
+    maxlength: HELLO_NAME_MAX, resolve: (typed) => renamedTo(p.name, typed),
+    commit: (next) => { p.name = next; save(); render(); personSheet(p.id) },
+  })
   dragPerson(h, p) // calendar module: the heading is a drag source (drop a person onto an event)
-  show()
   return h
 }
 
@@ -2848,7 +2949,8 @@ function leanRow(p: Person): HTMLElement | null {
     const saver = createAutosaver({ commit: (text) => { if (setGeneralNote(p, text)) save() } })
     area.addEventListener('input', () => saver.input(area.value))
     area.addEventListener('blur', () => saver.flush())
-    return area
+    const saveBtn = el('button', { class: 'btn btn-electric btn-sm', 'data-lean-note-save': '', onclick: () => { saver.flush(); toast(S.noteSaved) } }, [S.noteSave])
+    return el('div', { class: 'lean-note' }, [el('label', { class: 'meta' }, [S.noteLabel]), area, saveBtn])
   }
   const draw = (): void => box.replaceChildren(
     el('button', { class: 'btn btn-ghost btn-sm', 'data-lean-add-note': '', onclick: (e: Event) => { (e.currentTarget as HTMLElement).replaceWith(note()); box.querySelector('textarea')?.focus() } }, [S.leanAddNote]),
@@ -2989,7 +3091,7 @@ const NO_CHATS: ChatBook = {}
 
 const chatStrings = (): ChatStrings => ({
   title: S.chatTitle, messageOn: (r) => S.chatMessageOn(reachLabel(r)), notConnected: S.chatNotConnected, empty: S.chatEmpty,
-  offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, sendAgain: S.chatSendAgain, pending: S.chatPending,
+  offline: S.chatOffline, placeholder: S.chatPlaceholder, send: S.chatSend, longHint: S.chatLongHint, sendAgain: S.chatSendAgain, pending: S.chatPending,
   sent: S.chatSent, charsLeft: S.chatCharsLeft, you: S.chatYou,
   re: S.chatRe, replyingTo: S.chatReplyingTo, replyingToDrop: S.chatReplyingToDrop,
   notDelivered: S.chatNotDelivered, sendVia: (k) => S.chatSendVia(S.chLabel[k === 'signal' ? Channel.Signal : Channel.WhatsApp]),
@@ -3119,7 +3221,14 @@ function profileEditor(): HTMLElement {
 function profileRow(): HTMLElement {
   return el('div', { class: 'cb-row', 'data-profile-row': '1' }, [
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-open-profile': '1', onclick: profileSheet }, [S.profMine]),
+    shareExpiryLine(),
   ])
+}
+
+/** Wave 24b: the grey reminder wherever something is shared with a person (nothing when expiry is off). */
+function shareExpiryLine(): HTMLElement | null {
+  const text = S.shareExpiryHint(engagementDays(st()))
+  return text ? el('p', { class: 'meta', 'data-share-expiry': '1' }, [text]) : null
 }
 
 /** Chat I/O for chat_view.ts: the book lives in state.chats; setBook skips a save when nothing changed (markRead returns the same object). */
@@ -3290,7 +3399,7 @@ function onContactRequest(peer: Peer, text: string): void {
 
 function sendProfileRow(p: Person): HTMLElement | null {
   const peer = st().peers.find((x) => x.id === p.peerId)
-  return peer ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]) : null
+  return peer ? el('div', {}, [el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-send-profile': p.id, onclick: () => sendProfileTo(peer) }, [S.profSendTo(p.name)]), shareExpiryLine()]) : null
 }
 
 /** The Agreements section of a card (agreements.ts). A proposal or an accept goes as one chat-envelope text to the connected phone; nothing else leaves. */
@@ -4276,7 +4385,7 @@ function screenRecord(): Node[] {
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
       roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() && !draft.generalNotes.trim() && !draft.plain, data: 'data-record-discard' }),
-      roundButton('send', S.recSend, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
+      roundButton('send', S.recSave, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
     ]),
   ]
 }
@@ -5684,7 +5793,7 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
-/** Settings > Bottom row: one picker per slot; the last slot (My Resources) is locked. */
+/** Settings > Bottom row: one picker per slot; the last slot (Resources) is locked. */
 function tabRowSettings(s: AppState): (Node | null)[] {
   const flags = tabFlags()
   const row = resolveRow(s.tabRow, flags)
@@ -5798,6 +5907,19 @@ function settingsSheet(): void {
       'aria-pressed': String(s.showRingNames === true),
       onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('label', { class: 'radio', 'data-engagement-days': '1' }, [
+      el('b', {}, [S.setEngagement]),
+      el('input', {
+        class: 'field', type: 'number', min: '0', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagement,
+        // Only a change from the default of 30 is stored; empty or junk leaves it as it was.
+        onchange: (e: Event) => {
+          const d = parseDays((e.target as HTMLInputElement).value)
+          if (d !== null) { if (d === 30) delete s.engagementDays; else s.engagementDays = d; save() }
+          settingsSheet()
+        },
+      }),
+      el('small', {}, [S.setEngagementHint(engagementDays(s))]),
+    ]),
     el('button', {
       class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
       // Only "off" is stored: absent means on.
@@ -5934,6 +6056,20 @@ const backup = createBackupView({
 })
 autoBackup = backup
 
+/** Resources zoomed in: one flat outliner over every item, with a search field and a sort; the calendar's rows follow (cal8). */
+function outlinerItems(s: AppState): Node[] {
+  const chip = (t: string): HTMLElement => el('span', { class: 'cal-chip' }, [t])
+  const rows = el('div', { class: 'zoom-rows' })
+  const draw = (): void => rows.replaceChildren(...itemRows(s.inventory, resQuery, resSort).map((i) => el('button', { class: 'prow zoom-row', 'data-item': i.id, onclick: () => itemSheet(i.id) }, [
+    el('b', {}, [i.text]),
+    el('div', { class: 'cal-chips' }, [chip(S.audienceLabel[i.audience]), i.included ? null : chip(S.zoomOff), i.tagAudience?.length ? chip(S.zoomTags(i.tagAudience.length)) : null]),
+  ])))
+  const input = el('input', { class: 'field', type: 'search', placeholder: S.zoomSearchPh, 'aria-label': S.zoomSearchPh, value: resQuery, oninput: (e: Event) => { resQuery = (e.target as HTMLInputElement).value; draw() } })
+  const sort = el('button', { class: 'btn btn-ghost btn-sm', 'data-zoom-sort': '', onclick: () => { resSort = resSort === 'new' ? 'az' : 'new'; sort.textContent = resSort === 'new' ? S.zoomSortNew : S.zoomSortAz; draw() } }, [resSort === 'new' ? S.zoomSortNew : S.zoomSortAz])
+  draw()
+  return [el('div', { class: 'add-row' }, [input, sort]), rows]
+}
+
 function screenInventory(): Node[] {
   const s = st()
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
@@ -5955,9 +6091,10 @@ function screenInventory(): Node[] {
   ])
   // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
-  call.innerHTML = icon('call')
+  call.innerHTML = icon('ask')
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
-  const list = el('div', { class: 'scroll pad' }, [
+  const zin = zoom.inventory
+  const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
@@ -5993,7 +6130,7 @@ function screenInventory(): Node[] {
     undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
   })
   return [
-    header(S.invTitle, { after: gear }),
+    header(S.invTitle, { glyph: zoomGlyph('inventory'), after: gear }),
     list,
     call,
     requests,
@@ -6072,6 +6209,7 @@ async function pickTogetherPlace(): Promise<void> {
  * Anything that is not a together request is asked as typed, at once.
  */
 async function sendFromDock(text: string): Promise<void> {
+  if (!text.trim()) { toast(S.queryNeedText); return }
   const now = Date.now()
   const pending = togetherPending
   togetherPending = null
@@ -6157,6 +6295,7 @@ function queryDock(s: AppState): HTMLElement {
     ]),
     el('div', { class: 'dock-body' }, [
       run ? null : el('p', { class: 'hint' }, [S.queryLead]),
+      run ? null : el('p', { class: 'hint', 'data-query-sees': '1' }, [S.querySees]),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
@@ -6182,7 +6321,7 @@ function queryDock(s: AppState): HTMLElement {
       }, [S.querySend]),
       inFlight,
       // With the Feed off (the default since wave 2) this is where earlier answers stay readable (review-wave2).
-      !run && !feedOn(s) && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryEarlier)]) : null,
+      !run && (s.found?.length ?? 0) > 0 ? el('div', { 'data-earlier-answers': '1' }, [foundView(s, S.queryAnswers)]) : null,
     ]),
   ])
 }
@@ -6348,6 +6487,7 @@ document.addEventListener('visibilitychange', () => {
   hiddenSince = 0
   if (!state || state.testOf?.handedOverAt) return
   // Review 6h: back in front after a long time away is an open too (an installed app on a phone is rarely started afresh).
+  checkEngagement()
   if (slept && appOpened()) showAskCards()
   net.activate(slept || nativeApp)
 })
@@ -6394,6 +6534,8 @@ if (state && !state.testOf?.handedOverAt) {
   offerApkHint(offerDemoContent)
   offerNotifications()
   cal?.start?.()
+  checkEngagement()
+  setInterval(checkEngagement, 15 * 60_000)
   setTimeout(() => void offerApkUpdate(), 4000)
   sweepDemoAccounts()
   setInterval(sweepDemoAccounts, 60_000)

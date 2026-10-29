@@ -45,6 +45,7 @@ const NAME_REFUSALS = Object.freeze({
   not_held: [409, 'not_held'],
   alias_cap: [409, 'alias_cap'],
   moved_lately: [409, 'name_moved'],
+  held: [409, 'name_held'],
 })
 
 /**
@@ -259,7 +260,7 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     if (result.kind === 'name_cap') return jsonError(res, 429, 'name-cap', { until: result.until, field: 'name' })
     if (result.kind !== 'named') {
       const [status, error] = NAME_REFUSALS[result.kind]
-      return jsonError(res, status, error, { field: 'name', ...(result.until === undefined ? {} : { until: result.until }) })
+      return jsonError(res, status, error, { field: 'name', ...(result.until === undefined ? {} : { until: result.until }), ...(result.kind === 'held' ? { held: true } : {}) })
     }
     sendJson(res, 200, { name: result.name, aliases: result.aliases, locked: result.locked })
     return 200

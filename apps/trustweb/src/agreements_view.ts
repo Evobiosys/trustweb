@@ -28,7 +28,7 @@ function lineRow(d: AgreementsDeps, a: Agreement): HTMLElement {
   const btn = (label: string, attr: string, f: () => void): HTMLElement => el('button', { class: 'mini', type: 'button', [attr]: a.id, onclick: f }, [label])
   return el('div', { class: 'cb-row agr-row' + (expired ? ' off' : ''), 'data-agreement': a.id, 'data-status': a.status }, [
     el('b', {}, [a.text]),
-    el('small', { class: 'meta' }, [`${S.agrStatus(a.status, d.name)} · ${day(a.at)}${a.expiresAt !== undefined ? ` · ${expired ? S.agrExpired : S.agrUntil(day(a.expiresAt))}` : ''}`]),
+    el('small', { class: 'meta' }, [`${S.agrStatus(a.status, d.name)} · ${day(a.at)}${` · ${a.expiresAt === undefined ? S.agrOpenEnded : expired ? S.agrExpired : S.agrUntil(day(a.expiresAt))}`}`]),
     a.status === AgreementStatus.Incoming ? btn(S.agrAccept, 'data-agr-accept', () => d.accept(a.id)) : null,
     a.status === AgreementStatus.Proposed ? btn(S.agrResend, 'data-agr-resend', () => d.resend(a.id)) : null,
     btn('×', 'data-agr-remove', () => d.remove(a.id)),

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Chat tab list (wave 24): newest first, last line, unread count. */
-import { chatListRows } from '../../src/chat_list.ts'
+import { chatListRows, chatPickerRows } from '../../src/chat_list.ts'
 
 const msg = (text, at, dir = 'in') => ({ key: dir + at, dir, text, at, sentAt: at, state: dir === 'in' ? 'received' : 'delivered' })
 const people = [{ id: 'a', peerId: 'pa', name: 'Anna' }, { id: 'b', peerId: 'pb', name: 'Ben' }, { id: 'c', name: 'Cy' }]
@@ -23,5 +23,20 @@ describe('chat_list', () => {
   })
   it('tolerates an absent book', () => {
     expect(chatListRows(undefined, people)).toEqual([])
+  })
+})
+
+describe('chat_list picker (New message)', () => {
+  it('lists connected people first, then the others flagged, each group by name', () => {
+    const rows = chatPickerRows([{ id: 'c', name: 'Cy' }, { id: 'b', peerId: 'pb', name: 'Ben' }, { id: 'a', peerId: 'pa', name: 'Anna' }, { id: 'd', name: 'Dee' }])
+    expect(rows).toEqual([
+      { personId: 'a', name: 'Anna', connected: true },
+      { personId: 'b', name: 'Ben', connected: true },
+      { personId: 'c', name: 'Cy', connected: false },
+      { personId: 'd', name: 'Dee', connected: false },
+    ])
+  })
+  it('is empty without people', () => {
+    expect(chatPickerRows([])).toEqual([])
   })
 })

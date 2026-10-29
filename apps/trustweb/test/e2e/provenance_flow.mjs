@@ -111,8 +111,8 @@ async function main() {
     await page.getByRole('button', { name: 'Send' }).click()
     await page.locator('.line-card').first().waitFor({ timeout: 10_000 })
     await page.locator('.cta .btn').click()
-    await page.getByRole('button', { name: 'Save to My Resources' }).click()
-    await page.getByRole('heading', { name: 'My Resources' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Save to Resources' }).click()
+    await page.getByRole('heading', { name: 'Resources' }).waitFor({ timeout: 10_000 })
     const rec1 = await record(page)
     const item = rec1.inventory.find((i) => /can lend it on weekends/.test(i.text))
     const memo = rec1.meetings?.[0]
@@ -181,7 +181,7 @@ async function main() {
     await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
 
     // 3. typed, migrated, demo
-    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await page.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Sewing machine')
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     const rec3 = await record(page)
@@ -245,7 +245,7 @@ async function main() {
     const puts = []
     page.on('request', (r) => { if (r.method() === 'PUT' && /\/backup\//.test(r.url())) puts.push(r.postDataBuffer()?.length ?? 0) })
     // a meeting (from Inventory: a meeting), ended, then Meet: the Meet code uploads the same pack "Send inside TrustWeb" sends
-    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await page.locator('nav.tabs .tab-record').click()
     await page.getByLabel('Who are you meeting?').fill('Ben')
     await page.locator('#consent').check()
@@ -265,7 +265,7 @@ async function main() {
     ok('the meeting\'s pack (the same as "Send inside TrustWeb") is uploaded without the audio', packBody > 0 && packBody < meetingAudio / 2, JSON.stringify({ packBody, meetingAudio }))
     await page.getByRole('button', { name: 'Back' }).click()
     // the backup: the whole record, never the audio
-    await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
     puts.length = 0
     await page.getByRole('button', { name: 'Back up, with a key made on this phone' }).click()
     await page.locator('#bk-saved').check()

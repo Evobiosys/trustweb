@@ -35,6 +35,8 @@ export interface ChatStrings {
   offline: string
   placeholder: string
   send: string
+  /** Wave 24b: the grey hint under the composer, "Use Signal for longer messages". */
+  longHint: string
   sendAgain: string
   pending: string
   sent: string
@@ -291,6 +293,7 @@ function composer(deps: ChatViewDeps, vm: ChatViewModel, redraw: () => void, dra
     contextLine(deps, draft, redraw),
     area,
     h(doc, 'div', { class: 'chat-row' }, [left, again, sendBtn]),
+    h(doc, 'p', { class: 'chat-note', 'data-chat': 'long-hint' }, [S.longHint]),
   ])
 }
 

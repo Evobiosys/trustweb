@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Bottom row (wave 24): default five slots, My Resources pinned right, unknown ids skipped, duplicates collapsed. */
+/** Bottom row (wave 24): default five slots, Resources pinned right, unknown ids skipped, duplicates collapsed. */
 import { DEFAULT_ROW, availableTabs, resolveRow, setSlot } from '../../src/tab_row.ts'
 
 const all = { events: true, feed: false, inventory: true }
 
 describe('tab_row', () => {
-  it('defaults to Membranes | Chat | Record | Events | My Resources', () => {
+  it('defaults to Membranes | Chat | Record | Events | Resources', () => {
     expect(DEFAULT_ROW).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
     expect(resolveRow(undefined, all)).toEqual(DEFAULT_ROW)
   })

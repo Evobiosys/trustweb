@@ -25,7 +25,7 @@ export interface ExtHooks {
   notify: (kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void) => boolean
   /** AtEvent was set or cleared: the host tags a fresh recording draft (or not) to match. */
   atEventChanged: () => void
-  /** Opens a My Resources item. */
+  /** Opens a Resources item. */
   openItem: (id: string) => void
   /** Shows the calendar screen. */
   openCalendar: () => void
@@ -46,9 +46,9 @@ export interface ExtModule {
   screen: (h: ExtHooks) => {
     body: () => Node[]
     eventSection?: (ev: TwEvent) => Node[]
-    /** Extra rows on a My Resources item's sheet; removing the module removes them. */
+    /** Extra rows on a Resources item's sheet; removing the module removes them. */
     itemSection?: (item: InventoryItem) => Node[]
-    /** Events and tasks as outliner rows, folded, below the My Resources list; removing the module removes them. */
+    /** Events and tasks as outliner rows, folded, below the Resources list; removing the module removes them. */
     resourcesSection?: () => Node[]
     /** The "I'm at an event" frame for the top of every screen; null when not at an event. */
     frame?: () => HTMLElement | null

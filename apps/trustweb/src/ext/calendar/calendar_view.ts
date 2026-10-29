@@ -2,6 +2,7 @@
 /** Calendar module view (wave 24, cal1): month grid and the agenda of the chosen day. Selection lives in this closure, not in the record. */
 import { el } from '../../../../demo/src/ui/dom'
 import { acceptPerson, dragEvent } from '../../drag_payload'
+import { engagementDays } from '../../engagement'
 import { eventLabel, matchPeople, todayIso } from '../../events'
 import { ringColor, type Person, type TwEvent, type TwTask } from '../../model'
 import { S } from '../../strings'
@@ -68,6 +69,7 @@ export function calendarScreen(h: ExtHooks): ReturnType<ExtModule['screen']> {
   function eventSection(ev: TwEvent): Node[] {
     const box = el('div', { class: 'cal-invitees', 'data-cal-invitees': '' }, [
       el('h3', {}, [S.cal.invitees]),
+      S.shareExpiryHint(engagementDays(h.state())) ? el('p', { class: 'meta', 'data-share-expiry': '' }, [S.shareExpiryHint(engagementDays(h.state()))]) : null,
       ...invitees(h.state(), ev).map((p) => inviteeRow(ev, p)),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-cal-invite-add': '', onclick: () => { picking = !picking; h.redraw() } }, [S.cal.addPeople]),
       picking ? picker(ev) : null,

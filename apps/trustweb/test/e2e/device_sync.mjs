@@ -65,7 +65,7 @@ async function main() {
     await withPeople(mac, vite.base, [person('a1', 'Ada Mac', 'Mac'), person('b1', 'Bo Mac', 'Mac')], { ...macExtra, inventory: [macItem] })
     await withPeople(phone, vite.base, [person('c1', 'Cy Phone', 'Phone')])
     // Typed through the UI, so the factory reads the name sync_view set at start (device_name.ts), not a seeded one.
-    await phone.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await phone.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await phone.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Sewing machine')
     await phone.getByRole('button', { name: 'Add', exact: true }).click()
     ok('Wave 22: an item typed on the Phone records device "Phone"', (await record(phone)).inventory.find((i) => i.text === 'Sewing machine')?.source?.device === 'Phone')
@@ -145,7 +145,7 @@ async function main() {
     ok('a device with no record links from the welcome screen and receives everything', !!fr && fr.events?.length === 1 && !!fr.myChannels?.signal, JSON.stringify(fr?.people?.length))
     ok('its first snapshot (of the empty record) exists', JSON.parse(await fresh.evaluate(() => localStorage.getItem('trustweb.v1.me:snapshots'))).length === 1)
     await fresh.goto(vite.base)
-    await fresh.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await fresh.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await fresh.locator('[data-item="r1"]').click()
     ok('Wave 22: on a third device the Mac\'s item says "on Mac" in its source row', (await fresh.locator('.src-note[data-device="Mac"]').innerText().catch(() => '')) === 'on Mac')
 
