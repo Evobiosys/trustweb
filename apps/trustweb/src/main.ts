@@ -81,7 +81,8 @@ import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeT
 import { chatListRows, chatPickerRows } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
-import { viewHeading, viewMenuItems } from './view_menu'
+import { viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
@@ -95,7 +96,6 @@ import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUr
 import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
-import { networkChosen } from './network_graph'
 import { createNetworkView } from './network_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
@@ -145,7 +145,7 @@ import { profileSheetNodes, theirProfileBlock } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
-import { DESKTOP_KEY, DEX_URL, UI_VIEWS, UiView, desktopView, wideAllowed } from './desktop_view'
+import { DEX_URL, UI_VIEWS, UiView, wideAllowed } from './desktop_view'
 import { createInstallSheets } from './install_sheets'
 import { DismissScope, removeDummyContent } from './demo_dismiss'
 import { canEndDemoAccount } from './demo_devices'
@@ -211,7 +211,7 @@ import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerN
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
 // imports walkthrough too) ran this whole app without an #app and stayed blank (live 2026-10-19). test/scan_demo_entries.mjs (CI, after the build) guards it.
 import { mountWalkthrough } from './walkthrough'
-import { ZOOM_OUT, back as zoomBack, connectedPeople, itemRows, press, type ItemSort, type Zoom, type ZoomTab } from './zoom'
+import { ZOOM_OUT, back as zoomBack, itemRows, press, type ItemSort, type Zoom, type ZoomTab } from './zoom'
 
 enum Screen {
   Start = 'start',
@@ -354,8 +354,6 @@ let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
 const wantInstall = params.get('install') === '1'
-/** Wave 18 review b: a page opened by a link (connect, share, event, hand-over, install) shows what the link is for; the Desk does not open under it. */
-const openedByLink = Boolean(pendingConnect || pendingShare || pendingEvent || pendingBook || handover || wantInstall)
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
@@ -821,8 +819,6 @@ const demoToggle = el('button', { class: 'demo-toggle', hidden: true, onclick: (
 // 2026-10-23: only under Settings > View (Jakob).
 const DESK_PILL_SHOWN = false
 const deskToggle = el('button', { class: 'demo-toggle desk-toggle', 'data-desk-toggle': '', hidden: true, onclick: () => deskOpen() ? showPhoneVersion() : showDesktopVersion() })
-/** Map-local (Jakob 2026-10-23): the TrustWeb view's way back to the Desk, bottom right in the page dock, only on a wide tab while the Desk is closed. */
-const deskViewPill = el('button', { class: 'see-action desk-view-pill', 'data-desktop-view': '', hidden: true, onclick: () => showDesktopVersion() }, [S.showDesktop])
 let statusPill: HTMLElement | null = null
 /** A newer build is deployed (app_update.ts): small banner above the tab bar, only its button takes taps. */
 const updateBanner = el('div', { class: 'update-banner', role: 'status', 'aria-live': 'polite', 'data-update-banner': '1', hidden: true }, [
@@ -840,7 +836,7 @@ if (!solo && !isDemoPersona(persona) && window.top === window) {
   ])
   const see = el('button', { class: 'see-action', onclick: openWalkthrough }, [S.seeInAction])
   // The installed app is the personal version (owner 2026-10-07): no "Add a device" and no "Show demo content" in its dock; a browser tab keeps both.
-  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see, deskViewPill] : [add, see, deskViewPill]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
+  root.append(el('div', { class: 'page-dock' }, runsAsInstalledApp() ? [see] : [add, see]), demoToggle, ...(DESK_PILL_SHOWN ? [deskToggle] : []))
 }
 
 /**
@@ -897,7 +893,7 @@ function tabFor(id: TabId): HTMLElement {
   switch (id) {
     case 'events': return tabButton(id, label, TAB_ICON[id], () => openEvents())
     case 'network': return tabButton(id, label, TAB_ICON[id], () => chooseView('network'))
-    case 'desk': return tabButton(id, label, TAB_ICON[id], () => chooseView('desk'))
+    case 'desk': return tabButton(id, label, TAB_ICON[id], () => openDeskSheet())
     default: return tabButton(id, label, TAB_ICON[id])
   }
 }
@@ -969,13 +965,13 @@ function draftInProgress(): boolean {
     || draft.plain || Boolean(draft.name.trim() || draft.context.trim() || draft.text.trim() || draft.generalNotes.trim() || draft.segments.length || draft.lines.length || draft.extraLines.length)
 }
 
-/** Wave 24b: the zoom level per tab. Zooming in pushes one history entry, so Back zooms out (popstate below). */
+/** Wave 24b/25: the zoom level of the Resources tab (Membranes no longer zooms). Zooming in pushes one history entry, so Back zooms out (popstate below). */
 let zoom: Zoom = ZOOM_OUT
 let resQuery = ''
 let resSort: ItemSort = 'new'
-const zoomedIn = (): boolean => zoom.web || zoom.inventory
+const zoomedIn = (): boolean => zoom.inventory
 
-/** A tab tap: the second press on the active Membranes or Resources tab zooms in; everything else goes there as before. */
+/** A tab tap: the second press on the active Resources tab zooms in; everything else goes there as before. */
 function tabTap(target: Screen): void {
   const next = press(target, screen)
   if (target !== screen || zoomedIn() || next === ZOOM_OUT) { go(target); return }
@@ -1178,7 +1174,7 @@ function render(): void {
   host.replaceChildren(...(frame ? [frame] : []), ...body)
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
-  autoDesk()
+  applyLayout()
 }
 
 // ---------------------------------------------------------------------------
@@ -1208,7 +1204,6 @@ function openSheet(children: (Node | null)[]): void {
 
 function closeSheet(): void {
   const wasDesk = deskOpen()
-  if (wasDesk) { try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ } }
   const wasChat = openChat !== null
   openChat = null
   cardOpenFor = null
@@ -1438,19 +1433,14 @@ function updateDemoToggle(): void {
 }
 
 const wideTab = (): boolean => window.matchMedia('(min-width: 900px)').matches
-const storedDesktop = (): string | null => { try { return window.localStorage.getItem(DESKTOP_KEY) } catch { return null } }
-const deskOpen = (): boolean => sheet.classList.contains('on') && sheet.classList.contains('desk-wide') && sheet.dataset.kind === 'curator'
-const deskWanted = (): boolean => Boolean(state) && screen !== Screen.Start && !state?.testOf && !isDemoPersona(persona) && window.top === window && desktopView(storedDesktop(), wideTab(), solo, runsAsInstalledApp()) === 'desk'
-let deskTried = openedByLink
-
-/** Wave 18: a device with a record on a wide browser tab opens on the Desk, unless it chose the phone version. Decided once, at the first render with a record: a window widened later stays as it is. */
-function autoDesk(): void {
-  if (!deskTried && state && screen !== Screen.Start) {
-    deskTried = true
-    if (deskWanted()) openDeskSheet()
-  }
-  updateDeskToggle()
+/** Wave 25: the Curator's whole-window face needs the responsive layout on a wide tab; TrustWeb mobile keeps it in the phone frame. */
+const currentLayout = (): Layout => {
+  let stored: string | null = null
+  try { stored = window.localStorage.getItem(LAYOUT_KEY) } catch { /* storage blocked: the default */ }
+  return pickLayout(stored, isPhone(window.matchMedia('(pointer: coarse)').matches, window.innerWidth))
 }
+const storedDesktop = (): string | null => (currentLayout() === 'mobile' ? 'phone' : null)
+const deskOpen = (): boolean => sheet.classList.contains('on') && sheet.classList.contains('desk-wide') && sheet.dataset.kind === 'curator'
 
 let curatorFace: 'desk' | 'classic' = 'classic'
 /** The Curator sheet takes the whole window only on the Desk face AND while the device does not hold the phone version. */
@@ -1461,15 +1451,10 @@ function applyDeskWide(): void {
 
 function updateDeskToggle(): void {
   deskToggle.hidden = !DESK_PILL_SHOWN || demoToggle.hidden || !wideTab()
-  deskToggle.textContent = deskOpen() ? S.showPhone : S.showDesktop
-  deskViewPill.hidden = !wideTab() || deskOpen()
+  deskToggle.textContent = deskOpen() ? S.views.mobile : S.views.trustweb
 }
 
 function openDeskSheet(variant?: UiView): void {
-  // The face last seen is the face the next wide load opens (Jakob 2026-10-23 21:42): every way into the Desk remembers 'desk',
-  // closing it remembers 'phone' (closeSheet). Before, only the Settings pill wrote the key, so a Desk opened from the Web side bar
-  // or at boot still reopened as the phone next time once 'phone' had been stored.
-  try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
   openSheet([curator.el])
   sheet.dataset.kind = 'curator'
   curator.openDesk(variant)
@@ -1485,9 +1470,19 @@ document.addEventListener('keydown', (e) => {
 })
 
 function showPhoneVersion(): void {
-  try { window.localStorage.setItem(DESKTOP_KEY, 'phone') } catch { /* not remembered */ }
-  applyDeskWide()
+  setLayout('mobile')
   go(Screen.Web)
+}
+
+/** Wave 25: the frame follows the stored layout (TrustWeb fills the window, TrustWeb mobile keeps the phone frame); stored on this device only. */
+function applyLayout(): void {
+  phone.classList.toggle('fluid', !solo && currentLayout() === 'trustweb')
+  applyDeskWide()
+}
+
+function setLayout(l: Layout): void {
+  try { window.localStorage.setItem(LAYOUT_KEY, l) } catch { /* not remembered */ }
+  applyLayout()
 }
 
 /** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
@@ -1528,8 +1523,6 @@ function viewRow(): HTMLElement {
 
 /** `variant`: the phone's Settings > View picked Dex or the TrustWeb Desk; absent, the Desk opens on this device's saved one. */
 function showDesktopVersion(variant?: UiView): void {
-  try { window.localStorage.setItem(DESKTOP_KEY, 'desk') } catch { /* not remembered */ }
-  applyDeskWide()
   openDeskSheet(variant)
 }
 
@@ -1919,7 +1912,7 @@ let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
 let ringsK = 1
 
 /** `desk`: the rings lent to the Desk's Web page (curator.ts LentRings): a tap picks the person there, no phone sheets, no add-someone tap or space-out menu. */
-function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings): HTMLElement {
+function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map(), desk?: LentRings, complete = false): HTMLElement {
   const C = 176
   const counts = {} as Record<Ring, number>
   const members: Partial<Record<Ring, Person[]>> = {}
@@ -1933,7 +1926,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   for (ringsGeo = ringsGeometry(counts, angles, k); C / ringsGeo.extent < k - 0.005; ringsGeo = ringsGeometry(counts, angles, k)) k = C / ringsGeo.extent
   ringsK = k
   const colourTags = loadColourTags()
-  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', title: desk ? '' : S.hintText[HintId.WebTap] })
+  const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
   let dragged = false
   if (!desk) {
     wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -2405,27 +2398,28 @@ function openEvents(eventId?: string): void {
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 
+const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : v === 'network' ? S.netNetwork : S.views.complete)
+
 /** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(network: boolean, anyone: boolean): HTMLElement {
-  const heading = viewHeading(network ? 'network' : 'rings')
+function webViewRow(view: WebView, anyone: boolean): HTMLElement {
+  const heading = viewHeading(view)
   return el('div', { class: 'web-view-row' }, [
-    el('span', { class: 'web-view' }, [heading ? S.tabLabel[heading] : '']),
-    iconButton('more', S.viewMenuAria, () => viewSheet(network, anyone), 'view-menu-btn'),
+    el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
+    iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
   ])
 }
 
-function viewSheet(network: boolean, anyone: boolean): void {
+function viewSheet(current: WebView, anyone: boolean): void {
   openSheet([
     el('h3', {}, [S.viewMenuTitle]),
-    ...viewMenuItems(network ? 'network' : 'rings', anyone).map(({ view, on }) => el('button', {
+    ...viewMenuItems(current, anyone).map(({ view, on }) => el('button', {
       class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
-    }, [el('b', {}, [(on ? '✓ ' : '') + (view === 'rings' ? S.netRings : view === 'network' ? S.netNetwork : S.deskSide)])])),
+    }, [el('b', {}, [(on ? '✓ ' : '') + viewName(view)])])),
   ])
 }
 
-/** Membranes and Network are remembered (WEB_VIEW_KEY); Desk opens the Desk sheet as the old side button did. */
+/** Membranes, Network and Complete network are remembered (WEB_VIEW_KEY). */
 function chooseView(view: WebView): void {
-  if (view === 'desk') { openDeskSheet(); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -2460,34 +2454,31 @@ function chatNewSheet(): void {
 
 function screenWeb(): Node[] {
   const full = shown(st(), curatorHiddenIds())
-  const zin = zoom.web
-  // Zoomed out: the people I connect with most; the network option, search and the full list wait one press away.
-  const s = zin ? full : { ...full, people: connectedPeople(full, Date.now()) }
+  const s = full
   const search = iconButton('list', S.searchOpen, curatorSheet, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
-  const network = zin && s.people.length > 0 && networkChosen(stored)
+  const view = webViewOf(stored, s.people.length > 0)
   const right = document.createDocumentFragment()
-  if (zin) right.append(search)
+  right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-    network
+    view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
-      : ringsView(s, askMarks()),
-    s.people.length < full.people.length ? el('p', { class: 'meta zoom-hint', 'data-zoom-hint': '' }, [S.zoomHintWeb]) : null,
+      : ringsView(s, askMarks(), undefined, view === 'complete'),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll', 'data-zoom-level': zin ? 'in' : 'out' }, [layer])
+  const clip = el('div', { class: 'scroll' }, [layer])
   zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
-    header(S.webTitle, { glyph: zoomGlyph('web'), right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    ...(zin ? [webViewRow(network, s.people.length > 0)] : []),
+    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
+    webViewRow(view, s.people.length > 0),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -5873,6 +5864,14 @@ function settingsSheet(): void {
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
+    ...(solo ? [] : [
+      el('h4', { class: 'eyebrow' }, [S.views.layout]),
+      ...(['trustweb', 'mobile'] as const).map((l) => el('button', {
+        class: 'radio' + (currentLayout() === l ? ' on' : ''), 'aria-pressed': String(currentLayout() === l), 'data-layout': l,
+        onclick: () => { setLayout(l); settingsSheet() },
+      }, [el('b', {}, [l === 'trustweb' ? S.views.trustweb : S.views.mobile])])),
+      el('p', { class: 'meta' }, [S.views.layoutHint]),
+    ]),
     ...(solo || s.testOf ? [] : [
       el('h4', { class: 'eyebrow' }, [S.setDemoAccounts]),
       ...(s.testAccounts?.length
