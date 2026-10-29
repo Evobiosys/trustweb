@@ -1264,7 +1264,7 @@ export const S = {
   unLinkLeadNone: 'Type the name you want for your link.',
   unLinkGo: 'Change link',
   unLinkSure: (from: string, to: string) => from
-    ? `Are you sure? Your link becomes trustweb.one/${to}. trustweb.one/${from} is released: it stops working for people who have it, and anyone can then claim that name.`
+    ? `Are you sure? Your link becomes trustweb.one/${to}. Your old name stays blocked for 2 years; links with it stop working now.`
     : `Are you sure? Your link becomes trustweb.one/${to}.`,
   unLinkYes: 'Yes, change it',
   unLinkNo: 'Cancel',
@@ -1959,6 +1959,7 @@ export const S = {
     [ClaimError.BadName]: 'Use 3 to 30 letters, digits, dots, dashes or underscores, starting and ending with a letter or digit (like ada or ada.l). Some names are reserved.',
     [ClaimError.Taken]: 'That name is taken.',
     [ClaimError.Reserved]: 'This name is reserved.',
+    [ClaimError.NameHeld]: 'That name is blocked for now: its previous owner changed it, and it stays blocked for 2 years.',
     [ClaimError.NameLocked]: 'This name is reserved for you and stays; ask to change it.',
     [ClaimError.TooManyNames]: 'You already have 3 names.',
     [ClaimError.AliasCap]: 'The shared link holds three names at most. Release one first.',

@@ -52,3 +52,12 @@ describe('changePrimaryName', () => {
     expect(log.confirm).toEqual([['', 'fresh']])
   })
 })
+
+describe('the rename warning (username-hold)', () => {
+  it('says the old name stays blocked for 2 years and its links stop now; never "anyone can claim"', async () => {
+    const { S } = await import('../../src/strings.ts')
+    const text = S.unLinkSure('ada', 'bob')
+    expect(text).toContain('Your old name stays blocked for 2 years; links with it stop working now.')
+    expect(text).not.toMatch(/anyone can/i)
+  })
+})

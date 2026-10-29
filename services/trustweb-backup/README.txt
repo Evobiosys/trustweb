@@ -63,6 +63,8 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
   name limits, wave 15 (name_cap.mjs, connect_store.mjs): a network address (IPv4 as is, IPv6 by /64) may CLAIM 3 names per 30 days (NAME_CAP; promoting an alias, a re-claim,
                   a release and a read are no claims); the 4th answers 429 {"error":"name-cap","until":<ms>}. The count sits in the connect store file ("claims") and survives
                   restarts. A freed name rests 30 days for every other code (answered name_taken; its former holder may reclaim at once); "released" in the store file keeps it
+                  wave 24b: a name left by a RENAME (a claim that replaces the primary) is HELD for 730 days, not freed: other codes get 409 name_held {held:true, until}, its link stops at once (no alias),
+                  the former holder may re-take it; "holds" in the store file keeps it.
                   180 days. GET /c/<code> of a code whose claimed name had another holder in the last 180 days redirects with &prev=1 added to the query (the app shows a dismissible
                   note; no identity is kept or told). HOW AN ORGANIZER GETS MORE: mails the steward BEFORE the event (no squatting) with the username(s) and the event. The operator
                   then adds an entry to the NAME_CAP_ALLOW file (JSON array) and runs `systemctl kill -s HUP trustweb-backup` (or `kill -HUP <pid>`; no restart needed):
