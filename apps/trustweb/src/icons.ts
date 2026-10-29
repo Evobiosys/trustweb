@@ -30,6 +30,8 @@ export const ICONS: Record<string, string> = {
   // "Ask your web": only the sound waves (owner 2026-10-05: "simpler and
   // less confusing"), the call going out and the resonance coming back.
   call: '<svg viewBox="0 0 24 24"><path d="M5.5 8.5a5 5 0 0 1 0 7"/><path d="M9.5 5.5a9.5 9.5 0 0 1 0 13"/><path d="M13.5 2.8a13.5 13.5 0 0 1 0 18.4"/></svg>',
+  // Wave 24b (Zach 2026-09-25): "Ask your web" as a person with a plus, a request to someone, instead of the wifi arcs.
+  ask: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 7v6M16 10h6"/></svg>',
   // Wave 6h, S3: "Signal" as a plain speech bubble with a dotted rim, drawn in the text colour (no brand asset, no brand colour).
   signal: '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.8L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke-dasharray="2.2 1.6"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" stroke-width="2.4"/></svg>',
   calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
