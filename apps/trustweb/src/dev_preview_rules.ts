@@ -3,7 +3,7 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
@@ -71,6 +71,31 @@ export function sections(nodes: TreeNode[]): { repo: Repo; nodes: TreeNode[] }[]
   }
   for (const n of nodes) walk(n, null)
   return (Object.keys(roots) as Repo[]).filter((r) => roots[r].length).map((repo) => ({ repo, nodes: roots[repo] }))
+}
+
+/** Keys of the rows related to `key`: a requires link either way, the same context, the same where, or the same selector root (its first compound). */
+export function relatedRows(rows: PreviewFeature[], key: string): string[] {
+  const me = rows.find((r) => r.key === key)
+  if (!me) return []
+  const root = (r: PreviewFeature): string | undefined => r.selector?.trim().split(/[\s>+~]+/)[0] || undefined
+  const same = (a?: string, b?: string): boolean => a !== undefined && a === b
+  return rows.filter((r) => r.key !== key && (r.requires.includes(key) || me.requires.includes(r.key) || same(r.context, me.context) || same(r.where, me.where) || same(root(r), root(me)))).map((r) => r.key)
+}
+
+interface Box { left: number; top: number; right: number; bottom: number; width: number; height: number }
+/** Where the yellow step card goes: over the phone frame's bottom edge (top when the target sits under it); without a frame (responsive layouts) next to the target, below or above it, inside the viewport. */
+export function stepCardPlace(phone: Box | null, target: Box | undefined, cardH: number, vw: number, vh: number): { left: number; width: number; top?: number; bottom?: number } {
+  if (phone) {
+    const low = Math.min(phone.bottom, vh)
+    const high = target !== undefined && target.bottom > low - cardH - 16
+    return { left: phone.left + 8, width: phone.width - 16, ...(high ? { top: Math.max(phone.top, 0) + 8 } : { bottom: vh - low + 8 }) }
+  }
+  const width = Math.min(320, vw - 16)
+  const left = Math.min(Math.max(target?.left ?? 8, 8), vw - width - 8)
+  if (!target) return { left, width, bottom: 8 }
+  const below = target.bottom + 8
+  const top = below + cardH <= vh - 8 ? below : Math.max(8, target.top - 8 - cardH)
+  return { left, width, top }
 }
 
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
