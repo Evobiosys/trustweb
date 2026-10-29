@@ -199,6 +199,7 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
+import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
@@ -1101,6 +1102,7 @@ function openHint(id: HintId): void {
   showNotice(S.hintLabel[id], S.hintText[id], [
     el('label', { class: 'hint-again' }, [again, S.hintAgain]),
     el('button', { class: 'btn btn-ghost btn-sm', onclick: ok }, [S.hintOk]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-hint-dismiss': id, 'aria-label': S.hintDismiss, title: S.hintDismiss, onclick: () => { hideNotice(); setHintHidden(id, true); render() } }, ['×']),
   ])
 }
 
@@ -2072,6 +2074,7 @@ function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
   const apply = (z: RingsZoom): void => {
     ringsZoom = z
     layer.style.transform = transformOf(z)
+    layer.style.setProperty('--rz', String(labelScale(z.k)))
     clip.classList.toggle('zoomed', z.k !== 1)
     layer.querySelector<HTMLElement>('.rings-wrap')?.setAttribute('data-rings-zoom', String(z.k))
   }
@@ -5961,7 +5964,7 @@ function settingsSheet(): void {
     ]),
     el('h4', { class: 'eyebrow' }, [S.setTutorial]),
     el('button', {
-      class: 'btn btn-ghost', disabled: !(s.hiddenHints?.length),
+      class: 'btn btn-ghost', 'data-hints-reset': '', disabled: !(s.hiddenHints?.length),
       onclick: () => { delete s.hiddenHints; save(); render(); settingsSheet() },
     }, [S.setHintsAll]),
     el('p', { class: 'meta' }, [S.setHintsAllHint]),
