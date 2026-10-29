@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 24b: zoom levels. Membranes and My Resources show the key part first; a second press on the active tab zooms into everything. Pure, DOM-free. */
-import type { AppState, InventoryItem, Person } from './model'
-import { Ring } from './model'
-import { webSlot } from './rings_layout'
+/** Wave 24b/25: zoom levels. My Resources shows the key part first; a second press on the active tab zooms into everything (Membranes no longer zooms). Pure, DOM-free. */
+import type { InventoryItem } from './model'
 
-export type ZoomTab = 'web' | 'inventory'
+export type ZoomTab = 'inventory'
 export type Zoom = Readonly<Record<ZoomTab, boolean>>
 
-export const ZOOM_OUT: Zoom = { web: false, inventory: false }
-/** Membranes zoomed out: chats and timeline entries count within this many days. */
-export const ZOOM_DAYS = 90
-/** Fewer people than this after the filter: show everyone, so a small web looks as before. */
-export const ZOOM_MIN = 8
+export const ZOOM_OUT: Zoom = { inventory: false }
 
-export const zoomable = (tab: string): tab is ZoomTab => tab === 'web' || tab === 'inventory'
+export const zoomable = (tab: string): tab is ZoomTab => tab === 'inventory'
 
 /** A press on `tab` while `active` is showing: the second press on a zoomable tab zooms in; any other press leaves every zoom. */
 export function press(tab: string, active: string): Zoom {
@@ -23,15 +17,6 @@ export function press(tab: string, active: string): Zoom {
 
 /** The Back button: one level up. */
 export const back = (): Zoom => ZOOM_OUT
-
-/** People I connect with most: a chat or timeline entry in the last 90 days, or placed on Close or Friend. Under 8 of them: everyone. */
-export function connectedPeople<P extends Person>(s: Pick<AppState, 'chats'> & { people: P[] }, now: number): P[] {
-  const since = now - ZOOM_DAYS * 86_400_000
-  const recent = (p: Person): boolean =>
-    (p.peerId ? s.chats?.[p.peerId]?.messages ?? [] : []).some((m) => m.at >= since) || (p.timeline ?? []).some((e) => e.at >= since)
-  const kept = s.people.filter((p) => webSlot(p) === Ring.Close || webSlot(p) === Ring.Friend || recent(p))
-  return kept.length < ZOOM_MIN ? s.people : kept
-}
 
 export type ItemSort = 'new' | 'az'
 

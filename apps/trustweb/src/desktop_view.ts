@@ -15,6 +15,8 @@ export enum UiView {
   Desk = 'desk',
   Classic = 'classic',
   TrustWeb = 'trustweb',
+  /** Wave 25: the phone-frame layout ("TrustWeb mobile"); a layout, not a Settings > View row, so not in UI_VIEWS. */
+  Mobile = 'mobile',
 }
 export const UI_VIEWS: readonly UiView[] = [UiView.Dex, UiView.Desk, UiView.Classic, UiView.TrustWeb]
 export const DEX_URL = 'https://getdex.com'
