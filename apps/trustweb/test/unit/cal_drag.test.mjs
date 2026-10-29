@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Calendar drag and drop (wave 24, cal7): an event onto My Resources, a person onto an event, unknown ids add nothing. */
+/** Calendar drag and drop (wave 24, cal7): an event onto Resources, a person onto an event, unknown ids add nothing. */
 import { eventDropItem } from '../../src/event_drop.ts'
 import { personDropOnEvent } from '../../src/ext/calendar/invitees.ts'
 import { EVENT_MIME, PERSON_MIME, decodeDrag, encodeDrag } from '../../src/drag_payload.ts'

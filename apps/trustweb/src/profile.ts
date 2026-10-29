@@ -1,7 +1,7 @@
 /**
  * My TrustWeb profile (wave 7, Jakob 2026-10-14: "which should have special explicit agreements besides norms that you share
  * implicitly like 'first text, don't call' ... and what people share on their trustweb profile"). What I share by default is what I
- * can OFFER (my My Resources lines, shown read-only) plus how to reach me: contact norms, my favourite way to connect, one line of
+ * can OFFER (my Resources lines, shown read-only) plus how to reach me: contact norms, my favourite way to connect, one line of
  * intro. Every entry is dated and marked "by me" or "by AI" (AI is a placeholder flag only: nothing writes it yet); an entry is
  * stale after 90 days.
  *

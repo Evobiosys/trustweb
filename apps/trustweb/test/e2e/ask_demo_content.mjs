@@ -62,7 +62,7 @@ async function sectionDemoPage(browser, base) {
   await maya.getByRole('button', { name: 'Start on this phone' }).click()
   await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
   // The person adds a "Pfanne" in the app, as the afternoon guest did (default: shared with acquaintances and up).
-  await maya.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await maya.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await maya.getByPlaceholder(/Motorbike/).fill('Pfanne')
   await maya.getByRole('button', { name: 'Add', exact: true }).click()
   await maya.locator('.inv', { hasText: 'Pfanne' }).waitFor({ timeout: 5_000 })

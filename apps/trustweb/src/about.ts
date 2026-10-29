@@ -1,23 +1,24 @@
 /**
  * Settings > About (owner 2026-10-06): TrustWeb is presented as part of
  * EvoBioSys, never as a standalone brand. The pages live on the website
- * (idea2.site/trustweb, or trustintheweb.org for the app.trustintheweb.org and app.trustweb.one builds; built by
+ * (trustintheweb.org, built by
  * scripts/build_tw_front_door.sh); the app only
  * links to them, each opening in a new tab.
  */
 import { el } from '../../demo/src/ui/dom'
+import { HELP_MAIL } from './help_mail'
 import { devEventsFile } from './dev_events'
 import { devRecordFile } from './dev_record'
 import { SCHEMA_VERSION } from './schema_version'
 import { S } from './strings'
 
-/** The website of the idea2.site build (app.idea2.site/trustweb/), and the fallback. */
-export const DEFAULT_SITE_URL = 'https://idea2.site/trustweb/'
+/** The website the app links to, and the fallback. */
+export const DEFAULT_SITE_URL = 'https://trustintheweb.org/'
 
 /**
  * The website this build links to. A build for another home names it at build time
- * (VITE_TW_SITE_URL=https://trustintheweb.org/ for app.trustintheweb.org and app.trustweb.one, scripts/deploy_wot.sh);
- * anything but a plain https URL ending in "/" (no query, no fragment) falls back to the idea2 site.
+ * (VITE_TW_SITE_URL, scripts/deploy_wot.sh);
+ * anything but a plain https URL ending in "/" (no query, no fragment) falls back to the default.
  */
 export function resolveSiteUrl(raw: unknown): string {
   if (typeof raw !== 'string' || raw === '') return DEFAULT_SITE_URL
@@ -47,7 +48,9 @@ export function appVersion(): string {
   return typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : 'dev'
 }
 
+/** Feedback is the mail link; the other pages live on the website. */
 export function aboutUrl(page: AboutPage): string {
+  if (page === AboutPage.Feedback) return HELP_MAIL
   return `${SITE_URL}${page}.html`
 }
 

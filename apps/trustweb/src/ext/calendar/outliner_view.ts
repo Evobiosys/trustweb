@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Calendar outliner rows on My Resources (cal8): a folded list, one row per event or task with its fields as chips. */
+/** Calendar outliner rows on Resources (cal8): a folded list, one row per event or task with its fields as chips. */
 import { el } from '../../../../demo/src/ui/dom'
 import type { TwTask } from '../../model'
 import { S } from '../../strings'

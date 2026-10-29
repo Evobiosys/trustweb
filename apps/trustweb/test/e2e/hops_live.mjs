@@ -115,7 +115,7 @@ async function main() {
     ok('Ann - Ben - Cleo: a chain, Ann and Cleo do not know each other', counts.join() === '1,2,1', counts.join())
 
     // Cleo notes the ladder (acquaintances; one degree onward by default).
-    await tab(cleo, 'My Resources')
+    await tab(cleo, 'Resources')
     await cleo.getByPlaceholder(/Motorbike/).fill(LADDER)
     await cleo.getByRole('button', { name: 'Add', exact: true }).click()
     const row = cleo.locator('.inv', { hasText: LADDER })

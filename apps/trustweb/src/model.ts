@@ -297,7 +297,7 @@ export interface TwTask {
   parentId?: string
   /** Person ids. */
   people?: string[]
-  /** My Resources item this reminds me about, and whether to share it or ask about it. */
+  /** Resources item this reminds me about, and whether to share it or ask about it. */
   resourceId?: string
   resourceWhy?: 'share' | 'ask'
   /** Last change (ms). */
@@ -864,7 +864,7 @@ export interface ReceivedShare {
   keptAs?: string
 }
 
-/** Wave 24: no longer read. My Resources is pinned to the far right of the bottom row (tab_row.ts); old records may still carry the value, it changes nothing and is never written again. */
+/** Wave 24: no longer read. Resources is pinned to the far right of the bottom row (tab_row.ts); old records may still carry the value, it changes nothing and is never written again. */
 export enum TabOrder {
   WebLeft = 'web-left',
   InventoryLeft = 'inventory-left',

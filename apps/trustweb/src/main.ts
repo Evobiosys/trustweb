@@ -1,5 +1,5 @@
 /**
- * TrustWeb: the one merged demo app (app.idea2.site/trustweb/).
+ * TrustWeb: the one merged demo app (app.trustweb.one/).
  *
  * Substance from apps/demo (relay-mode consent flow, via net.ts); look and
  * nav chrome from apps/mobile-ui (the rings, bottom bar with a raised
@@ -78,7 +78,7 @@ import {
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
-import { chatListRows } from './chat_list'
+import { chatListRows, chatPickerRows } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
 import { viewHeading, viewMenuItems } from './view_menu'
@@ -886,7 +886,7 @@ function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
 }
 
 function renderTabs(): void {
-  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | My Resources.
+  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | Resources.
   tabs.replaceChildren(...resolveRow(state?.tabRow, tabFlags()).map(tabFor))
   tabs.classList.toggle('four', tabs.children.length > 3)
   updateChatBadge()
@@ -2389,13 +2389,25 @@ function screenChat(): Node[] {
   const rows = chatListRows(s.chats, s.people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
   return [
     header(S.chatListTitle),
-    el('div', { class: 'scroll ppl' }, rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
+    el('div', { class: 'scroll ppl' }, [el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]), ...(rows.length ? rows.map((r) => el('button', { class: 'prow chat-row', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
       avatar(r.name, r.personId),
       el('div', { class: 'who' }, [el('b', {}, [r.name]), el('i', {}, [r.last])]),
       el('span', { class: 'when' }, [ageLabel(r.at, now)]),
       r.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(r.unread) }) : null,
-    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])]),
+    ])) : [el('p', { class: 'empty' }, [S.chatListEmpty])])]),
   ]
+}
+
+/** Chat > New message: pick a person, connected ones first; the rest say they are not on TrustWeb yet. */
+function chatNewSheet(): void {
+  const rows = chatPickerRows(st().people.map((p) => ({ id: p.id, peerId: p.peerId, name: displayName(p.name).text })))
+  openSheet([
+    el('h3', {}, [S.chatNewTitle]),
+    el('div', { class: 'ppl', 'data-chat-picker': '' }, rows.map((r) => el('button', { class: 'prow', 'data-chat-pick': r.personId, onclick: () => chatSheet(r.personId) }, [
+      avatar(r.name, r.personId),
+      el('div', { class: 'who' }, [el('b', {}, [r.name]), r.connected ? null : el('i', {}, [S.chatNotOnTrustweb])]),
+    ]))),
+  ])
 }
 
 function screenWeb(): Node[] {
@@ -2421,7 +2433,7 @@ function screenWeb(): Node[] {
   const clip = el('div', { class: 'scroll' }, [layer])
   zoomOnWeb(clip, layer)
   return [
-    // Jakob 2026-10-19: the gear as on My Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
+    // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
     webViewRow(network, s.people.length > 0),
     clip,
@@ -5720,7 +5732,7 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
-/** Settings > Bottom row: one picker per slot; the last slot (My Resources) is locked. */
+/** Settings > Bottom row: one picker per slot; the last slot (Resources) is locked. */
 function tabRowSettings(s: AppState): (Node | null)[] {
   const flags = tabFlags()
   const row = resolveRow(s.tabRow, flags)

@@ -30,7 +30,7 @@
   import { DeskPage } from './nav'
   import { nav, openPerson, showDeskPage } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
-  import { HELP_MAIL } from './help_mail'
+  import { HELP_MAIL } from '../../trustweb/src/help_mail'
   import { prefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'

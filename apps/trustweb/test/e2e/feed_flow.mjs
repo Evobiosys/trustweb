@@ -1,7 +1,7 @@
 /**
  * The Feed and Mastodon/Pixelfed as services (wave 1733 round B, items 1, 2),
  * in the real app, local only:
- *   1. Bar layout: off by default (wave 2, P9); switched on Web | Record | Feed | My Resources; Settings > Feed off gives
+ *   1. Bar layout: off by default (wave 2, P9); switched on Web | Record | Feed | Resources; Settings > Feed off gives
  *      exactly the old bar; the empty Feed explains what will show up; opening
  *      it sends nothing.
  *   2. Posts from a second phone: Ben shares a line in an answer; it shows in
@@ -45,7 +45,7 @@ const tabLabels = (page) => page.locator('nav.tabs > button').evaluateAll((bs) =
 const closeSheet = (page) => page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } }).catch(() => {})
 const openSettings = async (page) => {
   await closeSheet(page)
-  await page.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await page.evaluate(() => { localStorage.setItem('trustweb.ui.settings.advanced', '1'); localStorage.setItem('trustweb.ui.settings.features', '1') }) // the Feed switch sits in Settings > Features, the rest in Advanced (folded by default)
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.locator('[data-feed-toggle]').waitFor({ timeout: 5_000 })
@@ -101,11 +101,11 @@ async function main() {
     await startPhone(a, vite.base, 'Jakob')
 
     // 1. the bar, the empty Feed, nothing sent. Wave 2 (P9): the Feed is optional and early, OFF by default.
-    ok('the bar by default: Membranes | Record | My Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']), JSON.stringify(await tabLabels(a)))
+    ok('the bar by default: Membranes | Record | Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Resources']), JSON.stringify(await tabLabels(a)))
     await openSettings(a)
     ok('Settings > Feed stays, says "optional, early" and is off', /optional, early/.test(await a.locator('[data-feed-toggle]').innerText()) && (await a.locator('[data-feed-toggle]').getAttribute('aria-pressed')) === 'false')
     await a.locator('[data-feed-toggle]').click()
-    ok('switched on: Membranes | Record | Feed | My Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'My Resources']) && (await record(a)).feed.on === true)
+    ok('switched on: Membranes | Record | Feed | Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'Resources']) && (await record(a)).feed.on === true)
     await closeSheet(a)
     const sent = []
     a.on('request', (r) => sent.push(r.method() + ' ' + r.url()))
@@ -117,9 +117,9 @@ async function main() {
     await shot(a, '17-feed-empty')
     await openSettings(a)
     await a.locator('[data-feed-toggle]').click()
-    ok('Settings > Feed off: the bar is exactly as before (Membranes | Record | My Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'My Resources']) && (await record(a)).feed.on === false)
+    ok('Settings > Feed off: the bar is exactly as before (Membranes | Record | Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Resources']) && (await record(a)).feed.on === false)
     await a.locator('[data-feed-toggle]').click()
-    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'My Resources']))
+    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'Resources']))
     await closeSheet(a)
 
     // 2. posts from a second phone
@@ -132,7 +132,7 @@ async function main() {
     await b.getByRole('button', { name: 'Connect', exact: true }).click()
     await acceptAdd(b)
     await until(async () => (await record(a)).peers.length === 1)
-    await b.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await b.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await b.getByLabel('e.g. Motorbike, can lend it for a weekend').fill('Cargo bike to lend on weekends')
     await b.getByRole('button', { name: 'Add', exact: true }).click()
     await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
@@ -174,7 +174,7 @@ async function main() {
     await a.locator('.query-dock .x').click()
 
     // 3. a picture on an item
-    await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await a.getByLabel('e.g. Motorbike, can lend it for a weekend').fill('Spare bike wheels')
     await a.getByRole('button', { name: 'Add', exact: true }).click()
     await a.locator('.inv-text', { hasText: 'Spare bike wheels' }).click()
@@ -257,7 +257,7 @@ async function main() {
     ok('an item with a picture: Pixelfed first', JSON.stringify(order) === '["pixelfed","mastodon"]', JSON.stringify(order))
     ok('Pixelfed says honestly that the text has to be pasted', /paste it there/.test(await a.locator('.sheet.on [data-share-target="pixelfed"]').innerText()))
     await closeSheet(a)
-    await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await a.getByLabel('e.g. Motorbike, can lend it for a weekend').fill('Lend a ladder & drill')
     await a.getByRole('button', { name: 'Add', exact: true }).click()
     await a.locator('.inv-text', { hasText: 'Lend a ladder' }).click()
@@ -277,14 +277,14 @@ async function main() {
     const android = await browser.newContext({ viewport: { width: 400, height: 860 }, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' })
     const d = await android.newPage()
     await startPhone(d, vite.base, 'Dana')
-    await d.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await d.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await d.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await d.getByRole('button', { name: 'Settings' }).click()
     await d.getByRole('button', { name: /Add ways to reach you/ }).click()
     const androidChannels = await d.locator('.sheet.on [data-contact-box]').innerText()
     ok('Android: "Signal" only (wave 6e: the Signal/Molly choice is gone, one Signal link)', !/Molly/.test(androidChannels) && /Signal/.test(androidChannels), androidChannels)
     await android.close()
-    await a.locator('nav.tabs button', { hasText: 'My Resources' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await a.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
     await a.getByRole('button', { name: 'Settings' }).click()
     await a.getByRole('button', { name: /Add ways to reach you/ }).click()

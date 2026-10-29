@@ -116,8 +116,11 @@ describe('host link', () => {
 })
 
 describe('link origin', () => {
-  it('keeps the three production hosts', () => {
-    for (const o of ['https://app.idea2.site', 'https://app.trustintheweb.org', 'https://app.trustweb.one']) expect(linkOrigin(o)).toBe(o)
+  it('sends an old idea2 page to the live app', () => {
+    expect(linkOrigin('https://app.idea2.site')).toBe('https://app.trustweb.one')
+  })
+  it('keeps the two production hosts', () => {
+    for (const o of ['https://app.trustintheweb.org', 'https://app.trustweb.one']) expect(linkOrigin(o)).toBe(o)
   })
 
   it('sends local, dev slot and LAN pages to the live app', () => {

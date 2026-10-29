@@ -117,7 +117,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes what she could lend', changed: ['maya'],
         text: 'One line in her resources (things she could lend or offer), and who may ask about it. Nothing is published anywhere.',
-        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${LOUDSPEAKERS}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
+        screens: { jonas: web(['Maya']), maya: `<div class="wt-h">Resources</div>${card('', `${LOUDSPEAKERS}<br><small>${WIDEST}</small>`)}${card('', 'Spare room in Vienna<br><small>Shared with: nobody</small>')}` },
       },
       {
         title: 'Jonas calls into his web', changed: ['jonas', 'maya'], path: ['jonas', 'maya'],
@@ -170,7 +170,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes an opening', changed: ['maya'],
         text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
       },
       {
         title: 'Sam calls into his web', changed: ['sam', 'jonas', 'maya'], path: ['sam', 'jonas', 'maya'],
@@ -202,7 +202,7 @@ const MODES: Mode[] = [
       {
         title: 'Maya notes an opening', changed: ['maya'],
         text: 'She lets acquaintances ask about it, and through a friend, friends of friends. Still nothing is published.',
-        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">My Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
+        screens: { sam: web(['Jonas']), jonas: web(['Sam', 'Maya']), maya: `<div class="wt-h">Resources</div>${card('', `${POSITION}<br><small>${WIDEST}</small>`)}` },
       },
       {
         title: 'Sam calls into his web, direct contacts only', changed: ['sam', 'jonas'], path: ['sam', 'jonas'],
