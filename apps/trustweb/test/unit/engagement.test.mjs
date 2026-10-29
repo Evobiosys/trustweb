@@ -6,14 +6,15 @@ import { DAY_MS, engagementDays, lastContact, noticeDue, parseDays, releaseTies,
 
 const NOW = Date.UTC(2026, 9, 28, 12, 0)
 const person = (o = {}) => ({ id: 'p1', name: 'Anna', context: '', ring: Ring.Close, metAt: 0, peerId: 'pe1', ...o })
-const state = (o = {}) => ({ people: [person()], ...o })
+// Expiry is off by default (wave 25): these tests switch it on.
+const state = (o = {}) => ({ people: [person()], engagementDays: 30, ...o })
 
 describe('engagement window', () => {
-  it('absent = 30 days; 0 = off; junk falls back', () => {
-    expect(engagementDays({})).toBe(30)
+  it('absent = off (0); a stored number of days switches it on; junk is off', () => {
+    expect(engagementDays({})).toBe(0)
     expect(engagementDays({ engagementDays: 0 })).toBe(0)
     expect(engagementDays({ engagementDays: 14 })).toBe(14)
-    expect(engagementDays({ engagementDays: -3 })).toBe(30)
+    expect(engagementDays({ engagementDays: -3 })).toBe(0)
   })
   it('parses the settings field: empty keeps, 0 off, clamped 1..365, whole days', () => {
     expect(parseDays('')).toBeNull()

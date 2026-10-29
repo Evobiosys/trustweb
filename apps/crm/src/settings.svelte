@@ -201,6 +201,7 @@
     <span>{S.advancedOn}</span>
   </label>
   <p class="muted">{S.advancedHint}</p>
+  <button class="btn small" data-hints-reset disabled={!prefs.mapCardDismissed} onclick={(): void => { prefs.mapCardDismissed = false; savePrefs() }}>{S.desk.hintsAgain}</button>
   {#if prefs.advanced}
     {#if PKMS.some(elsewhere)}
       <p class="muted" data-part="sources-elsewhere">{S.sourcesElsewhere}</p>
