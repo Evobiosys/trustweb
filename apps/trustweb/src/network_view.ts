@@ -7,6 +7,8 @@ import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
 import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
+import { fitBounds } from './network_fit'
+import type { Camera } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
 import type { MenuAction } from './network_menu'
 import { S } from './strings'
@@ -51,7 +53,6 @@ function download(name: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-interface Camera { k: number; x: number; y: number }
 interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null }
 // People hidden from the graph this session only (never stored).
 const hiddenIds = new Set<string>()
@@ -115,11 +116,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let tipTimer = 0
   const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, el('small', { class: 'net-legend' }, [S.netLegend])])
 
-  const fit = (): Camera => {
-    const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
-    const k = Math.min(w, h) / 2 / (r + 24)
-    return { k, x: w / 2, y: h / 2 }
-  }
+  const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })
   const hit = (px: number, py: number): GraphNode | null => {
     const c = cam()
@@ -244,13 +241,12 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const resize = (): void => {
     const box = root.getBoundingClientRect()
     if (!box.width) return
-    const first = !w
     w = Math.floor(box.width) - 24
     h = Math.max(360, Math.floor(window.innerHeight * 0.62))
     const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     canvas.width = w * dpr; canvas.height = h * dpr
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
-    if (first && state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
+    if (state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
     dirty = true
   }
 
