@@ -1874,6 +1874,10 @@ export const S = {
   connectAddWaiting: 'Waiting for their name...',
   connectAddWaitingHint: 'Their phone has not told us their name yet. Type one if you like; it is replaced when theirs arrives, unless you typed it.',
   connectAddedToast: (name: string) => `${name} is in your web.`,
+  // Stammbaum link (family_tree_link.ts): the connect link also carried a family tree to look at.
+  treeCardTitle: (name: string) => `${name} shared a family tree`,
+  treeCardBody: 'Opens the Stammbaum (evobiosys.org) in your browser. The key stays on this phone.',
+  treeCardOpen: 'View the family tree',
   // Jakob 2026-10-19: an intending person is "not yet in your web" (ringHint), so the toast says only that they were added.
   personAddedToast: (name: string) => `${name} added.`,
   archivedToast: 'Archived. Find them in Contacts.',
