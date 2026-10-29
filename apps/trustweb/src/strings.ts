@@ -1013,6 +1013,8 @@ export const S = {
   dvSamePerson: 'Same person',
   dvSameAs: 'Same person as…',
   cardNameEditAria: (name: string): string => `Rename ${name}`,
+  cardCurate: 'Curate',
+  cardChEditAria: (channel: string): string => `Edit ${channel} link`,
   dvSamePh: 'Search by name',
   dvSameTitle: 'Which one do you keep?',
   dvSameLead: 'They become one. Notes, tags and fields of both are kept; if they differ, the one you keep wins. A snapshot is saved first.',
