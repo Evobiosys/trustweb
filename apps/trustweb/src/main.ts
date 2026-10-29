@@ -19,6 +19,7 @@
  * No chat, no unread badges, notifications off by default.
  */
 import { createViaCard } from './via_card'
+import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
@@ -343,6 +344,8 @@ const viaCard = createViaCard()
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
+// A link from the Stammbaum (#tree=…&k=…[&family=1], family_tree_link.ts): the key stays in this fragment and in the url built below, on this phone.
+const treeLink = pendingConnect ? parseTreeFragment(location.hash) : null
 // A hand-over link (?handover=1#k=...): a demo account moves to this phone.
 const handover: HandoverLink | null = params.get('handover') === '1' ? parseHandoverFragment(location.hash) : null
 // A meeting sent inside TrustWeb (?share=1#k=...&t=...), or riding in a Meet
@@ -1602,6 +1605,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     person.ring = ring
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
+  if (treeLink?.family) applyFamily(person)
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
   if (admitted.legacy) person.connectedVia = 'legacy-code'
@@ -1635,6 +1639,10 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
+  if (treeLink) {
+    const url = treeUrl(treeLink)
+    showNotice(S.treeCardTitle(peer.displayName), S.treeCardBody, [el('a', { class: 'btn btn-electric btn-sm', href: url, target: '_blank', rel: 'noopener noreferrer', 'data-tree-link': '1', onclick: hideNotice }, [S.treeCardOpen])])
+  }
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
   if (demoLink || solo) openPendingShare()
   else if (picked) {
