@@ -191,6 +191,8 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
+import { askWebIcon, recordIcon } from './icons/ask_web'
+import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
 import type { DemoPeerRef, HandoverLink } from './demo_account'
@@ -885,7 +887,7 @@ function tabButton(target: string, label: string, name: string, onclick: () => v
 
 function recordButton(): HTMLElement {
   const b = el('button', { class: 'tab-record', 'data-go': Screen.Record, 'aria-label': S.navRecord, onclick: onRecordTap })
-  b.innerHTML = icon('mic')
+  b.innerHTML = recordIcon()
   b.append(el('span', {}, [S.navRecord]))
   return b
 }
@@ -2712,13 +2714,16 @@ function openQuery(): void {
   else go(Screen.Web)
 }
 
+/** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
+const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
+
 function queryFab(): HTMLElement {
   const call = queryStyle() === QueryStyle.Call
   const b = el('button', {
     class: 'query-fab' + (call ? ' call' : ''), 'aria-label': call ? S.webCall : S.webQuery, 'data-open-query': '1',
     onclick: openQuery,
   })
-  b.innerHTML = icon(call ? 'ask' : 'query')
+  b.innerHTML = call ? askWebIcon(askIconVariant) : icon('query')
   b.append(call
     ? el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])])
     : el('span', {}, [S.webQuery]))
@@ -3243,6 +3248,7 @@ function profileNodes(redraw: () => void): Node[] {
       choose: (file) => { void setOwnPicture(file).then(redraw, () => toast(S.agrSendFailed)) },
       remove: () => { void removeOwnPicture().then(redraw) },
     },    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+    city: { get: () => st().city ?? '', set: (v) => { const c = v.trim(); if (c) st().city = c; else delete st().city } },
   })
 }
 
@@ -6146,7 +6152,7 @@ function screenInventory(): Node[] {
   ])
   // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
-  call.innerHTML = icon('ask')
+  call.innerHTML = askWebIcon(askIconVariant)
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
   const zin = zoom.inventory
   const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
@@ -6231,10 +6237,10 @@ function requestsSheet(): void {
 // query: a dock on the Web screen, under the rings, so the web stays in view
 // ---------------------------------------------------------------------------
 
-const SUGGESTIONS = [
+const suggestions = (s: AppState): string[] => [
   'Does anyone have loudspeakers I could borrow?',
   'Who is hiring?',
-  'Who has a spare room in Vienna?',
+  spareRoomExample(s.city),
 ]
 
 let countdownTimer: ReturnType<typeof setInterval> | undefined
@@ -6242,6 +6248,21 @@ let countdownTimer: ReturnType<typeof setInterval> | undefined
 /** Seconds until the answers of an ask with this reach are due (one window per step, hops.ts). */
 function secondsLeft(startedAt: number, reach: number = HOPS_DEFAULT): number {
   return Math.max(0, Math.ceil((startedAt + askWaitMs(reach, net.answerWindowMs) - Date.now()) / 1000))
+}
+
+const ASK_HOW_KEY = 'tw.askHowOpen'
+/** "How asking works": the long explanation, folded by default; the state is remembered on this phone. */
+function askHow(): HTMLElement {
+  let open = false
+  try { open = window.localStorage.getItem(ASK_HOW_KEY) === '1' } catch { /* closed */ }
+  const d = el('details', { class: 'ask-how', 'data-ask-how': '1' }, [
+    el('summary', {}, [S.askHow]),
+    el('p', { class: 'hint' }, [S.queryLead]),
+    el('p', { class: 'hint', 'data-query-sees': '1' }, [S.querySees]),
+  ]) as HTMLDetailsElement
+  d.open = open
+  d.addEventListener('toggle', () => { try { window.localStorage.setItem(ASK_HOW_KEY, d.open ? '1' : '0') } catch { /* not remembered */ } })
+  return d
 }
 
 /** A together request waiting for the second tap: the compiled sentence is in the box, its reach and filled settings wait here. */
@@ -6349,8 +6370,7 @@ function queryDock(s: AppState): HTMLElement {
       el('button', { class: 'x', 'aria-label': S.queryClose, onclick: () => { queryOpen = false; render() } }, ['×']),
     ]),
     el('div', { class: 'dock-body' }, [
-      run ? null : el('p', { class: 'hint' }, [S.queryLead]),
-      run ? null : el('p', { class: 'hint', 'data-query-sees': '1' }, [S.querySees]),
+      run ? null : askHow(),
       !run && togetherPending ? el('p', { class: 'hint', 'data-together-check': '1' }, [S.queryTogetherCheck]) : null,
       !run && askDirectOnly(s) ? el('p', { class: 'hint', 'data-direct-note': '1' }, [S.queryDirectOnly]) : null,
       // Wave 6: how far the ask travels, remembered on this phone; "Ask only my direct contacts" (Settings > Advanced) holds it at 1.
@@ -6368,7 +6388,7 @@ function queryDock(s: AppState): HTMLElement {
       ]),
       run ? null : el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.queryTry]),
-        ...SUGGESTIONS.map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
+        ...suggestions(s).map((q) => el('button', { class: 'chip', onclick: () => { queryText = q; render() } }, [q])),
       ]),
       el('button', {
         class: 'btn btn-electric wide', disabled: busy || s.peers.length === 0 || demoWaiting || demoEnded,

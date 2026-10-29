@@ -1172,6 +1172,9 @@ export const S = {
 
   queryTitle: 'Ask your web',
   queryClose: 'Close',
+  askHow: 'How asking works',
+  profCity: 'Your city',
+  profCityPh: 'Vienna',
   queryLead: 'Ask in your own words. TrustWeb works like a neighbourhood, just online and much faster: ask for opportunities, resources and wants (questions about knowledge come later). The question goes to the people you are connected with; each phone checks it privately, and only a person can say yes.',
   queryPh: 'e.g. Does anyone have loudspeakers I could borrow?',
   querySend: 'Ask my web',

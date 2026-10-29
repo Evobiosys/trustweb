@@ -703,6 +703,9 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .query-fab.call{padding:10px 18px 10px 14px; gap:9px}
 .query-fab.call svg{width:24px; height:24px}
 .fab-two{display:flex; flex-direction:column; line-height:1.1; text-align:left; font-size:16px}
+.query-fab[data-open-query] .fab-two{text-align:center}
+.query-fab[data-open-query] svg{width:30px; height:30px}
+.ask-how summary{cursor:pointer; font-weight:600; padding:4px 0}
 .agr-row b,.agr-row small{min-width:0; overflow-wrap:anywhere}
 .agr-row{min-width:0}
 .lean-note{display:flex; flex-direction:column; gap:6px; align-items:stretch}
