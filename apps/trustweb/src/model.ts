@@ -1062,6 +1062,8 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
+  city?: string
   /**
    * Wave 16 (together_prefs.ts): the area, radius and friend degree of the last play request per activity, so the next sentence
    * ("play padel again before Thursday") needs no form. Kept by the small-list rule; read through liveTogetherPrefs(). Older builds ignore it.
