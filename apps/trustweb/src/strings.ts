@@ -145,7 +145,7 @@ export const S = {
   featureEventsOn: 'Turn on',
   featureEventsLater: 'Not now',
   setRingNames: 'Show ring names on the web',
-  setRingNamesHint: 'Close friend, friend or acquaintance under each name.',
+  setRingNamesHint: 'Trust zone under each name.',
   // Wave 3 (Jakob 2026-10-07): restrict asks to direct contacts. Off by default (one hop, plus whatever the front doors allow).
   // Wave 6 (U4 c): the notes on one person, on their card.
   personAdvanced: 'Advanced',
@@ -501,6 +501,9 @@ export const S = {
   eventLinkHostNames: 'The host names the tag for this event.',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
   searchOpen: 'Contacts',
+  // Wave 25: the people list page behind it.
+  peopleSearchPh: 'Search people',
+  peopleTitle: 'People',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
   olWants: (n: number) => `wants ${n}/10`,
@@ -612,19 +615,21 @@ export const S = {
   notifOfferNo: 'Not now',
 
   ringLabel: {
-    [Ring.Close]: 'Close friend',
-    [Ring.Friend]: 'Friend',
-    [Ring.Acquaintance]: 'Acquaintance',
-    [Ring.Intending]: 'Intending to connect',
+    [Ring.Closest]: 'Closest',
+    [Ring.Close]: 'Close friends and allies',
+    [Ring.Friend]: 'Friends and community members',
+    [Ring.Acquaintance]: 'Acquaintances',
+    [Ring.Intending]: 'Public',
     [Ring.None]: 'Not in my web',
     [Ring.Family]: 'Family',
     [Ring.Unsorted]: 'Not placed yet',
   } as Record<Ring, string>,
   ringHint: {
-    [Ring.Close]: 'the few you would call at 3 am',
+    [Ring.Closest]: 'the few you would call at 3 am',
+    [Ring.Close]: 'you stand up for each other',
     [Ring.Friend]: 'you know each other well',
     [Ring.Acquaintance]: 'met at least once, still getting to know',
-    [Ring.Intending]: 'someone you plan to meet, not yet in your web',
+    [Ring.Intending]: 'not yet connected; what you share publicly',
     [Ring.None]: 'kept for reference, not part of your web',
     [Ring.Family]: 'your family, whatever the closeness',
     [Ring.Unsorted]: 'not on a ring yet',
@@ -632,8 +637,8 @@ export const S = {
   // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {
     [Audience.FriendsOfFriends]: 'Acquaintances',
-    [Audience.Friends]: 'Friends',
-    [Audience.Close]: 'Close friends',
+    [Audience.Friends]: 'Friends and community members',
+    [Audience.Close]: 'Close friends and allies',
     [Audience.OnlyMe]: 'Only me',
   } as Record<Audience, string>,
   audienceHint: {
@@ -837,7 +842,7 @@ export const S = {
   meetTitleWith: (name: string) => `Meet ${name}`,
   meetLead: 'Let them scan this with their phone camera.',
   meetRing: 'Ring',
-  meetRingValue: 'Acquaintance (change it later on their card)',
+  meetRingValue: 'Acquaintances (change it later on their card)',
   meetShared: 'Shared',
   meetSharedValue: 'Just these notes, plus a small link to the app',
   meetSharedNoNotes: 'Just a small link to the app (no notes written yet)',
@@ -901,7 +906,7 @@ export const S = {
   placeWho: 'Who can ask about these notes',
   placeFoot: 'If someone asks and a note isn\'t shared with them, they see "no match".',
   placeSave: 'Save to my web',
-  savedToast: (name: string, ring: string) => `Saved. ${name} is in your ${ring.toLowerCase()} ring.`,
+  savedToast: (name: string, ring: string) => `Saved. ${name} is in your trust zone: ${ring}.`,
 
   stillTitle: 'Still true?',
   stillNoted: (age: string) => `Noted ${age}`,
@@ -1308,7 +1313,7 @@ export const S = {
   askClose: 'Back to the app',
   notifBodyAsk: (name: string) => `${name} asked something that matches your notes.`,
 
-  peerConnectedToast: (name: string, ring: string) => `Connected with ${name}, as ${ring === 'Acquaintance' ? 'an' : 'a'} ${ring.toLowerCase()}.`,
+  peerConnectedToast: (name: string, ring: string) => `Connected with ${name}. Trust zone: ${ring}.`,
   notesReceivedContext: (name: string) => `Shared by ${name} when you met`,
   chTitle: 'Contact info',
   chLabel: {

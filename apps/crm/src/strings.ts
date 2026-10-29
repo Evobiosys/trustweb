@@ -237,7 +237,7 @@ export const S = {
   familyTag: 'Family',
   suggestedBecause: (reason: string) => `suggested: ${reason}`,
   sectionTitle: (ring: string, n: number) => `${ring} (${n})`,
-  sectionNames: { close: 'Close friends', friend: 'Friends', acquaintance: 'Acquaintances', intending: 'Intending', unsorted: 'No suggestion' } as Record<string, string>,
+  sectionNames: { closest: 'Closest', close: 'Close friends and allies', friend: 'Friends and community members', acquaintance: 'Acquaintances', intending: 'Public', unsorted: 'No suggestion' } as Record<string, string>,
   confirmSection: 'Confirm all in this section',
   applySuggestion: 'Apply',
   confirmAll: (n: number) => `Confirm all suggestions (${n})`,

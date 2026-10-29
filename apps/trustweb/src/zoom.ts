@@ -29,7 +29,7 @@ export function connectedPeople<P extends Person>(s: Pick<AppState, 'chats'> & {
   const since = now - ZOOM_DAYS * 86_400_000
   const recent = (p: Person): boolean =>
     (p.peerId ? s.chats?.[p.peerId]?.messages ?? [] : []).some((m) => m.at >= since) || (p.timeline ?? []).some((e) => e.at >= since)
-  const kept = s.people.filter((p) => webSlot(p) === Ring.Close || webSlot(p) === Ring.Friend || recent(p))
+  const kept = s.people.filter((p) => webSlot(p) === Ring.Closest || webSlot(p) === Ring.Close || webSlot(p) === Ring.Friend || recent(p))
   return kept.length < ZOOM_MIN ? s.people : kept
 }
 

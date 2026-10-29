@@ -1082,3 +1082,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   box-shadow:0 10px 30px rgba(36,27,46,.22); display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13.5px; font-weight:600; animation:tw-pop .25s ease-out}
 .update-banner[hidden]{display:none}
 .update-banner .btn{margin:0; white-space:nowrap}
+
+.people-list .field{width:100%; margin-bottom:10px}
+.people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
+.people-zone .zoom-row small{display:block}
