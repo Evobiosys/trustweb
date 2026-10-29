@@ -417,6 +417,8 @@ export interface Person {
   ringSuggested?: boolean
   /** Degrees (0 = top, clockwise) where the dot sits on its ring in the Web view: where it was dropped. Local only, never sent. */
   angle?: number
+  /** Wave 25 (membranes_five.ts): a favourite is always among the people shown on its membrane. Absent = false. Owner's own devices only (sync_core). */
+  favourite?: boolean
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -425,6 +427,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
+  links?: { signal?: string; whatsapp?: string; other?: string }
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
   /**
@@ -913,10 +917,14 @@ export interface AppState {
   inventory: InventoryItem[]
   log: LogEntry[]
   notificationsOn: boolean
+  /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
+  chatsHidden?: boolean
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
-  /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent = 30, 0 = off. Local; rides the device sync. */
+  /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent or 0 = off (wave 25); the Settings switch stores 30. Local; rides the device sync. */
   engagementDays?: number
+  /** Wave 25 (membranes_five.ts): people shown per membrane on the Membranes page. Absent = 5; 1..20. Local; rides the device sync. */
+  membraneLimit?: number
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
@@ -1062,6 +1070,8 @@ export interface AppState {
    * `askDirectOnly` wins. An older build ignores it.
    */
   askReach?: number
+  /** Wave 25: "Your city" (Settings > Profile); the ask sheet's example names it. Absent: Vienna. An older build ignores it. */
+  city?: string
   /**
    * Wave 16 (together_prefs.ts): the area, radius and friend degree of the last play request per activity, so the next sentence
    * ("play padel again before Thursday") needs no form. Kept by the small-list rule; read through liveTogetherPrefs(). Older builds ignore it.

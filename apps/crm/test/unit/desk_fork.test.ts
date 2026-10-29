@@ -75,4 +75,10 @@ describe('Getting started', () => {
     expect(src('desk_start.svelte')).toContain('data-action="dismiss-start"')
     expect(src('settings.svelte')).toContain('data-action="show-start"')
   })
+  it('the map card has an × (data-hint-dismiss); Settings > Advanced "Show hints again" brings it back', () => {
+    expect(src('desk.svelte')).toContain('data-hint-dismiss')
+    expect(src('desk.svelte')).toContain('prefs.mapCardDismissed')
+    expect(src('settings.svelte')).toContain('data-hints-reset')
+    expect(src('settings.svelte')).toContain('mapCardDismissed = false')
+  })
 })
