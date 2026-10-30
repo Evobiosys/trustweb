@@ -84,7 +84,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
-import { viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { expandedOf, viewHeading, viewMenuItems, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
@@ -2512,16 +2512,26 @@ function openEvents(eventId?: string): void {
 }
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
+const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : v === 'network' ? S.netNetwork : S.views.complete)
+const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
 
 /** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(view: WebView, anyone: boolean): HTMLElement {
+function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
+  const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
+  expand.setAttribute('data-expand', '')
+  expand.setAttribute('aria-pressed', String(expanded))
   return el('div', { class: 'web-view-row' }, [
+    view === 'rings' ? expand : null,
     el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
     iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
   ])
+}
+
+function toggleExpand(expanded: boolean): void {
+  try { window.localStorage.setItem(WEB_EXPAND_KEY, expanded ? '0' : '1') } catch { /* not remembered */ }
+  go(Screen.Web)
 }
 
 function viewSheet(current: WebView, anyone: boolean): void {
@@ -2533,7 +2543,7 @@ function viewSheet(current: WebView, anyone: boolean): void {
   ])
 }
 
-/** Membranes, Network and Complete network are remembered (WEB_VIEW_KEY). */
+/** Membranes and Network are remembered (WEB_VIEW_KEY). */
 function chooseView(view: WebView): void {
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
@@ -2625,6 +2635,9 @@ function screenWeb(): Node[] {
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
+  let expandStored: string | null = null
+  try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
+  const expanded = expandedOf(expandStored, view)
   const right = document.createDocumentFragment()
   right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
@@ -2635,7 +2648,7 @@ function screenWeb(): Node[] {
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
-      : ringsView(s, askMarks(), undefined, { complete: view === 'complete' }),
+      : ringsView(s, askMarks(), undefined, { complete: expanded }),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
@@ -2645,7 +2658,7 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, s.people.length > 0),
+    webViewRow(view, s.people.length > 0, expanded),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]

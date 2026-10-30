@@ -285,7 +285,7 @@ export const S = {
   deskSide: 'Contacts',
   deskSideAria: 'Contacts, the actionable view',
   /** Wave 19 (Jakob 2026-10-23): Settings > View, one naming for the four views (the crm reads these too). */
-  views: { label: 'View', pickAria: 'Choose a view', dex: 'Dex', desk: 'Contacts (wide)', classic: 'Contacts', trustweb: 'TrustWeb', mobile: 'TrustWeb mobile', layout: 'Layout', layoutHint: 'TrustWeb fits your window; TrustWeb mobile keeps the phone frame. Kept on this device only.', complete: 'Complete network', dexInfo: 'Dex-inspired', deskInfo: 'Our take on Dex', dexAbout: 'Dex-inspired: modelled on Dex, the personal CRM (getdex.com)' },
+  views: { label: 'View', pickAria: 'Choose a view', dex: 'Dex', desk: 'Contacts (wide)', classic: 'Contacts', trustweb: 'TrustWeb', mobile: 'TrustWeb mobile', layout: 'Layout', layoutHint: 'TrustWeb fits your window; TrustWeb mobile keeps the phone frame. Kept on this device only.', dexInfo: 'Dex-inspired', deskInfo: 'Our take on Dex', dexAbout: 'Dex-inspired: modelled on Dex, the personal CRM (getdex.com)' },
   netSearchPh: 'Find someone in the network',
   netShake: 'Shake',
   netMenu: 'Graph options',
@@ -1132,6 +1132,8 @@ export const S = {
   tabLabel: { web: 'Membranes', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', feed: 'Feed', network: 'Network', desk: 'Contacts' } as Record<string, string>,
   viewMenuAria: 'Choose a view',
   viewMenuTitle: 'View',
+  expandAria: 'Show everyone',
+  collapseAria: 'Show only the closest',
   chatTabUnread: (n: number) => `${n} unread`,
   chatListTitle: 'Chats',
   chatSearch: 'Search chats',
