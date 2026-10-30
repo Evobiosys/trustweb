@@ -65,7 +65,7 @@ export function connectBlock(p: Person, name: string, d: ConnectDeps): HTMLEleme
   return el('div', { class: 'card-chat-why' }, [el('p', { class: 'meta' }, [S.cardNotConnectedLead(name), connect, S.cardNotConnectedTail]), panel])
 }
 
-/** "Days": what happened with this person by day, newest first; open by default, 30 days at a time, the fold remembered. */
+/** "Timeline": what happened with this person by day, newest first; open by default, 30 days at a time, the fold remembered. */
 export function daysSection(state: () => AppState, p: Person): HTMLElement {
   const read = (): boolean => { try { return foldOpen(window.localStorage.getItem(foldKey('days')), true) } catch { return true } }
   let open = read()
