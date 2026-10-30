@@ -7,32 +7,32 @@ import { parseRecord } from '../../src/store.ts'
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
 
 describe('rings drag', () => {
-  it('close dots sit 2 px (+-1) off the you avatar edge for 1, 3, 8 and 40 people at any view scale', () => {
+  it('closest dots sit 2 px (+-1) off the you avatar edge for 1, 3, 8 and 40 people at any view scale', () => {
     for (const k of [1, 0.6, 0.3]) for (const n of [1, 3, 8, 40]) {
-      const g = ringsGeometry({ close: n }, {}, k)
-      expect(Math.abs((g.radius.close - g.dot.close / 2) * k - YOU_EDGE - CLOSE_GAP)).toBeLessThanOrEqual(1)
+      const g = ringsGeometry({ closest: n }, {}, k)
+      expect(Math.abs((g.radius.closest - g.dot.closest / 2) * k - YOU_EDGE - CLOSE_GAP)).toBeLessThanOrEqual(1)
     }
   })
   it('orders the rings from the centre and reads a drop from the distance', () => {
-    expect(RING_RADIUS.close < RING_RADIUS.friend && RING_RADIUS.friend < RING_RADIUS.acquaintance).toBe(true)
+    expect(RING_RADIUS.closest < RING_RADIUS.close && RING_RADIUS.close < RING_RADIUS.friend && RING_RADIUS.friend < RING_RADIUS.acquaintance).toBe(true)
     expect(RING_RADIUS.acquaintance < RING_RADIUS.intending).toBe(true)
-    expect(ringAt(0)).toBe(Ring.Close)
+    expect(ringAt(0)).toBe(Ring.Closest)
     expect(ringAt(RING_RADIUS.intending + 3)).toBe(Ring.Intending)
     expect(ringAt(500)).toBe(Ring.Unsorted)
-    expect(ringAt(500, RING_RADIUS, [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending])).toBe(Ring.Intending)
+    expect(ringAt(500, RING_RADIUS, [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending])).toBe(Ring.Intending)
   })
   it('a full ring continues on laps outside it and pushes the rings beyond it outward, never inward', () => {
-    const few = ringsGeometry({ close: 3, intending: 2 })
+    const few = ringsGeometry({ closest: 3, intending: 2 })
     expect(few.radius.acquaintance).toBe(RING_RADIUS.acquaintance)
-    expect(few.perLap.close).toBeGreaterThanOrEqual(3)
-    const g = ringsGeometry({ close: 7, friend: 15, acquaintance: 255, intending: 238 })
+    expect(few.perLap.closest).toBeGreaterThanOrEqual(3)
+    const g = ringsGeometry({ closest: 7, friend: 15, acquaintance: 255, intending: 238 })
     expect(g.dot.acquaintance).toBe(14)
-    expect(g.radius.close).toBeLessThanOrEqual(RING_RADIUS.close) // the close ring hugs the you avatar
+    expect(g.radius.closest).toBeLessThanOrEqual(RING_RADIUS.closest) // the closest ring hugs the you avatar
     expect(lapRadius(g, Ring.Acquaintance, 2)).toBeGreaterThan(g.radius.acquaintance)
     expect(g.radius.intending).toBeGreaterThan(lapRadius(g, Ring.Acquaintance, Math.ceil(255 / g.perLap.acquaintance) - 1))
   })
-  it('four placed rings and a grey unsorted ring outside them; no contact tier', () => {
-    expect(WEB_RINGS).toEqual([Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted])
+  it('five placed rings and a grey unsorted ring outside them; no contact tier', () => {
+    expect(WEB_RINGS).toEqual([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted])
     expect(Object.values(Ring).some((r) => /contact/i.test(r))).toBe(false)
     expect(Object.values(S.ringLabel).some((l) => /contact/i.test(l.replace('Intending to connect', '')))).toBe(false)
   })
@@ -77,7 +77,7 @@ describe('rings drag', () => {
     expect(p.fields[CLOSENESS_KEY]).toBe(Ring.Acquaintance)
   })
   it('a drop beyond the outermost avatar hides, one on the outer ring does not', () => {
-    const g = ringsGeometry({ close: 3, intending: 2 })
+    const g = ringsGeometry({ closest: 3, intending: 2 })
     expect(beyondRings(RING_RADIUS.intending, g)).toBe(false)
     expect(beyondRings(g.extent + 13, g)).toBe(true)
   })

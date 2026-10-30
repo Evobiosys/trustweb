@@ -1108,6 +1108,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .update-banner[hidden]{display:none}
 .update-banner .btn{margin:0; white-space:nowrap}
 
+.people-list .field{width:100%; margin-bottom:10px}
+.people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
+.people-zone .zoom-row small{display:block}
 .chat-dnd.on{background:var(--electric); color:#fff}
 .chat-row .when{font-size:11.5px; color:var(--ink-soft)}
 .msgr{display:flex; gap:4px}

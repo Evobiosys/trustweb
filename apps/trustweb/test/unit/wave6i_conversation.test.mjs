@@ -352,7 +352,7 @@ describe('reask.ts: the rule', () => {
       expect(plan).toMatchObject({ originalQid: 'Q1', firstAt: NOW - DAY })
       list = noteReasked(list, 'r1', 'pA', `Qre${i}`, NOW)
     }
-    expect(REASKS_PER_ASK).toBe(3)
+    expect(REASKS_PER_ASK).toBe(RINGS.length - 1) // wave 25: five zones (Closest added), four possible tightenings
     expect(reaskCandidates(list, 'pA', NOW)).toEqual([])
   })
   it('a re-ask is direct, marked with the first ask, carries the first ask\'s words and no ring', () => {

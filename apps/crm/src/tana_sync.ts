@@ -18,7 +18,10 @@ export type SyncOp =
 
 /** What a field edit becomes in Tana, or why a human has to do it there. */
 export function planFieldSync(key: string, value: FieldValue | undefined): SyncOp {
-  if (key === RING_KEY) return { tool: 'set_field_option', args: { attributeId: RING_FIELD, optionId: TANA_RING_OPTIONS[ringOf(valueText(value))] } }
+  if (key === RING_KEY) {
+    const optionId = TANA_RING_OPTIONS[ringOf(valueText(value))]
+    return optionId ? { tool: 'set_field_option', args: { attributeId: RING_FIELD, optionId } } : { manual: 'no Tana ring option for this trust zone yet' }
+  }
   const field = fieldById(key)
   if (key.startsWith(ADHOC) || !field) return { manual: 'ad hoc field, no Tana attribute known' }
   const attributeId = field.tanaAttributeId
