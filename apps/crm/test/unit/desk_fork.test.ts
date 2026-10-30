@@ -21,7 +21,7 @@ describe('the view enum', () => {
   })
   it('four choices inside TrustWeb, in order, one naming', () => {
     expect(viewChoices({ showPhoneVersion: noop })).toEqual([View.Dex, View.Desk, View.Classic, View.TrustWeb])
-    expect(viewChoices({ showPhoneVersion: noop }).map(viewLabel)).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
+    expect(viewChoices({ showPhoneVersion: noop }).map(viewLabel)).toEqual(['Dex', 'Contacts (wide)', 'Contacts', 'TrustWeb'])
     expect(S.views).toMatchObject({ dexInfo: 'Dex-inspired', deskInfo: 'Our take on Dex' })
   })
   it('the host hears desk for either Desk', () => {
@@ -74,5 +74,11 @@ describe('Getting started', () => {
   it('an × dismisses it; Settings brings it back', () => {
     expect(src('desk_start.svelte')).toContain('data-action="dismiss-start"')
     expect(src('settings.svelte')).toContain('data-action="show-start"')
+  })
+  it('the map card has an × (data-hint-dismiss); Settings > Advanced "Show hints again" brings it back', () => {
+    expect(src('desk.svelte')).toContain('data-hint-dismiss')
+    expect(src('desk.svelte')).toContain('prefs.mapCardDismissed')
+    expect(src('settings.svelte')).toContain('data-hints-reset')
+    expect(src('settings.svelte')).toContain('mapCardDismissed = false')
   })
 })

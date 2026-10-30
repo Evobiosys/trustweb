@@ -9,7 +9,7 @@ describe('rings', () => {
     expect(ringOf('none')).toBe('unsorted')
     expect(ringOf('family')).toBe('unsorted')
     expect(ringOf('friend')).toBe('friend')
-    expect(RING_ORDER).toEqual(['close', 'friend', 'acquaintance', 'intending'])
+    expect(RING_ORDER).toEqual(['closest', 'close', 'friend', 'acquaintance', 'intending'])
     expect(ringColor('intending')).toBe('#EFC978')
   })
   it('a choice sets the ring, and the famous checkbox only where it changes', () => {

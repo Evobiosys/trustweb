@@ -18,8 +18,9 @@ export function kindsOf(s: { notifyKinds?: NotifyKinds }): NotifyKinds {
 }
 
 /** The one gate: notifications on at all, and this kind on. */
-export function wantsKind(s: { notificationsOn: boolean; notifyKinds?: NotifyKinds }, kind: NotifyKind): boolean {
-  return s.notificationsOn && kindsOf(s)[kind]
+export function wantsKind(s: { notificationsOn: boolean; notifyKinds?: NotifyKinds; chatsHidden?: boolean }, kind: NotifyKind): boolean {
+  // Chat Do Not Disturb (wave 25) silences chat notifications only.
+  return s.notificationsOn && kindsOf(s)[kind] && !(kind === 'chat' && s.chatsHidden)
 }
 
 /** Which kind a wire's envelope type `t` (apps/demo/src/wire.ts) is about; null: nothing to tell a person (an answer, a ping). */

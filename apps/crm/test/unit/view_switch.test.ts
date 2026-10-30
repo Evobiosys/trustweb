@@ -15,7 +15,7 @@ describe('viewChoices', () => {
 
 describe('one naming', () => {
   it('labels', () => {
-    expect([View.Dex, View.Desk, View.Classic, View.TrustWeb].map(viewLabel)).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
+    expect([View.Dex, View.Desk, View.Classic, View.TrustWeb].map(viewLabel)).toEqual(['Dex', 'Contacts (wide)', 'Contacts', 'TrustWeb'])
     expect(S.views).toMatchObject({ dex: 'Dex', classic: 'Contacts', trustweb: 'TrustWeb', dexInfo: 'Dex-inspired' })
   })
   it('the profile menu item is "TrustWeb view"', () => expect(S.desk.profile.phone).toBe('TrustWeb view'))

@@ -47,8 +47,9 @@ html:has(.phone),body:has(.phone){overflow:hidden; overscroll-behavior:none; hei
   body{padding:0}
   .phone{position:fixed; inset:0; width:auto; height:auto; max-height:none; border-radius:0; box-shadow:none}
 }
-.phone.embedded{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
-body:has(.phone.embedded){padding:0}
+.phone.embedded,.phone.fluid{width:100vw; height:100dvh; max-height:none; border-radius:0; box-shadow:none}
+body:has(.phone.embedded),body:has(.phone.fluid){padding:0}
+body:has(.phone.fluid) .page-dock{display:none}
 
 .screen{position:absolute; inset:0 0 86px; display:flex; flex-direction:column; overflow:hidden; overflow:clip; background:var(--linen)}
 .screen.start{inset:0}
@@ -126,6 +127,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .ava{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; box-shadow:0 2px 10px rgba(36,27,46,.2); flex-shrink:0}
 .node.nonresp{opacity:.55}
 .node span{font-size:11.5px; font-weight:600; color:var(--ink)}
+.rings-zoom .node:not(.you) span{font-size:calc(11.5px*var(--rz,1))}
+.rings-zoom .node:not(.you) .lvl{font-size:calc(9.5px*var(--rz,1))}
 .node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
 .node:not(.you) .ava{width:var(--d,42px); height:var(--d,42px); font-size:calc(var(--d,42px)*.42)}
 .rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
@@ -141,6 +144,13 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
+.ring-more{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:1.5px solid var(--rc,#8a8f94); border-radius:50%; background:#fff; color:var(--rc,#8a8f94); font-size:11px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
+.membrane-all{position:absolute; left:50%; transform:translateX(-50%); z-index:7; max-width:90%; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:11px; color:var(--ink); display:flex; flex-direction:column; gap:2px; pointer-events:none}
+.add-node{position:absolute; top:4px; right:4px; z-index:6; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
+.small-card{display:flex; flex-direction:column; gap:10px; padding:14px}
+.small-card .card-actions{display:flex; gap:8px; align-items:center}
+.membrane-rest{display:flex; flex-direction:column; padding:8px}
+.tag-filter{padding:6px 10px}
 .rings-wrap.hide-zone{outline:2px dashed #c62828; outline-offset:4px; border-radius:50%}
 .rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}
 .ctx-menu{position:absolute; z-index:7; display:flex; flex-direction:column; gap:2px; background:var(--card); border-radius:12px; padding:6px; box-shadow:0 4px 20px rgba(36,27,46,.3)}
@@ -161,7 +171,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .screen.querying .rings-wrap{transform-origin:top center}
 .net{padding:0 12px; position:relative}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
-.net-search{padding:8px 12px; font-size:14px}
+.net-search{padding:8px 12px; font-size:14px; flex:1; min-width:0}
 .net-canvas{display:block; touch-action:none; -webkit-touch-callout:none; user-select:none; border-radius:16px; background:var(--card); cursor:grab}
 .web-view-row{display:flex; gap:8px; align-items:center; margin:6px 16px 0}
 .web-view-row .web-view{flex:1; font-size:13px; font-weight:600; color:var(--ink-soft)}
@@ -702,6 +712,9 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .query-fab.call{padding:10px 18px 10px 14px; gap:9px}
 .query-fab.call svg{width:24px; height:24px}
 .fab-two{display:flex; flex-direction:column; line-height:1.1; text-align:left; font-size:16px}
+.query-fab[data-open-query] .fab-two{text-align:center}
+.query-fab[data-open-query] svg{width:30px; height:30px}
+.ask-how summary{cursor:pointer; font-weight:600; padding:4px 0}
 .agr-row b,.agr-row small{min-width:0; overflow-wrap:anywhere}
 .agr-row{min-width:0}
 .lean-note{display:flex; flex-direction:column; gap:6px; align-items:stretch}
@@ -890,8 +903,20 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-ch{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft)}
 .card-chat{margin:0 0 8px}
 .card-chat .btn svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-3px; margin-right:6px}
-.card-curate{margin-top:12px}
-.card-curate>summary{cursor:pointer; font-weight:600; padding:6px 0}
+.page-layer{position:absolute; inset:0; z-index:60; background:var(--linen); overflow-y:auto; padding:14px 22px 30px}
+.page-bar{display:flex; align-items:center; gap:12px; margin-bottom:12px}
+.page-bar h2{font-size:20px}
+.page-layer .btn{margin-top:8px}
+.card-curate-open{margin-top:12px; width:100%}
+.card-connect{background:none; border:0; padding:0; color:var(--teal); font:inherit; font-weight:700; text-decoration:underline; cursor:pointer}
+.connect-panel{display:flex; flex-direction:column; gap:8px; margin:6px 0 10px}
+.connect-panel[hidden]{display:none}
+.connect-link{word-break:break-all; padding:10px 12px; background:var(--card); border-radius:12px; font-size:13px}
+.connect-panel .card-ch{flex-wrap:wrap}
+.card-links .card-ch a{flex:1 1 60%; min-width:0; word-break:break-all}
+.fold-head{display:flex; align-items:center; gap:8px; margin:12px 0 4px}
+.fold-btn{background:none; border:0; padding:0; font:inherit; font-weight:700; cursor:pointer; color:var(--ink)}
+.days-day h5{margin:8px 0 2px}
 .ava.unconnected{background:transparent; border:2px dashed; color:var(--ink); box-shadow:none}
 .sheet-home{border:0; background:var(--card); color:var(--ink-soft); font:inherit; font-size:13px; border-radius:999px; padding:4px 12px; cursor:pointer}
 .sheet-home:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
@@ -1082,3 +1107,18 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   box-shadow:0 10px 30px rgba(36,27,46,.22); display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13.5px; font-weight:600; animation:tw-pop .25s ease-out}
 .update-banner[hidden]{display:none}
 .update-banner .btn{margin:0; white-space:nowrap}
+
+.people-list .field{width:100%; margin-bottom:10px}
+.people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
+.people-zone .zoom-row small{display:block}
+.chat-dnd.on{background:var(--electric); color:#fff}
+.chat-row .when{font-size:11.5px; color:var(--ink-soft)}
+.msgr{display:flex; gap:4px}
+.msgr-ico{width:20px; height:20px; border-radius:50%; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; text-decoration:underline; background:var(--tint-sand); color:var(--ink-soft)}
+.msgr-ico.signal{background:var(--tint-blue); color:var(--electric-deep)}
+.msgr-ico.whatsapp{background:var(--tint-violet); color:var(--violet-deep)}
+.chat-find{margin-top:14px}
+.chat-find summary{cursor:pointer; font-weight:700; color:var(--teal); text-decoration:underline; margin-bottom:8px}
+.chat-body{margin-top:10px}
+.who button.link{background:none; border:0; padding:0; font:inherit; color:var(--teal); text-decoration:underline; cursor:pointer}
+.status-pill[hidden]{display:none}

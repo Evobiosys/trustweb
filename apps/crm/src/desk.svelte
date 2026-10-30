@@ -31,7 +31,7 @@
   import { nav, openPerson, showDeskPage } from './nav.svelte'
   import { effectivePerson, entityValues } from './person_view'
   import { HELP_MAIL } from '../../trustweb/src/help_mail'
-  import { prefs } from './prefs.svelte'
+  import { prefs, savePrefs } from './prefs.svelte'
   import { store } from './state.svelte'
   import { S } from './strings'
 
@@ -154,14 +154,19 @@
     </div>
     <aside class="desk-right">
       {#if startShown(steps, prefs.startDismissed)}<DeskStart {steps} />{/if}
-      <button class="desk-mapcard" data-action="desk-mapcard" onclick={(): void => showDeskPage(DeskPage.Map)}>
-        <span class="desk-mapcard-text">
-          <span class="desk-label">{S.desk.mapCard.label}</span>
-          <strong>{S.desk.mapCard.text}</strong>
-          <DeskIcon name="right" size={16} />
-        </span>
-        <svg class="desk-globe" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="60" cy="60" r="52" /><ellipse cx="60" cy="60" rx="22" ry="52" /><ellipse cx="60" cy="60" rx="40" ry="52" /><path d="M8 60h104M14 36h92M14 84h92" /></svg>
-      </button>
+      {#if !prefs.mapCardDismissed}
+      <div class="desk-mapwrap">
+        <button class="desk-mapcard" data-action="desk-mapcard" onclick={(): void => showDeskPage(DeskPage.Map)}>
+          <span class="desk-mapcard-text">
+            <span class="desk-label">{S.desk.mapCard.label}</span>
+            <strong>{S.desk.mapCard.text}</strong>
+            <DeskIcon name="right" size={16} />
+          </span>
+          <svg class="desk-globe" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="60" cy="60" r="52" /><ellipse cx="60" cy="60" rx="22" ry="52" /><ellipse cx="60" cy="60" rx="40" ry="52" /><path d="M8 60h104M14 36h92M14 84h92" /></svg>
+        </button>
+        <button class="desk-icon-btn desk-dismiss" data-hint-dismiss="map" aria-label={S.desk.mapCard.dismiss} title={S.desk.mapCard.dismiss} onclick={(): void => { prefs.mapCardDismissed = true; savePrefs() }}>×</button>
+      </div>
+      {/if}
     </aside>
     </div>
     </div>
