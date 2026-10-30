@@ -39,11 +39,16 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
   ])
 }
 
-/** The flat list of the people of one membrane beyond the shown ones. */
-export function restList(rest: readonly Person[], onPick: (id: string) => void): HTMLElement {
-  return el('div', { class: 'membrane-rest', 'data-membrane-rest': '' }, rest.length
-    ? rest.map((p) => el('button', { class: 'conn-row btn btn-ghost', 'data-rest-person': p.id, onclick: () => onPick(p.id) }, [p.name]))
-    : [el('p', { class: 'meta' }, [S.membraneRestNone])])
+/** The flat list of the whole zone; a dashed last row, and a press on the empty space below it, adds someone to the zone. */
+export function restList(people: readonly Person[], zone: string, onPick: (id: string) => void, onAdd: () => void): HTMLElement {
+  const box = el('div', {
+    class: 'membrane-rest', 'data-membrane-rest': '',
+    onclick: (e: Event) => { if (e.target === box) onAdd() },
+  }, [
+    ...(people.length ? people.map((p) => el('button', { class: 'conn-row btn btn-ghost', 'data-rest-person': p.id, onclick: () => onPick(p.id) }, [p.name])) : [el('p', { class: 'meta' }, [S.membraneRestNone])]),
+    el('button', { class: 'conn-row btn btn-ghost rest-add', 'data-rest-add': '', onclick: onAdd }, [S.membraneAddTo(zone)]),
+  ])
+  return box
 }
 
 /** The strip at the top of the Membranes while a tag filter is on; the X clears it. */

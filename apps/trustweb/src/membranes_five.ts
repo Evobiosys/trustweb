@@ -33,10 +33,19 @@ export function recency(s: Partial<State>, p: Person, now: number): number {
 }
 
 /** Favourites first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
+/** The pin flag lives here only, so a rename (favourite -> pinned) is one line. */
+export const isPinned = (p: Pick<Person, 'favourite'>): boolean => p.favourite === true
+
 export function pickFive(people: readonly Person[], s: Partial<State>, limit: number, now: number): { shown: Person[]; rest: Person[] } {
   const at = new Map(people.map((p) => [p.id, recency(s, p, now)]))
-  const sorted = [...people].sort((a, b) => Number(b.favourite === true) - Number(a.favourite === true) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
+  const sorted = [...people].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
+}
+
+/** The whole zone, shown and rest together: pinned first, then the most recent. */
+export function wholeZone(people: readonly Person[], s: Partial<State>, now: number): Person[] {
+  const { shown, rest } = pickFive(people, s, Infinity, now)
+  return [...shown, ...rest]
 }
 
 /** Degrees clockwise from 12 o'clock: the first five at 1:30, 4:30, 6:00, 7:30, 10:30; any beyond spread evenly between. */

@@ -319,7 +319,8 @@ export const S = {
   // Wave 25 (membranes_five.ts): the closest five per membrane
   membraneMoreAria: (zone: string) => `Show everyone in ${zone}`,
   membraneRest: (zone: string, n: number) => `${zone}: ${n} more`,
-  membraneRestNone: 'Nobody else here.',
+  membraneRestNone: 'Nobody here yet.',
+  membraneAddTo: (zone: string) => `Add someone to ${zone}`,
   membraneAllTitle: (zone: string) => `Everyone in ${zone}`,
   membraneCardOpen: 'Open',
   cardFavourite: 'Favourite',
@@ -519,6 +520,7 @@ export const S = {
   searchOpen: 'Contacts',
   // Wave 25: the people list page behind it.
   peopleSearchPh: 'Search people',
+  peoplePinned: 'Pinned',
   peopleTitle: 'People',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',

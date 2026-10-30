@@ -174,7 +174,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, wholeZone, withTag } from './membranes_five'
 import { favouriteButton, membraneAll, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -2120,8 +2120,8 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
-    const { rest } = pickFive(withTag(people, tagFilter), s, limitOf(s), Date.now())
-    return [header(S.ringLabel[page.ring], { back }), el('div', { class: 'scroll' }, [restList(rest, (id) => openWebPage({ kind: 'card', id }))])]
+    const zone = S.ringLabel[page.ring]
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
