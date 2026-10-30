@@ -1131,6 +1131,17 @@ export interface AppState {
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
+  /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
+  advanced?: { ai?: AiEndpoint }
+}
+
+export interface AiEndpoint {
+  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
+  baseUrl: string
+  /** Empty: no Authorization header. */
+  apiKey: string
+  model: string
 }
 
 export interface FeedSettings {

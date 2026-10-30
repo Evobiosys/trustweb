@@ -206,6 +206,8 @@ import { geoPicker } from './together_location'
 import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { draftOrPlain, readTogetherRequest } from './together_request'
+import { askEndpoint, configured } from './llm_endpoint'
+import { aiSettings } from './llm_endpoint_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { labelScale } from './ring_spacing'
@@ -6027,6 +6029,7 @@ function settingsSheet(): void {
       onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
+    ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
     ...hosting.settingsGroup(),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
@@ -6420,8 +6423,9 @@ async function sendFromDock(text: string): Promise<void> {
     void runAsk(pending.text, pending.reach)
     return
   }
-  // No model call exists in the app yet: draftOrPlain reads plainly while TOGETHER_LLM_DRAFT is off (together_request.ts).
-  const read = await draftOrPlain(text, now, async () => null)
+  // Drafting only through the person's own endpoint (Settings > Advanced > Your AI); any error falls back to the plain reading.
+  const ai = st().advanced?.ai
+  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t), configured(ai))
   if (!read) { void runAsk(text); return }
   const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)
