@@ -2,7 +2,7 @@
 /** Wave 25: the closest five per membrane (membranes_five.ts). */
 import { ChatDirection } from '../../src/chat.ts'
 import { Audience, Ring } from '../../src/model.ts'
-import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, recency, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
+import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0)
 const person = (id, o = {}) => ({ id, name: id, context: '', ring: Ring.Friend, metAt: 0, ...o })
@@ -28,10 +28,10 @@ describe('pickFive', () => {
     expect(r.shown.map((p) => p.id)).toEqual(['a', 'c'])
     expect(r.rest.map((p) => p.id)).toEqual(['b', 'd'])
   })
-  it('favourites come first, then recency', () => {
+  it('pinned come first, then recency', () => {
     const r = pickFive([a, b, d], s, 2, NOW)
     expect(r.shown.map((p) => p.id)).toEqual(['a', 'b'])
-    const f = pickFive([a, b, { ...d, favourite: true }], s, 2, NOW)
+    const f = pickFive([a, b, { ...d, pinned: true }], s, 2, NOW)
     expect(f.shown.map((p) => p.id)).toEqual(['d', 'a'])
   })
   it('equal recency keeps a stable order by id', () => {
@@ -116,5 +116,20 @@ describe('sharedCount', () => {
     expect(sharedCount(s, person('a', { ring: Ring.Friend }))).toBe(1)
     expect(sharedCount(s, person('a', { ring: Ring.Close }))).toBe(2)
     expect(sharedCount(s, person('a', { ring: Ring.Unsorted }))).toBe(0)
+  })
+})
+
+describe('favourite -> pinned', () => {
+  it('pinnedFrom renames an old favourite and never overrides pinned', () => {
+    expect(pinnedFrom({ name: 'a', favourite: true })).toEqual({ name: 'a', pinned: true })
+    expect(pinnedFrom({ name: 'a', favourite: true, pinned: true })).toEqual({ name: 'a', pinned: true })
+    const same = { name: 'a' }
+    expect(pinnedFrom(same)).toBe(same)
+  })
+  it('repairPinned migrates a record once', () => {
+    const s = { people: [{ id: 'a', favourite: true }, { id: 'b' }] }
+    expect(repairPinned(s)).toBe(true)
+    expect(s.people).toEqual([{ id: 'a', pinned: true }, { id: 'b' }])
+    expect(repairPinned(s)).toBe(false)
   })
 })

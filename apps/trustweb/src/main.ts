@@ -175,7 +175,7 @@ import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag, collidingLabels } from './membranes_five'
-import { favouriteButton, membraneAll, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -2129,7 +2129,8 @@ function webPageScreen(page: WebPage): Node[] {
   return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
     onOpen: () => { webPage = null; render(); personSheet(p.id) },
-    onFavourite: () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render() },
+    onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
+    chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
   })])]
 }
@@ -2968,7 +2969,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
-    favouriteButton(p, () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render(); personSheet(p.id) }),
+    pinButton(p, () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render(); personSheet(p.id) }),
     daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,

@@ -7,6 +7,7 @@ import { repairConnectRecord } from './connect_code'
 import { repairGeneralNotes } from './general_notes'
 import { normaliseNoteFields } from './note_fields'
 import { repairProfile } from './profile'
+import { repairPinned } from './membranes_five'
 import { migrateSources } from './provenance'
 import { repairShareFields } from './share_modes'
 import { repairOtherCodes } from './sync_code'
@@ -31,7 +32,7 @@ export function migrate(s: AppState): boolean {
   assertReadable(s.schemaVersion)
   const ran = [
     migrateSources(s), normaliseNoteFields(s), migrateChats(s),
-    repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s),
+    repairConnectRecord(s), repairOtherCodes(s), repairShareFields(s), repairGeneralNotes(s), repairProfile(s), repairAgreements(s), repairPinned(s),
   ]
   const stamped = s.schemaVersion !== SCHEMA_VERSION
   s.schemaVersion = SCHEMA_VERSION
