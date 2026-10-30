@@ -24,7 +24,7 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoints, visiblePeople } from './rings_hide'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -174,7 +174,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag, collidingLabels } from './membranes_five'
 import { favouriteButton, membraneAll, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -1961,7 +1961,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     if (complete) { members[r] = ps; continue }
     const f = pickFive(withTag(ps, tagFilter), s, limitOf(s), Date.now())
     members[r] = f.shown; rest[r] = f.rest
-    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length)))
+    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length, WEB_RINGS.indexOf(r))))
   }
   const angleOfP = (p: Person): number => slotted.get(p.id) ?? angleOf(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
@@ -2795,6 +2795,14 @@ function addPersonSheet(ring: Ring): void {
 
 const RINGS_SIZE = 352
 
+/** Name labels that would sit on another's hide until hover or focus (the compact-ring pattern); measured at the settled layout. */
+function hideCollidingLabels(wrap: HTMLElement): void {
+  const nodes = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')]
+  nodes.forEach((n) => n.classList.remove('lbl-off'))
+  const spans = nodes.map((n) => n.querySelector('span'))
+  const boxes = spans.flatMap((s, i) => (s && s.offsetWidth ? [{ i, ...s.getBoundingClientRect().toJSON() }] : []))
+  collidingLabels(boxes.map((x) => ({ l: x.left, t: x.top, r: x.right, b: x.bottom }))).forEach((j) => nodes[boxes[j].i].classList.add('lbl-off'))
+}
 /**
  * While the query dock is open, shrink the rings to the space left above it,
  * so every person, and above all the ones who answer, stays in view: you
@@ -2805,6 +2813,7 @@ function fitRings(): void {
   const wrap = host.querySelector<HTMLElement>('.rings-wrap')
   const scroll = host.querySelector<HTMLElement>('.scroll')
   if (!wrap || !scroll) return
+  hideCollidingLabels(wrap)
   if (!queryOpen) { wrap.style.transform = ''; wrap.style.marginBottom = ''; return }
   const top = wrap.offsetTop - scroll.offsetTop
   const room = scroll.clientHeight - top - 8

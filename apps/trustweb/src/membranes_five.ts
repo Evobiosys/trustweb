@@ -39,12 +39,25 @@ export function pickFive(people: readonly Person[], s: Partial<State>, limit: nu
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 
-/** Degrees clockwise from 12 o'clock: the first five at 1:30, 4:30, 6:00, 7:30, 10:30; any beyond spread evenly between. */
+/** Each ring turns this far further than the one inside it, so adjacent rings' labels do not line up. */
+const RING_TURN = 18
+/** Degrees clockwise from 12 o'clock (plus the ring's turn): the first five at 1:30, 4:30, 6:00, 7:30, 10:30; any beyond spread evenly between. */
 const FIVE = [45, 135, 180, 225, 315]
-export function slotAngle(i: number, n: number): number {
-  if (i < FIVE.length) return FIVE[i]
+export function slotAngle(i: number, n: number, ringIndex = 0): number {
   const extra = n - FIVE.length
-  return ((i - FIVE.length + 0.5) * 360) / extra
+  const base = i < FIVE.length ? FIVE[i] : ((i - FIVE.length + 0.5) * 360) / extra
+  return (base + ringIndex * RING_TURN) % 360
+}
+
+/** Indexes of the boxes to hide so no two shown ones intersect: an earlier box wins (greedy). */
+export function collidingLabels(boxes: readonly { l: number; t: number; r: number; b: number }[]): number[] {
+  const kept: typeof boxes[number][] = []
+  const hide: number[] = []
+  boxes.forEach((x, i) => {
+    if (kept.some((k) => x.l < k.r && k.l < x.r && x.t < k.b && k.t < x.b)) hide.push(i)
+    else kept.push(x)
+  })
+  return hide
 }
 
 /** Keeps the people holding colour tag `id`; null = no filter. */
