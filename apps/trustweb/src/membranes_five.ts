@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 25 (Jakob 2026-10-29): the membranes page shows the closest five people per membrane, "the combination of the five people you
- * spend most of your time with". Favourites first, then by recency (chat, connect, activity). Everyone else stays one press away.
+ * spend most of your time with". Pinned first, then by recency (chat, connect, activity). Everyone else stays one press away.
  * View state only: nothing here travels or changes a record. Pure, no DOM.
  */
 import { audienceAdmits } from './model'
@@ -9,6 +9,20 @@ import type { AppState, Person } from './model'
 import { lastContact } from './engagement'
 import { tagsOf } from './colour_tags'
 import { webSlot } from './rings_layout'
+
+/** Wave 26: records and bundles from before the rename carry `favourite`; it loads as `pinned` (an existing `pinned` wins). */
+export function pinnedFrom<T extends object>(p: T): T {
+  if (!('favourite' in p)) return p
+  const { favourite, ...rest } = p as T & { favourite?: boolean }
+  return (favourite === true && !('pinned' in rest) ? { ...rest, pinned: true } : rest) as T
+}
+
+/** schema_version.ts chain step: true when a person changed. */
+export function repairPinned(s: Pick<AppState, 'people'>): boolean {
+  const changed = s.people.some((p) => 'favourite' in p)
+  if (changed) s.people = s.people.map(pinnedFrom)
+  return changed
+}
 
 export const LIMIT_DEFAULT = 5
 export const LIMIT_MAX = 20
@@ -32,10 +46,10 @@ export function recency(s: Partial<State>, p: Person, now: number): number {
   return lastContact({ people: [], ...s, engagementSince: undefined }, p, now)
 }
 
-/** Favourites first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
+/** Pinned first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
 export function pickFive(people: readonly Person[], s: Partial<State>, limit: number, now: number): { shown: Person[]; rest: Person[] } {
   const at = new Map(people.map((p) => [p.id, recency(s, p, now)]))
-  const sorted = [...people].sort((a, b) => Number(b.favourite === true) - Number(a.favourite === true) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
+  const sorted = [...people].sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 

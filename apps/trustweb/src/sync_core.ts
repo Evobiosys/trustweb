@@ -29,6 +29,7 @@ import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_pe
 import { codesForBundle, parseCodeField, readCodeList, validLongUrl, wireOther } from './sync_code'
 import type { CodeMerge } from './sync_code'
 import type { ConnectRecord } from './connect_code'
+import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
 
 /** 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
@@ -239,7 +240,7 @@ const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from',
 export function parseBundle(v: unknown): SyncBundle | null {
   if (!isObj(v)) return null
   if ((v.v !== 1 && v.v !== 2) || !isList(v.people) || !isList(v.inventory) || !isList(v.meetings) || !isObj(v.at)) return null
-  const people = v.people as unknown as Person[]
+  const people = (v.people as unknown as Person[]).map(pinnedFrom)
   if (!people.every((p) => Array.isArray(p.lines) && typeof p.name === 'string')) return null
   if (!Object.values(v.at).every((n) => Number.isFinite(n)) || Object.keys(v.at).length > AT_MAX) return null
   const out: SyncBundle = { v: v.v, people, inventory: v.inventory as unknown as InventoryItem[], meetings: v.meetings as unknown as PastMeeting[], at: v.at as Record<string, number> }

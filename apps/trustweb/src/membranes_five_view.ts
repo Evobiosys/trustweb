@@ -11,18 +11,20 @@ export interface SmallCardDeps {
   tags: readonly ColourTag[]
   shared: number
   onOpen: () => void
-  onFavourite: () => void
+  onPin: () => void
+  /** The primary Chat button of the full card. */
+  chat: HTMLElement
   /** A tag button: the Membranes then show only the people with it. */
   onTag: (id: string) => void
 }
 
-/** The star toggle, on the small card and on the full person page. */
-export function favouriteButton(p: Pick<Person, 'name' | 'favourite'>, onToggle: () => void): HTMLElement {
-  const on = p.favourite === true
-  return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-favourite': '', 'aria-pressed': String(on), 'aria-label': S.cardFavouriteAria(on, p.name), onclick: onToggle }, [on ? '★' : '☆', ' ', S.cardFavourite])
+/** The pin toggle, on the small card and on the full person page. */
+export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => void): HTMLElement {
+  const on = p.pinned === true
+  return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-pin': '', 'aria-pressed': String(on), 'aria-label': S.cardPinAria(on, p.name), onclick: onToggle }, [on ? '📌' : '📍', ' ', S.cardPin])
 }
 
-/** A compact page: name, zone, tags as buttons, what we share, Open. */
+/** A compact page: name, zone, tags as buttons, what we share, Chat, Extended. */
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
@@ -32,8 +34,9 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
       : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
     el('p', { class: 'meta', 'data-card-shares': '' }, [S.cardShares(d.shared, d.zone)]),
+    d.chat,
     el('div', { class: 'card-actions' }, [
-      favouriteButton(p, d.onFavourite),
+      pinButton(p, d.onPin),
       el('button', { class: 'btn btn-electric btn-sm', 'data-card-open': p.id, onclick: d.onOpen }, [S.membraneCardOpen]),
     ]),
   ])
