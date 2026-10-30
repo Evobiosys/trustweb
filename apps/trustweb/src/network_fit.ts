@@ -12,3 +12,12 @@ export function fitBounds(nodes: readonly { x: number; y: number; r: number }[],
   const k = Math.min(MAX_K, (w - MARGIN) / Math.max(1, maxX - minX), (h - MARGIN) / Math.max(1, maxY - minY))
   return { k, x: w / 2 - ((minX + maxX) / 2) * k, y: h / 2 - ((minY + maxY) / 2) * k }
 }
+
+export interface Size { w: number; h: number }
+
+/** The camera after the canvas changed size: untouched = fitted again; moved by the user = same picture, same spot relative to the box centre. */
+export function refitCamera(camera: Camera | null, touched: boolean, nodes: readonly { x: number; y: number; r: number }[], from: Size | null, to: Size): Camera | null {
+  if (!touched) return fitBounds(nodes, to.w, to.h)
+  if (!camera || !from) return camera
+  return { k: camera.k, x: camera.x + (to.w - from.w) / 2, y: camera.y + (to.h - from.h) / 2 }
+}
