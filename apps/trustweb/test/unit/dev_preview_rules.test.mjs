@@ -1,13 +1,17 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { conflictParts, mergeHead, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
 const on = (fs) => fs.filter((x) => x.checked).map((x) => x.key)
 
 describe('dev preview rules', () => {
+  it('the left panel is done once a Declare done run is going or released, free again after a failed or cancelled run', () => {
+    for (const step of ['tests', 'merging', 'released', 'release-pending']) expect(panelDone(step)).toBe(true)
+    for (const step of ['none', '', 'failed', 'checks-failed', 'cancelled']) expect(panelDone(step)).toBe(false)
+  })
   it('a box is disabled only while a required feature is unchecked, with its title as hint', () => {
     expect(needsHint(set, 'event-link')).toBeNull()
     expect(needsHint(toggled(set, 'events', false), 'event-link')).toBe('needs T-events')
