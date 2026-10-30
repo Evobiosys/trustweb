@@ -195,7 +195,7 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
-import { askWebIcon, recordIcon } from './icons/ask_web'
+import { askWebIcon, recordGlyph, recordIcon } from './icons/ask_web'
 import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -894,7 +894,7 @@ function tabButton(target: string, label: string, name: string, onclick: () => v
 
 function recordButton(): HTMLElement {
   const b = el('button', { class: 'tab-record', 'data-go': Screen.Record, 'aria-label': S.navRecord, onclick: onRecordTap })
-  b.innerHTML = recordIcon()
+  b.innerHTML = icon('mic')
   b.append(el('span', {}, [S.navRecord]))
   return b
 }
@@ -1184,6 +1184,13 @@ function render(): void {
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
+  const recTab = tabs.querySelector<HTMLElement>('.tab-record')
+  const recGlyph = recordGlyph(recorder.live, draft.mode === RecordMode.Solo)
+  if (recTab && recTab.dataset.glyph !== recGlyph) {
+    recTab.dataset.glyph = recGlyph
+    recTab.querySelector('svg')?.remove()
+    recTab.insertAdjacentHTML('afterbegin', recGlyph === 'solo' ? recordIcon() : icon('mic'))
+  }
   updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const frame = screen === Screen.Start ? null : cal?.frame?.()
