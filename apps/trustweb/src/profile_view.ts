@@ -3,6 +3,7 @@
  * saved is the caller's business (`commit` saves and redraws).
  */
 import { el } from '../../demo/src/ui/dom'
+import { CITY_MAX } from './ask_examples'
 import { Audience } from './model'
 import type { InventoryItem } from './model'
 import { NORMS, Norm, ONE_MAX, PROFILE_AUDIENCES, audienceOf, isStale } from './profile'
@@ -22,6 +23,8 @@ export interface ProfileViewDeps {
   /** My picture (wave 19): the round face (initials or the picture), pick a file, remove it. `has`: one is set. */
   picture: { face(): HTMLElement; has(): boolean; choose(file: File): void; remove(): void }
   openInventory: () => void
+  /** Wave 25: "Your city" for the ask sheet's example (AppState.city; empty = Vienna). */
+  city: { get(): string; set(v: string): void }
 }
 
 const day = (at: number): string => new Date(at).toISOString().slice(0, 10)
@@ -78,6 +81,12 @@ function oneField(d: ProfileViewDeps, key: OneKey, label: string, ph: string): H
   ])
 }
 
+function cityField(d: ProfileViewDeps): HTMLElement {
+  const input = el('input', { class: 'field', placeholder: S.profCityPh, maxlength: String(CITY_MAX), value: d.city.get(), 'aria-label': S.profCity, 'data-prof-city': '1' })
+  input.addEventListener('change', () => { d.city.set(input.value); d.commit() })
+  return el('div', { class: 'prof-one' }, [el('h4', { class: 'eyebrow' }, [S.profCity]), input])
+}
+
 export function profileSheetNodes(d: ProfileViewDeps): Node[] {
   const p = d.profile()
   const offers = offerLines(d.inventory())
@@ -88,6 +97,7 @@ export function profileSheetNodes(d: ProfileViewDeps): Node[] {
     el('h3', {}, [S.profTitle]),
     el('p', { class: 'meta' }, [S.profLead]),
     pictureSection(d),
+    cityField(d),
     el('h4', { class: 'eyebrow' }, [S.profOffer]),
     offers.length ? el('ul', { class: 'prof-offers', 'data-prof-offers': '1' }, offers.map((i) => el('li', {}, [i.text]))) : el('p', { class: 'meta' }, [S.profOfferNone]),
     el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: d.openInventory }, [S.profOfferEdit]),
