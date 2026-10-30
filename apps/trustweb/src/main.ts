@@ -4070,6 +4070,7 @@ const snapshots = createSnapshotView({
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
   askDid: () => state?.identity?.did,
+  isPhone: () => currentLayout() === 'mobile',
   codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
     ? { origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save }
     : null),
