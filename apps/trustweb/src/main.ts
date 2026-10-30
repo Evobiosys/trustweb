@@ -2599,6 +2599,7 @@ function screenChat(): Node[] {
       el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
       body,
     ]),
+    queryFab(),
   ]
 }
 
