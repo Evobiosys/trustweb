@@ -21,7 +21,7 @@ describe('the view enum', () => {
   })
   it('four choices inside TrustWeb, in order, one naming', () => {
     expect(viewChoices({ showPhoneVersion: noop })).toEqual([View.Dex, View.Desk, View.Classic, View.TrustWeb])
-    expect(viewChoices({ showPhoneVersion: noop }).map(viewLabel)).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
+    expect(viewChoices({ showPhoneVersion: noop }).map(viewLabel)).toEqual(['Dex', 'Contacts (wide)', 'Contacts', 'TrustWeb'])
     expect(S.views).toMatchObject({ dexInfo: 'Dex-inspired', deskInfo: 'Our take on Dex' })
   })
   it('the host hears desk for either Desk', () => {
