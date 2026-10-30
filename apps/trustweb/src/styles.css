@@ -132,6 +132,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .node .lvl{font-size:9.5px; color:var(--ink-soft); font-weight:500; font-style:normal}
 .node:not(.you) .ava{width:var(--d,42px); height:var(--d,42px); font-size:calc(var(--d,42px)*.42)}
 .rings-wrap.compact .node:not(.you) span,.rings-wrap.compact .node:not(.you) .lvl,.rings-wrap.compact .node:not(.you) .dummy-chip{display:none}
+.rings-wrap .node.lbl-off:not(:hover):not(:focus-visible) span{display:none}
 .rings-wrap.compact .node:not(.you):hover,.rings-wrap.compact .node:not(.you):focus-visible{z-index:2}
 .rings-wrap.compact .node:not(.you):hover span,.rings-wrap.compact .node:not(.you):focus-visible span{display:block; position:absolute; top:100%; white-space:nowrap; background:var(--card); padding:1px 6px; border-radius:8px; box-shadow:0 2px 8px rgba(36,27,46,.2)}
 .node.nl .ava{font-size:0}

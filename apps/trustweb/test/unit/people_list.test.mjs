@@ -30,7 +30,7 @@ describe('people list by trust zone', () => {
     expect(g.map((x) => x.people.map((y) => y.id))).toEqual([['f']])
   })
   it('pinned people form their own group, newest first, and are not repeated in their zones', () => {
-    const all = [...people, p('g', 'Gus', Ring.Close, 1, { favourite: true }), p('h', 'Hal', Ring.Closest, 6 * DAY, { favourite: true })]
+    const all = [...people, p('g', 'Gus', Ring.Close, 1, { pinned: true }), p('h', 'Hal', Ring.Closest, 6 * DAY, { pinned: true })]
     expect(pinnedPeople({ people: all }, '').map((x) => x.id)).toEqual(['h', 'g'])
     const ids = peopleByZone({ people: all }, '').flatMap((g) => g.people.map((x) => x.id))
     expect(ids).not.toContain('g'); expect(ids).not.toContain('h')
@@ -38,6 +38,6 @@ describe('people list by trust zone', () => {
   })
   it('no pinned people, no pinned group; a search filters it too', () => {
     expect(pinnedPeople({ people }, '')).toEqual([])
-    expect(pinnedPeople({ people: [p('g', 'Gus', Ring.Close, 1, { favourite: true })] }, 'zzz')).toEqual([])
+    expect(pinnedPeople({ people: [p('g', 'Gus', Ring.Close, 1, { pinned: true })] }, 'zzz')).toEqual([])
   })
 })
