@@ -2,7 +2,7 @@
 /** Wave 25: the closest five per membrane (membranes_five.ts). */
 import { ChatDirection } from '../../src/chat.ts'
 import { Audience, Ring } from '../../src/model.ts'
-import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag } from '../../src/membranes_five.ts'
+import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0)
 const person = (id, o = {}) => ({ id, name: id, context: '', ring: Ring.Friend, metAt: 0, ...o })
@@ -51,6 +51,33 @@ describe('slotAngle', () => {
   })
   it('fewer than five people still take the first slots', () => {
     expect([0, 1].map((i) => slotAngle(i, 2))).toEqual([45, 135])
+  })
+})
+
+describe('slotAngle ring offset', () => {
+  it('rotates ring i by i*18 degrees, wrapping at 360', () => {
+    expect([0, 1, 2, 3, 4].map((i) => slotAngle(i, 5, 1))).toEqual([63, 153, 198, 243, 333])
+    expect(slotAngle(4, 5, 4)).toBe((315 + 72) % 360)
+  })
+  it('no ring index = no offset', () => {
+    expect(slotAngle(0, 5, 0)).toBe(45)
+  })
+  it('the same slot differs on every ring', () => {
+    expect(new Set([0, 1, 2, 3, 4].map((r) => slotAngle(2, 5, r))).size).toBe(5)
+  })
+})
+
+describe('collidingLabels', () => {
+  const b = (l, t, r, bt) => ({ l, t, r, b: bt })
+  it('lists the later of two intersecting boxes, keeps the earlier', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(5, 5, 15, 15), b(20, 0, 30, 10)])).toEqual([1])
+  })
+  it('a hidden box no longer blocks the ones after it', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(8, 0, 18, 10), b(16, 0, 26, 10)])).toEqual([1])
+  })
+  it('touching edges do not collide; none = empty', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(10, 0, 20, 10)])).toEqual([])
+    expect(collidingLabels([])).toEqual([])
   })
 })
 
