@@ -143,6 +143,7 @@ export const S = {
   aiOk: 'OK: the model answered.',
   aiError: (msg: string) => `Error: ${msg}`,
   aiHint: 'Optional. With an endpoint set, the text of a request you type (for example "I want to play padel") is sent to that endpoint to be read, and only then; the key goes only there. Without one, nothing is sent and TrustWeb reads the text on this phone. Replies are range-checked; on any error TrustWeb reads the text itself.',
+  setGroup: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', general: 'General' } as Record<string, string>,
   setSecYou: 'You',
   setSecWeb: 'Your web',
   setSecNotify: 'Notifications',
