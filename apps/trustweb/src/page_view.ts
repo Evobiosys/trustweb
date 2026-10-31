@@ -16,7 +16,7 @@ export interface Pages {
 export function createPages(layer: HTMLElement): Pages {
   const stack: HTMLElement[] = []
   const drop = (keep: number): void => { while (stack.length > keep) stack.pop()?.remove() }
-  window.addEventListener('popstate', (e) => drop((e.state as { twPage?: number } | null)?.twPage ?? 0))
+  window.addEventListener('popstate', (e) => drop(typeof (e.state as { twPage?: unknown } | null)?.twPage === 'number' ? (e.state as { twPage: number }).twPage : 0))
   return {
     open(title, body, mark) {
       history.pushState({ twPage: stack.length + 1 }, '')
