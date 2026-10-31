@@ -205,7 +205,9 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
-import { askWebIcon, recordGlyph, recordIcon } from './icons/ask_web'
+import { askWebIcon, recordIcon } from './icons/ask_web'
+import { RECORD_TAB_GLYPH, recordTabGlyph } from './record_glyph'
+import { type RecStart, recStartFailure, recStartNext } from './record_start'
 import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -541,6 +543,8 @@ const audioStore = new AudioStore(persona, storeCtx)
 // Every take of the current draft, oldest first: a new take never overwrites one.
 let takes: Recording[] = []
 let recNotice = ''
+/** Where a tap on the record circle stands: asking for the microphone, recording, refused (record_start.ts). */
+let recStartState: RecStart = 'idle'
 let recTicker: ReturnType<typeof setInterval> | undefined
 let wakeLock: WakeLockSentinel | null = null
 // Meeting transcription: the engine is probed once, the transcriber lives per meeting.
@@ -1199,7 +1203,8 @@ function render(): void {
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   const recTab = tabs.querySelector<HTMLElement>('.tab-record')
-  const recGlyph = recordGlyph(recorder.live, draft.mode === RecordMode.Solo)
+  const { glyph: recGlyph, pulse: recPulse } = recordTabGlyph(RECORD_TAB_GLYPH, { live: recorder.live, solo: draft.mode === RecordMode.Solo, onRecord: screen === Screen.Record })
+  recTab?.classList.toggle('pulse', recPulse)
   if (recTab && recTab.dataset.glyph !== recGlyph) {
     recTab.dataset.glyph = recGlyph
     recTab.querySelector('svg')?.remove()
@@ -3945,6 +3950,7 @@ function dropRecording(): void {
   endLiveExtras()
   takes = []
   recNotice = ''
+  recStartState = 'idle'
 }
 
 /** Everything that only lives while a take is open. */
@@ -3957,6 +3963,7 @@ function endLiveExtras(): void {
 /** Every take lands here, whether the owner stopped it or the system did. */
 function onTake(take: Recording, expected: boolean): void {
   takes.push(take)
+  recStartState = recStartNext(recStartState, 'stopped')
   endLiveExtras()
   if (!expected) {
     recNotice = S.recInterrupted
@@ -3986,14 +3993,18 @@ async function startRecording(): Promise<boolean> {
   }
   // Never the microphone and a past meeting's playback at once.
   past.stopPlayer()
+  recStartState = recStartNext(recStartState, 'tap')
+  recNotice = ''
+  render()
   try {
     await recorder.start(onTake)
-  } catch {
-    recNotice = S.recDenied
+  } catch (err) {
+    recStartState = recStartNext(recStartState, 'rejected')
+    recNotice = recStartFailure(err)
     render()
     return false
   }
-  recNotice = ''
+  recStartState = recStartNext(recStartState, 'granted')
   startTicker()
   void keepScreenOn()
   render()
@@ -4416,7 +4427,7 @@ function onJobChange(m: PastMeeting): void {
   past.refresh(m)
   if (screen === Screen.Record || screen === Screen.Meeting || screen === Screen.Review) render()
 }
-const pastMeetingsLink = (): HTMLElement => past.link()
+const pastMeetingsLink = (solo = false): HTMLElement => past.link(solo)
 const pastMeetingSheet = (m: PastMeeting, focus?: PastFocus, from?: ItemSource): void => past.open(m, focus, from)
 
 /** Opens on Record and Meeting, in the header slot where Web has its contact search. */
@@ -4691,12 +4702,15 @@ function screenRecord(): Node[] {
   // Icon only, in the slot ⋮ has on Web, so the QR keeps its exact place (owner 2026-10-06: muscle memory).
   const meeting = withHint(iconButton('meet', S.recMeeting, () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) }, 'meet-btn'), HintId.Meeting)
   const has = takes.length > 0
+  const asking = recStartState === 'requesting'
   const circle = el('button', {
-    class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
+    class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : '') + (asking ? ' requesting' : ''),
     'aria-label': live ? (paused ? S.recResume : S.recPause) : S.recStart,
-    onclick: () => { if (live) togglePause(); else void startSolo() },
+    // Pressed state at once (pointerdown), before the microphone prompt answers.
+    onpointerdown: (e: Event) => (e.currentTarget as HTMLElement).classList.add('pressed'),
+    onclick: () => { if (live) togglePause(); else if (!asking) void startSolo() },
   })
-  const status = live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
+  const status = asking ? S.recAsking : live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
   if (pastSearchOpen) return [header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }), pastSearchView()]
   return [
     header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
@@ -4715,7 +4729,7 @@ function screenRecord(): Node[] {
       draft.segments.length || transcriber
         ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(S.trEmpty))
         : null,
-      pastMeetingsLink(),
+      pastMeetingsLink(true),
     ]),
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
