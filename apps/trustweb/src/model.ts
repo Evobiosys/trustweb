@@ -907,6 +907,11 @@ export interface NotifyKinds {
   event: boolean
 }
 
+/** Wave 27 (signal-link): one imported Signal conversation, metadata only. No words and no message text, ever. */
+export interface SignalConv { e164: string; name: string; n365: number; out: number; in: number; firstTs: number; lastTs: number }
+/** Wave 27 (signal-link): what the Signal / Molly import left on this device, read-only. Absent: not imported. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
+export interface SignalImport { at: number; conversations: SignalConv[] }
+
 export interface AppState {
   v: typeof RECORD_FORMAT
   /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
@@ -939,6 +944,8 @@ export interface AppState {
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
+  /** Wave 27 (signal-link): imported Signal / Molly conversation metadata. This device only. Absent: none. */
+  signalImport?: SignalImport
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
   tasks?: TwTask[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */

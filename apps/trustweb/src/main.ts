@@ -4245,6 +4245,7 @@ const extHooks: ExtHooks = {
     return ok
   },
   page: (title, body, mark) => pages.open(title, body, mark),
+  backupNow: () => backup.backUpNow(),
 }
 const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
 /** Wave 27: the messengers extension modules add to the Chat screen's Extend. */

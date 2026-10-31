@@ -2,6 +2,7 @@
 /** Extension modules (wave 24): everything beyond contacts and what we share. Deleting a module's folder and its line here removes it. */
 import type { AppState, InventoryItem, TwEvent } from '../model'
 import { calendarModule } from './calendar'
+import { signalLinkModule } from './signal-link'
 
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
@@ -39,6 +40,8 @@ export interface ExtHooks {
   me: () => { name: string; did?: string }
   /** Wave 27: a page with a Back control (history.pushState), for setup steps; mark = its data-page attribute. */
   page: (title: string, body: Node[], mark: string) => void
+  /** Wave 27: the existing encrypted TrustWeb backup, run now with the key this device already has (backup_view.ts). False: no backup set up, no server, or it failed. Needed so setup pages can ask for a backup first. */
+  backupNow: () => Promise<boolean>
 }
 
 /** Wave 27: one conversation in an extended messenger, as the Chat screen lists it. */
@@ -91,4 +94,4 @@ export interface ExtModule {
   messenger?: (h: ExtHooks) => MessengerSource
 }
 
-export const EXT_MODULES: ExtModule[] = [calendarModule]
+export const EXT_MODULES: ExtModule[] = [calendarModule, signalLinkModule]
