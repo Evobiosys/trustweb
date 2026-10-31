@@ -143,6 +143,7 @@ export const S = {
   aiOk: 'OK: the model answered.',
   aiError: (msg: string) => `Error: ${msg}`,
   aiHint: 'Optional. With an endpoint set, the text of a request you type (for example "I want to play padel") is sent to that endpoint to be read, and only then; the key goes only there. Without one, nothing is sent and TrustWeb reads the text on this phone. Replies are range-checked; on any error TrustWeb reads the text itself.',
+  setGroup: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', general: 'General' } as Record<string, string>,
   setSecYou: 'You',
   setSecWeb: 'Your web',
   setSecNotify: 'Notifications',
@@ -2097,6 +2098,9 @@ export const S = {
   awayAskDismiss: 'Dismiss',
   setMembraneLimit: 'People per trust zone',
   setMembraneLimitHint: (n: number) => `The Web page shows the ${n} you are closest to in each trust zone: pinned first, then the most recent chat, connection or activity (1 to 20).`,
+  setPinnedOrder: 'Pinned order',
+  setPinnedOrderChoice: { pinned: 'When pinned', contact: 'Latest contact' },
+  setPinnedOrderHint: 'Pinned people come first. "When pinned" puts the newest pin first; "Latest contact" puts whoever you were last in touch with first.',
   // Wave 24b (engagement.ts): close ties expire after n days without contact
   setEngagement: 'Close ties expire',
   setEngagementDays: 'Days without contact',

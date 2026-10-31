@@ -91,6 +91,7 @@ import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeT
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
+import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
 import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
@@ -182,9 +183,10 @@ import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
+import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -811,6 +813,8 @@ function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onO
     void showNotification(S.appName, title)
     return true
   }
+  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts); an event notice has no other home and stays a notice.
+  if (kind === 'reminder') { addReminder({ title, openLabel: body, onOpen }); if (screen === Screen.Events) render(); return true }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
   return true
 }
@@ -1080,6 +1084,16 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
   ])
 }
 
+/** Wave 27: every main screen carries the settings gear in its header (Web and Resources draw their own). */
+function mountSettingsGear(): void {
+  if (!sectionOfScreen(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right) return
+  const gear = iconButton('settings', S.invSettings, settingsSheet)
+  gear.dataset.settingsGear = '1'
+  right.append(gear)
+}
+
 function iconButton(name: string, label: string, onclick: () => void, extra = ''): HTMLElement {
   const b = el('button', { class: 'hdr-btn icon-only' + (extra ? ' ' + extra : ''), 'aria-label': label, title: label, onclick })
   b.innerHTML = icon(name)
@@ -1227,12 +1241,13 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
+      case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
+  mountSettingsGear()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   applyLayout()
@@ -2171,7 +2186,7 @@ function webPageScreen(page: WebPage): Node[] {
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
     heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
-    onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
+    onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
   })])]
@@ -2680,6 +2695,15 @@ function chatListBody(): Node[] {
   ]
 }
 
+/** Wave 27: reminders that came due, at the top of the Events panel; each with Open and a dismiss. */
+function reminderRows(): Node[] {
+  return remindersWaiting().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
+    el('span', { class: 'who' }, [el('b', {}, [r.title])]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { dismissReminder(r); r.onOpen() } }, [r.openLabel]),
+    el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { dismissReminder(r); render() } }, ['×']),
+  ]))
+}
+
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. */
 function screenChat(): Node[] {
   const s = st()
@@ -3091,7 +3115,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
-    pinButton(p, () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render(); personSheet(p.id) }),
+    pinButton(p, () => { togglePersonPin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
@@ -6152,6 +6176,24 @@ function settingsSection(key: string, title: string, children: (Node | null)[], 
   return d
 }
 
+/** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
+const settingsOpen = new Set<string>()
+
+/** Wave 27: the groups in `order`; the first opens, the rest are folded. An empty group is not drawn. */
+function settingsGroups(groups: Record<SettingsSection, (Node | null)[]>, order: SettingsSection[]): (Node | null)[] {
+  if (!(sheet.classList.contains('on') && sheet.dataset.kind === 'settings')) { settingsOpen.clear(); settingsOpen.add(order[0]) }
+  return order.map((id) => {
+    if (!groups[id].some(Boolean)) return null
+    const d = el('details', { class: 'settings-group', 'data-settings-group': id }, [
+      el('summary', { class: 'settings-group-title' }, [S.setGroup[id]]),
+      ...groups[id],
+    ]) as HTMLDetailsElement
+    d.open = settingsOpen.has(id)
+    d.addEventListener('toggle', () => { if (d.open) settingsOpen.add(id); else settingsOpen.delete(id) })
+    return d
+  })
+}
+
 /** A Settings > Features switch; off is the only stored state (featureOn in model.ts). */
 function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, hint: string): HTMLElement {
   const on = featureOn(s, key)
@@ -6186,27 +6228,8 @@ function settingsSheet(): void {
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
-  openSheet([
-    el('h3', {}, [S.setTitle]),
-    viewRow(),
-    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
-    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
-    s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
-    keepAskRow(s),
-    s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    settingsSection('you', S.setSecYou, [
-      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
-        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
-      ]),
-      linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
-      connectionRow(),
-      buildContactBox({}).el,
-      el('button', {
-        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
-        // Only "off" is stored: absent means on.
-        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
-      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
-    ], true),
+  const groups: Record<SettingsSection, (Node | null)[]> = {
+    web: [
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
@@ -6216,6 +6239,83 @@ function settingsSheet(): void {
         el('b', {}, [S.viewNames[i.view]]),
       ])),
     ]),
+    settingsSection('advanced-web', S.setAdvanced, [
+    el('h4', { class: 'eyebrow' }, [S.setQuery]),
+    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
+      class: 'radio' + (queryStyle() === q ? ' on' : ''),
+      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    el('button', {
+      class: 'radio' + (s.showRingNames ? ' on' : ''),
+      'aria-pressed': String(s.showRingNames === true),
+      onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('label', { class: 'radio', 'data-membrane-limit': '1' }, [
+      el('b', {}, [S.setMembraneLimit]),
+      el('input', {
+        class: 'field', type: 'number', min: '1', max: String(LIMIT_MAX), value: String(limitOf(s)), 'aria-label': S.setMembraneLimit,
+        // Only a change from the default of 5 is stored; empty or junk leaves it as it was.
+        onchange: (e: Event) => {
+          const n = parseLimit((e.target as HTMLInputElement).value)
+          if (n !== null) { if (n === 5) delete s.membraneLimit; else s.membraneLimit = n; save(); render() }
+          settingsSheet()
+        },
+      }),
+      el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
+    ]),
+    // Wave 27: how pinned people are ordered; the default (by pin time) is not stored.
+    el('div', { class: 'radio', 'data-pinned-order': '' }, [
+      el('b', {}, [S.setPinnedOrder]),
+      ...(['pinned', 'contact'] as const).map((m) => el('button', {
+        class: 'btn btn-ghost btn-sm' + (pinnedModeOf(s) === m ? ' on' : ''), 'aria-pressed': String(pinnedModeOf(s) === m), 'data-pinned-mode': m,
+        onclick: () => { if (m === 'pinned') delete s.pinnedOrder; else s.pinnedOrder = m; save(); render(); settingsSheet() },
+      }, [S.setPinnedOrderChoice[m]])),
+      el('small', {}, [S.setPinnedOrderHint]),
+    ]),
+    // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
+    el('button', {
+      class: 'radio' + (engagementDays(s) ? ' on' : ''), 'aria-pressed': String(engagementDays(s) > 0), 'data-engagement-switch': '1',
+      onclick: () => { if (engagementDays(s)) delete s.engagementDays; else s.engagementDays = ENGAGEMENT_DEFAULT_DAYS; save(); settingsSheet() },
+    }, [el('b', {}, [S.setEngagement]), el('small', {}, [S.setEngagementHint(engagementDays(s))])]),
+    engagementDays(s) ? el('label', { class: 'radio', 'data-engagement-days': '1' }, [
+      el('b', {}, [S.setEngagementDays]),
+      el('input', {
+        class: 'field', type: 'number', min: '1', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagementDays,
+        // Empty or junk leaves it as it was; 0 switches it off.
+        onchange: (e: Event) => {
+          const d = parseDays((e.target as HTMLInputElement).value)
+          if (d !== null) { if (d === 0) delete s.engagementDays; else s.engagementDays = d; save() }
+          settingsSheet()
+        },
+      }),
+    ]) : null,
+    el('button', {
+      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
+      // Only "off" is stored: absent means on.
+      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
+    el('button', {
+      class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
+      // Off is stored as absent: the record keeps only what differs from the default.
+      onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
+    liveTogetherPrefs(s.togetherPrefs, Date.now()).length === 0 ? null : el('div', { 'data-together-prefs': '1' }, [
+      el('p', { class: 'meta' }, [S.setTogetherHint(liveTogetherPrefs(s.togetherPrefs, Date.now()).length)]),
+      el('button', { class: 'btn', onclick: () => { delete s.togetherPrefs; save(); settingsSheet() } }, [S.setTogetherForget]),
+    ]),
+    solo ? null : el('button', {
+      class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
+      // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
+      onclick: () => {
+        const next = !showsUnmatched(s, demoPhone())
+        if (next === !demoPhone()) delete s.showUnmatchedAsks
+        else s.showUnmatchedAsks = next
+        save(); settingsSheet(); showAskCards()
+      },
+    }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
+    ]),
+    ],
+    chat: [
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (messengerLinksShown(s) ? ' on' : ''), 'aria-pressed': String(messengerLinksShown(s)), 'data-signal-visible': '1',
@@ -6229,26 +6329,49 @@ function settingsSheet(): void {
       s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
     ]),
+    ],
+    record: [
+    settingsSection('advanced-record', S.setAdvanced, [
+    ...recordingSettings(s),
+    ...hosting.settingsGroup(),
+    ]),
+    ],
+    events: [
+      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
+    ],
+    inventory: [
+      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
+    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('advanced-inventory', S.setAdvanced, [
+    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+    el('button', {
+      class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
+      // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
+      onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
+    }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
+    ]),
+    ],
+    general: [
+    settingsSection('you', S.setSecYou, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+      ]),
+      linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
+      connectionRow(),
+      buildContactBox({}).el,
+      el('button', {
+        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
+        // Only "off" is stored: absent means on.
+        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
+      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
+    ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
       eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
-    settingsSection('features', S.setSecFeatures, [
-      ...feed.settingsGroup(),
-      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
-      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
-    ]),
-    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
     settingsSection('advanced', S.setAdvanced, [
-    el('h4', { class: 'eyebrow' }, [S.setQuery]),
-    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
-      class: 'radio' + (queryStyle() === q ? ' on' : ''),
-      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
-    ...recordingSettings(s),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
-    ...hosting.settingsGroup(),
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6290,73 +6413,9 @@ function settingsSheet(): void {
         : [el('p', { class: 'meta' }, [S.blockedNone])]),
     ]),
     el('button', {
-      class: 'radio' + (s.showRingNames ? ' on' : ''),
-      'aria-pressed': String(s.showRingNames === true),
-      onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
-    el('label', { class: 'radio', 'data-membrane-limit': '1' }, [
-      el('b', {}, [S.setMembraneLimit]),
-      el('input', {
-        class: 'field', type: 'number', min: '1', max: String(LIMIT_MAX), value: String(limitOf(s)), 'aria-label': S.setMembraneLimit,
-        // Only a change from the default of 5 is stored; empty or junk leaves it as it was.
-        onchange: (e: Event) => {
-          const n = parseLimit((e.target as HTMLInputElement).value)
-          if (n !== null) { if (n === 5) delete s.membraneLimit; else s.membraneLimit = n; save(); render() }
-          settingsSheet()
-        },
-      }),
-      el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
-    ]),
-    // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
-    el('button', {
-      class: 'radio' + (engagementDays(s) ? ' on' : ''), 'aria-pressed': String(engagementDays(s) > 0), 'data-engagement-switch': '1',
-      onclick: () => { if (engagementDays(s)) delete s.engagementDays; else s.engagementDays = ENGAGEMENT_DEFAULT_DAYS; save(); settingsSheet() },
-    }, [el('b', {}, [S.setEngagement]), el('small', {}, [S.setEngagementHint(engagementDays(s))])]),
-    engagementDays(s) ? el('label', { class: 'radio', 'data-engagement-days': '1' }, [
-      el('b', {}, [S.setEngagementDays]),
-      el('input', {
-        class: 'field', type: 'number', min: '1', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagementDays,
-        // Empty or junk leaves it as it was; 0 switches it off.
-        onchange: (e: Event) => {
-          const d = parseDays((e.target as HTMLInputElement).value)
-          if (d !== null) { if (d === 0) delete s.engagementDays; else s.engagementDays = d; save() }
-          settingsSheet()
-        },
-      }),
-    ]) : null,
-    el('button', {
-      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
-      // Only "off" is stored: absent means on.
-      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
-    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
-    el('button', {
-      class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
-      // Off is stored as absent: the record keeps only what differs from the default.
-      onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
-    liveTogetherPrefs(s.togetherPrefs, Date.now()).length === 0 ? null : el('div', { 'data-together-prefs': '1' }, [
-      el('p', { class: 'meta' }, [S.setTogetherHint(liveTogetherPrefs(s.togetherPrefs, Date.now()).length)]),
-      el('button', { class: 'btn', onclick: () => { delete s.togetherPrefs; save(); settingsSheet() } }, [S.setTogetherForget]),
-    ]),
-    el('button', {
-      class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
-      // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
-      onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
-    }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
-    el('button', {
       class: 'radio' + (noticesOff(s) ? ' on' : ''), 'aria-pressed': String(noticesOff(s)), 'data-notices-off': '1',
       onclick: () => { setNoticesOff(s, !noticesOff(s)); save(); settingsSheet() },
     }, [el('b', {}, [S.setNoNotices]), el('small', {}, [S.setNoNoticesHint])]),
-    solo ? null : el('button', {
-      class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
-      // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
-      onclick: () => {
-        const next = !showsUnmatched(s, demoPhone())
-        if (next === !demoPhone()) delete s.showUnmatchedAsks
-        else s.showUnmatchedAsks = next
-        save(); settingsSheet(); showAskCards()
-      },
-    }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
     ...HINTS.map((id) => el('button', {
       class: 'radio' + (hintHidden(id) ? '' : ' on'),
       'aria-pressed': String(!hintHidden(id)),
@@ -6382,6 +6441,17 @@ function settingsSheet(): void {
         void Promise.all([audioStore.clear(), images.clear()]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
+    ],
+  }
+  openSheet([
+    el('h3', {}, [S.setTitle]),
+    viewRow(),
+    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
+    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
+    s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
+    keepAskRow(s),
+    s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
+    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveRow(s.tabRow, tabFlags()))),
   ])
   sheet.dataset.kind = 'settings'
 }
@@ -6493,7 +6563,7 @@ function screenInventory(): Node[] {
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
-  // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
+  // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = askWebIcon(askIconVariant)
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
