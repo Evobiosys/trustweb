@@ -942,6 +942,10 @@ export interface AppState {
   people: Person[]
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
+  /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
+  shareDefaultZone?: string
+  /** Wave 27: an agent may propose shares. Absent: off. */
+  agentsMayPropose?: true
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]
