@@ -77,7 +77,7 @@ export function toThreadSummaries(raw: unknown, people: readonly Person[]): Thre
       title: p?.name ?? (typeof t.title === 'string' && t.title ? t.title : t.did.slice(0, 12)),
       lastAt: typeof t.lastAt === 'number' ? t.lastAt : 0,
       unread: typeof t.unread === 'number' ? t.unread : 0,
-      ...(p ? { peerId: p.id } : {}),
+      ...(p?.peerId ? { peerId: p.peerId } : {}),
     })
   }
   return out

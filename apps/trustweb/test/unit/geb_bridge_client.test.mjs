@@ -40,7 +40,7 @@ describe('geb bridge pairing hash', () => {
 })
 
 describe('geb threads in the Chat screen', () => {
-  const people = [{ id: 'p1', name: 'Anna Test', channels: { consensual: `https://app.consensu.al/connect?to=${DID}` } }, { id: 'p2', name: 'Ben' }]
+  const people = [{ id: 'p1', name: 'Anna Test', peerId: 'peer-1', channels: { consensual: `https://app.consensu.al/connect?to=${DID}` } }, { id: 'p2', name: 'Ben' }]
   it('a thread whose DID is a person\'s Geb address is that person', () => {
     expect(personForDid(people, DID)?.id).toBe('p1')
     expect(personForDid(people, 'did:peer:2.Ez6LSzzz')).toBe(undefined)
@@ -48,7 +48,7 @@ describe('geb threads in the Chat screen', () => {
   it('maps to summaries, naming the person when known', () => {
     const r = toThreadSummaries([{ did: DID, title: 'x', lastAt: 5, unread: 2 }, { did: 'did:peer:2.Ez6LSzzz', title: 'Stranger', lastAt: 0, unread: 0 }], people)
     expect(r).toEqual([
-      { id: DID, title: 'Anna Test', lastAt: 5, unread: 2, peerId: 'p1' },
+      { id: DID, title: 'Anna Test', lastAt: 5, unread: 2, peerId: 'peer-1' },
       { id: 'did:peer:2.Ez6LSzzz', title: 'Stranger', lastAt: 0, unread: 0 },
     ])
   })
