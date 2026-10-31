@@ -58,6 +58,7 @@ import type { AckAttempts } from './ack_retry'
 import { ANSWER_WINDOW_MS, carriesWindow, passOnWindowFields, receivedWindowMs, windowFields } from './ask_window'
 import { AWAY_TEXT_MAX, isAwayAsk } from './away_asks'
 import { askSources } from './cascade'
+import { rank, threadStats } from './search_rank'
 import { createDrainLock, drainLockName } from './drain_lock'
 import type { DrainLock, LockManagerLike } from './drain_lock'
 import { directFlag, surfacesHere } from './direct_ask'
@@ -70,7 +71,7 @@ import { NAMELESS_PEER, cleanHelloName } from './hello'
 import { addHeldAsk, dropHeldAsk, liveHeldAsks } from './held_asks'
 import { addLateAnswer, addSentAsk, addShownAnswer, forgetSentAsk, LATE_KEEP_MS, openWindowUntil, releaseLateAnswers, sentAskFor } from './late_answers'
 import { askTemplate, foldThreadsForMatch, foldForMatch, forgivingAskTemplate, lineTextsOf } from './lexicon'
-import { LogOutcome, RINGS, Ring, sharedItems } from './model'
+import { LogOutcome, Ring, sharedItems } from './model'
 import type { AppState, AwayAsk, HeldAsk, LineRef, LogEntry, MatchScope, Peer } from './model'
 import { askPeers, isBlocked } from './non_responsive'
 import { personOf } from './peer_cards'
@@ -940,6 +941,12 @@ export class Net {
     this.openedAt = null
   }
 
+  /** Wave 27 sovereign-switch (search_rank.ts): who is asked first. Closest zone still counts most; recent, reciprocal chats break ties; stable otherwise. */
+  private askOrder(peers: readonly Peer[], chats: AppState['chats']): Peer[] {
+    const now = Date.now()
+    return rank(peers.map((p) => ({ p, ring: p.ring, ...threadStats(chats?.[p.id]) })), { now }).map((r) => r.person.p)
+  }
+
   /**
    * The next step: asks this phone's own contacts (not the sender, nobody in
    * `seen`, nobody only intended, closest rings first, at most MAX_FANOUT)
@@ -953,7 +960,7 @@ export class Net {
     const fromSender = await seenHash(root, sender.id)
     const excluded = new Set([...info.seen, self, fromSender])
     const targets: Peer[] = []
-    for (const p of [...s.peers].sort((a, b) => RINGS.indexOf(a.ring) - RINGS.indexOf(b.ring))) {
+    for (const p of this.askOrder(s.peers, s.chats)) {
       if (targets.length >= MAX_FANOUT) break
       if (p.did === sender.did || p.ring === Ring.Intending || this.hooks.samePerson(p, sender)) continue
       if (excluded.has(await seenHash(root, p.id))) continue

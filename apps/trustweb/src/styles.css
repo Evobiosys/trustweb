@@ -1163,6 +1163,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
 .people-zone .zoom-row small{display:block}
 .chat-dnd.on{background:var(--electric); color:#fff}
+.sov-svc{padding:8px 0; border-bottom:1px solid var(--line, #e4e2dc)}
+.sov-links{display:flex; flex-wrap:wrap; gap:12px; margin:4px 0}
+.sov-status{margin:6px 0; padding-left:18px}
 .msg-setup{display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0}
 .msg-ext{margin-bottom:12px}
 .hdr-pair{display:flex; gap:6px; align-items:center}
