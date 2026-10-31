@@ -13,7 +13,7 @@ const state = () => ({
   tasks: [{ id: 't1', title: 'Water plants' }],
   received: [{ id: 'r1', at: 4, fromName: 'Ana', fromPeerId: 'peer1', link: 'https://x/#s', title: 'Notes' }],
   meetings: [{ id: 'm1', about: 'Ana', at: 5, lines: [{ speaker: 0, at: 0, text: 'hello' }] }],
-  chats: { peer1: { messages: [{ from: 'me', text: 'hi', ts: 6 }, { from: 'peer1', text: 'yo', ts: 7 }] } },
+  chats: { peer1: { messages: [{ key: 'k1', dir: 'out', text: 'hi', at: 6, sentAt: 6 }, { key: 'k2', dir: 'in', text: 'yo', at: 7, sentAt: 7 }], unread: 0 } },
 })
 
 describe('sovereign switch: export', () => {

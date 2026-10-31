@@ -20,11 +20,11 @@ export function exportName(now: number): string {
 const NODE_KEYS = ['people', 'inventory', 'events', 'tasks', 'received', 'meetings', 'chats'] as const
 
 type Node = Record<string, unknown>
-type Chats = Record<string, { messages?: { ts?: number }[] }>
+type Chats = Record<string, { messages?: { at?: number }[] }>
 
 function chatMeta(chats: unknown): Node[] {
   return Object.entries((chats ?? {}) as Chats).map(([peerId, t]) => {
-    const ts = (t.messages ?? []).map((m) => m.ts).filter((x): x is number => typeof x === 'number')
+    const ts = (t.messages ?? []).map((m) => m.at).filter((x): x is number => typeof x === 'number')
     return { peerId, messages: t.messages?.length ?? 0, ...(ts.length ? { firstTs: Math.min(...ts), lastTs: Math.max(...ts) } : {}) }
   })
 }

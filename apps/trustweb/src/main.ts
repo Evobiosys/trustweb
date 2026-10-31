@@ -62,6 +62,8 @@ import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
 import { connectBlock, daysSection } from './card_pages_view'
 import { createPages } from './page_view'
+import { createSovereignView } from './sovereign_switch_view'
+import { applyForget, forgetText, noteForgetAck, parseForgetText } from './forget'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -820,6 +822,13 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
+/** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
+const sovereign = createSovereignView({
+  state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
+  peers: () => st().peers.filter((p) => !isBlocked(personOf(st().people, p.id))),
+  send: (peer, text) => net.sendText(peer, text),
+  importRows: () => (solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+})
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
 const toastShow = createToast(toastEl)
@@ -3704,7 +3713,8 @@ function hideMsgNotice(): void {
 function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?: string): void {
   const kind = routeText(APP_URL, text)
   // Wave 15: a blocked person's chat texts are stored (onChatText) but nothing else of theirs is acted on.
-  if (kind !== TextKind.Chat && isBlocked(personOf(st().people, peer.id))) return
+  // Wave 27: a forget request is honoured from anyone, a blocked person too (it only removes what they shared); its ack still never goes to them.
+  if (kind !== TextKind.Chat && kind !== TextKind.Forget && isBlocked(personOf(st().people, peer.id))) return
   switch (kind) {
     case TextKind.Share: onSharedText(peer, text); return
     case TextKind.Contact: onContactText(peer, text); return
@@ -3713,9 +3723,25 @@ function onIncomingText(peer: Peer, text: string, ts: number, re?: ChatRe, pic?:
     case TextKind.Hello: onHelloText(peer, text); return
     case TextKind.Profile: onProfileText(peer, text, pic); return
     case TextKind.Agreement: onAgreementText(peer, text); return
+    case TextKind.Forget: onForgetText(peer, text); return
     case TextKind.Chat: onChatText(peer, text, ts, re); return
     case TextKind.Ignore: return
   }
+}
+
+/** Wave 27 (forget.ts): the sender owns what it shared here, so its forget request is accepted as is, then acknowledged. */
+function onForgetText(peer: Peer, text: string): void {
+  const m = parseForgetText(APP_URL, text)
+  if (!m) return
+  if (m.op === 'forget-ack') {
+    if (noteForgetAck(st(), peer.id, Date.now())) { save(); sovereign.refresh() }
+    return
+  }
+  const n = applyForget(st(), peer.id)
+  save()
+  render()
+  toast(S.sov.forgotBy(personOf(st().people, peer.id)?.name ?? peer.displayName, n))
+  net.sendText(peer, forgetText(APP_URL, { op: 'forget-ack', ts: m.ts })).catch(() => { /* they ask again */ })
 }
 
 function channelRow(owner: ChannelOwner, ch: Channel, edit: boolean, redraw: (edit?: Channel) => void): HTMLElement {
@@ -6035,6 +6061,7 @@ function settingsSheet(): void {
         // Only "off" is stored: absent means on.
         onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
       }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
+      el('button', { class: 'conn-row', 'data-settings-sovereign': '', onclick: () => sovereign.open() }, [el('b', {}, [S.sov.entry]), el('em', {}, [S.sov.entryHint])]),
     ], true),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),

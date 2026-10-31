@@ -67,3 +67,12 @@ describe('forget: the sending side', () => {
     expect(s.inventory).toEqual([{ id: 'i1', included: true }, { id: 'i2', included: false }])
   })
 })
+
+describe('forget: routed as its own kind, never shown as a chat message', () => {
+  it('routeText', async () => {
+    const { routeText, TextKind } = await import('../../src/chat.ts')
+    expect(routeText(APP, forgetText(APP, { op: 'forget', scope: 'all', ts: 1 }))).toBe(TextKind.Forget)
+    expect(routeText(APP, forgetText(APP, { op: 'forget-ack', ts: 1 }))).toBe(TextKind.Forget)
+    expect(routeText(APP, `${APP}?forget=1#op=nonsense`)).toBe(TextKind.Ignore)
+  })
+})

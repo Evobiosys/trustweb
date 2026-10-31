@@ -21,6 +21,7 @@
  * input, so a corrupted record cannot take the app down.
  */
 import { isAgreementText, parseAgreementText } from './agreements'
+import { isForgetText, parseForgetText } from './forget'
 import { isKeepText, parseKeepText } from './account_keep'
 import { sanitizeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -226,6 +227,8 @@ export enum TextKind {
   Profile = 'profile',
   /** Wave 7 (agreements.ts): a proposed agreement, or the yes to mine. */
   Agreement = 'agreement',
+  /** Wave 27 (forget.ts): a forget request from the owner of what they shared, or the ack to mine. */
+  Forget = 'forget',
   Chat = 'chat',
   Ignore = 'ignore',
 }
@@ -239,6 +242,7 @@ export function routeText(appUrl: string, text: string): TextKind {
   if (isHelloText(appUrl, text)) return parseHelloText(appUrl, text) ? TextKind.Hello : TextKind.Ignore
   if (isAgreementText(appUrl, text)) return parseAgreementText(appUrl, text) ? TextKind.Agreement : TextKind.Ignore
   if (isProfileText(appUrl, text)) return parseProfileText(appUrl, text, Date.now()) ? TextKind.Profile : TextKind.Ignore
+  if (isForgetText(appUrl, text)) return parseForgetText(appUrl, text) ? TextKind.Forget : TextKind.Ignore
   return text.startsWith(`${appUrl}?${SHARE_PARAM}=1#`) ? TextKind.Ignore : TextKind.Chat
 }
 
