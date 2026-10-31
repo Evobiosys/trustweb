@@ -2,6 +2,7 @@
 /** Extension modules (wave 24): everything beyond contacts and what we share. Deleting a module's folder and its line here removes it. */
 import type { AppState, InventoryItem, TwEvent } from '../model'
 import { calendarModule } from './calendar'
+import { matrixModule } from './matrix'
 import { gebModule } from './geb'
 
 /** What the host app hands a module; modules never import main.ts. */
@@ -92,4 +93,4 @@ export interface ExtModule {
   messenger?: (h: ExtHooks) => MessengerSource
 }
 
-export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule]
+export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule]
