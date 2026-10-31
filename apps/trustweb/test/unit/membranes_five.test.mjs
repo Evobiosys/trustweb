@@ -2,7 +2,7 @@
 /** Wave 25: the closest five per membrane (membranes_five.ts). */
 import { ChatDirection } from '../../src/chat.ts'
 import { Audience, Ring } from '../../src/model.ts'
-import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, recency, sharedCount, slotAngle, withTag } from '../../src/membranes_five.ts'
+import { LIMIT_DEFAULT, isPinned, wholeZone, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0)
 const person = (id, o = {}) => ({ id, name: id, context: '', ring: Ring.Friend, metAt: 0, ...o })
@@ -28,10 +28,10 @@ describe('pickFive', () => {
     expect(r.shown.map((p) => p.id)).toEqual(['a', 'c'])
     expect(r.rest.map((p) => p.id)).toEqual(['b', 'd'])
   })
-  it('favourites come first, then recency', () => {
+  it('pinned come first, then recency', () => {
     const r = pickFive([a, b, d], s, 2, NOW)
     expect(r.shown.map((p) => p.id)).toEqual(['a', 'b'])
-    const f = pickFive([a, b, { ...d, favourite: true }], s, 2, NOW)
+    const f = pickFive([a, b, { ...d, pinned: true }], s, 2, NOW)
     expect(f.shown.map((p) => p.id)).toEqual(['d', 'a'])
   })
   it('equal recency keeps a stable order by id', () => {
@@ -51,6 +51,33 @@ describe('slotAngle', () => {
   })
   it('fewer than five people still take the first slots', () => {
     expect([0, 1].map((i) => slotAngle(i, 2))).toEqual([45, 135])
+  })
+})
+
+describe('slotAngle ring offset', () => {
+  it('rotates ring i by i*18 degrees, wrapping at 360', () => {
+    expect([0, 1, 2, 3, 4].map((i) => slotAngle(i, 5, 1))).toEqual([63, 153, 198, 243, 333])
+    expect(slotAngle(4, 5, 4)).toBe((315 + 72) % 360)
+  })
+  it('no ring index = no offset', () => {
+    expect(slotAngle(0, 5, 0)).toBe(45)
+  })
+  it('the same slot differs on every ring', () => {
+    expect(new Set([0, 1, 2, 3, 4].map((r) => slotAngle(2, 5, r))).size).toBe(5)
+  })
+})
+
+describe('collidingLabels', () => {
+  const b = (l, t, r, bt) => ({ l, t, r, b: bt })
+  it('lists the later of two intersecting boxes, keeps the earlier', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(5, 5, 15, 15), b(20, 0, 30, 10)])).toEqual([1])
+  })
+  it('a hidden box no longer blocks the ones after it', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(8, 0, 18, 10), b(16, 0, 26, 10)])).toEqual([1])
+  })
+  it('touching edges do not collide; none = empty', () => {
+    expect(collidingLabels([b(0, 0, 10, 10), b(10, 0, 20, 10)])).toEqual([])
+    expect(collidingLabels([])).toEqual([])
   })
 })
 
@@ -89,5 +116,31 @@ describe('sharedCount', () => {
     expect(sharedCount(s, person('a', { ring: Ring.Friend }))).toBe(1)
     expect(sharedCount(s, person('a', { ring: Ring.Close }))).toBe(2)
     expect(sharedCount(s, person('a', { ring: Ring.Unsorted }))).toBe(0)
+  })
+})
+
+describe('favourite -> pinned', () => {
+  it('pinnedFrom renames an old favourite and never overrides pinned', () => {
+    expect(pinnedFrom({ name: 'a', favourite: true })).toEqual({ name: 'a', pinned: true })
+    expect(pinnedFrom({ name: 'a', favourite: true, pinned: true })).toEqual({ name: 'a', pinned: true })
+    const same = { name: 'a' }
+    expect(pinnedFrom(same)).toBe(same)
+  })
+  it('repairPinned migrates a record once', () => {
+    const s = { people: [{ id: 'a', favourite: true }, { id: 'b' }] }
+    expect(repairPinned(s)).toBe(true)
+    expect(s.people).toEqual([{ id: 'a', pinned: true }, { id: 'b' }])
+    expect(repairPinned(s)).toBe(false)
+  })
+})
+
+describe('wholeZone', () => {
+  const s = { chats: { pa: chat(300), pb: chat(100) } }
+  const a = person('a', { peerId: 'pa' }); const b = person('b', { peerId: 'pb' }); const c = person('c', { metAt: 200 }); const d = person('d', { pinned: true })
+  it('lists everyone, shown and rest together, pinned first then recency', () => {
+    expect(wholeZone([b, c, a, d], s, NOW).map((p) => p.id)).toEqual(['d', 'a', 'c', 'b'])
+  })
+  it('isPinned reads the pin flag', () => {
+    expect(isPinned(d)).toBe(true); expect(isPinned(a)).toBe(false)
   })
 })

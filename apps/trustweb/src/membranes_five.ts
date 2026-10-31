@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 25 (Jakob 2026-10-29): the membranes page shows the closest five people per membrane, "the combination of the five people you
- * spend most of your time with". Favourites first, then by recency (chat, connect, activity). Everyone else stays one press away.
+ * spend most of your time with". Pinned first, then by recency (chat, connect, activity). Everyone else stays one press away.
  * View state only: nothing here travels or changes a record. Pure, no DOM.
  */
 import { audienceAdmits } from './model'
@@ -9,6 +9,20 @@ import type { AppState, Person } from './model'
 import { lastContact } from './engagement'
 import { tagsOf } from './colour_tags'
 import { webSlot } from './rings_layout'
+
+/** Wave 26: records and bundles from before the rename carry `favourite`; it loads as `pinned` (an existing `pinned` wins). */
+export function pinnedFrom<T extends object>(p: T): T {
+  if (!('favourite' in p)) return p
+  const { favourite, ...rest } = p as T & { favourite?: boolean }
+  return (favourite === true && !('pinned' in rest) ? { ...rest, pinned: true } : rest) as T
+}
+
+/** schema_version.ts chain step: true when a person changed. */
+export function repairPinned(s: Pick<AppState, 'people'>): boolean {
+  const changed = s.people.some((p) => 'favourite' in p)
+  if (changed) s.people = s.people.map(pinnedFrom)
+  return changed
+}
 
 export const LIMIT_DEFAULT = 5
 export const LIMIT_MAX = 20
@@ -32,19 +46,41 @@ export function recency(s: Partial<State>, p: Person, now: number): number {
   return lastContact({ people: [], ...s, engagementSince: undefined }, p, now)
 }
 
-/** Favourites first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
+/** Pinned first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
+/** The pin flag lives here only. */
+export const isPinned = (p: Pick<Person, 'pinned'>): boolean => p.pinned === true
+
 export function pickFive(people: readonly Person[], s: Partial<State>, limit: number, now: number): { shown: Person[]; rest: Person[] } {
   const at = new Map(people.map((p) => [p.id, recency(s, p, now)]))
-  const sorted = [...people].sort((a, b) => Number(b.favourite === true) - Number(a.favourite === true) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
+  const sorted = [...people].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 
-/** Degrees clockwise from 12 o'clock: the first five at 1:30, 4:30, 6:00, 7:30, 10:30; any beyond spread evenly between. */
+/** The whole zone, shown and rest together: pinned first, then the most recent. */
+export function wholeZone(people: readonly Person[], s: Partial<State>, now: number): Person[] {
+  const { shown, rest } = pickFive(people, s, Infinity, now)
+  return [...shown, ...rest]
+}
+
+/** Each ring turns this far further than the one inside it, so adjacent rings' labels do not line up. */
+const RING_TURN = 18
+/** Degrees clockwise from 12 o'clock (plus the ring's turn): the first five at 1:30, 4:30, 6:00, 7:30, 10:30; any beyond spread evenly between. */
 const FIVE = [45, 135, 180, 225, 315]
-export function slotAngle(i: number, n: number): number {
-  if (i < FIVE.length) return FIVE[i]
+export function slotAngle(i: number, n: number, ringIndex = 0): number {
   const extra = n - FIVE.length
-  return ((i - FIVE.length + 0.5) * 360) / extra
+  const base = i < FIVE.length ? FIVE[i] : ((i - FIVE.length + 0.5) * 360) / extra
+  return (base + ringIndex * RING_TURN) % 360
+}
+
+/** Indexes of the boxes to hide so no two shown ones intersect: an earlier box wins (greedy). */
+export function collidingLabels(boxes: readonly { l: number; t: number; r: number; b: number }[]): number[] {
+  const kept: typeof boxes[number][] = []
+  const hide: number[] = []
+  boxes.forEach((x, i) => {
+    if (kept.some((k) => x.l < k.r && k.l < x.r && x.t < k.b && k.t < x.b)) hide.push(i)
+    else kept.push(x)
+  })
+  return hide
 }
 
 /** Keeps the people holding colour tag `id`; null = no filter. */

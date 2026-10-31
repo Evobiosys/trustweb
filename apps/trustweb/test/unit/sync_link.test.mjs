@@ -71,6 +71,24 @@ describe('pair and sync', () => {
     expect(all).not.toContain('Ben Carter')
   })
 
+  it('a receive-only device (canSend false) applies what comes in, sends nothing back and refuses Sync now', async () => {
+    const h = hub()
+    let send = true
+    const phone = await device(h, 'Phone', mk('J', [person('b', 'Ben Carter')]), 'phone')
+    const mac = await device(h, 'Mac', mk('J', [person('a', 'Ada Lovelace')]), 'mac', { canSend: () => send })
+    const mine = await mac.api.join(await phone.api.offerCode())
+    await until(() => phone.box.requests.length === 1)
+    mine.confirm(); phone.box.requests[0].confirm()
+    send = false
+    await phone.api.syncNow(phone.api.pairings()[0].did)
+    await until(() => mac.box.incoming.length === 1)
+    await mac.box.incoming[0].accept(false)
+    expect(mac.state.people.map((p) => p.id).sort()).toEqual(['a', 'b'])
+    await new Promise((r) => setTimeout(r, 150))
+    expect(phone.box.incoming).toHaveLength(0)
+    await expect(mac.api.syncNow(mac.api.pairings()[0].did)).rejects.toThrow('receive only')
+  })
+
   it('a code is one use: a second device with the same code gets no request', async () => {
     const h = hub()
     const a = await device(h, 'A', mk('J', []), 'a')

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { peopleByZone, lastContact } from '../../src/people_list'
+import { peopleByZone, pinnedPeople, lastContact } from '../../src/people_list'
 import { Ring } from '../../src/model'
 
 const DAY = 86_400_000
@@ -28,5 +28,16 @@ describe('people list by trust zone', () => {
   it('a search keeps only matching names or contexts, case-blind', () => {
     const g = peopleByZone({ people: [...people, p('f', 'Fay', Ring.Friend, 1, { context: 'Repair café' })] }, 'REPAIR')
     expect(g.map((x) => x.people.map((y) => y.id))).toEqual([['f']])
+  })
+  it('pinned people form their own group, newest first, and are not repeated in their zones', () => {
+    const all = [...people, p('g', 'Gus', Ring.Close, 1, { pinned: true }), p('h', 'Hal', Ring.Closest, 6 * DAY, { pinned: true })]
+    expect(pinnedPeople({ people: all }, '').map((x) => x.id)).toEqual(['h', 'g'])
+    const ids = peopleByZone({ people: all }, '').flatMap((g) => g.people.map((x) => x.id))
+    expect(ids).not.toContain('g'); expect(ids).not.toContain('h')
+    expect(new Set([...ids, 'g', 'h']).size).toBe(all.length)
+  })
+  it('no pinned people, no pinned group; a search filters it too', () => {
+    expect(pinnedPeople({ people }, '')).toEqual([])
+    expect(pinnedPeople({ people: [p('g', 'Gus', Ring.Close, 1, { pinned: true })] }, 'zzz')).toEqual([])
   })
 })

@@ -4,6 +4,7 @@
   import AddNote from './add_note.svelte'
   import PersonDays from './person_days.svelte'
   import ContactInfo from './contact_info.svelte'
+  import ConnectPanel from './connect_panel.svelte'
   import { fmtDate } from './dates'
   import { shownName } from './display'
   import EventRow from './event_row.svelte'
@@ -143,6 +144,7 @@
     <MergeSheet personId={person.id} />
 
     <ContactInfo {person} />
+    {#if !embedded}<ConnectPanel {person} />{/if}
     {#if isDesk(prefs.view)}
       <label class="fld"><span>{S.desk.keepLabel}</span><KeepSelect personId={person.id} /></label>
     {/if}

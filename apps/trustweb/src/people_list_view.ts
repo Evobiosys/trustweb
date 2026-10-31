@@ -2,8 +2,8 @@
 /** The people list page (wave 25): a search field, then the trust zones collapsed; rows are drawn only for an opened zone. */
 import { el } from '../../demo/src/ui/dom'
 import { ringColor } from './model'
-import type { AppState, Ring } from './model'
-import { peopleByZone } from './people_list'
+import type { AppState, Person, Ring } from './model'
+import { peopleByZone, pinnedPeople } from './people_list'
 import { S } from './strings'
 
 let query = ''
@@ -17,7 +17,15 @@ export function resetPeopleList(): void {
 
 export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, autofocus: boolean): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
-  const draw = (): void => groups.replaceChildren(...peopleByZone(state(), query).map(({ ring, people }) => {
+  const row = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
+    el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
+  ])
+  const draw = (): void => {
+    const pinned = pinnedPeople(state(), query)
+    groups.replaceChildren(...(pinned.length ? [el('section', { class: 'people-zone people-pinned', 'data-zone': 'pinned' }, [
+      el('div', { class: 'people-zone-head' }, [el('b', {}, [S.peoplePinned]), el('small', {}, [String(pinned.length)])]),
+      ...pinned.map(row),
+    ])] : []), ...peopleByZone(state(), query).map(({ ring, people }) => {
     // A search shows its hits: the zones that have some open by themselves.
     const open = opened.has(ring) || query.trim() !== ''
     return el('section', { class: 'people-zone', 'data-zone': ring }, [
@@ -25,11 +33,10 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
         class: 'people-zone-head', style: `--rc:${ringColor({ ring })}`, 'aria-expanded': String(open),
         onclick: () => { if (opened.has(ring)) opened.delete(ring); else opened.add(ring); draw() },
       }, [el('b', {}, [S.ringLabel[ring]]), el('small', {}, [String(people.length)])]),
-      ...(open ? people.map((p) => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
-        el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
-      ])) : []),
+      ...(open ? people.map(row) : []),
     ])
   }))
+  }
   const input = el('input', {
     class: 'field', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.peopleSearchPh, 'data-people-search': '', value: query,
     oninput: (e: Event) => { query = (e.target as HTMLInputElement).value; draw() },

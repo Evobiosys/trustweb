@@ -24,7 +24,7 @@ import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
-import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot } from './rings_layout'
+import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
 import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoints, visiblePeople } from './rings_hide'
 import { displayName } from '../../../packages/person-fields/src/display_name'
@@ -84,7 +84,7 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
-import { viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { expandedOf, viewHeading, viewMenuItems, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
@@ -174,8 +174,8 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, withTag } from './membranes_five'
-import { favouriteButton, membraneAll, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -195,7 +195,7 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
-import { askWebIcon, recordIcon } from './icons/ask_web'
+import { askWebIcon, recordGlyph, recordIcon } from './icons/ask_web'
 import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -206,6 +206,8 @@ import { geoPicker } from './together_location'
 import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
 import { draftOrPlain, readTogetherRequest } from './together_request'
+import { askEndpoint, configured } from './llm_endpoint'
+import { aiSettings } from './llm_endpoint_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { labelScale } from './ring_spacing'
@@ -894,7 +896,7 @@ function tabButton(target: string, label: string, name: string, onclick: () => v
 
 function recordButton(): HTMLElement {
   const b = el('button', { class: 'tab-record', 'data-go': Screen.Record, 'aria-label': S.navRecord, onclick: onRecordTap })
-  b.innerHTML = recordIcon()
+  b.innerHTML = icon('mic')
   b.append(el('span', {}, [S.navRecord]))
   return b
 }
@@ -1184,6 +1186,13 @@ function render(): void {
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
+  const recTab = tabs.querySelector<HTMLElement>('.tab-record')
+  const recGlyph = recordGlyph(recorder.live, draft.mode === RecordMode.Solo)
+  if (recTab && recTab.dataset.glyph !== recGlyph) {
+    recTab.dataset.glyph = recGlyph
+    recTab.querySelector('svg')?.remove()
+    recTab.insertAdjacentHTML('afterbegin', recGlyph === 'solo' ? recordIcon() : icon('mic'))
+  }
   updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
   const frame = screen === Screen.Start ? null : cal?.frame?.()
@@ -1961,7 +1970,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     if (complete) { members[r] = ps; continue }
     const f = pickFive(withTag(ps, tagFilter), s, limitOf(s), Date.now())
     members[r] = f.shown; rest[r] = f.rest
-    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length)))
+    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length, WEB_RINGS.indexOf(r))))
   }
   const angleOfP = (p: Person): number => slotted.get(p.id) ?? angleOf(p)
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
@@ -2120,8 +2129,8 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
-    const { rest } = pickFive(withTag(people, tagFilter), s, limitOf(s), Date.now())
-    return [header(S.ringLabel[page.ring], { back }), el('div', { class: 'scroll' }, [restList(rest, (id) => openWebPage({ kind: 'card', id }))])]
+    const zone = S.ringLabel[page.ring]
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
@@ -2129,7 +2138,8 @@ function webPageScreen(page: WebPage): Node[] {
   return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
     onOpen: () => { webPage = null; render(); personSheet(p.id) },
-    onFavourite: () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render() },
+    onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
+    chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
   })])]
 }
@@ -2512,16 +2522,26 @@ function openEvents(eventId?: string): void {
 }
 
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
+const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : v === 'network' ? S.netNetwork : S.views.complete)
+const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
 
 /** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(view: WebView, anyone: boolean): HTMLElement {
+function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
+  const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
+  expand.setAttribute('data-expand', '')
+  expand.setAttribute('aria-pressed', String(expanded))
   return el('div', { class: 'web-view-row' }, [
+    view === 'rings' ? expand : null,
     el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
     iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
   ])
+}
+
+function toggleExpand(expanded: boolean): void {
+  try { window.localStorage.setItem(WEB_EXPAND_KEY, expanded ? '0' : '1') } catch { /* not remembered */ }
+  go(Screen.Web)
 }
 
 function viewSheet(current: WebView, anyone: boolean): void {
@@ -2533,7 +2553,7 @@ function viewSheet(current: WebView, anyone: boolean): void {
   ])
 }
 
-/** Membranes, Network and Complete network are remembered (WEB_VIEW_KEY). */
+/** Membranes and Network are remembered (WEB_VIEW_KEY). */
 function chooseView(view: WebView): void {
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
@@ -2599,6 +2619,7 @@ function screenChat(): Node[] {
       el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
       body,
     ]),
+    queryFab(),
   ]
 }
 
@@ -2625,6 +2646,9 @@ function screenWeb(): Node[] {
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
+  let expandStored: string | null = null
+  try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
+  const expanded = expandedOf(expandStored, view)
   const right = document.createDocumentFragment()
   right.append(search)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
@@ -2635,7 +2659,7 @@ function screenWeb(): Node[] {
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
-      : ringsView(s, askMarks(), undefined, { complete: view === 'complete' }),
+      : ringsView(s, askMarks(), undefined, { complete: expanded }),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
@@ -2645,7 +2669,7 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, s.people.length > 0),
+    webViewRow(view, s.people.length > 0, expanded),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2795,6 +2819,14 @@ function addPersonSheet(ring: Ring): void {
 
 const RINGS_SIZE = 352
 
+/** Name labels that would sit on another's hide until hover or focus (the compact-ring pattern); measured at the settled layout. */
+function hideCollidingLabels(wrap: HTMLElement): void {
+  const nodes = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')]
+  nodes.forEach((n) => n.classList.remove('lbl-off'))
+  const spans = nodes.map((n) => n.querySelector('span'))
+  const boxes = spans.flatMap((s, i) => (s && s.offsetWidth ? [{ i, ...s.getBoundingClientRect().toJSON() }] : []))
+  collidingLabels(boxes.map((x) => ({ l: x.left, t: x.top, r: x.right, b: x.bottom }))).forEach((j) => nodes[boxes[j].i].classList.add('lbl-off'))
+}
 /**
  * While the query dock is open, shrink the rings to the space left above it,
  * so every person, and above all the ones who answer, stays in view: you
@@ -2805,6 +2837,7 @@ function fitRings(): void {
   const wrap = host.querySelector<HTMLElement>('.rings-wrap')
   const scroll = host.querySelector<HTMLElement>('.scroll')
   if (!wrap || !scroll) return
+  hideCollidingLabels(wrap)
   if (!queryOpen) { wrap.style.transform = ''; wrap.style.marginBottom = ''; return }
   const top = wrap.offsetTop - scroll.offsetTop
   const room = scroll.clientHeight - top - 8
@@ -2959,7 +2992,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
-    favouriteButton(p, () => { if (p.favourite) delete p.favourite; else p.favourite = true; save(); render(); personSheet(p.id) }),
+    pinButton(p, () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render(); personSheet(p.id) }),
     daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
@@ -4070,6 +4103,7 @@ const snapshots = createSnapshotView({
 const devices = createSyncView({
   persona, storeCtx, state: stateForSync, peek: () => state, save, sheet, openSheet, closeSheet, toast, when: whenLabel, changed: render, snapshots,
   askDid: () => state?.identity?.did,
+  isPhone: () => currentLayout() === 'mobile',
   codeDeps: () => (connectEligible() && canRegister(SERVER_ORIGIN)
     ? { origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now(), state: st, save }
     : null),
@@ -4141,6 +4175,14 @@ const curator = createCurator({
     p.lines.push(line)
     save()
     if (screen === Screen.Web) render()
+  },
+  // A12: the person page of the Curator shows the Connect panel and the messenger links of the phone card.
+  connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+  setLinks: (id, links) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p) return
+    if (links) p.links = links; else delete p.links
+    save()
   },
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
@@ -6027,6 +6069,7 @@ function settingsSheet(): void {
       onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
     }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
     ...recordingSettings(s),
+    ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
     ...hosting.settingsGroup(),
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
@@ -6420,8 +6463,9 @@ async function sendFromDock(text: string): Promise<void> {
     void runAsk(pending.text, pending.reach)
     return
   }
-  // No model call exists in the app yet: draftOrPlain reads plainly while TOGETHER_LLM_DRAFT is off (together_request.ts).
-  const read = await draftOrPlain(text, now, async () => null)
+  // Drafting only through the person's own endpoint (Settings > Advanced > Your AI); any error falls back to the plain reading.
+  const ai = st().advanced?.ai
+  const read = await draftOrPlain(text, now, (t) => askEndpoint(ai!, t), configured(ai))
   if (!read) { void runAsk(text); return }
   const req = togetherPlace?.label && !read.area ? { ...read, area: togetherPlace.label } : read
   const filled = fillFromPrefs(req, st().togetherPrefs, now)

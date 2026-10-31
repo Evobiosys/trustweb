@@ -419,8 +419,8 @@ export interface Person {
   ringSuggested?: boolean
   /** Degrees (0 = top, clockwise) where the dot sits on its ring in the Web view: where it was dropped. Local only, never sent. */
   angle?: number
-  /** Wave 25 (membranes_five.ts): a favourite is always among the people shown on its membrane. Absent = false. Owner's own devices only (sync_core). */
-  favourite?: boolean
+  /** Wave 26 (was `favourite`; membranes_five.ts pinnedFrom): a pinned person is always among the first five shown on their membrane. Absent = false. Owner's own devices only (sync_core). */
+  pinned?: boolean
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -1131,6 +1131,17 @@ export interface AppState {
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
   features?: { events?: false; inventory?: false }
+  /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
+  advanced?: { ai?: AiEndpoint }
+}
+
+export interface AiEndpoint {
+  preset: 'openai' | 'ollama' | 'pc24' | 'custom'
+  /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
+  baseUrl: string
+  /** Empty: no Authorization header. */
+  apiKey: string
+  model: string
 }
 
 export interface FeedSettings {

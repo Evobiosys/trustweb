@@ -7,8 +7,8 @@ import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
 import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
-import { fitBounds } from './network_fit'
-import type { Camera } from './network_fit'
+import { fitBounds, refitCamera } from './network_fit'
+import type { Camera, Size } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
 import type { MenuAction } from './network_menu'
 import { S } from './strings'
@@ -53,7 +53,7 @@ function download(name: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null }
+interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null; touched: boolean; size: Size | null }
 // People hidden from the graph this session only (never stored).
 const hiddenIds = new Set<string>()
 // One graph and camera per record, so a redraw of the screen keeps the picture where it settled.
@@ -67,7 +67,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
   const people = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id))
   const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
-  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
+  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
   const g = state.graph
@@ -76,7 +76,6 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let matches = new Set<string>()
   let hover: GraphNode | null = null
   let dirty = true
-  let touched = state.iteration >= LAYOUT_ITERATIONS && state.camera !== null
   let w = 0
   let h = 0
 
@@ -228,10 +227,10 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   }
 
   const frame = (): void => {
-    if (!canvas.isConnected) return // the screen was redrawn: this view is gone
+    if (!canvas.isConnected) { sizes.disconnect(); return } // the screen was redrawn: this view is gone
     if (state.iteration < LAYOUT_ITERATIONS) {
       for (let i = 0; i < STEPS_PER_FRAME && state.iteration < LAYOUT_ITERATIONS; i++) step(g, alphaAt(state.iteration++), settings.forces)
-      if (state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
+      if (state.iteration >= LAYOUT_ITERATIONS && !state.touched) { state.camera = fit(); state.size = { w, h } }
       dirty = true
     }
     if (dirty) { dirty = false; draw() }
@@ -241,12 +240,16 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const resize = (): void => {
     const box = root.getBoundingClientRect()
     if (!box.width) return
-    w = Math.floor(box.width) - 24
-    h = Math.max(360, Math.floor(window.innerHeight * 0.62))
+    const nw = Math.floor(box.width) - 24
+    const nh = Math.max(360, Math.floor(window.innerHeight * 0.62))
+    if (nw === w && nh === h) return
+    w = nw; h = nh
     const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     canvas.width = w * dpr; canvas.height = h * dpr
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
-    if (state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
+    // The cached camera was fitted to the size of an earlier box (another layout, window or orientation): fit it to this one.
+    if (state.iteration >= LAYOUT_ITERATIONS) state.camera = refitCamera(state.camera, state.touched, g.nodes, state.size, { w, h })
+    state.size = { w, h }
     dirty = true
   }
 
@@ -255,7 +258,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let travelled = 0
   const local = (e: MouseEvent): { x: number; y: number } => { const b = canvas.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top } }
   const zoomAt = (px: number, py: number, factor: number): void => {
-    touched = true
+    state.touched = true
     const c = cam()
     const k = Math.min(8, Math.max(0.2, c.k * factor))
     c.x = px - (px - c.x) * (k / c.k); c.y = py - (py - c.y) * (k / c.k); c.k = k
@@ -293,7 +296,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   canvas.addEventListener('pointerdown', (e) => {
     closePop()
     if (e.button > 0) return
-    touched = true
+    state.touched = true
     canvas.setPointerCapture(e.pointerId)
     const p = local(e)
     down.set(e.pointerId, p)
@@ -355,7 +358,9 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); closePop(); const p = local(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015)) }, { passive: false })
   search.addEventListener('input', () => { matches = matchIds(g, search.value); dirty = true })
 
-  new ResizeObserver(resize).observe(root)
+  // Root = width; the page = window height (the canvas height follows it); the canvas = whatever else resizes it.
+  const sizes = new ResizeObserver(resize)
+  sizes.observe(root); sizes.observe(canvas); sizes.observe(document.documentElement)
   requestAnimationFrame(frame)
   return root
 }
