@@ -3,12 +3,13 @@
 import { el } from '../../demo/src/ui/dom'
 import type { MessengerSource, ThreadSummary } from './ext/registry'
 import { ageLabel } from './model'
+import { activateKey } from './key_press'
 import { pickExtended } from './messenger_host'
 import { S } from './strings'
 
 export function threadRows(src: MessengerSource, list: ThreadSummary[], now: number): Node[] {
   if (!list.length) return [el('p', { class: 'empty' }, [S.msgNoThreads])]
-  return list.map((t) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-msg-thread': t.id, onclick: () => src.open(t.id) }, [
+  return list.map((t) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-msg-thread': t.id, onclick: () => src.open(t.id), onkeydown: activateKey(() => src.open(t.id)) }, [
     el('div', { class: 'who' }, [el('b', {}, [t.title])]),
     t.lastAt ? el('span', { class: 'when' }, [ageLabel(t.lastAt, now)]) : null,
     t.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(t.unread) }) : null,

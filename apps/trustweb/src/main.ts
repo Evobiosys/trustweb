@@ -95,6 +95,7 @@ import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
+import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -186,7 +187,7 @@ import { importGroup } from './import_view'
 import { servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
-import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
+import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
 import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
@@ -232,6 +233,7 @@ import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
+import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
@@ -395,6 +397,9 @@ if (apkLaunch) rememberApkSession(apkLaunch)
 function installedHere(): boolean {
   return runsAsInstalledApp() || isApkSession() || nativeApp
 }
+// Wave 27 review: the extension modules read their pairing links from this copy, taken before the clean below.
+const bootHash = location.hash
+const bootSearch = location.search
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -777,8 +782,10 @@ function checkEngagement(): void {
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
-  const shown = soon.length === 0 || notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id))
-  if (shown) { state.engagementNoticeDay = localDay(new Date(now)); save() }
+  // Stamped once the warning was shown; in the Events panel that is when its row is drawn, so a reload before then shows it again.
+  const stamp = (): void => { if (state) { state.engagementNoticeDay = localDay(new Date(now)); save() } }
+  if (soon.length === 0) stamp()
+  else notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id), stamp)
 }
 
 function dismissCard(card: StackCard): void {
@@ -802,23 +809,34 @@ function ownDoorDid(): string | null {
 /** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
 function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined)
+  if (Notification.permission === 'granted') { void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined); arrivalHome = notifyHome(kind) }
 }
+/** Wave 27 (notify_route.ts): the screen that owns the last arrival told while the page was hidden; the person lands there on return, unless something is open. */
+let arrivalHome: NotifyHome | null = null
+const HOME_SCREEN: Record<NotifyHome, Screen> = { chat: Screen.Chat, inventory: Screen.Inventory, web: Screen.Web, events: Screen.Events }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !arrivalHome) return
+  const home = HOME_SCREEN[arrivalHome]
+  arrivalHome = null
+  if (state && !solo && screen !== home && !sheet.classList.contains('on') && !overlay.classList.contains('on')) go(home)
+})
 
 /**
  * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
  * are on; page open: a notice with an Open button when the reminder switch is on.
  */
-function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void): boolean {
+function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void, onShown?: () => void): boolean {
   if (!state || !kindsOf(state)[kind]) return false
   if (document.hidden) {
     if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
     void showNotification(S.appName, title)
+    onShown?.()
     return true
   }
-  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts); an event notice has no other home and stays a notice.
-  if (kind === 'reminder') { addReminder({ title, openLabel: body, onOpen }); if (screen === Screen.Events) render(); return true }
+  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts) while Events is on; an event notice, or Events switched off, stays a notice.
+  if (kind === 'reminder' && featureOn(state, 'events')) { addReminder({ title, openLabel: body, onOpen, onShown }); if (screen === Screen.Events) render(); return true }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+  onShown?.()
   return true
 }
 
@@ -2586,6 +2604,8 @@ const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
 /** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
 let eyeOpen = false
+// Escape or a tap outside the dropdown (and the eye itself, which toggles) closes it.
+dismissOnOutside((t) => !eyeOpen || (t instanceof Element && !!t.closest('[data-view-drop], .view-menu-btn')), () => { if (eyeOpen) { eyeOpen = false; render() } })
 let webSearchOpen = false
 const HAS_MAP_VIEW = true
 
@@ -2707,7 +2727,7 @@ function chatListBody(): Node[] {
 
 /** Wave 27: reminders that came due, at the top of the Events panel; each with Open and a dismiss. */
 function reminderRows(): Node[] {
-  return remindersWaiting().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
+  return drawReminders().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
     el('span', { class: 'who' }, [el('b', {}, [r.title])]),
     el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { dismissReminder(r); r.onOpen() } }, [r.openLabel]),
     el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { dismissReminder(r); render() } }, ['×']),
@@ -4423,7 +4443,7 @@ const eventsView = createEventsView({
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const extHooks: ExtHooks = {
-  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
+  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
   openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),

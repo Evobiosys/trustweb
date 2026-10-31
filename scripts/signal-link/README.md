@@ -53,7 +53,7 @@ Not verified against a real signal-cli (it was not available): all of these are 
 | `GET /import` | `{v, generatedAt, note, conversations:[{e164,name,n365,out,in,firstTs,lastTs,words:[[word,count],...]}]}` |
 
 Rules: bound to 127.0.0.1; `Host` must be `127.0.0.1:<port>` or `localhost:<port>`; `Authorization: Bearer <token>`; an `Origin` must be
-`https://app.trustweb.one`, `https://dev.trustweb.one`, `https://pre.trustweb.one` or `http://localhost:<port>`; CORS headers only for those.
+`https://app.trustweb.one`, `https://dev.trustweb.one`, `https://pre.trustweb.one` or `http://localhost:<port>` / `http://127.0.0.1:<port>` (any port); CORS headers only for those.
 
 ## What is stored, where
 
