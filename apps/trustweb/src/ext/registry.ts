@@ -3,6 +3,8 @@
 import type { AppState, InventoryItem, TwEvent } from '../model'
 import { calendarModule } from './calendar'
 import { signalLinkModule } from './signal-link'
+import { matrixModule } from './matrix'
+import { gebModule } from './geb'
 
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
@@ -94,4 +96,4 @@ export interface ExtModule {
   messenger?: (h: ExtHooks) => MessengerSource
 }
 
-export const EXT_MODULES: ExtModule[] = [calendarModule, signalLinkModule]
+export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule]
