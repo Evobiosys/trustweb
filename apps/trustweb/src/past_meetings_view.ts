@@ -64,8 +64,8 @@ export interface PastMeetingsHooks {
 }
 
 export interface PastMeetings {
-  link(): HTMLElement
-  listSheet(): void
+  link(solo?: boolean): HTMLElement
+  listSheet(solo?: boolean): void
   open(m: PastMeeting, focus?: PastFocus, from?: ItemSource, back?: PastBack): void
   /** A person's card section "Notes": their note lines and past meetings per day, searchable (person_notes.ts). */
   personSection(personId: string, back: PastBack): HTMLElement
@@ -109,10 +109,10 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
   const isStored = (m: PastMeeting): boolean => (h.state().meetings ?? []).some((x) => x.id === m.id)
   const row = (m: PastMeeting, i: number): HTMLElement | null => sheet.querySelector<HTMLElement>(`.tr-static [data-seg="${CSS.escape(`${m.id}:${i}`)}"]`)
 
-  function listSheet(): void {
+  function listSheet(solo = false): void {
     const list = pastMeetings(h.state())
     h.openSheet([
-      el('h3', {}, [S.pastTitle]),
+      el('h3', {}, [solo ? S.pastTitleSolo : S.pastTitle]),
       list.length === 0 ? el('p', { class: 'meta' }, [S.pastEmpty]) : null,
       ...list.map((m) => el('button', { class: 'pm-row', onclick: () => open(m) }, [el('b', {}, [m.about, dummyFor(m)]), el('i', {}, [pastMeta(m)]), generalSnippet(m)])),
       el('p', { class: 'foot' }, [S.pastFoot]),
@@ -174,7 +174,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
     const person = m.personId ? h.state().people.find((p) => p.id === m.personId) : undefined
     const general = cleanGeneralNotes(m.generalNotes)
     h.openSheet([
-      el('button', { class: 'back-link', 'data-back': back ? 'person' : 'list', onclick: back ? back.go : listSheet }, ['‹ ' + (back ? back.label : S.pastTitle)]),
+      el('button', { class: 'back-link', 'data-back': back ? 'person' : 'list', onclick: back ? back.go : () => listSheet() }, ['‹ ' + (back ? back.label : S.pastTitle)]),
       el('h3', {}, [m.about, dummyFor(m)]),
       el('p', { class: 'meta' }, [pastMeta(m)]),
       general ? el('h4', { class: 'eyebrow' }, [S.pastGeneralNotes]) : null,
@@ -278,7 +278,7 @@ export function createPastMeetings(h: PastMeetingsHooks): PastMeetings {
 
   return {
     personSection,
-    link: () => el('button', { class: 'past-link', onclick: listSheet }, [S.pastLink(pastMeetings(h.state()).length)]),
+    link: (solo = false) => el('button', { class: 'past-link', onclick: () => listSheet(solo) }, [solo ? S.pastLinkSolo(pastMeetings(h.state()).length) : S.pastLink(pastMeetings(h.state()).length)]),
     listSheet,
     open,
     searchView: (query, onQuery, onClose) => meetingSearchPanel({
