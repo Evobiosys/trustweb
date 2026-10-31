@@ -11,6 +11,7 @@
  */
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
+import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
@@ -431,6 +432,10 @@ export interface Person {
   knows?: string[]
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
   links?: { signal?: string; whatsapp?: string; other?: string }
+  /** Wave 27 (messenger_links.ts): the service "Chat" opens for this person, pinned by the owner. Absent: the last used. */
+  chatPin?: ServiceId
+  /** Wave 27: the service last opened for this person. Absent: TrustWeb's chat, else the first one known. */
+  chatLast?: ServiceId
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
   /**

@@ -451,3 +451,11 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
 ## D-iroh-rung (2026-10-27): iroh relay as an alternative rung behind DeliveryChannel
 
 Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChannel`, `docs/IROH-RELAY.md`). The iroh runtime is injected (`IrohEndpointLike`), no native dependency added. The existing mediator rung stays for offline store-and-forward. No privacy claim beyond today's relay (I7).
+
+## D-messenger-host (2026-10-31): Chat hosts extended messengers; deep links may use sgnl:// (owner 2026-10-31)
+- The simple TrustWeb chat stays the default; "Extend" in the Chat header opens, in place, the extended messenger an extension module
+  adds (ExtModule.messenger, ext/registry.ts). Geb is the default once set up (messenger_host.ts).
+- messenger_links.ts: Signal/Molly open sgnl://signal.me/... as the owner asked, with the https://signal.me link as `fallback`
+  (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
+- OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
+  inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.

@@ -1169,6 +1169,15 @@ export const S = {
   chatListEmpty: 'No chats yet. Open a card and write to someone.',
   chatNotifOff: 'Turn these off',
   chatNotifOffDone: 'Chat notifications are off. Settings > Notifications turns them back on.',
+  // Wave 27 (msg-host): "Extend" in the Chat header opens the extended messenger in place; the simple chat stays the default.
+  chatExtend: 'Extend',
+  chatSimple: 'Simple chat',
+  msgExtendWith: 'Extend with Geb / Molly / Matrix',
+  msgNoneInstalled: 'No messenger extension on this device yet.',
+  msgNoThreads: 'No conversations yet.',
+  msgLoading: 'Loading conversations…',
+  msgUnreachable: (label: string) => `${label} is not reachable right now.`,
+  msgArchive: (label: string) => `${label}: imported, read only.`,
   setQuery: 'Asking your web',
   setQueryLabel: {
     [QueryStyle.Call]: 'Ask your web',

@@ -180,7 +180,8 @@ import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { EXT_MODULES } from './ext/registry'
+import { EXT_MODULES, type ExtHooks } from './ext/registry'
+import { extendedChat } from './messenger_host_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
 import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
@@ -2612,15 +2613,33 @@ function screenChat(): Node[] {
   const dnd = iconButton('moon', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
   dnd.setAttribute('data-dnd', '')
   dnd.setAttribute('aria-pressed', String(!!s.chatsHidden))
+  const extended = chatExtended()
+  // Same control as the Web view's expand glyph: the extended messenger opens in place, the simple chat stays the default.
+  const extend = iconButton(extended ? 'collapse' : 'expand', extended ? S.chatSimple : S.chatExtend, () => toggleChatExtended(extended), 'chat-extend' + (extended ? ' on' : ''))
+  extend.setAttribute('data-chat-extend', '')
+  extend.setAttribute('aria-pressed', String(extended))
   return [
-    header(S.chatListTitle, { qr: false, right: dnd }),
+    header(S.chatListTitle, { qr: false, right: el('span', { class: 'hdr-pair' }, [extend, dnd]) }),
     el('div', { class: 'scroll ppl' }, [
-      s.chatsHidden ? null : search,
-      el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
-      body,
+      extended ? extendedChat(messengers) : null,
+      s.chatsHidden || extended ? null : search,
+      extended ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
+      extended ? null : body,
     ]),
     queryFab(),
   ]
+}
+
+const CHAT_EXTEND_KEY = 'trustweb.ui.chatExtend'
+
+/** Wave 27: Extend is remembered on this device, like the Web view's expand. Absent: the simple chat. */
+function chatExtended(): boolean {
+  try { return window.localStorage.getItem(CHAT_EXTEND_KEY) === '1' } catch { return false }
+}
+
+function toggleChatExtended(extended: boolean): void {
+  try { window.localStorage.setItem(CHAT_EXTEND_KEY, extended ? '0' : '1') } catch { /* not remembered */ }
+  go(Screen.Chat)
 }
 
 /** Chat > New message: a search bar, the people who can be chatted with; a typed name that is not connected says to connect first. */
@@ -4205,7 +4224,7 @@ const eventsView = createEventsView({
   by: eventsBy,
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
-const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
+const extHooks: ExtHooks = {
   state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
   openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
@@ -4225,7 +4244,11 @@ const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen({
     toast(ok ? S.cal.inviteSent : S.chatOffline)
     return ok
   },
-})
+  page: (title, body, mark) => pages.open(title, body, mark),
+}
+const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
+/** Wave 27: the messengers extension modules add to the Chat screen's Extend. */
+const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
 const feed = createFeedView({
   state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
