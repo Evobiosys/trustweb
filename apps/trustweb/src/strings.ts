@@ -1901,6 +1901,10 @@ export const S = {
   // Contact received / chat
   contactReceivedToast: (name: string) => `${name} shared how to reach them`,
   chatOpen: 'Chat',
+  chatRowChoose: 'Choose where to chat',
+  chatRowPinAria: (service: string, on: boolean) => on ? `Unpin ${service}` : `Always chat on ${service}`,
+  chatRowTrustweb: 'TrustWeb',
+  chatRowLink: { signal: 'Signal', whatsapp: 'WhatsApp', other: 'Other link' } as Record<string, string>,
   blockPerson: (name: string) => `Block ${name}`,
   unblockPerson: (name: string) => `Unblock ${name}`,
   blockConfirm: (name: string) => `Block ${name}? Their asks and messages stop, nothing is sent to them, and their dot disappears. They are not told.`,
