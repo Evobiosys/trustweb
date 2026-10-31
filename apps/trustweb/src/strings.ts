@@ -1224,7 +1224,7 @@ export const S = {
   sigBackupTitle: 'Back up first',
   sigBackupTrustweb: 'Back up TrustWeb now',
   sigBackupDone: 'TrustWeb is backed up.',
-  sigBackupNone: 'No backup is set up yet. Set one up under Inventory first.',
+  sigBackupNone: 'No backup is set up yet. Set one up under My Resources first.',
   sigBackupFailed: 'The backup did not go through.',
   sigBackupSignal: 'Also make a Signal backup on your phone: Settings > Chats > Chat backups.',
   sigHaveBackup: 'I have a backup',
