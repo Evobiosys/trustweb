@@ -60,7 +60,7 @@ import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff }
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
-import { connectBlock, daysSection } from './card_pages_view'
+import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
 import { createPages } from './page_view'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
@@ -3181,7 +3181,7 @@ function timelineSection(p: Person): HTMLElement {
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
 function noMessengerRow(p: Person): HTMLElement | null {
   if (!p.peerId || primaryReachable(p)) return null
-  return el('p', { class: 'meta', 'data-no-messenger': p.id }, [S.cardNoMessenger(p.name)])
+  return noMessengerBlock(p, p.name, { link: async () => '', save, toast }, () => personSheet(p.id))
 }
 
 /** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */
