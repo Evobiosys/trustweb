@@ -1214,7 +1214,6 @@ export const S = {
   msgLoading: 'Loading conversations…',
   msgUnreachable: (label: string) => `${label} is not reachable right now.`,
   msgArchive: (label: string) => `${label}: imported, read only.`,
-<<<<<<< HEAD
   // Wave 27 (msg-signal-link): the Signal / Molly setup page. One step at a time; explanations sit under (i).
   sigLabel: 'Signal / Molly',
   sigTitle: 'Signal / Molly on this computer',
@@ -1262,7 +1261,6 @@ export const S = {
   sigPrivacy: 'Everything runs on this computer. The companion talks to this page over 127.0.0.1 with a code that changes at every start. The record stays end-to-end encrypted between your own devices as before. The TrustWeb project and its servers do not see your contacts, your words or your zones. Imported conversations stay on this device; people you accept travel between your own devices like any other person.',
   sigNeedsSetup: 'Set up Signal / Molly',
   sigNoNumber: 'No phone number for this conversation.',
-=======
   // Wave 27 (msg-matrix): the Matrix module. Long text sits under (i).
   matrix: {
     label: 'Matrix',
@@ -1338,7 +1336,6 @@ export const S = {
     unpair: 'Disconnect',
     unpaired: 'Disconnected. The bridge keeps running until you stop it.',
   },
->>>>>>> wave27/msg-matrix
   setQuery: 'Asking your web',
   setQueryLabel: {
     [QueryStyle.Call]: 'Ask your web',
