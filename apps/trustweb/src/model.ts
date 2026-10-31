@@ -346,6 +346,9 @@ export interface TwEvent {
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
 export interface ReleasedTie { personId: string; name: string; from: Ring; to: Ring; at: number; /** The summary card was dismissed; the ring row keeps its Undo. */ seen?: boolean }
 
+/** Wave 27: the provenance of one imported person: which service, which file, when, and the key used to match a later export. */
+export interface PersonSource { source: string; file: string; importedAt: number; key: string }
+
 export interface Person {
   id: string
   name: string
@@ -363,6 +366,8 @@ export interface Person {
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
+  /** Wave 27: where this person was imported from (one entry per source file, I8). Local only. Absent: entered by hand. */
+  sources?: PersonSource[]
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
    * the owner's own devices only (sealed when it travels between linked devices, sync_core.ts): never matched, relayed or put into a shared code.
