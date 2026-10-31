@@ -82,13 +82,16 @@ export function fitOfAsk(text: string, prefs: unknown, now: number): TogetherPre
 
 /**
  * Queues an incoming ask: a fitting one goes ahead of the waiting non-fitting ones, but each non-fitting ask is overtaken at most once
- * (`jumped` remembers them), so a stream of fitting asks cannot starve it.
+ * (`jumped` remembers them), so a stream of fitting asks cannot starve it. `rankOf` (optional) orders fitting asks among themselves, higher first.
  */
-export function queueAsk<T extends object>(queue: T[], ask: T, fits: (a: T) => boolean, jumped: WeakSet<T>): void {
+export function queueAsk<T extends object>(queue: T[], ask: T, fits: (a: T) => boolean, jumped: WeakSet<T>, rankOf?: (a: T) => number): void {
   let from = 0
   queue.forEach((q, i) => { if (jumped.has(q)) from = i + 1 })
   const at = fits(ask) ? queue.findIndex((q, i) => i >= from && !fits(q)) : -1
-  if (at < 0) { queue.push(ask); return }
+  // Wave 27 sovereign-switch (search_rank.ts): among fitting asks the better-ranked asker goes first; equal rank keeps arrival order.
+  let i = at < 0 ? queue.length : at
+  if (rankOf && fits(ask)) while (i > from && fits(queue[i - 1]) && rankOf(queue[i - 1]) < rankOf(ask)) i--
+  if (at < 0) { queue.splice(i, 0, ask); return }
   for (const q of queue.slice(at)) if (!fits(q)) jumped.add(q)
-  queue.splice(at, 0, ask)
+  queue.splice(i, 0, ask)
 }

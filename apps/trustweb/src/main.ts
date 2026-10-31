@@ -202,6 +202,7 @@ import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPerso
 import type { DemoPeerRef, HandoverLink } from './demo_account'
 import { askReachOf, askWaitMs, HOPS_DEFAULT, readVia } from './hops'
 import { fitOfAsk, queueAsk, togetherAsk } from './together_match'
+import { zoneRank } from './search_rank'
 import { geoPicker } from './together_location'
 import type { Place } from './together_location'
 import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_prefs'
@@ -569,7 +570,9 @@ const net = new Net({
   onPush: (outcome) => { pushState = outcome },
   onAsk: (ask) => {
     // Wave 19: an incoming together ask that fits one of this person's own settings goes ahead of the ones that do not.
-    queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken)
+    queueAsk(askQueue, ask, (a) => fitOfAsk(a.text, st().togetherPrefs, Date.now()) !== null, askOvertaken,
+      // Wave 27 sovereign-switch: among fitting asks the asker in the closer zone first (search_rank.ts; matched by name, 0 when unknown).
+      (a) => { const who = st().people.find((p) => p.name === a.fromName); return who ? zoneRank(who) : 0 })
     notify('ask', S.notifBodyAsk(ask.fromName))
     if (!askShowing) showNextAsk()
   },
