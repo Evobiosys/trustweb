@@ -100,6 +100,7 @@ import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
+import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
@@ -2526,7 +2527,7 @@ const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 /** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
 let eyeOpen = false
 let webSearchOpen = false
-const HAS_MAP_VIEW = false // the map-view row flips this once its Map page exists
+const HAS_MAP_VIEW = true
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
@@ -2596,7 +2597,6 @@ function chooseView(view: ViewKey): void {
   if (view === 'people') { openPeople(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
-  if (view === 'map') return
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -2704,8 +2704,11 @@ function screenWeb(): Node[] {
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
-  zoomOnWeb(clip, layer)
+  // The Map has text boxes: no zoom layer (it would capture their pointers).
+  const clip = view === 'map'
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    : el('div', { class: 'scroll' }, [layer])
+  if (view !== 'map') zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
