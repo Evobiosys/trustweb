@@ -28,6 +28,7 @@ import { SCHEMA_VERSION } from './schema_version'
 import { linkButton } from './link_change_view'
 import { S } from './strings'
 import { setDeviceNameSource } from './device_name'
+import { readSyncMode, shouldSend, writeSyncMode } from './sync_mode'
 
 export interface SyncViewHooks {
   persona: string
@@ -53,6 +54,8 @@ export interface SyncViewHooks {
   connectLink: () => Promise<string>
   /** Opens the sheet that changes the main name; the shown link becomes a tappable text. */
   editLink?: () => void
+  /** Wave 26 (R52): true when this device runs TrustWeb mobile (the phone, the holder in 'phoneHolds'). */
+  isPhone: () => boolean
 }
 
 export interface SyncView {
@@ -106,6 +109,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
   setDeviceNameSource(() => deviceNameOf(nameKey))
   const link = createSyncLink({
     persona: h.persona, storeCtx: h.storeCtx, state: h.state, save: h.save, deviceName: () => deviceNameOf(nameKey), snapshot: h.snapshots.take,
+    canSend: () => shouldSend(readSyncMode(), h.isPhone()),
     onLog: (line) => addLog(line),
     onChange: () => { if (showing()) devicesSheet() },
     askDid: h.askDid,
@@ -160,6 +164,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       name,
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const v = name.value.trim(); if (v) { try { localStorage.setItem(nameKey, v.slice(0, 40)) } catch { /* kept this visit only */ } } devicesSheet() } }, [S.dvDeviceNameSave]),
       ...(rows.length ? rows : [el('p', { class: 'empty' }, [S.dvNone])]),
+      receiveOnlyToggle(),
       ...usernameBlock(s),
       el('button', { class: 'btn btn-electric', 'data-link-device': '1', onclick: () => void linkSheet() }, [S.dvLink]),
       el('button', { class: 'btn btn-ghost', 'data-enter-code': '1', onclick: enterSheet }, [S.dvEnter]),
@@ -168,6 +173,16 @@ export function createSyncView(h: SyncViewHooks): SyncView {
       ...orphanChats(s),
       el('h4', { class: 'eyebrow' }, [S.dvLogTitle]),
       logList(),
+    ])
+  }
+
+  /** Wave 26 (R52): this device only receives; stored on this device, never synced. */
+  function receiveOnlyToggle(): HTMLElement {
+    const box = el('input', { type: 'checkbox', checked: readSyncMode() === 'phoneHolds', 'data-receive-only': '1' }) as HTMLInputElement
+    box.onchange = () => { writeSyncMode(box.checked ? 'phoneHolds' : 'mirror'); devicesSheet() }
+    return el('div', {}, [
+      el('label', { class: 'consent' }, [box, el('span', {}, [S.dvReceiveOnly])]),
+      el('p', { class: 'meta', 'data-receive-only-hint': '1' }, [h.isPhone() ? S.dvReceiveOnlyPhone : S.dvReceiveOnlyHint]),
     ])
   }
 
@@ -301,7 +316,7 @@ export function createSyncView(h: SyncViewHooks): SyncView {
 
   async function syncNow(p: Pairing): Promise<void> {
     try { await link.syncNow(p.did); failed.delete(p.did); h.toast(S.dvSent) } catch (e) {
-      failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge }[(e as Error).message] ?? S.dvSendFailed)
+      failed.set(p.did, { version: S.dvUpdate(p.name), offline: S.dvOffline, 'too large': S.dvTooLarge, 'receive only': S.dvReceiveOnlyNow }[(e as Error).message] ?? S.dvSendFailed)
       devicesSheet()
     }
   }

@@ -63,6 +63,8 @@ export interface SyncLinkDeps {
   askDid?: () => string | undefined
   /** Wave 15: the network step after a merge that brought codes in (sync_codes.ts); never throws. */
   settleCodes?: (merge: CodeMerge) => Promise<void>
+  /** Wave 26 (R52): false = this device only receives (sync_mode.ts): it sends no record, neither on Sync now nor as the reply to one it merged. Absent = sends. */
+  canSend?: () => boolean
   /** Overrides how long a handshake waits (tests). */
   handshakeMs?: number
   /** Overrides the SYNC_VERSION this device announces (tests). */
@@ -196,7 +198,7 @@ export function createSyncLink(d: SyncLinkDeps) {
     d.save()
     d.onLog(`Merged from ${p.name}: ${res.added} added, ${res.updated} updated, ${res.conflicts.length} to review`)
     if (res.codes && d.settleCodes) await d.settleCodes(res.codes).catch(() => d.onLog(`Could not settle the username with ${p.name}`))
-    if (!reply) await sendBundle(p, true).catch(() => d.onLog(`Could not send ours back to ${p.name}`))
+    if (!reply && d.canSend?.() !== false) await sendBundle(p, true).catch(() => d.onLog(`Could not send ours back to ${p.name}`))
     return res
   }
 
@@ -279,10 +281,11 @@ export function createSyncLink(d: SyncLinkDeps) {
       keys.delete(did)
       persist()
     },
-    /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline", "version" or "too large" (and with the relay's error if a send fails). */
+    /** Starts a sync: only when the other device answers "ready" within 30 s and runs the same SYNC_VERSION. Rejects with "offline", "version", "too large" or "receive only" (and with the relay's error if a send fails). */
     async syncNow(did: string): Promise<void> {
       const p = store.pairings.find((x) => x.did === did)
       if (!p) throw new Error('not linked')
+      if (d.canSend?.() === false) throw new Error('receive only')
       const sid = randomId(12)
       d.onLog(`Asking ${p.name} if it is on…`)
       const ready = new Promise<number | null>((resolve) => {
