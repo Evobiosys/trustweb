@@ -114,6 +114,7 @@
 <section class="person" data-screen="person">
   {#if !embedded}<button class="back" onclick={onclose}>&larr; {S.back}</button>{/if}
   {#if person}
+    {#if !embedded}<!-- Wave 27: embedded in the TrustWeb card the name, zone and state are already the card's own (no second copy of the person). -->
     <div class="person-head">
       <Avatar id={person.id} name={shownName(person.name)} />
       <div>
@@ -134,6 +135,7 @@
       {/if}
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
+    {/if}
 
     {#if !embedded}<PersonDays {person} />{/if}
 
@@ -148,9 +150,6 @@
     {#if isDesk(prefs.view)}
       <label class="fld"><span>{S.desk.keepLabel}</span><KeepSelect personId={person.id} /></label>
     {/if}
-
-    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
-    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
 
     <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-notes" aria-expanded={notesOpen} onclick={(): void => { notesOpen = !notesOpen; fold('notes', notesOpen) }}>{notesOpen ? '▾' : '▸'} {S.notes} ({lines.length})</button>
       <button class="icon-btn" data-action="note-search" aria-label={S.noteSearch} title={S.noteSearch} aria-expanded={searching}
@@ -180,6 +179,11 @@
     {/each}
     {/if}
 
+    <!-- Wave 27: the fields sit under the notes, so "Add a note" stays above them. -->
+    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
+    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
+
+    {#if !embedded}
     <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-happened" aria-expanded={happenedOpen} onclick={(): void => { happenedOpen = !happenedOpen; fold('happened', happenedOpen) }}>{happenedOpen ? '▾' : '▸'} {S.personTimeline} ({events.length})</button></h3>
     {#if happenedOpen}
     <LogNow personId={person.id} />
@@ -197,6 +201,7 @@
     {:else}
       <p class="muted">{S.nothingYet}</p>
     {/each}
+    {/if}
     {/if}
   {:else}
     <p class="empty">{S.noPeople}</p>
