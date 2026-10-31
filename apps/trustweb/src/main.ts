@@ -41,7 +41,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection } from './timeline_view'
-import { addEntries, parseTimelineImport, timelineOf } from './timeline'
+import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -61,6 +61,7 @@ import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
 import { connectBlock, daysSection } from './card_pages_view'
+import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
@@ -2038,7 +2039,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
       }
       pictured(face, p.theirProfile?.picture)
-      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => personSheet(p.id))
+      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
@@ -2100,13 +2101,26 @@ let tagFilter: string | null = null
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
 type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
 let webPage: WebPage | null = null
+/** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
+let cardExpanded = false
 
 function openWebPage(page: WebPage): void {
   webPage = page
+  cardExpanded = false
   history.pushState({ twPage: page.kind }, '')
   render()
 }
-window.addEventListener('popstate', () => { if (webPage) { webPage = null; render() } })
+window.addEventListener('popstate', () => {
+  if (cardExpanded) { cardExpanded = false; render(); return }
+  if (webPage) { webPage = null; render() }
+})
+
+function toggleCardExpanded(): void {
+  if (cardExpanded) { history.back(); return }
+  cardExpanded = true
+  history.pushState({ twPage: 'card-expanded' }, '')
+  render()
+}
 
 /** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
 function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
@@ -2135,9 +2149,10 @@ function webPageScreen(page: WebPage): Node[] {
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
-  return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
+  return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
-    onOpen: () => { webPage = null; render(); personSheet(p.id) },
+    heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    onOpen: toggleCardExpanded,
     onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
@@ -3032,6 +3047,8 @@ let cardOpenFor: string | null = null
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
+  // Wave 27: a card already open as a page redraws in place; the sheet below is the archived overlay (restore: DEVLOG/wave27/archive/card-overlay).
+  if (webPage?.kind === 'card' && webPage.id === personId) { render(); return }
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
@@ -3059,6 +3076,31 @@ function personSheet(personId: string): void {
     el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
+}
+
+/** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
+function cardMore(p: Person): Node[] {
+  const cons = chatOnConsensual(p, st().preferConsensual)
+  const rows: Record<string, () => (Node | null)[]> = {
+    channels: () => [
+      cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
+      cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+      cardChannelsRow(p), reachedOutRow(p), noMessengerRow(p), sharedReachRow(p),
+    ],
+    askLinks: () => [askLinksRow(p)],
+    passOn: () => [passOnRowFor(p)],
+    knows: () => [knowsRow(p, st().people, save, () => personSheet(p.id))],
+    other: () => [
+      undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
+      askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+    ],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
+    timeline: () => [timelineSection(p)],
+    curate: () => [el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate])],
+  }
+  const connected = Boolean(p.peerId)
+  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
+  return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
 }
 
 /** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
@@ -3096,6 +3138,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
 function curatePage(p: Person): void {
   pages.open(S.cardCurate, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-curate-knows': p.id, onclick: () => { history.back(); window.setTimeout(() => document.querySelector(`[data-person-knows="${p.id}"]`)?.scrollIntoView({ block: 'center' }), 50) } }, [S.cardCurateKnows]),
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     agreementsFor(p),
     blockRow(p),
@@ -3210,7 +3253,7 @@ function timelineSection(p: Person): HTMLElement {
   // The record may have been replaced since the card opened: write into the person as the record holds it now.
   const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
   return createTimelineSection({
-    entries: () => timelineOf(st(), now()),
+    entries: () => mergedTimeline(st(), now()),
     add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
     importText: (text) => {
       const r = parseTimelineImport(text)
@@ -3219,7 +3262,7 @@ function timelineSection(p: Person): HTMLElement {
       if (n) save()
       return S.tlImported(n, r.skipped, r.entries.length - n)
     },
-  }, toast)
+  }, toast, true)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
