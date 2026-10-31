@@ -422,6 +422,8 @@ export interface Person {
   angle?: number
   /** Wave 26 (was `favourite`; membranes_five.ts pinnedFrom): a pinned person is always among the first five shown on their membrane. Absent = false. Owner's own devices only (sync_core). */
   pinned?: boolean
+  /** Wave 27 (place_suggest.ts): where the owner put this person on the Map view. Absent: not on the map. Owner's own devices only (sync_core). */
+  place?: { name: string; lat: number; lon: number; source: 'gazetteer' }
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
