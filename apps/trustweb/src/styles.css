@@ -227,6 +227,9 @@ textarea.field{resize:vertical; line-height:1.5}
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; align-self:flex-start}
 .tab-record.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
 .tab-record.live{background:var(--coral); animation:pulse 1.4s ease-in-out infinite}
+/* On the solo recorder, not recording yet: the glyph breathes ("press to start"); reduced motion gets a static ring */
+.tab-record.pulse svg{animation:tab-breathe 1.6s ease-in-out infinite}
+@keyframes tab-breathe{50%{transform:scale(1.12); opacity:.6}}
 .tab-record svg{width:24px; height:24px; stroke:#fff; fill:none; stroke-width:1.8; stroke-linecap:round}
 .tab-record span{font-size:9.5px; font-weight:700; letter-spacing:.05em; line-height:1}
 .tab:focus-visible,.tab-record:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
@@ -419,7 +422,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .rec-circle{width:132px; height:132px; border-radius:50%; border:0; cursor:pointer; flex-shrink:0;
   background:radial-gradient(circle at 35% 30%, #CDEEE9, #7ED9CF 70%); box-shadow:0 10px 30px rgba(23,143,134,.25);
   display:grid; place-items:center; transition:transform .15s}
-.rec-circle:active{transform:scale(.97)}
+.rec-circle:active,.rec-circle.pressed{transform:scale(.97)}
+.rec-circle.requesting{opacity:.7}
 .rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); animation:pulse 1.4s ease-in-out infinite}
 .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #E3E8E6, #B4C0BC 75%)}
 .rec-circle.small{width:62px; height:62px; box-shadow:0 6px 18px rgba(23,143,134,.25)}
@@ -656,7 +660,7 @@ a.web-engine{text-decoration:none; color:var(--ink)}
 .ask-foot{font-size:12.5px; color:#A9D6D1; line-height:1.55; margin-top:10px}
 .ask-done{font-size:22px; color:#fff; margin-top:16px}
 
-@media (prefers-reduced-motion: reduce){ .ripple{display:none} .demo-friends,.stack-card{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
+@media (prefers-reduced-motion: reduce){ .tab-record.pulse svg{animation:none} .tab-record.pulse{box-shadow:0 8px 24px rgba(23,143,134,.4), 0 0 0 5px var(--linen), 0 0 0 8px rgba(255,255,255,.55)} .ripple{display:none} .demo-friends,.stack-card{animation:none} .orb1,.orb2,.rec-mic.live,.tab-record.live,.status-pill.rec::before,.node.asked .ava,.spin{animation:none} }
 
 /* dark: the pale pills and tints that are not tokens get night versions */
 @media all{
