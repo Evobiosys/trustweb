@@ -84,9 +84,9 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
-import { expandedOf, viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
-import type { WebView } from './view_menu'
+import type { ViewKey, WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
@@ -1000,8 +1000,8 @@ window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = fals
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
-function openPeople(): void {
-  resetPeopleList()
+function openPeople(query = ''): void {
+  resetPeopleList(query)
   peoplePage = true
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
@@ -1498,11 +1498,12 @@ function updateDeskToggle(): void {
   deskToggle.textContent = deskOpen() ? S.views.mobile : S.views.trustweb
 }
 
+/** Wave 27: Dex, Contacts (wide) and Contacts compact open as a page with Back, no longer as a sheet over the web (the sheet code is archived in DEVLOG/wave27/archive/views-eye). */
 function openDeskSheet(variant?: UiView): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openDesk(variant)
-  updateDeskToggle()
+  closeSheet()
+  if (screen !== Screen.Web) go(Screen.Web)
+  openWebPage({ kind: 'curator', variant })
+  if (variant === UiView.Classic) curator.openClassic(); else curator.openDesk(variant)
 }
 
 // Escape closes an open sheet, except while typing in a field inside it (the Curator is a shadow root: read the composed path).
@@ -1529,19 +1530,12 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
-/** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
-function openClassicSheet(): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openClassic()
-}
-
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
 function viewRow(): HTMLElement {
   const items = UI_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
     ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
-    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openDeskSheet(UiView.Classic); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
@@ -2103,7 +2097,7 @@ const HIDDEN_GUIDE_OPACITY = '.25'
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
 let webPage: WebPage | null = null
 
 function openWebPage(page: WebPage): void {
@@ -2123,10 +2117,15 @@ function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement
   }, ['+'])
 }
 
+function curatorPageTitle(variant?: UiView): string {
+  return variant === UiView.Dex ? S.viewNames.dex : variant === UiView.Classic ? S.viewNames.compact : S.views.desk
+}
+
 /** The page body for `webPage`, with its header and Back. */
 function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
+  if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2524,18 +2523,65 @@ function openEvents(eventId?: string): void {
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
+/** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
+let eyeOpen = false
+let webSearchOpen = false
+const HAS_MAP_VIEW = false // the map-view row flips this once its Map page exists
 
-/** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+
+/** The web-view-row: expand (Web only), the heading of the chosen view or the search field, the magnifier. */
+function webViewRow(view: WebView, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
-  return el('div', { class: 'web-view-row' }, [
-    view === 'rings' ? expand : null,
-    el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
-    iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
+  const mid = webSearchOpen
+    ? el('input', {
+      class: 'field web-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-web-search': '',
+      onkeydown: (ev: Event) => {
+        const e = ev as KeyboardEvent
+        const input = e.target as HTMLInputElement
+        if (e.key === 'Escape') { webSearchOpen = false; render() } else if (e.key === 'Enter') { webSearchOpen = false; openPeople(input.value) }
+      },
+    })
+    : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
+  if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
+  const find = iconButton('search', S.viewSearchAria, () => { webSearchOpen = !webSearchOpen; render() }, 'web-search-btn')
+  find.setAttribute('aria-expanded', String(webSearchOpen))
+  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid, find])
+}
+
+/** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
+function viewControls(current: ViewKey, anyone: boolean): Node {
+  const pins = st().uiPins?.views
+  const frag = document.createDocumentFragment()
+  for (const v of pinnedViews(pins, anyone, HAS_MAP_VIEW)) {
+    const b = iconButton(viewGlyph[v], S.viewNames[v], () => chooseView(v), 'view-pin' + (v === current ? ' on' : ''))
+    b.setAttribute('data-view-pin', v)
+    frag.append(b)
+  }
+  const eye = iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
+  eye.setAttribute('aria-expanded', String(eyeOpen))
+  frag.append(eye)
+  return frag
+}
+
+/** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
+function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
+  if (!eyeOpen) return null
+  const items = viewMenu(current, anyone, HAS_MAP_VIEW, st().uiPins?.views)
+  const btn = (i: { view: ViewKey; on: boolean }): HTMLElement => {
+    const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
+    b.innerHTML = icon(viewGlyph[i.view])
+    b.append(el('b', {}, [S.viewNames[i.view]]))
+    return b
+  }
+  const other = items.filter((i) => i.other)
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
+    ...items.filter((i) => !i.other).map(btn),
+    other.length ? el('div', { class: 'view-drop-sep' }, [S.viewOther]) : null,
+    ...other.map(btn),
   ])
 }
 
@@ -2544,17 +2590,13 @@ function toggleExpand(expanded: boolean): void {
   go(Screen.Web)
 }
 
-function viewSheet(current: WebView, anyone: boolean): void {
-  openSheet([
-    el('h3', {}, [S.viewMenuTitle]),
-    ...viewMenuItems(current, anyone).map(({ view, on }) => el('button', {
-      class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
-    }, [el('b', {}, [(on ? '✓ ' : '') + viewName(view)])])),
-  ])
-}
-
-/** Membranes and Network are remembered (WEB_VIEW_KEY). */
-function chooseView(view: WebView): void {
+/** Web and Network are remembered (WEB_VIEW_KEY); People, Dex and Contacts compact open as pages with Back. */
+function chooseView(view: ViewKey): void {
+  eyeOpen = false
+  if (view === 'people') { openPeople(); return }
+  if (view === 'dex') { openDeskSheet(UiView.Dex); return }
+  if (view === 'compact') { openDeskSheet(UiView.Classic); return }
+  if (view === 'map') return
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -2642,15 +2684,13 @@ function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
   const s = full
-  const search = iconButton('list', S.searchOpen, openPeople, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
-  const right = document.createDocumentFragment()
-  right.append(search)
+  const right = viewControls(view, s.people.length > 0)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2669,7 +2709,8 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, s.people.length > 0, expanded),
+    webViewRow(view, expanded),
+    ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -6038,6 +6079,12 @@ function settingsSheet(): void {
     ], true),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
+      el('p', { class: 'meta' }, [S.viewPinsHint]),
+      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+        el('b', {}, [S.viewNames[i.view]]),
+      ])),
     ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
