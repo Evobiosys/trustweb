@@ -108,7 +108,7 @@ function normalizeConsensual(raw: string): string | null {
 }
 
 /** The DID inside a stored Consensual value, or null. */
-function consensualDid(value: string): string | null {
+export function consensualDid(value: string): string | null {
   try {
     const did = new URL(value).searchParams.get('to')
     return did !== null && isConsensualDid(did) ? did : null
