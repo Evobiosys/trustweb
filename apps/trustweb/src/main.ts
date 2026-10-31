@@ -60,10 +60,10 @@ import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff }
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
-import { chatServices, noteUsed, togglePin } from './chat_row'
+import { chatServices, noteUsed, togglePin as toggleChatPin } from './chat_row'
 import type { ChatService } from './chat_row'
 import { chatRow } from './chat_row_view'
-import { connectBlock, daysSection } from './card_pages_view'
+import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
 import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
 import { tapEdit } from './tap_edit'
@@ -3159,7 +3159,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
     b = chatRow({
       personId: p.id, services, prefs: () => st().chatPrefs?.[p.id], mainClass, iconHtml: icon('chat'), open,
       label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
-      pin: (id) => { togglePin(st(), p.id, id); save() },
+      pin: (id) => { toggleChatPin(st(), p.id, id); save() },
     })
   } else {
     b = el('button', {
@@ -3305,7 +3305,7 @@ function timelineSection(p: Person): HTMLElement {
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
 function noMessengerRow(p: Person): HTMLElement | null {
   if (!p.peerId || primaryReachable(p)) return null
-  return el('p', { class: 'meta', 'data-no-messenger': p.id }, [S.cardNoMessenger(p.name)])
+  return noMessengerBlock(p, p.name, { link: async () => '', save, toast }, () => personSheet(p.id))
 }
 
 /** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */

@@ -2068,7 +2068,9 @@ export const S = {
   } as Record<ClaimError, string>,
   sharingAddLink: (app: string) => `Add my ${app} link`,
   sharingEditLink: (app: string) => `Edit my ${app} link`,
-  cardNoMessenger: (name: string) => `No messenger link from ${name} yet. If they share one, it shows here.`,
+  cardNoMessengerLead: (name: string) => `No messenger link from ${name} yet. If they share one, it shows here, or `,
+  cardNoMessengerAdd: 'add',
+  cardNoMessengerTail: ' one.',
   // wave 6f: asks that arrived while this phone was closed (away_asks.ts)
   awayAskTitle: (name: string) => `${name} asked while you were away`,
   awayAskBody: (text: string, more: number) => `“${text}” Your web had something for it. They have stopped waiting, so nothing was sent; write to them if you can help.${more > 0 ? ` (${more} more)` : ''}`,
