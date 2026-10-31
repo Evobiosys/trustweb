@@ -2,11 +2,15 @@
  * Device sync, the pure part (wave 7, Jakob 2026-10-14: "some data on phone and some on Mac"; wave 13, 2026-10-17): what travels between
  * two of the owner's own devices, how two records merge, and the one-time pairing code. No DOM, no network: sync_link.ts sends, sync_view.ts shows.
  *
- * What travels (SyncBundle v2): people (with their note lines and fields), resources (inventory), past meetings, events, my own messenger
- * links with their share ticks (myChannels, contactShare), chats as TEXT ONLY (the ChatMessage fields; no image, no audio) and the sameAs map
- * ("these two persons are one"). All of it only sealed between the owner's own linked devices (sync_link.ts). Never the relay identity, peers,
- * hosting secret or any setting: those belong to one device. The connect code (public link + username) travels only when the pairing shares it
- * (wave 15, sync_code.ts), with the name shown on it (`displayName`, newer wins). Pictures stay on their device (imageId is dropped).
+ * What travels (SyncBundle v3): people (with their note lines and fields), resources (inventory), past meetings, events, my own messenger
+ * links with their share ticks (myChannels, contactShare), chats as TEXT ONLY (the ChatMessage fields; no image, no audio), the sameAs map
+ * ("these two persons are one") and, since wave 26 ("per default everything travels with sync"), EVERY other field of the record the owner
+ * set: Do Not Disturb (chatsHidden), membraneLimit, city, engagementDays, feed, features, askDirectOnly, advanced, ... as `settings`. That
+ * part is an exclusion list (SYNC_EXCLUDED), so a field added to AppState later rides along without touching this file. All of it only
+ * sealed between the owner's own linked devices (sync_link.ts). Never what is structurally per device (SYNC_EXCLUDED): relay identity and
+ * keys, peers, hosting secret, queues and caches of this phone, notification permission, the layout pick (localStorage, not in the record).
+ * Pictures stay on their device (imageId is dropped; images are large). The connect code (public link + username) travels only when the pairing shares it
+ * (wave 15, sync_code.ts), with the name shown on it (`displayName`, newer wins).
  *
  * Merge, per entity (a person, a resource, a meeting, an event, one messenger link), by id: unknown ids are added; the same id on both sides
  * keeps the version with the newer stamp and takes over every field only the other side has; a person's note lines are united by id so
@@ -14,6 +18,10 @@
  * one was kept; the other stays readable in "Review merge", which keeps up to 50 until dismissed). Chats are united per peer by message key
  * (the state further along wins), ordered by (sentAt, key) and trimmed to the chat.ts bound on every device alike (200 per person).
  * Unread is the larger of the two counts: a message read on one device may still show unread on the other.
+ *
+ * Settings merge per field (stamp key 'g:<field>', the same stamps as below): a field only the other side has is taken, a field both have goes
+ * to the newer stamp, a field only this side has stays (nothing is deleted, so switching a setting back to "absent" does not travel; store
+ * the explicit value). A v2 bundle has no `settings` and reads as before.
  *
  * Stamps: no entity carries an updatedAt (and 40 edit sites would have to set one), so a stamp is found at sync time: an entity whose
  * content hash differs from the one stored at the last look gets "now" and this device's name (`by`; `from` = the device that first brought
@@ -32,14 +40,37 @@ import type { ConnectRecord } from './connect_code'
 import { pinnedFrom } from './membranes_five'
 import { SCHEMA_VERSION } from './schema_version'
 
-/** 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
-export const SYNC_VERSION = 2
+/** 3: `settings` (every non-excluded record field) travels too; v2 is still read. 2: events, channels, chats and sameAs travel too. A device of version 1 shows "Update TrustWeb" (sync_link.ts hello). */
+export const SYNC_VERSION = 3
 /** A sync message older than this is ignored on arrival (the relay may hold it longer; see sync_link.ts). */
 export const SYNC_TTL_MS = 10 * 60_000
 /** The other device must answer "ready" within this, or it is not on. */
 export const HANDSHAKE_MS = 30_000
 /** Conflicts kept in AppState.syncReview. */
 export const REVIEW_MAX = 50
+
+/**
+ * Record fields that never leave the device (or travel as an entity of their own above): everything else of AppState is a setting and rides along.
+ * Adding a per-device field to AppState means adding it here; adding a setting means doing nothing.
+ */
+export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
+  // carried by their own bundle parts, or the record's identity
+  'v', 'schemaVersion', 'me', 'people', 'inventory', 'meetings', 'events', 'tasks', 'chats', 'sameAs', 'myChannels', 'contactShare', 'syncReview',
+  // relay identity, keys, peers, hosting secret, connect codes
+  'identity', 'peers', 'log', 'hosting', 'connectCode', 'seenConnectNonces', 'otherCodes', 'pendingRenew', 'contactSent', 'contactSentChannels', 'autoSentRank',
+  // queues, caches and counters of this phone
+  'reachOutLog', 'reachOutHeld', 'reachOutsPaused', 'wantsToConnect', 'releasedTies', 'engagementNoticeDay', 'engagementSince', 'awayAsks', 'sentAsks',
+  'lateAnswers', 'heldAsks', 'unmatchedAsks', 'reaskSeen', 'received', 'found', 'imports', 'peerCardsUnmergedAt', 'dismissed',
+  // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
+  'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'webSearchConsent', 'serverTranscriptionConsentAt',
+  'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal',
+])
+
+/** The settings of a record: every field not in SYNC_EXCLUDED. */
+export function settingsOf(s: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(s).filter(([k, v]) => v !== undefined && !SYNC_EXCLUDED.has(k)))
+}
 
 export type SyncKind = 'person' | 'resource' | 'meeting' | 'event' | 'task' | 'channel' | 'sameAs' | 'chat' | 'name'
 /** `by`: the device whose version was kept; `from`: the device that first brought the entity in (set once). */
@@ -64,6 +95,8 @@ export interface SyncBundle {
   tasks?: TwTask[]
   chats?: ChatBook
   sameAs?: Record<string, string>
+  /** Wave 26 (v3): every record field the owner set that is not per device (settingsOf). Absent from v2. */
+  settings?: Record<string, unknown>
   /** Wave 15: the public link and username of this account, when the pairing shares them (sync_code.ts), and the others it holds. Never part of a conflict or the sync log. */
   connectCode?: ConnectRecord
   otherCodes?: ConnectRecord[]
@@ -95,6 +128,7 @@ export interface MergeResult {
 
 export interface Counts { people: number; lines: number; resources: number; meetings: number; events: number; tasks: number; messages: number }
 
+const SETTING_PREFIX = 'g:'
 const KEY_PREFIX = { person: 'p:', resource: 'i:', meeting: 'm:', event: 'e:', task: 't:' } as const
 
 /** djb2 over the JSON text: change detection (a stored stamp), and the "identical on both sides" skip in stampsAfterMerge. The merge itself compares the JSON text, so a collision cannot keep an older version. */
@@ -129,8 +163,9 @@ export function slimMeeting(m: PastMeeting): PastMeeting {
 
 type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 'tasks' | 'myChannels' | 'contactShare'> & { me?: { displayName: string } }
 
-function entities(s: Source): [string, unknown][] {
+function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
+    ...Object.entries(settings).map(([k, x]): [string, unknown] => [SETTING_PREFIX + k, x]),
     ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, x]),
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
@@ -147,7 +182,7 @@ const sourceOf = (b: SyncBundle): Source => ({ people: b.people, inventory: b.in
 /** The stamps after looking at the record now: unchanged entities keep theirs, new or edited ones get `now` and this device's name. Gone ones drop out. */
 export function refreshStamps(s: AppState, prev: Stamps, now: number, device: string): Stamps {
   const out: Stamps = {}
-  for (const [key, e] of entities(s)) {
+  for (const [key, e] of entities(s, settingsOf(s))) {
     const h = hashOf(e)
     out[key] = prev[key]?.h === h ? prev[key] : { h, at: now, by: device, from: prev[key]?.from ?? device }
   }
@@ -170,6 +205,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
     ...(s.tasks?.length ? { tasks: s.tasks } : {}),
     chats: sanitizeChatBook(s.chats),
     ...(s.sameAs ? { sameAs: s.sameAs } : {}),
+    settings: settingsOf(s),
     ...codesForBundle(s, shareCode),
     ...(shareCode && s.me?.displayName ? { displayName: s.me.displayName } : {}),
   }
@@ -229,17 +265,23 @@ function parseChannels(v: unknown): SyncBundle['channels'] | null {
   return { mine, share: Object.keys(shareOnConnect).length ? { shareOnConnect } : {} }
 }
 
+/** Settings: a plain JSON object without excluded or prototype keys; anything else is dropped alone (a record from a newer build still merges). */
+function parseSettings(v: unknown): Record<string, unknown> | null {
+  if (!isObj(v)) return null
+  return Object.fromEntries(Object.entries(v).filter(([k]) => k !== '__proto__' && k.length <= 60 && !SYNC_EXCLUDED.has(k)))
+}
+
 const isTask = (e: unknown): e is TwTask => isObj(e) && ['id', 'title'].every((k) => typeof e[k] === 'string') && typeof e.stamp === 'number'
 const isEvent = (e: unknown): e is TwEvent => isObj(e) && ['id', 'name', 'from', 'where'].every((k) => typeof e[k] === 'string')
   && typeof e.createdAt === 'number' && typeof e.attended === 'boolean'
 
 /**
- * The untrusted-input boundary: a decrypted bundle that is not exactly this shape is nothing. Versions 1 and 2 are read; a v2 field that is
+ * The untrusted-input boundary: a decrypted bundle that is not exactly this shape is nothing. Versions 1 to 3 are read; a v2 field that is
  * present but malformed makes the whole bundle nothing, and the result holds only what is known (chats through chat.ts sanitizeChatBook).
  */
 export function parseBundle(v: unknown): SyncBundle | null {
   if (!isObj(v)) return null
-  if ((v.v !== 1 && v.v !== 2) || !isList(v.people) || !isList(v.inventory) || !isList(v.meetings) || !isObj(v.at)) return null
+  if ((v.v !== 1 && v.v !== 2 && v.v !== 3) || !isList(v.people) || !isList(v.inventory) || !isList(v.meetings) || !isObj(v.at)) return null
   const people = (v.people as unknown as Person[]).map(pinnedFrom)
   if (!people.every((p) => Array.isArray(p.lines) && typeof p.name === 'string')) return null
   if (!Object.values(v.at).every((n) => Number.isFinite(n)) || Object.keys(v.at).length > AT_MAX) return null
@@ -258,6 +300,8 @@ export function parseBundle(v: unknown): SyncBundle | null {
   out.events = (v.events as TwEvent[]).map(syncEvent)
   if (v.tasks) out.tasks = v.tasks as TwTask[]
   out.chats = sanitizeChatBook(v.chats)
+  const settings = parseSettings(v.settings)
+  if (settings) out.settings = settings
   const map = Object.entries(sameAs).filter(([k, x]) => k !== x)
   if (map.length) out.sameAs = Object.fromEntries(map)
   // The codes are optional extras: a malformed one is dropped alone, never the bundle (a record from a newer build still merges).
@@ -390,6 +434,19 @@ function mergeChannels(mine: AppState, theirs: NonNullable<SyncBundle['channels'
   }
 }
 
+/** Per field: one only the other side has is taken; one both have and differ goes to the newer stamp (this side on a tie). Nothing is deleted. */
+function mergeSettings(mine: AppState, theirs: SyncBundle, c: Ctx): void {
+  const own = mine as unknown as Record<string, unknown>
+  for (const [k, t] of Object.entries(theirs.settings ?? {})) {
+    const m = has(own, k) ? own[k] : undefined
+    if (m !== undefined && hashOf(m) === hashOf(t)) continue
+    if (m === undefined) c.res.added++
+    else if ((theirs.at[SETTING_PREFIX + k] ?? 0) > (c.myAt[SETTING_PREFIX + k]?.at ?? 0)) c.res.updated++
+    else continue
+    own[k] = t
+  }
+}
+
 /** The name shown on the public link: skipped when the other side has no timestamp for it; otherwise the newer wins and the difference is listed like a messenger link (F12). */
 function mergeDisplayName(mine: AppState, myStamps: Stamps, theirs: SyncBundle, res: MergeResult): void {
   const t = theirs.at['n:me']
@@ -421,6 +478,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (theirs.tasks?.length) mine.tasks = mergeList('task', mine.tasks ?? [], theirs.tasks, c, (x) => x.title, (winner) => winner)
   if (theirs.channels) mergeChannels(mine, theirs.channels, c)
   if (theirs.chats) mergeChats(mine, theirs.chats, res)
+  mergeSettings(mine, theirs, c)
   mergeDisplayName(mine, myStamps, theirs, res)
   collapseSamePersons(mine)
   return res
@@ -440,8 +498,8 @@ export function collapseSamePersons(s: AppState): boolean {
 export function stampsAfterMerge(s: AppState, before: Stamps, incoming: SyncBundle, now: number, device: string, theirName: string): Stamps {
   const theirs = remapBundle(incoming, s.sameAs)
   const fresh = refreshStamps(s, before, now, device)
-  const theirHash = new Map(entities(sourceOf(theirs)).map(([k, e]) => [k, hashOf(e)]))
-  for (const [key, e] of entities(s)) {
+  const theirHash = new Map(entities(sourceOf(theirs), theirs.settings ?? {}).map(([k, e]) => [k, hashOf(e)]))
+  for (const [key, e] of entities(s, settingsOf(s))) {
     const at = theirs.at[key]
     if (at === undefined) continue
     const from = before[key]?.from ?? theirs.from?.[key] ?? theirName
