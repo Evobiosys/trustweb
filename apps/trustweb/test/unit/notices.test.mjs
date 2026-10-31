@@ -1,5 +1,5 @@
 /** Dismissible notices (src/notices.ts, wave 15): per-note dismissal, the general switch, the cap, and an emptied list being dropped. */
-import { ALL_NOTICES, DISMISSED_MAX, dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from '../../src/notices.ts'
+import { ALL_NOTICES, DISMISSED_MAX, PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, passOnDefaultNoticeDue, noticeShown, noticesOff, setNoticesOff } from '../../src/notices.ts'
 
 describe('notices', () => {
   it('shows a note until its id is dismissed; other notes stay', () => {
@@ -31,5 +31,19 @@ describe('notices', () => {
     setNoticesOff(s, true)
     expect(s.dismissed).toHaveLength(DISMISSED_MAX)
     expect(noticesOff(s)).toBe(true)
+  })
+})
+
+describe('pass-on default notice (wave 27, D2)', () => {
+  const p = (ring, extra) => ({ id: 'x', name: 'x', ring, peerId: 'q', ...extra })
+  it('is due once for a connected person whose pass-on was never set and whose zone lost the default', () => {
+    const s = { people: [p('friend')] }
+    expect(passOnDefaultNoticeDue(s)).toBe(true)
+    dismissNotice(s, PASS_ON_DEFAULT_NOTICE)
+    expect(passOnDefaultNoticeDue(s)).toBe(false)
+  })
+  it('is not due when nobody was affected (Close/Closest, an explicit value, not connected) or notices are off', () => {
+    expect(passOnDefaultNoticeDue({ people: [p('close'), p('closest'), p('friend', { passOn: false }), p('friend', { peerId: undefined })] })).toBe(false)
+    expect(passOnDefaultNoticeDue({ people: [p('friend')], dismissed: [ALL_NOTICES] })).toBe(false)
   })
 })

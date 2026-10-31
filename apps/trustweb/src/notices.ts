@@ -3,7 +3,7 @@
  * can be dismissed with its x; AppState.dismissed holds the ids. The id "all-notices" (Settings > Advanced, "Don't show such notices")
  * silences every note. Pure: the caller saves.
  */
-import type { AppState } from './model'
+import { Ring, type AppState } from './model'
 
 export const ALL_NOTICES = 'all-notices'
 /** At most this many ids are kept (the oldest drop first): a note that comes back after that is only shown once more. */
@@ -33,3 +33,11 @@ export function setNoticesOff(s: AppState, off: boolean): void {
 }
 
 export const noticesOff = (s: Pick<AppState, 'dismissed'>): boolean => (s.dismissed ?? []).includes(ALL_NOTICES)
+
+/** Wave 27: the one-time note after the pass-on default narrowed to Close and Closest. */
+export const PASS_ON_DEFAULT_NOTICE = 'pass-on-default-27'
+
+/** Due when it was not dismissed and a connected person holds no explicit pass-on and sits outside Close/Closest (their asks stopped hopping through me). */
+export function passOnDefaultNoticeDue(s: Pick<AppState, 'dismissed' | 'people'>): boolean {
+  return noticeShown(s, PASS_ON_DEFAULT_NOTICE) && s.people.some((p) => p.peerId && p.passOn === undefined && p.ring !== Ring.Close && p.ring !== Ring.Closest)
+}
