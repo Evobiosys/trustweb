@@ -468,8 +468,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .rings-hint{top:6px; right:6px}
 .fab-hint{position:absolute; right:16px; bottom:16px; z-index:20}
 .fab-hint .query-fab{position:static}
-.requests-fab{padding:10px 20px}
-.inv-call-fab{left:16px; right:auto}
+.requests-fab{padding:10px 20px; left:16px; right:auto}
 /* the two fabs on Inventory never cover the last line or the backup card */
 .screen.inventory .scroll{padding-bottom:84px}
 .hint-again{display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--ink-soft); white-space:nowrap}
