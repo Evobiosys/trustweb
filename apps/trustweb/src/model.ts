@@ -426,6 +426,10 @@ export interface Person {
   pinned?: boolean
   /** Wave 27 (membranes_five.ts togglePin): when the pin was set (ms); the "when pinned" order puts the newest pin first. Absent = oldest. Rides with the person. */
   pinnedAt?: number
+  /** Wave 27 (qr_modes.ts): what others may pass on about me when they introduce me. Absent: 'public' (username only). */
+  introducePermission?: 'public' | 'one-ring-closer' | 'ask-first'
+  /** Wave 27: this person's public username, as I know it (typed on Curate). Offered under the QR on their card. Absent: unknown. */
+  publicUsername?: string
   /** Wave 27 (place_suggest.ts): where the owner put this person on the Map view. Absent: not on the map. Owner's own devices only (sync_core). */
   place?: { name: string; lat: number; lon: number; source: 'gazetteer' }
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
