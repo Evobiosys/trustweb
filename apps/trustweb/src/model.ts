@@ -925,7 +925,7 @@ export interface NotifyKinds {
 /** Wave 27 (signal-link): one imported Signal conversation, metadata only. No words and no message text, ever. */
 export interface SignalConv { e164: string; name: string; n365: number; out: number; in: number; firstTs: number; lastTs: number }
 /** Wave 27 (signal-link): what the Signal / Molly import left on this device, read-only. Absent: not imported. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
-export interface SignalImport { at: number; conversations: SignalConv[] }
+export interface SignalImport { at: number; conversations: SignalConv[]; /** personId -> the ring before a Change in the placing step (Accept never moves a ring). */ prevRing?: Record<string, Ring> }
 
 export interface AppState {
   v: typeof RECORD_FORMAT
@@ -991,7 +991,7 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
-  /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. This phone only. Absent: none, Chat opens the first linked service. */
+  /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. Travels to the owner's own linked devices with the other settings (sync_core settingsOf). Absent: none, Chat opens the first linked service. */
   chatPrefs?: Record<string, ChatPrefs>
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
@@ -1166,7 +1166,7 @@ export interface AppState {
   serverTranscriptionConsent?: ServerConsent
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
-  /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first, local only. Absent: none. */
+  /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). Absent: none. */
   serviceImports?: ServiceBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
@@ -1265,7 +1265,7 @@ export interface ServiceRow {
   n365: number; out: number; in: number; lastTs?: number; ids: string[]; dupe?: boolean; sig: string
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
-export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; added?: boolean }
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
 /** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
 export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
 

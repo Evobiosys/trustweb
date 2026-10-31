@@ -81,7 +81,7 @@ export type Choice = { do: 'accept' } | { do: 'change'; ring: Ring } | { do: 'le
 
 export interface ZoneWrite {
   ring: Ring
-  /** The in_zone tuple: valid from now, expiring after a year (I9). */
+  /** The in_zone tuple: valid from now, expiring after a year (I9). Not written by the Curate page yet: only .ring is used. */
   inZone: { ring: Ring; since: number; until: number }
 }
 

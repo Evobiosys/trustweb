@@ -3262,11 +3262,11 @@ async function qrPage(build: (link: string) => QrContext): Promise<void> {
 
 /** Curate: what others may pass on about this person when they introduce them, and the public username I know for them. */
 function introduceRow(p: Person): HTMLElement {
-  const sel = el('select', { 'aria-label': S.introduceLabel, 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
+  const sel = el('select', { 'aria-label': S.introduceLabel(p.name), 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
     INTRODUCE_PERMISSIONS.map((o) => el('option', { value: o, selected: parseIntroducePermission(p.introducePermission) === o }, [S.introduceOptions[o]])))
   const name = el('input', { class: 'field', maxlength: '30', 'aria-label': S.introduceUsernameLabel, placeholder: S.introduceUsernameLabel, value: p.publicUsername ?? '', 'data-public-username': p.id }) as HTMLInputElement
   name.addEventListener('change', () => { p.publicUsername = name.value.trim().replace(/^@/, '').toLowerCase() || undefined; save() })
-  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel + ' ', sel]), name])
+  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel(p.name) + ' ', sel]), name])
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
