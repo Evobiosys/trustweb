@@ -200,6 +200,9 @@ export const applyStuck = (since: number, now: number): boolean => now - since >
 /** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
 export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
 
+/** The left panel greys out and stops reacting once Declare done has been pressed and the run did not end in failure or cancel. */
+export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
+
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
 /** A name in a conflict text: the file, the first feature (or branch) and the second one (feature or main), each drawn in its own colour (Jakob 2026-10-28). */
