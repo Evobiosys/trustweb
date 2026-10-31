@@ -915,6 +915,8 @@ export interface AppState {
   me: Me
   identity?: SerializedIdentityV1
   people: Person[]
+  /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
+  shares?: import('./share_sink/share_lines').ShareLine[]
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]
