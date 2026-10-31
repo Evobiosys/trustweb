@@ -11,9 +11,11 @@
  */
 import type { ChatThread, SharedItem } from '../../demo/src/types'
 import type { TogetherPref } from './together_prefs'
+import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
+import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { SeenNonce } from './connect_freshness'
@@ -38,6 +40,8 @@ export enum Ring {
   /** Not sorted yet (grey): replaces what the importers filed as None; never offered by the ring picker. */
   Unsorted = 'unsorted',
 }
+
+export type PinnedOrder = 'pinned' | 'contact'
 
 export const RINGS: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
@@ -346,6 +350,9 @@ export interface TwEvent {
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
 export interface ReleasedTie { personId: string; name: string; from: Ring; to: Ring; at: number; /** The summary card was dismissed; the ring row keeps its Undo. */ seen?: boolean }
 
+/** Wave 27: the provenance of one imported person: which service, which file, when, and the key used to match a later export. */
+export interface PersonSource { source: string; file: string; importedAt: number; key: string }
+
 export interface Person {
   id: string
   name: string
@@ -363,6 +370,8 @@ export interface Person {
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
+  /** Wave 27: where this person was imported from (one entry per source file, I8). Local only. Absent: entered by hand. */
+  sources?: PersonSource[]
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
    * the owner's own devices only (sealed when it travels between linked devices, sync_core.ts): never matched, relayed or put into a shared code.
@@ -421,6 +430,14 @@ export interface Person {
   angle?: number
   /** Wave 26 (was `favourite`; membranes_five.ts pinnedFrom): a pinned person is always among the first five shown on their membrane. Absent = false. Owner's own devices only (sync_core). */
   pinned?: boolean
+  /** Wave 27 (membranes_five.ts togglePin): when the pin was set (ms); the "when pinned" order puts the newest pin first. Absent = oldest. Rides with the person. */
+  pinnedAt?: number
+  /** Wave 27 (qr_modes.ts): what others may pass on about me when they introduce me. Absent: 'public' (username only). */
+  introducePermission?: 'public' | 'one-ring-closer' | 'ask-first'
+  /** Wave 27: this person's public username, as I know it (typed on Curate). Offered under the QR on their card. Absent: unknown. */
+  publicUsername?: string
+  /** Wave 27 (place_suggest.ts): where the owner put this person on the Map view. Absent: not on the map. Owner's own devices only (sync_core). */
+  place?: { name: string; lat: number; lon: number; source: 'gazetteer' }
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -431,6 +448,10 @@ export interface Person {
   knows?: string[]
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
   links?: { signal?: string; whatsapp?: string; other?: string }
+  /** Wave 27 (messenger_links.ts): the service "Chat" opens for this person, pinned by the owner. Absent: the last used. */
+  chatPin?: ServiceId
+  /** Wave 27: the service last opened for this person. Absent: TrustWeb's chat, else the first one known. */
+  chatLast?: ServiceId
   /** Wave 7 (timeline.ts): entries typed or imported on the Timeline of this card. ONLY ME, like generalNote. Absent: none. */
   timeline?: TimelineEntry[]
   /**
@@ -455,14 +476,13 @@ export type Lean = -2 | -1 | 0 | 1 | 2
 export const LEANS: readonly Lean[] = [-2, -1, 0, 1, 2]
 
 /**
- * Do this person's asks go on through me? Yes unless I switched it off for them (Jakob 2026-10-09: "make the default yes", after a
- * friends-of-friends line stayed unseen because the middle phone's default was off; this reverses wave 6f S1's "per default it
- * should be no"). A record that holds an explicit value keeps it; an unset one reads as on, except for someone I only intend to
- * meet (not yet in my web). Whoever answers still decides with their own yes.
+ * Do this person's asks go on through me? Wave 27 (Jakob 2026-10-31: "per default, pass their asks on should be turned off unless
+ * for close friends"): an unset value reads as on for the Close zone only, off for every other. A record that holds an explicit
+ * value keeps it (wave 6f's default was off, 2026-10-09's was on for all but Intending). Whoever answers still decides with their own yes.
  */
 export function passesAsksOn(p: Pick<Person, 'passOn' | 'ring'>): boolean {
   if (p.ring === Ring.Intending) return false
-  return p.passOn !== false
+  return p.passOn ?? p.ring === Ring.Close
 }
 
 /** A person's fediverse address and whether the Feed shows their public posts. */
@@ -904,6 +924,11 @@ export interface NotifyKinds {
   event: boolean
 }
 
+/** Wave 27 (signal-link): one imported Signal conversation, metadata only. No words and no message text, ever. */
+export interface SignalConv { e164: string; name: string; n365: number; out: number; in: number; firstTs: number; lastTs: number }
+/** Wave 27 (signal-link): what the Signal / Molly import left on this device, read-only. Absent: not imported. THIS DEVICE ONLY (sync_core SYNC_EXCLUDED). */
+export interface SignalImport { at: number; conversations: SignalConv[] }
+
 export interface AppState {
   v: typeof RECORD_FORMAT
   /** schema_version.ts: the build's SCHEMA_VERSION that last migrated this record. Absent: version 1. */
@@ -917,6 +942,12 @@ export interface AppState {
   me: Me
   identity?: SerializedIdentityV1
   people: Person[]
+  /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
+  shares?: import('./share_sink/share_lines').ShareLine[]
+  /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
+  shareDefaultZone?: string
+  /** Wave 27: an agent may propose shares. Absent: off. */
+  agentsMayPropose?: true
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]
@@ -929,6 +960,8 @@ export interface AppState {
   engagementDays?: number
   /** Wave 25 (membranes_five.ts): people shown per membrane on the Membranes page. Absent = 5; 1..20. Local; rides the device sync. */
   membraneLimit?: number
+  /** Wave 27 (membranes_five.ts pinnedOrder): how pinned people are ordered: 'pinned' = newest pin first, 'contact' = latest contact (wave 26). Absent = 'pinned'. Local; rides the device sync. */
+  pinnedOrder?: PinnedOrder
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
@@ -936,6 +969,8 @@ export interface AppState {
   engagementSince?: number
   /** Events I know (events.ts). Absent in older records. Travels only between the owner's own devices (sync_core.ts), sealed. */
   events?: TwEvent[]
+  /** Wave 27 (signal-link): imported Signal / Molly conversation metadata. This device only. Absent: none. */
+  signalImport?: SignalImport
   /** Tasks (calendar module, wave 24). Absent = none; a new optional field needs no schema migration. Travels only between the owner's own devices, sealed. */
   tasks?: TwTask[]
   /** "I'm here now" (calendar module, wave 24): the event I am at, since when (ms), bell absent = on. THIS DEVICE ONLY: not in sync_core's bundle, because being at an event is true of this phone. Absent = not at an event. */
@@ -950,12 +985,16 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
+  /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
+  uiPins?: { views: string[] }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. This phone only. Absent: none, Chat opens the first linked service. */
+  chatPrefs?: Record<string, ChatPrefs>
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
   /** Settings > Public link "Show my Signal / WhatsApp links to people who connect" (channel_visibility.ts). Absent: on; only false is stored. */
@@ -1139,6 +1178,8 @@ export interface AppState {
   serverTranscriptionConsent?: ServerConsent
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
+  /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first, local only. Absent: none. */
+  serviceImports?: ServiceBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
@@ -1229,6 +1270,16 @@ export interface ImportBatch {
    */
   items: { itemId: string; key: string; sig?: string; text?: string; audience?: Audience }[]
 }
+
+/** Wave 27: one row of an import from another service, waiting for the owner on the Curate page (services_import.ts). Counts only, never message text. */
+export interface ServiceRow {
+  key: string; name: string; source: string; file: string; since?: number; org?: string
+  n365: number; out: number; in: number; lastTs?: number; ids: string[]; dupe?: boolean; sig: string
+}
+/** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; added?: boolean }
+/** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
+export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
 
 /** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
 export function isDemoPerson(s: Pick<AppState, 'demo'>, personId: string): boolean {

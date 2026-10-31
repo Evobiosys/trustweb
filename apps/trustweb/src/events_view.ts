@@ -36,6 +36,8 @@ export interface EventsViewHooks {
   by: () => EventBy | undefined
   /** Extension modules' sections on the event page (ext/registry.ts), drawn above Advanced. */
   extra?: (ev: TwEvent) => Node[]
+  /** Wave 27: the QR page of an event (qr_modes.ts): the event and my connect code in one code. */
+  showQr?: (ev: TwEvent) => void
 }
 
 export interface EventsView {
@@ -287,6 +289,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ev.conditions ? el('p', {}, [ev.conditions]) : null,
       el('div', { class: 'chips' }, [attended]),
       el('button', { class: 'btn btn-ghost wide', 'data-event-share': '', onclick: () => copyShown(ev) }, [S.eventLinkShare]),
+      h.showQr ? el('button', { class: 'btn btn-ghost wide', 'data-event-qr': '', onclick: () => h.showQr?.(ev) }, [S.eventQrShare]) : null,
       hostToggle(ev),
       linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
