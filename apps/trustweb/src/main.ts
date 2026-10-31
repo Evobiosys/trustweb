@@ -2175,6 +2175,8 @@ function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement):
  * Web screen body, and only there: outside the phone, the header and the tab bar the browser zooms as ever. Only the inner layer moves.
  */
 function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
+  // Wave 27: the rings' fit zoom (ringsZoom, kept for the way back) must not scale a Network layer: it blew the canvas up and pushed it off-centre.
+  if (layer.querySelector('[data-own-zoom]')) return
   // [data-own-zoom] (the Network view) pans and zooms itself in its draw loop, so it stays crisp: this layer leaves it alone.
   const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea, [data-own-zoom]'
   const apply = (z: RingsZoom): void => {

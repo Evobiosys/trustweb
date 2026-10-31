@@ -361,6 +361,10 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   // Root = width; the page = window height (the canvas height follows it); the canvas = whatever else resizes it.
   const sizes = new ResizeObserver(resize)
   sizes.observe(root); sizes.observe(canvas); sizes.observe(document.documentElement)
+  // The box settles late (bottom bar, header, orientation, browser chrome): measure again on the next two frames and on viewport changes.
+  const settle = (): void => { if (canvas.isConnected) resize(); else window.visualViewport?.removeEventListener('resize', settle) }
+  window.visualViewport?.addEventListener('resize', settle)
+  requestAnimationFrame(() => { resize(); requestAnimationFrame(resize) })
   requestAnimationFrame(frame)
   return root
 }
