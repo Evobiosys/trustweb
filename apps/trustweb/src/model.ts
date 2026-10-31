@@ -14,6 +14,7 @@ import type { TogetherPref } from './together_prefs'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
+import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { SeenNonce } from './connect_freshness'
@@ -963,6 +964,8 @@ export interface AppState {
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. This phone only. Absent: none, Chat opens the first linked service. */
+  chatPrefs?: Record<string, ChatPrefs>
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
   /** Settings > Public link "Show my Signal / WhatsApp links to people who connect" (channel_visibility.ts). Absent: on; only false is stored. */

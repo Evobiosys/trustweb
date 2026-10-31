@@ -60,6 +60,9 @@ import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff }
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
+import { chatServices, noteUsed, togglePin } from './chat_row'
+import type { ChatService } from './chat_row'
+import { chatRow } from './chat_row_view'
 import { connectBlock, daysSection } from './card_pages_view'
 import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
@@ -3126,12 +3129,27 @@ function cardChannelsRow(p: Person): HTMLElement | null {
 /** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const chat = chatButtonKind(p) === 'chat'
-  const b = el('button', {
-    class: 'btn ' + (chat && !quiet ? 'btn-electric' : 'btn-ghost'), 'data-card-chat': p.id, 'data-chat-open': p.id,
-    onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
-  })
-  b.innerHTML = icon('chat')
-  b.append(S.chatOpen)
+  const services = chatServices(p)
+  const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
+  const open = (svc: ChatService): void => {
+    noteUsed(st(), p.id, svc.id, Date.now()); save()
+    if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
+  }
+  let b: HTMLElement
+  if (services.length) {
+    b = chatRow({
+      personId: p.id, services, prefs: () => st().chatPrefs?.[p.id], mainClass, iconHtml: icon('chat'), open,
+      label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
+      pin: (id) => { togglePin(st(), p.id, id); save() },
+    })
+  } else {
+    b = el('button', {
+      class: 'btn ' + mainClass, 'data-card-chat': p.id, 'data-chat-open': p.id,
+      onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
+    })
+    b.innerHTML = icon('chat')
+    b.append(S.chatOpen)
+  }
   return el('div', { class: 'card-chat' }, [b, chat ? null : connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast })])
 }
 
