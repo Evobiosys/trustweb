@@ -22,11 +22,35 @@ export interface ConnectDeps {
 const GLYPH: Record<LinkKind, string> = { signal: ICONS.signal, whatsapp: ICONS.whatsapp, other: ICONS.web }
 const icon = (kind: LinkKind): HTMLElement => { const s = el('span', { class: 'tl-glyph', 'aria-hidden': 'true' }); s.innerHTML = GLYPH[kind]; return s }
 
+/** The form that adds or edits one typed link of `p`; `edit(kind)` fills `form` and focuses its input, `onSaved` runs after a save. */
+function linkEditor(p: Person, d: ConnectDeps, onSaved: () => void): { form: HTMLElement; edit: (kind: LinkKind) => void } {
+  const form = el('div')
+  const edit = (kind: LinkKind): void => {
+    const input = el('input', { class: 'field', type: 'url', maxlength: '300', placeholder: S.cardLinkPh, 'aria-label': S.cardAddLink[kind], value: p.links?.[kind] ?? '', 'data-link-input': kind }) as HTMLInputElement
+    form.replaceChildren(el('div', { class: 'card-ch' }, [input,
+      el('button', { class: 'btn btn-electric btn-sm', 'data-link-save': kind, onclick: () => {
+        if (!input.value.trim() && !p.links?.[kind]) { form.replaceChildren(); return }
+        if (!setLink(p, kind, input.value)) { d.toast(S.cardLinkBad); return }
+        d.save(); onSaved(); form.replaceChildren()
+      } }, [S.tlSave]),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => form.replaceChildren() }, [S.tlCancel]),
+    ]))
+    input.focus()
+  }
+  return { form, edit }
+}
+
+/** "No messenger link from <name> yet. If they share one, it shows here, or add one." with "add" an underlined button that opens the editor (first kind) under the line. */
+export function noMessengerBlock(p: Person, name: string, d: ConnectDeps, onSaved: () => void): HTMLElement {
+  const { form, edit } = linkEditor(p, d, onSaved)
+  const add = el('button', { class: 'card-connect', role: 'button', 'data-no-messenger-add': p.id, onclick: () => edit(LINK_KINDS[0]) }, [S.cardNoMessengerAdd])
+  return el('div', { 'data-no-messenger': p.id }, [el('p', { class: 'meta' }, [S.cardNoMessengerLead(name), add, S.cardNoMessengerTail]), form])
+}
+
 /** "<name> isn't connected on TrustWeb yet. Connect first to chat here." with Connect underlined; a tap opens the panel under it. */
 export function connectBlock(p: Person, name: string, d: ConnectDeps): HTMLElement {
   const linkText = el('p', { class: 'connect-link', 'data-connect-link': '' }, [S.cardConnectLoading])
   const linksBox = el('div', { class: 'card-links', 'data-card-links': p.id })
-  const form = el('div')
   const draw = (): void => {
     linksBox.replaceChildren(...linkEntries(p).map(({ kind, url }) => el('div', { class: 'card-ch', 'data-card-link': kind }, [
       icon(kind), el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, [url]),
@@ -34,18 +58,7 @@ export function connectBlock(p: Person, name: string, d: ConnectDeps): HTMLEleme
       el('button', { class: 'btn btn-ghost btn-sm', 'data-remove-link': kind, onclick: () => { setLink(p, kind, ''); d.save(); draw() } }, [S.cardLinkRemove]),
     ])))
   }
-  const edit = (kind: LinkKind): void => {
-    const input = el('input', { class: 'field', type: 'url', maxlength: '300', placeholder: S.cardLinkPh, 'aria-label': S.cardAddLink[kind], value: p.links?.[kind] ?? '', 'data-link-input': kind }) as HTMLInputElement
-    form.replaceChildren(el('div', { class: 'card-ch' }, [input,
-      el('button', { class: 'btn btn-electric btn-sm', 'data-link-save': kind, onclick: () => {
-        if (!input.value.trim() && !p.links?.[kind]) { form.replaceChildren(); return }
-        if (!setLink(p, kind, input.value)) { d.toast(S.cardLinkBad); return }
-        d.save(); draw(); form.replaceChildren()
-      } }, [S.tlSave]),
-      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => form.replaceChildren() }, [S.tlCancel]),
-    ]))
-    input.focus()
-  }
+  const { form, edit } = linkEditor(p, d, draw)
   const panel = el('div', { class: 'connect-panel', hidden: true, 'data-connect-panel': p.id }, [
     linkText,
     el('div', { class: 'card-ch' }, [

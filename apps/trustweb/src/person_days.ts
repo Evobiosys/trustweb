@@ -9,7 +9,7 @@ import type { TimelineEntry } from './timeline'
 export const DAYS_PAGE = 30
 
 /** Chats (one entry per day with the count, never the text), meetings and events together, on top of the timeline of the card. */
-function extraEntries(s: AppState, p: Person): TimelineEntry[] {
+export function extraEntries(s: AppState, p: Person): TimelineEntry[] {
   const mk = (at: number, channel: TlChannel, summary: string): TimelineEntry => ({ at, channel, direction: TlDirection.Both, summary, source: TlSource.TrustWeb })
   const perDay = new Map<number, number>()
   for (const m of s.chats?.[p.peerId ?? '']?.messages ?? []) {

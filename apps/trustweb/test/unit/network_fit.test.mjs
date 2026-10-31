@@ -19,6 +19,11 @@ describe('network fit', () => {
     expect(fitBounds([{ x: 0, y: 0, r: 6 }], 400, 600).k).toBe(1.5)
   })
 
+  it('a box that has no size yet gives a camera with a positive scale, never a mirrored one', () => {
+    const c = fitBounds([{ x: 100, y: 200, r: 6 }, { x: 300, y: 260, r: 6 }], 0, 0)
+    expect(c.k).toBeGreaterThan(0)
+  })
+
   describe('refit when the canvas size changes', () => {
     const nodes = [{ x: 100, y: 200, r: 6 }, { x: 300, y: 260, r: 6 }]
     it('an untouched camera is fitted again to the new size', () => {

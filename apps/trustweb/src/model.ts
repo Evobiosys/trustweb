@@ -15,6 +15,7 @@ import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
 import type { SignalProvider } from './channel'
+import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
 import type { SeenNonce } from './connect_freshness'
@@ -39,6 +40,8 @@ export enum Ring {
   /** Not sorted yet (grey): replaces what the importers filed as None; never offered by the ring picker. */
   Unsorted = 'unsorted',
 }
+
+export type PinnedOrder = 'pinned' | 'contact'
 
 export const RINGS: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
@@ -422,6 +425,14 @@ export interface Person {
   angle?: number
   /** Wave 26 (was `favourite`; membranes_five.ts pinnedFrom): a pinned person is always among the first five shown on their membrane. Absent = false. Owner's own devices only (sync_core). */
   pinned?: boolean
+  /** Wave 27 (membranes_five.ts togglePin): when the pin was set (ms); the "when pinned" order puts the newest pin first. Absent = oldest. Rides with the person. */
+  pinnedAt?: number
+  /** Wave 27 (qr_modes.ts): what others may pass on about me when they introduce me. Absent: 'public' (username only). */
+  introducePermission?: 'public' | 'one-ring-closer' | 'ask-first'
+  /** Wave 27: this person's public username, as I know it (typed on Curate). Offered under the QR on their card. Absent: unknown. */
+  publicUsername?: string
+  /** Wave 27 (place_suggest.ts): where the owner put this person on the Map view. Absent: not on the map. Owner's own devices only (sync_core). */
+  place?: { name: string; lat: number; lon: number; source: 'gazetteer' }
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -460,14 +471,13 @@ export type Lean = -2 | -1 | 0 | 1 | 2
 export const LEANS: readonly Lean[] = [-2, -1, 0, 1, 2]
 
 /**
- * Do this person's asks go on through me? Yes unless I switched it off for them (Jakob 2026-10-09: "make the default yes", after a
- * friends-of-friends line stayed unseen because the middle phone's default was off; this reverses wave 6f S1's "per default it
- * should be no"). A record that holds an explicit value keeps it; an unset one reads as on, except for someone I only intend to
- * meet (not yet in my web). Whoever answers still decides with their own yes.
+ * Do this person's asks go on through me? Wave 27 (Jakob 2026-10-31: "per default, pass their asks on should be turned off unless
+ * for close friends"): an unset value reads as on for the Close zone only, off for every other. A record that holds an explicit
+ * value keeps it (wave 6f's default was off, 2026-10-09's was on for all but Intending). Whoever answers still decides with their own yes.
  */
 export function passesAsksOn(p: Pick<Person, 'passOn' | 'ring'>): boolean {
   if (p.ring === Ring.Intending) return false
-  return p.passOn !== false
+  return p.passOn ?? p.ring === Ring.Close
 }
 
 /** A person's fediverse address and whether the Feed shows their public posts. */
@@ -937,6 +947,8 @@ export interface AppState {
   engagementDays?: number
   /** Wave 25 (membranes_five.ts): people shown per membrane on the Membranes page. Absent = 5; 1..20. Local; rides the device sync. */
   membraneLimit?: number
+  /** Wave 27 (membranes_five.ts pinnedOrder): how pinned people are ordered: 'pinned' = newest pin first, 'contact' = latest contact (wave 26). Absent = 'pinned'. Local; rides the device sync. */
+  pinnedOrder?: PinnedOrder
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
@@ -960,12 +972,16 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
+  /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
+  uiPins?: { views: string[] }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
   myChannels?: Partial<Record<Channel, string>>
   /** Which of my links go to a new connection (contact_share.ts). Absent: nothing is shared. */
   contactShare?: ShareSettings
+  /** Wave 27 chat-row (chat_row.ts): per person, the pinned chat service and when each was last used. This phone only. Absent: none, Chat opens the first linked service. */
+  chatPrefs?: Record<string, ChatPrefs>
   /** Settings > Advanced "Prefer Consensual for chats" (contact_share.ts chatOnConsensual). Absent: on; only false is stored. */
   preferConsensual?: false
   /** Settings > Public link "Show my Signal / WhatsApp links to people who connect" (channel_visibility.ts). Absent: on; only false is stored. */
