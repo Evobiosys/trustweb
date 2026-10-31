@@ -66,6 +66,7 @@ import { chatRow } from './chat_row_view'
 import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
 import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
+import { seenLine, sharePageBody, sharingSettings } from './share_page_view'
 import { linkEntries } from './person_links'
 import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from './qr_modes'
 import type { QrContext } from './qr_modes'
@@ -3156,7 +3157,7 @@ function cardMore(p: Person): Node[] {
     knows: () => [knowsRow(p, st().people, save, () => personSheet(p.id))],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
-      askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+      seenLine(st(), p.id), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
     timeline: () => [timelineSection(p)],
@@ -4428,6 +4429,7 @@ const feed = createFeedView({
   redrawFeed: () => { if (screen === Screen.Feed) render() },
   tabsChanged: () => { renderTabs(); if (screen === Screen.Feed && !feedOn(st())) screen = Screen.Web; render() },
   settings: settingsSheet,
+  openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, close: () => history.back() }, itemId)], 'share-page'),
 })
 const packs = createPackView({
   state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,
@@ -6241,6 +6243,7 @@ function settingsSheet(): void {
         el('b', {}, [S.viewNames[i.view]]),
       ])),
     ]),
+    settingsSection('sharing', S.setSecSharing, sharingSettings(s, save, settingsSheet)),
     settingsSection('advanced-web', S.setAdvanced, [
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
