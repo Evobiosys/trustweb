@@ -954,6 +954,8 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
+  /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
+  uiPins?: { views: string[] }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
