@@ -3,7 +3,7 @@
 import { Ring, RINGS } from './model'
 import type { AppState, Person } from './model'
 import { webSlot } from './rings_layout'
-import { isPinned } from './membranes_five'
+import { isPinned, pinnedModeOf, pinnedOrder } from './membranes_five'
 
 export interface ZoneGroup {
   ring: Ring
@@ -16,13 +16,13 @@ export function lastContact(s: Pick<AppState, 'chats'>, p: Person): number {
   return Math.max(p.metAt, p.engagementKept ?? 0, ...chat.map((m) => m.at), ...(p.timeline ?? []).map((e) => e.at))
 }
 
-type ListState = Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats'>>
+type ListState = Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'pinnedOrder'>>
 
 const ZONES: readonly Ring[] = [...RINGS, Ring.Unsorted]
 
-/** Pinned people first, whatever their zone; newest contact first. `query` filters on name and context. */
+/** Pinned people first, whatever their zone; in the "Pinned order" setting's order (newest pin first, or newest contact). `query` filters on name and context. */
 export function pinnedPeople(s: ListState, query: string): Person[] {
-  return listed(s, query, isPinned)
+  return pinnedOrder(listed(s, query, isPinned), pinnedModeOf(s), (p) => lastContact(s, p))
 }
 
 function listed(s: ListState, query: string, keep: (p: Person) => boolean): Person[] {
