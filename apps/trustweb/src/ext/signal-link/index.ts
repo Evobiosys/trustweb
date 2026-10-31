@@ -9,7 +9,7 @@ import { openSetup, type WordsByNumber } from './setup_view'
 
 function signalMessenger(h: ExtHooks): MessengerSource {
   // The companion prints https://app.trustweb.one/#signal-link=<port>.<token>: read once, keep in localStorage only, drop it from the address bar.
-  try { consumePairing(location.hash, localStorage, () => history.replaceState(null, '', location.pathname + location.search)) } catch { /* no storage: not paired */ }
+  try { consumePairing(h.boot.hash, localStorage, () => history.replaceState(null, '', location.pathname + location.search)) } catch { /* no storage: not paired */ }
   const words: WordsByNumber = new Map()
   return {
     id: 'signal-link',

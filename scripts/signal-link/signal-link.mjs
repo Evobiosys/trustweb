@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url'
 
 const DAY = 86_400_000
 export const ALLOWED_ORIGINS = ['https://app.trustweb.one', 'https://dev.trustweb.one', 'https://pre.trustweb.one']
+// A local preview of the app, any port.
+const LOCAL_DEV = /^http:\/\/(localhost|127\.0\.0\.1):\d{1,5}$/
 
 // ---- pure: words and aggregation -------------------------------------------------------------------------------------
 
@@ -99,8 +101,7 @@ export function checkRequest({ method, headers }, port, token) {
   const host = headers.host
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return { ok: false, status: 421 }
   const origin = headers.origin
-  const allowed = [...ALLOWED_ORIGINS, `http://localhost:${port}`]
-  if (origin !== undefined && !allowed.includes(origin)) return { ok: false, status: 403 }
+  if (origin !== undefined && !ALLOWED_ORIGINS.includes(origin) && !LOCAL_DEV.test(origin)) return { ok: false, status: 403 }
   if (method === 'OPTIONS') return { ok: true, origin }
   const auth = headers.authorization ?? ''
   const given = Buffer.from(auth.startsWith('Bearer ') ? auth.slice(7) : '')

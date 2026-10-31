@@ -2,6 +2,7 @@
 /** Matrix module (wave 27, msg-matrix): the messenger source, the one setup page and the read-only room page. DOM + localStorage. */
 import { el } from '../../../../demo/src/ui/dom'
 import { ICONS } from '../../icons'
+import { activateKey } from '../../key_press'
 import { ageLabel } from '../../model'
 import { S } from '../../strings'
 import type { ExtHooks, MessengerSource, ThreadSummary } from '../registry'
@@ -31,7 +32,7 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
   let cache: ThreadSummary[] = []
 
   /** Back from the SSO page: ?loginToken=... plus the server we sent them to. */
-  const token = loginTokenFrom(location.search)
+  const token = loginTokenFrom(h.boot.search)
   const pendingHs = localStorage.getItem(PENDING_KEY)
   if (token && pendingHs) {
     localStorage.removeItem(PENDING_KEY)
@@ -130,7 +131,7 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
       const list = el('div', { class: 'ppl' }, [el('p', { class: 'meta' }, [S.msgLoading])])
       void Promise.resolve(s ? client.sync(s) : null).then((sync) => {
         cache = sync ? parseSync(sync, h.state().people) : []
-        list.replaceChildren(...(cache.length ? cache.map((t) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-msg-thread': t.id, onclick: () => open(t.id) }, [
+        list.replaceChildren(...(cache.length ? cache.map((t) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-msg-thread': t.id, onclick: () => open(t.id), onkeydown: activateKey(() => open(t.id)) }, [
           el('div', { class: 'who' }, [el('b', {}, [t.title])]),
           t.lastAt ? el('span', { class: 'when' }, [ageLabel(t.lastAt, Date.now())]) : null,
           t.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(t.unread) }) : null,

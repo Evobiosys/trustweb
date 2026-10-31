@@ -291,6 +291,7 @@ export const S = {
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
   netRings: 'Web',
   netNetwork: 'Network',
+  // unused since wave27 review, archive candidate
   netMap: 'Map',
   mapAria: 'Map of the places you gave your people',
   mapPlacePh: 'Place',
@@ -540,6 +541,7 @@ export const S = {
   evOrgCounts: 'The organizer sees counts only: how many opened, joined and tagged. Never who.',
   eventLinkHostNames: 'The host names the tag for this event.',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
+  // unused since wave27 review, archive candidate
   searchOpen: 'Contacts',
   // Wave 25: the people list page behind it.
   peopleSearchPh: 'Search people',
@@ -1178,6 +1180,7 @@ export const S = {
   setTabRowLocked: 'Resources stays on the right.',
   tabLabel: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', feed: 'Feed', network: 'Network', desk: 'Contacts' } as Record<string, string>,
   viewMenuAria: 'Choose a view',
+  // unused since wave27 review, archive candidate
   viewMenuTitle: 'View',
   viewNames: { rings: 'Web', network: 'Network', people: 'People', map: 'Map', dex: 'Dex', compact: 'Contacts compact' } as Record<string, string>,
   viewOther: 'Other views',
@@ -1253,13 +1256,17 @@ export const S = {
   sigDone: (zone: string) => `Placed: ${zone}`,
   sigLeft: 'Left out',
   sigHere: 'in your web',
+  // unused since wave27 review, archive candidate
   sigCounts: (out: number, inn: number) => `${out} sent, ${inn} received`,
   sigWords: 'Words you use together',
   sigFinish: 'Done',
+  // unused since wave27 review, archive candidate
   sigAllDone: 'Chat > Extend now lists these conversations.',
   sigPrivacyTitle: 'Where does this run?',
   sigPrivacy: 'Everything runs on this computer. The companion talks to this page over 127.0.0.1 with a code that changes at every start. The record stays end-to-end encrypted between your own devices as before. The TrustWeb project and its servers do not see your contacts, your words or your zones. Imported conversations stay on this device; people you accept travel between your own devices like any other person.',
+  // unused since wave27 review, archive candidate
   sigNeedsSetup: 'Set up Signal / Molly',
+  // unused since wave27 review, archive candidate
   sigNoNumber: 'No phone number for this conversation.',
   // Wave 27 (msg-matrix): the Matrix module. Long text sits under (i).
   matrix: {
@@ -1324,6 +1331,7 @@ export const S = {
       'The bridge never starts the Geb listener. Run your own `geb listen` to receive new messages. Opening a chat here does not mark anything as read in Geb.',
       'What Geb prints is not fully checked yet; if a list looks wrong, open Geb itself.',
     ],
+    // unused since wave27 review, archive candidate
     threadsTitle: 'Geb on this computer',
     historyTitle: (name: string) => `Geb: ${name}`,
     historyEmpty: 'No messages shown yet.',
