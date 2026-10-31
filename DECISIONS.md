@@ -451,3 +451,13 @@ Plan review 2026-10-18 10:20 (U1 to U30), built on wave15/name-limits.
 ## D-iroh-rung (2026-10-27): iroh relay as an alternative rung behind DeliveryChannel
 
 Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChannel`, `docs/IROH-RELAY.md`). The iroh runtime is injected (`IrohEndpointLike`), no native dependency added. The existing mediator rung stays for offline store-and-forward. No privacy claim beyond today's relay (I7).
+
+## D-sovereign-switch (2026-10-31): export everything, be forgotten, social search rank (owner 2026-10-31)
+- Settings > Sovereign Switch (core, not an extension: it is the owner's own record). Export = one store-only zip (zip.ts, no dependency):
+  record.json as stored, log.jsonl (one create_node line per node; chats as counts and times only), outliner Markdown per kind, README.
+- Be forgotten: TrustWeb = a sealed forget text to every connected, unblocked phone, only after a confirmation page. The receiver removes
+  what the SENDER shared (shares, answers in finds, their links/profile on the card) and acks; its own notes stay. Honoured from a blocked
+  person too (it only removes their data); the ack never goes to them. My own lines pause (included=false, retractedAt) until Share again.
+- Other services: a static registry (src/data/services_rtbf.ts), every URL verified:false on the build day; GDPR Art. 17 + 20 template EN/DE.
+- search_rank.ts orders people search, ask fan-out and the together queue (zone .35, tag .25, recency .2, reciprocity .1, text .1).
+  Ask fan-out is no longer strictly ring-first: a recent chat can outweigh one zone step.
