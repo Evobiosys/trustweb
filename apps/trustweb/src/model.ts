@@ -532,6 +532,8 @@ export interface InventoryItem {
   text: string
   audience: Audience
   included: boolean
+  /** Wave 27 (forget.ts): paused by "Be forgotten: TrustWeb"; Share again sets included back. Absent: not paused. */
+  retractedAt?: number
   createdAt: number
   /** Where it came from (provenance.ts). This phone only. Absent before 2026-10-06: migrated to typed or demo. */
   source?: ItemSource
@@ -1116,6 +1118,16 @@ export interface AppState {
    * stored there. The same account carries the server transcription. Absent: never used.
    */
   hosting?: HostingState
+  /**
+   * Wave 27 (sovereign_switch.ts, forget.ts): Settings > Sovereign Switch. `services`: when I asked a service for my export or deletion
+   * (ticked by me); `lang`: the request template's language; `forget`: per peer, when the forget request went out and was acknowledged.
+   * Absent: nothing asked yet.
+   */
+  sovereign?: {
+    services?: Record<string, { exportAt?: number; deleteAt?: number }>
+    lang?: 'en' | 'de'
+    forget?: { peers: Record<string, { sentAt?: number; ackAt?: number }> }
+  }
   /**
    * Before wave 3: the bare time of the yes to server transcription. Wave 3
    * reads it as NO consent (it names no route; no live phone holds one) and
