@@ -350,6 +350,9 @@ export interface TwEvent {
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
 export interface ReleasedTie { personId: string; name: string; from: Ring; to: Ring; at: number; /** The summary card was dismissed; the ring row keeps its Undo. */ seen?: boolean }
 
+/** Wave 27: the provenance of one imported person: which service, which file, when, and the key used to match a later export. */
+export interface PersonSource { source: string; file: string; importedAt: number; key: string }
+
 export interface Person {
   id: string
   name: string
@@ -367,6 +370,8 @@ export interface Person {
   events?: string[]
   /** The relay identity an event link told me this person has; pairing stays with the connect action. Local only. */
   did?: string
+  /** Wave 27: where this person was imported from (one entry per source file, I8). Local only. Absent: entered by hand. */
+  sources?: PersonSource[]
   /**
    * How to reach them outside TrustWeb, canonical form per channel.ts. Kept on
    * the owner's own devices only (sealed when it travels between linked devices, sync_core.ts): never matched, relayed or put into a shared code.
@@ -1148,6 +1153,8 @@ export interface AppState {
   serverTranscriptionConsent?: ServerConsent
   /** Inventory files imported (Settings > Inventory), newest first, for "Undo import". Absent: none. */
   imports?: ImportBatch[]
+  /** Wave 27: imports from other services (WhatsApp, LinkedIn, contact files), newest first, local only. Absent: none. */
+  serviceImports?: ServiceBatch[]
   /** Settings > Feed (wave 1733 round B, items 1 and 2). Absent: the Feed off (wave 2, P9), nothing from the fediverse. */
   feed?: FeedSettings
   /** Settings > Features: only what is switched off is stored (absent or true = on). The Feed keeps its own switch (feed.on). */
@@ -1238,6 +1245,16 @@ export interface ImportBatch {
    */
   items: { itemId: string; key: string; sig?: string; text?: string; audience?: Audience }[]
 }
+
+/** Wave 27: one row of an import from another service, waiting for the owner on the Curate page (services_import.ts). Counts only, never message text. */
+export interface ServiceRow {
+  key: string; name: string; source: string; file: string; since?: number; org?: string
+  n365: number; out: number; in: number; lastTs?: number; ids: string[]; dupe?: boolean; sig: string
+}
+/** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
+export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; added?: boolean }
+/** Wave 27: one "From other services" import, kept for the Curate page and its undo. */
+export interface ServiceBatch { id: string; at: number; counts: Record<string, number>; rows: ServiceRow[]; done: Record<string, ServiceDone> }
 
 /** Demo content on this phone: these people and items were added as "imaginary friends" and are marked dummy. */
 export function isDemoPerson(s: Pick<AppState, 'demo'>, personId: string): boolean {
