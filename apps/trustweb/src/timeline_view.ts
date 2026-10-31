@@ -5,6 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { ICONS } from './icons'
+import { isSystemEvent } from './card_sections'
 import { S } from './strings'
 import { TL_CHANNELS, TlChannel, TlDirection, TlSource, IMPORT_MAX_BYTES, byDay, cleanEntry } from './timeline'
 import type { TimelineEntry } from './timeline'
@@ -40,12 +41,12 @@ function select(values: readonly string[], labels: Record<string, string>, label
   return el('select', { class: 'field', 'aria-label': label, [attr]: '' }, values.map((v) => el('option', { value: v }, [labels[v]]))) as HTMLSelectElement
 }
 
-export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => void): HTMLElement {
+export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => void, startOpen = false): HTMLElement {
   const list = el('div', { class: 'tl-list', 'aria-live': 'polite' })
   const form = el('div', { class: 'tl-form', hidden: true, 'data-tl-form': '' })
-  const toggle = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'person-timeline', 'aria-expanded': 'false' })
-  const panel = el('div', { class: 'tl-panel', hidden: true, 'data-tl-panel': '' })
-  let open = false
+  const toggle = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'person-timeline', 'aria-expanded': String(startOpen) })
+  const panel = el('div', { class: 'tl-panel', hidden: !startOpen, 'data-tl-panel': '' })
+  let open = startOpen
 
   const draw = (): void => {
     const all = h.entries()
@@ -61,7 +62,7 @@ export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => 
     const more = el('div', { class: 'tl-more meta', hidden: true }, [
       e.summary, e.ref ? ` · ${S.tlRef(e.ref)}` : '', ` · ${S.tlSource[e.source]} · ${S.tlDirection[e.direction]}`,
     ])
-    const row = el('button', { class: 'tl-entry', type: 'button', 'data-tl-entry': e.channel, 'aria-expanded': 'false' }, [
+    const row = el('button', { class: 'tl-entry ' + (isSystemEvent(e) ? 'tl-sys' : 'tl-human'), type: 'button', 'data-tl-entry': e.channel, 'aria-expanded': 'false' }, [
       glyph(e.channel),
       el('span', { class: 'tl-sum' }, [e.summary]),
       el('i', { class: 'tl-dir' }, [ARROW[e.direction] + ' ' + new Date(e.at).toLocaleTimeString([], { timeStyle: 'short' })]),

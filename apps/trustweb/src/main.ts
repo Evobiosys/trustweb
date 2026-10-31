@@ -41,7 +41,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection } from './timeline_view'
-import { addEntries, parseTimelineImport, timelineOf } from './timeline'
+import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -60,7 +60,11 @@ import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff }
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
-import { connectBlock, daysSection } from './card_pages_view'
+import { chatServices, noteUsed, togglePin as toggleChatPin } from './chat_row'
+import type { ChatService } from './chat_row'
+import { chatRow } from './chat_row_view'
+import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
+import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
 import { linkEntries } from './person_links'
 import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from './qr_modes'
@@ -88,9 +92,9 @@ import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import type { TabId } from './tab_row'
-import { expandedOf, viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
-import type { WebView } from './view_menu'
+import type { ViewKey, WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
@@ -104,6 +108,7 @@ import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
+import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
@@ -1006,8 +1011,8 @@ window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = fals
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
-function openPeople(): void {
-  resetPeopleList()
+function openPeople(query = ''): void {
+  resetPeopleList(query)
   peoplePage = true
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
@@ -1504,11 +1509,12 @@ function updateDeskToggle(): void {
   deskToggle.textContent = deskOpen() ? S.views.mobile : S.views.trustweb
 }
 
+/** Wave 27: Dex, Contacts (wide) and Contacts compact open as a page with Back, no longer as a sheet over the web (the sheet code is archived in DEVLOG/wave27/archive/views-eye). */
 function openDeskSheet(variant?: UiView): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openDesk(variant)
-  updateDeskToggle()
+  closeSheet()
+  if (screen !== Screen.Web) go(Screen.Web)
+  openWebPage({ kind: 'curator', variant })
+  if (variant === UiView.Classic) curator.openClassic(); else curator.openDesk(variant)
 }
 
 // Escape closes an open sheet, except while typing in a field inside it (the Curator is a shadow root: read the composed path).
@@ -1535,19 +1541,12 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
-/** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
-function openClassicSheet(): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openClassic()
-}
-
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
 function viewRow(): HTMLElement {
   const items = UI_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
     ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
-    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openDeskSheet(UiView.Classic); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
@@ -2051,7 +2050,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
       }
       pictured(face, p.theirProfile?.picture)
-      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => personSheet(p.id))
+      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
@@ -2111,15 +2110,28 @@ const HIDDEN_GUIDE_OPACITY = '.25'
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
 let webPage: WebPage | null = null
+/** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
+let cardExpanded = false
 
 function openWebPage(page: WebPage): void {
   webPage = page
+  cardExpanded = false
   history.pushState({ twPage: page.kind }, '')
   render()
 }
-window.addEventListener('popstate', () => { if (webPage) { webPage = null; render() } })
+window.addEventListener('popstate', () => {
+  if (cardExpanded) { cardExpanded = false; render(); return }
+  if (webPage) { webPage = null; render() }
+})
+
+function toggleCardExpanded(): void {
+  if (cardExpanded) { history.back(); return }
+  cardExpanded = true
+  history.pushState({ twPage: 'card-expanded' }, '')
+  render()
+}
 
 /** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
 function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
@@ -2131,10 +2143,15 @@ function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement
   }, ['+'])
 }
 
+function curatorPageTitle(variant?: UiView): string {
+  return variant === UiView.Dex ? S.viewNames.dex : variant === UiView.Classic ? S.viewNames.compact : S.views.desk
+}
+
 /** The page body for `webPage`, with its header and Back. */
 function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
+  if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2143,9 +2160,10 @@ function webPageScreen(page: WebPage): Node[] {
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
-  return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
+  return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
-    onOpen: () => { webPage = null; render(); personSheet(p.id) },
+    heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    onOpen: toggleCardExpanded,
     onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
@@ -2532,18 +2550,65 @@ function openEvents(eventId?: string): void {
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
+/** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
+let eyeOpen = false
+let webSearchOpen = false
+const HAS_MAP_VIEW = true
 
-/** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+
+/** The web-view-row: expand (Web only), the heading of the chosen view or the search field, the magnifier. */
+function webViewRow(view: WebView, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
-  return el('div', { class: 'web-view-row' }, [
-    view === 'rings' ? expand : null,
-    el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
-    iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
+  const mid = webSearchOpen
+    ? el('input', {
+      class: 'field web-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-web-search': '',
+      onkeydown: (ev: Event) => {
+        const e = ev as KeyboardEvent
+        const input = e.target as HTMLInputElement
+        if (e.key === 'Escape') { webSearchOpen = false; render() } else if (e.key === 'Enter') { webSearchOpen = false; openPeople(input.value) }
+      },
+    })
+    : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
+  if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
+  const find = iconButton('search', S.viewSearchAria, () => { webSearchOpen = !webSearchOpen; render() }, 'web-search-btn')
+  find.setAttribute('aria-expanded', String(webSearchOpen))
+  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid, find])
+}
+
+/** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
+function viewControls(current: ViewKey, anyone: boolean): Node {
+  const pins = st().uiPins?.views
+  const frag = document.createDocumentFragment()
+  for (const v of pinnedViews(pins, anyone, HAS_MAP_VIEW)) {
+    const b = iconButton(viewGlyph[v], S.viewNames[v], () => chooseView(v), 'view-pin' + (v === current ? ' on' : ''))
+    b.setAttribute('data-view-pin', v)
+    frag.append(b)
+  }
+  const eye = iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
+  eye.setAttribute('aria-expanded', String(eyeOpen))
+  frag.append(eye)
+  return frag
+}
+
+/** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
+function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
+  if (!eyeOpen) return null
+  const items = viewMenu(current, anyone, HAS_MAP_VIEW, st().uiPins?.views)
+  const btn = (i: { view: ViewKey; on: boolean }): HTMLElement => {
+    const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
+    b.innerHTML = icon(viewGlyph[i.view])
+    b.append(el('b', {}, [S.viewNames[i.view]]))
+    return b
+  }
+  const other = items.filter((i) => i.other)
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
+    ...items.filter((i) => !i.other).map(btn),
+    other.length ? el('div', { class: 'view-drop-sep' }, [S.viewOther]) : null,
+    ...other.map(btn),
   ])
 }
 
@@ -2552,17 +2617,12 @@ function toggleExpand(expanded: boolean): void {
   go(Screen.Web)
 }
 
-function viewSheet(current: WebView, anyone: boolean): void {
-  openSheet([
-    el('h3', {}, [S.viewMenuTitle]),
-    ...viewMenuItems(current, anyone).map(({ view, on }) => el('button', {
-      class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
-    }, [el('b', {}, [(on ? '✓ ' : '') + viewName(view)])])),
-  ])
-}
-
-/** Membranes and Network are remembered (WEB_VIEW_KEY). */
-function chooseView(view: WebView): void {
+/** Web and Network are remembered (WEB_VIEW_KEY); People, Dex and Contacts compact open as pages with Back. */
+function chooseView(view: ViewKey): void {
+  eyeOpen = false
+  if (view === 'people') { openPeople(); return }
+  if (view === 'dex') { openDeskSheet(UiView.Dex); return }
+  if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -2650,15 +2710,13 @@ function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
   const s = full
-  const search = iconButton('list', S.searchOpen, openPeople, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
-  const right = document.createDocumentFragment()
-  right.append(search)
+  const right = viewControls(view, s.people.length > 0)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2672,12 +2730,16 @@ function screenWeb(): Node[] {
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
-  zoomOnWeb(clip, layer)
+  // The Map has text boxes: no zoom layer (it would capture their pointers).
+  const clip = view === 'map'
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    : el('div', { class: 'scroll' }, [layer])
+  if (view !== 'map') zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, s.people.length > 0, expanded),
+    webViewRow(view, expanded),
+    ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -2996,6 +3058,8 @@ let cardOpenFor: string | null = null
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
+  // Wave 27: a card already open as a page redraws in place; the sheet below is the archived overlay (restore: DEVLOG/wave27/archive/card-overlay).
+  if (webPage?.kind === 'card' && webPage.id === personId) { render(); return }
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
@@ -3026,6 +3090,31 @@ function personSheet(personId: string): void {
   cardOpenFor = p.id
 }
 
+/** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
+function cardMore(p: Person): Node[] {
+  const cons = chatOnConsensual(p, st().preferConsensual)
+  const rows: Record<string, () => (Node | null)[]> = {
+    channels: () => [
+      cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
+      cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+      cardChannelsRow(p), reachedOutRow(p), noMessengerRow(p), sharedReachRow(p),
+    ],
+    askLinks: () => [askLinksRow(p)],
+    passOn: () => [passOnRowFor(p)],
+    knows: () => [knowsRow(p, st().people, save, () => personSheet(p.id))],
+    other: () => [
+      undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
+      askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+    ],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
+    timeline: () => [timelineSection(p)],
+    curate: () => [el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate])],
+  }
+  const connected = Boolean(p.peerId)
+  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
+  return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
+}
+
 /** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
 function cardChannelsRow(p: Person): HTMLElement | null {
   const chs = reachableChannels(p)
@@ -3049,18 +3138,34 @@ function cardChannelsRow(p: Person): HTMLElement | null {
 /** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const chat = chatButtonKind(p) === 'chat'
-  const b = el('button', {
-    class: 'btn ' + (chat && !quiet ? 'btn-electric' : 'btn-ghost'), 'data-card-chat': p.id, 'data-chat-open': p.id,
-    onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
-  })
-  b.innerHTML = icon('chat')
-  b.append(S.chatOpen)
+  const services = chatServices(p)
+  const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
+  const open = (svc: ChatService): void => {
+    noteUsed(st(), p.id, svc.id, Date.now()); save()
+    if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
+  }
+  let b: HTMLElement
+  if (services.length) {
+    b = chatRow({
+      personId: p.id, services, prefs: () => st().chatPrefs?.[p.id], mainClass, iconHtml: icon('chat'), open,
+      label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
+      pin: (id) => { toggleChatPin(st(), p.id, id); save() },
+    })
+  } else {
+    b = el('button', {
+      class: 'btn ' + mainClass, 'data-card-chat': p.id, 'data-chat-open': p.id,
+      onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
+    })
+    b.innerHTML = icon('chat')
+    b.append(S.chatOpen)
+  }
   return el('div', { class: 'card-chat' }, [b, chat ? null : connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast })])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
 function curatePage(p: Person): void {
   pages.open(S.cardCurate, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-curate-knows': p.id, onclick: () => { history.back(); window.setTimeout(() => document.querySelector(`[data-person-knows="${p.id}"]`)?.scrollIntoView({ block: 'center' }), 50) } }, [S.cardCurateKnows]),
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     introduceRow(p),
     agreementsFor(p),
@@ -3191,7 +3296,7 @@ function timelineSection(p: Person): HTMLElement {
   // The record may have been replaced since the card opened: write into the person as the record holds it now.
   const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
   return createTimelineSection({
-    entries: () => timelineOf(st(), now()),
+    entries: () => mergedTimeline(st(), now()),
     add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
     importText: (text) => {
       const r = parseTimelineImport(text)
@@ -3200,13 +3305,13 @@ function timelineSection(p: Person): HTMLElement {
       if (n) save()
       return S.tlImported(n, r.skipped, r.entries.length - n)
     },
-  }, toast)
+  }, toast, true)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
 function noMessengerRow(p: Person): HTMLElement | null {
   if (!p.peerId || primaryReachable(p)) return null
-  return el('p', { class: 'meta', 'data-no-messenger': p.id }, [S.cardNoMessenger(p.name)])
+  return noMessengerBlock(p, p.name, { link: async () => '', save, toast }, () => personSheet(p.id))
 }
 
 /** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */
@@ -6064,6 +6169,12 @@ function settingsSheet(): void {
     ], true),
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
+      el('p', { class: 'meta' }, [S.viewPinsHint]),
+      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+        el('b', {}, [S.viewNames[i.view]]),
+      ])),
     ]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {

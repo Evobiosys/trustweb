@@ -4,6 +4,7 @@
  * Each page is one history entry, so the browser's and the phone's Back close the top page. DOM only.
  */
 import { el } from '../../demo/src/ui/dom'
+import { pagesToKeep } from './page_stack'
 import { S } from './strings'
 
 export interface Pages {
@@ -16,13 +17,13 @@ export interface Pages {
 export function createPages(layer: HTMLElement): Pages {
   const stack: HTMLElement[] = []
   const drop = (keep: number): void => { while (stack.length > keep) stack.pop()?.remove() }
-  window.addEventListener('popstate', (e) => drop(typeof (e.state as { twPage?: unknown } | null)?.twPage === 'number' ? (e.state as { twPage: number }).twPage : 0))
+  window.addEventListener('popstate', (e) => drop(pagesToKeep(e.state)))
   return {
     open(title, body, mark) {
       history.pushState({ twPage: stack.length + 1 }, '')
       const page = el('div', { class: 'page-layer', role: 'region', 'aria-label': title, 'data-page': mark }, [
         el('div', { class: 'page-bar' }, [
-          el('button', { class: 'btn btn-ghost btn-sm', 'data-page-back': '', onclick: () => history.back() }, ['← ' + S.back]),
+          el('button', { class: 'btn btn-ghost btn-sm', 'data-page-back': '', onpointerup: () => history.back(), onclick: (e: Event) => { if ((e as MouseEvent).detail === 0) history.back() } }, ['← ' + S.back]),
           el('h2', {}, [title]),
         ]),
         ...body,
