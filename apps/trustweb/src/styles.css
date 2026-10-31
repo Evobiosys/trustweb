@@ -150,7 +150,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .add-node{position:absolute; top:4px; right:4px; z-index:6; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
 .small-card{display:flex; flex-direction:column; gap:10px; padding:14px}
 .small-card .card-actions{display:flex; gap:8px; align-items:center}
-.membrane-rest{display:flex; flex-direction:column; padding:8px}
+.membrane-rest{display:flex; flex-direction:column; padding:8px; min-height:60vh}
+.rest-add{border:1px dashed var(--line,currentColor); background:transparent; text-decoration:underline}
 .tag-filter{padding:6px 10px}
 .rings-wrap.hide-zone{outline:2px dashed #c62828; outline-offset:4px; border-radius:50%}
 .rings-wrap svg circle.drop{stroke-opacity:1; stroke-width:3}

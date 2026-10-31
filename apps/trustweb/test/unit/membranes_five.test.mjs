@@ -2,7 +2,7 @@
 /** Wave 25: the closest five per membrane (membranes_five.ts). */
 import { ChatDirection } from '../../src/chat.ts'
 import { Audience, Ring } from '../../src/model.ts'
-import { LIMIT_DEFAULT, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
+import { LIMIT_DEFAULT, isPinned, wholeZone, limitOf, parseLimit, pickFive, pinnedFrom, recency, repairPinned, sharedCount, slotAngle, withTag, collidingLabels } from '../../src/membranes_five.ts'
 
 const NOW = Date.UTC(2026, 9, 29, 12, 0)
 const person = (id, o = {}) => ({ id, name: id, context: '', ring: Ring.Friend, metAt: 0, ...o })
@@ -131,5 +131,16 @@ describe('favourite -> pinned', () => {
     expect(repairPinned(s)).toBe(true)
     expect(s.people).toEqual([{ id: 'a', pinned: true }, { id: 'b' }])
     expect(repairPinned(s)).toBe(false)
+  })
+})
+
+describe('wholeZone', () => {
+  const s = { chats: { pa: chat(300), pb: chat(100) } }
+  const a = person('a', { peerId: 'pa' }); const b = person('b', { peerId: 'pb' }); const c = person('c', { metAt: 200 }); const d = person('d', { pinned: true })
+  it('lists everyone, shown and rest together, pinned first then recency', () => {
+    expect(wholeZone([b, c, a, d], s, NOW).map((p) => p.id)).toEqual(['d', 'a', 'c', 'b'])
+  })
+  it('isPinned reads the pin flag', () => {
+    expect(isPinned(d)).toBe(true); expect(isPinned(a)).toBe(false)
   })
 })
