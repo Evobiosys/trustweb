@@ -56,7 +56,8 @@ import {
 import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
 import { inviteText, sendInvite } from './invite'
-import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
+import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, noticesOff, passOnDefaultNoticeDue, setNoticesOff } from './notices'
+import { cardPopAction } from './page_stack'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
@@ -96,6 +97,7 @@ import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
+import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
@@ -187,7 +189,7 @@ import { importGroup } from './import_view'
 import { servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
-import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
+import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
 import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
@@ -234,6 +236,7 @@ import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import { joinFrontDoor, mergeOneJakob, ownFrontDoor, passOnAllowed, personOfPeer, samePersonTarget } from './one_jakob'
 import { kindsOf, NOTIFY_KINDS, wantsKind } from './notify_kinds'
+import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
@@ -397,6 +400,9 @@ if (apkLaunch) rememberApkSession(apkLaunch)
 function installedHere(): boolean {
   return runsAsInstalledApp() || isApkSession() || nativeApp
 }
+// Wave 27 review: the extension modules read their pairing links from this copy, taken before the clean below.
+const bootHash = location.hash
+const bootSearch = location.search
 // Keep only what a reload needs; the connect parameters are consumed once.
 history.replaceState(null, '', location.pathname + (solo ? `?persona=${persona}&solo=1&ctx=${ctx}` : isDemoPersona(persona) ? `?persona=${persona}` : devParam ? `?dev=${devParam}` : ''))
 
@@ -781,8 +787,10 @@ function checkEngagement(): void {
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
-  const shown = soon.length === 0 || notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id))
-  if (shown) { state.engagementNoticeDay = localDay(new Date(now)); save() }
+  // Stamped once the warning was shown; in the Events panel that is when its row is drawn, so a reload before then shows it again.
+  const stamp = (): void => { if (state) { state.engagementNoticeDay = localDay(new Date(now)); save() } }
+  if (soon.length === 0) stamp()
+  else notifyKind('reminder', S.engagementSoonTitle(names, more), S.engagementSoonOpen, () => personSheet(soon[0].id), stamp)
 }
 
 function dismissCard(card: StackCard): void {
@@ -806,23 +814,34 @@ function ownDoorDid(): string | null {
 /** Wave 11: every arrival has a kind, each with its own switch (notify_kinds.ts); shown only while the page is hidden. */
 function notify(kind: NotifyKind, body: string, offerOff = false): void {
   if (!state || !wantsKind(state, kind) || !document.hidden || typeof Notification === 'undefined') return
-  if (Notification.permission === 'granted') void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined)
+  if (Notification.permission === 'granted') { void showNotification(S.appName, body, offerOff ? S.chatNotifOff : undefined); arrivalHome = notifyHome(kind) }
 }
+/** Wave 27 (notify_route.ts): the screen that owns the last arrival told while the page was hidden; the person lands there on return, unless something is open. */
+let arrivalHome: NotifyHome | null = null
+const HOME_SCREEN: Record<NotifyHome, Screen> = { chat: Screen.Chat, inventory: Screen.Inventory, web: Screen.Web, events: Screen.Events }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !arrivalHome) return
+  const home = HOME_SCREEN[arrivalHome]
+  arrivalHome = null
+  if (state && !solo && screen !== home && !sheet.classList.contains('on') && !overlay.classList.contains('on')) go(home)
+})
 
 /**
  * A task or resource reminder came due (calendar module). Hidden page: a system notification when notifications and the reminder switch
  * are on; page open: a notice with an Open button when the reminder switch is on.
  */
-function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void): boolean {
+function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onOpen: () => void, onShown?: () => void): boolean {
   if (!state || !kindsOf(state)[kind]) return false
   if (document.hidden) {
     if (!wantsKind(state, kind) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
     void showNotification(S.appName, title)
+    onShown?.()
     return true
   }
-  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts); an event notice has no other home and stays a notice.
-  if (kind === 'reminder') { addReminder({ title, openLabel: body, onOpen }); if (screen === Screen.Events) render(); return true }
+  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts) while Events is on; an event notice, or Events switched off, stays a notice.
+  if (kind === 'reminder' && featureOn(state, 'events')) { addReminder({ title, openLabel: body, onOpen, onShown }); if (screen === Screen.Events) render(); return true }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
+  onShown?.()
   return true
 }
 
@@ -1044,7 +1063,7 @@ function openPeople(query = ''): void {
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [peopleListBody(st, (id) => personSheet(id), !window.matchMedia('(pointer: coarse)').matches)]),
+    el('div', { class: 'scroll pad' }, [peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches)]),
   ]
 }
 
@@ -2157,9 +2176,16 @@ function openWebPage(page: WebPage): void {
   history.pushState({ twPage: page.kind }, '')
   render()
 }
-window.addEventListener('popstate', () => {
-  if (cardExpanded) { cardExpanded = false; render(); return }
-  if (webPage) { webPage = null; render() }
+/** A person's card as a page on the Web (no overlay): from the People list, Network, Map and Feed. */
+function openCardPage(id: string): void {
+  closeSheet()
+  peoplePage = false
+  go(Screen.Web)
+  openWebPage({ kind: 'card', id })
+}
+window.addEventListener('popstate', (e) => {
+  const act = cardPopAction(e.state, cardExpanded)
+  if (act === 'collapse') { cardExpanded = false; render() } else if (act === 'leave' && webPage) { cardExpanded = false; webPage = null; render() }
 })
 
 function toggleCardExpanded(): void {
@@ -2202,7 +2228,7 @@ function webPageScreen(page: WebPage): Node[] {
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     chat: cardChatButton(p, false),
-    onTag: (id) => { tagFilter = id; back() },
+    onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
   })])]
 }
 
@@ -2590,6 +2616,8 @@ const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
 /** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
 let eyeOpen = false
+// Escape or a tap outside the dropdown (and the eye itself, which toggles) closes it.
+dismissOnOutside((t) => !eyeOpen || (t instanceof Element && !!t.closest('[data-view-drop], .view-menu-btn')), () => { if (eyeOpen) { eyeOpen = false; render() } })
 let webSearchOpen = false
 const HAS_MAP_VIEW = true
 
@@ -2711,7 +2739,7 @@ function chatListBody(): Node[] {
 
 /** Wave 27: reminders that came due, at the top of the Events panel; each with Open and a dismiss. */
 function reminderRows(): Node[] {
-  return remindersWaiting().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
+  return drawReminders().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
     el('span', { class: 'who' }, [el('b', {}, [r.title])]),
     el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { dismissReminder(r); r.onOpen() } }, [r.openLabel]),
     el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { dismissReminder(r); render() } }, ['×']),
@@ -2771,6 +2799,17 @@ function chatNewSheet(): void {
   openSheet([el('h3', {}, [S.chatNewTitle]), search, list])
 }
 
+/** Wave 27 (D2): once after the upgrade, an honest line that the pass-on default narrowed; drawn once, then marked dismissed. */
+function passOnNotice(): HTMLElement | null {
+  if (!passOnDefaultNoticeDue(st())) return null
+  dismissNotice(st(), PASS_ON_DEFAULT_NOTICE); save()
+  const note = el('p', { class: 'meta', role: 'status', 'data-pass-on-notice': '' }, [
+    S.passOnDefaultNotice,
+    el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => note.remove() }, ['×']),
+  ])
+  return note
+}
+
 function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
@@ -2787,9 +2826,10 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet() })
       : ringsView(s, askMarks(), undefined, { complete: expanded }),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2797,7 +2837,7 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save })])
     : el('div', { class: 'scroll' }, [layer])
   if (view !== 'map') zoomOnWeb(clip, layer)
   return [
@@ -3149,10 +3189,14 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
-    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => { void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url })) } }, [S.qrPageTitle]),
+    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => personQr(p) }, [S.qrPageTitle]),
     el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
+}
+
+function personQr(p: Person): void {
+  void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -3173,7 +3217,10 @@ function cardMore(p: Person): Node[] {
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
     timeline: () => [timelineSection(p)],
-    curate: () => [el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate])],
+    curate: () => [
+      el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => personQr(p) }, [S.qrPageTitle]),
+      el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
+    ],
   }
   const connected = Boolean(p.peerId)
   const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
@@ -3247,11 +3294,11 @@ async function qrPage(build: (link: string) => QrContext): Promise<void> {
 
 /** Curate: what others may pass on about this person when they introduce them, and the public username I know for them. */
 function introduceRow(p: Person): HTMLElement {
-  const sel = el('select', { 'aria-label': S.introduceLabel, 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
+  const sel = el('select', { 'aria-label': S.introduceLabel(p.name), 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
     INTRODUCE_PERMISSIONS.map((o) => el('option', { value: o, selected: parseIntroducePermission(p.introducePermission) === o }, [S.introduceOptions[o]])))
   const name = el('input', { class: 'field', maxlength: '30', 'aria-label': S.introduceUsernameLabel, placeholder: S.introduceUsernameLabel, value: p.publicUsername ?? '', 'data-public-username': p.id }) as HTMLInputElement
   name.addEventListener('change', () => { p.publicUsername = name.value.trim().replace(/^@/, '').toLowerCase() || undefined; save() })
-  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel + ' ', sel]), name])
+  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel(p.name) + ' ', sel]), name])
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
@@ -4425,7 +4472,7 @@ const eventsView = createEventsView({
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const extHooks: ExtHooks = {
-  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8),
+  state: st, save, redraw: render, header, leave: () => go(Screen.Web), newId: () => randomId(8), boot: { hash: bootHash, search: bootSearch },
   openEvent: (id) => { eventsView.open(id); if (screen === Screen.Events) render(); else go(Screen.Events) },
   addEvent: (fromIso) => eventsView.openForm(fromIso),
   showList: () => eventsView.showList(),
@@ -4452,7 +4499,7 @@ const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
 const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
 const feed = createFeedView({
-  state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
+  state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
   openMeeting: (id) => { const m = pastMeetings(st()).find((x) => x.id === id); if (m) pastMeetingSheet(m) },
   redrawFeed: () => { if (screen === Screen.Feed) render() },

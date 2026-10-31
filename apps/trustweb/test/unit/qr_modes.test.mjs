@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** QR modes (src/qr_modes.ts, wave 27): mode() per context, payload round trip, old-code compatibility. Fake data only. */
-import { decodeModeLink, mode, parseIntroducePermission } from '../../src/qr_modes.ts'
+import { decodeModeLink, mode, parseIntroducePermission, QR_PROFILE_OPTION } from '../../src/qr_modes.ts'
 import { decodeEventLink } from '../../src/event_link.ts'
 
 const LINK = 'https://app.trustweb.one/?connect=did%3Apeer%3Aabc&id=p1&name=Ada'
@@ -26,7 +26,15 @@ describe('mode() per context', () => {
     expect(decodeModeLink(m.payload)).toEqual({ kind: 'person', username: 'kaja' })
   })
 
-  it('person: the acquaintance-level profile is offered only for one-ring-closer', () => {
+  it('person: the profile option stays hidden while QR_PROFILE_OPTION is off (a typed messenger link is not a profile)', () => {
+    expect(QR_PROFILE_OPTION).toBe(false)
+    const base = { kind: 'person', link: LINK, name: 'Kaja', username: 'kaja', profile: 'https://signal.me/#p/+4366000', introducePermission: 'one-ring-closer' }
+    expect(mode(base, ['username', 'profile']).options.map((o) => o.id)).toEqual(['username'])
+    expect(mode(base, ['username', 'profile']).payload).not.toContain('signal.me')
+    expect(decodeModeLink(mode(base, ['username', 'profile']).payload)).toEqual({ kind: 'person', username: 'kaja' })
+  })
+
+  it.skip('person: the acquaintance-level profile is offered only for one-ring-closer (needs QR_PROFILE_OPTION)', () => {
     const base = { kind: 'person', link: LINK, name: 'Kaja', username: 'kaja', profile: 'https://signal.me/#eu/x' }
     expect(mode({ ...base, introducePermission: 'public' }).options.map((o) => o.id)).toEqual(['username'])
     expect(mode({ ...base, introducePermission: 'ask-first' }).options).toEqual([])
@@ -61,13 +69,13 @@ describe('mode() per context', () => {
     for (const kind of ['item', 'calendar', 'group']) {
       const m = mode({ kind, link: LINK, shareLink: 'https://app.trustweb.one/#x=1' })
       expect(decodeModeLink(m.payload)).toEqual({ kind, link: 'https://app.trustweb.one/#x=1' })
-      expect(new URL(m.payload).searchParams.get('m')).toBe(kind)
+      expect(new URLSearchParams(new URL(m.payload).hash.slice(1)).get('m')).toBe(kind)
     }
   })
 
-  it('a short code link takes the mode with ?', () => {
+  it('a short code link takes the mode in the fragment', () => {
     const m = mode({ kind: 'person', link: SHORT, name: 'K', username: 'k' }, ['username'])
-    expect(m.payload.startsWith(SHORT + '?m=person')).toBe(true)
+    expect(m.payload.startsWith(SHORT + '#m=person')).toBe(true)
   })
 })
 
@@ -85,6 +93,35 @@ describe('decode / compatibility', () => {
   it('the connect parameters survive in a mode payload (old scanners still connect)', () => {
     const m = mode({ kind: 'person', link: LINK, name: 'K', username: 'k' }, ['username'])
     expect(new URL(m.payload).searchParams.get('id')).toBe('p1')
+  })
+})
+
+describe('wave 27 review: the body rides in the fragment, with caps', () => {
+  it('m and x are in the fragment, not the query string', () => {
+    const m = mode({ kind: 'person', link: LINK, name: 'K', username: 'k' }, ['username'])
+    const u = new URL(m.payload)
+    expect(u.search).toBe(new URL(LINK).search)
+    expect(u.hash).toMatch(/^#m=person&x=/)
+    const t = new URL(mode({ kind: 'community', link: LINK, tag: 'meditation', people: ['a'] }).payload)
+    expect(t.search).toBe(new URL(LINK).search)
+    expect(t.hash).toMatch(/^#m=tag&x=/)
+  })
+  it('a code that already has a fragment keeps it', () => {
+    const m = mode({ kind: 'person', link: LINK + '#k=1', name: 'K', username: 'k' }, ['username'])
+    expect(new URL(m.payload).hash.startsWith('#k=1&m=person&x=')).toBe(true)
+    expect(decodeModeLink(m.payload)).toEqual({ kind: 'person', username: 'k' })
+  })
+  it('an old code with m= and x= in the query still decodes (and still connects)', () => {
+    const x = btoa(JSON.stringify({ u: 'kaja' })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    expect(decodeModeLink(LINK + '&m=person&x=' + x)).toEqual({ kind: 'person', username: 'kaja' })
+  })
+  it('caps: username 30, tag 60, people 200', () => {
+    const p = decodeModeLink(mode({ kind: 'person', link: LINK, name: 'K', username: 'u'.repeat(50) }, ['username']).payload)
+    expect(p.username).toHaveLength(30)
+    const people = Array.from({ length: 250 }, (_, i) => 'p' + i)
+    const t = decodeModeLink(mode({ kind: 'community', link: LINK, tag: 't'.repeat(90), people }).payload)
+    expect(t.tag).toHaveLength(60)
+    expect(t.people).toHaveLength(200)
   })
 })
 

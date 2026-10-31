@@ -9,7 +9,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 export const APP_ORIGINS = ['https://app.trustweb.one', 'https://dev.trustweb.one', 'https://pre.trustweb.one']
-const LOCAL_DEV = /^http:\/\/localhost:\d{1,5}$/
+const LOCAL_DEV = /^http:\/\/(localhost|127\.0\.0\.1):\d{1,5}$/
 const CLI_TIMEOUT_MS = 20000
 const BODY_MAX = 16 * 1024
 const TEXT_MAX = 4000

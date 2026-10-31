@@ -2,7 +2,7 @@
 # TrustWeb Signal link companion
 
 A small laptop process (Node, stdlib only) behind the TrustWeb extension "Signal / Molly". It links this computer to your
-existing Signal or Molly account as an additional device, collects counts and a local word list per conversation, and serves them
+existing Signal or Molly account as an additional device, collects counts (on disk) and a word list per conversation (in memory only), and serves them
 to the TrustWeb app in your browser over `127.0.0.1`. Nothing is sent to the TrustWeb project or its servers.
 
 ## Run
@@ -53,14 +53,14 @@ Not verified against a real signal-cli (it was not available): all of these are 
 | `GET /import` | `{v, generatedAt, note, conversations:[{e164,name,n365,out,in,firstTs,lastTs,words:[[word,count],...]}]}` |
 
 Rules: bound to 127.0.0.1; `Host` must be `127.0.0.1:<port>` or `localhost:<port>`; `Authorization: Bearer <token>`; an `Origin` must be
-`https://app.trustweb.one`, `https://dev.trustweb.one`, `https://pre.trustweb.one` or `http://localhost:<port>`; CORS headers only for those.
+`https://app.trustweb.one`, `https://dev.trustweb.one`, `https://pre.trustweb.one` or `http://localhost:<port>` / `http://127.0.0.1:<port>` (any port); CORS headers only for those.
 
 ## What is stored, where
 
-`~/.trustweb-signal-link/messages.jsonl` (directory 0700, file 0600): one line per message with peer number, direction, time, and the
-kept words of that message (stopwords, short words and numbers dropped, then sorted alphabetically so the sentence cannot be read
-back). Message bodies are not written. Words are still personal data: delete the folder to forget them. signal-cli keeps its own
-account data in its own folder, outside this project.
+`~/.trustweb-signal-link/messages.jsonl` (directory 0700, file 0600): one line per message with peer number, direction and time only.
+No message text and no words are written. The words (stopwords, short words and numbers dropped) are counted in the companion's
+memory per peer while it runs, returned by `/import`, and gone when the companion stops, so the word list covers the time since
+the start. Delete the folder to forget the counts. signal-cli keeps its own account data in its own folder, outside this project.
 
 The word histogram is returned only by `/import` to the page on this computer, shown there as "words you use together", and never
 written into the TrustWeb record.

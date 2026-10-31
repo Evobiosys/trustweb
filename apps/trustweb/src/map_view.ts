@@ -5,6 +5,7 @@
  * Everything local (I1): the table is bundled, nothing is sent.
  */
 import { el } from '../../demo/src/ui/dom'
+import { activateKey } from './key_press'
 import type { Person } from './model'
 import { clearPlace, pinGroups, placeSuggest, project, setPlace } from './place_suggest'
 import type { PersonPlace, PlaceHit } from './place_suggest'
@@ -64,6 +65,7 @@ export function createMapView(opts: MapOptions): HTMLElement {
       const dot = svg('g', { class: 'map-dot', 'data-map-dot': g.place, tabindex: '0', role: 'button', 'aria-label': `${g.place}: ${g.people.map((p) => p.name).join(', ')}` })
       dot.append(svg('circle', { cx: String(x), cy: String(y), r: '4' }), svg('text', { x: String(x + 6), y: String(y + 3) }, label))
       dot.addEventListener('click', () => openPerson(first.id))
+      dot.addEventListener('keydown', activateKey(() => openPerson(first.id)))
       return [dot]
     }))
   }

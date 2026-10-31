@@ -9,6 +9,8 @@ import { gebModule } from './geb'
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
   state: () => AppState
+  /** The address as the page was opened, before the startup clean removed the one-time parameters (pairing links, SSO return). */
+  boot: { hash: string; search: string }
   save: () => void
   redraw: () => void
   header: (title: string, opts: { back: () => void }) => HTMLElement

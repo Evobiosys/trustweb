@@ -4,11 +4,19 @@ export interface Reminder {
   title: string
   openLabel: string
   onOpen: () => void
+  /** Called once, the first time the row is drawn (the caller stamps its once-a-day flag then, so a reload before that shows it again). */
+  onShown?: () => void
 }
 
 const waiting: Reminder[] = []
 
 export const remindersWaiting = (): readonly Reminder[] => waiting
+
+/** The rows to draw now; each reminder's onShown fires on its first draw. */
+export function drawReminders(): readonly Reminder[] {
+  for (const r of waiting) { r.onShown?.(); r.onShown = undefined }
+  return waiting
+}
 
 export function addReminder(r: Reminder): void {
   if (!waiting.some((w) => w.title === r.title)) waiting.push(r)

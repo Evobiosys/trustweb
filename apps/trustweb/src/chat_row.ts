@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 27 chat-row (Jakob 2026-10-31): the Chat button on a person's card opens the service most recently used WITH THIS PERSON,
- * unless the owner pinned one in the dropdown. Pure, no DOM. Preferences live in AppState.chatPrefs[personId] (this phone only; absent = none).
+ * unless the owner pinned one in the dropdown. Pure, no DOM. Preferences live in AppState.chatPrefs[personId] (travel to the owner's own devices as a setting; absent = none).
  */
 import { reachableChannels } from './contact_share'
 import type { ContactCarrier } from './contact_share'

@@ -343,6 +343,7 @@ export const S = {
   webCount: (people: number, connected: number) => `${people} ${people === 1 ? 'person' : 'people'} · ${connected} on TrustWeb`,
   netRings: 'Web',
   netNetwork: 'Network',
+  // unused since wave27 review, archive candidate
   netMap: 'Map',
   mapAria: 'Map of the places you gave your people',
   mapPlacePh: 'Place',
@@ -592,6 +593,7 @@ export const S = {
   evOrgCounts: 'The organizer sees counts only: how many opened, joined and tagged. Never who.',
   eventLinkHostNames: 'The host names the tag for this event.',
   // Wave 6 (N3, N8a): the top-right glyph on Web is the outliner (manage and search the people you hold); the magnifier belongs to past meetings.
+  // unused since wave27 review, archive candidate
   searchOpen: 'Contacts',
   // Wave 25: the people list page behind it.
   peopleSearchPh: 'Search people',
@@ -1145,7 +1147,7 @@ export const S = {
   qrTooLong: 'Too much for one code. Switch an option off.',
   qrScanUsername: (name: string, username: string): string => `${name} shares the public username @${username}`,
   qrScanTag: (tag: string): string => `A shared group: ${tag}`,
-  introduceLabel: 'Others may introduce me:',
+  introduceLabel: (name: string): string => `Others may introduce ${name}:`,
   introduceOptions: { public: 'username only', 'one-ring-closer': 'one ring closer', 'ask-first': 'ask first' },
   introduceUsernameLabel: 'Their public username',
   cardChEditAria: (channel: string): string => `Edit ${channel} link`,
@@ -1232,6 +1234,7 @@ export const S = {
   setTabRowLocked: 'Resources stays on the right.',
   tabLabel: { web: 'Web', chat: 'Chat', record: 'Record', events: 'Events', inventory: 'Resources', feed: 'Feed', network: 'Network', desk: 'Contacts' } as Record<string, string>,
   viewMenuAria: 'Choose a view',
+  // unused since wave27 review, archive candidate
   viewMenuTitle: 'View',
   viewNames: { rings: 'Web', network: 'Network', people: 'People', map: 'Map', dex: 'Dex', compact: 'Contacts compact' } as Record<string, string>,
   viewOther: 'Other views',
@@ -1307,13 +1310,17 @@ export const S = {
   sigDone: (zone: string) => `Placed: ${zone}`,
   sigLeft: 'Left out',
   sigHere: 'in your web',
+  // unused since wave27 review, archive candidate
   sigCounts: (out: number, inn: number) => `${out} sent, ${inn} received`,
   sigWords: 'Words you use together',
   sigFinish: 'Done',
+  // unused since wave27 review, archive candidate
   sigAllDone: 'Chat > Extend now lists these conversations.',
   sigPrivacyTitle: 'Where does this run?',
   sigPrivacy: 'Everything runs on this computer. The companion talks to this page over 127.0.0.1 with a code that changes at every start. The record stays end-to-end encrypted between your own devices as before. The TrustWeb project and its servers do not see your contacts, your words or your zones. Imported conversations stay on this device; people you accept travel between your own devices like any other person.',
+  // unused since wave27 review, archive candidate
   sigNeedsSetup: 'Set up Signal / Molly',
+  // unused since wave27 review, archive candidate
   sigNoNumber: 'No phone number for this conversation.',
   // Wave 27 (msg-matrix): the Matrix module. Long text sits under (i).
   matrix: {
@@ -1378,6 +1385,7 @@ export const S = {
       'The bridge never starts the Geb listener. Run your own `geb listen` to receive new messages. Opening a chat here does not mark anything as read in Geb.',
       'What Geb prints is not fully checked yet; if a list looks wrong, open Geb itself.',
     ],
+    // unused since wave27 review, archive candidate
     threadsTitle: 'Geb on this computer',
     historyTitle: (name: string) => `Geb: ${name}`,
     historyEmpty: 'No messages shown yet.',
@@ -1497,7 +1505,7 @@ export const S = {
   passOnStateOn: 'On',
   passOnStateOff: 'Off',
   passOnInfoAria: 'About passing asks on',
-  passOnHint: 'Off unless they are close friends and allies. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
+  passOnHint: 'Off unless they are close friends, allies or closer. When they ask further than their own contacts, their ask may then go on through you to yours. Whoever answers still decides with their own yes.',
   logPassedOn: (n: number, back: number) => (back ? `passed on to ${n}, ${back} came back` : `passed on to ${n}`),
   queryWaiting: (s: number) => (s > 0 ? `Answers in ${s < 120 ? `about ${s} s` : waitLabel(s)}` : 'Waiting for anyone still deciding...'),
   resultShared: (name: string) => `${name} chose to share`,
@@ -1543,6 +1551,7 @@ export const S = {
   nameCapSent: 'Sent to the steward; you hear back by mail or here',
   nameCapThrottled: 'One request per day',
   nameCapFailed: 'Could not send. Try again in a moment.',
+  passOnDefaultNotice: 'Passing asks on is now off by default except for close friends and allies; change it per person on their card',
   namePreviousHolder: 'This username belonged to someone else before.',
   unTitle: 'My username',
   unLinkTap: 'Change your link',
@@ -2055,7 +2064,7 @@ export const S = {
   svcCurate: (n: number) => `Curate (${n})`,
   svcUndo: 'Undo this import',
   svcUndoConfirm: 'Take this import back? People it added leave your web (kept as "Not in my web"); rings it changed go back.',
-  svcUndone: (archived: number, restored: number) => `Import taken back: ${archived} left your web, ${restored} ring${restored === 1 ? '' : 's'} restored.`,
+  svcUndone: (archived: number, restored: number, kept = 0) => `Import taken back: ${archived} left your web, ${restored} ring${restored === 1 ? '' : 's'} restored${kept ? `, ${kept} kept as they are now` : ''}.`,
   svcCuratePage: 'Curate imported people',
   svcCurateEmpty: 'Nobody waits for a decision.',
   svcInferred: 'inferred, not verified',

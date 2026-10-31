@@ -23,6 +23,10 @@ test('guard: wrong host (DNS rebinding) is refused', () => {
 test('guard: foreign origins are refused', () => {
   for (const origin of ['https://evil.example', 'http://app.trustweb.one', 'https://app.trustweb.one.evil.com', 'null', 'http://localhost.evil.com']) assert.equal(chk({ origin }).status, 403, origin)
 })
+test('guard: a local preview on localhost or 127.0.0.1, any port, is allowed', () => {
+  for (const origin of ['http://localhost:5461', 'http://127.0.0.1:5461']) assert.equal(chk({ origin }).ok, true, origin)
+  for (const origin of ['https://127.0.0.1:5461', 'http://127.0.0.1.evil.com:5461', 'http://127.0.0.1']) assert.equal(chk({ origin }).status, 403, origin)
+})
 test('guard: token must match exactly', () => {
   for (const authorization of [undefined, '', 'Bearer ', 'Bearer x', 'Bearer ' + tok + 'x', tok, 'Basic ' + tok]) assert.equal(chk({ authorization }).status, 401, String(authorization))
 })
