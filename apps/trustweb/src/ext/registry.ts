@@ -37,6 +37,34 @@ export interface ExtHooks {
   toast: (msg: string) => void
   origin: string
   me: () => { name: string; did?: string }
+  /** Wave 27: a page with a Back control (history.pushState), for setup steps; mark = its data-page attribute. */
+  page: (title: string, body: Node[], mark: string) => void
+}
+
+/** Wave 27: one conversation in an extended messenger, as the Chat screen lists it. */
+export interface ThreadSummary {
+  id: string
+  title: string
+  /** ms since epoch; 0 when unknown. */
+  lastAt: number
+  unread: number
+  /** The TrustWeb person this thread is with, when known. */
+  peerId?: string
+}
+
+/** Wave 27: a messenger the Chat screen can extend into (Geb, Signal/Molly, Matrix). live = reachable now, archive = imported read-only. */
+export interface MessengerSource {
+  id: string
+  label: string
+  icon: string
+  status: () => 'live' | 'archive' | 'needs-setup'
+  threads: () => ThreadSummary[] | Promise<ThreadSummary[]>
+  open: (threadId: string) => void
+  send?: (threadId: string, text: string) => Promise<boolean>
+  /** Opens the module's setup page (needs-setup). */
+  setup?: () => void
+  /** The module's own extended view in place of the thread list (Geb's own UI). */
+  view?: () => Node[]
 }
 
 export interface ExtModule {
@@ -59,6 +87,8 @@ export interface ExtModule {
     /** Called once the record is loaded: starts the module's timers. */
     start?: () => void
   }
+  /** Wave 27: the messenger this module adds to the Chat screen's Extend. */
+  messenger?: (h: ExtHooks) => MessengerSource
 }
 
 export const EXT_MODULES: ExtModule[] = [calendarModule]
