@@ -12,6 +12,7 @@ import type { Camera, Size } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
 import type { MenuAction } from './network_menu'
 import { S } from './strings'
+import { shortLabel } from './short_label'
 
 export interface NetworkOptions {
   me: { id: string; displayName: string }
@@ -166,7 +167,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const colour = (v: GraphNode): string =>
     v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : TIER_COLOUR[v.tier]
 
-  const label = (v: GraphNode): string => (v.desire === undefined ? v.name : `${v.name} · ${S.netWants(v.desire)}`)
+  const label = (v: GraphNode): string => (v.desire === undefined ? shortLabel(v.name) : `${shortLabel(v.name)} · ${S.netWants(v.desire)}`)
 
   const draw = (): void => {
     if (!ctx) return
@@ -200,6 +201,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
+    const labels: { text: string; x: number; y: number; alpha: number; fill: string }[] = [] // drawn after every dot and edge, above the dot
     g.nodes.forEach((v, i) => {
       const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
       const x = v.x * c.k + c.x
@@ -223,15 +225,14 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (lq) {
         const a = lit ? fade : fade * 0.15
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
-        ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
-        ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
-        ctx.fillText(label(v), x, y + rad + 10)
+        labels.push({ text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label })
       } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
-        ctx.globalAlpha = 1
-        ctx.fillStyle = ink
-        ctx.fillText(label(v), x, y + rad + 12)
+        labels.push({ text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink })
       }
     })
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5
+    ctx.strokeStyle = lq ? LOGSEQ.bg : css.getPropertyValue('--linen').trim() || '#FFFFFF' // halo: readable over edges
+    for (const l of labels) { ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y) }
     ctx.globalAlpha = 1
   }
 
