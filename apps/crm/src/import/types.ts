@@ -12,6 +12,10 @@ export enum ContactSource {
   VCard = 'vcard',
   GoogleCsv = 'google-csv',
   FacebookJson = 'facebook-json',
+  /** Chat export (_chat.txt): read by whatsapp.ts with the owner's own name; never by the contact-file picker. */
+  WhatsApp = 'whatsapp',
+  /** LinkedIn Connections.csv (a data export, re-imported when a newer one is dropped). */
+  LinkedIn = 'linkedin',
 }
 
 export interface ImportedContact {
