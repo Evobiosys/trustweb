@@ -43,11 +43,26 @@ describe('signal-link: accepting', () => {
     expect(s.people).toHaveLength(1)
     expect(s.people[0]).toMatchObject({ id: 'n1', name: 'Test 03', ring: Ring.Friend, channels: { [Channel.Signal]: '+436600000003' } })
   })
-  it('an existing person is re-ringed, never duplicated', () => {
-    const s = { people: [person('p1', '+436600000001')] }
+  it('Accept on an existing person keeps the ring and never duplicates', () => {
+    const s = { people: [{ ...person('p1', '+436600000001'), ring: Ring.Close }] }
     acceptProposal(s, { e164: '+436600000001', name: 'Test 01', personId: 'p1' }, Ring.Friend, () => 'zz', NOW)
     expect(s.people).toHaveLength(1)
+    expect(s.people[0].ring).toBe(Ring.Close)
+    expect(s.people[0].channels[Channel.Signal]).toBe('+436600000001')
+  })
+  it('Accept adds Channel.Signal to a person found by id who lacks it', () => {
+    const s = { people: [{ id: 'p1', name: 'Test 01', context: '', ring: Ring.Close, metAt: 0, lines: [] }] }
+    acceptProposal(s, { e164: '+436600000001', name: 'Test 01', personId: 'p1' }, Ring.Friend, () => 'zz', NOW)
+    expect(s.people[0].channels).toEqual({ [Channel.Signal]: '+436600000001' })
+    expect(s.people[0].ring).toBe(Ring.Close)
+  })
+  it('Change re-rings an existing person and records the previous ring', () => {
+    const s = { people: [{ ...person('p1', '+436600000001'), ring: Ring.Close }], signalImport: { at: 1, conversations: [] } }
+    acceptProposal(s, { e164: '+436600000001', name: 'Test 01', personId: 'p1' }, Ring.Friend, () => 'zz', NOW, true)
     expect(s.people[0].ring).toBe(Ring.Friend)
+    expect(s.signalImport.prevRing).toEqual({ p1: Ring.Close })
+    acceptProposal(s, { e164: '+436600000001', name: 'Test 01', personId: 'p1' }, Ring.Acquaintance, () => 'zz', NOW, true)
+    expect(s.signalImport.prevRing).toEqual({ p1: Ring.Close })
   })
   it('accepting the same number twice finds the first person', () => {
     const s = { people: [] }

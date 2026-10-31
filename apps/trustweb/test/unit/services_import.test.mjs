@@ -87,12 +87,23 @@ describe('commit, curate, undo', () => {
     expect(s.people).toHaveLength(2)
     expect(s.people[0].ring).toBe(Ring.Friend)
     const r = undoBatch(s, 'b1')
-    expect(r).toEqual({ restored: 1, archived: 1 })
+    expect(r).toEqual({ restored: 1, archived: 1, kept: 0 })
     expect(s.serviceImports).toEqual([])
     expect(s.people).toHaveLength(2)
     expect(s.people[0].ring).toBe(Ring.Close)
     expect(s.people[0].sources ?? []).toEqual([])
     expect(s.people[1].ring).toBe(Ring.None)
+  })
+  it('undo leaves a person alone whose ring changed since the decision (counted as kept)', () => {
+    const s = { people: [{ id: 'p', name: 'Mira Test', ring: Ring.Close, lines: [] }], serviceImports: [] }
+    commitPlan(s, planServices(s, [CHAT, LI], opts()), 'b1', NOW)
+    for (const p of pendingProposals(s, NOW)) decide(s, 'b1', p.row.key, { do: 'change', ring: Ring.Friend }, NOW, newId)
+    s.people[0].ring = Ring.Closest // moved by hand since
+    s.people[1].ring = Ring.Close // the created person got connected since
+    const r = undoBatch(s, 'b1')
+    expect(r).toEqual({ restored: 0, archived: 0, kept: 2 })
+    expect(s.people[0].ring).toBe(Ring.Closest)
+    expect(s.people[1].ring).toBe(Ring.Close)
   })
 })
 

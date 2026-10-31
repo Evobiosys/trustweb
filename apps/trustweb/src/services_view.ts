@@ -82,7 +82,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
     const r = undoBatch(h.state(), batchId)
     h.save()
     h.changed()
-    h.toast(S.svcUndone(r.archived, r.restored))
+    h.toast(S.svcUndone(r.archived, r.restored, r.kept))
     draw()
   }
 
