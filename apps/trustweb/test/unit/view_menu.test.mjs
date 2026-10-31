@@ -29,10 +29,13 @@ describe('view_menu', () => {
   it('names the view as heading only when it is not Web', () => {
     expect(viewHeading('rings')).toBeNull()
     expect(viewHeading('network')).toBe('network')
+    expect(viewHeading('map')).toBe('map')
   })
   it('reads the stored choice; anything else, or nobody in the web, is Web', () => {
     expect(webViewOf('network', true)).toBe('network')
     expect(webViewOf('complete', true)).toBe('rings')
+    expect(webViewOf('map', true)).toBe('map')
+    expect(webViewOf('map', false)).toBe('rings')
     expect(webViewOf('network', false)).toBe('rings')
     expect(webViewOf('desk', true)).toBe('rings')
     expect(webViewOf(null, true)).toBe('rings')
