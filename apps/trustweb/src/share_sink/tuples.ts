@@ -8,7 +8,8 @@
  */
 import { Zone, isZone } from './zones'
 
-export const RELATIONS = ['has_tag', 'in_zone', 'may_read', 'may_write', 'grants'] as const
+/** Wave 27 adds: excludes (person|tag excludes item, D3), nested_in (tag:child nested_in tag:parent, D4), feeds (agreement node). */
+export const RELATIONS = ['has_tag', 'in_zone', 'may_read', 'may_write', 'grants', 'excludes', 'nested_in', 'feeds'] as const
 export type Relation = (typeof RELATIONS)[number]
 
 export interface Tuple {
