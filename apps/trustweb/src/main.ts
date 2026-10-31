@@ -56,7 +56,8 @@ import {
 import { resolveAddInput, ParseError, connectLinkOf } from './add_by_code'
 import { check as checkFreshness, remember as rememberNonce } from './connect_freshness'
 import { inviteText, sendInvite } from './invite'
-import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff } from './notices'
+import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, noticesOff, passOnDefaultNoticeDue, setNoticesOff } from './notices'
+import { cardPopAction } from './page_stack'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
@@ -1031,7 +1032,7 @@ function openPeople(query = ''): void {
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [peopleListBody(st, (id) => personSheet(id), !window.matchMedia('(pointer: coarse)').matches)]),
+    el('div', { class: 'scroll pad' }, [peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches)]),
   ]
 }
 
@@ -2144,9 +2145,16 @@ function openWebPage(page: WebPage): void {
   history.pushState({ twPage: page.kind }, '')
   render()
 }
-window.addEventListener('popstate', () => {
-  if (cardExpanded) { cardExpanded = false; render(); return }
-  if (webPage) { webPage = null; render() }
+/** A person's card as a page on the Web (no overlay): from the People list, Network, Map and Feed. */
+function openCardPage(id: string): void {
+  closeSheet()
+  peoplePage = false
+  go(Screen.Web)
+  openWebPage({ kind: 'card', id })
+}
+window.addEventListener('popstate', (e) => {
+  const act = cardPopAction(e.state, cardExpanded)
+  if (act === 'collapse') { cardExpanded = false; render() } else if (act === 'leave' && webPage) { cardExpanded = false; webPage = null; render() }
 })
 
 function toggleCardExpanded(): void {
@@ -2189,7 +2197,7 @@ function webPageScreen(page: WebPage): Node[] {
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     chat: cardChatButton(p, false),
-    onTag: (id) => { tagFilter = id; back() },
+    onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
   })])]
 }
 
@@ -2758,6 +2766,17 @@ function chatNewSheet(): void {
   openSheet([el('h3', {}, [S.chatNewTitle]), search, list])
 }
 
+/** Wave 27 (D2): once after the upgrade, an honest line that the pass-on default narrowed; drawn once, then marked dismissed. */
+function passOnNotice(): HTMLElement | null {
+  if (!passOnDefaultNoticeDue(st())) return null
+  dismissNotice(st(), PASS_ON_DEFAULT_NOTICE); save()
+  const note = el('p', { class: 'meta', role: 'status', 'data-pass-on-notice': '' }, [
+    S.passOnDefaultNotice,
+    el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.noticeDismiss, 'data-notice-dismiss': '', onclick: () => note.remove() }, ['×']),
+  ])
+  return note
+}
+
 function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
@@ -2774,9 +2793,10 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: (id) => personSheet(id), openMe: () => editNameSheet() })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet() })
       : ringsView(s, askMarks(), undefined, { complete: expanded }),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2784,7 +2804,7 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save })])
     : el('div', { class: 'scroll' }, [layer])
   if (view !== 'map') zoomOnWeb(clip, layer)
   return [
@@ -3136,10 +3156,14 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
-    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => { void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url })) } }, [S.qrPageTitle]),
+    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => personQr(p) }, [S.qrPageTitle]),
     el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
+}
+
+function personQr(p: Person): void {
+  void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url }))
 }
 
 /** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
@@ -3160,7 +3184,10 @@ function cardMore(p: Person): Node[] {
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
     timeline: () => [timelineSection(p)],
-    curate: () => [el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate])],
+    curate: () => [
+      el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => personQr(p) }, [S.qrPageTitle]),
+      el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
+    ],
   }
   const connected = Boolean(p.peerId)
   const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
@@ -4422,7 +4449,7 @@ const cal = EXT_MODULES.find((m) => m.id === 'calendar')?.screen(extHooks)
 const messengers = EXT_MODULES.flatMap((m) => (m.messenger ? [m.messenger(extHooks)] : []))
 
 const feed = createFeedView({
-  state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet, itemSheet,
+  state: st, save, openSheet, closeSheet, toast, images, avatar, dummyChip, personSheet: openCardPage, itemSheet,
   openShare: (id) => { const r = st().received?.find((x) => x.id === id); const l = r ? parseShareText(APP_URL, r.link) : null; if (r && l) void openShare(l, r) },
   openMeeting: (id) => { const m = pastMeetings(st()).find((x) => x.id === id); if (m) pastMeetingSheet(m) },
   redrawFeed: () => { if (screen === Screen.Feed) render() },

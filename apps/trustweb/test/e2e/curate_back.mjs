@@ -19,7 +19,7 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)))
     await page.goto(URL); await page.waitForTimeout(1500)
     await page.evaluate((r) => localStorage.setItem('trustweb.v1.me', r), record)
-    await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(500)
+    await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok, .twp { display: none !important }' }); await page.waitForTimeout(500)
     await page.locator('[data-pid="p2"]').last().click(); await page.waitForTimeout(400)
     await page.locator('[data-card-open="p2"]').click(); await page.waitForTimeout(500)
     const add = page.locator('[data-no-messenger-add="p2"]')
@@ -36,7 +36,7 @@ try {
     else await page.locator('[data-page-back]').click()
     await page.waitForTimeout(60)
     check(`${name}: Back closes the Curate page at once`, (await page.locator('[data-page]').count()) === 0)
-    check(`${name}: one Back leaves the card open underneath`, (await page.locator('[data-card-days="p2"]').count()) === 1)
+    check(`${name}: one Back leaves the card open underneath`, (await page.locator('[data-card-more="p2"]').count()) === 1)
     check(`${name}: no page errors`, errors.length === 0)
     if (errors.length) console.log(errors)
   }

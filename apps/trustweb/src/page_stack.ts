@@ -6,3 +6,11 @@ export function pagesToKeep(state: unknown): number {
   const n = (state as { twPage?: unknown } | null)?.twPage
   return typeof n === 'number' ? n : 0
 }
+
+/** Wave 27: what a popstate does to the card page. `collapse` = fold the expanded card, `none` = a page or the expanded entry is still on top, `leave` = back to the web. */
+export function cardPopAction(state: unknown, expanded: boolean): 'collapse' | 'none' | 'leave' {
+  const t = (state as { twPage?: unknown } | null)?.twPage
+  if (t === 'card' && expanded) return 'collapse'
+  if (t === 'card-expanded' || typeof t === 'number') return 'none'
+  return 'leave'
+}
