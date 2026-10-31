@@ -41,7 +41,7 @@ import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
 import { createTimelineSection } from './timeline_view'
-import { addEntries, parseTimelineImport, timelineOf } from './timeline'
+import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
 import type { ConnectView } from './connect_view'
@@ -60,8 +60,16 @@ import { dismissNotice, namePreviousId, noticeShown, noticesOff, setNoticesOff }
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
 import { channelEdit, chatButtonKind, isConnected } from './card_view'
-import { connectBlock, daysSection } from './card_pages_view'
+import { chatServices, noteUsed, togglePin as toggleChatPin } from './chat_row'
+import type { ChatService } from './chat_row'
+import { chatRow } from './chat_row_view'
+import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
+import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
+import { linkEntries } from './person_links'
+import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from './qr_modes'
+import type { QrContext } from './qr_modes'
+import { openQrPage } from './qr_modes_view'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -83,10 +91,11 @@ import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeT
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
+import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
-import { expandedOf, viewHeading, viewMenuItems, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
-import type { WebView } from './view_menu'
+import type { ViewKey, WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
@@ -100,6 +109,7 @@ import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
+import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
@@ -173,8 +183,10 @@ import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
+import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { shortLabel } from './short_label'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -196,7 +208,9 @@ import type { JobTake } from './server_transcription'
 import { createPackView } from './pack_view'
 import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
-import { askWebIcon, recordGlyph, recordIcon } from './icons/ask_web'
+import { askWebIcon, recordIcon } from './icons/ask_web'
+import { RECORD_TAB_GLYPH, recordTabGlyph } from './record_glyph'
+import { type RecStart, recStartFailure, recStartNext } from './record_start'
 import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -365,6 +379,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
+const qrBody = pendingConnect ? decodeModeLink(location.href) : null
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -530,6 +546,8 @@ const audioStore = new AudioStore(persona, storeCtx)
 // Every take of the current draft, oldest first: a new take never overwrites one.
 let takes: Recording[] = []
 let recNotice = ''
+/** Where a tap on the record circle stands: asking for the microphone, recording, refused (record_start.ts). */
+let recStartState: RecStart = 'idle'
 let recTicker: ReturnType<typeof setInterval> | undefined
 let wakeLock: WakeLockSentinel | null = null
 // Meeting transcription: the engine is probed once, the transcriber lives per meeting.
@@ -795,6 +813,8 @@ function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onO
     void showNotification(S.appName, title)
     return true
   }
+  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts); an event notice has no other home and stays a notice.
+  if (kind === 'reminder') { addReminder({ title, openLabel: body, onOpen }); if (screen === Screen.Events) render(); return true }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
   return true
 }
@@ -1001,8 +1021,8 @@ window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = fals
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
-function openPeople(): void {
-  resetPeopleList()
+function openPeople(query = ''): void {
+  resetPeopleList(query)
   peoplePage = true
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
@@ -1062,6 +1082,16 @@ function header(title: string, opts: { back?: () => void; glyph?: Node | null; r
     ]),
     el('div', { class: 'hdr-right' }, [opts.right ?? null, qr, opts.more ? moreButton() : opts.after ?? null]),
   ])
+}
+
+/** Wave 27: every main screen carries the settings gear in its header (Web and Resources draw their own). */
+function mountSettingsGear(): void {
+  if (!sectionOfScreen(screen) || host.querySelector(`.hdr [aria-label="${S.invSettings}"]`)) return
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!right) return
+  const gear = iconButton('settings', S.invSettings, settingsSheet)
+  gear.dataset.settingsGear = '1'
+  right.append(gear)
 }
 
 function iconButton(name: string, label: string, onclick: () => void, extra = ''): HTMLElement {
@@ -1188,7 +1218,8 @@ function render(): void {
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
   const recTab = tabs.querySelector<HTMLElement>('.tab-record')
-  const recGlyph = recordGlyph(recorder.live, draft.mode === RecordMode.Solo)
+  const { glyph: recGlyph, pulse: recPulse } = recordTabGlyph(RECORD_TAB_GLYPH, { live: recorder.live, solo: draft.mode === RecordMode.Solo, onRecord: screen === Screen.Record })
+  recTab?.classList.toggle('pulse', recPulse)
   if (recTab && recTab.dataset.glyph !== recGlyph) {
     recTab.dataset.glyph = recGlyph
     recTab.querySelector('svg')?.remove()
@@ -1210,12 +1241,13 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
+      case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
+  mountSettingsGear()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
   applyLayout()
@@ -1499,11 +1531,12 @@ function updateDeskToggle(): void {
   deskToggle.textContent = deskOpen() ? S.views.mobile : S.views.trustweb
 }
 
+/** Wave 27: Dex, Contacts (wide) and Contacts compact open as a page with Back, no longer as a sheet over the web (the sheet code is archived in DEVLOG/wave27/archive/views-eye). */
 function openDeskSheet(variant?: UiView): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openDesk(variant)
-  updateDeskToggle()
+  closeSheet()
+  if (screen !== Screen.Web) go(Screen.Web)
+  openWebPage({ kind: 'curator', variant })
+  if (variant === UiView.Classic) curator.openClassic(); else curator.openDesk(variant)
 }
 
 // Escape closes an open sheet, except while typing in a field inside it (the Curator is a shadow root: read the composed path).
@@ -1530,19 +1563,12 @@ function setLayout(l: Layout): void {
   applyLayout()
 }
 
-/** Wave 19: Settings > View > Classic: the Curator on its classic face, inside the phone. */
-function openClassicSheet(): void {
-  openSheet([curator.el])
-  sheet.dataset.kind = 'curator'
-  curator.openClassic()
-}
-
 /** Wave 19 (Jakob 2026-10-23): the phone's Settings > View row. This sheet shows only in the TrustWeb view; Dex and Classic lead back to the Curator. */
 function viewRow(): HTMLElement {
   const items = UI_VIEWS.map((v) => el('button', {
     role: 'menuitemradio', 'aria-checked': String(v === UiView.TrustWeb), 'data-view': v,
     ...(v === UiView.Dex ? { title: S.views.dexAbout, 'aria-describedby': 'view-dex-info' } : v === UiView.Desk ? { 'aria-describedby': 'view-desk-info' } : {}),
-    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openClassicSheet(); else toggle(false) },
+    onclick: () => { if (v === UiView.Dex || v === UiView.Desk) showDesktopVersion(v); else if (v === UiView.Classic) openDeskSheet(UiView.Classic); else toggle(false) },
   }, [S.views[v]]))
   const menu = el('div', { class: 'view-menu', role: 'menu', 'aria-label': S.views.pickAria, hidden: true }, [
     ...items,
@@ -1673,6 +1699,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
+  if (qrBody?.kind === 'person' && qrBody.username) toast(S.qrScanUsername(peer.displayName, qrBody.username))
+  else if (qrBody?.kind === 'tag') toast(S.qrScanTag(qrBody.tag))
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
   if (demoLink || solo) openPendingShare()
   else if (picked) {
@@ -2044,13 +2072,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
       }
       pictured(face, p.theirProfile?.picture)
-      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => personSheet(p.id))
+      const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
       const b = el('button', {
         class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
       }, [
         face,
-        el('span', { title: displayName(p.name).title, 'aria-label': displayName(p.name).text }, [displayName(p.name).text]),
+        el('span', { title: displayName(p.name).title || p.name, 'aria-label': displayName(p.name).text }, [shortLabel(displayName(p.name).text)]),
         isDemoPerson(s, p.id) ? dummyChip() : null,
         st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
       ])
@@ -2063,7 +2091,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       wrap.appendChild(b)
     })
   }
-  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [s.me.displayName])])
+  const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [shortLabel(s.me.displayName)])])
   you.style.left = C + 'px'
   you.style.top = C + 'px'
   wrap.appendChild(you)
@@ -2104,15 +2132,28 @@ const HIDDEN_GUIDE_OPACITY = '.25'
 let tagFilter: string | null = null
 
 /** Wave 25: a page over the Membranes (never a sheet): a person's small card, or the people beyond a membrane's five. Back = the browser's. */
-type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring }
+type WebPage = { kind: 'card'; id: string } | { kind: 'more'; ring: Ring } | { kind: 'curator'; variant?: UiView }
 let webPage: WebPage | null = null
+/** Wave 27: the small card page is expanded in place (card_sections.ts order); Back collapses it first, a second Back leaves. */
+let cardExpanded = false
 
 function openWebPage(page: WebPage): void {
   webPage = page
+  cardExpanded = false
   history.pushState({ twPage: page.kind }, '')
   render()
 }
-window.addEventListener('popstate', () => { if (webPage) { webPage = null; render() } })
+window.addEventListener('popstate', () => {
+  if (cardExpanded) { cardExpanded = false; render(); return }
+  if (webPage) { webPage = null; render() }
+})
+
+function toggleCardExpanded(): void {
+  if (cardExpanded) { history.back(); return }
+  cardExpanded = true
+  history.pushState({ twPage: 'card-expanded' }, '')
+  render()
+}
 
 /** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
 function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
@@ -2124,10 +2165,15 @@ function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement
   }, ['+'])
 }
 
+function curatorPageTitle(variant?: UiView): string {
+  return variant === UiView.Dex ? S.viewNames.dex : variant === UiView.Classic ? S.viewNames.compact : S.views.desk
+}
+
 /** The page body for `webPage`, with its header and Back. */
 function webPageScreen(page: WebPage): Node[] {
   const s = shown(st(), curatorHiddenIds())
   const back = (): void => history.back()
+  if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
     const zone = S.ringLabel[page.ring]
@@ -2136,10 +2182,11 @@ function webPageScreen(page: WebPage): Node[] {
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
-  return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
+  return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
-    onOpen: () => { webPage = null; render(); personSheet(p.id) },
-    onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
+    heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
+    onOpen: toggleCardExpanded,
+    onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
   })])]
@@ -2176,6 +2223,8 @@ function localPoint(e: { clientX: number; clientY: number }, wrap: HTMLElement):
  * Web screen body, and only there: outside the phone, the header and the tab bar the browser zooms as ever. Only the inner layer moves.
  */
 function zoomOnWeb(clip: HTMLElement, layer: HTMLElement): void {
+  // Wave 27: the rings' fit zoom (ringsZoom, kept for the way back) must not scale a Network layer: it blew the canvas up and pushed it off-centre.
+  if (layer.querySelector('[data-own-zoom]')) return
   // [data-own-zoom] (the Network view) pans and zooms itself in its draw loop, so it stays crisp: this layer leaves it alone.
   const skip = '.node, .ctx-menu, .desire, .hint-i, button, a, input, textarea, [data-own-zoom]'
   const apply = (z: RingsZoom): void => {
@@ -2525,18 +2574,65 @@ function openEvents(eventId?: string): void {
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
+/** Wave 27: the eye (where the outliner glyph sat) opens the view menu; the magnifier beside the heading expands into the people search. */
+let eyeOpen = false
+let webSearchOpen = false
+const HAS_MAP_VIEW = true
 
-/** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
-function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+
+/** The web-view-row: expand (Web only), the heading of the chosen view or the search field, the magnifier. */
+function webViewRow(view: WebView, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
   expand.setAttribute('data-expand', '')
   expand.setAttribute('aria-pressed', String(expanded))
-  return el('div', { class: 'web-view-row' }, [
-    view === 'rings' ? expand : null,
-    el('span', { class: 'web-view' }, [heading ? viewName(heading) : '']),
-    iconButton('more', S.viewMenuAria, () => viewSheet(view, anyone), 'view-menu-btn'),
+  const mid = webSearchOpen
+    ? el('input', {
+      class: 'field web-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-web-search': '',
+      onkeydown: (ev: Event) => {
+        const e = ev as KeyboardEvent
+        const input = e.target as HTMLInputElement
+        if (e.key === 'Escape') { webSearchOpen = false; render() } else if (e.key === 'Enter') { webSearchOpen = false; openPeople(input.value) }
+      },
+    })
+    : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
+  if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
+  const find = iconButton('search', S.viewSearchAria, () => { webSearchOpen = !webSearchOpen; render() }, 'web-search-btn')
+  find.setAttribute('aria-expanded', String(webSearchOpen))
+  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid, find])
+}
+
+/** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
+function viewControls(current: ViewKey, anyone: boolean): Node {
+  const pins = st().uiPins?.views
+  const frag = document.createDocumentFragment()
+  for (const v of pinnedViews(pins, anyone, HAS_MAP_VIEW)) {
+    const b = iconButton(viewGlyph[v], S.viewNames[v], () => chooseView(v), 'view-pin' + (v === current ? ' on' : ''))
+    b.setAttribute('data-view-pin', v)
+    frag.append(b)
+  }
+  const eye = iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
+  eye.setAttribute('aria-expanded', String(eyeOpen))
+  frag.append(eye)
+  return frag
+}
+
+/** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
+function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
+  if (!eyeOpen) return null
+  const items = viewMenu(current, anyone, HAS_MAP_VIEW, st().uiPins?.views)
+  const btn = (i: { view: ViewKey; on: boolean }): HTMLElement => {
+    const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
+    b.innerHTML = icon(viewGlyph[i.view])
+    b.append(el('b', {}, [S.viewNames[i.view]]))
+    return b
+  }
+  const other = items.filter((i) => i.other)
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
+    ...items.filter((i) => !i.other).map(btn),
+    other.length ? el('div', { class: 'view-drop-sep' }, [S.viewOther]) : null,
+    ...other.map(btn),
   ])
 }
 
@@ -2545,17 +2641,12 @@ function toggleExpand(expanded: boolean): void {
   go(Screen.Web)
 }
 
-function viewSheet(current: WebView, anyone: boolean): void {
-  openSheet([
-    el('h3', {}, [S.viewMenuTitle]),
-    ...viewMenuItems(current, anyone).map(({ view, on }) => el('button', {
-      class: 'radio view-opt' + (on ? ' on' : ''), 'data-view': view, 'aria-pressed': String(on), onclick: () => chooseView(view),
-    }, [el('b', {}, [(on ? '✓ ' : '') + viewName(view)])])),
-  ])
-}
-
-/** Membranes and Network are remembered (WEB_VIEW_KEY). */
-function chooseView(view: WebView): void {
+/** Web and Network are remembered (WEB_VIEW_KEY); People, Dex and Contacts compact open as pages with Back. */
+function chooseView(view: ViewKey): void {
+  eyeOpen = false
+  if (view === 'people') { openPeople(); return }
+  if (view === 'dex') { openDeskSheet(UiView.Dex); return }
+  if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
   go(Screen.Web)
 }
@@ -2602,6 +2693,15 @@ function chatListBody(): Node[] {
       ])) : [el('p', { class: 'meta' }, [S.chatFindEmpty])]),
     ]),
   ]
+}
+
+/** Wave 27: reminders that came due, at the top of the Events panel; each with Open and a dismiss. */
+function reminderRows(): Node[] {
+  return remindersWaiting().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
+    el('span', { class: 'who' }, [el('b', {}, [r.title])]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { dismissReminder(r); r.onOpen() } }, [r.openLabel]),
+    el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { dismissReminder(r); render() } }, ['×']),
+  ]))
 }
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. */
@@ -2661,15 +2761,13 @@ function screenWeb(): Node[] {
   if (webPage) return webPageScreen(webPage)
   const full = shown(st(), curatorHiddenIds())
   const s = full
-  const search = iconButton('list', S.searchOpen, openPeople, 'search-btn curator-btn' + (Date.now() < curatorPulseUntil ? ' pulse' : ''))
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
   const view = webViewOf(stored, s.people.length > 0)
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
-  const right = document.createDocumentFragment()
-  right.append(search)
+  const right = viewControls(view, s.people.length > 0)
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2683,12 +2781,16 @@ function screenWeb(): Node[] {
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
-  zoomOnWeb(clip, layer)
+  // The Map has text boxes: no zoom layer (it would capture their pointers).
+  const clip = view === 'map'
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    : el('div', { class: 'scroll' }, [layer])
+  if (view !== 'map') zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, s.people.length > 0, expanded),
+    webViewRow(view, expanded),
+    ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
     clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
@@ -3007,11 +3109,13 @@ let cardOpenFor: string | null = null
 function personSheet(personId: string): void {
   const p = st().people.find((x) => x.id === personId)
   if (!p) return
+  // Wave 27: a card already open as a page redraws in place; the sheet below is the archived overlay (restore: DEVLOG/wave27/archive/card-overlay).
+  if (webPage?.kind === 'card' && webPage.id === personId) { render(); return }
   // The person's page is the Web Curator's own; this strip holds only what the Curator lacks: chat, messenger links, pass-on and ask-again (it already says connected or not).
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
-    pinButton(p, () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render(); personSheet(p.id) }),
+    pinButton(p, () => { togglePersonPin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
@@ -3031,9 +3135,35 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
+    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => { void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url })) } }, [S.qrPageTitle]),
     el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
+}
+
+/** Wave 27: the rest of the person's card under the small card, in card_sections.ts order (the old sheet's rows, no overlay). */
+function cardMore(p: Person): Node[] {
+  const cons = chatOnConsensual(p, st().preferConsensual)
+  const rows: Record<string, () => (Node | null)[]> = {
+    channels: () => [
+      cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
+      cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+      cardChannelsRow(p), reachedOutRow(p), noMessengerRow(p), sharedReachRow(p),
+    ],
+    askLinks: () => [askLinksRow(p)],
+    passOn: () => [passOnRowFor(p)],
+    knows: () => [knowsRow(p, st().people, save, () => personSheet(p.id))],
+    other: () => [
+      undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
+      askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+    ],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
+    timeline: () => [timelineSection(p)],
+    curate: () => [el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate])],
+  }
+  const connected = Boolean(p.peerId)
+  const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
+  return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
 }
 
 /** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
@@ -3059,23 +3189,55 @@ function cardChannelsRow(p: Person): HTMLElement | null {
 /** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const chat = chatButtonKind(p) === 'chat'
-  const b = el('button', {
-    class: 'btn ' + (chat && !quiet ? 'btn-electric' : 'btn-ghost'), 'data-card-chat': p.id, 'data-chat-open': p.id,
-    onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
-  })
-  b.innerHTML = icon('chat')
-  b.append(S.chatOpen)
+  const services = chatServices(p)
+  const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
+  const open = (svc: ChatService): void => {
+    noteUsed(st(), p.id, svc.id, Date.now()); save()
+    if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
+  }
+  let b: HTMLElement
+  if (services.length) {
+    b = chatRow({
+      personId: p.id, services, prefs: () => st().chatPrefs?.[p.id], mainClass, iconHtml: icon('chat'), open,
+      label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
+      pin: (id) => { toggleChatPin(st(), p.id, id); save() },
+    })
+  } else {
+    b = el('button', {
+      class: 'btn ' + mainClass, 'data-card-chat': p.id, 'data-chat-open': p.id,
+      onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
+    })
+    b.innerHTML = icon('chat')
+    b.append(S.chatOpen)
+  }
   return el('div', { class: 'card-chat' }, [b, chat ? null : connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast })])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
 function curatePage(p: Person): void {
   pages.open(S.cardCurate, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-curate-knows': p.id, onclick: () => { history.back(); window.setTimeout(() => document.querySelector(`[data-person-knows="${p.id}"]`)?.scrollIntoView({ block: 'center' }), 50) } }, [S.cardCurateKnows]),
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
+    introduceRow(p),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
   ].filter((n): n is HTMLElement => n !== null), 'card-curate')
+}
+
+/** The QR page for a context (qr_modes.ts): the longer connect link is used, since a short /c/ link may drop the mode parameters on its redirect. */
+async function qrPage(build: (link: string) => QrContext): Promise<void> {
+  await net.start()
+  openQrPage({ open: (title, body, mark) => pages.open(title, body, mark), renderQr }, build(net.connectLink(CONNECT_URL)))
+}
+
+/** Curate: what others may pass on about this person when they introduce them, and the public username I know for them. */
+function introduceRow(p: Person): HTMLElement {
+  const sel = el('select', { 'aria-label': S.introduceLabel, 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
+    INTRODUCE_PERMISSIONS.map((o) => el('option', { value: o, selected: parseIntroducePermission(p.introducePermission) === o }, [S.introduceOptions[o]])))
+  const name = el('input', { class: 'field', maxlength: '30', 'aria-label': S.introduceUsernameLabel, placeholder: S.introduceUsernameLabel, value: p.publicUsername ?? '', 'data-public-username': p.id }) as HTMLInputElement
+  name.addEventListener('change', () => { p.publicUsername = name.value.trim().replace(/^@/, '').toLowerCase() || undefined; save() })
+  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel + ' ', sel]), name])
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
@@ -3185,7 +3347,7 @@ function timelineSection(p: Person): HTMLElement {
   // The record may have been replaced since the card opened: write into the person as the record holds it now.
   const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
   return createTimelineSection({
-    entries: () => timelineOf(st(), now()),
+    entries: () => mergedTimeline(st(), now()),
     add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
     importText: (text) => {
       const r = parseTimelineImport(text)
@@ -3194,13 +3356,13 @@ function timelineSection(p: Person): HTMLElement {
       if (n) save()
       return S.tlImported(n, r.skipped, r.entries.length - n)
     },
-  }, toast)
+  }, toast, true)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
 function noMessengerRow(p: Person): HTMLElement | null {
   if (!p.peerId || primaryReachable(p)) return null
-  return el('p', { class: 'meta', 'data-no-messenger': p.id }, [S.cardNoMessenger(p.name)])
+  return noMessengerBlock(p, p.name, { link: async () => '', save, toast }, () => personSheet(p.id))
 }
 
 /** "Pass their asks on" with the value this phone acts on (one_jakob.ts passOnAllowed), for a connected person only. */
@@ -3831,6 +3993,7 @@ function dropRecording(): void {
   endLiveExtras()
   takes = []
   recNotice = ''
+  recStartState = 'idle'
 }
 
 /** Everything that only lives while a take is open. */
@@ -3843,6 +4006,7 @@ function endLiveExtras(): void {
 /** Every take lands here, whether the owner stopped it or the system did. */
 function onTake(take: Recording, expected: boolean): void {
   takes.push(take)
+  recStartState = recStartNext(recStartState, 'stopped')
   endLiveExtras()
   if (!expected) {
     recNotice = S.recInterrupted
@@ -3872,14 +4036,18 @@ async function startRecording(): Promise<boolean> {
   }
   // Never the microphone and a past meeting's playback at once.
   past.stopPlayer()
+  recStartState = recStartNext(recStartState, 'tap')
+  recNotice = ''
+  render()
   try {
     await recorder.start(onTake)
-  } catch {
-    recNotice = S.recDenied
+  } catch (err) {
+    recStartState = recStartNext(recStartState, 'rejected')
+    recNotice = recStartFailure(err)
     render()
     return false
   }
-  recNotice = ''
+  recStartState = recStartNext(recStartState, 'granted')
   startTicker()
   void keepScreenOn()
   render()
@@ -4222,6 +4390,7 @@ const eventsView = createEventsView({
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
+  showQr: (ev) => { void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()) })) },
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const extHooks: ExtHooks = {
@@ -4305,7 +4474,7 @@ function onJobChange(m: PastMeeting): void {
   past.refresh(m)
   if (screen === Screen.Record || screen === Screen.Meeting || screen === Screen.Review) render()
 }
-const pastMeetingsLink = (): HTMLElement => past.link()
+const pastMeetingsLink = (solo = false): HTMLElement => past.link(solo)
 const pastMeetingSheet = (m: PastMeeting, focus?: PastFocus, from?: ItemSource): void => past.open(m, focus, from)
 
 /** Opens on Record and Meeting, in the header slot where Web has its contact search. */
@@ -4580,12 +4749,15 @@ function screenRecord(): Node[] {
   // Icon only, in the slot ⋮ has on Web, so the QR keeps its exact place (owner 2026-10-06: muscle memory).
   const meeting = withHint(iconButton('meet', S.recMeeting, () => { if (!live) { draft.mode = RecordMode.Meeting; recNotice = ''; go(Screen.Meeting) } else toast(S.recSwitchWhileLive) }, 'meet-btn'), HintId.Meeting)
   const has = takes.length > 0
+  const asking = recStartState === 'requesting'
   const circle = el('button', {
-    class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : ''),
+    class: 'rec-circle' + (live && !paused ? ' live' : '') + (paused ? ' paused' : '') + (asking ? ' requesting' : ''),
     'aria-label': live ? (paused ? S.recResume : S.recPause) : S.recStart,
-    onclick: () => { if (live) togglePause(); else void startSolo() },
+    // Pressed state at once (pointerdown), before the microphone prompt answers.
+    onpointerdown: (e: Event) => (e.currentTarget as HTMLElement).classList.add('pressed'),
+    onclick: () => { if (live) togglePause(); else if (!asking) void startSolo() },
   })
-  const status = live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
+  const status = asking ? S.recAsking : live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
   if (pastSearchOpen) return [header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }), pastSearchView()]
   return [
     header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }),
@@ -4604,7 +4776,7 @@ function screenRecord(): Node[] {
       draft.segments.length || transcriber
         ? el('div', { class: 'tr-list memo-tr', id: 'tr-list', 'aria-live': 'polite' }, transcriptRows(S.trEmpty))
         : null,
-      pastMeetingsLink(),
+      pastMeetingsLink(true),
     ]),
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
@@ -6004,6 +6176,24 @@ function settingsSection(key: string, title: string, children: (Node | null)[], 
   return d
 }
 
+/** Group ids that stay open across the redraws a toggle causes; reset to the lead group whenever Settings opens afresh. */
+const settingsOpen = new Set<string>()
+
+/** Wave 27: the groups in `order`; the first opens, the rest are folded. An empty group is not drawn. */
+function settingsGroups(groups: Record<SettingsSection, (Node | null)[]>, order: SettingsSection[]): (Node | null)[] {
+  if (!(sheet.classList.contains('on') && sheet.dataset.kind === 'settings')) { settingsOpen.clear(); settingsOpen.add(order[0]) }
+  return order.map((id) => {
+    if (!groups[id].some(Boolean)) return null
+    const d = el('details', { class: 'settings-group', 'data-settings-group': id }, [
+      el('summary', { class: 'settings-group-title' }, [S.setGroup[id]]),
+      ...groups[id],
+    ]) as HTMLDetailsElement
+    d.open = settingsOpen.has(id)
+    d.addEventListener('toggle', () => { if (d.open) settingsOpen.add(id); else settingsOpen.delete(id) })
+    return d
+  })
+}
+
 /** A Settings > Features switch; off is the only stored state (featureOn in model.ts). */
 function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, hint: string): HTMLElement {
   const on = featureOn(s, key)
@@ -6038,30 +6228,94 @@ function settingsSheet(): void {
   // What the Swiss server has switched on drives the wording; asked once, the sheet redraws with the answer.
   if (swiss.enabled() && swiss.status() === undefined) void swiss.probe().then(() => { if (sheet.dataset.kind === 'settings') settingsSheet() })
   const demoSettingsShown = !solo && (Boolean(s.demo) || !runsAsInstalledApp())
-  openSheet([
-    el('h3', {}, [S.setTitle]),
-    viewRow(),
-    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
-    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
-    s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
-    keepAskRow(s),
-    s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    settingsSection('you', S.setSecYou, [
-      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
-        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
-      ]),
-      linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
-      connectionRow(),
-      buildContactBox({}).el,
-      el('button', {
-        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
-        // Only "off" is stored: absent means on.
-        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
-      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
-    ], true),
+  const groups: Record<SettingsSection, (Node | null)[]> = {
+    web: [
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
+      el('p', { class: 'meta' }, [S.viewPinsHint]),
+      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+        el('b', {}, [S.viewNames[i.view]]),
+      ])),
     ]),
+    settingsSection('advanced-web', S.setAdvanced, [
+    el('h4', { class: 'eyebrow' }, [S.setQuery]),
+    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
+      class: 'radio' + (queryStyle() === q ? ' on' : ''),
+      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
+    el('button', {
+      class: 'radio' + (s.showRingNames ? ' on' : ''),
+      'aria-pressed': String(s.showRingNames === true),
+      onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
+    el('label', { class: 'radio', 'data-membrane-limit': '1' }, [
+      el('b', {}, [S.setMembraneLimit]),
+      el('input', {
+        class: 'field', type: 'number', min: '1', max: String(LIMIT_MAX), value: String(limitOf(s)), 'aria-label': S.setMembraneLimit,
+        // Only a change from the default of 5 is stored; empty or junk leaves it as it was.
+        onchange: (e: Event) => {
+          const n = parseLimit((e.target as HTMLInputElement).value)
+          if (n !== null) { if (n === 5) delete s.membraneLimit; else s.membraneLimit = n; save(); render() }
+          settingsSheet()
+        },
+      }),
+      el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
+    ]),
+    // Wave 27: how pinned people are ordered; the default (by pin time) is not stored.
+    el('div', { class: 'radio', 'data-pinned-order': '' }, [
+      el('b', {}, [S.setPinnedOrder]),
+      ...(['pinned', 'contact'] as const).map((m) => el('button', {
+        class: 'btn btn-ghost btn-sm' + (pinnedModeOf(s) === m ? ' on' : ''), 'aria-pressed': String(pinnedModeOf(s) === m), 'data-pinned-mode': m,
+        onclick: () => { if (m === 'pinned') delete s.pinnedOrder; else s.pinnedOrder = m; save(); render(); settingsSheet() },
+      }, [S.setPinnedOrderChoice[m]])),
+      el('small', {}, [S.setPinnedOrderHint]),
+    ]),
+    // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
+    el('button', {
+      class: 'radio' + (engagementDays(s) ? ' on' : ''), 'aria-pressed': String(engagementDays(s) > 0), 'data-engagement-switch': '1',
+      onclick: () => { if (engagementDays(s)) delete s.engagementDays; else s.engagementDays = ENGAGEMENT_DEFAULT_DAYS; save(); settingsSheet() },
+    }, [el('b', {}, [S.setEngagement]), el('small', {}, [S.setEngagementHint(engagementDays(s))])]),
+    engagementDays(s) ? el('label', { class: 'radio', 'data-engagement-days': '1' }, [
+      el('b', {}, [S.setEngagementDays]),
+      el('input', {
+        class: 'field', type: 'number', min: '1', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagementDays,
+        // Empty or junk leaves it as it was; 0 switches it off.
+        onchange: (e: Event) => {
+          const d = parseDays((e.target as HTMLInputElement).value)
+          if (d !== null) { if (d === 0) delete s.engagementDays; else s.engagementDays = d; save() }
+          settingsSheet()
+        },
+      }),
+    ]) : null,
+    el('button', {
+      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
+      // Only "off" is stored: absent means on.
+      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
+    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
+    el('button', {
+      class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
+      // Off is stored as absent: the record keeps only what differs from the default.
+      onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
+    liveTogetherPrefs(s.togetherPrefs, Date.now()).length === 0 ? null : el('div', { 'data-together-prefs': '1' }, [
+      el('p', { class: 'meta' }, [S.setTogetherHint(liveTogetherPrefs(s.togetherPrefs, Date.now()).length)]),
+      el('button', { class: 'btn', onclick: () => { delete s.togetherPrefs; save(); settingsSheet() } }, [S.setTogetherForget]),
+    ]),
+    solo ? null : el('button', {
+      class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
+      // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
+      onclick: () => {
+        const next = !showsUnmatched(s, demoPhone())
+        if (next === !demoPhone()) delete s.showUnmatchedAsks
+        else s.showUnmatchedAsks = next
+        save(); settingsSheet(); showAskCards()
+      },
+    }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
+    ]),
+    ],
+    chat: [
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (messengerLinksShown(s) ? ' on' : ''), 'aria-pressed': String(messengerLinksShown(s)), 'data-signal-visible': '1',
@@ -6075,26 +6329,49 @@ function settingsSheet(): void {
       s.reachOutHeld ? el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { delete s.reachOutHeld; save(); settingsSheet() } }, [S.reachOutsReset]) : null,
       el('p', { class: 'meta' }, [S.reachOutsSettingsHint(reachOutLink())]),
     ]),
+    ],
+    record: [
+    settingsSection('advanced-record', S.setAdvanced, [
+    ...recordingSettings(s),
+    ...hosting.settingsGroup(),
+    ]),
+    ],
+    events: [
+      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
+    ],
+    inventory: [
+      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
+    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('advanced-inventory', S.setAdvanced, [
+    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
+    el('button', {
+      class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
+      // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
+      onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
+    }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
+    ]),
+    ],
+    general: [
+    settingsSection('you', S.setSecYou, [
+      el('button', { class: 'conn-row name-row', 'aria-label': S.meNameAria(s.me.displayName), onclick: () => editNameSheet() }, [
+        el('b', {}, [S.setYourName]), el('span', {}, [s.me.displayName]), el('em', {}, [S.setYourNameEdit]),
+      ]),
+      linkButton(namesSync().names().name, () => openLinkChange(linkHooks)),
+      connectionRow(),
+      buildContactBox({}).el,
+      el('button', {
+        class: 'radio' + (s.profileAutoOff ? '' : ' on'), 'aria-pressed': String(!s.profileAutoOff), 'data-profile-auto': '1',
+        // Only "off" is stored: absent means on.
+        onclick: () => { if (s.profileAutoOff) delete s.profileAutoOff; else s.profileAutoOff = true; save(); settingsSheet() },
+      }, [el('b', {}, [S.profAutoShare]), el('small', {}, [S.profAutoShareHint])]),
+    ], true),
     settingsSection('notifications', S.setSecNotify, [notificationsCard(s)]),
     settingsSection('devices', S.setSecDevices, devicesSectionChildren<Node>({
       eligible: connectEligible(), devices: () => devices.settingsGroup(), backupCard: () => (backup.available() === false ? null : backup.card(true)),
     })),
-    settingsSection('features', S.setSecFeatures, [
-      ...feed.settingsGroup(),
-      featureSwitch(s, 'events', S.setFeatEvents, S.setFeatEventsHint),
-      featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
-    ]),
-    settingsSection('sources', S.setSources, sourcesGroup(s)),
+    settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
     settingsSection('advanced', S.setAdvanced, [
-    el('h4', { class: 'eyebrow' }, [S.setQuery]),
-    ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
-      class: 'radio' + (queryStyle() === q ? ' on' : ''),
-      onclick: () => { s.queryStyle = q; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setQueryLabel[q]]), el('small', {}, [S.setQueryHint[q]])])),
-    ...recordingSettings(s),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
-    ...hosting.settingsGroup(),
-    ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6136,73 +6413,9 @@ function settingsSheet(): void {
         : [el('p', { class: 'meta' }, [S.blockedNone])]),
     ]),
     el('button', {
-      class: 'radio' + (s.showRingNames ? ' on' : ''),
-      'aria-pressed': String(s.showRingNames === true),
-      onclick: () => { s.showRingNames = !s.showRingNames; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setRingNames]), el('small', {}, [S.setRingNamesHint])]),
-    el('label', { class: 'radio', 'data-membrane-limit': '1' }, [
-      el('b', {}, [S.setMembraneLimit]),
-      el('input', {
-        class: 'field', type: 'number', min: '1', max: String(LIMIT_MAX), value: String(limitOf(s)), 'aria-label': S.setMembraneLimit,
-        // Only a change from the default of 5 is stored; empty or junk leaves it as it was.
-        onchange: (e: Event) => {
-          const n = parseLimit((e.target as HTMLInputElement).value)
-          if (n !== null) { if (n === 5) delete s.membraneLimit; else s.membraneLimit = n; save(); render() }
-          settingsSheet()
-        },
-      }),
-      el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
-    ]),
-    // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
-    el('button', {
-      class: 'radio' + (engagementDays(s) ? ' on' : ''), 'aria-pressed': String(engagementDays(s) > 0), 'data-engagement-switch': '1',
-      onclick: () => { if (engagementDays(s)) delete s.engagementDays; else s.engagementDays = ENGAGEMENT_DEFAULT_DAYS; save(); settingsSheet() },
-    }, [el('b', {}, [S.setEngagement]), el('small', {}, [S.setEngagementHint(engagementDays(s))])]),
-    engagementDays(s) ? el('label', { class: 'radio', 'data-engagement-days': '1' }, [
-      el('b', {}, [S.setEngagementDays]),
-      el('input', {
-        class: 'field', type: 'number', min: '1', max: '365', value: String(engagementDays(s)), 'aria-label': S.setEngagementDays,
-        // Empty or junk leaves it as it was; 0 switches it off.
-        onchange: (e: Event) => {
-          const d = parseDays((e.target as HTMLInputElement).value)
-          if (d !== null) { if (d === 0) delete s.engagementDays; else s.engagementDays = d; save() }
-          settingsSheet()
-        },
-      }),
-    ]) : null,
-    el('button', {
-      class: 'radio' + (s.preferConsensual === false ? '' : ' on'), 'aria-pressed': String(s.preferConsensual !== false), 'data-prefer-consensual': '1',
-      // Only "off" is stored: absent means on.
-      onclick: () => { if (s.preferConsensual === false) delete s.preferConsensual; else s.preferConsensual = false; save(); settingsSheet() },
-    }, [el('b', {}, [S.setConsensual]), el('small', {}, [S.setConsensualHint])]),
-    el('button', {
-      class: 'radio' + (askDirectOnly(s) ? ' on' : ''), 'aria-pressed': String(askDirectOnly(s)), 'data-direct-only': '1',
-      // Off is stored as absent: the record keeps only what differs from the default.
-      onclick: () => { if (askDirectOnly(s)) delete s.askDirectOnly; else s.askDirectOnly = true; save(); render(); settingsSheet() },
-    }, [el('b', {}, [S.setDirectOnly]), el('small', {}, [S.setDirectOnlyHint])]),
-    liveTogetherPrefs(s.togetherPrefs, Date.now()).length === 0 ? null : el('div', { 'data-together-prefs': '1' }, [
-      el('p', { class: 'meta' }, [S.setTogetherHint(liveTogetherPrefs(s.togetherPrefs, Date.now()).length)]),
-      el('button', { class: 'btn', onclick: () => { delete s.togetherPrefs; save(); settingsSheet() } }, [S.setTogetherForget]),
-    ]),
-    el('button', {
-      class: 'radio' + (asksMatchNotes(s) ? ' on' : ''), 'aria-pressed': String(asksMatchNotes(s)), 'data-notes-match': '1',
-      // Stored only when it differs from the default of this account type (notes_source.ts), so a change of default never flips a choice.
-      onclick: () => { const next = !asksMatchNotes(s); if (next === notesMatchDefault(s)) delete s.asksMatchNotes; else s.asksMatchNotes = next; save(); settingsSheet() },
-    }, [el('b', {}, [S.setNotesMatch]), el('small', {}, [S.setNotesMatchHint])]),
-    el('button', {
       class: 'radio' + (noticesOff(s) ? ' on' : ''), 'aria-pressed': String(noticesOff(s)), 'data-notices-off': '1',
       onclick: () => { setNoticesOff(s, !noticesOff(s)); save(); settingsSheet() },
     }, [el('b', {}, [S.setNoNotices]), el('small', {}, [S.setNoNoticesHint])]),
-    solo ? null : el('button', {
-      class: 'radio' + (showsUnmatched(s, demoPhone()) ? ' on' : ''), 'aria-pressed': String(showsUnmatched(s, demoPhone())), 'data-unmatched-switch': '1',
-      // Stored only when it differs from this phone's default (unmatched_asks.ts showsUnmatched).
-      onclick: () => {
-        const next = !showsUnmatched(s, demoPhone())
-        if (next === !demoPhone()) delete s.showUnmatchedAsks
-        else s.showUnmatchedAsks = next
-        save(); settingsSheet(); showAskCards()
-      },
-    }, [el('b', {}, [S.setUnmatched]), el('small', {}, [S.setUnmatchedHint])]),
     ...HINTS.map((id) => el('button', {
       class: 'radio' + (hintHidden(id) ? '' : ' on'),
       'aria-pressed': String(!hintHidden(id)),
@@ -6228,6 +6441,17 @@ function settingsSheet(): void {
         void Promise.all([audioStore.clear(), images.clear()]).finally(() => { clearState(persona, storeCtx); location.reload() })
       },
     }, [S.resetPhone]),
+    ],
+  }
+  openSheet([
+    el('h3', {}, [S.setTitle]),
+    viewRow(),
+    apkSettingsRow(apkHintEnv()) ? el('div', { class: 'inst-apk', 'data-apk-settings-hint': '' }, [el('b', {}, [S.apkSettingsTitle]), apkPart(S.apkSettingsShown)]) : null,
+    s.testOf ? el('p', { class: 'meta' }, [s.testOf.own ? S.setDemoOfOwn(s.me.displayName) : guestKept(s.testOf) ? S.setDemoKeptOf(s.testOf.name) : S.setDemoOf(s.testOf.name)]) : null,
+    s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
+    keepAskRow(s),
+    s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
+    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveRow(s.tabRow, tabFlags()))),
   ])
   sheet.dataset.kind = 'settings'
 }
@@ -6339,7 +6563,7 @@ function screenInventory(): Node[] {
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
-  // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
+  // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = askWebIcon(askIconVariant)
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
