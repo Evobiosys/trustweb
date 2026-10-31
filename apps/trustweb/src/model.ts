@@ -455,14 +455,13 @@ export type Lean = -2 | -1 | 0 | 1 | 2
 export const LEANS: readonly Lean[] = [-2, -1, 0, 1, 2]
 
 /**
- * Do this person's asks go on through me? Yes unless I switched it off for them (Jakob 2026-10-09: "make the default yes", after a
- * friends-of-friends line stayed unseen because the middle phone's default was off; this reverses wave 6f S1's "per default it
- * should be no"). A record that holds an explicit value keeps it; an unset one reads as on, except for someone I only intend to
- * meet (not yet in my web). Whoever answers still decides with their own yes.
+ * Do this person's asks go on through me? Wave 27 (Jakob 2026-10-31: "per default, pass their asks on should be turned off unless
+ * for close friends"): an unset value reads as on for the Close zone only, off for every other. A record that holds an explicit
+ * value keeps it (wave 6f's default was off, 2026-10-09's was on for all but Intending). Whoever answers still decides with their own yes.
  */
 export function passesAsksOn(p: Pick<Person, 'passOn' | 'ring'>): boolean {
   if (p.ring === Ring.Intending) return false
-  return p.passOn !== false
+  return p.passOn ?? p.ring === Ring.Close
 }
 
 /** A person's fediverse address and whether the Feed shows their public posts. */

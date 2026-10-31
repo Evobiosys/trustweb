@@ -150,6 +150,11 @@ textarea.field{resize:vertical; line-height:1.5}
 .add-node{position:absolute; top:4px; right:4px; z-index:6; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
 .small-card{display:flex; flex-direction:column; gap:10px; padding:14px}
 .small-card .card-actions{display:flex; gap:8px; align-items:center}
+.card-name-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.card-name-row .btn{margin-left:auto; flex-shrink:0}
+.card-more{display:flex; flex-direction:column; gap:12px; margin-top:12px}
+.passon-line{display:flex; align-items:center; gap:6px}
+.passon-line .passon-row{flex:1}
 .membrane-rest{display:flex; flex-direction:column; padding:8px; min-height:60vh}
 .rest-add{border:1px dashed var(--line,currentColor); background:transparent; text-decoration:underline}
 .tag-filter{padding:6px 10px}
@@ -1006,6 +1011,10 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .tl-item{display:flex; flex-direction:column; gap:2px}
 .tl-entry{display:flex; align-items:center; gap:8px; width:100%; border:0; background:var(--card); color:inherit; font:inherit; font-size:13.5px; text-align:left; border-radius:12px; padding:8px 12px; cursor:pointer}
 .tl-entry:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.tl-sys{border-left:4px solid var(--electric)}
+.tl-sys .tl-glyph{color:var(--electric)}
+.tl-human{border-left:4px solid var(--warm-deep)}
+.tl-human .tl-glyph{color:var(--warm-deep)}
 .tl-glyph{display:inline-grid; place-items:center; width:20px; height:20px; flex-shrink:0; color:var(--teal)}
 .tl-glyph svg{width:100%; height:100%; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
 .tl-sum{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
