@@ -174,7 +174,7 @@ import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, sharedCount, slotAngle, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -2138,7 +2138,7 @@ function webPageScreen(page: WebPage): Node[] {
   return [header(p.name, { back }), el('div', { class: 'scroll' }, [smallCard({
     person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
     onOpen: () => { webPage = null; render(); personSheet(p.id) },
-    onPin: () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render() },
+    onPin: () => { togglePin(p, Date.now()); save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; back() },
   })])]
@@ -2992,7 +2992,7 @@ function personSheet(personId: string): void {
   const cons = chatOnConsensual(p, st().preferConsensual)
   openSheet([
     cardNameHeading(p),
-    pinButton(p, () => { if (p.pinned) delete p.pinned; else p.pinned = true; save(); render(); personSheet(p.id) }),
+    pinButton(p, () => { togglePin(p, Date.now()); save(); render(); personSheet(p.id) }),
     daysSection(st, p),
     undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render(); personSheet(p.id) } }, [S.engagementUndoRelease]) : null,
     cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
@@ -6129,6 +6129,15 @@ function settingsSheet(): void {
         },
       }),
       el('small', {}, [S.setMembraneLimitHint(limitOf(s))]),
+    ]),
+    // Wave 27: how pinned people are ordered; the default (by pin time) is not stored.
+    el('div', { class: 'radio', 'data-pinned-order': '' }, [
+      el('b', {}, [S.setPinnedOrder]),
+      ...(['pinned', 'contact'] as const).map((m) => el('button', {
+        class: 'btn btn-ghost btn-sm' + (pinnedModeOf(s) === m ? ' on' : ''), 'aria-pressed': String(pinnedModeOf(s) === m), 'data-pinned-mode': m,
+        onclick: () => { if (m === 'pinned') delete s.pinnedOrder; else s.pinnedOrder = m; save(); render(); settingsSheet() },
+      }, [S.setPinnedOrderChoice[m]])),
+      el('small', {}, [S.setPinnedOrderHint]),
     ]),
     // Wave 25: off unless switched on; the days field shows only while on. Only the days are stored (absent = off).
     el('button', {

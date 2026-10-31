@@ -2046,6 +2046,9 @@ export const S = {
   awayAskDismiss: 'Dismiss',
   setMembraneLimit: 'People per membrane',
   setMembraneLimitHint: (n: number) => `The Membranes page shows the ${n} you are closest to in each membrane: pinned first, then the most recent chat, connection or activity (1 to 20).`,
+  setPinnedOrder: 'Pinned order',
+  setPinnedOrderChoice: { pinned: 'When pinned', contact: 'Latest contact' },
+  setPinnedOrderHint: 'Pinned people come first. "When pinned" puts the newest pin first; "Latest contact" puts whoever you were last in touch with first.',
   // Wave 24b (engagement.ts): close ties expire after n days without contact
   setEngagement: 'Close ties expire',
   setEngagementDays: 'Days without contact',

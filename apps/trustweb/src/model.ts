@@ -39,6 +39,8 @@ export enum Ring {
   Unsorted = 'unsorted',
 }
 
+export type PinnedOrder = 'pinned' | 'contact'
+
 export const RINGS: readonly Ring[] = [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 
 export const CLOSENESS_KEY = 'tw-closeness'
@@ -421,6 +423,8 @@ export interface Person {
   angle?: number
   /** Wave 26 (was `favourite`; membranes_five.ts pinnedFrom): a pinned person is always among the first five shown on their membrane. Absent = false. Owner's own devices only (sync_core). */
   pinned?: boolean
+  /** Wave 27 (membranes_five.ts togglePin): when the pin was set (ms); the "when pinned" order puts the newest pin first. Absent = oldest. Rides with the person. */
+  pinnedAt?: number
   /** Acquaintance only: a note to myself, -2 more friend ... 2 more acquaintance (0 = neither, default). Never changes the ring. Local only, never sent. */
   lean?: Lean
   /** Wave 8: sent = I reached out through their link; received = they reached out to me. Rides on Ring.Intending; own data, never leaves the device (cascade.ts). */
@@ -927,6 +931,8 @@ export interface AppState {
   engagementDays?: number
   /** Wave 25 (membranes_five.ts): people shown per membrane on the Membranes page. Absent = 5; 1..20. Local; rides the device sync. */
   membraneLimit?: number
+  /** Wave 27 (membranes_five.ts pinnedOrder): how pinned people are ordered: 'pinned' = newest pin first, 'contact' = latest contact (wave 26). Absent = 'pinned'. Local; rides the device sync. */
+  pinnedOrder?: PinnedOrder
   /** Wave 24b: ties released one ring outward that still show their card with Undo; and the local day the 48-hour reminder last went out. This device only. */
   releasedTies?: ReleasedTie[]
   engagementNoticeDay?: string
