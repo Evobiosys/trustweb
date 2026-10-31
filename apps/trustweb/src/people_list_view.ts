@@ -10,8 +10,8 @@ let query = ''
 const opened = new Set<Ring>()
 
 /** A fresh visit starts with an empty search and every zone collapsed. */
-export function resetPeopleList(): void {
-  query = ''
+export function resetPeopleList(startQuery = ''): void {
+  query = startQuery
   opened.clear()
 }
 

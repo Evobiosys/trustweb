@@ -113,7 +113,16 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
   const pop = el('div', { class: 'net-pop', 'data-net-pop': '', hidden: '' })
   let tipTimer = 0
-  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, el('small', { class: 'net-legend' }, [S.netLegend])])
+  // Wave 27: the legend sits under an (i); a tap shows or hides the one line.
+  const legendInfo = (): HTMLElement => {
+    const line = el('small', { class: 'net-legend', 'data-net-legend': '', hidden: true }, [S.netLegend])
+    const btn = el('button', { class: 'hint-i legend-i', 'data-net-legend-btn': '', 'aria-label': S.netLegendAria, 'aria-expanded': 'false', onclick: () => {
+      line.hidden = !line.hidden
+      btn.setAttribute('aria-expanded', String(!line.hidden))
+    } }, ['i'])
+    return el('div', { class: 'net-legend-box' }, [btn, line])
+  }
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, legendInfo()])
 
   const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })
