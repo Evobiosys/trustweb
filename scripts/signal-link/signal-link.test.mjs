@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
-import { aggregate, appendRow, checkRequest, contactsFromList, createServer, findLinkUri, logRow, newToken, pairingUrl, readRows, rowFromReceive, tokenize } from './signal-link.mjs'
+import { addWords, aggregate, appendRow, checkRequest, contactsFromList, createServer, findLinkUri, logRow, newToken, pairingUrl, readRows, rowFromReceive, tokenize } from './signal-link.mjs'
 
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 9, 31)
@@ -22,7 +22,7 @@ test('logRow keeps sorted kept words, never the body', () => {
   assert.ok(!JSON.stringify(r).includes('the mango'))
 })
 
-test('aggregate: counts in/out over 365 days, first/last any age, top words', () => {
+test('aggregate: counts in/out over 365 days, first/last any age, top words from memory', () => {
   const rows = [
     logRow(A, 'in', NOW - 10 * DAY, 'garden tomatoes garden'),
     logRow(A, 'out', NOW - 9 * DAY, 'tomatoes garden'),
@@ -30,7 +30,9 @@ test('aggregate: counts in/out over 365 days, first/last any age, top words', ()
     logRow(B, 'out', NOW - 1 * DAY, 'hi ok'),
     logRow('+10000000000', 'in', NOW, 'stranger'),
   ]
-  const out = aggregate(rows, [{ e164: A, name: 'Test Anna' }, { e164: B, name: 'Test Ben' }], NOW)
+  const words = new Map()
+  for (const r of rows) addWords(words, r)
+  const out = aggregate(rows, [{ e164: A, name: 'Test Anna' }, { e164: B, name: 'Test Ben' }], NOW, words)
   const a = out.find((x) => x.e164 === A)
   assert.equal(a.n365, 2); assert.equal(a.in, 1); assert.equal(a.out, 1)
   assert.equal(a.firstTs, NOW - 400 * DAY); assert.equal(a.lastTs, NOW - 9 * DAY)
@@ -82,19 +84,23 @@ test('findLinkUri picks the sgnl link out of output', () => {
   assert.equal(findLinkUri('nothing'), null)
 })
 
-test('log file is mode 0600 and round-trips', () => {
+test('log file is mode 0600, round-trips, and keeps only peer/dir/ts (no words)', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-sl-'))
   appendRow(d, logRow(A, 'in', NOW, 'hello world'))
-  assert.equal(fs.statSync(path.join(d, 'messages.jsonl')).mode & 0o777, 0o600)
-  assert.equal(readRows(d).length, 1)
+  const f = path.join(d, 'messages.jsonl')
+  assert.equal(fs.statSync(f).mode & 0o777, 0o600)
+  assert.deepEqual(readRows(d), [{ peer: A, dir: 'in', ts: NOW }])
+  assert.ok(!fs.readFileSync(f, 'utf8').includes('hello'))
 })
 
 test('server: refuses without token, serves /status, /import and /link with token', async () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-sl-'))
-  appendRow(d, logRow(A, 'in', NOW - DAY, 'climbing gym'))
+  const words = new Map()
+  const row = logRow(A, 'in', NOW - DAY, 'climbing gym')
+  appendRow(d, row); addWords(words, row)
   const token = newToken()
   let port = 0
-  const receiver = { running: true, call: async () => [{ number: A, name: 'Test Anna' }] }
+  const receiver = { running: true, words, call: async () => [{ number: A, name: 'Test Anna' }] }
   const linker = { state: { phase: 'idle' }, start: async () => 'sgnl://linkdevice?uuid=u&pub_key=k' }
   const srv = createServer({ token, getPort: () => port, linker, receiver: () => receiver, dir: d, now: () => NOW, account: () => A })
   await new Promise((r) => srv.listen(0, '127.0.0.1', r))

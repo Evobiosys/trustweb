@@ -18,8 +18,8 @@ describe('cardSections', () => {
   })
 })
 
-describe('passes asks on by default only for the Close zone (G2)', () => {
-  it.each([[Ring.Close, true], [Ring.Closest, false], [Ring.Friend, false], [Ring.Acquaintance, false], [Ring.Intending, false]])('%s: %s', (ring, want) => {
+describe('passes asks on by default only for Close and Closest (G2, D1)', () => {
+  it.each([[Ring.Close, true], [Ring.Closest, true], [Ring.Friend, false], [Ring.Acquaintance, false], [Ring.Intending, false]])('%s: %s', (ring, want) => {
     expect(passesAsksOn({ ring })).toBe(want)
   })
   it('an explicit value always wins', () => {

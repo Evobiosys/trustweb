@@ -141,12 +141,13 @@ export function decide(s: State, batchId: string, key: string, choice: Choice, n
     done.personId = mine.id
     done.created = false
     if (!mine.sources?.some((x) => x.key === key)) { mine.sources = [...(mine.sources ?? []), origin]; done.added = true }
-    if (choice.do === 'change' && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring }
+    if (choice.do === 'change' && ring !== mine.ring) { done.prevRing = mine.ring; mine.ring = ring; done.wrote = ring }
   } else {
     const p: Person = { id: newId(), name: row.name, context: contextOf(row), ring, metAt: now, lines: [], sources: [origin] }
     s.people.push(p)
     done.personId = p.id
     done.created = true
+    done.wrote = ring
   }
   batch.done[key] = done
 }
@@ -158,16 +159,18 @@ export function bulkAccept(s: State, now: number, newId: () => string): number {
   return list.length
 }
 
-/** Takes the batch away: staged rows go; people it created leave the web (Ring.None, kept); rings it changed come back; its source stamps go. */
-export function undoBatch(s: State, batchId: string): { restored: number; archived: number } {
+/** Takes the batch away: staged rows go; people it created leave the web (Ring.None, kept); rings it changed come back while they still stand where the decision put them; its source stamps go. */
+export function undoBatch(s: State, batchId: string): { restored: number; archived: number; kept: number } {
   const batch = (s.serviceImports ?? []).find((b) => b.id === batchId)
-  const out = { restored: 0, archived: 0 }
+  const out = { restored: 0, archived: 0, kept: 0 }
   if (!batch) return out
   for (const [key, d] of Object.entries(batch.done)) {
     const p = d.personId ? s.people.find((x) => x.id === d.personId) : undefined
     if (!p) continue
-    if (d.created) { p.ring = Ring.None; out.archived++ }
-    else if (d.prevRing !== undefined) { p.ring = d.prevRing; out.restored++ }
+    // Only while the person still has the ring the decision wrote; moved or connected since = kept as they are.
+    const same = d.wrote === undefined || p.ring === d.wrote
+    if (d.created) { if (same) { p.ring = Ring.None; out.archived++ } else out.kept++ }
+    else if (d.prevRing !== undefined) { if (same) { p.ring = d.prevRing; out.restored++ } else out.kept++ }
     if (d.created || d.added) p.sources = (p.sources ?? []).filter((x) => x.key !== key)
   }
   s.serviceImports = (s.serviceImports ?? []).filter((b) => b.id !== batchId)

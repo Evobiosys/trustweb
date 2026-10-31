@@ -13,10 +13,11 @@ const STEPS = 4
 /** Every explanation sits under a collapsed details control. */
 const info = (text: string): HTMLElement => el('details', { class: 'meta', 'data-sl-info': '' }, [el('summary', {}, [S.sigInfo]), el('p', {}, [text])])
 
-/** The words per number, kept in this closure only: never written to the record, gone when the page is closed. */
+/** The words per number, kept in this setup page only: never written to the record, gone when the page is closed. */
 export type WordsByNumber = Map<string, [string, number][]>
 
-export function openSetup(h: ExtHooks, words: WordsByNumber): void {
+export function openSetup(h: ExtHooks): void {
+  const words: WordsByNumber = new Map()
   let step = 0
   let haveBackup = false
   let linked = false
@@ -97,14 +98,15 @@ export function openSetup(h: ExtHooks, words: WordsByNumber): void {
     const rows = proposals(imp?.conversations ?? [], h.state().people, Date.now())
     const row = (p: Proposal): HTMLElement => {
       const r = el('div', { class: 'prow', 'data-sl-row': p.e164 })
-      const place = (ring: Ring): void => {
-        acceptProposal(h.state(), p, ring, h.newId, Date.now())
+      const place = (ring: Ring, change = false): void => {
+        const id = acceptProposal(h.state(), p, ring, h.newId, Date.now(), change)
         h.save()
-        r.replaceChildren(el('b', {}, [p.name]), el('span', { class: 'meta', 'data-sl-placed': '' }, [' ' + S.sigDone(S.ringLabel[ring])]))
+        const now = h.state().people.find((x) => x.id === id)?.ring ?? ring
+        r.replaceChildren(el('b', {}, [p.name]), el('span', { class: 'meta', 'data-sl-placed': '' }, [' ' + S.sigDone(S.ringLabel[now])]))
       }
       const picker = el('select', { class: 'field', 'aria-label': S.sigChange, 'data-sl-ring': '' }, RINGS.map((x) => el('option', { value: x, ...(x === p.ring ? { selected: '' } : {}) }, [S.ringLabel[x]]))) as HTMLSelectElement
       picker.hidden = true
-      picker.addEventListener('change', () => place(picker.value as Ring))
+      picker.addEventListener('change', () => place(picker.value as Ring, true))
       const w = words.get(p.e164)
       r.append(
         el('div', { class: 'who' }, [el('b', {}, [p.name]), el('small', { class: 'meta' }, [' ' + (p.personId ? S.sigHere + ' · ' : '') + S.ringLabel[p.ring]])]),

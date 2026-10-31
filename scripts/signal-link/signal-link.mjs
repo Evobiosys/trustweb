@@ -4,8 +4,8 @@
  * TrustWeb Signal link companion (wave 27, msg-signal-link). Runs on the owner's laptop only. Node stdlib only.
  *
  * It drives a SEPARATE, user-installed `signal-cli` (GPL-3.0; never embedded or vendored here), keeps a local message log
- * of KEPT WORDS + direction + time (no message bodies, no order) under ~/.trustweb-signal-link/ (mode 0600), and serves
- * the aggregate to the TrustWeb PWA over 127.0.0.1 with a per-start bearer token. See README.md for what is verified and guessed.
+ * of peer + direction + time (no message text, no words) under ~/.trustweb-signal-link/ (mode 0600), counts the words per peer
+ * in memory only (gone when the companion stops), and serves the aggregate to the TrustWeb PWA over 127.0.0.1 with a per-start bearer token. See README.md for what is verified and guessed.
  */
 import http from 'node:http'
 import crypto from 'node:crypto'
@@ -41,17 +41,25 @@ export function tokenize(text) {
   return out
 }
 
-/** One log row from one message: kept words only, sorted (so the sentence cannot be read back), never the body. */
+/** One row from one message: kept words only, sorted (so the sentence cannot be read back), never the body. Only peer/dir/ts reach the disk (appendRow). */
 export function logRow(peer, dir, ts, text) {
   return { peer, dir, ts, w: tokenize(text).sort() }
 }
 
+/** Adds a row's words to the in-memory histogram `words` (Map peer -> Map word -> count). */
+export function addWords(words, row) {
+  if (!row.w?.length) return
+  const m = words.get(row.peer) ?? new Map()
+  for (const w of row.w) m.set(w, (m.get(w) ?? 0) + 1)
+  words.set(row.peer, m)
+}
+
 /**
- * Pure. rows: log rows. contacts: [{e164, name}]. Returns per-contact counts over the 365 days before `now`, first/last (any age),
+ * Pure. rows: log rows. contacts: [{e164, name}]. words: in-memory histogram (see addWords). Returns per-contact counts over the 365 days before `now`, first/last (any age),
  * and the top words. Rows from peers that are not in `contacts` are ignored (only people you saved).
  */
-export function aggregate(rows, contacts, now, topN = 12) {
-  const by = new Map(contacts.map((c) => [c.e164, { e164: c.e164, name: c.name ?? '', n365: 0, out: 0, in: 0, firstTs: 0, lastTs: 0, _w: new Map() }]))
+export function aggregate(rows, contacts, now, words = new Map(), topN = 12) {
+  const by = new Map(contacts.map((c) => [c.e164, { e164: c.e164, name: c.name ?? '', n365: 0, out: 0, in: 0, firstTs: 0, lastTs: 0 }]))
   for (const r of rows) {
     const a = by.get(r.peer)
     if (!a || !Number.isFinite(r.ts)) continue
@@ -60,11 +68,10 @@ export function aggregate(rows, contacts, now, topN = 12) {
     if (r.ts > now || now - r.ts > 365 * DAY) continue
     a.n365++
     if (r.dir === 'out') a.out++; else a.in++
-    for (const w of r.w ?? []) a._w.set(w, (a._w.get(w) ?? 0) + 1)
   }
-  return [...by.values()].map(({ _w, ...a }) => ({
+  return [...by.values()].map((a) => ({
     ...a,
-    words: [..._w].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, topN),
+    words: [...(words.get(a.e164) ?? [])].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, topN),
   }))
 }
 
@@ -119,7 +126,8 @@ export function dataDir(home = os.homedir()) { return path.join(home, '.trustweb
 export function appendRow(dir, row) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   const f = path.join(dir, 'messages.jsonl')
-  fs.appendFileSync(f, JSON.stringify(row) + '\n', { mode: 0o600 })
+  const { peer, dir: d, ts } = row
+  fs.appendFileSync(f, JSON.stringify({ peer, dir: d, ts }) + '\n', { mode: 0o600 })
   fs.chmodSync(f, 0o600)
 }
 
@@ -172,9 +180,10 @@ export function createReceiver({ bin = 'signal-cli', account, dir, spawnFn = spa
   let child = null
   let pending = new Map()
   let nextId = 1
+  const words = new Map()
   const onLine = (line) => {
     const row = rowFromReceive(line)
-    if (row) { appendRow(dir, row); return }
+    if (row) { appendRow(dir, row); addWords(words, row); return }
     try {
       const m = JSON.parse(line)
       if (m?.id !== undefined && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id) }
@@ -182,6 +191,7 @@ export function createReceiver({ bin = 'signal-cli', account, dir, spawnFn = spa
   }
   return {
     get running() { return child !== null },
+    words,
     start() {
       if (child) return
       child = spawnFn(bin, ['-a', account, 'jsonRpc'], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -230,7 +240,7 @@ export function createServer({ token, getPort, linker, receiver, dir, now = Date
       if (req.method === 'GET' && url.pathname === '/import') {
         const r = receiver()
         const contacts = contactsFromList(r ? await r.call('listContacts') : [])
-        return send(200, { v: 1, generatedAt: now(), note: 'history starts when this computer was linked', conversations: aggregate(readRows(dir), contacts, now()) })
+        return send(200, { v: 1, generatedAt: now(), note: 'history starts when this computer was linked', conversations: aggregate(readRows(dir), contacts, now(), r?.words) })
       }
       return send(404, { error: 'not found' })
     } catch (e) {

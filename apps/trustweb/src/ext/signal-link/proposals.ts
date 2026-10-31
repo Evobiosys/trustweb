@@ -53,10 +53,20 @@ export function proposals(convs: readonly SignalConv[], people: readonly Person[
   }).sort((a, b) => b.score - a.score)
 }
 
-/** Accept / Change: adds the person (with Channel.Signal) or re-rings the one that has this number. Returns the person's id. */
-export function acceptProposal(s: Pick<AppState, 'people'>, p: Pick<Proposal, 'e164' | 'name' | 'personId'>, ring: Ring, newId: () => string, now: number): string {
+/**
+ * Accept / Change: adds the person (with Channel.Signal). An existing person only gets Channel.Signal on Accept; their ring moves only
+ * on Change (`change`), and the ring before is kept in signalImport.prevRing. Returns the person's id.
+ */
+export function acceptProposal(s: Pick<AppState, 'people' | 'signalImport'>, p: Pick<Proposal, 'e164' | 'name' | 'personId'>, ring: Ring, newId: () => string, now: number, change = false): string {
   const have = (p.personId ? s.people.find((x) => x.id === p.personId) : undefined) ?? findByE164(s.people, p.e164)
-  if (have) { have.ring = ring; return have.id }
+  if (have) {
+    if (!signalOf(have)) have.channels = { ...have.channels, [Channel.Signal]: p.e164 }
+    if (change && ring !== have.ring) {
+      if (s.signalImport) { s.signalImport.prevRing ??= {}; s.signalImport.prevRing[have.id] ??= have.ring }
+      have.ring = ring
+    }
+    return have.id
+  }
   const id = newId()
   s.people.push({ id, name: p.name || p.e164, context: '', ring, metAt: now, lines: [], channels: { [Channel.Signal]: p.e164 } })
   return id
