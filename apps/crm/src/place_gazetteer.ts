@@ -2,8 +2,11 @@
 /**
  * Offline first placement for the Desk map: a place text that names a country or its capital (English or German) gets the centroid of that
  * country from the bundled Natural Earth outline, so dots show at once and nothing is sent. Precise geocodes (prefs.geo) replace them.
+ * A city of the bundled table (Austrian cities over 20,000 people and the 60 biggest EU cities; GeoNames, CC BY 4.0, https://www.geonames.org,
+ * built by scripts/city_table.mjs) wins over a country, so "Linz" and "Linz, Austria" land on Linz.
  */
 import { norm } from './contacts'
+import cities from './map/cities.json'
 import centroids from './map/country_centroids.json'
 import { geoKey } from './place_geo'
 import type { GeoCache } from './place_geo'
@@ -89,13 +92,17 @@ for (const line of NAMES) {
   BY_NAME.set(key(country), at)
 }
 
-/** Coarse position of a place text ("Wien", "Graz, Austria"): the last comma/slash part that names a known country or capital wins. */
+const BY_CITY = new Map<string, readonly [number, number]>()
+for (const [lat, lon, ...names] of cities as unknown as [number, number, ...string[]][]) for (const n of names) if (!BY_CITY.has(key(n))) BY_CITY.set(key(n), [lat, lon])
+
+/** Coarse position of a place text ("Wien", "Linz, Austria"): the last comma/slash part naming a known city wins, else the last naming a country or capital. */
 export function approxOf(place: string): { lat: number; lon: number } | null {
-  const whole = key(place)
-  const parts = [whole, ...place.split(/[,/;(|]|\s-\s/).map(key).reverse()]
-  for (const p of parts) {
-    const at = p && BY_NAME.get(p.replace(/[)]/g, '').trim())
-    if (at) return { lat: at[0], lon: at[1] }
+  const parts = [key(place), ...place.split(/[,/;(|]|\s-\s/).map(key).reverse()].map((p) => p.replace(/[)]/g, '').trim())
+  for (const names of [BY_CITY, BY_NAME]) {
+    for (const p of parts) {
+      const at = p && names.get(p)
+      if (at) return { lat: at[0], lon: at[1] }
+    }
   }
   return null
 }
