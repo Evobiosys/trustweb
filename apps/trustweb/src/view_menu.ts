@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 25: the Web screen's view chooser (three-dots sheet): Membranes (default), Network; Expand (top left of the rings) shows everyone. Pure, no DOM. */
-export type WebView = 'rings' | 'network'
+/** Wave 25: the Web screen's view chooser (three-dots sheet): Membranes (default), Network, Map (wave 27); Expand (top left of the rings) shows everyone. Pure, no DOM. */
+export type WebView = 'rings' | 'network' | 'map'
 
 export interface ViewItem {
   view: WebView
@@ -8,7 +8,7 @@ export interface ViewItem {
 }
 
 export function viewMenuItems(current: WebView, anyone: boolean): ViewItem[] {
-  const views: WebView[] = anyone ? ['rings', 'network'] : ['rings']
+  const views: WebView[] = anyone ? ['rings', 'network', 'map'] : ['rings']
   return views.map((view) => ({ view, on: view === current }))
 }
 
@@ -17,9 +17,9 @@ export function viewHeading(current: WebView): WebView | null {
   return current === 'rings' ? null : current
 }
 
-/** The stored choice (`trustweb.ui.webView`); Network needs someone in the web, a stale 'desk' or 'complete' reads as Membranes. */
+/** The stored choice (`trustweb.ui.webView`); Network and Map need someone in the web, a stale 'desk' or 'complete' reads as Membranes. */
 export function webViewOf(stored: string | null, anyone: boolean): WebView {
-  return anyone && stored === 'network' ? 'network' : 'rings'
+  return anyone && (stored === 'network' || stored === 'map') ? stored : 'rings'
 }
 
 /** The stored Expand flag (`trustweb.ui.webExpand` = '1'); only the rings have it. */

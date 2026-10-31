@@ -100,6 +100,7 @@ import type { MeetingPack, ShareLink } from './share'
 import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
+import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { migrate } from './schema_version'
@@ -2524,7 +2525,7 @@ function openEvents(eventId?: string): void {
 const WEB_VIEW_KEY = 'trustweb.ui.webView'
 const WEB_EXPAND_KEY = 'trustweb.ui.webExpand'
 
-const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : S.netNetwork)
+const viewName = (v: WebView): string => (v === 'rings' ? S.netRings : v === 'map' ? S.netMap : S.netNetwork)
 
 /** The Web screen's top row: the chosen view's name when it is not Membranes, and the three-dots view chooser at the right end. */
 function webViewRow(view: WebView, anyone: boolean, expanded: boolean): HTMLElement {
@@ -2664,8 +2665,11 @@ function screenWeb(): Node[] {
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
   ])
-  const clip = el('div', { class: 'scroll' }, [layer])
-  zoomOnWeb(clip, layer)
+  // The Map has text boxes: no zoom layer (it would capture their pointers).
+  const clip = view === 'map'
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: (id) => personSheet(id), save })])
+    : el('div', { class: 'scroll' }, [layer])
+  if (view !== 'map') zoomOnWeb(clip, layer)
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),

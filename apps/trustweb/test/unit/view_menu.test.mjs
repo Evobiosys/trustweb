@@ -4,7 +4,7 @@ import { viewMenuItems, viewHeading, webViewOf, expandedOf } from '../../src/vie
 
 describe('view_menu', () => {
   it('lists Membranes and Network with the current one ticked', () => {
-    expect(viewMenuItems('rings', true)).toEqual([{ view: 'rings', on: true }, { view: 'network', on: false }])
+    expect(viewMenuItems('rings', true)).toEqual([{ view: 'rings', on: true }, { view: 'network', on: false }, { view: 'map', on: false }])
     expect(viewMenuItems('network', true)[1].on).toBe(true)
   })
   it('offers no Network while nobody is in the web', () => {
@@ -16,10 +16,13 @@ describe('view_menu', () => {
   it('names the view as heading only when it is not Membranes', () => {
     expect(viewHeading('rings')).toBeNull()
     expect(viewHeading('network')).toBe('network')
+    expect(viewHeading('map')).toBe('map')
   })
   it('reads the stored choice; anything else, or nobody in the web, is Membranes', () => {
     expect(webViewOf('network', true)).toBe('network')
     expect(webViewOf('complete', true)).toBe('rings')
+    expect(webViewOf('map', true)).toBe('map')
+    expect(webViewOf('map', false)).toBe('rings')
     expect(webViewOf('network', false)).toBe('rings')
     expect(webViewOf('desk', true)).toBe('rings')
     expect(webViewOf(null, true)).toBe('rings')
