@@ -181,6 +181,7 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
+import { servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
@@ -6342,6 +6343,7 @@ function settingsSheet(): void {
     inventory: [
       featureSwitch(s, 'inventory', S.setFeatInventory, S.setFeatInventoryHint),
     settingsSection('sources', S.setSources, sourcesGroup(s)),
+    ...(solo ? [] : servicesGroup({ state: st, save, toast, changed: render, pages })),
     settingsSection('advanced-inventory', S.setAdvanced, [
     ...(solo ? [] : importGroup({ state: st, save, openSheet, closeSheet, toast, changed: render, settings: settingsSheet })),
     el('button', {

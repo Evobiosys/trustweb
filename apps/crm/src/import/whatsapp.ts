@@ -46,6 +46,9 @@ function scan(text: string): Raw[] {
   return out
 }
 
+/** True when the text holds at least one dated "Name: text" line in a WhatsApp layout. */
+export const isWhatsAppChat = (text: string): boolean => scan(text.slice(0, 50_000)).some((r) => r.sender !== null)
+
 function dateOrderOf(rows: readonly Raw[]): WhatsAppResult['dateOrder'] {
   if (rows.some((r) => r.a > 12)) return 'dmy'
   if (rows.some((r) => r.b > 12)) return 'mdy'
