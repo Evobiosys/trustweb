@@ -175,6 +175,18 @@ textarea.field{resize:vertical; line-height:1.5}
 .net-bar{display:flex; gap:8px; align-items:center; margin:6px 0}
 .net-search{padding:8px 12px; font-size:14px; flex:1; min-width:0}
 .net-canvas{display:block; touch-action:none; -webkit-touch-callout:none; user-select:none; border-radius:16px; background:var(--card); cursor:grab}
+.map-view{display:grid; gap:8px; padding:0 16px 16px}
+.map-svg{width:100%; height:auto; max-height:55vh; border-radius:16px; background:var(--card)}
+.map-land{fill:var(--ink-soft); fill-opacity:.25; stroke:var(--ink-soft); stroke-opacity:.5; stroke-width:.4}
+.map-dot{cursor:pointer}
+.map-dot circle{fill:var(--electric,#3a6cf0)}
+.map-dot text{font-size:9px; fill:var(--ink)}
+.map-credit{font-size:11px; margin:0}
+.map-row{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 3.5rem; gap:6px 8px; align-items:center}
+.map-name{background:none; padding:0; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.map-sug{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px}
+.map-sug:empty{display:none}
+.map-opt{padding:4px 10px; border-radius:12px; border:0; background:var(--card); font-size:13px}
 .web-view-row{display:flex; gap:8px; align-items:center; margin:6px 16px 0}
 .web-view-row .web-view{flex:1; font-size:13px; font-weight:600; color:var(--ink-soft)}
 .web-view-row .web-search{flex:1; min-width:0}
