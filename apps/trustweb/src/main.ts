@@ -4173,6 +4173,14 @@ const curator = createCurator({
     save()
     if (screen === Screen.Web) render()
   },
+  // A12: the person page of the Curator shows the Connect panel and the messenger links of the phone card.
+  connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+  setLinks: (id, links) => {
+    const p = state?.people.find((x) => x.id === id)
+    if (!p) return
+    if (links) p.links = links; else delete p.links
+    save()
+  },
   showRings: () => { closeSheet(); if (screen !== Screen.Web) go(Screen.Web) },
   // The class stays through a close: the Desk is still mounted and does not announce itself again on the next open (the CSS needs .on and data-kind=curator).
   viewChanged: (view) => { curatorFace = view; applyDeskWide() },
