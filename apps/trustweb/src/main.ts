@@ -66,6 +66,10 @@ import { chatRow } from './chat_row_view'
 import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
 import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
+import { linkEntries } from './person_links'
+import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from './qr_modes'
+import type { QrContext } from './qr_modes'
+import { openQrPage } from './qr_modes_view'
 import { tapEdit } from './tap_edit'
 import { HELLO_NAME_MAX, cleanHelloName, helloText, parseHelloText, wantsHelloName } from './hello'
 import type { ConnectAddHandle } from './connect_add_view'
@@ -370,6 +374,8 @@ const handover: HandoverLink | null = params.get('handover') === '1' ? parseHand
 let pendingShare: ShareLink | null = params.get(SHARE_PARAM) === '1' || pendingConnect ? parseShareFragment(location.hash) : null
 // An event link (#ev=..., event_link.ts): the join sheet opens once the app has a record; the fragment goes below either way.
 let pendingEvent: LinkedEvent | null = decodeEventLink(location.hash)
+// A QR mode (qr_modes.ts, wave 27): what the code shares besides the connect; an old code or an unknown mode is a plain connect.
+const qrBody = pendingConnect ? decodeModeLink(location.href) : null
 // ?install=1 (the website's and the demo's Install button): open the Install sheet once the app is up (install.ts).
 // A scheduling link (#book= or #booked=, ext/calendar/scheduling.ts): its sheet opens once the app has a record.
 let pendingBook = /[#&]book(ed)?=/.test(location.hash) ? location.hash : ''
@@ -1672,6 +1678,8 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
     else toast(S.peerConnectedToast(peer.displayName, S.ringLabel[ring]))
   }
   render()
+  if (qrBody?.kind === 'person' && qrBody.username) toast(S.qrScanUsername(peer.displayName, qrBody.username))
+  else if (qrBody?.kind === 'tag') toast(S.qrScanTag(qrBody.tag))
   // Wave 6b: a scanned or pasted link lands on the person: the add sheet, then their card. A demo account and the demo phones keep the direct flow.
   if (demoLink || solo) openPendingShare()
   else if (picked) {
@@ -3095,6 +3103,7 @@ function personSheet(personId: string): void {
     theirProfileBlock(p.name, p.theirProfile, Date.now()),
     p.peerId ? sendProfileRow(p) : null,
     curator.person(p.id, closeSheet, { embedded: true }),
+    el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => { void qrPage((link) => ({ kind: 'person', link, name: p.name, username: p.publicUsername, introducePermission: p.introducePermission, profile: linkEntries(p)[0]?.url })) } }, [S.qrPageTitle]),
     el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
   ])
   cardOpenFor = p.id
@@ -3177,10 +3186,26 @@ function curatePage(p: Person): void {
   pages.open(S.cardCurate, [
     el('button', { class: 'btn btn-ghost btn-sm', 'data-curate-knows': p.id, onclick: () => { history.back(); window.setTimeout(() => document.querySelector(`[data-person-knows="${p.id}"]`)?.scrollIntoView({ block: 'center' }), 50) } }, [S.cardCurateKnows]),
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
+    introduceRow(p),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
   ].filter((n): n is HTMLElement => n !== null), 'card-curate')
+}
+
+/** The QR page for a context (qr_modes.ts): the longer connect link is used, since a short /c/ link may drop the mode parameters on its redirect. */
+async function qrPage(build: (link: string) => QrContext): Promise<void> {
+  await net.start()
+  openQrPage({ open: (title, body, mark) => pages.open(title, body, mark), renderQr }, build(net.connectLink(CONNECT_URL)))
+}
+
+/** Curate: what others may pass on about this person when they introduce them, and the public username I know for them. */
+function introduceRow(p: Person): HTMLElement {
+  const sel = el('select', { 'aria-label': S.introduceLabel, 'data-introduce': p.id, onchange: (e: Event) => { p.introducePermission = parseIntroducePermission((e.target as HTMLSelectElement).value); save() } },
+    INTRODUCE_PERMISSIONS.map((o) => el('option', { value: o, selected: parseIntroducePermission(p.introducePermission) === o }, [S.introduceOptions[o]])))
+  const name = el('input', { class: 'field', maxlength: '30', 'aria-label': S.introduceUsernameLabel, placeholder: S.introduceUsernameLabel, value: p.publicUsername ?? '', 'data-public-username': p.id }) as HTMLInputElement
+  name.addEventListener('change', () => { p.publicUsername = name.value.trim().replace(/^@/, '').toLowerCase() || undefined; save() })
+  return el('div', { class: 'conn-row' }, [el('label', {}, [S.introduceLabel + ' ', sel]), name])
 }
 
 /** The card's name; a tap swaps it for an input (Enter or blur saves, Escape cancels). person.name is the owner's own name for them. */
@@ -4327,6 +4352,7 @@ const eventsView = createEventsView({
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
+  showQr: (ev) => { void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()) })) },
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const extHooks: ExtHooks = {
