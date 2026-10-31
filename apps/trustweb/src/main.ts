@@ -182,6 +182,7 @@ import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
+import { addReminder, dismissReminder, remindersWaiting } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
 import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
@@ -810,6 +811,8 @@ function notifyKind(kind: 'reminder' | 'event', title: string, body: string, onO
     void showNotification(S.appName, title)
     return true
   }
+  // Wave 27: a reminder waits in the Events panel (reminders_inbox.ts); an event notice has no other home and stays a notice.
+  if (kind === 'reminder') { addReminder({ title, openLabel: body, onOpen }); if (screen === Screen.Events) render(); return true }
   showNotice(title, '', [el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { hideNotice(); onOpen() } }, [body])])
   return true
 }
@@ -1226,7 +1229,7 @@ function render(): void {
       case Screen.Place: return screenPlace()
       case Screen.StillTrue: return screenStillTrue()
       case Screen.Feed: return [header(S.feedTitle), feed.body()]
-      case Screen.Events: return cal && eventsView.atList() ? cal.body() : eventsView.body()
+      case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
     }
@@ -2677,6 +2680,15 @@ function chatListBody(): Node[] {
       ])) : [el('p', { class: 'meta' }, [S.chatFindEmpty])]),
     ]),
   ]
+}
+
+/** Wave 27: reminders that came due, at the top of the Events panel; each with Open and a dismiss. */
+function reminderRows(): Node[] {
+  return remindersWaiting().map((r) => el('div', { class: 'prow reminder-row', 'data-reminder': '' }, [
+    el('span', { class: 'who' }, [el('b', {}, [r.title])]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-reminder-open': '', onclick: () => { dismissReminder(r); r.onOpen() } }, [r.openLabel]),
+    el('button', { class: 'x', 'aria-label': S.remove, onclick: () => { dismissReminder(r); render() } }, ['×']),
+  ]))
 }
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. */
@@ -6479,7 +6491,7 @@ function screenInventory(): Node[] {
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
-  // Querying is one tap from Inventory too (wave 2, P9): bottom left, opposite "Review requests".
+  // Querying is one tap from Inventory too (wave 2, P9): bottom right as on Web and Chat (wave 27); "Review requests" sits bottom left.
   const call = el('button', { class: 'query-fab call inv-call-fab', 'aria-label': S.webCall, 'data-open-query': 'inventory', onclick: openQuery })
   call.innerHTML = askWebIcon(askIconVariant)
   call.append(el('span', { class: 'fab-two' }, [el('span', {}, [S.webCallTop]), el('span', {}, [S.webCallBottom])]))
