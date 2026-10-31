@@ -5,7 +5,7 @@
  * View state only: nothing here travels or changes a record. Pure, no DOM.
  */
 import { audienceAdmits } from './model'
-import type { AppState, Person } from './model'
+import type { AppState, PinnedOrder, Person } from './model'
 import { lastContact } from './engagement'
 import { tagsOf } from './colour_tags'
 import { webSlot } from './rings_layout'
@@ -27,7 +27,7 @@ export function repairPinned(s: Pick<AppState, 'people'>): boolean {
 export const LIMIT_DEFAULT = 5
 export const LIMIT_MAX = 20
 
-type State = Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'meetings' | 'events' | 'membraneLimit' | 'inventory'>>
+type State = Pick<AppState, 'people'> & Partial<Pick<AppState, 'chats' | 'meetings' | 'events' | 'membraneLimit' | 'inventory' | 'pinnedOrder'>>
 
 /** People per membrane: absent or junk = 5; clamped 1..20. */
 export function limitOf(s: Pick<AppState, 'membraneLimit'>): number {
@@ -46,13 +46,31 @@ export function recency(s: Partial<State>, p: Person, now: number): number {
   return lastContact({ people: [], ...s, engagementSince: undefined }, p, now)
 }
 
-/** Pinned first, then the most recent; `limit` shown, the others in `rest` (same order). Ties keep a stable order by id. */
 /** The pin flag lives here only. */
 export const isPinned = (p: Pick<Person, 'pinned'>): boolean => p.pinned === true
 
+/** Pin or unpin: a pin carries the time it was set (`pinnedAt`, for the "when pinned" order); unpinning drops both. */
+export function togglePin(p: Person, now: number): void {
+  if (p.pinned) { delete p.pinned; delete p.pinnedAt } else { p.pinned = true; p.pinnedAt = now }
+}
+
+/** The "Pinned order" setting: absent or junk = by pin time. */
+export function pinnedModeOf(s: Partial<Pick<AppState, 'pinnedOrder'>>): PinnedOrder {
+  return s.pinnedOrder === 'contact' ? 'contact' : 'pinned'
+}
+
+/**
+ * Pinned first, then the rest; both by the most recent sign of life `at` (ms). Pinned people in mode 'pinned' go by pin time instead, newest pin
+ * first (no `pinnedAt` = oldest, then by `at`); mode 'contact' is the wave 26 order (latest contact). Ties keep a stable order by id. Returns a copy.
+ */
+export function pinnedOrder(people: readonly Person[], mode: PinnedOrder, at: (p: Person) => number): Person[] {
+  const pinAt = (p: Person): number => (mode === 'pinned' && isPinned(p) ? p.pinnedAt ?? 0 : 0)
+  return [...people].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || pinAt(b) - pinAt(a) || at(b) - at(a) || (a.id < b.id ? -1 : 1))
+}
+
+/** Pinned first, then the most recent; `limit` shown, the others in `rest` (same order). */
 export function pickFive(people: readonly Person[], s: Partial<State>, limit: number, now: number): { shown: Person[]; rest: Person[] } {
-  const at = new Map(people.map((p) => [p.id, recency(s, p, now)]))
-  const sorted = [...people].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || at.get(b.id)! - at.get(a.id)! || (a.id < b.id ? -1 : 1))
+  const sorted = pinnedOrder(people, pinnedModeOf(s), (p) => recency(s, p, now))
   return { shown: sorted.slice(0, limit), rest: sorted.slice(limit) }
 }
 

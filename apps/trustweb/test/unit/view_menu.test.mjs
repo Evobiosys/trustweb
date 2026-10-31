@@ -1,30 +1,46 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Web screen view chooser (wave 25): Membranes, Network; the expand flag shows everyone. No Desk. */
-import { viewMenuItems, viewHeading, webViewOf, expandedOf } from '../../src/view_menu.ts'
+/** Web screen view chooser (wave 25): Web, Network; the expand flag shows everyone. No Desk. */
+import { viewMenu, pinnedViews, togglePin, viewHeading, webViewOf, expandedOf } from '../../src/view_menu.ts'
 
 describe('view_menu', () => {
-  it('lists Membranes and Network with the current one ticked', () => {
-    expect(viewMenuItems('rings', true)).toEqual([{ view: 'rings', on: true }, { view: 'network', on: false }])
-    expect(viewMenuItems('network', true)[1].on).toBe(true)
+  it('lists Web, Network, People, then Other views: Dex, Contacts compact; the current one is on', () => {
+    const m = viewMenu('rings', true, true, [])
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'map', 'dex', 'compact'])
+    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact'])
+    expect(m.find((i) => i.on)?.view).toBe('rings')
+    expect(viewMenu('dex', true, true, []).find((i) => i.on)?.view).toBe('dex')
   })
-  it('offers no Network while nobody is in the web', () => {
-    expect(viewMenuItems('rings', false).map((i) => i.view)).toEqual(['rings'])
+  it('hides Network and People while nobody is in the web, and Map while no map exists', () => {
+    expect(viewMenu('rings', false, false, []).map((i) => i.view)).toEqual(['rings', 'dex', 'compact'])
   })
   it('never lists a desk', () => {
-    expect(viewMenuItems('rings', true).map((i) => i.view)).not.toContain('desk')
+    expect(viewMenu('rings', true, true, []).map((i) => i.view)).not.toContain('desk')
   })
-  it('names the view as heading only when it is not Membranes', () => {
+  it('marks pinned views and pins in menu order, skipping unknown or unavailable ones', () => {
+    expect(viewMenu('rings', true, false, ['dex']).find((i) => i.view === 'dex')?.pinned).toBe(true)
+    expect(pinnedViews(['dex', 'network', 'nope', 'map'], true, false)).toEqual(['network', 'dex'])
+    expect(pinnedViews(undefined, true, true)).toEqual([])
+    expect(pinnedViews(['network'], false, true)).toEqual([])
+  })
+  it('toggles a pin on and off', () => {
+    expect(togglePin(undefined, 'network')).toEqual(['network'])
+    expect(togglePin(['network', 'dex'], 'network')).toEqual(['dex'])
+  })
+  it('names the view as heading only when it is not Web', () => {
     expect(viewHeading('rings')).toBeNull()
     expect(viewHeading('network')).toBe('network')
+    expect(viewHeading('map')).toBe('map')
   })
-  it('reads the stored choice; anything else, or nobody in the web, is Membranes', () => {
+  it('reads the stored choice; anything else, or nobody in the web, is Web', () => {
     expect(webViewOf('network', true)).toBe('network')
     expect(webViewOf('complete', true)).toBe('rings')
+    expect(webViewOf('map', true)).toBe('map')
+    expect(webViewOf('map', false)).toBe('rings')
     expect(webViewOf('network', false)).toBe('rings')
     expect(webViewOf('desk', true)).toBe('rings')
     expect(webViewOf(null, true)).toBe('rings')
   })
-  it('expand is on only for the stored flag "1", and only on Membranes', () => {
+  it('expand is on only for the stored flag "1", and only on Web', () => {
     expect(expandedOf('1', 'rings')).toBe(true)
     expect(expandedOf('1', 'network')).toBe(false)
     expect(expandedOf(null, 'rings')).toBe(false)

@@ -5,7 +5,7 @@ import { DEFAULT_ROW, availableTabs, resolveRow, setSlot } from '../../src/tab_r
 const all = { events: true, feed: false, inventory: true }
 
 describe('tab_row', () => {
-  it('defaults to Membranes | Chat | Record | Events | Resources', () => {
+  it('defaults to Web | Chat | Record | Events | Resources', () => {
     expect(DEFAULT_ROW).toEqual(['web', 'chat', 'record', 'events', 'inventory'])
     expect(resolveRow(undefined, all)).toEqual(DEFAULT_ROW)
   })
