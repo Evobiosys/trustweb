@@ -189,7 +189,7 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { servicesGroup } from './services_view'
+import { openServicesImport, servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
@@ -1055,7 +1055,7 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
@@ -1068,7 +1068,10 @@ function openPeople(query = ''): void {
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches)]),
+    el('div', { class: 'scroll pad' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
+      peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches),
+    ]),
   ]
 }
 
