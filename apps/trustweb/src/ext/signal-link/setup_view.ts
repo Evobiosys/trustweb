@@ -59,12 +59,14 @@ export function openSetup(h: ExtHooks): void {
       else if (st.link === 'waiting') status.textContent = S.sigWaiting
     }
     const show = el('button', { class: 'btn btn-electric', 'data-sl-show-qr': '', onclick: () => {
-      void client()?.link().then(async (r) => {
+      const c = client()
+      if (!c) { status.textContent = S.sigNoCompanion; return }
+      void c.link().then(async (r) => {
         if (!r) { status.textContent = S.sigNoCompanion; return }
         await renderQr(qr, r.uri)
         status.textContent = S.sigWaiting
         stop(); timer = setInterval(() => { void poll() }, 2000)
-      })
+      }).catch(() => { status.textContent = S.sigLinkFailed('') })
     } }, [S.sigShowQr])
     const check = el('button', { class: 'btn btn-ghost btn-sm', 'data-sl-check': '', onclick: () => { void poll() } }, [S.sigCheck])
     void poll()

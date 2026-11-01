@@ -6,6 +6,7 @@
   import { Kind, Section, labelOf } from './placement'
   import { layoutFor, placeField } from './placement.svelte'
   import { prefs, savePrefs, tanaOn } from './prefs.svelte'
+  import { onHoverOrLongPress } from '../../trustweb/src/press'
   import { setIntending } from './sorting.svelte'
   import { S } from './strings'
   import { saveField } from './sync.svelte'
@@ -16,13 +17,24 @@
     /** The person or environment id; `tana-<node>` ids carry their Tana node. */
     id: string
     values: FieldValues
+    /** Wave 28: fields the host's card shows elsewhere; hidden until "Show all fields", each with a hint saying so. */
+    duplicates?: readonly string[]
   }
-  const { kind, id, values }: Props = $props()
+  const { kind, id, values, duplicates = [] }: Props = $props()
+
+  let showAll = $state(false)
+  const dup = (key: string): boolean => duplicates.includes(key)
+  /** Hover on the desktop, a long press on the phone: the hint under a duplicate field shows (it fades after 4 s on a hold). */
+  function hint(node: HTMLElement): void {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    onHoverOrLongPress(node, () => { node.classList.add('dup-on'); clearTimeout(timer); timer = setTimeout(() => node.classList.remove('dup-on'), 4000) }, () => { clearTimeout(timer); node.classList.remove('dup-on') })
+  }
 
   let advancedOpen = $state(false)
   let hiddenOpen = $state(false)
 
   const lay = $derived(layoutFor(kind, values))
+  const hiddenDups = $derived([...lay.simple, ...lay.advanced, ...lay.collapsed].filter((f) => dup(f.id)).length)
   const node = $derived(id.startsWith('tana-') ? id.slice(5) : prefs.nodeIds[id])
 
   function nosync(key: string): { reason: string; href?: string } | undefined {
@@ -49,13 +61,14 @@
 
 {#snippet zone(section: Section)}
   <div class="zone" class:over={drag.key !== null && drag.zone === section} data-zone={section} data-part={section}>
-    {#each lay[section] as f (f.id)}
-      <div class="slot" class:before={drag.key !== null && drag.before === f.id} class:lifted={drag.key === f.id} data-slot={f.id}>
+    {#each lay[section].filter((f) => showAll || !dup(f.id)) as f (f.id)}
+      <div class="slot" class:dup={dup(f.id)} title={dup(f.id) ? S.fieldsDupHint : undefined} use:hint class:before={drag.key !== null && drag.before === f.id} class:lifted={drag.key === f.id} data-slot={f.id}>
         <span class="grip" role="presentation" data-key={f.id} aria-label={S.dragField} use:grip={drop}>⋮⋮</span>
         <FieldInput field={f.id.startsWith('adhoc:') ? undefined : f} label={f.id.startsWith('adhoc:') ? fieldLabelOf(f.id) : labelOf(f, values)}
           value={values[f.id]} onchange={(v): void => save(f.id, v)} nosync={nosync(f.id)} />
         <label class="hide-box"><input type="checkbox" data-hide={f.id} checked={section === Section.Hidden}
           onchange={(e): void => hide(f.id, e.currentTarget.checked)} /><span>{S.hideField}</span></label>
+        {#if dup(f.id)}<small class="dup-note" data-dup-note={f.id}>{S.fieldsDupHint}</small>{/if}
       </div>
     {/each}
   </div>
@@ -64,6 +77,9 @@
 {#if prefs.scope.length}
   <p class="warn" data-part="scope-note">{S.scopeNote(prefs.scope.join(', '))}
     <button class="quiet" onclick={(): void => { prefs.scope = []; savePrefs() }}>{S.scopeBack}</button></p>
+{/if}
+{#if hiddenDups}
+  <button class="link" data-action="show-all-fields" aria-expanded={showAll} onclick={(): void => { showAll = !showAll }}>{showAll ? '▾' : '▸'} {S.fieldsShowAll(hiddenDups)}</button>
 {/if}
 <h3>{S.viewSimple}</h3>
 {@render zone(Section.Simple)}

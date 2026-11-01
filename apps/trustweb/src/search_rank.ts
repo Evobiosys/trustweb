@@ -16,6 +16,19 @@ import { scoreTokens } from './fuzzy'
 import { Ring, ringSlot } from './model'
 import type { Person } from './model'
 
+/**
+ * Wave 28 (sovereign-import): the swappable block, shaped after the NAOMS adapter-search package (one fetcher interface with an id,
+ * a registry, one place that names the active one); nothing copied. ALL choices of the block sit in SEARCH_CONFIG: which adapter
+ * runs, and (RANK below) how the built-in one weighs. A later crate or a remote ranker implements RankAdapter and registers itself;
+ * `rank` below is the only entry the app calls, so nothing else changes.
+ */
+export interface RankAdapter {
+  id: string
+  rank<T extends RankCandidate>(candidates: readonly T[], ctx: RankContext): Ranked<T>[]
+}
+
+export const SEARCH_CONFIG: { adapter: string } = { adapter: 'builtin' }
+
 /** All tuning in one place. The five weights sum to 1, so a score is in 0..1. */
 export const RANK = {
   w_zone: 0.35, w_tag: 0.25, w_recency: 0.2, w_recip: 0.1, w_text: 0.1,
@@ -107,7 +120,7 @@ function termsOf(p: RankCandidate, ctx: RankContext): RankTerms {
 }
 
 /** Ranks candidates best first; stable; every candidate is kept. */
-export function rank<T extends RankCandidate>(candidates: readonly T[], ctx: RankContext): Ranked<T>[] {
+function builtinRank<T extends RankCandidate>(candidates: readonly T[], ctx: RankContext): Ranked<T>[] {
   return candidates
     .map((person, i) => {
       const terms = termsOf(person, ctx)
@@ -116,4 +129,15 @@ export function rank<T extends RankCandidate>(candidates: readonly T[], ctx: Ran
     })
     .sort((a, b) => b.score - a.score || a.i - b.i)
     .map(({ person, score, terms }) => ({ person, score, terms }))
+}
+
+const ADAPTERS = new Map<string, RankAdapter>([['builtin', { id: 'builtin', rank: builtinRank }]])
+
+export function registerRankAdapter(a: RankAdapter): void {
+  ADAPTERS.set(a.id, a)
+}
+
+/** The active adapter ranks; an unknown id falls back to the built-in one, so a missing module never empties a search. */
+export function rank<T extends RankCandidate>(candidates: readonly T[], ctx: RankContext): Ranked<T>[] {
+  return (ADAPTERS.get(SEARCH_CONFIG.adapter) ?? ADAPTERS.get('builtin')!).rank(candidates, ctx)
 }

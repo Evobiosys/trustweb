@@ -3,6 +3,7 @@
 import { el } from '../../../../demo/src/ui/dom'
 import { S } from '../../strings'
 import { threadRows } from '../../messenger_host_view'
+import { detectGeb } from '../../messenger_detect'
 import type { ExtHooks, MessengerSource } from '../registry'
 import { bridgeCall, clearPairing, consumePairingHash, loadPairing, parsePairingHash, savePairing, toThreadSummaries, type Pairing } from './bridge_client'
 
@@ -123,6 +124,12 @@ export function createGeb(h: ExtHooks): MessengerSource {
     send,
     setup,
     view,
+    // Wave 28: Geb in this browser? The paired bridge answers, else Geb's page marker (data-geb on <html> or window.geb; assumed, not checked against Geb).
+    probe: () => detectGeb({
+      paired: !!pair(),
+      marker: document.documentElement.hasAttribute('data-geb') || 'geb' in window,
+      ping: async () => { const p = pair(); if (!p) return false; await bridgeCall(p, '/threads'); return true },
+    }),
   }
   return src
 }
