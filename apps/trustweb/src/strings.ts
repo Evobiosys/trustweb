@@ -360,6 +360,8 @@ export const S = {
   views: { label: 'View', pickAria: 'Choose a view', dex: 'Dex', desk: 'Contacts (wide)', classic: 'Contacts', trustweb: 'TrustWeb', mobile: 'TrustWeb mobile', layout: 'Layout', layoutHint: 'TrustWeb fits your window; TrustWeb mobile keeps the phone frame. Kept on this device only.', dexInfo: 'Dex-inspired', deskInfo: 'Our take on Dex', dexAbout: 'Dex-inspired: modelled on Dex, the personal CRM (getdex.com)' },
   netSearchPh: 'Find someone in the network',
   netShake: 'Shake',
+  netShowOthers: (n: number) => `Show others (${n})`,
+  netHideOthers: 'Hide others',
   netMenu: 'Graph options',
   netWants: (n: number) => `wants ${n}/10`,
   netLogseq: 'Logseq style',
