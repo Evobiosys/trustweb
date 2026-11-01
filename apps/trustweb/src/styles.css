@@ -254,7 +254,7 @@ textarea.field{resize:vertical; line-height:1.5}
   background:linear-gradient(135deg,var(--coral),var(--violet)); color:#fff; box-shadow:0 8px 24px rgba(23,143,134,.4), 0 0 0 5px var(--linen);
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; align-self:flex-start}
 .tab-record.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
-.tab-record.live{background:var(--coral); animation:pulse 1.4s ease-in-out infinite}
+.tab-record.live{background:var(--coral); box-shadow:0 0 0 var(--pulse-px,4px) rgba(255,113,91,.25)}
 /* On the solo recorder, not recording yet: the glyph breathes ("press to start"); reduced motion gets a static ring */
 .tab-record.pulse svg{animation:tab-breathe 1.6s ease-in-out infinite}
 @keyframes tab-breathe{50%{transform:scale(1.12); opacity:.6}}
@@ -452,7 +452,7 @@ textarea.field{resize:vertical; line-height:1.5}
   display:grid; place-items:center; transition:transform .15s}
 .rec-circle:active,.rec-circle.pressed{transform:scale(.97)}
 .rec-circle.requesting{opacity:.7}
-.rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); animation:pulse 1.4s ease-in-out infinite}
+.rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); box-shadow:0 0 0 var(--pulse-px,4px) rgba(255,113,91,.25)}
 .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #E3E8E6, #B4C0BC 75%)}
 .rec-circle.small{width:62px; height:62px; box-shadow:0 6px 18px rgba(23,143,134,.25)}
 .rec-circle svg{width:26px; height:26px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round}
