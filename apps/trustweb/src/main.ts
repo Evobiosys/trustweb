@@ -4505,7 +4505,7 @@ const feed = createFeedView({
   redrawFeed: () => { if (screen === Screen.Feed) render() },
   tabsChanged: () => { renderTabs(); if (screen === Screen.Feed && !feedOn(st())) screen = Screen.Web; render() },
   settings: settingsSheet,
-  openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, close: () => history.back() }, itemId)], 'share-page'),
+  openSharePage: (itemId) => pages.open(S.sharePageTitle, [sharePageBody({ state: st, save, toast, page: (title, body, mark) => pages.open(title, body, mark), close: () => history.back() }, itemId)], 'share-page'),
 })
 const packs = createPackView({
   state: st, save, sheet, openSheet, closeSheet, toast, render, transcriptView: past.transcriptView, cap: past.cap, when: whenLabel,

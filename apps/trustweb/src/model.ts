@@ -946,6 +946,10 @@ export interface AppState {
   shares?: import('./share_sink/share_lines').ShareLine[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
+  /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
+  shareProfiles?: import('./share_profiles').ShareProfile[]
+  /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
+  shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */
   agentsMayPropose?: true
   peers: Peer[]

@@ -9,13 +9,19 @@ import { loadColourTags } from './colour_tags'
 import { AGENT_SHARE_CEILING } from './share_sink/ceiling'
 import { isZone } from './share_sink/zones'
 import type { AppState } from './model'
-import { DEFAULT_ZONE, ZONE_CHOICES, candidates, initial, previewOf, seenBy, shareItem, suggest, withChip, withoutChip, type Basis, type ChipRow, type PageState } from './share_page'
+import { DEFAULT_ZONE, MEMBERS_PEEK, ZONE_CHOICES, candidates, initial, membersOf, previewOf, seenBy, shareItem, suggest, withChip, withoutChip, type Basis, type ChipRow, type PageState } from './share_page'
+import { applyProfile, removeProfile, saveProfile } from './share_profiles'
+import { curatorHiddenIds } from './curator'
+import { onHoverOrLongPress } from './press'
+import { shown } from './sources'
 import { S } from './strings'
 
 export interface SharePageHooks {
   state: () => AppState
   save: () => void
   toast: (msg: string) => void
+  /** Opens a page with Back (pages.open): the community list of a tag. */
+  page: (title: string, body: Node[], mark: string) => void
   /** Leave the page (history.back()). */
   close: () => void
 }
@@ -23,7 +29,8 @@ export interface SharePageHooks {
 /** The zone the Share page starts on: the Settings choice, else Acquaintance. */
 export const defaultZone = (s: AppState) => (s.shareDefaultZone && isZone(s.shareDefaultZone) ? s.shareDefaultZone : DEFAULT_ZONE)
 
-export const basisOf = (s: AppState): Basis => ({ people: s.people, tags: loadColourTags(), shares: s.shares })
+/** The people are the ones shown: the Curator's archived contacts never count or list (G5). */
+export const basisOf = (s: AppState): Basis => ({ people: shown(s, curatorHiddenIds()).people, tags: loadColourTags(), shares: s.shares })
 
 export function sharePageBody(h: SharePageHooks, itemId: string): HTMLElement {
   const root = el('div', { class: 'share-page', 'data-share-page': itemId })
@@ -41,10 +48,52 @@ export function sharePageBody(h: SharePageHooks, itemId: string): HTMLElement {
     return el('div', { class: 'share-row', 'data-share-row': row }, [
       el('h4', { class: 'eyebrow' }, [row === 'include' ? S.shareAlso : S.shareExcept]),
       el('p', { class: 'meta' }, [row === 'include' ? S.shareAlsoHint : S.shareExceptHint]),
-      el('div', { class: 'chips' }, page[row].map((id) => el('button', {
-        class: 'chip on', 'data-share-chip': id, 'aria-label': S.shareChipRemove(label(id)), onclick: () => { page = withoutChip(page, row, id); draw() },
-      }, [label(id) + ' ×']))),
+      el('div', { class: 'chips' }, page[row].map(chip(row))),
       input, hits,
+      ...(row === 'include' ? [profilesBlock()] : []),
+    ])
+  }
+
+  /** A chip: the label (a tag's opens its community list, hover or long press shows 3 of its people), and a × that removes it. */
+  const chip = (row: ChipRow) => (id: string): HTMLElement => {
+    const isTag = id.startsWith('tag:')
+    const names = isTag ? membersOf(basis, id).map((m) => m.name) : []
+    const peek = el('div', { class: 'share-peek', hidden: '' })
+    const text = el(isTag ? 'button' : 'span', {
+      class: 'share-chip-label', 'data-share-chip': id,
+      ...(isTag ? { onclick: () => h.page(label(id), [el('p', { class: 'meta' }, [S.shareTagPeople(names.length)]), ...names.map((n) => el('p', { class: 'share-member' }, [n]))], 'share-tag-list') } : {}),
+    }, [label(id)])
+    const wrap = el('span', { class: 'chip on share-chip', 'data-share-chip-wrap': id }, [text, el('button', {
+      class: 'share-chip-x', 'data-share-remove': id, 'aria-label': S.shareChipRemove(label(id)), onclick: () => { page = withoutChip(page, row, id); draw() },
+    }, ['×']), peek])
+    if (isTag) {
+      const fill = (all: boolean): void => {
+        const more = el('button', { class: 'share-more', 'data-share-more': id, onclick: () => fill(true) }, [S.shareMore])
+        onHoverOrLongPress(more, () => fill(true), () => undefined)
+        peek.replaceChildren(...(all ? names : names.slice(0, MEMBERS_PEEK)).map((n) => el('div', {}, [n])), ...(!all && names.length > MEMBERS_PEEK ? [more] : []))
+        peek.hidden = false
+      }
+      onHoverOrLongPress(wrap, () => fill(false), () => { peek.hidden = true })
+      document.addEventListener('pointerdown', (e) => { if (!wrap.contains(e.target as Node)) peek.hidden = true })
+    }
+    return wrap
+  }
+
+  /** Profiles: saved groups for the in-addition list (share_profiles.ts); picking one adds its members, saving keeps the current list. */
+  const profilesBlock = (): HTMLElement => {
+    const s = h.state()
+    const name = el('input', { class: 'field', placeholder: S.shareProfileName, 'aria-label': S.shareProfileName, 'data-share-profile-name': '' }) as HTMLInputElement
+    return el('div', { class: 'share-profiles', 'data-share-profiles': '' }, [
+      el('details', {}, [el('summary', {}, [S.shareProfiles + ' (i)']), el('p', { class: 'meta' }, [S.shareProfilesInfo])]),
+      el('div', { class: 'chips' }, (s.shareProfiles ?? []).length ? (s.shareProfiles ?? []).map((p) => el('span', { class: 'chip share-chip' }, [
+        el('button', { class: 'share-chip-label', 'data-share-profile': p.id, onclick: () => { page = applyProfile(page, p, s.shareProfilesWin === true); draw() } }, [p.name]),
+        el('button', { class: 'share-chip-x', 'data-share-profile-remove': p.id, 'aria-label': S.shareProfileRemove(p.name), onclick: () => { s.shareProfiles = removeProfile(s.shareProfiles ?? [], p.id); if (!s.shareProfiles.length) delete s.shareProfiles; h.save(); draw() } }, ['×']),
+      ])) : [el('span', { class: 'meta' }, [S.shareProfilesNone])]),
+      name,
+      el('button', { class: 'btn btn-sm', 'data-share-profile-save': '', onclick: () => {
+        if (!name.value.trim() || !page.include.length) return
+        s.shareProfiles = saveProfile(s.shareProfiles ?? [], name.value, page.include); h.save(); draw()
+      } }, [S.shareProfileSave]),
     ])
   }
 
@@ -57,8 +106,9 @@ export function sharePageBody(h: SharePageHooks, itemId: string): HTMLElement {
       }, [el('b', {}, [S.shareZones[z][0]]), el('small', {}, [S.shareZones[z][1]])])),
       chipRow('include'),
       chipRow('exclude'),
+      el('h3', { class: 'share-count' }, [S.sharePreview(seen.count)]),
       el('details', { class: 'share-preview', 'data-share-preview': String(seen.count) }, [
-        el('summary', {}, [S.sharePreview(seen.count) + ' (i)']),
+        el('summary', {}, ['(i)']),
         el('p', { class: 'meta' }, [S.sharePreviewInfo]),
         el('p', { class: 'meta', 'data-share-names': '' }, [seen.names.join(', ') || S.shareNobody]),
       ]),
@@ -85,6 +135,10 @@ export function sharingSettings(s: AppState, save: () => void, redraw: () => voi
       }, ZONE_CHOICES.map((z) => el('option', { value: z, ...(z === zone ? { selected: '' } : {}) }, [S.shareZones[z][0]]))),
       el('small', {}, [S.setShareZoneHint]),
     ]),
+    el('button', {
+      class: 'radio' + (s.shareProfilesWin ? ' on' : ''), 'aria-pressed': String(s.shareProfilesWin === true), 'data-share-profiles-win': '1',
+      onclick: () => { if (s.shareProfilesWin) delete s.shareProfilesWin; else s.shareProfilesWin = true; save(); redraw() },
+    }, [el('b', {}, [S.setShareProfilesWin]), el('small', {}, [S.setShareProfilesWinHint])]),
     el('button', {
       class: 'radio' + (s.agentsMayPropose ? ' on' : ''), 'aria-pressed': String(s.agentsMayPropose === true), 'data-agents-propose': '1',
       onclick: () => { if (s.agentsMayPropose) delete s.agentsMayPropose; else s.agentsMayPropose = true; save(); redraw() },
