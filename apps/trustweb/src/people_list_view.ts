@@ -2,20 +2,21 @@
 /** The people list page (wave 25): a search field, then the trust zones collapsed; rows are drawn only for an opened zone. */
 import { el } from '../../demo/src/ui/dom'
 import { ringColor } from './model'
-import type { AppState, Person, Ring } from './model'
-import { peopleByZone, pinnedPeople } from './people_list'
+import { Ring } from './model'
+import type { AppState, Person } from './model'
+import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
 
 let query = ''
-const opened = new Set<Ring>()
+const flipped = new Set<Ring>()
 
-/** A fresh visit starts with an empty search and every zone collapsed. */
+/** A fresh visit starts with an empty search and the closest few open, the other zones collapsed. */
 export function resetPeopleList(startQuery = ''): void {
   query = startQuery
-  opened.clear()
+  flipped.clear()
 }
 
-export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, autofocus: boolean): HTMLElement {
+export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring) => void, autofocus: boolean): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
   const row = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
     el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
@@ -27,13 +28,19 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
       ...pinned.map(row),
     ])] : []), ...peopleByZone(state(), query).map(({ ring, people }) => {
     // A search shows its hits: the zones that have some open by themselves.
-    const open = opened.has(ring) || query.trim() !== ''
-    return el('section', { class: 'people-zone', 'data-zone': ring }, [
-      el('button', {
-        class: 'people-zone-head', style: `--rc:${ringColor({ ring })}`, 'aria-expanded': String(open),
-        onclick: () => { if (opened.has(ring)) opened.delete(ring); else opened.add(ring); draw() },
-      }, [el('b', {}, [S.ringLabel[ring]]), el('small', {}, [String(people.length)])]),
-      ...(open ? people.map(row) : []),
+    const open = zoneOpen(ring, flipped, query.trim() !== '')
+    const label = S.peopleZone[ring]
+    return el('section', { class: 'people-zone' + (ring === Ring.Unsorted ? ' people-unsorted' : ''), 'data-zone': ring, style: `--rc:${ringColor({ ring })}` }, [
+      el('div', { class: 'people-zone-head' }, [
+        el('button', {
+          class: 'people-zone-toggle', 'aria-expanded': String(open),
+          onclick: () => { if (flipped.has(ring)) flipped.delete(ring); else flipped.add(ring); draw() },
+        }, [el('span', { class: 'outliner', 'aria-hidden': 'true' }, [open ? '▾' : '▸']), el('b', {}, [label])]),
+        // Unsorted is no ring the add sheet offers; it starts people on the acquaintance ring.
+        el('button', { class: 'people-zone-add', 'data-zone-add': ring, 'aria-label': S.peopleZoneAdd(label), onclick: () => addTo(ring === Ring.Unsorted ? Ring.Acquaintance : ring) }, ['⊕']),
+        el('small', {}, [String(people.length)]),
+      ]),
+      ...(open ? (people.length ? people.map(row) : [el('p', { class: 'meta', 'data-zone-empty': '' }, [S.peopleZoneEmpty])]) : []),
     ])
   }))
   }
