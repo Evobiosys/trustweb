@@ -12,7 +12,7 @@ import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allApproved, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, reminderText, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -35,7 +35,10 @@ const CSS = `
 .twp .twc-file,.twp .twc-a,.twp .twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twp .twc-file{color:#7ee8de;background:rgba(94,234,212,.16)}.twp .twc-a{color:#ffc65c;background:rgba(251,191,36,.16)}.twp .twc-b{color:#e3a8ff;background:rgba(233,166,255,.16)}
 .twp .feat{display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;padding:2px 0;cursor:pointer}.twp .feat>span:not(.pills){flex:1 1 0;min-width:0;overflow-wrap:anywhere}.twp .feat.twp-active{background:rgba(79,215,160,.22);border-radius:4px}.twp .feat.twp-related{background:rgba(255,198,92,.2);border-radius:4px;box-shadow:inset 3px 0 #ffc65c}.twp .feat.off{opacity:.55}.twp .feat.seen{font-style:italic;opacity:.85}.twp .lit i{width:7px;height:7px;border-radius:50%;background:#ff715b;flex:none}
 .twp .kids{margin-left:5px;padding-left:9px;border-left:1px solid #7a6a8c}.twp .kids>div>.feat::before{content:'';width:6px;border-top:1px solid #7a6a8c;margin-left:-9px;align-self:center;flex:none}
-.twp .mini{flex:none;padding:1px 6px;font-size:10px}.twp header b{cursor:copy}
+.twp .mini{flex:none;padding:1px 6px;font-size:10px}
+.twp .mini.walk{background:#6b6178;color:#fff}.twp .mini.walk.ok{background:#4fd7a0;color:#241b2e}
+.twp .remind{color:#ffc65c;font-weight:600}
+.twf-ok .big:disabled{background:#8a8f94;color:#eceeef;opacity:1}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
 .twp .ask{margin:4px 10px;padding:6px 8px;border-radius:8px;background:#3a2c48;display:grid;gap:5px}.twp .ask div{display:flex;gap:6px}
@@ -185,7 +188,9 @@ export function initDevPreview(): void {
   // A box or pill only writes the registry (the CLI cascades requires/dependants); the server answers with the new registry.
   const setVerdict = (feature: string, verdict: 'merge' | 'needs-work' | null): Promise<void> => act(null, () => call('POST', '/verdict', { feature, verdict }))
   const press = (key: string, v: 'merge' | 'needs-work'): Promise<void> => setVerdict(key, pillPress(p!.features, key, v))
-  const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allApproved(p!.features)) }))
+  const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
+  // The box only loads the row into the preview (the CLI cascades requires/dependants); approving is the pill's job and moves no assembly.
+  const load = (feature: string, checked: boolean): Promise<void> => act(null, () => call('POST', '', { feature, checked }))
 
   // Assemble the approved set on the server (the vite config only restarts the server when its content changed), poll the registry
   // (pending / assembled.at) and reload when it is done; no registry change for 90 s = stuck, "Retry" asks again.
@@ -249,14 +254,14 @@ export function initDevPreview(): void {
     const hint = needsHint(shown, f.key)
     const off = loading() || hint !== null
     const box = h('input', { type: 'checkbox', checked: d.checked, disabled: off })
-    box.addEventListener('change', () => { void setVerdict(f.key, box.checked ? 'merge' : null) })
+    box.addEventListener('change', () => { void load(f.key, box.checked) })
     const mark = seenState(seen, f.key, fresh ? f.ref ?? '' : seen[f.key]?.ref ?? '')
     if (mark.next !== seen) { seen = mark.next; store.set(seenKey(p!.id), JSON.stringify(seen)) }
     const closed = n.children.length > 0 && folded(p!.id).includes(f.key)
     const chev = h('button', { className: 'chev' + (n.children.length ? '' : ' leaf'), textContent: closed ? '▸' : '▾', title: closed ? 'Expand' : 'Collapse' })
     chev.addEventListener('click', (e) => { e.stopPropagation(); setFolded(p!.id, closed ? folded(p!.id).filter((k) => k !== f.key) : [...folded(p!.id), f.key]); render() })
     const walking = lit === f.key && steps.active()
-    const go = h('button', { className: 'mini', textContent: walking ? 'Stop' : 'Walk' })
+    const go = h('button', { className: 'mini walk' + (shownVerdict(d) === 'merge' ? ' ok' : ''), textContent: walking ? 'Stop' : 'Walk' })
     go.addEventListener('click', (e) => { e.stopPropagation(); if (walking) { lit = null; render() } else walk(f) })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
       const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
@@ -422,11 +427,12 @@ export function initDevPreview(): void {
           if (!error) location.href = `http://127.0.0.1:${other === 'personal' ? q.port : q.stockPort}/${location.hash}`
         })
       })
-      const all = h('button', { className: 'alt', textContent: allApproved(q.features) ? 'Select none' : 'Select all', disabled: loading() })
+      const all = h('button', { className: 'alt', textContent: allLoaded(q.features) ? 'Select none' : 'Select all', disabled: loading() })
       all.addEventListener('click', () => { void pressAll() })
       root.append(
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
         h('div', { className: 'btns' }, all),
+        ...(reminderText(q.features) ? [h('div', { className: 'row remind', textContent: reminderText(q.features) })] : []),
         ...allRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
         ...(q.assembled?.error ? [h('div', { className: 'row warn' }, ...conflictNodes(q.assembled.error))] : []),

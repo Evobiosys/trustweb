@@ -53,6 +53,8 @@ export interface TimelineEntry {
   summary: string
   ref?: string
   source: TlSource
+  /** A TrustWeb system event (connected, ...): drawn in the accent colour, human events in a neutral one. */
+  system?: true
 }
 
 export const SUMMARY_MAX = 200
@@ -115,9 +117,10 @@ export function parseTimelineImport(text: string): ImportResult {
 export function ownEvents(s: AppState, p: Person): TimelineEntry[] {
   const mk = (at: number, channel: TlChannel, direction: TlDirection, summary: string): TimelineEntry => ({ at, channel, direction, summary: line(summary, SUMMARY_MAX), source: TlSource.TrustWeb })
   const out: TimelineEntry[] = []
-  if (p.metAt > 0) out.push(mk(p.metAt, TlChannel.InPerson, TlDirection.Both, S.tlMet(p.context)))
+  // A card made at connect time carries the context "Connected on TrustWeb": that is the connection event below, not a second "Met" line.
+  if (p.metAt > 0 && !(p.peerId && p.context === S.peerCardRepairedContext)) out.push(mk(p.metAt, TlChannel.InPerson, TlDirection.Both, S.tlMet(p.context)))
   const peer = p.peerId ? s.peers.find((x) => x.id === p.peerId) : undefined
-  if (peer) out.push(mk(peer.connectedAt, TlChannel.TrustWeb, TlDirection.Both, S.tlConnected))
+  if (peer) out.push({ ...mk(peer.connectedAt, TlChannel.TrustWeb, TlDirection.Both, S.tlConnected), system: true })
   if (peer) for (const l of s.log) if (l.peerId === peer.id && !l.away) out.push(mk(l.at, TlChannel.TrustWeb, TlDirection.In, S.tlAsked(l.text)))
   for (const l of p.lines) out.push(mk(l.notedAt, TlChannel.Note, TlDirection.Both, l.text))
   const mine = new Set((s.meetings ?? []).filter((m) => m.personId === p.id).map((m) => m.id))

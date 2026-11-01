@@ -38,6 +38,7 @@ export function chatListRows(book: ChatBook | undefined, people: readonly ChatLi
   const rows: ChatListRow[] = []
   if (hidden) return rows
   for (const p of people) {
+    // Chat is for people already connected (a peer); the others are found in Web.
     const t = p.peerId ? book?.[p.peerId] : undefined
     const m = t?.messages[t.messages.length - 1]
     if (!t || !m || !matches(query, p.name, ...t.messages.map((x) => x.text))) continue

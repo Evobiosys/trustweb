@@ -47,6 +47,8 @@ export interface BackupView {
   /** The app went to the background: back up now if something changed. */
   hidden(): void
   backOnline(): void
+  /** Backs up now with the key already kept on this device (an extension asks before it changes the record). False: no key, no server, or it failed. */
+  backUpNow(): Promise<boolean>
   /** Asks the server once whether it is there (/backup/health). */
   probe(): Promise<void>
   /** null: not asked yet; true / false: the answer. */
@@ -237,6 +239,11 @@ export function createBackupView(h: BackupViewHooks): BackupView {
     changed: () => auto.changed(),
     hidden: () => auto.hidden(),
     backOnline: () => auto.backOnline(),
+    backUpNow: async () => {
+      const keyText = loadBackupInfo()?.keyText
+      if (!keyText || backupAvailable === false) return false
+      try { await sealAndSave(parseKeyText(keyText), await hashOf(h.state())); redraw(); return true } catch { return false }
+    },
     card: (inSettings = false) => {
       if (backupAvailable === null) void probe()
       const inner = cardInner(!inSettings)

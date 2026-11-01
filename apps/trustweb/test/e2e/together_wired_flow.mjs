@@ -113,7 +113,7 @@ async function main() {
     const p = b.page
     await p.locator('.sheet.on .sheet-home').click({ timeout: 1000 }).catch(() => {})
     await p.keyboard.press('Escape').catch(() => {})
-    await p.locator('nav.tabs button', { hasText: 'Membranes' }).click()
+    await p.locator('nav.tabs button', { hasText: 'Web' }).click()
     if (await p.locator('.query-dock').count() === 0) await p.getByRole('button', { name: 'Ask your web', exact: true }).click()
     t.ok('the place button is there and nothing is chosen yet', await p.locator('[data-together-pick]').count() === 1 && await p.locator('[data-together-place-chosen]').count() === 0)
     await p.locator('.query-dock textarea').fill('I want to play padel in Wien with me')

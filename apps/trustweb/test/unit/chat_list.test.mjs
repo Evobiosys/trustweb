@@ -21,6 +21,10 @@ describe('chat_list', () => {
     expect(rows[0].last.includes('\n')).toBe(false)
     expect(rows[0].last.length).toBeLessThanOrEqual(80)
   })
+  it('lists connected people only, never one without a peer even when a thread bears their id', () => {
+    const book = { c: { messages: [msg('x', 5)], unread: 0 }, pa: { messages: [msg('hi', 10)], unread: 0 } }
+    expect(chatListRows(book, people).map((r) => r.personId)).toEqual(['a'])
+  })
   it('tolerates an absent book', () => {
     expect(chatListRows(undefined, people)).toEqual([])
   })

@@ -100,19 +100,25 @@ export function answerTitle(from: string, items: readonly { via?: unknown }[]): 
 
 /**
  * On a person's card: may their asks go on through me ("Pass their asks on"). `on` is the EFFECTIVE value
- * (one_jakob.ts passOnAllowed: on for a person unless switched off for them; on by default since 2026-10-09), so the
+ * (one_jakob.ts passOnAllowed: on by default for Close and Closest only since wave 27, the person's own setting wins), so the
  * switch shows what the phone does and one tap flips it.
  */
 export function passOnRow(on: boolean, onToggle: (next: boolean) => void): HTMLElement {
   // A phone-style switch (knob slides, green when on, grey when off) with the state written beside it, so off reads as off, not as an unticked box.
-  return el('button', {
+  const hint = el('p', { class: 'meta', hidden: true, 'data-pass-on-hint': '' }, [S.passOnHint])
+  const info = el('button', { class: 'btn btn-ghost btn-sm passon-info', 'aria-label': S.passOnInfoAria, 'aria-expanded': 'false', 'data-pass-on-info': '', onclick: (e: Event) => {
+    hint.hidden = !hint.hidden
+    ;(e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!hint.hidden))
+  } }, ['(i)'])
+  const row = el('button', {
     class: 'passon-row' + (on ? ' on' : ''), role: 'switch', 'aria-checked': String(on), 'data-pass-on': '1',
     onclick: () => onToggle(!on),
   }, [
-    el('span', { class: 'passon-text' }, [el('b', {}, [S.passOnTitle]), el('small', {}, [S.passOnHint])]),
+    el('span', { class: 'passon-text' }, [el('b', {}, [S.passOnTitle])]),
     el('span', { class: 'passon-ctl' }, [
       el('span', { class: 'passon-state' }, [on ? S.passOnStateOn : S.passOnStateOff]),
       el('span', { class: 'ios-switch', 'aria-hidden': 'true' }, [el('span', { class: 'ios-knob' })]),
     ]),
   ])
+  return el('div', { class: 'passon-wrap' }, [el('div', { class: 'passon-line' }, [row, info]), hint])
 }
