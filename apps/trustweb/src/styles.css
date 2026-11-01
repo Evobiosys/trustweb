@@ -1165,6 +1165,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .people-zone-toggle .outliner{display:inline-block; width:1.1em; text-align:center}
 .people-zone-add{border:0; background:none; font:inherit; font-size:1.3em; line-height:1; color:inherit; padding:6px; cursor:pointer}
 .people-unsorted{margin-top:28px}
+.people-zone-head small{min-width:1.6em; text-align:right}
 .people-pinned .people-zone-head b{flex:1; padding:8px 0 8px 10px}
 .people-zone .zoom-row small{display:block}
 .chat-dnd.on{background:var(--electric); color:#fff}
