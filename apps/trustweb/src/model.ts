@@ -14,6 +14,7 @@ import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
+import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -1165,6 +1166,8 @@ export interface AppState {
   sovereign?: {
     services?: Record<string, { exportAt?: number; deleteAt?: number }>
     lang?: 'en' | 'de'
+    /** Wave 28 (export_watch.ts): per service, the export-mail watcher. Absent: not watching. */
+    watch?: Record<string, Watch>
     forget?: { peers: Record<string, { sentAt?: number; ackAt?: number }> }
   }
   /**
