@@ -5,6 +5,7 @@
  * (for "what it would mean to share this"). Pure: no I/O, the clock is passed in.
  */
 import { type Store, type Tuple, isLive } from './tuples'
+import { MAX_DEPTH } from './tags'
 import { ALL_ZONES, Zone, effectiveZone, mostIntimate, rank } from './zones'
 
 export interface Access { allowed: boolean; why: Tuple[] }
@@ -20,16 +21,34 @@ export function personZone(store: Store, personId: string, now: Date, active: re
   return { zone, tuple: mine.find((t) => zoneOf(t.object) === zone) }
 }
 
+/** The tags a person holds, each with the tuples that show how: their own has_tag, then up through nested_in (depth-capped). */
+export function heldTags(live: Store, personId: string): Map<string, Tuple[]> {
+  const held = new Map<string, Tuple[]>()
+  const queue = live.filter((t) => t.subject === personId && t.relation === 'has_tag').map((t) => ({ tag: t.object, path: [t] }))
+  for (let i = 0; i < queue.length; i++) {
+    const { tag, path } = queue[i]
+    if (held.has(tag)) continue
+    held.set(tag, path)
+    if (path.filter((t) => t.relation === 'nested_in').length >= MAX_DEPTH - 1) continue
+    for (const up of live.filter((t) => t.subject === tag && t.relation === 'nested_in')) queue.push({ tag: up.object, path: [...path, up] })
+  }
+  return held
+}
+
 export function canAccess(store: Store, personId: string, itemId: string, now: Date, active: readonly Zone[] = ALL_ZONES): Access {
   const live = store.filter((t) => isLive(t, now))
+  const held = heldTags(live, personId)
+  // D3: an exclusion (of the person, or of a tag they hold) beats every grant, zone and tag alike.
+  const excluded = live.filter((t) => t.relation === 'excludes' && t.object === itemId && (t.subject === personId || held.has(t.subject)))
+  if (excluded.length) return { allowed: false, why: [...new Set(excluded.flatMap((t) => (t.subject === personId ? [t] : [t, ...(held.get(t.subject) ?? [])])))] }
   const why: Tuple[] = live.filter((t) => t.subject === personId && opens(t, itemId))
-  for (const has of live.filter((t) => t.subject === personId && t.relation === 'has_tag')) {
-    const item = live.filter((t) => t.subject === has.object && opens(t, itemId))
-    if (item.length) why.push(has, ...item)
+  for (const [tag, path] of held) {
+    const item = live.filter((t) => t.subject === tag && opens(t, itemId))
+    if (item.length) why.push(...path, ...item)
   }
   const me = personZone(live, personId, now, active)
   const zoned = live.filter((t) => t.subject.startsWith('zone:') && opens(t, itemId) && rank(me.zone) >= rank(effectiveZone(zoneOf(t.subject), active)))
   const needsMe = me.tuple && zoned.some((t) => zoneOf(t.subject) !== Zone.Public)
   if (zoned.length) why.push(...(needsMe ? [me.tuple as Tuple] : []), ...zoned)
-  return { allowed: why.length > 0, why }
+  return { allowed: why.length > 0, why: [...new Set(why)] }
 }
