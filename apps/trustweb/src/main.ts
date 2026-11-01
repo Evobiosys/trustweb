@@ -21,7 +21,7 @@
 import { createViaCard } from './via_card'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
@@ -98,7 +98,10 @@ import { availableTabs, resolveRow, setSlot } from './tab_row'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
 import { dismissOnOutside } from './key_press'
-import { expandedOf, pinnedViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
+import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
+import type { HeaderPin } from './header_controls'
+import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
@@ -107,7 +110,7 @@ import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
 import { askWhenLabel, flushPending, renderChat, safeHref, renderShareControls, submitText } from './chat_view'
 import type { ChatIo, ChatStrings, ShareStrings } from './chat_view'
-import type { AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
+import type { TwEvent, AppState, DemoAccount, Found, InventoryItem, ItemSource, NoteLine, PastMeeting, Peer, Person, ReceivedShare } from './model'
 import { SOURCES, lineShown, removeSource, setHiddenSources, setSourceHidden, shown, sourceCount, sourceHidden } from './sources'
 import { parseShareFragment, parseShareText, SHARE_PARAM, shareFragment, shareUrl } from './share'
 import type { MeetingPack, ShareLink } from './share'
@@ -187,23 +190,25 @@ import { createSnapshotView } from './snapshot_view'
 import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
-import { servicesGroup } from './services_view'
+import { openServicesImport, servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import type { LentRings } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { communityOf, filledRings, inZones, isArchived, moveKinds, toggleRing, toneVar, zoneFor } from './trustzones'
+import { legendInfo, outlinerToggle, zonePanel, zzzStrip } from './trustzones_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
-import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
+import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, dueMoves, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES, type ExtHooks } from './ext/registry'
 import { extendedChat } from './messenger_host_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
-import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
+import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
@@ -784,7 +789,7 @@ function checkEngagement(): void {
   if (!state || solo || state.testOf) return
   const now = Date.now()
   if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
-  if (releaseTies(state, now).length) { save(); render() }
+  // Wave 28 (Jakob 2026-11-01): nothing moves by itself any more; a quiet tie gets a zzz marker on the TrustZones and moves on a tap (zzzAccept).
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
@@ -1051,7 +1056,7 @@ function tabTap(target: Screen): void {
   history.pushState({ twZoom: target }, '')
   render()
 }
-window.addEventListener('popstate', (e) => { if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
+window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'people' || typeof t === 'number')((e.state as { twPage?: unknown } | null)?.twPage)) return; if (peoplePage) { peoplePage = false; go(Screen.Web) } else if (zoomedIn() && !(e.state as { twZoom?: string } | null)?.twZoom) { zoom = zoomBack(); render() } })
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
@@ -1064,7 +1069,10 @@ function openPeople(query = ''): void {
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
-    el('div', { class: 'scroll pad' }, [peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches)]),
+    el('div', { class: 'scroll pad' }, [
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
+      peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches),
+    ]),
   ]
 }
 
@@ -1126,6 +1134,81 @@ function mountSettingsGear(): void {
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
   right.append(gear)
+}
+
+/** Wave 28: what the QR button shows for what is on screen: an open event, the tag the web is filtered to, else the connect code (Meet). */
+function screenQr(plain = false): void {
+  const ev = screen === Screen.Events ? eventsView.current() : undefined
+  const tag = screen === Screen.Web && !webPage ? tagFilter : null
+  switch (qrTarget({ eventOpen: !!ev, tag })) {
+    case 'event': if (ev) eventQr(ev, plain); break
+    case 'tag': if (tag) tagQr(tag, plain); break
+    default: openMeet(screen === Screen.Meet ? meetFrom : screen)
+  }
+}
+
+function eventQr(ev: TwEvent, plain = false): void {
+  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()) }), plain)
+}
+
+/** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
+function tagQr(tag: string, plain = false): void {
+  const people = withTag(st().people, tag).filter((p) => p.publicUsername && parseIntroducePermission(p.introducePermission) !== 'ask-first').map((p) => p.publicUsername ?? '')
+  void qrPage((link) => ({ kind: 'community', link, tag: loadColourTags().find((x) => x.id === tag)?.label ?? tag, people }), plain)
+}
+
+/** One search button for every view: the Web's and Resources' field opens in place, Chat focuses its field, Events shows the list with its filter. */
+function headerSearch(): void {
+  if (screen === Screen.Web) { webSearchOpen = !webSearchOpen; render() }
+  else if (screen === Screen.Chat) document.querySelector<HTMLInputElement>('[data-chat-search]')?.focus()
+  else if (screen === Screen.Events) { eventsView.showList(); window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-event-filter]')?.focus(), 0) }
+  else { invSearchOpen = !invSearchOpen; if (!invSearchOpen) invQuery = ''; render() }
+}
+
+/** Do Not Disturb: the Android stop sign; pressed = no new chats shown. */
+function dndButton(): HTMLElement {
+  const s = st()
+  const dnd = iconButton('dnd', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
+  dnd.setAttribute('data-dnd', '')
+  dnd.setAttribute('aria-pressed', String(!!s.chatsHidden))
+  return dnd
+}
+
+/** Opens Settings on the Advanced part of the group of the screen it is pressed on. */
+function openAdvancedSettings(): void {
+  try { localStorage.setItem(`trustweb.ui.settings.${advancedKeyOf(sectionOfScreen(screen))}`, '1') } catch { /* not remembered */ }
+  settingsSheet()
+}
+
+const PIN_ACTIONS: Record<HeaderPin, { icon: string; run: () => void }> = {
+  dnd: { icon: 'dnd', run: () => undefined },
+  advanced: { icon: 'more', run: openAdvancedSettings },
+  'qr-only': { icon: 'qr', run: () => screenQr(true) },
+}
+
+/** Wave 28: the header of Web, Chat, Events and Resources in one order, right to left: settings, the QR, the pinned buttons (Do Not Disturb on by default), the views, search. */
+function mountHeaderControls(): void {
+  const order = headerControls(screen)
+  const right = host.querySelector('.hdr .hdr-right')
+  if (!order || !right || (screen === Screen.Web && webPage)) return
+  const qr = statusPill && right.contains(statusPill) ? (statusPill.closest('.hdr-right > *') ?? statusPill) : null
+  const gear = iconButton('settings', S.invSettings, settingsSheet)
+  gear.dataset.settingsGear = '1'
+  const anyone = st().people.length > 0
+  const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
+  find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : invSearchOpen && screen === Screen.Inventory))
+  const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
+    : screen === Screen.Chat ? chatExtendButton()
+      : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
+  const pins = headerPins(st().uiPins?.header).map((id) => {
+    const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
+    b.setAttribute('data-header-pin', id)
+    return b
+  })
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views], pins, qr: [qr], settings: [gear] }
+  right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : null
+  if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
 function iconButton(name: string, label: string, onclick: () => void, extra = ''): HTMLElement {
@@ -1237,7 +1320,7 @@ function updateStatusPill(withQr: boolean = statusPill?.dataset.qr !== '0'): voi
   p.innerHTML = icon('qr')
   p.setAttribute('aria-label', `${S.qrOpen} (${relayLabel()})`)
   p.title = `${S.qrOpen} · ${relayLabel()}`
-  p.onclick = (): void => openMeet(screen === Screen.Meet ? meetFrom : screen)
+  p.onclick = (): void => screenQr()
 }
 
 function render(): void {
@@ -1281,6 +1364,7 @@ function render(): void {
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
+  mountHeaderControls()
   mountSettingsGear()
   if (screen === Screen.Web) { drawCardStack(); requestAnimationFrame(fitRings) }
   updateDemoToggle()
@@ -2028,19 +2112,23 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const C = 176
   const counts = {} as Record<Ring, number>
   const everyone: Partial<Record<Ring, Person[]>> = {}
-  for (const p of s.people) if (!isBlocked(p)) (everyone[webSlot(p)] ??= []).push(p)
+  // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
+  const community = communityOf(s)
+  for (const p of desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : inZones(s.people, s)) (everyone[zoneFor(p, community)] ??= []).push(p)
   // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
   const complete = opts.complete === true || desk !== undefined
   const members: Partial<Record<Ring, Person[]>> = {}
   const rest: Partial<Record<Ring, Person[]>> = {}
-  const slotted = new Map<string, number>()
+  const filled = filledRings(s)
   for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
     if (complete) { members[r] = ps; continue }
-    const f = pickFive(withTag(ps, tagFilter), s, limitOf(s), Date.now())
+    // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
+    const f = pickFive(withTag(ps, tagFilter), s, filled.includes(r) ? Infinity : limitOf(s), Date.now())
     members[r] = f.shown; rest[r] = f.rest
-    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length, WEB_RINGS.indexOf(r))))
   }
-  const angleOfP = (p: Person): number => slotted.get(p.id) ?? angleOf(p)
+  // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
+  const angleOfP = (p: Person): number => angleOf(p)
+  const quiet = new Map(desk ? [] : dueMoves(s, Date.now()).map((m) => [m.person.id, m.to] as const))
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
   // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
   const hidden = loadHiddenRings()
@@ -2105,7 +2193,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const arcs = arcsGradient(tagColours(p, colourTags))
       const face = avatar(p.name, p.id)
-      face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
+      face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
       if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
@@ -2113,7 +2201,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       pictured(face, p.theirProfile?.picture)
       const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
       const b = el('button', {
-        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
+        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
       }, [
         face,
@@ -2128,6 +2216,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       b.style.setProperty('--d', dot * k + 'px')
       if (dot * k < 11) b.classList.add('nl')
       wrap.appendChild(b)
+      const to = quiet.get(p.id)
+      if (to) { // Wave 28: a note, never a move: tap accepts this one move
+        const z = el('button', { class: 'zzz', 'data-zzz': p.id, 'aria-label': S.zoneZzzAria(p.name, S.ringLabel[to]), title: S.zoneZzzTitle(S.ringLabel[to]),
+          onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); zzzAccept([p.id]) } }, ['zzz'])
+        z.style.left = x + (dot * k) / 2 + 'px'; z.style.top = y - (dot * k) / 2 + 'px'
+        wrap.appendChild(z)
+      }
     })
   }
   const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [shortLabel(s.me.displayName)])])
@@ -2157,7 +2252,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     const diamond = ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
     wrap.appendChild(diamond)
     if (!desk) onHoverOrLongPress(diamond, () => showAll(r, at.top), hideAll)
-    if (!hidden.has(r) && rest[r]?.length) wrap.appendChild(ringMore(r, rest[r]!.length, at.top, at.left))
+    if (!hidden.has(r) && !complete && (rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)) ringMore(r, filled.includes(r), at.top, at.left, (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
   })
   wrap.addEventListener('pointerdown', hideAll)
   // Last in the DOM, so above every dot.
@@ -2201,14 +2296,21 @@ function toggleCardExpanded(): void {
   render()
 }
 
-/** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
-function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
-  return el('button', {
-    class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${ringColor({ ring })}; left:${left + 16}px; top:${top}px`,
-    'aria-label': S.membraneMoreAria(S.ringLabel[ring]), title: S.membraneRest(S.ringLabel[ring], n),
+/** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
+function ringMore(ring: Ring, filled: boolean, top: number, left: number, onFill: (btn: HTMLElement) => void): HTMLElement[] {
+  const fill = outlinerToggle(filled, S.zoneFillAria(S.ringLabel[ring], filled), onFill, { class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, title: S.zoneTapToAdd[ring] })
+  const list = el('button', {
+    class: 'ring-more ring-list', 'data-membrane-list': ring, style: `--rc:${toneVar(ring)}; left:${left + 34}px; top:${top}px`,
+    'aria-label': S.zoneListAria(S.ringLabel[ring]), title: S.zoneListAria(S.ringLabel[ring]),
     onpointerdown: (e: Event) => { e.stopPropagation() },
     onclick: (e: Event) => { e.stopPropagation(); openWebPage({ kind: 'more', ring }) },
-  }, ['+'])
+  }, ['☰'])
+  return filled ? [fill, list] : [fill]
+}
+
+/** Wave 28: the zzz tap(s): these people move one ring outward (their suggestion), nobody else. */
+function zzzAccept(ids: readonly string[]): void {
+  if (releaseTies(st(), Date.now(), new Set(ids)).length) { save(); render() }
 }
 
 function curatorPageTitle(variant?: UiView): string {
@@ -2221,7 +2323,7 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'more') {
-    const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
+    const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
     return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
@@ -2627,10 +2729,17 @@ let eyeOpen = false
 dismissOnOutside((t) => !eyeOpen || (t instanceof Element && !!t.closest('[data-view-drop], .view-menu-btn')), () => { if (eyeOpen) { eyeOpen = false; render() } })
 let webSearchOpen = false
 const HAS_MAP_VIEW = true
+/** The Solar calendar is an extension module that does not exist yet: its entry stays greyed (wave 28). */
+const SOLAR_INSTALLED = false
+/** Wave 28: "Other views" starts collapsed. */
+let otherViewsOpen = false
+let webViewNow: ViewKey = 'rings'
+let invSearchOpen = false
+let invQuery = ''
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
-/** The web-view-row: expand (Web only), the heading of the chosen view or the search field, the magnifier. */
+/** The web-view-row: expand (Web only), the heading of the chosen view or the search field (the magnifier sits in the header, wave 28). */
 function webViewRow(view: WebView, expanded: boolean): HTMLElement {
   const heading = viewHeading(view)
   const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
@@ -2647,9 +2756,7 @@ function webViewRow(view: WebView, expanded: boolean): HTMLElement {
     })
     : el('span', { class: 'web-view' }, [heading ? S.viewNames[heading] : ''])
   if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
-  const find = iconButton('search', S.viewSearchAria, () => { webSearchOpen = !webSearchOpen; render() }, 'web-search-btn')
-  find.setAttribute('aria-expanded', String(webSearchOpen))
-  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid, find])
+  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid])
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
@@ -2677,12 +2784,35 @@ function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
     b.append(el('b', {}, [S.viewNames[i.view]]))
     return b
   }
-  const other = items.filter((i) => i.other)
+  const other = items.filter((i) => i.group === 'other')
+  const alt = items.filter((i) => i.group === 'alt')
+  // Wave 28: "Other views" is one collapsed group holding the views beneath it; Dex sits under its own beta label inside.
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, [
     ...items.filter((i) => !i.other).map(btn),
-    other.length ? el('div', { class: 'view-drop-sep' }, [S.viewOther]) : null,
-    ...other.map(btn),
+    other.length || alt.length ? el('button', { class: 'view-drop-sep view-other-toggle', 'data-view-other': '', 'aria-expanded': String(otherViewsOpen), onclick: () => { otherViewsOpen = !otherViewsOpen; render() } }, [disclosureGlyph(otherViewsOpen) + ' ' + S.viewOther]) : null,
+    ...(otherViewsOpen ? [...other.map(btn), alt.length ? el('div', { class: 'view-drop-sep', 'data-view-alt': '' }, [S.viewAlt]) : null, ...alt.map(btn)] : []),
   ])
+}
+
+/** The dropdown of Events and Resources (their own views), under the header like the Web's. */
+function screenViewDrop(): HTMLElement | null {
+  const which = screen === Screen.Events ? 'events' : 'inventory'
+  if (!eyeOpen) return null
+  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : zoom.inventory ? 'outline' : 'list'
+  return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
+    const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
+    b.innerHTML = icon(v.key === 'list' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
+    b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
+    return b
+  }))
+}
+
+function chooseScreenView(which: 'events' | 'inventory', key: string): void {
+  eyeOpen = false
+  if (which === 'events') { if (key === 'list') eventsView.showList(); else eventsView.open(); render(); return }
+  if (key === 'outline' && !zoom.inventory) tabTap(Screen.Inventory)
+  else if (key === 'list' && zoom.inventory) history.back()
+  else render()
 }
 
 function toggleExpand(expanded: boolean): void {
@@ -2754,21 +2884,23 @@ function reminderRows(): Node[] {
 }
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. */
+/** Same control as the Web view's expand glyph: the extended messenger opens in place, the simple chat stays the default. Chat's "views" button. */
+function chatExtendButton(): HTMLElement {
+  const extended = chatExtended()
+  const extend = iconButton(extended ? 'collapse' : 'expand', extended ? S.chatSimple : S.chatExtend, () => toggleChatExtended(extended), 'chat-extend' + (extended ? ' on' : ''))
+  extend.setAttribute('data-chat-extend', '')
+  extend.setAttribute('aria-pressed', String(extended))
+  return extend
+}
+
 function screenChat(): Node[] {
   const s = st()
   const body = el('div', { class: 'chat-body' }, chatListBody())
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
   search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
-  const dnd = iconButton('moon', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
-  dnd.setAttribute('data-dnd', '')
-  dnd.setAttribute('aria-pressed', String(!!s.chatsHidden))
   const extended = chatExtended()
-  // Same control as the Web view's expand glyph: the extended messenger opens in place, the simple chat stays the default.
-  const extend = iconButton(extended ? 'collapse' : 'expand', extended ? S.chatSimple : S.chatExtend, () => toggleChatExtended(extended), 'chat-extend' + (extended ? ' on' : ''))
-  extend.setAttribute('data-chat-extend', '')
-  extend.setAttribute('aria-pressed', String(extended))
   return [
-    header(S.chatListTitle, { qr: false, right: el('span', { class: 'hdr-pair' }, [extend, dnd]) }),
+    header(S.chatListTitle),
     el('div', { class: 'scroll ppl' }, [
       extended ? extendedChat(messengers) : null,
       s.chatsHidden || extended ? null : search,
@@ -2827,7 +2959,7 @@ function screenWeb(): Node[] {
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
-  const right = viewControls(view, s.people.length > 0)
+  webViewNow = view
   // The zoom layer holds everything the screen body shows; the clip (.scroll) and the phone frame stay put.
   const layer = el('div', { class: 'rings-zoom' }, [
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
@@ -2848,13 +2980,24 @@ function screenWeb(): Node[] {
     : el('div', { class: 'scroll' }, [layer])
   if (view !== 'map') zoomOnWeb(clip, layer)
   return [
-    // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
-    header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
+    // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
+    header(S.webTitle),
     webViewRow(view, expanded),
     ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
-    clip,
+    view === 'rings' ? el('div', { class: 'zones-split' }, [clip, zoneColumn(s)]) : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
+}
+
+/** Wave 28 (trustzones_view.ts): beside the rings (desktop: left; phone: below) the filter, the pinned people and one folding list per zone, the zzz "move all" lines and the legend under (i). */
+function zoneColumn(s: AppState): HTMLElement {
+  const live = (): void => { save(); render() }
+  const panel = zonePanel({
+    s: st(), people: inZones(s.people, st()), tags: loadColourTags(), nameOf: (p) => displayName(p.name).text, onOpen: openCardPage,
+    onRename: (p, next) => { const mine = st().people.find((x) => x.id === p.id); if (mine) mine.name = next; live() }, onChange: live,
+  })
+  const quiet = moveKinds(dueMoves(st(), Date.now()))
+  return el('div', { class: 'zone-column' }, [legendInfo(), zzzStrip(quiet, zzzAccept), panel])
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
@@ -3099,6 +3242,7 @@ function itemSheet(itemId: string): void {
     itemContextView(item),
     ...provenanceStateView(item),
     feed.itemExtras(item),
+    el('button', { class: 'btn btn-ghost', 'data-item-qr': item.id, onclick: () => { closeSheet(); void qrPage((link) => ({ kind: 'item', link, shareLink: `${link.split('#')[0]}#item=${toBase64Url(item.text)}` })) } }, [S.qrItemShow]),
     ...(cal?.itemSection?.(item) ?? []),
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.close]),
   ])
@@ -3294,9 +3438,9 @@ function curatePage(p: Person): void {
 }
 
 /** The QR page for a context (qr_modes.ts): the longer connect link is used, since a short /c/ link may drop the mode parameters on its redirect. */
-async function qrPage(build: (link: string) => QrContext): Promise<void> {
+async function qrPage(build: (link: string) => QrContext, plain = false): Promise<void> {
   await net.start()
-  openQrPage({ open: (title, body, mark) => pages.open(title, body, mark), renderQr }, build(net.connectLink(CONNECT_URL)))
+  openQrPage({ open: (title, body, mark) => pages.open(title, body, mark), renderQr, profileOption: st().qrProfileOption }, build(net.connectLink(CONNECT_URL)), plain ? S.qrOnlyNote : undefined)
 }
 
 /** Curate: what others may pass on about this person when they introduce them, and the public username I know for them. */
@@ -4475,7 +4619,7 @@ const eventsView = createEventsView({
   undoNotice,
   newId: () => randomId(8), copyLink, joinLink, origin: linkOrigin(location.origin),
   by: eventsBy,
-  showQr: (ev) => { void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()) })) },
+  showQr: (ev) => eventQr(ev),
   extra: (ev) => cal?.eventSection?.(ev) ?? [],
 })
 const extHooks: ExtHooks = {
@@ -6321,13 +6465,18 @@ function settingsSheet(): void {
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
-        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
+      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+        el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
         el('b', {}, [S.viewNames[i.view]]),
       ])),
     ]),
     settingsSection('sharing', S.setSecSharing, sharingSettings(s, save, settingsSheet)),
     settingsSection('advanced-web', S.setAdvanced, [
+    // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
+    HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
+      el('input', { type: 'checkbox', ...(s.uiPins?.views.includes('map') ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, 'map') }; save(); render() } }),
+      el('b', {}, [S.mapPinTitle]), el('small', {}, [S.mapPinHint]),
+    ]) : null,
     el('h4', { class: 'eyebrow' }, [S.setQuery]),
     ...[QueryStyle.Call, QueryStyle.Search].map((q) => el('button', {
       class: 'radio' + (queryStyle() === q ? ' on' : ''),
@@ -6461,6 +6610,16 @@ function settingsSheet(): void {
     })),
     settingsSection('features', S.setSecFeatures, feed.settingsGroup()),
     settingsSection('advanced', S.setAdvanced, [
+    // Wave 28: what sits beneath Settings in the top bar (Do Not Disturb by default), and the person QR's profile option.
+    el('h4', { class: 'eyebrow' }, [S.headerPinsTitle]),
+    ...HEADER_PINS.map((id) => el('label', { class: 'radio', 'data-header-pin-toggle': id }, [
+      el('input', { type: 'checkbox', ...(headerPins(s.uiPins?.header).includes(id) ? { checked: '' } : {}), onchange: () => { s.uiPins = { views: s.uiPins?.views ?? [], header: togglePinned(s.uiPins?.header, id) }; save(); render() } }),
+      el('b', {}, [S.headerPinNames[id]]), el('small', {}, [S.headerPinHint[id]]),
+    ])),
+    el('label', { class: 'radio', 'data-qr-profile-option': '' }, [
+      el('input', { type: 'checkbox', ...(s.qrProfileOption ? { checked: '' } : {}), onchange: () => { s.qrProfileOption = !s.qrProfileOption; save() } }),
+      el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
+    ]),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(s),
@@ -6645,11 +6804,13 @@ function screenInventory(): Node[] {
     render()
   }
   input.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') add() })
-  // Top right, in the slot ⋮ has on Web, so the QR keeps its place (owner 2026-10-06).
-  const gearBtn = el('button', { class: 'hdr-btn icon-only', 'aria-label': S.invSettings, title: S.invSettings, onclick: settingsSheet })
-  gearBtn.innerHTML = icon('settings')
-  // Wave 6: a small (i) just below Settings explains the cascade (Jakob 2026-10-07).
-  const gear = el('div', { class: 'gear-stack' }, [gearBtn, cascadeInfoButton(() => openSheet(cascadeInfoContent()))])
+  // Wave 28: Settings now comes from mountHeaderControls; the small (i) that explains the cascade (Jakob 2026-10-07) sits beside the title.
+  const info = cascadeInfoButton(() => openSheet(cascadeInfoContent()))
+  const find = invSearchOpen
+    ? el('input', { class: 'field', type: 'search', placeholder: S.invSearchPh, 'aria-label': S.invSearchPh, 'data-inv-search': '', value: invQuery, oninput: (e: Event) => { invQuery = (e.target as HTMLInputElement).value; render() } })
+    : null
+  if (find) setTimeout(() => { find.focus(); find.setSelectionRange(invQuery.length, invQuery.length) }, 0)
+  const shown = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
@@ -6661,11 +6822,12 @@ function screenInventory(): Node[] {
   const list = el('div', { class: 'scroll pad', 'data-zoom-level': zin ? 'in' : 'out' }, zin ? [...outlinerItems(s), ...(cal?.resourcesSection?.() ?? [])] : [
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
+      find,
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
       // under the text first who can ask, then how far it may travel.
-      ...s.inventory.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
+      ...shown.map((item) => el('div', { class: 'inv' + (item.included ? '' : ' off') }, [
         el('div', { class: 'inv-main' }, [
           el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
             item.text, isDemoItem(s, item.id) ? dummyChip() : null,
@@ -6694,7 +6856,7 @@ function screenInventory(): Node[] {
     undoNotice(S.cal.dropAdded(item.text), () => { s.inventory = s.inventory.filter((x) => x !== item); save(); render() })
   })
   return [
-    header(S.invTitle, { glyph: zoomGlyph('inventory'), after: gear }),
+    header(S.invTitle, { glyph: el('span', { class: 'hdr-pair' }, [zoomGlyph('inventory'), info]) }),
     list,
     call,
     requests,

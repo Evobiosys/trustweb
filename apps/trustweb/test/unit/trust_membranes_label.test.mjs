@@ -7,6 +7,6 @@ describe('Trust zones wording', () => {
     expect(S.hintText[HintId.WebTap]).toContain('rings (trust zones)')
   })
   it('the screen title stays the product', () => {
-    expect(S.webTitle).toBe('Your TrustWeb')
+    expect(S.webTitle).toBe('TrustZones')
   })
 })

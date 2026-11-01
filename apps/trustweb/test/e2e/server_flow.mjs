@@ -108,7 +108,7 @@ async function partA(browser, base) {
     localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
   })
   await page.reload()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await openSettings(page)
   ok('a phone that chose it before still sees its choice (so it can move away)', await page.locator('[data-server-button].on').count() === 1)
   await page.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })
@@ -196,7 +196,7 @@ async function partConsent(browser, base, provider) {
     localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
   })
   await page.reload()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const submits1 = provider.state.submits
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.about-kind.what').click()
@@ -417,7 +417,7 @@ async function partE(browser, base, provider) {
   await until(async () => provider.state.submits === submitted + 1 || null, 15_000)
   const before = provider.state.submits
   await page.reload()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.waitForTimeout(1_500)
   const m = (await record(page)).meetings[0]
   ok('after a reload the cut-off job\'s answer counts as lost (state "maybe-charged", kept for older builds)', m.serverJob?.state === 'maybe-charged', JSON.stringify(m.serverJob))
