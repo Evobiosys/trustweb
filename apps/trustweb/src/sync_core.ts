@@ -64,7 +64,7 @@ export const SYNC_EXCLUDED: ReadonlySet<string> = new Set([
   // true of this phone only: where I am, permissions and consents given here, the app shell, demo state, the tab row
   'atEvent', 'availability', 'heldAvailability', 'bookLinks', 'notificationsOn', 'notifOffered', 'webSearchConsent', 'serverTranscriptionConsentAt',
   'serverTranscriptionConsent', 'apkVersion', 'apkCheckedAt', 'apkUpdates', 'tabOrder', 'tabRow', 'shareMode', 'demo', 'demoHidden', 'demoOffered',
-  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal',
+  'testAccounts', 'testOf', 'demoOnlyForDemoAccounts', 'talkWeaveLocal', 'signalImport',
 ])
 
 /** The settings of a record: every field not in SYNC_EXCLUDED. */

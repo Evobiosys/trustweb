@@ -5,7 +5,7 @@ const MULTI = ' ::: '
 const BIRTHDAY = /^(\d{4}-\d{2}-\d{2}|--\d{2}-\d{2})$/
 
 /** RFC 4180: quoted fields, "" escape, newlines in quotes, CRLF/LF. Rows without text are dropped. */
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = []
   let row: string[] = []
   let cell = ''
