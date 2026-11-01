@@ -21,6 +21,7 @@ import type { AppState, Person } from './model'
 import { stripUnsafe } from './safe_text'
 import { MAX_TIME } from './agreements'
 import { S } from './strings'
+import { contextWithoutDate } from './card_small'
 
 export enum TlChannel {
   Email = 'email',
@@ -55,6 +56,8 @@ export interface TimelineEntry {
   source: TlSource
   /** A TrustWeb system event (connected, ...): drawn in the accent colour, human events in a neutral one. */
   system?: true
+  /** TrustWeb's own "Met" event: its date is the person's metAt and editable from the timeline (card_small.ts setMetAt). */
+  met?: true
 }
 
 export const SUMMARY_MAX = 200
@@ -118,7 +121,7 @@ export function ownEvents(s: AppState, p: Person): TimelineEntry[] {
   const mk = (at: number, channel: TlChannel, direction: TlDirection, summary: string): TimelineEntry => ({ at, channel, direction, summary: line(summary, SUMMARY_MAX), source: TlSource.TrustWeb })
   const out: TimelineEntry[] = []
   // A card made at connect time carries the context "Connected on TrustWeb": that is the connection event below, not a second "Met" line.
-  if (p.metAt > 0 && !(p.peerId && p.context === S.peerCardRepairedContext)) out.push(mk(p.metAt, TlChannel.InPerson, TlDirection.Both, S.tlMet(p.context)))
+  if (p.metAt > 0 && !(p.peerId && p.context === S.peerCardRepairedContext)) out.push({ ...mk(p.metAt, TlChannel.InPerson, TlDirection.Both, S.tlMet(contextWithoutDate(p.context))), met: true })
   const peer = p.peerId ? s.peers.find((x) => x.id === p.peerId) : undefined
   if (peer) out.push({ ...mk(peer.connectedAt, TlChannel.TrustWeb, TlDirection.Both, S.tlConnected), system: true })
   if (peer) for (const l of s.log) if (l.peerId === peer.id && !l.away) out.push(mk(l.at, TlChannel.TrustWeb, TlDirection.In, S.tlAsked(l.text)))

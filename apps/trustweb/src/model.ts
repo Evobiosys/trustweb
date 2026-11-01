@@ -447,6 +447,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 28 (person_image.ts): a small JPEG data URL (256 px) shown on the card and the who-they-know entries. This phone only, never synced. Absent: initials. */
+  image?: string
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
   links?: { signal?: string; whatsapp?: string; other?: string }
   /** Wave 27 (messenger_links.ts): the service "Chat" opens for this person, pinned by the owner. Absent: the last used. */
@@ -947,6 +949,10 @@ export interface AppState {
   shares?: import('./share_sink/share_lines').ShareLine[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
+  /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
+  shareProfiles?: import('./share_profiles').ShareProfile[]
+  /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
+  shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */
   agentsMayPropose?: true
   peers: Peer[]
@@ -955,6 +961,8 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
+  /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
+  chatsHiddenAt?: number
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
   /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent or 0 = off (wave 25); the Settings switch stores 30. Local; rides the device sync. */
@@ -990,8 +998,8 @@ export interface AppState {
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
-  /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; open?: Ring[]; filterOpen?: boolean; community?: string }
+  /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */

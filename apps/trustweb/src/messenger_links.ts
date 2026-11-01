@@ -77,3 +77,37 @@ export function shortcutSpec(p: Pick<Person, 'id' | 'name'>, t: ChatTarget | nul
   if (!t || !('href' in t)) return null
   return { id: `tw-${t.service}-${p.id}`, label: p.name.trim().slice(0, 40), deepLink: t.href }
 }
+
+export interface LocalOpenEnv {
+  assign: (url: string) => void
+  visible: () => boolean
+  openTab: (url: string) => void
+  later: (fn: () => void) => void
+}
+
+/** Wave 28: a deep link opens the app on this device first (sgnl://, matrix:); if this page is still in front a moment later the app is not there and the https link opens instead. */
+export function openLocalFirst(appHref: string, webHref: string, env: LocalOpenEnv): void {
+  env.assign(appHref)
+  env.later(() => { if (env.visible()) env.openTab(webHref) })
+}
+
+/** Wave 28: a target as a matrix: URI (MSC2312), which Element X on this device handles before the https link; also the copyable code. */
+export function elementXUri(target: string): string {
+  const kind = { '@': 'u', '!': 'roomid', '#': 'r' }[target[0]] ?? 'u'
+  return `matrix:${kind}/${target.slice(1)}`
+}
+
+/** The app-scheme twin of an https messenger link (signal.me, matrix.to), or null when the service has none. */
+export function appLinkFor(url: string): string | null {
+  if (url.startsWith('https://signal.me/')) return url.replace(/^https:/, 'sgnl:')
+  const m = /^https:\/\/matrix\.to\/#\/(.+)$/.exec(url)
+  return m ? elementXUri(decodeURIComponent(m[1])) : null
+}
+
+/** The browser's side of openLocalFirst. */
+export const browserOpenEnv = (): LocalOpenEnv => ({
+  assign: (u) => location.assign(u),
+  visible: () => document.visibilityState === 'visible',
+  openTab: (u) => { window.open(u, '_blank', 'noopener,noreferrer') },
+  later: (fn) => { setTimeout(fn, 1500) },
+})

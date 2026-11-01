@@ -2,6 +2,7 @@
 /** Wave 25 (membranes_five.ts): the pages and bits the Membranes screen opens: the small card, the "everyone beyond the five" list, the tag filter chip. */
 import { el } from '../../demo/src/ui/dom'
 import type { ColourTag } from './colour_tags'
+import { Ring } from './model'
 import type { Person } from './model'
 import { S } from './strings'
 
@@ -9,6 +10,9 @@ export interface SmallCardDeps {
   person: Person
   zone: string
   tags: readonly ColourTag[]
+  /** The defined tags this person lacks; a "+ tag" button offers them (empty: it says none are defined). */
+  addableTags?: readonly ColourTag[]
+  onAddTag?: (id: string) => void
   shared: number
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
   onOpen: () => void
@@ -18,6 +22,13 @@ export interface SmallCardDeps {
   /** The rest of the person's card, drawn under the small card while it is expanded. */
   more?: readonly (Node | null)[]
   onPin: () => void
+  /** The picture slot (card_pages_view.ts cardFace): the button left of the name, its menu under the name row. Absent: none. */
+  face?: { button: HTMLElement; menu: HTMLElement }
+  /** The QR code of this person: top right, small and extended alike. */
+  onQr?: () => void
+  /** The zones the person can move to; the ring chip and the "visible to" line open them. */
+  rings?: readonly { ring: Ring; label: string; current: boolean }[]
+  onRing?: (ring: Ring) => void
   /** The primary Chat button of the full card. */
   chat: HTMLElement
   /** A tag button: the Membranes then show only the people with it. */
@@ -30,17 +41,30 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
   return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-pin': '', 'aria-pressed': String(on), 'aria-label': S.cardPinAria(on, p.name), onclick: onToggle }, [on ? '📌' : '📍', ' ', S.cardPin])
 }
 
-/** A compact page: name with the pin at the right edge, the chat row, zone, tags as buttons, what we share, Extended; expanded: the rest of the card below. */
+/** A compact page: name with the pin and QR at the right edge, the chat row, zone (press to move), tags as buttons (+ tag), what we share, Extended; expanded: the rest of the card below. */
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
+  const picker = el('div', { class: 'chips ring-pick', hidden: true, 'data-ring-pick': p.id, role: 'group', 'aria-label': S.cardRingPickTitle }, (d.rings ?? []).map((r) =>
+    el('button', { class: 'chip', 'data-ring-choice': r.ring, 'aria-pressed': String(r.current), onclick: () => d.onRing?.(r.ring) }, [r.label])))
+  const togglePicker = (): void => { picker.hidden = !picker.hidden }
+  const tagPicker = el('div', { class: 'chips', hidden: true, 'data-tag-pick': p.id }, d.addableTags?.length
+    ? d.addableTags.map((t) => el('button', { class: 'chip', 'data-tag-choice': t.id, onclick: () => d.onAddTag?.(t.id) }, [t.label ?? t.id]))
+    : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
-    el('div', { class: 'card-name-row' }, [d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin)]),
+    el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
+      d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
+    d.face?.menu,
     el('div', { 'data-chat-row': '' }, [d.chat]),
-    el('p', { class: 'meta', 'data-card-zone': '' }, [d.zone]),
-    el('div', { class: 'chips', 'data-card-tags': '' }, d.tags.length
-      ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
-      : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
-    el('p', { class: 'meta', 'data-card-shares': '' }, [S.cardShares(d.shared, d.zone)]),
+    el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
+    picker,
+    el('div', { class: 'chips', 'data-card-tags': '' }, [
+      ...(d.tags.length
+        ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
+        : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
+      el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
+    ]),
+    tagPicker,
+    el('button', { class: 'card-shares meta', 'data-card-shares': '', title: S.cardRingChange(d.zone), onclick: togglePicker }, [p.ring === Ring.Unsorted ? S.cardSharesUnplaced : S.cardShares(d.shared, d.zone)]),
     el('div', { class: 'card-actions' }, [
       el('button', { class: 'btn btn-electric btn-sm', 'data-card-open': p.id, 'aria-expanded': String(d.expanded === true), onclick: d.onOpen }, [d.expanded ? S.membraneCardClose : S.membraneCardOpen]),
     ]),
