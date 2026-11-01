@@ -9,6 +9,9 @@
   /* surface tokens: --linen is the screen, --card the raised panels */
   --card:#fff; --line:rgba(31,42,40,.14); --tab-bg:rgba(255,255,255,.94);
   --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
+  /* Wave 28 (trustzones.ts TONE_ORDER): the orange of a rung, strongest inside, the outermost grey. */
+  --ring-0:#A63A00; --ring-1:#D2570A; --ring-2:#EE7A1C; --ring-3:#F6A24F; --ring-4:#FAC98F; --ring-5:#9E9E9E;
+  --pin-edge:#F2A0A0;
   --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
 }
 /* Dark is the default (light only with data-theme="light" on <html>). A deep teal night instead of a darkened beige, with the same accents.
@@ -1181,3 +1184,27 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-body{margin-top:10px}
 .who button.link{background:none; border:0; padding:0; font:inherit; color:var(--teal); text-decoration:underline; cursor:pointer}
 .status-pill[hidden]{display:none}
+/* Wave 28 (trustzones.ts): TrustZones. Dots take the rung's orange; pinned = light red edge; the zone panel; zzz; the outliner triangle. */
+.rings-wrap .node[data-tone="3"] .ava,.rings-wrap .node[data-tone="4"] .ava{color:#3a1d00}
+.rings-wrap .node.pinned .ava,.zone-row.pinned{border-color:var(--pin-edge); box-shadow:0 0 0 2px var(--pin-edge)}
+.zone-row.pinned{box-shadow:none; border:1.5px solid var(--pin-edge)}
+.outliner-toggle{font-size:11px; line-height:1}
+.ring-more.outliner-toggle,.ring-list{background:#fff; color:#3a1d00; border-color:var(--rc)}
+.ring-list{font-size:9px}
+.zzz{position:absolute; transform:translate(-30%,-80%); z-index:4; padding:0 3px; border:0; border-radius:6px; background:#fff; color:var(--ink-soft); font-size:9px; font-weight:700; font-style:italic; line-height:12px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.zzz:hover,.zzz:focus-visible{color:var(--ink); box-shadow:0 0 0 2px var(--ring-2)}
+.zones-split{flex:1; min-height:0; display:flex; flex-direction:column}
+.zones-split>.scroll{flex:1 1 auto; min-height:0}
+.zone-column{flex:0 1 auto; max-height:40%; overflow-y:auto; padding:6px 12px; display:flex; flex-direction:column; gap:6px}
+.zone-panel{display:flex; flex-direction:column; gap:6px}
+.zone-head{display:flex; align-items:center; gap:6px}
+.zone-list{border-left:3px solid var(--tone,var(--ring-5)); padding-left:8px; display:flex; flex-direction:column; gap:2px}
+.zone-row{display:flex; align-items:center; justify-content:space-between; gap:6px; padding:1px 6px; border:1.5px solid transparent; border-radius:10px}
+.zone-name{flex:1; min-width:0}
+.zone-name .tap-edit{background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:text; text-align:left}
+.zone-check{display:flex; align-items:center; gap:6px; font-size:13px}
+.zzz-strip{display:flex; flex-direction:column; gap:4px}
+@media (min-width:760px){
+  .zones-split{flex-direction:row-reverse}
+  .zone-column{flex:0 0 300px; max-height:none}
+}

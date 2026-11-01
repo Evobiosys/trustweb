@@ -141,7 +141,7 @@ async function partWebResults(browser, base, a) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(BRAVE_ANSWER) })
   })
   await a.reload()
-  await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await a.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await a.getByRole('button', { name: 'Search contacts' }).click()
   await a.locator('.search-field').fill('cargo  bike')
   const show = a.locator('[data-web-results-show]')

@@ -61,7 +61,7 @@ async function startPhone(page, name, origin = ORIGIN) {
   await page.goto(origin + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 
@@ -69,7 +69,7 @@ async function startPhone(page, name, origin = ORIGIN) {
 async function reopen(ctx, origin = ORIGIN) {
   const page = await newTab(ctx)
   await page.goto(origin + '/')
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   return page
 }
 
@@ -236,7 +236,7 @@ async function partE(browser) {
   const back = await newTab(a.ctx)
   await back.addInitScript(() => { const real = Date.now.bind(Date); Date.now = () => real() + 20 * 60_000 })
   await back.goto(ORIGIN + '/')
-  await back.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await back.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   // (The eyebrow is uppercased by CSS, and innerText follows text-transform: match it case-insensitively.)
   // Wave 6h: Bo's ask carried its window, so his app takes a late yes: the prompt shows, marked as asked while she was away (the 6f
   // "asked while you were away" card stays for asks from an older build, which cannot take one).

@@ -81,7 +81,7 @@ async function main() {
     await page.goto(base)
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
     // Web: no welcome line, no ring caption; QR in the header; Curate; tap to add
     const webText = await page.locator('.screen').innerText()
@@ -198,7 +198,7 @@ async function main() {
     await shot(page, 'review_solo')
     await page.getByRole('button', { name: 'Looks right' }).click()
     await page.getByRole('button', { name: 'Save to my web' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 10_000 })
     ok('a solo memo saves to the web', true)
     await page.locator('nav.tabs .tab-record').click()
     ok('Record starts fresh after saving: "Who or what was this about?"', /Who\s*or\s*what\s*was this about\?/.test(await page.locator('.about-row').innerText()))
@@ -346,7 +346,7 @@ async function main() {
     const dm = dp.frameLocator('iframe[title="Device 1"]')
     await dm.getByLabel('Your first name').fill('Maya')
     await dm.getByRole('button', { name: 'Start on this phone' }).click()
-    await dm.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
+    await dm.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 30_000 })
     const bg = await dp.evaluate(() => {
       const f = [...document.querySelectorAll('iframe')].find((i) => i.title === "Device 1")
       const s = f?.contentDocument?.querySelector('.screen')
@@ -395,7 +395,7 @@ async function main() {
     await p3.goto(base)
     await p3.getByLabel('Your first name').fill('Jakob')
     await p3.getByRole('button', { name: 'Start on this phone' }).click()
-    await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await p3.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     // an older record that opted into "Use TalkWeave on this computer" keeps it
     await p3.evaluate(() => {
       for (let i = 0; i < localStorage.length; i++) {
@@ -405,7 +405,7 @@ async function main() {
       }
     })
     await p3.reload()
-    await p3.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await p3.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     // The sheet redraws once the server's status is in (no server here: "did not answer"); wait for that, so no click lands on the old sheet.
     const openSettings = async () => {
       await p3.locator('.hdr [aria-label="Settings"]').click()
