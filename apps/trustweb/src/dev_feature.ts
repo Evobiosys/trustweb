@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
+import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: { id: string } | null | undefined
@@ -162,11 +162,17 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const post = (feature: string): Promise<Response> => fetch('/__tw/preview/verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict: 'merge' }) })
       const asApproved = (q: Parameters<typeof approveGate>[0]): Parameters<typeof approveGate>[0] => ({ ...q, features: applyVerdicts(q.features, unapproved(q.features).map((f) => f.key), 'merge') })
       const id = __TW_PREVIEW__!.id
+      // The conflict text sits folded under "details", never as a paragraph.
+      const setHint = (text: string): void => {
+        const { head, detail } = hintParts(text)
+        hint.replaceChildren(...conflictNodes(head), ...(detail ? [Object.assign(document.createElement('details'), { innerHTML: '<summary>details</summary>' })] : []))
+        if (detail) hint.querySelector('details')!.append(...conflictNodes(detail))
+      }
       const go = btn('Approve wave', 'go big', () => {
         const since = Date.now() - 2000
         void read().then(async (q) => {
           const g = approveGate(asApproved(q))
-          if (!g.ok) { go.disabled = true; hint.replaceChildren(...conflictNodes(g.hint)); return }
+          if (!g.ok) { go.disabled = true; setHint(g.hint); return }
           const w = waveState(q.features, individualStore(localStorage, id).get())
           if (w.warn) { foldStore(sessionStorage, id).set(expandFor(q.features, w.implicit, foldStore(sessionStorage, id).get())); loadOpenStore(sessionStorage, id).set(true) }
           go.disabled = true
@@ -177,7 +183,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const refresh = (): void => {
         if (!go.isConnected) return
         void read().then((q) => {
-          const g = approveGate(asApproved(q)); go.disabled = !g.ok; hint.replaceChildren(...conflictNodes(g.ok ? APPROVE_HINT : g.hint))
+          const g = approveGate(asApproved(q)); go.disabled = !g.ok; setHint(g.ok ? APPROVE_HINT : g.hint)
           const w = waveState(q.features, individualStore(localStorage, id).get())
           go.textContent = (w.warn ? '⚠ ' : '') + 'Approve wave'; go.classList.toggle('light', w.light)
           go.title = w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one'

@@ -12,13 +12,14 @@ import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { APPLY_DELAY_MS, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, reminderText, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
   port: number; stockPort: number; mode: 'personal' | 'stock'; features: PreviewFeature[]
   assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
   pending?: boolean
+  compat?: Compat
   pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
   next?: { id: string; port: number }
   tested?: Tested | null
@@ -38,7 +39,8 @@ const CSS = `
 .twp .mini{flex:none;padding:1px 6px;font-size:10px}
 .twp .mini.walk{background:#6b6178;color:#fff}.twp .mini.alt{color:#b7a8c9;border-color:#7a6a8c}
 .twp .feat.rej>span:not(.pills){text-decoration:line-through;opacity:.7}.twp .remind.rej{color:#ff9b8e}
-.twp .pill.note{border-color:#7a6a8c;text-decoration:none}
+.twp .pillbox{display:inline-flex;border:1px solid #7a6a8c;border-radius:999px;overflow:hidden}.twp .pillbox .pill{border:0;border-radius:0}.twp .pillbox .pill.note{border-left:1px solid #7a6a8c;text-decoration:none}.twp .pillbox .pill.on.merge{background:#4fd7a0}
+.twp .srch{display:block;width:calc(100% - 20px);box-sizing:border-box;margin:2px 10px;padding:3px 6px;border-radius:6px;border:1px solid #7a6a8c;background:#1a1322;color:#fff;font:inherit}.twp .srchbtn{background:none;border:0;color:#fff;padding:0 10px;cursor:pointer}.twp .compat.bad{color:#ff9b8e}.twp .compat summary,.twp .remind summary{cursor:pointer;text-decoration:underline}.twp .compat ul{margin:2px 0 0;padding-left:16px}
 .twp .feat.glim{animation:twp-glim .9s ease-out}@keyframes twp-glim{0%{background:rgba(255,255,255,.95)}100%{background:transparent}}
 .twp .loadhead{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
 .twp .adv{margin-top:2px}.twp .adv summary{cursor:pointer;text-decoration:underline;color:#b7a8c9;padding:2px 0}
@@ -120,8 +122,9 @@ export function initDevPreview(): void {
   let inflight = 0
   let chain: Promise<unknown> = Promise.resolve()
   let glim: string | null = null
+  let query = '', searching = false   // the row search under the header line (Esc / empty clears)
   let retried = false
-  const individual = individualStore(localStorage, p.id), loadOpen = loadOpenStore(sessionStorage, p.id)
+  const individual = individualStore(localStorage, p.id), loadOpen = loadOpenStore(sessionStorage, p.id), remindOpen = remindOpenStore(sessionStorage, p.id)
   const applyLater = debounce(() => { if (p && autoApply(p, applying)) void apply() }, APPLY_DELAY_MS)
   const root = h('div')
   const mode = typeof __TW_BUILD__ === 'undefined' || !__TW_BUILD__ ? p.mode : (__TW_BUILD__.mode as Preview['mode'])
@@ -207,12 +210,13 @@ export function initDevPreview(): void {
   }
   // A box or pill writes the registry (the CLI cascades requires/dependants). Approve and needs work only mark what gets pushed; the boxes assemble.
   const press = (key: string, v: 'merge' | 'needs-work'): void => {
-    const f = p!.features.find((x) => x.key === key)!
-    const next = pillPress(p!.features, key, v)
-    if (next === 'merge' && !f.checked) { toast('Tick the box first: approve marks what is loaded'); return }
-    const keys = next === 'needs-work' ? [key] : subtreeKeys(p!.features, key)
+    const loadFirst = v === 'merge' && !p!.features.find((x) => x.key === key)!.checked   // approve on an unticked row ticks it for the owner
+    const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
+    const next = pillPress(base, key, v)
+    const keys = next === 'needs-work' ? [key] : subtreeKeys(base, key)
     individual.set(next === 'merge' ? [...new Set([...individual.get(), ...keys])] : individual.get().filter((k) => !keys.includes(k)))
-    write(applyVerdicts(p!.features, keys, next), async () => { let q: Preview | undefined; for (const k of keys) q = await call('POST', '/verdict', { feature: k, verdict: next }); return q! })
+    write(applyVerdicts(base, keys, next), async () => { if (loadFirst) await call('POST', '', { feature: key, checked: true }); let q: Preview | undefined; for (const k of keys) q = await call('POST', '/verdict', { feature: k, verdict: next }); return q! })
+    if (loadFirst) applyLater()
   }
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
   const load = (feature: string, checked: boolean): void => { write(withBox(p!.features, feature, checked), () => call('POST', '', { feature, checked })); applyLater() }
@@ -294,7 +298,7 @@ export function initDevPreview(): void {
     const go = h('button', { className: 'mini walk', textContent: walking ? 'Stop' : 'Walk' })
     go.addEventListener('click', (e) => {
       e.stopPropagation()
-      if (walking) { lit = null; render() } else if (!d.checked) { toast('Tick the box first, then Walk'); box.focus() } else walk(f)
+      if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f) }
     })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
       const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
@@ -312,7 +316,7 @@ export function initDevPreview(): void {
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
-    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, pill('merge', 'approve'), note, pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkShown(f) ? [go] : []), how] : [])))
+    const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkShown(f) ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
   }
@@ -474,17 +478,29 @@ export function initDevPreview(): void {
       const rejected = visible(shown).filter((f) => shownVerdict(f) === 'needs-work' || (f.verdict === 'needs-work' && !f.checked))
       const loadHead = h('button', { className: 'loadhead', textContent: `${open ? '▾' : '▸'} Load (${visible(shown).filter((f) => f.checked).length} of ${visible(shown).length} loaded)`, title: open ? 'Collapse' : 'Expand' })
       loadHead.addEventListener('click', () => { loadOpen.set(!open); render() })
+      const waiting = unapproved(q.features)
+      const remindHead = h('button', { className: 'loadhead', textContent: `${waiting.length} loaded, not yet approved ${remindOpen.get() ? '▾' : '▸'}`, title: remindOpen.get() ? 'Collapse' : 'Expand' })
+      remindHead.addEventListener('click', () => { remindOpen.set(!remindOpen.get()); render() })
+      const searchBtn = h('button', { className: 'srchbtn', textContent: '🔍', title: 'Search the rows' })
+      searchBtn.addEventListener('click', () => { searching = !searching; if (!searching) query = ''; render() })
+      const searchBox = h('input', { className: 'srch', type: 'search', placeholder: 'Search rows (title, key, steps)', value: query })
+      searchBox.addEventListener('input', () => { query = searchBox.value; render() })
+      searchBox.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); searching = false; query = ''; render() } })
+      const compatInfo = compatLine(q.compat, compatFresh(q.compat, q.baseSha, q.features.filter((f) => f.checked && !f.merged)))
+      const compat = compatInfo ? h('div', { className: 'row compat' + (compatInfo.ok || q.compat?.state === 'running' ? '' : ' bad') }, ...(compatInfo.conflicts.length > 1 ? [h('details', {}, h('summary', { textContent: compatInfo.text }), h('ul', {}, ...compatInfo.conflicts.map((c) => h('li', { textContent: c }))))] : [compatInfo.text])) : null
       const all = h('button', { className: 'alt', textContent: allLoaded(q.features) ? 'Select none' : 'Select all', disabled: loading() })
       all.addEventListener('click', () => { void pressAll() })
       root.append(
-        h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` })),
+        h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` }), searchBtn),
+        ...(searching ? [searchBox] : []),
+        ...(compat ? [compat] : []),
         ...(open ? [h('div', { className: 'btns' }, all)] : []),
-        ...(reminderText(q.features) ? [h('div', { className: 'row remind', textContent: reminderText(q.features) })] : []),
+        ...(waiting.length ? [h('div', { className: 'row remind' }, remindHead, ...(remindOpen.get() ? [h('div', { textContent: waiting.map((f) => f.title).join(', ') })] : []))] : []),
         ...(rejected.length ? [h('div', { className: 'row remind rej', textContent: `needs work: ${rejected.map((f) => f.title).join(', ')}` })] : []),
         loadHead,
-        ...(open ? allRows(sections(tree(visible(shown))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
+        ...(open || query ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),
-        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, ...conflictNodes(q.assembled.error))] : []),
+        ...(q.assembled?.error ? [h('div', { className: 'row warn' }, hintParts('Fix the conflict first: ' + q.assembled.error).head, h('details', {}, h('summary', { textContent: 'details' }), h('div', {}, ...conflictNodes(q.assembled.error))))] : []),
         ...(error ? [h('div', { className: 'row warn', textContent: error })] : []),
         ...(prStatusEl ? [prStatusEl] : []), h('div', { className: 'btns' }, sw, h('details', { className: 'adv' }, h('summary', { textContent: 'advanced' }), gate())), ...(bar ? [bar] : []),
       )
@@ -494,6 +510,7 @@ export function initDevPreview(): void {
     sync()
     renderedAt = Date.now()
     if (!pill) root.scrollTop = scrolled.get()
+    if (searching && !pill) { const i = root.querySelector<HTMLInputElement>('.srch'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length) }
     if (!lit) steps.close()
     if (!steps.active()) pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
   }
