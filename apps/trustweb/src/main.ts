@@ -40,7 +40,8 @@ import { createNamesView } from './names_view'
 import { GENERAL_NOTE_MAX, createAutosaver, generalNoteOf, setGeneralNote } from './general_notes'
 // import { SafetyPlace, markFirstTimeShown, offerFirstTime } from './reassurance'
 // import { safetyLink, safetySheetNodes } from './reassurance_view'
-import { createTimelineSection } from './timeline_view'
+import { createTimelineSection, timelineImportButton } from './timeline_view'
+import { addTagTo, chatShown, messengerGlyphs, setMetAt, setRing, tagsAddable } from './card_small'
 import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
@@ -60,11 +61,11 @@ import { PASS_ON_DEFAULT_NOTICE, dismissNotice, namePreviousId, noticeShown, not
 import { cardPopAction } from './page_stack'
 import type { AddFailure, StampedLink } from './add_by_code'
 import { renamedTo } from './card_name'
-import { channelEdit, chatButtonKind, isConnected } from './card_view'
+import { channelEdit, isConnected } from './card_view'
 import { chatServices, noteUsed, togglePin as toggleChatPin } from './chat_row'
 import type { ChatService } from './chat_row'
 import { chatRow } from './chat_row_view'
-import { connectBlock, daysSection, noMessengerBlock } from './card_pages_view'
+import { connectBlock, daysSection, infoNote, noMessengerBlock } from './card_pages_view'
 import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
 import { createSovereignView } from './sovereign_switch_view'
@@ -91,7 +92,7 @@ import {
 } from './contact_share'
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
-import { TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
+import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
 import { availableTabs, resolveRow, setSlot } from './tab_row'
@@ -2227,6 +2228,10 @@ function webPageScreen(page: WebPage): Node[] {
     heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
     onPin: () => { togglePersonPin(p, Date.now()); save(); render() },
+    onQr: () => personQr(p),
+    rings: RINGS.map((ring) => ({ ring, label: S.ringLabel[ring], current: webSlot(p) === ring })),
+    onRing: (ring) => placePerson(p.id, ring, true),
+    addableTags: tagsAddable(p, tags), onAddTag: (id) => { addTagTo(p, id); save(); render() },
     chat: cardChatButton(p, false),
     onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
   })])]
@@ -2484,6 +2489,17 @@ function hideOnRings(p: Person): Promise<void> {
       el('button', { class: 'btn btn-ghost btn-sm', 'data-undo-hide': p.id, onclick: () => { hideNotice(); void curator.unhide(p.id) } }, [S.ringsHiddenUndo]),
     ], 30000)
   })
+}
+
+/** The owner puts a person on a zone (the Curator's ring chooser, the card's zone chip): saved, the automatic zone slice sent, the Web redrawn; `toTana` when the Curator did not already sync it. */
+function placePerson(id: string, ring: Ring, toTana: boolean): void {
+  const p = state?.people.find((x) => x.id === id)
+  if (!p) return
+  setRing(p, ring)
+  save()
+  autoShareToPerson(p)
+  if (toTana) ringToTana(p, ring)
+  if (screen === Screen.Web) render()
 }
 
 /** A Web view ring change goes on to Tana through the Curator's sync; the real record only (no solo, demo persona or test account). */
@@ -3205,7 +3221,7 @@ function cardMore(p: Person): Node[] {
   const rows: Record<string, () => (Node | null)[]> = {
     channels: () => [
       cons ? el('a', { class: 'btn btn-electric', href: cons.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': cons.channel }, [S.consChat]) : null,
-      cons ? el('p', { class: 'meta' }, [S.consHonesty]) : null,
+      cons ? infoNote(S.consHonesty) : null,
       cardChannelsRow(p), reachedOutRow(p), noMessengerRow(p), sharedReachRow(p),
     ],
     askLinks: () => [askLinksRow(p)],
@@ -3218,7 +3234,6 @@ function cardMore(p: Person): Node[] {
     notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
     timeline: () => [timelineSection(p)],
     curate: () => [
-      el('button', { class: 'btn btn-ghost', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, onclick: () => personQr(p) }, [S.qrPageTitle]),
       el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
     ],
   }
@@ -3247,42 +3262,71 @@ function cardChannelsRow(p: Person): HTMLElement | null {
   }))
 }
 
-/** The primary Chat button (the Chat tab's icon). Not connected yet: outlined, says why, and opens the way to connect (an invitation I hold, else the chat page with their outside link). */
+/** The icon of one messenger service: the channel's own, else the link kind's, else the web glyph. */
+const serviceIcon = (svc: ChatService): string => ICONS[svc.channel ?? svc.linkKind ?? 'web'] ?? ICONS.web
+
+/** Wave 28: one glyph per messenger link with this person; solid = connected on TrustWeb (opens the chat page), dashed = only linked (opens the outside link). */
+function messengerStrip(p: Person): HTMLElement | null {
+  const glyphs = messengerGlyphs(p)
+  if (!glyphs.length) return null
+  return el('div', { class: 'msg-glyphs', 'data-msg-glyphs': p.id }, glyphs.map((g) => {
+    const label = g.connected ? S.cardGlyphConnected : S.cardGlyphLinked(g.service.channel ? chName(g.service.channel) : S.chatRowLink[g.service.linkKind ?? 'other'])
+    const attrs = { class: 'msg-glyph' + (g.connected ? '' : ' linked'), 'data-msg-glyph': g.id, 'aria-label': label, title: label }
+    const node = g.connected || !g.service.url
+      ? el('button', { ...attrs, onclick: () => chatSheet(p.id) })
+      : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
+    node.innerHTML = serviceIcon(g.service)
+    return node
+  }))
+}
+
+/** Advanced: write to a connected person without opening the earlier conversation; the message still lands in the chat book. */
+function sendUnreadBox(p: Person): HTMLElement {
+  const text = el('textarea', { class: 'field', rows: '2', maxlength: String(CHAT_TEXT_MAX), placeholder: S.cardSendUnreadPh, 'aria-label': S.cardSendUnread, 'data-send-unread-text': p.id }) as HTMLTextAreaElement
+  const go = el('button', { class: 'btn btn-electric btn-sm', 'data-send-unread': p.id, onclick: () => {
+    const peerId = p.peerId
+    if (!peerId || !text.value.trim()) return
+    void submitText(chatIo(), peerId, text.value).then((ok) => { if (ok) { text.value = ''; toast(S.cardSendUnreadSent) } })
+  } }, [S.cardSendUnreadGo])
+  return el('details', { class: 'card-advanced', 'data-card-advanced': p.id }, [el('summary', {}, [S.cardChatAdvanced]), el('div', { class: 'card-compose' }, [el('p', { class: 'meta' }, [S.cardSendUnread]), text, go])])
+}
+
+/** The Chat button (the Chat tab's icon), only for a person connected on TrustWeb; it opens the chat page (or the pinned / last-used service). Not connected: the messenger glyphs and the way to connect (an invitation I hold, else the link panel). */
 function cardChatButton(p: Person, quiet: boolean): HTMLElement {
-  const chat = chatButtonKind(p) === 'chat'
-  const services = chatServices(p)
-  const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
+  const strip = messengerStrip(p)
+  if (!chatShown(p)) {
+    return el('div', { class: 'card-chat' }, [
+      strip,
+      p.pendingInvite ? el('button', { class: 'btn btn-electric btn-sm', 'data-reopen-invite': p.id, onclick: () => reopenInvite(p.pendingInvite!) }, [S.cardConnect]) : null,
+      connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast }),
+    ])
+  }
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
     if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
   }
-  let b: HTMLElement
-  if (services.length) {
-    b = chatRow({
-      personId: p.id, services, prefs: () => st().chatPrefs?.[p.id], mainClass, iconHtml: icon('chat'), open,
-      label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
-      pin: (id) => { toggleChatPin(st(), p.id, id); save() },
-    })
-  } else {
-    b = el('button', {
-      class: 'btn ' + mainClass, 'data-card-chat': p.id, 'data-chat-open': p.id,
-      onclick: () => { if (!chat && p.pendingInvite) reopenInvite(p.pendingInvite); else chatSheet(p.id) },
-    })
-    b.innerHTML = icon('chat')
-    b.append(S.chatOpen)
-  }
-  return el('div', { class: 'card-chat' }, [b, chat ? null : connectBlock(p, displayName(p.name).text, { link: async () => { await net.start(); return net.connectLink(CONNECT_URL) }, save, toast })])
+  const b = chatRow({
+    personId: p.id, services: chatServices(p), prefs: () => st().chatPrefs?.[p.id], mainClass: quiet ? 'btn-ghost' : 'btn-electric', iconHtml: icon('chat'), open,
+    label: (svc) => svc.kind === 'trustweb' ? S.chatRowTrustweb : svc.channel ? chName(svc.channel) : S.chatRowLink[svc.linkKind ?? 'other'],
+    pin: (id) => { toggleChatPin(st(), p.id, id); save() },
+  })
+  return el('div', { class: 'card-chat' }, [b, strip, sendUnreadBox(p)])
 }
 
 /** Wave 25: Curate opens its own page (the unfold took too long to draw); the tools are the same rows. */
 function curatePage(p: Person): void {
-  pages.open(S.cardCurate, [
+  const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
+  pages.open(S.cardCurateTitle(p.name), [
+    cardNameHeading(p),
     el('button', { class: 'btn btn-ghost btn-sm', 'data-curate-knows': p.id, onclick: () => { history.back(); window.setTimeout(() => document.querySelector(`[data-person-knows="${p.id}"]`)?.scrollIntoView({ block: 'center' }), 50) } }, [S.cardCurateKnows]),
     solo ? null : el('button', { class: 'btn btn-ghost btn-sm', 'data-same-person': p.id, onclick: () => devices.samePersonPicker(p.id) }, [S.dvSameAs]),
     introduceRow(p),
     agreementsFor(p),
     blockRow(p),
     archiveRow(p),
+    timelineImportButton((text) => importTimelineText(now(), text), toast),
+    // Keep in touch and Merge with sit at the bottom of Curate (wave 28), the Curator's own pieces; the mount sizes to them, not to the page.
+    Object.assign(curator.person(p.id, () => history.back(), { embedded: 'curate' }), { style: 'height:auto' }),
   ].filter((n): n is HTMLElement => n !== null), 'card-curate')
 }
 
@@ -3404,20 +3448,24 @@ function eventChipsRow(p: Person): HTMLElement | null {
 }
 
 /** The Timeline of a person (timeline.ts, timeline_view.ts): typed and imported entries live on the person; TrustWeb's own are derived. */
-function timelineSection(p: Person): HTMLElement {
+function timelineSection(p: Person, full = false): HTMLElement {
   // The record may have been replaced since the card opened: write into the person as the record holds it now.
   const now = (): Person => st().people.find((x) => x.id === p.id) ?? p
   return createTimelineSection({
     entries: () => mergedTimeline(st(), now()),
     add: (entries) => { const n = addEntries(now(), entries); if (n) save(); return n },
-    importText: (text) => {
-      const r = parseTimelineImport(text)
-      if (r.unreadable) return S.tlImportBad
-      const n = addEntries(now(), r.entries)
-      if (n) save()
-      return S.tlImported(n, r.skipped, r.entries.length - n)
-    },
-  }, toast, true)
+    importText: (text) => importTimelineText(now(), text),
+    setMet: (at) => { setMetAt(now(), at); save() },
+  }, toast, true, full ? undefined : () => pages.open(S.tlTitle, [timelineSection(p, true)], 'card-timeline'))
+}
+
+/** Reads a timeline file into the person; returns the message to show. */
+function importTimelineText(p: Person, text: string): string {
+  const r = parseTimelineImport(text)
+  if (r.unreadable) return S.tlImportBad
+  const n = addEntries(p, r.entries)
+  if (n) save()
+  return S.tlImported(n, r.skipped, r.entries.length - n)
 }
 
 /** A connected person who has shared no messenger link (and none was typed): say so plainly; it fills in if their link arrives. */
@@ -4046,7 +4094,7 @@ function askAgainRow(p: Person): HTMLElement | null {
       class: 'btn btn-ghost btn-sm', type: 'button', 'data-ask-again': p.id,
       onclick: () => { void net.askAgain(peer).then((sent) => toast(sent ? S.askAgainSent(p.name) : S.askAgainQueued(p.name))) },
     }, [S.askAgainButton(p.name)]),
-    el('p', { class: 'meta' }, [S.askAgainHint]),
+    infoNote(S.askAgainHint),
   ])
 }
 
@@ -4388,15 +4436,7 @@ function stateForSync(): AppState {
 const images = new ImageStore(persona, storeCtx)
 const curator = createCurator({
   record: () => (state ? structuredClone(state) : null),
-  setRing: (id, ring) => {
-    const p = state?.people.find((x) => x.id === id)
-    if (!p) return
-    p.ring = ring
-    delete p.ringSuggested
-    save()
-    autoShareToPerson(p)
-    if (screen === Screen.Web) render()
-  },
+  setRing: (id, ring) => placePerson(id, ring, false),
   setFamily: (id, on) => {
     const p = state?.people.find((x) => x.id === id)
     if (!p) return
