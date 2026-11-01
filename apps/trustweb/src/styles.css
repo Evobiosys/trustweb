@@ -203,6 +203,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .view-drop .view-opt.on{background:rgba(127,127,127,.15)}
 .view-drop .view-opt svg{width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .view-drop-sep{margin:6px 10px 2px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.6}
+button.view-drop-sep{border:0; background:none; color:inherit; font-family:inherit; text-align:left; cursor:pointer; text-decoration:underline; opacity:.8}
+.view-drop .view-opt:disabled{opacity:.45; cursor:default}
 .curator-page{display:flex; flex-direction:column; min-height:0; padding-bottom:0}
 .curator-page .curator{flex:1; min-height:0}
 .view-opt.on{font-weight:700}
