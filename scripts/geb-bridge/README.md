@@ -22,7 +22,7 @@ Options: `--port N` (default random), `--app <origin>` (TrustWeb origin the link
 - Binds `127.0.0.1` only; refuses to run on anything else.
 - Every request needs the exact `Host` (`127.0.0.1:<port>` or `localhost:<port>`), an `Authorization: Bearer <token>`
   header, and, if the browser sent an `Origin`, one of `https://app.trustweb.one`, `https://dev.trustweb.one`,
-  `https://pre.trustweb.one`, `http://localhost:<port>`. CORS preflight is answered only for those origins.
+  `https://pre.trustweb.one`, `http://localhost:<port>` or `http://127.0.0.1:<port>`. CORS preflight is answered only for those origins.
 - Runs `node <geb.mjs> ...` with an argument array (no shell). It never runs `geb listen` (one listener per
   identity: start your own) and never `--mark-read`.
 - The fragment of the pairing link never reaches a server. TrustWeb's servers never see Geb messages.

@@ -19,7 +19,7 @@ function moreInfo(): HTMLElement {
 export function createGeb(h: ExtHooks): MessengerSource {
   const store = localStorage
   // The pairing link was opened in this browser: read its fragment once, keep port + token here only, drop it from the address bar.
-  if (consumePairingHash(location, store, (u) => history.replaceState(history.state, '', u))) setTimeout(() => { h.toast(S.geb.paired); h.redraw() }, 0)
+  if (consumePairingHash({ hash: h.boot.hash, search: location.search, pathname: location.pathname }, store, (u) => history.replaceState(history.state, '', u))) setTimeout(() => { h.toast(S.geb.paired); h.redraw() }, 0)
 
   const pair = (): Pairing | null => loadPairing(store)
 

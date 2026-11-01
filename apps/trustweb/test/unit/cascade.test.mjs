@@ -116,8 +116,8 @@ describe('askSources: only lines this step admits ever reach the matcher', () =>
   })
 })
 
-describe('pass their asks on: on by default only for Close (wave 27, Jakob 2026-10-31), the setting wins', () => {
-  it.each([[R.Close, true], [R.Friend, false], [R.Acquaintance, false], [R.Intending, false]])('%s: %s', (ring, want) => {
+describe('pass their asks on: on by default only for Close and Closest (wave 27, Jakob 2026-10-31), the setting wins', () => {
+  it.each([[R.Closest, true], [R.Close, true], [R.Friend, false], [R.Acquaintance, false], [R.Intending, false]])('%s: %s', (ring, want) => {
     expect(passesAsksOn({ ring })).toBe(want)
   })
   it('the per-person setting wins either way', () => {

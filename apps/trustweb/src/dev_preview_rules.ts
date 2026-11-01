@@ -148,9 +148,10 @@ export const shownVerdict = (f: PreviewFeature): Verdict => (f.verdict === 'merg
 /** A press on a pill: the verdict to store (the registry checks/unchecks the box and cascades over requires/dependants itself; nothing assembles). Pressing the shown pill again clears it. */
 export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): Verdict => verdictAfter(shownVerdict(features.find((x) => x.key === key)!), v)
 
-/** Select all / none as the exact boxes to POST: every available (not merged) row on = approved, or off; merged rows keep their box. */
+/** Select all / none as the exact boxes to POST: every available (not merged) row on = loaded into the preview, or off (approval is the pill verdict, not the box); merged rows keep their box. */
 export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
 
+// unused since wave27 review, archive candidate
 export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
 export const allLoaded = (features: PreviewFeature[]): boolean => visible(features).every((f) => f.checked)
 
