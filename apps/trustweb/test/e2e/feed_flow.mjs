@@ -80,7 +80,7 @@ function fakeInstance(port, cors) {
 }
 
 async function addAddress(page, personName, address) {
-  await page.locator('nav.tabs button', { hasText: 'Membranes' }).click()
+  await page.locator('nav.tabs button', { hasText: 'Web' }).click()
   await page.locator('.node', { hasText: personName }).first().click()
   if (await page.locator('.sheet.on [data-fed-add]').count()) await page.locator('.sheet.on [data-fed-add]').click()
   else await page.locator('.sheet.on [data-fed-row] .mini').click()
@@ -101,11 +101,11 @@ async function main() {
     await startPhone(a, vite.base, 'Jakob')
 
     // 1. the bar, the empty Feed, nothing sent. Wave 2 (P9): the Feed is optional and early, OFF by default.
-    ok('the bar by default: Membranes | Record | Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Resources']), JSON.stringify(await tabLabels(a)))
+    ok('the bar by default: Membranes | Record | Resources (the Feed is off)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Resources']), JSON.stringify(await tabLabels(a)))
     await openSettings(a)
     ok('Settings > Feed stays, says "optional, early" and is off', /optional, early/.test(await a.locator('[data-feed-toggle]').innerText()) && (await a.locator('[data-feed-toggle]').getAttribute('aria-pressed')) === 'false')
     await a.locator('[data-feed-toggle]').click()
-    ok('switched on: Membranes | Record | Feed | Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'Resources']) && (await record(a)).feed.on === true)
+    ok('switched on: Membranes | Record | Feed | Resources', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'Resources']) && (await record(a)).feed.on === true)
     await closeSheet(a)
     const sent = []
     a.on('request', (r) => sent.push(r.method() + ' ' + r.url()))
@@ -117,9 +117,9 @@ async function main() {
     await shot(a, '17-feed-empty')
     await openSettings(a)
     await a.locator('[data-feed-toggle]').click()
-    ok('Settings > Feed off: the bar is exactly as before (Membranes | Record | Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Resources']) && (await record(a)).feed.on === false)
+    ok('Settings > Feed off: the bar is exactly as before (Membranes | Record | Resources)', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Resources']) && (await record(a)).feed.on === false)
     await a.locator('[data-feed-toggle]').click()
-    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Membranes', 'Record', 'Feed', 'Resources']))
+    ok('and on again', JSON.stringify(await tabLabels(a)) === JSON.stringify(['Web', 'Record', 'Feed', 'Resources']))
     await closeSheet(a)
 
     // 2. posts from a second phone
@@ -135,7 +135,7 @@ async function main() {
     await b.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await b.getByLabel('e.g. Motorbike, can lend it for a weekend').fill('Cargo bike to lend on weekends')
     await b.getByRole('button', { name: 'Add', exact: true }).click()
-    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
     await a.getByRole('button', { name: 'Ask your web' }).click()
     await a.locator('.query-dock textarea').fill('Does anyone have a cargo bike?')
     await a.getByRole('button', { name: 'Ask my web' }).click()
@@ -157,7 +157,7 @@ async function main() {
     await closeSheet(a)
     await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000)
     await a.reload()
-    await a.locator('nav.tabs button', { hasText: 'Membranes' }).waitFor({ timeout: 15_000 })
+    await a.locator('nav.tabs button', { hasText: 'Web' }).waitFor({ timeout: 15_000 })
     await a.getByRole('button', { name: 'Ask your web', exact: true }).click()
     const earlier = a.locator('.query-dock [data-earlier-answers]')
     await earlier.waitFor({ timeout: 10_000 })
@@ -168,7 +168,7 @@ async function main() {
     await a.locator('[data-feed-toggle]').click()
     await closeSheet(a)
     await until(async () => { if ((await a.locator('.sheet.on').count()) === 0) return true; await closeSheet(a); return false }, 10_000) // the Settings redraw race (A2): closed for real
-    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
     await a.getByRole('button', { name: 'Ask your web', exact: true }).click()
     ok('Feed on: the dock does not repeat them (they are in the Feed)', await a.locator('.query-dock [data-earlier-answers]').count() === 0)
     await a.locator('.query-dock .x').click()
@@ -231,7 +231,7 @@ async function main() {
     await closeSheet(a)
     await a.locator('nav.tabs button', { hasText: 'Feed' }).click()
     await until(async () => (await record(a)).people.find((p) => p.name === 'Ben').fediverse.reach === 'link', 15_000)
-    await a.locator('nav.tabs button', { hasText: 'Membranes' }).click()
+    await a.locator('nav.tabs button', { hasText: 'Web' }).click()
     await a.locator('.node', { hasText: 'Ben' }).first().click()
     await a.locator('.sheet.on [data-fed-reach="link"]').waitFor({ timeout: 15_000 })
     ok('an instance that refuses this page (CORS): kept as a link out, "Open their profile"', (await record(a)).people.find((p) => p.name === 'Ben').fediverse.reach === 'link' && /Open their profile/.test(await a.locator('.sheet.on [data-fed-row]').innerText()))
