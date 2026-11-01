@@ -37,6 +37,8 @@ export interface FeedViewHooks {
   /** The bottom bar changed (Feed on/off). */
   tabsChanged: () => void
   settings: () => void
+  /** Wave 27: an item's Share opens the Share page (share_page_view.ts), not the old "Share to..." sheet. */
+  openSharePage: (itemId: string) => void
 }
 
 export interface FeedView {
@@ -277,7 +279,7 @@ export function createFeedView(h: FeedViewHooks): FeedView {
         el('div', { class: 'rec-saves' }, [
           el('button', { class: 'btn btn-ghost btn-sm', 'data-item-image-add': '1', onclick: () => input.click() }, [item.imageId ? S.imgChange : S.imgAdd]),
           item.imageId ? el('button', { class: 'btn btn-ghost btn-sm', 'data-item-image-remove': '1', onclick: () => { const id = item.imageId; delete item.imageId; h.save(); if (id) void h.images.remove(id); draw() } }, [S.imgRemove]) : null,
-          el('button', { class: 'btn btn-ghost btn-sm', 'data-share-item': item.id, onclick: () => shareSheet(item.text, Boolean(item.imageId)) }, [S.shareTo]),
+          el('button', { class: 'btn btn-ghost btn-sm', 'data-share-item': item.id, onclick: () => h.openSharePage(item.id) }, [S.shareTo]),
         ]),
         el('p', { class: 'meta' }, [S.imgHint]),
       )
