@@ -194,8 +194,9 @@ import { intendingReminder, knownWays, lastMessagedAt } from './intending_remind
 import { shortLabel } from './short_label'
 import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
-import { communityOf, filledRings, inZones, isArchived, moveKinds, toggleRing, toneVar, zoneFor } from './trustzones'
-import { legendInfo, outlinerToggle, zonePanel, zzzStrip } from './trustzones_view'
+import { communityOf, filledRings, inZones, isArchived, toggleRing, toneVar, zoneFor } from './trustzones'
+import { filterByChips } from './tag_filter'
+import { zoneSidebar } from './trustzones_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, dueMoves, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -2026,7 +2027,8 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const everyone: Partial<Record<Ring, Person[]>> = {}
   // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
   const community = communityOf(s)
-  for (const p of desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : inZones(s.people, s)) (everyone[zoneFor(p, community)] ??= []).push(p)
+  // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
+  for (const p of desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [])) (everyone[zoneFor(p, community)] ??= []).push(p)
   // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
   const complete = opts.complete === true || desk !== undefined
   const members: Partial<Record<Ring, Person[]>> = {}
@@ -2168,7 +2170,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   })
   wrap.addEventListener('pointerdown', hideAll)
   // Last in the DOM, so above every dot.
-  if (!desk) wrap.appendChild(el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: (e: Event) => { e.stopPropagation(); addPersonSheet(Ring.Acquaintance) } }, ['+']))
+  // Wave 28b: the floating "+" moved into the TrustZones sidebar (zoneColumn), next to expand all.
   return wrap
 }
 
@@ -2210,7 +2212,9 @@ function toggleCardExpanded(): void {
 
 /** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
 function ringMore(ring: Ring, filled: boolean, top: number, left: number, onFill: (btn: HTMLElement) => void): HTMLElement[] {
-  const fill = outlinerToggle(filled, S.zoneFillAria(S.ringLabel[ring], filled), onFill, { class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, title: S.zoneTapToAdd[ring] })
+  // Wave 28b (Jakob): the fill control is the expand glyph, not the outliner triangle (that looks like "play").
+  const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': S.zoneFillAria(S.ringLabel[ring], filled), title: S.zoneTapToAdd[ring],
+    style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
   const list = el('button', {
     class: 'ring-more ring-list', 'data-membrane-list': ring, style: `--rc:${toneVar(ring)}; left:${left + 34}px; top:${top}px`,
     'aria-label': S.zoneListAria(S.ringLabel[ring]), title: S.zoneListAria(S.ringLabel[ring]),
@@ -2644,11 +2648,8 @@ const HAS_MAP_VIEW = true
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: expand (Web only), the heading of the chosen view or the search field, the magnifier. */
-function webViewRow(view: WebView, expanded: boolean): HTMLElement {
+function webViewRow(view: WebView): HTMLElement {
   const heading = viewHeading(view)
-  const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
-  expand.setAttribute('data-expand', '')
-  expand.setAttribute('aria-pressed', String(expanded))
   const mid = webSearchOpen
     ? el('input', {
       class: 'field web-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-web-search': '',
@@ -2662,7 +2663,7 @@ function webViewRow(view: WebView, expanded: boolean): HTMLElement {
   if (webSearchOpen) setTimeout(() => (mid as HTMLInputElement).focus(), 0)
   const find = iconButton('search', S.viewSearchAria, () => { webSearchOpen = !webSearchOpen; render() }, 'web-search-btn')
   find.setAttribute('aria-expanded', String(webSearchOpen))
-  return el('div', { class: 'web-view-row' }, [view === 'rings' ? expand : null, mid, find])
+  return el('div', { class: 'web-view-row' }, [mid, find]) // Wave 28b: expand all moved into the TrustZones sidebar
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
@@ -2849,7 +2850,7 @@ function screenWeb(): Node[] {
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
-      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet() })
+      ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : ringsView(s, askMarks(), undefined, { complete: expanded }),
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
@@ -2863,22 +2864,21 @@ function screenWeb(): Node[] {
   return [
     // Jakob 2026-10-19: the gear as on Resources (was ⋮ moreMenu, now unused; curating moved into Settings > Your web).
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
-    webViewRow(view, expanded),
+    webViewRow(view),
     ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
-    view === 'rings' ? el('div', { class: 'zones-split' }, [clip, zoneColumn(s)]) : clip,
+    view === 'rings' ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), clip]) : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
 
-/** Wave 28 (trustzones_view.ts): beside the rings (desktop: left; phone: below) the filter, the pinned people and one folding list per zone, the zzz "move all" lines and the legend under (i). */
-function zoneColumn(s: AppState): HTMLElement {
+/** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
+function zoneColumn(s: AppState, expanded: boolean): HTMLElement {
   const live = (): void => { save(); render() }
-  const panel = zonePanel({
-    s: st(), people: inZones(s.people, st()), tags: loadColourTags(), nameOf: (p) => displayName(p.name).text, onOpen: openCardPage,
-    onRename: (p, next) => { const mine = st().people.find((x) => x.id === p.id); if (mine) mine.name = next; live() }, onChange: live,
-  })
-  const quiet = moveKinds(dueMoves(st(), Date.now()))
-  return el('div', { class: 'zone-column' }, [legendInfo(), zzzStrip(quiet, zzzAccept), panel])
+  const expand = iconButton(expanded ? 'collapse' : 'expand', expanded ? S.collapseAria : S.expandAria, () => toggleExpand(expanded), 'expand-btn')
+  expand.setAttribute('data-expand', '')
+  expand.setAttribute('aria-pressed', String(expanded))
+  const add = el('button', { class: 'add-node', 'data-add-node': '', 'aria-label': S.addNodeAria, onclick: () => addPersonSheet(Ring.Acquaintance) }, ['+'])
+  return zoneSidebar({ s: st(), people: s.people, tags: loadColourTags(), onChange: live, expand, add })
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
