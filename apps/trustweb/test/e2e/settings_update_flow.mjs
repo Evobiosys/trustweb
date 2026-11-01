@@ -68,8 +68,9 @@ async function main() {
     // 1 backup card in Settings, Inventory off
     await page.reload()
     await page.locator('.hdr [aria-label="Settings"]').click()
-    await page.locator('.sheet.on [data-settings-section="features"] > summary').click()
+    await page.locator('.sheet.on [data-settings-group="inventory"] > summary').click()
     await page.locator('.sheet.on [data-feature-inventory]').click()
+    await page.locator('.sheet.on [data-settings-group="general"] > summary').click()
     await page.locator('.sheet.on [data-settings-section="devices"] > summary').click()
     const card = page.locator('.sheet.on [data-settings-section="devices"] [data-backup-slot="settings"]')
     t.ok('1: the backup card is in Devices and backups (Inventory off)', !!(await until(async () => (await card.locator('.backup').count()) ? true : null)))
