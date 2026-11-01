@@ -73,7 +73,7 @@ async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 
@@ -113,7 +113,7 @@ async function pair(browser, tag, lines, { loadHidden = false } = {}) {
   // Her laptop tab, reloaded with those lines, then behind another window (or loaded while already behind one).
   if (loadHidden) await a.page.evaluate(() => sessionStorage.setItem('__twHidden', '1'))
   await a.page.reload()
-  await a.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await a.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await a.page.evaluate(() => window.__twFront(false))
   return { a, b, tag }
 }
@@ -197,7 +197,7 @@ async function partD(browser) {
   const kept = await until(async () => ((await record(b.page)).lateAnswers ?? []).length > 0, 15_000)
   t.ok('d: kept for his next open', !!kept)
   await b.page.reload()
-  await b.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await b.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const late = await until(async () => { const x = await bodyText(b.page); return /Ada Late answered later/.test(x) && /Cargo bike/.test(x) }, 10_000)
   t.ok('d: on his next open: "Ada Late answered later" with her line', !!late, (await bodyText(b.page)).slice(0, 400))
   await shot(b.page, 'q6h_d_late_answer.png')
@@ -209,7 +209,7 @@ async function partE(browser) {
   await ask(b.page, 'projector')
   t.ok('e: the prompt arrived', !!(await until(() => promptShown(a.page), 20_000)))
   await a.page.reload()
-  await a.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await a.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const again = await until(() => promptShown(a.page), 8000)
   t.ok('e: after a reload the ask is still there to answer', !!again && /Projector/.test(await promptText(a.page)))
   await a.ctx.close(); await b.ctx.close()
@@ -260,7 +260,7 @@ async function partI(browser) {
   await a.page.waitForTimeout(5000) // the relay keeps it for Bo
   const page = await newTab(b.ctx)
   await page.goto(ORIGIN + '/')
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const late = await until(async () => { const x = await bodyText(page); return /Ada Closed answered later/.test(x) && /Bread maker/.test(x) }, 20_000)
   t.ok('i: on his very next open: "Ada Closed answered later" with her line', !!late, (await bodyText(page)).slice(0, 400))
   await shot(page, 'q6h_i_late_answer_after_close.png')

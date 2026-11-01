@@ -46,7 +46,7 @@ async function startHolder(page) {
   const phone = device(page, 1)
   await phone.getByLabel('Your first name').fill('Jakob')
   await phone.getByRole('button', { name: 'Start on this phone' }).click()
-  await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await phone.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const gotIt = phone.getByRole('button', { name: 'Got it' })
   if (await gotIt.isVisible().catch(() => false)) await gotIt.click()
   await phone.locator('.rings-wrap').click({ position: { x: 176 + 152, y: 176 } })
@@ -69,7 +69,7 @@ async function partComeBack(browser, base) {
   await startHolder(page)
   await page.locator('.dock .add').click()
   await device(page, 2).getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
-  await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await device(page, 2).getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   ok('first visit: two devices, the second one started', await page.locator('iframe').count() === 2)
   // Settled: both phones hold each other as a peer (the pairing went over the relay).
   for (let i = 0; i < 100; i++) {
@@ -83,11 +83,11 @@ async function partComeBack(browser, base) {
   await page.goto('about:blank')
   await page.goto(base + 'demo/')
   const phone = device(page, 1)
-  await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await phone.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   ok('second visit: the first phone opens on Jakob\'s web, not the start screen', await phone.locator('.node', { hasText: 'Max' }).count() === 1)
   await phone.locator('nav.tabs button', { hasText: 'Resources' }).click()
   ok('second visit: the thing he noted is still there', await phone.locator('.inv-text', { hasText: 'Ladder, 3 m, to lend' }).count() === 1)
-  await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await device(page, 2).getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   ok('second visit: both devices are open again, the second one as it was', await page.locator('iframe').count() === 2)
   // The second phone is reopened on the first one's connect link: that must not pair them again or add anyone twice.
   await page.waitForTimeout(4_000)
@@ -111,7 +111,7 @@ async function partComeBack(browser, base) {
       && (await fdLink.getAttribute('target')) === '_blank' && /noopener/.test(await fdLink.getAttribute('rel')) && (await fdLink.getAttribute('referrerpolicy')) === 'no-referrer')
   await shot(page, 'w3-06-front-door-line')
   await page.locator('[data-d2l="clean"]').click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const live = await page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')))
   ok('the personal account has Jakob, Max and the ladder: carried over, not retyped', live?.me?.displayName === 'Jakob'
     && live.people.some((p) => p.name === 'Max') && live.inventory.some((i) => i.text === 'Ladder, 3 m, to lend'), JSON.stringify({ people: live?.people?.map((p) => p.name), inv: live?.inventory?.map((i) => i.text) }))
@@ -119,7 +119,7 @@ async function partComeBack(browser, base) {
 
   // Start over forgets the demo: one device, the start screen.
   await page.goto(base + 'demo/')
-  await device(page, 1).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await device(page, 1).getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.locator('.restart').click()
   await page.waitForLoadState('load')
   await device(page, 1).getByLabel('Your first name').waitFor({ timeout: 15_000 })
@@ -137,7 +137,7 @@ async function partSwitchAndSecondDegree(browser, base) {
   await startHolder(page)
   await page.locator('.dock .add').click()
   await device(page, 2).getByRole('button', { name: 'Connect', exact: true }).click({ timeout: 30_000 })
-  await device(page, 2).getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await device(page, 2).getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   const sw = page.locator('[data-switch-device]')
   ok('two devices on a phone: the switch shows, top right next to Install, and names the other device', await sw.isVisible() && (await sw.innerText()).trim() === 'Switch to device 1')
   const top = async (n) => Math.round((await page.locator(`iframe[title="Device ${n}"]`).boundingBox()).y)

@@ -178,7 +178,7 @@ async function run(browser) {
   ok('4: the late yes reached B\'s phone', !!held)
   ok('4: nothing shows live on B', !/answered later/.test(await bodyText(b.page)))
   await b.page.reload()
-  await b.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await b.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   const late = await until(async () => { const x = await bodyText(b.page); return x.includes(`${NAME('A')} answered later`) && x.includes(LINE) }, 15_000)
   ok('4: on his next open B sees "<A> answered later" with her line', !!late)
   await shot(b.page, '4_b_answered_later')

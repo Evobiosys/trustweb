@@ -54,7 +54,7 @@ async function connect(host, joiner, joinerName, fresh) {
   await acceptAdd(joiner)
   await until(async () => (await record(host)).peers.length === before + 1)
   await host.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await joiner.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await joiner.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ async function w1(jakob) {
   // a personal phone that SHOWS demo content stays on (its demo-account askers are scoped to the demo content anyway)
   await patch(jakob, 's.demo = { people: [], inventory: [] }', {})
   await jakob.reload()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await tab(jakob, 'Resources')
   await jakob.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await jakob.getByRole('button', { name: 'Settings' }).click()
@@ -121,7 +121,7 @@ async function w2(jakob) {
       lines: [{ text: 'Talked about the cello recital', tag: 'note', audience: 'friends' }], transcript: [] }]
   `, { now, day: DAY })
   await jakob.reload()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await tab(jakob, 'Web')
   await jakob.locator('.node', { hasText: 'Anna Berger' }).first().click()
   const sec = jakob.locator('.sheet.on [data-person-notes]')
@@ -153,7 +153,7 @@ async function w3(jakob, anna) {
               { text: 'Private sauna thoughts about a friend', tag: 'note', audience: 'me' }], transcript: [] })
   `, { now: Date.now(), day: DAY })
   await jakob.reload()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await connect(jakob, anna, 'Anna', true)
   await tab(anna, 'Web')
   await anna.getByRole('button', { name: 'Ask your web', exact: true }).click()
@@ -179,7 +179,7 @@ async function w3(jakob, anna) {
   await jakob.getByRole('heading', { name: /Notes about Anna/ }).waitFor({ timeout: 10_000 })
   await jakob.getByRole('button', { name: 'Looks right' }).click()
   await jakob.getByRole('button', { name: 'Save to my web' }).click()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 10_000 })
   const typed = (await record(jakob)).meetings.find((m) => (m.lines ?? []).some((l) => /Pickleball court at the lake/.test(l.text)))
   ok('W3 a Review save stores each meeting line WITH its audience (the typed General note: Only me)', typed?.lines.find((l) => /Pickleball/.test(l.text))?.audience === 'me', JSON.stringify(typed?.lines))
   await tab(anna, 'Web')
@@ -192,7 +192,7 @@ async function w3(jakob, anna) {
   // the setting off: nothing reaches him
   await patch(jakob, 's.asksMatchNotes = false', {})
   await jakob.reload()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await anna.getByRole('button', { name: /Ask your web again|Close/ }).first().click().catch(() => {})
   await anna.getByRole('button', { name: 'Ask your web', exact: true }).click().catch(() => {})
   await anna.locator('.query-dock textarea').fill('Is there a sauna raft anywhere?')
@@ -257,7 +257,7 @@ async function w4(jakob, browser) {
   const g = (await record(gina)).testOf
   ok('W4 the guest\'s record: kept, no end, no pending ask', g.kept === true && g.expiresAt === undefined && g.keepAsked === undefined, JSON.stringify(g))
   await gina.reload()
-  await gina.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await gina.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await tab(gina, 'Resources')
   await gina.evaluate(() => localStorage.setItem('trustweb.ui.settings.advanced', '1')) // Settings > Advanced is folded by default
   await gina.getByRole('button', { name: 'Settings' }).click()
@@ -292,7 +292,7 @@ async function w4(jakob, browser) {
   // the owner's sweep never takes a kept account down: age Gina-demo's createdAt far back, reload
   await patch(jakob, `s.testAccounts.find((t) => t.name === 'Gina-demo').createdAt = a.old`, { old: Date.now() - 400 * DAY })
   await jakob.reload()
-  await jakob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await jakob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   ok('W4 a kept account survives the owner\'s sweep however old', (await record(jakob)).testAccounts.some((t) => t.name === 'Gina-demo'))
 }
 

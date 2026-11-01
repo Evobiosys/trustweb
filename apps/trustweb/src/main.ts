@@ -21,7 +21,7 @@
 import { createViaCard } from './via_card'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, PERSON_GREEN, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
 import { askPeers, isBlocked, isNonResponsive } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { DESIRE_DEFAULT, FAMILY_FIELD, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
@@ -192,10 +192,12 @@ import type { LentRings } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
 import { shortLabel } from './short_label'
-import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, slotAngle, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pickFive, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { membraneAll, pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { communityOf, filledRings, inZones, isArchived, moveKinds, toggleRing, toneVar, zoneFor } from './trustzones'
+import { legendInfo, outlinerToggle, zonePanel, zzzStrip } from './trustzones_view'
 import { onHoverOrLongPress, singleOrDouble } from './press'
-import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
+import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, dueMoves, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
 import { EXT_MODULES, type ExtHooks } from './ext/registry'
@@ -783,7 +785,7 @@ function checkEngagement(): void {
   if (!state || solo || state.testOf) return
   const now = Date.now()
   if (state.engagementSince === undefined) { ensureBaseline(state, now); save() }
-  if (releaseTies(state, now).length) { save(); render() }
+  // Wave 28 (Jakob 2026-11-01): nothing moves by itself any more; a quiet tie gets a zzz marker on the TrustZones and moves on a tap (zzzAccept).
   if (!noticeDue(state, new Date(now))) return
   const soon = expiringSoon(state, now)
   const { names, more } = soonNames(soon)
@@ -2022,19 +2024,23 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
   const C = 176
   const counts = {} as Record<Ring, number>
   const everyone: Partial<Record<Ring, Person[]>> = {}
-  for (const p of s.people) if (!isBlocked(p)) (everyone[webSlot(p)] ??= []).push(p)
+  // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
+  const community = communityOf(s)
+  for (const p of desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : inZones(s.people, s)) (everyone[zoneFor(p, community)] ??= []).push(p)
   // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
   const complete = opts.complete === true || desk !== undefined
   const members: Partial<Record<Ring, Person[]>> = {}
   const rest: Partial<Record<Ring, Person[]>> = {}
-  const slotted = new Map<string, number>()
+  const filled = filledRings(s)
   for (const [r, ps] of Object.entries(everyone) as [Ring, Person[]][]) {
     if (complete) { members[r] = ps; continue }
-    const f = pickFive(withTag(ps, tagFilter), s, limitOf(s), Date.now())
+    // Wave 28: a filled ring (the + became a triangle) draws everyone; the others the closest five, the rest behind the list button.
+    const f = pickFive(withTag(ps, tagFilter), s, filled.includes(r) ? Infinity : limitOf(s), Date.now())
     members[r] = f.shown; rest[r] = f.rest
-    f.shown.forEach((p, i) => slotted.set(p.id, slotAngle(i, f.shown.length, WEB_RINGS.indexOf(r))))
   }
-  const angleOfP = (p: Person): number => slotted.get(p.id) ?? angleOf(p)
+  // Wave 28: a dot keeps its angle (dropped, else fixed from its id): slotAngle (membranes_five.ts, kept) no longer moves dots between renders, a ring change only moves them radially.
+  const angleOfP = (p: Person): number => angleOf(p)
+  const quiet = new Map(desk ? [] : dueMoves(s, Date.now()).map((m) => [m.person.id, m.to] as const))
   for (const r of Object.keys(members) as Ring[]) counts[r] = members[r]!.length
   // The layout keeps every person's place; a hidden ring's people are only not drawn (and so not hit-testable).
   const hidden = loadHiddenRings()
@@ -2099,7 +2105,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       const mark = (p.peerId ? marks.get(p.peerId) : undefined) ?? (p.doorPeerId ? marks.get(p.doorPeerId) : undefined)
       const arcs = arcsGradient(tagColours(p, colourTags))
       const face = avatar(p.name, p.id)
-      face.style.background = ring === Ring.Unsorted ? ringColor({ ring }) : p.reachedOut && ring === Ring.Intending ? ringColor(p) : PERSON_GREEN
+      face.style.background = p.reachedOut && ring === Ring.Intending ? ringColor(p) : toneVar(ring)
       if (p.reachedOut && ring === Ring.Intending) face.style.color = REACH_OUT_INK
       if (!isConnected(p)) { // outline only until connected on TrustWeb: dashed stroke in the fill colour, ink text
         face.classList.add('unconnected'); face.style.borderColor = face.style.background; face.style.background = ''; face.style.color = ''
@@ -2107,7 +2113,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       pictured(face, p.theirProfile?.picture)
       const press = singleOrDouble(() => openWebPage({ kind: 'card', id: p.id }), () => { openWebPage({ kind: 'card', id: p.id }); toggleCardExpanded() })
       const b = el('button', {
-        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : ''), 'data-pid': p.id,
+        class: 'node' + (mark ? ' ' + mark : '') + (arcs ? ' tagged' : '') + (isNonResponsive(p) ? ' nonresp' : '') + (p.pinned === true ? ' pinned' : ''), 'data-pid': p.id, 'data-tone': String(WEB_RINGS.indexOf(ring)),
         onclick: () => { if (!dragged) (desk ? desk.onPick(p.id) : press()) },
       }, [
         face,
@@ -2122,6 +2128,13 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
       b.style.setProperty('--d', dot * k + 'px')
       if (dot * k < 11) b.classList.add('nl')
       wrap.appendChild(b)
+      const to = quiet.get(p.id)
+      if (to) { // Wave 28: a note, never a move: tap accepts this one move
+        const z = el('button', { class: 'zzz', 'data-zzz': p.id, 'aria-label': S.zoneZzzAria(p.name, S.ringLabel[to]), title: S.zoneZzzTitle(S.ringLabel[to]),
+          onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); zzzAccept([p.id]) } }, ['zzz'])
+        z.style.left = x + (dot * k) / 2 + 'px'; z.style.top = y - (dot * k) / 2 + 'px'
+        wrap.appendChild(z)
+      }
     })
   }
   const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), ownPictureUrl), el('span', {}, [shortLabel(s.me.displayName)])])
@@ -2151,7 +2164,7 @@ function ringsView(s: AppState, marks: Map<string, 'asked' | 'shared'> = new Map
     const diamond = ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
     wrap.appendChild(diamond)
     if (!desk) onHoverOrLongPress(diamond, () => showAll(r, at.top), hideAll)
-    if (!hidden.has(r) && rest[r]?.length) wrap.appendChild(ringMore(r, rest[r]!.length, at.top, at.left))
+    if (!hidden.has(r) && !complete && (rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)) ringMore(r, filled.includes(r), at.top, at.left, (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
   })
   wrap.addEventListener('pointerdown', hideAll)
   // Last in the DOM, so above every dot.
@@ -2195,14 +2208,21 @@ function toggleCardExpanded(): void {
   render()
 }
 
-/** The "+" beside a folded-out membrane's diamond: the people beyond its five, as a page. */
-function ringMore(ring: Ring, n: number, top: number, left: number): HTMLElement {
-  return el('button', {
-    class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${ringColor({ ring })}; left:${left + 16}px; top:${top}px`,
-    'aria-label': S.membraneMoreAria(S.ringLabel[ring]), title: S.membraneRest(S.ringLabel[ring], n),
+/** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
+function ringMore(ring: Ring, filled: boolean, top: number, left: number, onFill: (btn: HTMLElement) => void): HTMLElement[] {
+  const fill = outlinerToggle(filled, S.zoneFillAria(S.ringLabel[ring], filled), onFill, { class: 'ring-more', 'data-membrane-more': ring, style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, title: S.zoneTapToAdd[ring] })
+  const list = el('button', {
+    class: 'ring-more ring-list', 'data-membrane-list': ring, style: `--rc:${toneVar(ring)}; left:${left + 34}px; top:${top}px`,
+    'aria-label': S.zoneListAria(S.ringLabel[ring]), title: S.zoneListAria(S.ringLabel[ring]),
     onpointerdown: (e: Event) => { e.stopPropagation() },
     onclick: (e: Event) => { e.stopPropagation(); openWebPage({ kind: 'more', ring }) },
-  }, ['+'])
+  }, ['☰'])
+  return filled ? [fill, list] : [fill]
+}
+
+/** Wave 28: the zzz tap(s): these people move one ring outward (their suggestion), nobody else. */
+function zzzAccept(ids: readonly string[]): void {
+  if (releaseTies(st(), Date.now(), new Set(ids)).length) { save(); render() }
 }
 
 function curatorPageTitle(variant?: UiView): string {
@@ -2215,7 +2235,7 @@ function webPageScreen(page: WebPage): Node[] {
   const back = (): void => history.back()
   if (page.kind === 'curator') return [header(curatorPageTitle(page.variant), { back }), el('div', { class: 'scroll curator-page' }, [curator.el])]
   if (page.kind === 'more') {
-    const people = s.people.filter((p) => !isBlocked(p) && webSlot(p) === page.ring)
+    const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
     return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
@@ -2845,9 +2865,20 @@ function screenWeb(): Node[] {
     header(S.webTitle, { right, after: iconButton('settings', S.invSettings, settingsSheet) }),
     webViewRow(view, expanded),
     ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
-    clip,
+    view === 'rings' ? el('div', { class: 'zones-split' }, [clip, zoneColumn(s)]) : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
+}
+
+/** Wave 28 (trustzones_view.ts): beside the rings (desktop: left; phone: below) the filter, the pinned people and one folding list per zone, the zzz "move all" lines and the legend under (i). */
+function zoneColumn(s: AppState): HTMLElement {
+  const live = (): void => { save(); render() }
+  const panel = zonePanel({
+    s: st(), people: inZones(s.people, st()), tags: loadColourTags(), nameOf: (p) => displayName(p.name).text, onOpen: openCardPage,
+    onRename: (p, next) => { const mine = st().people.find((x) => x.id === p.id); if (mine) mine.name = next; live() }, onChange: live,
+  })
+  const quiet = moveKinds(dueMoves(st(), Date.now()))
+  return el('div', { class: 'zone-column' }, [legendInfo(), zzzStrip(quiet, zzzAccept), panel])
 }
 
 /** Under the web, only while someone waits: who reached out through my link, each with Add and Dismiss. */
