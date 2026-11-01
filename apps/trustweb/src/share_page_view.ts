@@ -10,6 +10,7 @@ import { AGENT_SHARE_CEILING } from './share_sink/ceiling'
 import { isZone } from './share_sink/zones'
 import type { AppState } from './model'
 import { DEFAULT_ZONE, ZONE_CHOICES, candidates, initial, previewOf, seenBy, shareItem, suggest, withChip, withoutChip, type Basis, type ChipRow, type PageState } from './share_page'
+import { seeInActionFoot } from './page_foot'
 import { S } from './strings'
 
 export interface SharePageHooks {
@@ -66,6 +67,7 @@ export function sharePageBody(h: SharePageHooks, itemId: string): HTMLElement {
         class: 'btn btn-electric', 'data-share-go': '1',
         onclick: () => { const s = h.state(); s.shares = shareItem(basisOf(s), itemId, page, new Date()); h.save(); h.toast(S.shareDone); h.close() },
       }, [S.shareGoBtn]),
+      seeInActionFoot(),
     )
     if (focus) (root.querySelector(`[data-share-input="${focus}"]`) as HTMLInputElement | null)?.focus()
   }

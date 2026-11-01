@@ -242,12 +242,31 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     devicesSheet()
   }
 
+  /** The lock explains itself in one line under the name: on hover (mouse) and on tap (toggles, also for keyboard); no overlay. */
+  function lockGlyph(name: string): HTMLElement {
+    let pinned = false
+    const show = (e: Event, on: boolean): void => {
+      const w = (e.currentTarget as HTMLElement).parentElement?.querySelector<HTMLElement>('[data-un-lock-why]')
+      if (w) w.hidden = !on
+    }
+    const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
+    return el('button', {
+      class: 'btn-ghost', type: 'button', 'data-un-lock': name, 'aria-label': S.unLockedWhy, 'aria-expanded': 'false',
+      onpointerenter: (e) => { if (mouse(e)) show(e, true) },
+      onpointerleave: (e) => { if (mouse(e) && !pinned) show(e, false) },
+      onclick: (e) => { pinned = !pinned; (e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(pinned)); show(e, pinned) },
+    }, ['🔒'])
+  }
+
+  const lockWhy = (name: string): HTMLElement => el('p', { class: 'meta', 'data-un-lock-why': name, hidden: true }, [S.unLockedWhy])
+
   function nameRow(r: ConnectRecord, name: string, primary: boolean, main: boolean): HTMLElement {
     const locked = namesOf(r).locked.includes(name)
     return el('div', { class: 'verse', 'data-un-name': name }, [
       el('b', {}, [`@${name}`]),
-      locked ? el('button', { class: 'btn-ghost', 'data-un-lock': name, title: S.unLockedWhy, 'aria-label': S.unLockedWhy, onclick: () => h.toast(S.unLockedWhy) }, ['🔒']) : null,
+      locked ? lockGlyph(name) : null,
       primary ? el('span', { class: 'meta', 'data-un-primary-hint': name }, [S.unPrimaryHint]) : null,
+      locked ? lockWhy(name) : null,
       el('p', { class: 'meta' }, [S.unOnDevice(deviceOf(r))]),
       !main ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-move': name, onclick: () => void act((d) => moveHere(d, name, r)) }, [S.unMoveHere(name)]) : null,
       !primary ? el('button', { class: 'btn btn-ghost btn-sm', 'data-un-primary': name, onclick: () => void act((d) => makePrimary(d, name, main ? null : r)) }, [S.unMakePrimary(name)]) : null,
