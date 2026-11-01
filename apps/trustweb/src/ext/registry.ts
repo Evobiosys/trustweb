@@ -73,6 +73,10 @@ export interface MessengerSource {
   setup?: () => void
   /** The module's own extended view in place of the thread list (Geb's own UI). */
   view?: () => Node[]
+  /** Wave 28: more under the thread list when this source is shown alone (Matrix account). */
+  extra?: () => Node[]
+  /** Wave 28: is the app in this browser? (Geb: bridge answers, or its page marker.) live = reachable, installed = found but not paired, absent. */
+  probe?: () => Promise<'live' | 'installed' | 'absent'>
 }
 
 export interface ExtModule {

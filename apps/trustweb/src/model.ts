@@ -957,6 +957,8 @@ export interface AppState {
   notificationsOn: boolean
   /** Wave 25: Chat "Do Not Disturb" (the moon on the Chat tab): conversations, unread badges and chat notifications are hidden. Absent: false. */
   chatsHidden?: boolean
+  /** Wave 28: when Do Not Disturb was switched on; the Chat tab keeps showing the state of that moment, nothing newer. Absent: now (nothing hidden yet). */
+  chatsHiddenAt?: number
   /** Wave 11 (notify_kinds.ts): which kinds notify while notificationsOn; absent: all three. */
   notifyKinds?: NotifyKinds
   /** Wave 24b (engagement.ts): days without contact before a Close / Friend tie moves one ring outward. Absent or 0 = off (wave 25); the Settings switch stores 30. Local; rides the device sync. */
