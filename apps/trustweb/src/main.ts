@@ -198,8 +198,9 @@ import { onHoverOrLongPress, singleOrDouble } from './press'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, releaseTies, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
 import { createEventsView } from './events_view'
-import { EXT_MODULES, type ExtHooks } from './ext/registry'
-import { extendedChat } from './messenger_host_view'
+import { EXT_MODULES, type ExtHooks, type ThreadSummary } from './ext/registry'
+import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
+import { chatView } from './messenger_combined_view'
 import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
 import { contextPress } from './context_press'
 import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
@@ -1124,7 +1125,7 @@ function mountSettingsGear(): void {
   if (!right) return
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
-  right.append(gear)
+  right.insertBefore(gear, right.querySelector('[data-chat-dots]'))
 }
 
 function iconButton(name: string, label: string, onclick: () => void, extra = ''): HTMLElement {
@@ -2714,10 +2715,9 @@ function messengerChips(p: ChatListPerson): HTMLElement {
 
 function chatListBody(): Node[] {
   const s = st()
-  if (s.chatsHidden) return [el('p', { class: 'empty', 'data-chats-hidden': '' }, [S.chatDndHint])]
   const now = Date.now()
   const people = chatPeople()
-  const rows = chatListRows(s.chats, people, { query: chatQuery })
+  const rows = chatListRows(s.chats, people, { query: chatQuery, since: dndSince() })
   const find = chatFindRows(s.chats, people, chatQuery)
   return [
     ...(rows.length ? rows.map((r) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-chat-row': r.personId, onclick: () => chatSheet(r.personId) }, [
@@ -2746,42 +2746,35 @@ function reminderRows(): Node[] {
   ]))
 }
 
-/** Wave 24: every chat, newest first; a tap opens the chat sheet. */
+/** Wave 28: Do Not Disturb keeps the state of the moment it was switched on (nothing newer shows); 0 for a record from before that field. */
+const dndSince = (): number | undefined => (st().chatsHidden ? st().chatsHiddenAt ?? 0 : undefined)
+
+/** Wave 28: TrustWeb's own chats as the combined view's thread rows. */
+function trustwebThreads(): ThreadSummary[] {
+  return chatListRows(st().chats, chatPeople(), { since: dndSince() }).map((r) => ({ id: r.personId, title: r.name, lastAt: r.at, unread: r.unread }))
+}
+
+/** Wave 24: every chat, newest first; a tap opens the chat sheet. Wave 28: the pill and the three dots choose which messengers join the list. */
 function screenChat(): Node[] {
   const s = st()
+  const view = chatView({ sources: messengers, trustweb: trustwebThreads, openTrustweb: chatSheet, dndSince, redraw: () => go(Screen.Chat) })
   const body = el('div', { class: 'chat-body' }, chatListBody())
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
   search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
-  const dnd = iconButton('moon', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
+  const dnd = iconButton('dnd', S.chatDnd, () => { s.chatsHidden = !s.chatsHidden; if (s.chatsHidden) s.chatsHiddenAt = Date.now(); else delete s.chatsHiddenAt; save(); render() }, 'chat-dnd' + (s.chatsHidden ? ' on' : ''))
   dnd.setAttribute('data-dnd', '')
   dnd.setAttribute('aria-pressed', String(!!s.chatsHidden))
-  const extended = chatExtended()
-  // Same control as the Web view's expand glyph: the extended messenger opens in place, the simple chat stays the default.
-  const extend = iconButton(extended ? 'collapse' : 'expand', extended ? S.chatSimple : S.chatExtend, () => toggleChatExtended(extended), 'chat-extend' + (extended ? ' on' : ''))
-  extend.setAttribute('data-chat-extend', '')
-  extend.setAttribute('aria-pressed', String(extended))
   return [
-    header(S.chatListTitle, { qr: false, right: el('span', { class: 'hdr-pair' }, [extend, dnd]) }),
+    header(S.chatListTitle, { glyph: view.pill, right: dnd, after: view.dots }),
     el('div', { class: 'scroll ppl' }, [
-      extended ? extendedChat(messengers) : null,
-      s.chatsHidden || extended ? null : search,
-      extended ? null : el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]),
-      extended ? null : body,
+      s.chatsHidden ? el('p', { class: 'meta', 'data-chats-hidden': '' }, [S.chatDndHint]) : null,
+      view.body,
+      view.simple ? search : null,
+      view.simple ? el('button', { class: 'btn btn-electric btn-sm', 'data-chat-new': '', onclick: chatNewSheet }, [S.chatNew]) : null,
+      view.simple ? body : null,
     ]),
     queryFab(),
   ]
-}
-
-const CHAT_EXTEND_KEY = 'trustweb.ui.chatExtend'
-
-/** Wave 27: Extend is remembered on this device, like the Web view's expand. Absent: the simple chat. */
-function chatExtended(): boolean {
-  try { return window.localStorage.getItem(CHAT_EXTEND_KEY) === '1' } catch { return false }
-}
-
-function toggleChatExtended(extended: boolean): void {
-  try { window.localStorage.setItem(CHAT_EXTEND_KEY, extended ? '0' : '1') } catch { /* not remembered */ }
-  go(Screen.Chat)
 }
 
 /** Chat > New message: a search bar, the people who can be chatted with; a typed name that is not connected says to connect first. */
@@ -3254,7 +3247,10 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
-    if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
+    const app = svc.url ? appLinkFor(svc.url) : null
+    if (svc.url && app) openLocalFirst(app, svc.url, browserOpenEnv())
+    else if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer')
+    else chatSheet(p.id)
   }
   let b: HTMLElement
   if (services.length) {

@@ -4,6 +4,7 @@ import { ICONS } from '../../icons'
 import { S } from '../../strings'
 import type { ExtHooks, ExtModule, MessengerSource } from '../registry'
 import { consumePairing } from './companion'
+import { browserOpenEnv, openLocalFirst } from '../../messenger_links'
 import { deepLink, threadsOf } from './proposals'
 import { openSetup } from './setup_view'
 
@@ -18,9 +19,7 @@ function signalMessenger(h: ExtHooks): MessengerSource {
     threads: () => threadsOf(h.state().signalImport, h.state().people),
     open: (e164) => {
       const { href, fallback } = deepLink(e164)
-      location.assign(href)
-      // sgnl:// does nothing without the app; if this page is still in front a moment later, use the https link.
-      setTimeout(() => { if (document.visibilityState === 'visible') window.open(fallback, '_blank', 'noopener') }, 1500)
+      openLocalFirst(href, fallback, browserOpenEnv())
     },
     setup: () => openSetup(h),
   }

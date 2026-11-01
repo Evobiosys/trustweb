@@ -69,3 +69,11 @@ describe('chat_list search, hidden, find, symbols', () => {
     expect(messengerSymbols({ id: 'f', name: 'Fay' })).toEqual([])
   })
 })
+
+describe('wave 28 Do Not Disturb keeps the last state', () => {
+  it('shows threads as of the moment it was switched on, no newer message, no unread', () => {
+    const book = { pa: { messages: [msg('hi', 10), msg('new', 90)], unread: 2 }, pb: { messages: [msg('later', 80)], unread: 1 } }
+    const rows = chatListRows(book, people, { since: 50 })
+    expect(rows.map((r) => [r.personId, r.last, r.unread])).toEqual([['a', 'hi', 0]])
+  })
+})

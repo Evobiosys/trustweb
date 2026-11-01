@@ -2,11 +2,11 @@
 /** Matrix module (wave 27, msg-matrix): the messenger source, the one setup page and the read-only room page. DOM + localStorage. */
 import { el } from '../../../../demo/src/ui/dom'
 import { ICONS } from '../../icons'
-import { activateKey } from '../../key_press'
-import { ageLabel } from '../../model'
+import { browserOpenEnv, openLocalFirst } from '../../messenger_links'
+import { setSourceOff } from '../../messenger_combined_view'
 import { S } from '../../strings'
 import type { ExtHooks, MessengerSource, ThreadSummary } from '../registry'
-import { DEFAULT_HOMESERVER, ELEMENT_LINK, loginTokenFrom, normalizeHomeserver, parseMessages, parseSession, parseSync, pickLogin, ssoRedirectUrl, type MatrixSession } from './matrix'
+import { DEFAULT_HOMESERVER, ELEMENT_LINK, elementXUri, loginTokenFrom, normalizeHomeserver, parseMessages, parseSession, parseSync, pickLogin, ssoRedirectUrl, type MatrixSession } from './matrix'
 import { createClient } from './matrix_io'
 
 const SESSION_KEY = 'trustweb.matrix.session'
@@ -28,6 +28,12 @@ function info(text: string, label: string): Node[] {
   return [btn, hint]
 }
 
+/** The code Element X takes (a matrix: address), readable and one tap to copy, for when the button cannot open the app. */
+function codeField(target: string, toast: (m: string) => void): HTMLElement {
+  const box = el('input', { class: 'field', readonly: '', value: elementXUri(target), 'aria-label': T.code, 'data-matrix-code': '' }) as HTMLInputElement
+  return el('div', { class: 'row' }, [box, el('button', { class: 'btn btn-ghost btn-sm', 'data-matrix-copy': '', onclick: () => { void navigator.clipboard?.writeText(box.value).then(() => toast(T.copied), () => { box.select(); toast(box.value) }) } }, [T.copy])])
+}
+
 export function matrixMessenger(h: ExtHooks): MessengerSource {
   let cache: ThreadSummary[] = []
 
@@ -46,7 +52,9 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
     const title = cache.find((t) => t.id === id)?.title ?? T.roomTitle
     h.page(title, [
       el('div', { class: 'scroll' }, [
-        el('p', { class: 'meta' }, [el('a', { href: ELEMENT_LINK(id), target: '_blank', rel: 'noopener', 'data-matrix-open-element': '' }, [T.openElement]), ...info(T.roomHint, T.roomInfo)]),
+        el('p', { class: 'meta' }, [el('a', { href: ELEMENT_LINK(id), target: '_blank', rel: 'noopener', 'data-matrix-open-element': '', onclick: (e: Event) => { e.preventDefault(); openElementX(id) } }, [T.openElement]), ...info(T.roomHint, T.roomInfo)]),
+        el('p', { class: 'meta' }, [T.code, ...info(T.codeHint, T.code)]),
+        codeField(id, h.toast),
         list,
       ]),
     ], 'matrix-room')
@@ -57,6 +65,8 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
       ])) : [el('p', { class: 'empty' }, [T.noText])]))
     }, () => list.replaceChildren(el('p', { class: 'empty' }, [S.msgUnreachable(T.label)])))
   }
+
+  const openElementX = (id: string): void => openLocalFirst(elementXUri(id), ELEMENT_LINK(id), browserOpenEnv())
 
   const setup = (): void => {
     const hsField = el('input', { class: 'field', value: DEFAULT_HOMESERVER, 'aria-label': T.server, autocomplete: 'off', inputmode: 'url', 'data-matrix-server': '' }) as HTMLInputElement
@@ -110,7 +120,7 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
   const open = (id: string): void => {
     const s = loadSession()
     if (s && localStorage.getItem(READ_HERE_KEY) === '1') readRoom(s, id)
-    else window.open(ELEMENT_LINK(id), '_blank', 'noopener')
+    else openElementX(id)
   }
 
   return {
@@ -126,27 +136,19 @@ export function matrixMessenger(h: ExtHooks): MessengerSource {
     },
     open,
     setup,
-    view: () => {
+    extra: () => {
       const s = loadSession()
-      const list = el('div', { class: 'ppl' }, [el('p', { class: 'meta' }, [S.msgLoading])])
-      void Promise.resolve(s ? client.sync(s) : null).then((sync) => {
-        cache = sync ? parseSync(sync, h.state().people) : []
-        list.replaceChildren(...(cache.length ? cache.map((t) => el('div', { class: 'prow chat-row', role: 'button', tabindex: '0', 'data-msg-thread': t.id, onclick: () => open(t.id), onkeydown: activateKey(() => open(t.id)) }, [
-          el('div', { class: 'who' }, [el('b', {}, [t.title])]),
-          t.lastAt ? el('span', { class: 'when' }, [ageLabel(t.lastAt, Date.now())]) : null,
-          t.unread > 0 ? el('span', { class: 'dot', role: 'img', 'aria-label': S.chatTabUnread(t.unread) }) : null,
-        ])) : [el('p', { class: 'empty' }, [S.msgNoThreads])]))
-      }, () => list.replaceChildren(el('p', { class: 'empty' }, [S.msgUnreachable(T.label)])))
       const readHere = el('input', { type: 'checkbox', 'data-matrix-read-here': '' }) as HTMLInputElement
       readHere.checked = localStorage.getItem(READ_HERE_KEY) === '1'
       readHere.addEventListener('change', () => { if (readHere.checked) localStorage.setItem(READ_HERE_KEY, '1'); else localStorage.removeItem(READ_HERE_KEY) })
       return [
-        list,
         el('details', { class: 'meta', 'data-matrix-account': '' }, [
           el('summary', {}, [T.account]),
           el('p', {}, [T.signedIn(s?.userId ?? '')]),
           el('label', {}, [readHere, ' ' + T.readHere]),
           el('p', {}, [T.roomHint]),
+          s?.userId ? codeField('@' + s.userId.replace(/^@/, ''), h.toast) : null,
+          el('button', { class: 'btn btn-ghost btn-sm', 'data-matrix-off': '', onclick: () => { setSourceOff('matrix', true); h.redraw() } }, [T.switchOff]),
           el('button', { class: 'btn btn-ghost btn-sm', 'data-matrix-logout': '', onclick: () => {
             const cur = loadSession()
             localStorage.removeItem(SESSION_KEY)

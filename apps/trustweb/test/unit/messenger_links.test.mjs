@@ -51,3 +51,41 @@ describe('messenger links', () => {
     expect(shortcutSpec({ ...p, name: 'A'.repeat(60) }, chatTarget(p, 'matrix'))?.label).toHaveLength(40)
   })
 })
+
+import { openLocalFirst } from '../../src/messenger_links.ts'
+import { elementXUri } from '../../src/ext/matrix/matrix.ts'
+
+describe('wave 28: deep links open the local app first', () => {
+  const env = (visible) => {
+    const calls = []
+    let timer
+    return { calls, env: { assign: (u) => calls.push(['app', u]), visible: () => visible, openTab: (u) => calls.push(['tab', u]), later: (fn) => { timer = fn }, fire: () => timer?.() } }
+  }
+  it('tries the app link first, then the https link only while the page is still in front', () => {
+    const a = env(true)
+    openLocalFirst('sgnl://x', 'https://signal.me/x', a.env)
+    expect(a.calls).toEqual([['app', 'sgnl://x']])
+    a.env.fire()
+    expect(a.calls).toEqual([['app', 'sgnl://x'], ['tab', 'https://signal.me/x']])
+  })
+  it('does not open the web link when the app took over', () => {
+    const a = env(false)
+    openLocalFirst('matrix:u/a:b', 'https://matrix.to/#/@a:b', a.env)
+    a.env.fire()
+    expect(a.calls).toEqual([['app', 'matrix:u/a:b']])
+  })
+  it('Element X code: user, room id and alias as matrix: URIs', () => {
+    expect(elementXUri('@ann:matrix.org')).toBe('matrix:u/ann:matrix.org')
+    expect(elementXUri('!abc:matrix.org')).toBe('matrix:roomid/abc:matrix.org')
+    expect(elementXUri('#room:matrix.org')).toBe('matrix:r/room:matrix.org')
+  })
+})
+
+import { appLinkFor } from '../../src/messenger_links.ts'
+describe('wave 28: app twin of a messenger link', () => {
+  it('signal.me -> sgnl, matrix.to -> matrix:, others none', () => {
+    expect(appLinkFor('https://signal.me/#p/+4366412345')).toBe('sgnl://signal.me/#p/+4366412345')
+    expect(appLinkFor('https://matrix.to/#/@ann:matrix.org')).toBe('matrix:u/ann:matrix.org')
+    expect(appLinkFor('https://wa.me/4366412345')).toBeNull()
+  })
+})
