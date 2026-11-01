@@ -6,11 +6,15 @@ export type WebView = 'rings' | 'network' | 'map'
 export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact'
 const VIEW_ORDER: readonly ViewKey[] = ['rings', 'network', 'people', 'map', 'dex', 'compact']
 const OTHER: readonly ViewKey[] = ['dex', 'compact']
+/** Wave 28: Dex is the one view that sits in the "Alternative UI (beta)" part of Other views; new unique views join Other views. */
+const ALT: readonly ViewKey[] = ['dex']
 
 export interface ViewItem {
   view: ViewKey
   on: boolean
   other: boolean
+  /** main = always listed; other and alt = inside the collapsed "Other views" group (alt under its "Alternative UI (beta)" label). */
+  group: 'main' | 'other' | 'alt'
   pinned: boolean
 }
 
@@ -19,7 +23,7 @@ function available(anyone: boolean, hasMap: boolean): ViewKey[] {
 }
 
 export function viewMenu(current: ViewKey, anyone: boolean, hasMap: boolean, pins: readonly string[] | undefined): ViewItem[] {
-  return available(anyone, hasMap).map((view) => ({ view, on: view === current, other: OTHER.includes(view), pinned: !!pins?.includes(view) }))
+  return available(anyone, hasMap).map((view) => ({ view, on: view === current, other: OTHER.includes(view), group: ALT.includes(view) ? 'alt' : OTHER.includes(view) ? 'other' : 'main', pinned: !!pins?.includes(view) }))
 }
 
 /** The pinned views that exist right now, in menu order (the glyph buttons beside the eye). */
@@ -45,4 +49,13 @@ export function webViewOf(stored: string | null, anyone: boolean): WebView {
 /** The stored Expand flag (`trustweb.ui.webExpand` = '1'); only the rings have it. */
 export function expandedOf(stored: string | null, view: WebView): boolean {
   return view === 'rings' && stored === '1'
+}
+
+export interface ScreenView { key: string; core: boolean; available: boolean }
+
+/** Wave 28: the views menu of Events (Calendar, List, and the non-core Solar calendar, greyed until its module is there) and Resources (List, Outline). */
+export function screenViews(screen: 'events' | 'inventory', solarInstalled: boolean): ScreenView[] {
+  return screen === 'events'
+    ? [{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: solarInstalled }]
+    : [{ key: 'list', core: true, available: true }, { key: 'outline', core: true, available: true }]
 }

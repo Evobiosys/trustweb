@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Web screen view chooser (wave 25): Web, Network; the expand flag shows everyone. No Desk. */
-import { viewMenu, pinnedViews, togglePin, viewHeading, webViewOf, expandedOf } from '../../src/view_menu.ts'
+import { viewMenu, pinnedViews, togglePin, viewHeading, webViewOf, expandedOf, screenViews } from '../../src/view_menu.ts'
 
 describe('view_menu', () => {
   it('lists Web, Network, People, then Other views: Dex, Contacts compact; the current one is on', () => {
@@ -45,5 +45,15 @@ describe('view_menu', () => {
     expect(expandedOf('1', 'network')).toBe(false)
     expect(expandedOf(null, 'rings')).toBe(false)
     expect(expandedOf('0', 'rings')).toBe(false)
+  })
+  it('groups Contacts compact under Other views and Dex under Alternative UI (beta)', () => {
+    const m = viewMenu('rings', true, true, [])
+    expect(m.map((i) => i.group)).toEqual(['main', 'main', 'main', 'main', 'alt', 'other'])
+    expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact'])
+  })
+  it('lists the calendar and inventory views; Solar calendar is non-core and greyed until its module is there', () => {
+    expect(screenViews('events', false)).toEqual([{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: false }])
+    expect(screenViews('events', true).find((v) => v.key === 'solar')?.available).toBe(true)
+    expect(screenViews('inventory', false).map((v) => v.key)).toEqual(['list', 'outline'])
   })
 })

@@ -79,7 +79,7 @@ async function connect(host, joiner, joinerName, fresh) {
   await acceptAdd(joiner)
   await until(async () => (await record(host)).peers.length === before + 1)
   await host.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await joiner.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await joiner.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 }
 
 async function openPerson(page, name) {
@@ -198,7 +198,7 @@ async function main() {
 
     // 6. reload keeps the threads; a corrupted value is repaired
     await alice.reload()
-    await alice.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await alice.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     const kept = (await record(alice)).chats
     ok('6. after a reload the thread with Bob is still there', JSON.stringify(kept).includes('hello Alice') && JSON.stringify(kept).includes('hello Bob'))
     await bob.evaluate(() => {
@@ -208,7 +208,7 @@ async function main() {
       localStorage.setItem(k, JSON.stringify(s))
     })
     await bob.reload()
-    await bob.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await bob.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     const repaired = (await record(bob)).chats
     ok('6. a corrupted `chats` value is repaired at startup and the app starts', typeof repaired === 'object' && repaired !== null && !Array.isArray(repaired), JSON.stringify(repaired))
     ok('no page errors', errors.length === 0, errors.join(' | '))

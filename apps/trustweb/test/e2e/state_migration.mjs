@@ -116,7 +116,7 @@ async function pageWith(browser, base, keys, opts = {}) {
   return { ctx, page, errors }
 }
 
-const webUp = (page) => page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+const webUp = (page) => page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
 async function partA(browser, base) {
   console.log('A. a pre-wave record in the new build')

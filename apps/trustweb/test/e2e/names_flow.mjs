@@ -48,7 +48,7 @@ async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 

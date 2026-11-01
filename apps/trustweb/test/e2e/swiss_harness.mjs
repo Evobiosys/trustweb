@@ -139,7 +139,7 @@ export async function startPhone(page, base, name) {
   await page.goto(base)
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   // The phone-width demo-content offer, if it shows, is answered "no".
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }

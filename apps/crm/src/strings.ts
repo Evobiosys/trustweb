@@ -42,6 +42,8 @@ export const S = {
   notes: 'Notes',
   addNote: 'Add a note',
   fieldsToggle: (n: number) => `Fields (${n})`,
+  fieldsShowAll: (n: number) => `Show all fields (${n} more, also shown elsewhere on the card)`,
+  fieldsDupHint: 'Also shown elsewhere on the card',
   personTimeline: 'What happened',
   addInteraction: 'Note what happened',
   addFollowUp: 'Remind me',

@@ -59,8 +59,7 @@ export function lastContact(s: State, p: Person, now: number): number {
 const OUTWARD: Partial<Record<Ring, Ring>> = { [Ring.Close]: Ring.Friend, [Ring.Friend]: Ring.Acquaintance }
 
 /** When the tie of `p` runs out (ms), or null: not an inner ring, expiry off, or no contact on record to count from. */
-function endsAt(s: State, p: Person, now: number): number | null {
-  const days = engagementDays(s)
+function endsAt(s: State, p: Person, now: number, days = engagementDays(s)): number | null {
   const last = lastContact(s, p, now)
   return days === 0 || !OUTWARD[p.ring] || last === 0 || !inScope(s, p) ? null : last + days * DAY_MS
 }
@@ -70,15 +69,23 @@ export function expiringSoon(s: State, now: number): Person[] {
   return s.people.filter((p) => { const end = endsAt(s, p, now); return end !== null && end > now && end - now <= WARN_MS })
 }
 
-/** Moves everyone past the window one ring outward and records them in s.releasedTies (newest last; a person's older record is replaced, records past the undo time go). Returns the new ones. */
-export function releaseTies(s: State, now: number): ReleasedTie[] {
+/** Wave 28 (Jakob 2026-11-01: "dont automove them with the algo without human consent"): who is past the window and would move one ring outward, as a suggestion only (the zzz marker). Off (engagementDays 0) still suggests, with the 30-day default. */
+export function dueMoves(s: State, now: number): { person: Person; to: Ring }[] {
+  const days = engagementDays(s) || ENGAGEMENT_DEFAULT_DAYS
+  return s.people.flatMap((person) => {
+    const end = endsAt(s, person, now, days)
+    const to = OUTWARD[person.ring]
+    return end === null || end > now || !to ? [] : [{ person, to }]
+  })
+}
+
+/** Moves everyone past the window one ring outward and records them in s.releasedTies (newest last; a person's older record is replaced, records past the undo time go). Returns the new ones. `only` (wave 28: the people whose zzz marker was accepted) limits it to them and uses the suggestion window, so a tap works with expiry switched off. */
+export function releaseTies(s: State, now: number, only?: ReadonlySet<string>): ReleasedTie[] {
   const out: ReleasedTie[] = []
-  for (const p of s.people) {
-    const end = endsAt(s, p, now)
-    const to = OUTWARD[p.ring]
-    if (end === null || end > now || !to) continue
+  for (const { person: p, to } of dueMoves(s, now).filter((m) => (only ? only.has(m.person.id) : engagementDays(s) > 0))) {
     out.push({ personId: p.id, name: p.name, from: p.ring, to, at: now })
     p.ring = to
+    if (only) p.engagementKept = now // an accepted suggestion starts a fresh window, else the next ring is suggested at once
   }
   const fresh = new Set(out.map((r) => r.personId))
   s.releasedTies = [...(s.releasedTies ?? []).filter((r) => !fresh.has(r.personId) && now - r.at < UNDO_DAYS * DAY_MS), ...out]

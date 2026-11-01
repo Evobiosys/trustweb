@@ -27,6 +27,8 @@ export interface ChatListOptions {
   query?: string
   /** Do Not Disturb: no conversation is listed. */
   hidden?: boolean
+  /** Wave 28 Do Not Disturb: the list as it stood at this moment; nothing newer shows, no unread. */
+  since?: number
 }
 
 const matches = (query: string | undefined, ...texts: string[]): boolean => {
@@ -34,15 +36,16 @@ const matches = (query: string | undefined, ...texts: string[]): boolean => {
   return !q || texts.some((x) => x.toLowerCase().includes(q))
 }
 
-export function chatListRows(book: ChatBook | undefined, people: readonly ChatListPerson[], { query, hidden }: ChatListOptions = {}): ChatListRow[] {
+export function chatListRows(book: ChatBook | undefined, people: readonly ChatListPerson[], { query, hidden, since }: ChatListOptions = {}): ChatListRow[] {
   const rows: ChatListRow[] = []
   if (hidden) return rows
   for (const p of people) {
     // Chat is for people already connected (a peer); the others are found in Web.
     const t = p.peerId ? book?.[p.peerId] : undefined
-    const m = t?.messages[t.messages.length - 1]
-    if (!t || !m || !matches(query, p.name, ...t.messages.map((x) => x.text))) continue
-    rows.push({ personId: p.id, name: p.name, last: m.text.replace(/\s+/g, ' ').trim().slice(0, LAST_MAX), at: m.at, unread: t.unread })
+    const msgs = since === undefined ? t?.messages : t?.messages.filter((x) => x.at <= since)
+    const m = msgs?.[msgs.length - 1]
+    if (!t || !msgs || !m || !matches(query, p.name, ...msgs.map((x) => x.text))) continue
+    rows.push({ personId: p.id, name: p.name, last: m.text.replace(/\s+/g, ' ').trim().slice(0, LAST_MAX), at: m.at, unread: since === undefined ? t.unread : 0 })
   }
   return rows.sort((a, b) => b.at - a.at)
 }
