@@ -9,16 +9,17 @@ const SCREENS = ['web', 'chat', 'events', 'inventory']
 
 /** The header's controls for a screen id (Screen enum value); undefined = the screen draws its own. */
 export function headerControls(screen: string): HeaderControl[] | undefined {
+  if (screen === 'chat') return ['search', 'pins', 'qr', 'settings']
   return SCREENS.includes(screen) ? ['search', 'views', 'pins', 'qr', 'settings'] : undefined
 }
 
-/** What can sit as a button beneath Settings: Do Not Disturb (on unless unpinned), Advanced settings, "Share QR only". */
+/** What can sit as a button beneath Settings: Do Not Disturb (unpinned by default; its switch is in Settings > Chat), Advanced settings, "Share QR only". */
 export const HEADER_PINS = ['dnd', 'advanced', 'qr-only'] as const
 export type HeaderPin = (typeof HEADER_PINS)[number]
 
-/** The stored list (`uiPins.header`); absent = the default, Do Not Disturb only. */
+/** The stored list (`uiPins.header`); absent = the default, nothing pinned. */
 export function headerPins(stored: readonly string[] | undefined): HeaderPin[] {
-  return stored === undefined ? ['dnd'] : HEADER_PINS.filter((p) => stored.includes(p))
+  return stored === undefined ? [] : HEADER_PINS.filter((p) => stored.includes(p))
 }
 
 export function togglePinned(stored: readonly string[] | undefined, pin: HeaderPin): HeaderPin[] {

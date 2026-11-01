@@ -1197,8 +1197,7 @@ function mountHeaderControls(): void {
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
-    : screen === Screen.Chat ? chatExtendButton()
-      : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
+    : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
     b.setAttribute('data-header-pin', id)
@@ -2877,15 +2876,6 @@ function reminderRows(): Node[] {
 }
 
 /** Wave 24: every chat, newest first; a tap opens the chat sheet. */
-/** Same control as the Web view's expand glyph: the extended messenger opens in place, the simple chat stays the default. Chat's "views" button. */
-function chatExtendButton(): HTMLElement {
-  const extended = chatExtended()
-  const extend = iconButton(extended ? 'collapse' : 'expand', extended ? S.chatSimple : S.chatExtend, () => toggleChatExtended(extended), 'chat-extend' + (extended ? ' on' : ''))
-  extend.setAttribute('data-chat-extend', '')
-  extend.setAttribute('aria-pressed', String(extended))
-  return extend
-}
-
 function screenChat(): Node[] {
   const s = st()
   const body = el('div', { class: 'chat-body' }, chatListBody())
@@ -2909,11 +2899,6 @@ const CHAT_EXTEND_KEY = 'trustweb.ui.chatExtend'
 /** Wave 27: Extend is remembered on this device, like the Web view's expand. Absent: the simple chat. */
 function chatExtended(): boolean {
   try { return window.localStorage.getItem(CHAT_EXTEND_KEY) === '1' } catch { return false }
-}
-
-function toggleChatExtended(extended: boolean): void {
-  try { window.localStorage.setItem(CHAT_EXTEND_KEY, extended ? '0' : '1') } catch { /* not remembered */ }
-  go(Screen.Chat)
 }
 
 /** Chat > New message: a search bar, the people who can be chatted with; a typed name that is not connected says to connect first. */
@@ -6546,6 +6531,11 @@ function settingsSheet(): void {
     ]),
     ],
     chat: [
+    // Wave 28b: Do Not Disturb lives here, not in the header (it can still be pinned there from Advanced).
+    el('button', {
+      class: 'radio' + (s.chatsHidden ? ' on' : ''), 'aria-pressed': String(Boolean(s.chatsHidden)), 'data-settings-dnd': '',
+      onclick: () => { s.chatsHidden = !s.chatsHidden; save(); render(); settingsSheet() },
+    }, [el('b', {}, [S.chatDnd]), el('small', {}, [S.setChatDndHint])]),
     settingsSection('reach', S.reachOutsTitle, solo || s.testOf ? [] : [
       el('button', {
         class: 'radio' + (messengerLinksShown(s) ? ' on' : ''), 'aria-pressed': String(messengerLinksShown(s)), 'data-signal-visible': '1',
