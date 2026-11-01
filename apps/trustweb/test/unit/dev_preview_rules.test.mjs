@@ -1,13 +1,17 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { conflictParts, mergeHead, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, approvedKeys, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
 const on = (fs) => fs.filter((x) => x.checked).map((x) => x.key)
 
 describe('dev preview rules', () => {
+  it('the left panel is done once a Declare done run is going or released, free again after a failed or cancelled run', () => {
+    for (const step of ['tests', 'merging', 'released', 'release-pending']) expect(panelDone(step)).toBe(true)
+    for (const step of ['none', '', 'failed', 'checks-failed', 'cancelled']) expect(panelDone(step)).toBe(false)
+  })
   it('a box is disabled only while a required feature is unchecked, with its title as hint', () => {
     expect(needsHint(set, 'event-link')).toBeNull()
     expect(needsHint(toggled(set, 'events', false), 'event-link')).toBe('needs T-events')
@@ -241,26 +245,30 @@ describe('approve (merge to main) rules', () => {
     expect(shownVerdict(g('a', true, 'needs-work'))).toBeNull()
     expect(shownVerdict(g('a', true, null))).toBeNull()
   })
-  it('a press on a pill gives the verdict to store (the server checks/unchecks the box and cascades); the shown pill pressed again clears it', () => {
+  it('a press on a pill gives the verdict to store (approve also loads the row on the server; un-approve keeps it loaded); the shown pill pressed again clears it', () => {
     expect(pillPress([g('a', false, null)], 'a', 'merge')).toBe('merge')
     expect(pillPress([g('a', true, 'merge')], 'a', 'merge')).toBeNull()
     expect(pillPress([g('a', true, 'merge')], 'a', 'needs-work')).toBe('needs-work')
     expect(pillPress([g('a', false, 'needs-work')], 'a', 'needs-work')).toBeNull()
   })
-  it('select all = the exact boxes that approve every available row; select none unchecks them; merged rows stay as they are', () => {
+  it('select all = the exact boxes that load every available row (approving none); select none unloads them; merged rows stay as they are', () => {
     const list = [g('a', false, 'needs-work'), g('b', true, null), g('m', true, null, { merged: true })]
+    expect(allLoaded(list)).toBe(false)
+    expect(allLoaded([g('a', true, null), g('m', false, null, { merged: true })])).toBe(true)
     expect(allApproved(list)).toBe(false)
     expect(selectAll(list, true)).toEqual({ a: true, b: true, m: true })
     expect(selectAll(list, false)).toEqual({ a: false, b: false, m: true })
     expect(allApproved([g('a', true, 'merge'), g('m', true, null, { merged: true })])).toBe(true)
   })
-  it('approved = checked + verdict merge; the pending count is the approved set against the assembled set', () => {
-    const list = [g('a', true, 'merge'), g('b', true, null), g('c', false, 'needs-work'), g('d', true, 'merge')]
+  it('loaded = checked, approved = loaded + verdict merge; the pending count is the loaded set against the assembled set (approving moves nothing)', () => {
+    const list = [g('a', true, 'merge'), g('b', true, null), g('c', false, 'needs-work'), g('d', true, 'merge'), g('m', true, 'merge', { merged: true })]
     expect(approvedKeys(list)).toEqual(['a', 'd'])
-    expect(pendingCount({ features: list, assembled: { set: ['a', 'd'] } })).toBe(0)
-    expect(pendingCount({ features: list, assembled: { set: ['a', 'x'] } })).toBe(2)
-    expect(pendingCount({ features: list, assembled: { set: [] } })).toBe(2)
-    expect(pendingCount({ features: list, assembled: null })).toBe(1)   // no assembled.set (older registry): its checked rows a, b, d against the approved a, d
+    expect(loadedKeys(list)).toEqual(['a', 'b', 'd'])
+    expect(pendingCount({ features: list, assembled: { set: ['a', 'b', 'd'] } })).toBe(0)
+    expect(pendingCount({ features: [g('a', true, null), g('b', true, 'merge')], assembled: { set: ['a', 'b'] } })).toBe(0)
+    expect(pendingCount({ features: list, assembled: { set: ['a', 'x'] } })).toBe(3)
+    expect(pendingCount({ features: list, assembled: { set: [] } })).toBe(3)
+    expect(pendingCount({ features: list, assembled: null })).toBe(0)   // no assembled.set (older registry): its checked rows a, b, d against the loaded a, b, d
     expect(pendingText(1)).toBe('1 change not applied'); expect(pendingText(3)).toBe('3 changes not applied')
   })
   it('no manual reload (Jakob 2026-10-24): a pending registry starts the apply by itself, unless one is going, a test runs, or the last apply got stuck (Retry is the owner\'s)', () => {
@@ -281,6 +289,8 @@ describe('approve (merge to main) rules', () => {
   it('the apply counts as stuck when the registry did not change for 90 s', () => {
     const p = { pending: true, assembled: { at: 't1', set: [] }, features: [g('a', true, 'merge')] }
     expect(applyStamp(p)).toBe(applyStamp({ ...p }))
+    expect(applyStamp(p)).toBe(applyStamp({ ...p, features: [g('a', true, null)] }))   // a verdict alone does not move it
+    expect(applyStamp(p)).not.toBe(applyStamp({ ...p, features: [g('a', true, 'merge'), g('b', true, null)] }))
     expect(applyStamp(p)).not.toBe(applyStamp({ ...p, assembled: { at: 't2', set: [] } }))
     expect(applyStuck(1000, 1000 + 89e3)).toBe(false); expect(applyStuck(1000, 1000 + 91e3)).toBe(true)
   })
@@ -296,15 +306,24 @@ describe('approve (merge to main) rules', () => {
     expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
     expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
   })
-  it('Approve opens with nothing running, >= 1 approved row and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
+  it('Declare done opens with nothing running, every loaded row approved (>= 1) and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
     expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
     expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, pending: true, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
-    expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Declare at least one feature done')
+    expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Approve first: T-a')
+    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', true, null), g('c', true, null)] })).toEqual({ ok: false, hint: 'Approve first: T-b, T-c' })
+    expect(approveGate({ ...passed, features: [g('b', false, 'merge'), g('c', false, 'needs-work')] }).hint).toBe('Approve at least one feature')
+    expect(approveGate({ ...passed, features: [] }).ok).toBe(false)
     expect(approveGate({ ...passed, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).hint).toBe('Fix the conflict first: conflict x')
     expect(approveGate({ ...passed, pending: true, assembled: { sha: 'abc1234', error: 'conflict x' } , features: [g('a', true, 'merge')] }).ok).toBe(true)
+  })
+  it('the reminder names the loaded rows still waiting for the approval; empty when none waits; merged and unloaded rows do not count', () => {
+    const list = [g('a', true, null), g('b', true, null), g('c', true, 'merge'), g('d', false, null), g('m', true, null, { merged: true })]
+    expect(unapproved(list).map((x) => x.key)).toEqual(['a', 'b'])
+    expect(reminderText(list)).toBe('2 loaded, not yet approved: T-a, T-b')
+    expect(reminderText([g('a', true, 'merge'), g('d', false, null)])).toBe('')
   })
   it('the box head says DONE (class ok) once the released step ended the flow, IN PROGRESS before', () => {
     expect(mergeHead('released')).toEqual({ text: 'DONE', ok: true })

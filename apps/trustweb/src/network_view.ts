@@ -7,9 +7,12 @@ import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
 import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
 import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
+import { fitBounds, refitCamera } from './network_fit'
+import type { Camera, Size } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
 import type { MenuAction } from './network_menu'
 import { S } from './strings'
+import { shortLabel } from './short_label'
 
 export interface NetworkOptions {
   me: { id: string; displayName: string }
@@ -51,8 +54,7 @@ function download(name: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-interface Camera { k: number; x: number; y: number }
-interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null }
+interface Cached { key: string; graph: Graph; iteration: number; camera: Camera | null; touched: boolean; size: Size | null }
 // People hidden from the graph this session only (never stored).
 const hiddenIds = new Set<string>()
 // One graph and camera per record, so a redraw of the screen keeps the picture where it settled.
@@ -66,7 +68,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
   const people = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id))
   const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
-  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null }
+  if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
   const g = state.graph
@@ -75,7 +77,6 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let matches = new Set<string>()
   let hover: GraphNode | null = null
   let dirty = true
-  let touched = state.iteration >= LAYOUT_ITERATIONS && state.camera !== null
   let w = 0
   let h = 0
 
@@ -113,13 +114,18 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
   const pop = el('div', { class: 'net-pop', 'data-net-pop': '', hidden: '' })
   let tipTimer = 0
-  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, el('small', { class: 'net-legend' }, [S.netLegend])])
-
-  const fit = (): Camera => {
-    const r = Math.max(60, ...g.nodes.map((v) => Math.hypot(v.x, v.y)))
-    const k = Math.min(w, h) / 2 / (r + 24)
-    return { k, x: w / 2, y: h / 2 }
+  // Wave 27: the legend sits under an (i); a tap shows or hides the one line.
+  const legendInfo = (): HTMLElement => {
+    const line = el('small', { class: 'net-legend', 'data-net-legend': '', hidden: true }, [S.netLegend])
+    const btn = el('button', { class: 'hint-i legend-i', 'data-net-legend-btn': '', 'aria-label': S.netLegendAria, 'aria-expanded': 'false', onclick: () => {
+      line.hidden = !line.hidden
+      btn.setAttribute('aria-expanded', String(!line.hidden))
+    } }, ['i'])
+    return el('div', { class: 'net-legend-box' }, [btn, line])
   }
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, legendInfo()])
+
+  const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })
   const hit = (px: number, py: number): GraphNode | null => {
     const c = cam()
@@ -161,7 +167,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const colour = (v: GraphNode): string =>
     v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : TIER_COLOUR[v.tier]
 
-  const label = (v: GraphNode): string => (v.desire === undefined ? v.name : `${v.name} · ${S.netWants(v.desire)}`)
+  const label = (v: GraphNode): string => (v.desire === undefined ? shortLabel(v.name) : `${shortLabel(v.name)} · ${S.netWants(v.desire)}`)
 
   const draw = (): void => {
     if (!ctx) return
@@ -195,6 +201,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
+    const labels: { text: string; x: number; y: number; alpha: number; fill: string }[] = [] // drawn after every dot and edge, above the dot
     g.nodes.forEach((v, i) => {
       const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
       const x = v.x * c.k + c.x
@@ -218,23 +225,22 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (lq) {
         const a = lit ? fade : fade * 0.15
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
-        ctx.globalAlpha = v === hover || matches.has(v.id) ? 1 : a
-        ctx.fillStyle = v === hover ? LOGSEQ.lit : LOGSEQ.label
-        ctx.fillText(label(v), x, y + rad + 10)
+        labels.push({ text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label })
       } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
-        ctx.globalAlpha = 1
-        ctx.fillStyle = ink
-        ctx.fillText(label(v), x, y + rad + 12)
+        labels.push({ text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink })
       }
     })
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5
+    ctx.strokeStyle = lq ? LOGSEQ.bg : css.getPropertyValue('--linen').trim() || '#FFFFFF' // halo: readable over edges
+    for (const l of labels) { ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y) }
     ctx.globalAlpha = 1
   }
 
   const frame = (): void => {
-    if (!canvas.isConnected) return // the screen was redrawn: this view is gone
+    if (!canvas.isConnected) { sizes.disconnect(); return } // the screen was redrawn: this view is gone
     if (state.iteration < LAYOUT_ITERATIONS) {
       for (let i = 0; i < STEPS_PER_FRAME && state.iteration < LAYOUT_ITERATIONS; i++) step(g, alphaAt(state.iteration++), settings.forces)
-      if (state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
+      if (state.iteration >= LAYOUT_ITERATIONS && !state.touched) { state.camera = fit(); state.size = { w, h } }
       dirty = true
     }
     if (dirty) { dirty = false; draw() }
@@ -244,13 +250,16 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const resize = (): void => {
     const box = root.getBoundingClientRect()
     if (!box.width) return
-    const first = !w
-    w = Math.floor(box.width) - 24
-    h = Math.max(360, Math.floor(window.innerHeight * 0.62))
+    const nw = Math.floor(box.width) - 24
+    const nh = Math.max(360, Math.floor(window.innerHeight * 0.62))
+    if (nw === w && nh === h) return
+    w = nw; h = nh
     const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     canvas.width = w * dpr; canvas.height = h * dpr
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
-    if (first && state.iteration >= LAYOUT_ITERATIONS && !touched) state.camera = fit()
+    // The cached camera was fitted to the size of an earlier box (another layout, window or orientation): fit it to this one.
+    if (state.iteration >= LAYOUT_ITERATIONS) state.camera = refitCamera(state.camera, state.touched, g.nodes, state.size, { w, h })
+    state.size = { w, h }
     dirty = true
   }
 
@@ -259,7 +268,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let travelled = 0
   const local = (e: MouseEvent): { x: number; y: number } => { const b = canvas.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top } }
   const zoomAt = (px: number, py: number, factor: number): void => {
-    touched = true
+    state.touched = true
     const c = cam()
     const k = Math.min(8, Math.max(0.2, c.k * factor))
     c.x = px - (px - c.x) * (k / c.k); c.y = py - (py - c.y) * (k / c.k); c.k = k
@@ -297,7 +306,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   canvas.addEventListener('pointerdown', (e) => {
     closePop()
     if (e.button > 0) return
-    touched = true
+    state.touched = true
     canvas.setPointerCapture(e.pointerId)
     const p = local(e)
     down.set(e.pointerId, p)
@@ -359,7 +368,13 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); closePop(); const p = local(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015)) }, { passive: false })
   search.addEventListener('input', () => { matches = matchIds(g, search.value); dirty = true })
 
-  new ResizeObserver(resize).observe(root)
+  // Root = width; the page = window height (the canvas height follows it); the canvas = whatever else resizes it.
+  const sizes = new ResizeObserver(resize)
+  sizes.observe(root); sizes.observe(canvas); sizes.observe(document.documentElement)
+  // The box settles late (bottom bar, header, orientation, browser chrome): measure again on the next two frames and on viewport changes.
+  const settle = (): void => { if (canvas.isConnected) resize(); else window.visualViewport?.removeEventListener('resize', settle) }
+  window.visualViewport?.addEventListener('resize', settle)
+  requestAnimationFrame(() => { resize(); requestAnimationFrame(resize) })
   requestAnimationFrame(frame)
   return root
 }

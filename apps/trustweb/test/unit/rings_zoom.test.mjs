@@ -1,5 +1,5 @@
 /** The pure zoom and pan maths of the Web rings (src/rings_zoom.ts). */
-import { RINGS_ZOOM_MAX, panBy, transformOf, zoomAt } from '../../src/rings_zoom.ts'
+import { RINGS_ZOOM_MAX, panBy, transformOf, zoomAt, fitZoom, RINGS_ZOOM_FIT_MAX } from '../../src/rings_zoom.ts'
 
 const home = { k: 1, x: 0, y: 0 }
 const v = { w: 352, h: 600, cw: 352, ch: 500 }
@@ -44,5 +44,18 @@ describe('rings zoom', () => {
   it('writes no transform at k = 1', () => {
     expect(transformOf(home)).toBe('')
     expect(transformOf({ k: 2, x: -10, y: -20 })).toBe('translate(-10px, -20px) scale(2)')
+  })
+})
+
+describe('fitZoom (wave 25: the responsive layout fits the rings to the window once)', () => {
+  it('phone-sized clip: no zoom', () => { expect(fitZoom(352, 352, 390, 844)).toBe(1); expect(fitZoom(352, 352, 360, 540)).toBe(1) })
+  it('desktop window: fits the height, capped', () => {
+    expect(fitZoom(352, 352, 1440, 800)).toBeCloseTo((800 - 48) / 352, 5)
+    expect(fitZoom(352, 352, 2560, 1600)).toBe(RINGS_ZOOM_FIT_MAX)
+  })
+  it('narrow tall window: the width bounds it; a small gain is left alone', () => {
+    expect(fitZoom(352, 352, 600, 1200)).toBeCloseTo((600 - 24) / 352, 5)
+    expect(fitZoom(352, 352, 420, 1200)).toBe(1)
+    expect(fitZoom(0, 0, 1440, 900)).toBe(1)
   })
 })

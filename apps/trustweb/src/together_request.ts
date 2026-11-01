@@ -201,7 +201,7 @@ export function acceptTogetherDraft(draft: unknown, now: number): TogetherReques
 export const TOGETHER_DRAFT_SHAPE =
   '{"activity": string, "phrase"?: string, "beforeAt"?: epoch ms, "fromAt"?: epoch ms, "area"?: string, "radiusKm"?: number 1-100, "reach"?: integer 1-6}'
 
-/** owner 2026-10-23: on with the first local-model hook. No model call the app makes itself exists yet; nothing leaves while this is false. */
+/** Default of draftOrPlain's `on`: off. The app turns it on only while the person has configured an endpoint (llm_endpoint.ts configured()). */
 export const TOGETHER_LLM_DRAFT = false
 
 /**

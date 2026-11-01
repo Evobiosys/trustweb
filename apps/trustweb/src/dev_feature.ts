@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, mergeHead, conflictParts, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
+import { approveGate, mergeHead, conflictParts, panelDone, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: object | null | undefined
@@ -141,6 +141,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
     pollStatus((j) => {
       if (stale(j)) return
+      document.documentElement.classList.toggle('twp-done', panelDone(j.step))
       const h = mergeHead(j.step); head.textContent = h.text; bar.classList.toggle('ok', h.ok); bar.classList.toggle('prog', !h.ok)
       body.replaceChildren(statusLine(j.text ?? 'starting', j.url))
       if (j.step === 'checks-failed' || j.step === 'failed') body.className = 'body warn'
@@ -148,7 +149,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
     }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
   }
   function buttons(): void {
-    bar.classList.remove('prog', 'ok'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
+    document.documentElement.classList.remove('twp-done'); bar.classList.remove('prog', 'ok'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
     const personal = btn('Declare done and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
       const since = Date.now() - 2000
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))

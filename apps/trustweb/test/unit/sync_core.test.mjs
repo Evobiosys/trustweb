@@ -1,6 +1,6 @@
 /** Device sync, the pure part (src/sync_core.ts): stamps, merge, chunks, pairing code, fingerprint. */
 import {
-  CHUNK_BYTES, REVIEW_MAX, bundleOf, recordReview, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parseBundle, parsePairingCode, refreshStamps, stampsAfterMerge, toChunks,
+  CHUNK_BYTES, REVIEW_MAX, SYNC_EXCLUDED, settingsOf, bundleOf, recordReview, countsOf, fingerprintOf, fromChunks, mergeBundle, pairingCode, parseBundle, parsePairingCode, refreshStamps, stampsAfterMerge, toChunks,
 } from '../../src/sync_core.ts'
 
 const line = (id, text = id) => ({ id, text, tag: 'note', audience: 'close', status: 'current', notedAt: 1, checkedAt: 1 })
@@ -298,5 +298,12 @@ describe('review fixes (DS-01, DS-02, DS-04, DS-06)', () => {
     const b = { v: 1, people: [], inventory: [], meetings: [], at: { 'p:a': 'soon' } }
     expect(parseBundle(b)).toBeNull()
     expect(parseBundle({ ...b, at: { 'p:a': 5 } })).not.toBeNull()
+  })
+})
+
+describe('wave 27 review: staged service imports stay on this device', () => {
+  it('serviceImports is excluded from the synced settings', () => {
+    expect(SYNC_EXCLUDED.has('serviceImports')).toBe(true)
+    expect(settingsOf({ serviceImports: [{ id: 'b' }], feed: 1 })).toEqual({ feed: 1 })
   })
 })

@@ -2,7 +2,9 @@
   import { LineStatus, Ring } from '../../trustweb/src/model'
   import Avatar from './avatar.svelte'
   import AddNote from './add_note.svelte'
+  import PersonDays from './person_days.svelte'
   import ContactInfo from './contact_info.svelte'
+  import ConnectPanel from './connect_panel.svelte'
   import { fmtDate } from './dates'
   import { shownName } from './display'
   import EventRow from './event_row.svelte'
@@ -29,6 +31,8 @@
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
   import { personTimeline } from './timeline'
+  import { foldKey, foldOpen, foldStored } from '../../trustweb/src/fold'
+  import { newestFirst } from './person_sections'
 
   interface Props {
     personId: string
@@ -45,6 +49,11 @@
   let find = $state('')
   let fieldsOpen = $state(false)
   let renaming = $state(false)
+  // Wave 25: "Notes" (open) and "What happened" (closed) fold; the choice is remembered per section on this device.
+  const readFold = (section: string, dflt: boolean): boolean => { try { return foldOpen(window.localStorage.getItem(foldKey(section)), dflt) } catch { return dflt } }
+  let notesOpen = $state(readFold('notes', true))
+  let happenedOpen = $state(readFold('happened', false))
+  function fold(section: string, open: boolean): void { try { window.localStorage.setItem(foldKey(section), foldStored(open)) } catch { /* not remembered */ } }
 
   // A person opens at its top, never at the scroll position of the list it came from.
   $effect(() => { void personId; window.scrollTo(0, 0) })
@@ -54,7 +63,7 @@
   const person = $derived(raw && effectivePerson(raw, edits))
   const values = $derived(raw ? entityValues(raw, baseFields(raw), edits) : {})
   const textOf = (l: { id: string; text: string }): string => store.crm.lineEdits?.[l.id]?.text ?? l.text
-  const lines = $derived((person?.lines ?? []).filter((l) => l.status === LineStatus.Current && norm(textOf(l)).includes(norm(find.trim()))))
+  const lines = $derived(newestFirst((person?.lines ?? []).filter((l) => l.status === LineStatus.Current && norm(textOf(l)).includes(norm(find.trim())))))
   const events = $derived(person ? personTimeline({ app: store.app, crm: store.crm }, person.id) : [])
   const meta = $derived(
     person === undefined ? '' : person.ring === Ring.Intending
@@ -105,6 +114,7 @@
 <section class="person" data-screen="person">
   {#if !embedded}<button class="back" onclick={onclose}>&larr; {S.back}</button>{/if}
   {#if person}
+    {#if !embedded}<!-- Wave 27: embedded in the TrustWeb card the name, zone and state are already the card's own (no second copy of the person). -->
     <div class="person-head">
       <Avatar id={person.id} name={shownName(person.name)} />
       <div>
@@ -125,6 +135,9 @@
       {/if}
       <button class="icon-btn hide-btn" data-action="hide-person" aria-label={S.hideFromTrustweb} title={S.hideFromTrustweb} onclick={hide}>🗑</button>
     </div>
+    {/if}
+
+    {#if !embedded}<PersonDays {person} />{/if}
 
     {#if raw !== undefined && ringOf(person.ring) === Ring.Intending}
     <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
@@ -133,17 +146,17 @@
     <MergeSheet personId={person.id} />
 
     <ContactInfo {person} />
+    {#if !embedded}<ConnectPanel {person} />{/if}
     {#if isDesk(prefs.view)}
       <label class="fld"><span>{S.desk.keepLabel}</span><KeepSelect personId={person.id} /></label>
     {/if}
 
-    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
-    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
-
-    <h3>{S.notes}
+    <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-notes" aria-expanded={notesOpen} onclick={(): void => { notesOpen = !notesOpen; fold('notes', notesOpen) }}>{notesOpen ? '▾' : '▸'} {S.notes} ({lines.length})</button>
       <button class="icon-btn" data-action="note-search" aria-label={S.noteSearch} title={S.noteSearch} aria-expanded={searching}
         onclick={(): void => { searching = !searching; find = '' }}>🔍</button></h3>
     {#if searching}<input class="field" type="search" data-field="note-search" placeholder={S.noteSearchPh} aria-label={S.noteSearch} bind:value={find} />{/if}
+    {#if notesOpen}
+    <AddNote personId={person.id} />
     {#each lines as line (line.id)}
       {@const checked = store.crm.lineEdits?.[line.id]?.checkedAt}
       <div class="line">
@@ -164,10 +177,15 @@
     {:else}
       <p class="muted">{S.sheetNoNotes}</p>
     {/each}
+    {/if}
 
-    <AddNote personId={person.id} />
+    <!-- Wave 27: the fields sit under the notes, so "Add a note" stays above them. -->
+    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
+    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
 
-    <h3>{S.personTimeline}</h3>
+    {#if !embedded}
+    <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-happened" aria-expanded={happenedOpen} onclick={(): void => { happenedOpen = !happenedOpen; fold('happened', happenedOpen) }}>{happenedOpen ? '▾' : '▸'} {S.personTimeline} ({events.length})</button></h3>
+    {#if happenedOpen}
     <LogNow personId={person.id} />
     <div class="add-actions">
       <button class="btn small" data-action="add-interaction" onclick={(): void => show(PersonForm.Interaction)}>{S.addInteraction}</button>
@@ -183,6 +201,8 @@
     {:else}
       <p class="muted">{S.nothingYet}</p>
     {/each}
+    {/if}
+    {/if}
   {:else}
     <p class="empty">{S.noPeople}</p>
   {/if}

@@ -59,8 +59,8 @@ export function mergeOneJakob(s: AppState, doorContext: string): boolean {
 }
 
 /**
- * Wave 6: may this peer's asks go on through this phone? Jakob 2026-10-09 ("make the default yes"): yes for a person in my web
- * unless their "Pass their asks on" is switched off (model.ts passesAsksOn). A peer without a person card (a front door, a demo
+ * Wave 6: may this peer's asks go on through this phone? Jakob 2026-10-09 ("make the default yes", changed wave 27): an unset setting is yes for Close and Closest, no for every other
+ * zone; a person's own "Pass their asks on" wins (model.ts passesAsksOn). A peer without a person card (a front door, a demo
  * account) is not a person I chose to connect with: it passes on only if a card for it says so, as since wave 6f S1.
  * `ownDoorDid` is kept for the callers and samePersonTarget.
  */

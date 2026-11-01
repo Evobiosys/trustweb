@@ -31,6 +31,10 @@ export interface Host {
   setHiddenSources(kinds: readonly string[]): void
   /** A bullet written in the vault (notes_sync.svelte.ts) becomes a line in the host's record, local provenance. */
   addLine(personId: string, line: NoteLine): void
+  /** My bare TrustWeb connect link (A12), for the person page's Connect panel. Absent standalone. */
+  connectLink?(): Promise<string>
+  /** A person's messenger links (Person.links) typed on the Curator's person page go to the host's record. Absent standalone. */
+  setLinks?(personId: string, links: Person['links']): void
   /** The element the Curator lives in (its theme switch goes there). */
   root: HTMLElement
 }

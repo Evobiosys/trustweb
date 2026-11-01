@@ -87,6 +87,10 @@ a.btn{display:inline-flex; align-items:center; text-decoration:none}
 .field:focus{outline:none; border-color:var(--electric)}
 .warn{font-size:13px; color:var(--warn-ink); background:var(--tint-warn); border-radius:12px; padding:10px 12px; margin:8px 0}
 .muted{color:var(--ink-soft); font-size:13.5px}
+.person h3.fold-head{display:flex; align-items:center; gap:8px; margin:16px 2px 6px}
+.fold-btn{font-size:13px; letter-spacing:.06em; text-transform:uppercase}
+.days-day h4{font-size:12px; margin:8px 0 2px}
+.days-day p{margin:2px 0; font-size:14px}
 .empty{color:var(--ink-soft); text-align:center; padding:24px 8px}
 .empty.compact{padding:10px 4px}
 .empty-title{font-weight:600}
@@ -433,6 +437,8 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .desk-steps li{display:flex; align-items:center; gap:12px; min-height:44px; font-size:14.5px}
 .desk-circle-box{width:20px; height:20px; border:1.5px solid color-mix(in srgb,var(--ink-soft) 55%,transparent); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; color:var(--card); flex-shrink:0}
 .desk-done .desk-circle-box{background:var(--desk-accent); border-color:var(--desk-accent)}
+.desk-mapwrap{position:relative; margin-top:auto; display:flex}
+.desk-mapwrap .desk-mapcard{flex:1}
 .desk-mapcard{margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end; min-height:120px; padding:16px; overflow:hidden; text-align:left; color:var(--ink); border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,var(--card),var(--desk-glow))}
 .desk-mapcard-text{display:flex; flex-direction:column; gap:6px; align-items:flex-start}
 .desk-mapcard-text .desk-label{letter-spacing:.12em; font-size:11px}

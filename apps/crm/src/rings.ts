@@ -1,5 +1,5 @@
 /**
- * The rings as the CRM shows them, centre outwards: close friend, friend, acquaintance, intending to connect. UNSORTED is no ring:
+ * The rings as the CRM shows them, centre outwards: closest, close friends and allies, friends and community members, acquaintances, public (Ring.Intending). UNSORTED is no ring:
  * it marks people not placed yet, who sit outside the rings.
  * Family is no ring but a tag (checkbox) on top of any closeness. RING_COLORS is plain data on purpose: the outliner branch copies it as is.
  */
@@ -17,7 +17,8 @@ export type RingId = Exclude<Ring, Ring.None | Ring.Family> | typeof UNSORTED
 export const RING_KEY = 'tw-ring'
 export const RING_FIELD = 'rVfw62lb7BYD'
 export const RING_APPROVED_KEY = '_7wgarGd90ZR'
-export const TANA_RING_OPTIONS: Record<RingId, string> = {
+/** Closest has no option in Tana's ring field yet: its edit is a manual item (tana_sync.ts). */
+export const TANA_RING_OPTIONS: Readonly<Record<string, string>> = {
   close: 'ODC_KVcWiMTS', friend: 'L3O_fhbzNg3H', acquaintance: '5g0_ijoSfbqA', intending: 'RK_7xKgGfWYB', unsorted: 'THYXz_h9_MSf',
 }
 /** A choice that files a person under famous (filtered out of the web); it is no ring. */
@@ -32,14 +33,14 @@ export function ringSyncValue(ring: string): RingId | null {
 export type Choice = Exclude<RingId, typeof UNSORTED> | typeof OUT_OF_WEB
 
 export const RING_COLORS = {
-  close: '#8C4A00', friend: '#B8700A', acquaintance: '#D99A2B', intending: '#EFC978',
+  closest: '#5E3200', close: '#8C4A00', friend: '#B8700A', acquaintance: '#D99A2B', intending: '#EFC978',
   unsorted: '#9e9e9e',
   /** The family tag's accent dot / chip. */
   family: '#9575CD',
 }
 
 /** Display order of the groups, from the centre. */
-export const RING_ORDER: readonly Exclude<RingId, typeof UNSORTED>[] = [Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
+export const RING_ORDER: readonly Exclude<RingId, typeof UNSORTED>[] = [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending]
 export const CHOICES: readonly Choice[] = [...RING_ORDER, OUT_OF_WEB]
 
 /** The ring a person is filed under: anything unknown (an older "none" or "family") counts as unsorted. */

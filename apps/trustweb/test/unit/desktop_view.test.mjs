@@ -27,9 +27,9 @@ describe('wideAllowed', () => {
 /** Wave 19 (Jakob 2026-10-23): Settings > View, the three views; the bottom-left pill only under Settings > View. */
 
 describe('views', () => {
-  it('Dex, TrustWeb Desk, Classic, TrustWeb, in that order, one naming', () => {
+  it('Dex, Curator, Classic, TrustWeb, in that order, one naming', () => {
     expect(UI_VIEWS).toEqual([UiView.Dex, UiView.Desk, UiView.Classic, UiView.TrustWeb])
-    expect(UI_VIEWS.map((v) => S.views[v])).toEqual(['Dex', 'TrustWeb Desk', 'Contacts', 'TrustWeb'])
+    expect(UI_VIEWS.map((v) => S.views[v])).toEqual(['Dex', 'Contacts (wide)', 'Contacts', 'TrustWeb'])
     expect(S.views.deskInfo).toBe('Our take on Dex')
   })
   it('the phone Settings has the View row; the bottom-left desk pill is never shown', () => {

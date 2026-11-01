@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/** The Network view's opening camera: the graph's own bounds fitted and centred in the box, wherever the layout settled. */
+export interface Camera { k: number; x: number; y: number }
+
+const MARGIN = 24
+const MAX_K = 1.5
+const MIN_K = 0.05 // a box that has no size yet must not mirror the picture
+
+export function fitBounds(nodes: readonly { x: number; y: number; r: number }[], w: number, h: number): Camera {
+  if (!nodes.length) return { k: 1, x: w / 2, y: h / 2 }
+  const minX = Math.min(...nodes.map((v) => v.x - v.r)); const maxX = Math.max(...nodes.map((v) => v.x + v.r))
+  const minY = Math.min(...nodes.map((v) => v.y - v.r)); const maxY = Math.max(...nodes.map((v) => v.y + v.r))
+  const k = Math.min(MAX_K, Math.max(MIN_K, (w - MARGIN) / Math.max(1, maxX - minX)), Math.max(MIN_K, (h - MARGIN) / Math.max(1, maxY - minY)))
+  return { k, x: w / 2 - ((minX + maxX) / 2) * k, y: h / 2 - ((minY + maxY) / 2) * k }
+}
+
+export interface Size { w: number; h: number }
+
+/** The camera after the canvas changed size: untouched = fitted again; moved by the user = same picture, same spot relative to the box centre. */
+export function refitCamera(camera: Camera | null, touched: boolean, nodes: readonly { x: number; y: number; r: number }[], from: Size | null, to: Size): Camera | null {
+  if (!touched) return fitBounds(nodes, to.w, to.h)
+  if (!camera || !from) return camera
+  return { k: camera.k, x: camera.x + (to.w - from.w) / 2, y: camera.y + (to.h - from.h) / 2 }
+}

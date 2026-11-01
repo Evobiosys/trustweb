@@ -24,3 +24,16 @@ export function panBy(z: RingsZoom, dx: number, dy: number, v: ZoomView): RingsZ
 }
 
 export const transformOf = (z: RingsZoom): string => z.k === 1 ? '' : `translate(${z.x}px, ${z.y}px) scale(${z.k})`
+
+/** The most the responsive layout zooms in by itself (dots and labels stay crisp enough; a pinch may go further). */
+export const RINGS_ZOOM_FIT_MAX = 2.4
+
+/**
+ * Wave 25 (Jakob 2026-10-29, the layout without a phone frame): the factor that fits the rings box (w, h) into the clip (cw, ch) with a
+ * margin, capped; 1 when the clip is phone-sized or the gain would be small (under 15 %), so a phone or a narrow window keeps its rings.
+ */
+export function fitZoom(w: number, h: number, cw: number, ch: number): number {
+  if (w <= 0 || h <= 0 || ch <= 560) return 1
+  const k = Math.min(RINGS_ZOOM_FIT_MAX, (ch - 48) / h, (cw - 24) / w)
+  return k > 1.15 ? k : 1
+}

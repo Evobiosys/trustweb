@@ -22,8 +22,9 @@ describe('Z7 ask icon', () => {
     expect(ICONS.ask).toMatch(/^<svg viewBox="0 0 24 24">/)
     expect(ICONS.ask).toContain('circle')
     expect(ICONS.ask).not.toBe(ICONS.call)
-    expect(read('main.ts')).toMatch(/icon\(call \? 'ask'/)
-    expect(read('main.ts')).toMatch(/icon\('ask'\)/)
+    // wave 25: the fabs draw src/icons/ask_web.ts (two people, "?" badge, arcs)
+    expect(read('main.ts')).toMatch(/call \? askWebIcon\(/)
+    expect(read('main.ts')).toMatch(/innerHTML = askWebIcon\(/)
   })
 })
 

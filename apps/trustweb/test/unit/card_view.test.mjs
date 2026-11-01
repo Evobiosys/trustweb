@@ -1,16 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { CARD_CURATE_KEY, curateOpen, curateStored, chatButtonKind, channelEdit, isConnected } from '../../src/card_view.ts'
+import { chatButtonKind, channelEdit, isConnected } from '../../src/card_view.ts'
 import { Channel } from '../../src/model.ts'
 
 describe('card views (card_view.ts)', () => {
-  it('the Curate section is folded unless the device stored "1"', () => {
-    expect(CARD_CURATE_KEY).toBe('trustweb.ui.cardCurate')
-    expect(curateOpen(null)).toBe(false)
-    expect(curateOpen('0')).toBe(false)
-    expect(curateOpen('1')).toBe(true)
-    expect(curateStored(true)).toBe('1')
-    expect(curateStored(false)).toBe('0')
-  })
   it('a person is connected exactly when a peer id is set', () => {
     expect(isConnected({ peerId: 'p1' })).toBe(true)
     expect(isConnected({})).toBe(false)

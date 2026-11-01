@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 24b (Jakob 2026-10-28): close ties expire. Close and Friend people with no contact for `engagementDays` (default 30, a moon
- * cycle; 0 = off) move one ring outward by themselves; 48 h before that a reminder says so. Contact = the newest of chat messages in or
+ * Wave 24b (Jakob 2026-10-28): close ties expire. Close and Friend people with no contact for `engagementDays` (off by default; the Settings switch
+ * sets 30, a moon cycle) move one ring outward by themselves; 48 h before that a reminder says so. Contact = the newest of chat messages in or
  * out, timeline entries, meetings, events together, and when we met. Everything local: nothing here travels. Pure, no DOM.
  */
 import { ChatDirection } from './chat'
@@ -31,10 +31,10 @@ export function inScope(s: State, p: Person): boolean {
 
 type State = Pick<AppState, 'people'> & Partial<Pick<AppState, 'engagementDays' | 'engagementSince' | 'chats' | 'meetings' | 'events' | 'releasedTies' | 'engagementNoticeDay'>>
 
-/** Days of silence a close tie survives; absent or junk = 30; 0 = off. */
+/** Days of silence a close tie survives; absent, junk or 0 = off (wave 25). ENGAGEMENT_DEFAULT_DAYS is what the Settings switch stores. */
 export function engagementDays(s: Pick<AppState, 'engagementDays'>): number {
   const d = s.engagementDays
-  return typeof d === 'number' && Number.isFinite(d) && d >= 0 ? d : ENGAGEMENT_DEFAULT_DAYS
+  return typeof d === 'number' && Number.isFinite(d) && d >= 0 ? d : 0
 }
 
 /** The settings field: null = leave as it was (empty or not a number); else whole days, 0..365. */

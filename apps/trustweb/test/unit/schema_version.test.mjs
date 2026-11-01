@@ -62,3 +62,14 @@ describe('the chain runs each existing migration', () => {
     check(s)
   })
 })
+
+describe('favourite -> pinned', () => {
+  it('a stored record and an older bundle load favourite as pinned', () => {
+    const rec = parseRecord(JSON.stringify(base({ people: [{ id: 'a', name: 'A', lines: [], favourite: true }] })))
+    expect(rec.people[0]).toMatchObject({ pinned: true })
+    expect(rec.people[0].favourite).toBeUndefined()
+    const b = parseBundle({ v: 1, people: [{ id: 'a', name: 'A', lines: [], favourite: true }], inventory: [], meetings: [], at: {} })
+    expect(b.people[0].pinned).toBe(true)
+    expect(b.people[0].favourite).toBeUndefined()
+  })
+})

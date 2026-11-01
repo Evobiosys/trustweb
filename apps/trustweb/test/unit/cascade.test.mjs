@@ -116,8 +116,8 @@ describe('askSources: only lines this step admits ever reach the matcher', () =>
   })
 })
 
-describe('pass their asks on: on by default for every ring but Intending (2026-10-09), the setting wins', () => {
-  it.each([[R.Close, true], [R.Friend, true], [R.Acquaintance, true], [R.Intending, false]])('%s: %s', (ring, want) => {
+describe('pass their asks on: on by default only for Close and Closest (wave 27, Jakob 2026-10-31), the setting wins', () => {
+  it.each([[R.Closest, true], [R.Close, true], [R.Friend, false], [R.Acquaintance, false], [R.Intending, false]])('%s: %s', (ring, want) => {
     expect(passesAsksOn({ ring })).toBe(want)
   })
   it('the per-person setting wins either way', () => {
@@ -185,7 +185,7 @@ describe('passing on through this phone (one_jakob.ts): who, and never the same 
     testAccounts: [{ id: 'acct1', name: 'Anna-demo', createdAt: 1, peerId: 'anna' }],
   }
   it.each([
-    ['an acquaintance with a card, nothing set: yes (on by default)', peer('ann', 'd-ann', R.Acquaintance), null, true],
+    ['an acquaintance with a card, nothing set: no (wave 27: on by default only for Close)', peer('ann', 'd-ann', R.Acquaintance), null, false],
     ['a close friend who was switched off: no (the setting wins)', peer('cleo', 'd-cleo', R.Close), null, false],
     ['a friend without a person card: no (only a card can say yes)', peer('x', 'd-x', R.Friend), null, false],
     ['this phone\'s own front door: no (no card)', peer('door', 'd-door', R.Acquaintance), 'd-door', false],

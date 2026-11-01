@@ -3,7 +3,7 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
@@ -73,6 +73,31 @@ export function sections(nodes: TreeNode[]): { repo: Repo; nodes: TreeNode[] }[]
   return (Object.keys(roots) as Repo[]).filter((r) => roots[r].length).map((repo) => ({ repo, nodes: roots[repo] }))
 }
 
+/** Keys of the rows related to `key`: a requires link either way, the same context, the same where, or the same selector root (its first compound). */
+export function relatedRows(rows: PreviewFeature[], key: string): string[] {
+  const me = rows.find((r) => r.key === key)
+  if (!me) return []
+  const root = (r: PreviewFeature): string | undefined => r.selector?.trim().split(/[\s>+~]+/)[0] || undefined
+  const same = (a?: string, b?: string): boolean => a !== undefined && a === b
+  return rows.filter((r) => r.key !== key && (r.requires.includes(key) || me.requires.includes(r.key) || same(r.context, me.context) || same(r.where, me.where) || same(root(r), root(me)))).map((r) => r.key)
+}
+
+interface Box { left: number; top: number; right: number; bottom: number; width: number; height: number }
+/** Where the yellow step card goes: over the phone frame's bottom edge (top when the target sits under it); without a frame (responsive layouts) next to the target, below or above it, inside the viewport. */
+export function stepCardPlace(phone: Box | null, target: Box | undefined, cardH: number, vw: number, vh: number): { left: number; width: number; top?: number; bottom?: number } {
+  if (phone) {
+    const low = Math.min(phone.bottom, vh)
+    const high = target !== undefined && target.bottom > low - cardH - 16
+    return { left: phone.left + 8, width: phone.width - 16, ...(high ? { top: Math.max(phone.top, 0) + 8 } : { bottom: vh - low + 8 }) }
+  }
+  const width = Math.min(320, vw - 16)
+  const left = Math.min(Math.max(target?.left ?? 8, 8), vw - width - 8)
+  if (!target) return { left, width, bottom: 8 }
+  const below = target.bottom + 8
+  const top = below + cardH <= vh - 8 ? below : Math.max(8, target.top - 8 - cardH)
+  return { left, width, top }
+}
+
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
 export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
@@ -123,17 +148,27 @@ export const shownVerdict = (f: PreviewFeature): Verdict => (f.verdict === 'merg
 /** A press on a pill: the verdict to store (the registry checks/unchecks the box and cascades over requires/dependants itself; nothing assembles). Pressing the shown pill again clears it. */
 export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 'needs-work'): Verdict => verdictAfter(shownVerdict(features.find((x) => x.key === key)!), v)
 
-/** Select all / none as the exact boxes to POST: every available (not merged) row on = approved, or off; merged rows keep their box. */
+/** Select all / none as the exact boxes to POST: every available (not merged) row on = loaded into the preview, or off (approval is the pill verdict, not the box); merged rows keep their box. */
 export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
 
+// unused since wave27 review, archive candidate
 export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
+export const allLoaded = (features: PreviewFeature[]): boolean => visible(features).every((f) => f.checked)
 
-/** In the preview and in the merge only what is checked AND approved (verdict merge). Mirror of approvedKeys in the ops repo. */
+/** Two states per row (Jakob 2026-10-31): loaded = the box is checked = in the preview assembly; approved = loaded + verdict merge = reviewed and liked. Mirror of loadedKeys / approvedKeys in the ops repo. */
+export const loadedKeys = (features: PreviewFeature[]): string[] => visible(features).filter((f) => f.checked).map((f) => f.key)
 export const approvedKeys = (features: PreviewFeature[]): string[] => visible(features).filter((f) => f.checked && f.verdict === 'merge').map((f) => f.key)
 
-/** Changes not yet applied: the approved set against the set the worktree was assembled with (assembled.set; an older registry: its checked rows). */
+/** Loaded rows still waiting for the approval, and the panel's reminder line for them (empty when none waits). Mirror of unapproved / reminderText in the ops repo. */
+export const unapproved = (features: PreviewFeature[]): PreviewFeature[] => visible(features).filter((f) => f.checked && f.verdict !== 'merge')
+export function reminderText(features: PreviewFeature[]): string {
+  const open = unapproved(features)
+  return open.length ? `${open.length} loaded, not yet approved: ${open.map((f) => f.title).join(', ')}` : ''
+}
+
+/** Changes not yet applied: the loaded set against the set the worktree was assembled with (assembled.set; an older registry: its checked rows). A verdict alone moves nothing. */
 export function pendingCount(p: { features: PreviewFeature[]; assembled?: { set?: string[] } | null }): number {
-  const now = approvedKeys(p.features), was = p.assembled?.set ?? visible(p.features).filter((f) => f.checked).map((f) => f.key)
+  const now = loadedKeys(p.features), was = p.assembled?.set ?? loadedKeys(p.features)
   return now.filter((k) => !was.includes(k)).length + was.filter((k) => !now.includes(k)).length
 }
 export const pendingText = (n: number): string => `${n} change${n === 1 ? '' : 's'} not applied`
@@ -169,11 +204,14 @@ export const scrollStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: s
   tabValue<number>(storage, 'twp-scroll-' + id, 0, (v): v is number => typeof v === 'number' && v >= 0)
 
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
-export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, approvedKeys(p.features)])
+export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
 
 /** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
 export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
+
+/** The left panel greys out and stops reacting once Declare done has been pressed and the run did not end in failure or cancel. */
+export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
 
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
@@ -200,11 +238,12 @@ export function conflictParts(text: string): Array<string | ConflictName> {
   return out
 }
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Declare done opens with no test run going, >= 1 approved row and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Declare done opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
-    : approvedKeys(p.features).length === 0 ? 'Declare at least one feature done' : ''
+    : unapproved(p.features).length ? `Approve first: ${unapproved(p.features).map((f) => f.title).join(', ')}`
+    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature' : ''
   return { ok: hint === '', hint }
 }
 

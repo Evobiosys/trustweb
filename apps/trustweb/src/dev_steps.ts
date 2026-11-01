@@ -1,6 +1,6 @@
 /** Dev-only step overlay: a yellow card over the phone walks through the steps to a feature, one at a time, the pointer's red ring on each step's element. Used by dev_preview.ts. */
 import type { Pointer } from './dev_pointer'
-import { parseStep } from './dev_preview_rules'
+import { parseStep, stepCardPlace } from './dev_preview_rules'
 
 const CSS = `
 .twp-step{position:fixed;z-index:99999;padding:8px 10px;border-radius:10px;background:#ffd24a;color:#241b2e;font:600 13px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);display:grid;gap:6px}
@@ -28,14 +28,12 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   const button = (text: string, onclick: () => void, className = '', disabled = false): HTMLButtonElement =>
     Object.assign(document.createElement('button'), { textContent: text, onclick, className, disabled })
 
-  // Over the phone's bottom edge; at its top when the target sits under the card.
   function place(): void {
     if (!card) return
-    const r = (document.querySelector('.phone') ?? document.body).getBoundingClientRect()
+    const phone = document.querySelector('.phone')?.getBoundingClientRect() ?? null
     const target = list[at].selector ? document.querySelector(list[at].selector!)?.getBoundingClientRect() : undefined
-    const low = Math.min(r.bottom, innerHeight)
-    const top = target !== undefined && target.bottom > low - card.offsetHeight - 16
-    Object.assign(card.style, { left: r.left + 8 + 'px', width: r.width - 16 + 'px', top: top ? Math.max(r.top, 0) + 8 + 'px' : '', bottom: top ? '' : innerHeight - low + 8 + 'px' })
+    const p = stepCardPlace(phone, target, card.offsetHeight, innerWidth, innerHeight)
+    Object.assign(card.style, { left: p.left + 'px', width: p.width + 'px', top: p.top !== undefined ? p.top + 'px' : '', bottom: p.bottom !== undefined ? p.bottom + 'px' : '' })
   }
 
   function draw(): void {
@@ -67,6 +65,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     card?.remove(); card = null
     document.removeEventListener('click', follow, true)
     window.removeEventListener('resize', replace)
+    document.removeEventListener('scroll', replace, true)
   }
 
   return {
@@ -76,6 +75,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
       on = true
       document.addEventListener('click', follow, true)
       window.addEventListener('resize', replace)
+      document.addEventListener('scroll', replace, true)
       go(0)
     },
     close,

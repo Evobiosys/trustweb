@@ -9,7 +9,7 @@ export function webSlot(p: Pick<Person, 'ring' | 'fields' | 'ringSuggested'>): R
   const r = ringSlot(p)
   return WEB_RINGS.includes(r) && !p.ringSuggested ? r : Ring.Unsorted
 }
-export const RING_RADIUS: Record<Ring, number> = { [Ring.Close]: 48, [Ring.Friend]: 84, [Ring.Acquaintance]: 118, [Ring.Intending]: 148, [Ring.Unsorted]: 168, [Ring.None]: 168, [Ring.Family]: 48 }
+export const RING_RADIUS: Record<Ring, number> = { [Ring.Closest]: 48, [Ring.Close]: 78, [Ring.Friend]: 106, [Ring.Acquaintance]: 132, [Ring.Intending]: 156, [Ring.Unsorted]: 176, [Ring.None]: 176, [Ring.Family]: 48 }
 
 /** More people than this on the rings: the name shows on hover, focus or tap only. */
 export const RINGS_LABEL_CAP = 40
@@ -117,7 +117,7 @@ export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Reco
   for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
     // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it; the close ring hugs the "you" avatar.
-    let { r, dot } = ring === Ring.Close ? closeFit(n, k) : { r: RING_RADIUS[ring], dot: Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / n))) }
+    let { r, dot } = ring === Ring.Closest ? closeFit(n, k) : { r: RING_RADIUS[ring], dot: Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / n))) }
     if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
     const mine = angles[ring]
