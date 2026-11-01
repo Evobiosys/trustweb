@@ -46,7 +46,7 @@ export function fitSize(w: number, h: number, side: number): { w: number; h: num
 }
 
 /** Scales a picture down to `side` (default MAX_SIDE) as JPEG. A browser that cannot decode it keeps nothing. */
-export async function shrink(file: Blob, side: number = MAX_SIDE): Promise<Blob> {
+export async function shrink(file: Blob, side: number = MAX_SIDE, quality: number = JPEG_QUALITY): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
   try {
     const { w, h } = fitSize(bitmap.width, bitmap.height, side)
@@ -54,7 +54,7 @@ export async function shrink(file: Blob, side: number = MAX_SIDE): Promise<Blob>
     canvas.width = w
     canvas.height = h
     canvas.getContext('2d')?.drawImage(bitmap, 0, 0, w, h)
-    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('no image'))), 'image/jpeg', JPEG_QUALITY))
+    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('no image'))), 'image/jpeg', quality))
   } finally {
     bitmap.close()
   }

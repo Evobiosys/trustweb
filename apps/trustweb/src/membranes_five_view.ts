@@ -18,6 +18,8 @@ export interface SmallCardDeps {
   /** The rest of the person's card, drawn under the small card while it is expanded. */
   more?: readonly (Node | null)[]
   onPin: () => void
+  /** The picture slot (card_pages_view.ts cardFace): the button left of the name, its menu under the name row. Absent: none. */
+  face?: { button: HTMLElement; menu: HTMLElement }
   /** The primary Chat button of the full card. */
   chat: HTMLElement
   /** A tag button: the Membranes then show only the people with it. */
@@ -34,7 +36,8 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
-    el('div', { class: 'card-name-row' }, [d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin)]),
+    el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin)]),
+    d.face?.menu,
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('p', { class: 'meta', 'data-card-zone': '' }, [d.zone]),
     el('div', { class: 'chips', 'data-card-tags': '' }, d.tags.length

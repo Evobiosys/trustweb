@@ -1179,3 +1179,16 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-body{margin-top:10px}
 .who button.link{background:none; border:0; padding:0; font:inherit; color:var(--teal); text-decoration:underline; cursor:pointer}
 .status-pill[hidden]{display:none}
+/* wave 28: card picture slot and the who-they-know entries */
+.card-face{border:0; background:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:50%}
+.card-face .ava{width:56px; height:56px; font-size:22px}
+.card-face:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.card-face-menu{display:flex; gap:6px; flex-wrap:wrap}
+.card-face-menu[hidden]{display:none}
+.card-name-row .card-face + *{margin-right:auto}
+.knows-chip{border-radius:18px; display:inline-flex; flex-wrap:wrap; align-items:center; gap:2px; padding:2px 4px 2px 10px}
+.knows-name{border:0; background:none; padding:4px 2px; font:inherit; color:inherit; cursor:pointer; text-decoration:underline}
+.knows-peek{flex-basis:100%; display:flex; gap:8px; align-items:flex-start; padding:6px 4px 4px}
+.knows-peek[hidden]{display:none}
+.knows-peek .ava{width:64px; height:64px; font-size:24px}
+.knows-note{font-size:12px; color:var(--ink-soft); white-space:normal; max-width:220px}

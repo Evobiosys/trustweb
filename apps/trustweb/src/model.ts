@@ -446,6 +446,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 28 (person_image.ts): a small JPEG data URL (256 px) shown on the card and the who-they-know entries. This phone only, never synced. Absent: initials. */
+  image?: string
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
   links?: { signal?: string; whatsapp?: string; other?: string }
   /** Wave 27 (messenger_links.ts): the service "Chat" opens for this person, pinned by the owner. Absent: the last used. */
