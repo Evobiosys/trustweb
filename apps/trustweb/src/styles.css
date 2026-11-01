@@ -974,6 +974,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* Wave 28: the source pill, its menu, and the combined list (a C-shaped bracket on the left edge in the source colour; side by side from 900px). */
 .chat-source-wrap{display:inline-block; margin-left:8px; vertical-align:middle}
 .chat-source-pill{display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); background:var(--card); color:inherit; border-radius:999px; padding:4px 10px; font:inherit; font-size:13px; cursor:pointer}
+@media (max-width:480px){.hdr [data-chat-dots]{display:none} .chat-source-pill{white-space:nowrap} .hdr-left h2{flex-shrink:0}} /* the pill opens the same list; six header buttons leave the title no room */
 .chat-source-menu{min-width:240px}
 .chat-menu-item.grey .chat-menu-open{opacity:.55}
 .chat-menu-item small{font-size:11px}
