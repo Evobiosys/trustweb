@@ -15,7 +15,7 @@ export interface Curator {
   /** Wave 19: Settings > View > Classic. */
   openClassic(): void
   /** One person's Curator page, in a new element for the person sheet (same component and CSS as the tab). */
-  person(personId: string, onclose: () => void, opts?: { embedded?: boolean }): HTMLElement
+  person(personId: string, onclose: () => void, opts?: { embedded?: boolean | 'curate' }): HTMLElement
   /** Hide in trustweb (Tana checkbox through the Curator's sync, removed from this record) and its Undo. */
   hide(personId: string): Promise<void>
   unhide(personId: string): Promise<void>

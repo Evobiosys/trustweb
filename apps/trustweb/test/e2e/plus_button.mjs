@@ -58,7 +58,7 @@ async function main() {
 
     await page.getByLabel('Your first name').fill('Smoke Tester')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     ok('boots on Web screen', true)
     const offer = page.locator('.demo-friends')
     await offer.waitFor({ timeout: 5_000 })
@@ -84,7 +84,7 @@ async function main() {
     await page.getByPlaceholder('Name').first().fill('Plus Person')
     await page.getByRole('button', { name: 'Add to my web' }).click()
     await page.getByRole('button', { name: 'Back' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 10_000 })
     ok('back from Curate returns to the open search, with the new person found', /Plus Person/.test(await page.locator('#search-results').innerText()))
     await page.getByRole('button', { name: 'Close search' }).click()
     ok('back on Web with the new person on the rings', await page.locator('.node', { hasText: 'Plus Person' }).count() === 1)
@@ -96,11 +96,11 @@ async function main() {
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     ok('tapping yourself lets you change your own name', (await page.locator('.node.you span').innerText()) === 'Jakob')
     await page.reload()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     ok('the new name is kept', (await page.locator('.node.you span').innerText()) === 'Jakob')
 
     await page.reload()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await page.waitForTimeout(800)
     ok('the demo offer does not come back after "No thanks"', await page.locator('.demo-friends').isHidden())
     // Settings: the connection state, and demo content on and off

@@ -94,7 +94,7 @@ async function main() {
     await page.goto(base)
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
     // 1. a "what" memo with a line added by hand during the take
     await page.locator('nav.tabs .tab-record').click()
@@ -162,7 +162,7 @@ async function main() {
       localStorage.setItem('trustweb.v1.me', JSON.stringify(s))
     })
     await page.reload()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await page.locator('.node', { hasText: 'Anna' }).click()
     const pLink = page.locator('.sheet.on .sline .src-link')
     ok('the person sheet links the note: "From the meeting with Anna, <date>"', /^From the meeting with Anna, /.test(await pLink.innerText()) && await page.locator('.sheet.on [data-provenance="recorded-meeting"]').count() === 1)
@@ -206,7 +206,7 @@ async function main() {
       localStorage.setItem('trustweb.v1.me', JSON.stringify(s))
     }, audioDb)
     await page.reload()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await page.locator('nav.tabs .tab-record').click()
     await page.locator('.past-link').click()
     await page.locator('.sheet .pm-row', { hasText: 'Tap test' }).click()

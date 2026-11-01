@@ -41,7 +41,7 @@ export async function mountCurator(el: HTMLElement, lent: Omit<Host, 'root'>): P
 }
 
 /** One person's page (the Curator tab's own, same component and CSS) in a fresh element of the host, read from the host's record as it is now. */
-export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root'>, personId: string, onclose: () => void, embedded = false): Promise<void> {
+export async function mountCuratorPerson(el: HTMLElement, lent: Omit<Host, 'root'>, personId: string, onclose: () => void, embedded: boolean | 'curate' = false): Promise<void> {
   Object.assign(host, lent)
   const [{ default: Person }, { reloadRecord }] = await Promise.all([import('./person.svelte'), import('./state.svelte')])
   reloadRecord()

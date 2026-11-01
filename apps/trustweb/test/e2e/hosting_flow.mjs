@@ -173,7 +173,7 @@ async function main() {
     await p2.goto(vite.base + 'seed-blank')
     await p2.evaluate((v) => localStorage.setItem('trustweb.v1.me', v), saved)
     await p2.goto(vite.base)
-    await p2.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await p2.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await openSettings(p2)
     await p2.locator('[data-hosting-open]').click()
     const drill = await meetingId(p2, 'Drill')

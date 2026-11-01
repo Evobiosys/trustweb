@@ -5,8 +5,8 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
-import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, isArchived, labelAt, mutualIds, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
+import type { Forces, Graph, GraphEdge, GraphNode, LabelBox, Pins } from './network_graph'
 import { fitBounds, refitCamera } from './network_fit'
 import type { Camera, Size } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
@@ -28,13 +28,13 @@ const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7'
 const STEPS_PER_FRAME = 20
 const TAP_SLOP = PRESS_SLOP
 
-/** Per device: the Logseq look, the forces, and whether people outside my web (tier "outside") are drawn. */
-interface Settings { logseq: boolean; showAll: boolean; forces: Forces }
+/** Per device: the Logseq look, the forces, whether people outside my web (tier "outside") are drawn, and whether people connected only to me are. */
+interface Settings { logseq: boolean; showAll: boolean; showOthers: boolean; forces: Forces }
 function loadSettings(): Settings {
   try {
     const v = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<Settings>
-    return { logseq: v.logseq === true, showAll: v.showAll === true, forces: { ...DEFAULT_FORCES, ...v.forces } }
-  } catch { return { logseq: false, showAll: false, forces: { ...DEFAULT_FORCES } } }
+    return { logseq: v.logseq === true, showAll: v.showAll === true, showOthers: v.showOthers === true, forces: { ...DEFAULT_FORCES, ...v.forces } }
+  } catch { return { logseq: false, showAll: false, showOthers: false, forces: { ...DEFAULT_FORCES } } }
 }
 function saveSettings(v: Settings): void {
   try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)) } catch { /* not remembered */ }
@@ -66,8 +66,12 @@ function keyOf(o: NetworkOptions): string {
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
-  const people = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id))
-  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
+  const inWeb = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id) && !isArchived(p))
+  // Default: only people who are connected with other contacts too; the rest (only connected with me) sit behind "Show others (n)".
+  const mutual = mutualIds(o.me, inWeb)
+  const others = inWeb.length - mutual.size
+  const people = settings.showOthers ? inWeb : inWeb.filter((p) => mutual.has(p.id))
+  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '') + (settings.showOthers ? '+others' : '')
   if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
@@ -77,13 +81,14 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let matches = new Set<string>()
   let hover: GraphNode | null = null
   let dirty = true
+  let shown: LabelBox[] = [] // the labels of the last frame, for taps on a name
   let w = 0
   let h = 0
 
   const canvas = el('canvas', { class: 'net-canvas', role: 'img', 'aria-label': S.netAria(people.length) }) as HTMLCanvasElement
   const ctx = canvas.getContext('2d')
   const search = el('input', { class: 'field net-search', type: 'search', placeholder: S.netSearchPh, 'aria-label': S.netSearchPh, autocomplete: 'off' }) as HTMLInputElement
-  const shakeBtn = el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { shake(g, Date.now()); state.iteration = 0; dirty = true } }, [S.netShake])
+  const shakeBtn = el('button', { class: 'btn btn-ghost btn-sm', 'data-net-shake': '', onclick: () => { shake(g, Date.now()); state.iteration = 0; dirty = true } }, [S.netShake])
   const rebuild = (): void => { saveSettings(settings); root.replaceWith(createNetworkView(o)) }
   const reheat = (): void => { saveSettings(settings); state.iteration = 0; dirty = true }
   const check = (label: string, on: boolean, set: (v: boolean) => void): HTMLElement =>
@@ -98,6 +103,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     download('network.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }))
   }
   const menu = el('div', { class: 'net-menu', hidden: '' }, [
+    shakeBtn,
     check(S.netLogseq, settings.logseq, (v) => { settings.logseq = v; saveSettings(settings); dirty = true }),
     check(S.netShowAll, settings.showAll, (v) => { settings.showAll = v; rebuild() }),
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { for (const v of g.nodes) if (v.tier !== undefined) v.pinned = false; savePins(g); reheat() } }, [S.netUnpinAll]),
@@ -111,6 +117,8 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ]),
   ])
   const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
+  const othersBtn = el('button', { class: 'btn btn-ghost btn-sm net-others', 'data-net-others': '', 'aria-pressed': String(settings.showOthers),
+    onclick: () => { settings.showOthers = !settings.showOthers; rebuild() } }, [settings.showOthers ? S.netHideOthers : S.netShowOthers(others)])
   const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
   const pop = el('div', { class: 'net-pop', 'data-net-pop': '', hidden: '' })
   let tipTimer = 0
@@ -123,7 +131,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     } }, ['i'])
     return el('div', { class: 'net-legend-box' }, [btn, line])
   }
-  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, legendInfo()])
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, menuBtn]), menu, canvas, tip, pop, othersBtn, legendInfo()])
 
   const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })
@@ -201,7 +209,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
-    const labels: { text: string; x: number; y: number; alpha: number; fill: string }[] = [] // drawn after every dot and edge, above the dot
+    const labels: { id: string; text: string; x: number; y: number; alpha: number; fill: string; pinned: boolean }[] = [] // drawn after every dot and edge, above the dot
     g.nodes.forEach((v, i) => {
       const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
       const x = v.x * c.k + c.x
@@ -225,14 +233,22 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
       if (lq) {
         const a = lit ? fade : fade * 0.15
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
-        labels.push({ text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label })
+        labels.push({ id: v.id, text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label, pinned: v.pinned && v.tier !== undefined })
       } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
-        labels.push({ text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink })
+        labels.push({ id: v.id, text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink, pinned: v.pinned && v.tier !== undefined })
       }
     })
     ctx.lineJoin = 'round'; ctx.lineWidth = 3.5
     ctx.strokeStyle = lq ? LOGSEQ.bg : css.getPropertyValue('--linen').trim() || '#FFFFFF' // halo: readable over edges
-    for (const l of labels) { ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y) }
+    // Names in the body font, pinned people's in the second family (--font-pinned); the boxes make a name tappable.
+    const bodyFont = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif'
+    const pinnedFont = css.getPropertyValue('--font-pinned').trim() || 'ui-monospace, Menlo, monospace'
+    shown = []
+    for (const l of labels) {
+      ctx.font = `${l.pinned ? '500' : lq ? '400' : '600'} ${lq ? 10 : 11}px ${l.pinned ? pinnedFont : bodyFont}`
+      ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y)
+      shown.push({ id: l.id, x: l.x, y: l.y, w: ctx.measureText(l.text).width })
+    }
     ctx.globalAlpha = 1
   }
 
@@ -352,7 +368,8 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (dragged && travelled > TAP_SLOP && tap) { savePins(g); return }
     if (dragged) dragged.pinned = dragPinned
     if (!tap || was !== 1 || travelled > TAP_SLOP) return
-    const v = hit(local(e).x, local(e).y)
+    const lid = labelAt(shown, local(e).x, local(e).y)
+    const v = hit(local(e).x, local(e).y) ?? g.nodes.find((n) => n.id === lid) ?? null
     if (!v) { const ed = hitEdge(local(e).x, local(e).y); if (ed) showTip(ed); return }
     if (v.pinned && v.tier !== undefined) {
       if (lastTap.id === v.id && e.timeStamp - lastTap.at < DOUBLE_TAP_MS) { clearTimeout(opening); lastTap = { id: '', at: 0 }; unpin(v); return }

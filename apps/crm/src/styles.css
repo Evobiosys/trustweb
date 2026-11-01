@@ -242,6 +242,9 @@ section[data-section="overdue"] .due{color:var(--warn-ink)}
 .slot{display:flex; gap:4px; align-items:flex-start; border-radius:12px}
 .slot > :not(.grip):not(.hide-box){flex:1; min-width:0}
 .hide-box{display:flex; align-items:center; gap:4px; font-size:12px; color:var(--ink-soft); min-height:44px}
+.slot.dup{flex-wrap:wrap}
+.dup-note{display:none; flex-basis:100%; font-size:.75rem; opacity:.7; padding-left:24px}
+.slot.dup-on .dup-note{display:block}
 .slot.before{box-shadow:0 -3px 0 var(--electric)}
 .slot.lifted{opacity:.45}
 .grip{touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; width:28px; min-height:44px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:18px}

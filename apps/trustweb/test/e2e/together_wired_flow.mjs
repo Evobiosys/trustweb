@@ -44,7 +44,7 @@ async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 
@@ -108,7 +108,7 @@ async function main() {
       localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
     })
     await a.page.reload()
-    await a.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await a.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
     const p = b.page
     await p.locator('.sheet.on .sheet-home').click({ timeout: 1000 }).catch(() => {})

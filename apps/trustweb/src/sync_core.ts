@@ -33,6 +33,7 @@ import { CHANNELS } from './model'
 import { CHAT_MAX_THREADS, MessageState, byStamp, lastAt, sanitizeChatBook, trimThread } from './chat'
 import type { ChatBook } from './chat'
 import type { ChannelMap, ShareSettings } from './contact_share'
+import { withoutPersonImage } from './person_image'
 import { fillMissing, mergePersons, resolveSameAs, unitePerson } from './same_person'
 import { codesForBundle, parseCodeField, readCodeList, validLongUrl, wireOther } from './sync_code'
 import type { CodeMerge } from './sync_code'
@@ -166,7 +167,7 @@ type Source = Pick<AppState, 'people' | 'inventory' | 'meetings' | 'events' | 't
 function entities(s: Source, settings: Record<string, unknown>): [string, unknown][] {
   return [
     ...Object.entries(settings).map(([k, x]): [string, unknown] => [SETTING_PREFIX + k, x]),
-    ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, x]),
+    ...s.people.map((x): [string, unknown] => [KEY_PREFIX.person + x.id, withoutPersonImage(x)]),
     ...s.inventory.map((x): [string, unknown] => [KEY_PREFIX.resource + x.id, withoutImage(x)]),
     ...(s.meetings ?? []).map((x): [string, unknown] => [KEY_PREFIX.meeting + x.id, x]),
     ...(s.events ?? []).map((x): [string, unknown] => [KEY_PREFIX.event + x.id, syncEvent(x)]),
@@ -194,7 +195,7 @@ export function bundleOf(s: AppState, stamps: Stamps, shareCode = true): SyncBun
   return {
     v: SYNC_VERSION,
     schemaVersion: SCHEMA_VERSION,
-    people: s.people,
+    people: s.people.map(withoutPersonImage),
     inventory: s.inventory.map(withoutImage),
     meetings: s.meetings ?? [],
     at: Object.fromEntries(entries.map(([k, x]) => [k, x.at])),
@@ -470,7 +471,7 @@ export function mergeBundle(mine: AppState, myStamps: Stamps, incoming: SyncBund
   if (sameAs) mine.sameAs = sameAs
   const theirs = remapBundle(incoming, sameAs)
   const c: Ctx = { myAt: myStamps, theirs, since, res }
-  mine.people = mergeList('person', mine.people, theirs.people, c, (p) => p.name, unitePerson)
+  mine.people = mergeList('person', mine.people, theirs.people.map(withoutPersonImage), c, (p) => p.name, unitePerson)
   mine.inventory = mergeList('resource', mine.inventory, theirs.inventory.map(withoutImage), c, (x) => x.text, fillMissing)
   mine.meetings = mergeList('meeting', mine.meetings ?? [], theirs.meetings, c, (x) => x.about, fillMissing)
   if (theirs.events?.length) mine.events = mergeList('event', mine.events ?? [], theirs.events, c, (x) => x.name, fillMissing)

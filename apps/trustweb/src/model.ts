@@ -14,6 +14,7 @@ import type { TogetherPref } from './together_prefs'
 import type { ServiceId } from './messenger_links'
 import type { SerializedIdentityV1 } from '../../demo/src/did'
 import type { ConnectLinkParams } from '../../demo/src/connect_link'
+import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
@@ -446,6 +447,8 @@ export interface Person {
   blocked?: number
   /** Ids of the persons (or my own id) this person is connected to, as I know it: edges in the Network view. Unites on merge. Absent: none. */
   knows?: string[]
+  /** Wave 28 (person_image.ts): a small JPEG data URL (256 px) shown on the card and the who-they-know entries. This phone only, never synced. Absent: initials. */
+  image?: string
   /** Wave 25 (person_links.ts): Signal, WhatsApp or other links typed on the card. ONLY ME. Absent: none. */
   links?: { signal?: string; whatsapp?: string; other?: string }
   /** Wave 27 (messenger_links.ts): the service "Chat" opens for this person, pinned by the owner. Absent: the last used. */
@@ -988,7 +991,11 @@ export interface AppState {
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
-  uiPins?: { views: string[] }
+  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
+  /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
+  qrProfileOption?: boolean
+  /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Local; rides the device sync with the other settings. */
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; open?: Ring[]; filterOpen?: boolean; community?: string }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */
@@ -1167,6 +1174,8 @@ export interface AppState {
   sovereign?: {
     services?: Record<string, { exportAt?: number; deleteAt?: number }>
     lang?: 'en' | 'de'
+    /** Wave 28 (export_watch.ts): per service, the export-mail watcher. Absent: not watching. */
+    watch?: Record<string, Watch>
     forget?: { peers: Record<string, { sentAt?: number; ackAt?: number }> }
   }
   /**

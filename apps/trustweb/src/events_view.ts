@@ -51,6 +51,8 @@ export interface EventsView {
   openForm: (fromIso?: string) => void
   /** The plain list (search, filter, paste a link) instead of the calendar. */
   showList: () => void
+  /** Wave 28: the event whose page is open (the header's QR button then shows its code); undefined on the list, the calendar and the form. */
+  current: () => TwEvent | undefined
 }
 
 type View = { kind: 'list' } | { kind: 'page'; id: string } | { kind: 'form'; id?: string; from?: string }
@@ -105,7 +107,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       ].filter((n): n is HTMLElement => n !== null))
     }
     draw('')
-    const filter = upcoming.length + past.length > 5
+    const filter = upcoming.length + past.length > 0
       ? el('input', { class: 'field', placeholder: S.eventsFilter, 'aria-label': S.eventsFilter, 'data-event-filter': '', oninput: (e: Event) => draw((e.target as HTMLInputElement).value) })
       : null
     return [h.header(S.eventsTitle, { back: h.leave }), el('div', { class: 'scroll' }, [filter, rows, add, pasteRow()])]
@@ -308,6 +310,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     atList: () => view.kind === 'list' && !plain,
     openForm: (from) => show({ kind: 'form', ...(from ? { from } : {}) }),
     showList: () => { view = { kind: 'list' }; plain = true; h.redraw() },
+    current: () => (view.kind === 'page' ? find(view.id) : undefined),
     open: (id) => { view = id ? { kind: 'page', id } : { kind: 'list' } },
     body: () => {
       const ev = view.kind === 'list' ? undefined : find(view.id ?? '')

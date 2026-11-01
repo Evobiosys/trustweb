@@ -3,7 +3,7 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
@@ -151,6 +151,64 @@ export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 
 /** Select all / none as the exact boxes to POST: every available (not merged) row on = loaded into the preview, or off (approval is the pill verdict, not the box); merged rows keep their box. */
 export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
 
+/** The panel's write before the server answers (wave 28: Approve is instant): the verdict on `keys`; needs work also unloads the row and its dependants, as the registry does. */
+export function applyVerdicts(features: PreviewFeature[], keys: string[], v: Verdict): PreviewFeature[] {
+  const base = v === 'needs-work' ? keys.reduce((fs, k) => toggled(fs, k, false), features) : features
+  return base.map((f) => (keys.includes(f.key) ? { ...f, verdict: v } : f))
+}
+
+/** The panel's write of a box before the server answers: the cascade of `toggled`, and a row that is no longer loaded loses a merge verdict (as the registry settles it). */
+export const withBox = (features: PreviewFeature[], key: string, checked: boolean): PreviewFeature[] =>
+  toggled(features, key, checked).map((f) => (!f.checked && f.verdict === 'merge' ? { ...f, verdict: null } : f))
+
+/** A row and the loaded rows below it (their `requires` chain): one approve covers them all. */
+export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
+  const out: string[] = []
+  const walk = (n: TreeNode): void => { if (n.feature.checked) out.push(n.feature.key); n.children.forEach(walk) }
+  const find = (ns: TreeNode[]): TreeNode | undefined => { for (const n of ns) { const hit = n.feature.key === key ? n : find(n.children); if (hit) return hit } return undefined }
+  const top = find(tree(visible(features)))
+  if (top) walk(top)
+  return out
+}
+
+/** "Approve wave": warn (and light green) while a loaded row was not approved on its own press (`individual` = the keys the owner pressed); dark green when every one was. */
+export function waveState(features: PreviewFeature[], individual: string[]): { warn: boolean; light: boolean; implicit: string[] } {
+  const implicit = visible(features).filter((f) => f.checked && !individual.includes(f.key)).map((f) => f.key)
+  return { warn: implicit.length > 0, light: implicit.length > 0, implicit }
+}
+
+/** The folded keys left after the rows in `keys` must be seen: their folded parents (the `requires` chain) open. */
+export function expandFor(features: PreviewFeature[], keys: string[], foldedKeys: string[]): string[] {
+  const open = new Set<string>()
+  const walk = (n: TreeNode, parents: string[]): void => {
+    if (keys.includes(n.feature.key)) parents.forEach((k) => open.add(k))
+    n.children.forEach((c) => walk(c, [...parents, n.feature.key]))
+  }
+  tree(visible(features)).forEach((n) => walk(n, []))
+  return foldedKeys.filter((k) => !open.has(k))
+}
+
+/** Walk is offered only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk). */
+export const walkShown = (f: { walkOk?: boolean }): boolean => f.walkOk === true
+
+/** What the note button copies: the preview, the row, its title, branch and ref, to paste into the pi session. */
+export const noteText = (id: string, f: PreviewFeature): string => `${id} | ${f.key} | ${f.title} | ${f.branch}@${f.ref ?? '?'}`
+
+/** How an apply ended, read from the registry: a newer assembly (moved), nothing left to assemble 5 s after the press (idle), else running. */
+export function applyOutcome(q: { pending?: boolean; assembled?: { at: string } | null }, start: number, now: number): 'moved' | 'idle' | 'running' {
+  if (q.pending) return 'running'
+  if (q.assembled && Date.parse(q.assembled.at) > start) return 'moved'
+  return now - start > 5000 ? 'idle' : 'running'
+}
+
+/** Boxes are picked in a row: the reassembly starts this long after the last one. */
+export const APPLY_DELAY_MS = 1300
+export function debounce(fn: () => void, ms: number): (() => void) & { waiting(): boolean } {
+  let t: ReturnType<typeof setTimeout> | undefined
+  const d = (): void => { clearTimeout(t); t = setTimeout(() => { t = undefined; fn() }, ms) }
+  return Object.assign(d, { waiting: (): boolean => t !== undefined })
+}
+
 // unused since wave27 review, archive candidate
 export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
 export const allLoaded = (features: PreviewFeature[]): boolean => visible(features).every((f) => f.checked)
@@ -202,6 +260,12 @@ export const reloadMark = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: st
 /** The panel's scroll offset: kept across the self-reload, a manual reload and an apply round trip. */
 export const scrollStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) =>
   tabValue<number>(storage, 'twp-scroll-' + id, 0, (v): v is number => typeof v === 'number' && v >= 0)
+
+const isKeys = (v: unknown): v is string[] => Array.isArray(v) && v.every((k) => typeof k === 'string')
+/** Wave 28: the rows the owner approved with their own press (localStorage: survives tabs), the folded rows of the tree and whether the load list is open (sessionStorage), per preview. */
+export const individualStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-indiv-' + id, [], isKeys)
+export const foldStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-tree-' + id, [], isKeys)
+export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-load-' + id, false, (v): v is boolean => typeof v === 'boolean')
 
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])
