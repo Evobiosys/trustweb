@@ -54,7 +54,7 @@ async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 
@@ -92,7 +92,7 @@ async function pair(browser, tag, lines) {
     localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
   }, lines)
   await a.page.reload()
-  await a.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await a.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await closeSheets(b.page)
   return { a, b, tag }
 }
@@ -292,7 +292,7 @@ async function partE(browser) {
     localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
   })
   await page.reload()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.locator('nav.tabs .tab-record').click()
   await page.locator('.rec-circle').click()
   await page.locator('.rec-circle.live').waitFor({ timeout: 10_000 })
@@ -309,7 +309,7 @@ async function partE(browser) {
     pills.some(([txt, aud]) => txt === 'Knows a good bike mechanic' && aud === 'Close friends') && pills.some(([txt, aud]) => /Voice memo/.test(txt) && aud === 'Only me'), JSON.stringify(pills))
   await shot(page, 'c6i_e1_place_close.png')
   await page.getByRole('button', { name: 'Save to my web' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 10_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 10_000 })
   const cy = (await record(page)).people.find((p) => p.name === 'Cy Record')
   t.ok('e: saved as Close friends', cy?.lines.find((l) => l.text === 'Knows a good bike mechanic')?.audience === 'close', JSON.stringify(cy?.lines))
   await ctx.close()

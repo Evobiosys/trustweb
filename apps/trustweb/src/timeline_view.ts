@@ -1,11 +1,14 @@
 /**
  * The "Timeline" section on a person's card (wave 7, timeline.ts): collapsed, the count in its header; entries newest first with a
- * channel glyph and day separators; a tap shows the whole summary and its reference; "+ add" and "Import" write to the person.
+ * channel glyph and day separators; a tap shows the whole summary and its reference; "+" writes to the person. Wave 28: on the card only the
+ * last three show, with a right arrow (the whole timeline as a page) and a plus on the header's own line; Import lives on the Curate page
+ * (timelineImportButton); the "Met" entry's date is editable.
  * DOM and words only: the rules (shape, duplicates, import) are timeline.ts.
  */
 import { el } from '../../demo/src/ui/dom'
 import { ICONS } from './icons'
 import { isSystemEvent } from './card_sections'
+import { smallTimeline } from './card_small'
 import { S } from './strings'
 import { TL_CHANNELS, TlChannel, TlDirection, TlSource, IMPORT_MAX_BYTES, byDay, cleanEntry } from './timeline'
 import type { TimelineEntry } from './timeline'
@@ -17,6 +20,8 @@ export interface TimelineHooks {
   add: (entries: TimelineEntry[]) => number
   /** Imports a file's text; returns the message to show. */
   importText: (text: string) => string
+  /** Moves the person's met date (the "Met" entry). */
+  setMet?: (at: number) => void
 }
 
 const GLYPH: Record<TlChannel, string> = {
@@ -41,18 +46,20 @@ function select(values: readonly string[], labels: Record<string, string>, label
   return el('select', { class: 'field', 'aria-label': label, [attr]: '' }, values.map((v) => el('option', { value: v }, [labels[v]]))) as HTMLSelectElement
 }
 
-export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => void, startOpen = false): HTMLElement {
+/** `openAll` given: the card's short form (last three, an arrow that calls it); absent: every entry (the page the arrow opens). */
+export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => void, startOpen = false, openAll?: () => void): HTMLElement {
   const list = el('div', { class: 'tl-list', 'aria-live': 'polite' })
   const form = el('div', { class: 'tl-form', hidden: true, 'data-tl-form': '' })
-  const toggle = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-act': 'person-timeline', 'aria-expanded': String(startOpen) })
+  const toggle = el('button', { class: 'btn btn-ghost btn-sm tl-toggle', type: 'button', 'data-act': 'person-timeline', 'aria-expanded': String(startOpen) })
   const panel = el('div', { class: 'tl-panel', hidden: !startOpen, 'data-tl-panel': '' })
   let open = startOpen
 
   const draw = (): void => {
     const all = h.entries()
-    toggle.textContent = `${S.tlTitle} (${all.length}) ${open ? '▴' : '▾'}`
+    toggle.textContent = `${open ? '▾' : '▸'} ${S.tlTitle} (${all.length})`
     if (!all.length) { list.replaceChildren(el('p', { class: 'meta', 'data-tl-empty': '' }, [S.tlNone])); return }
-    list.replaceChildren(...byDay(all).map((d) => el('div', { class: 'tl-day', 'data-tl-day': String(d.day) }, [
+    const { shown } = openAll ? smallTimeline(all) : { shown: all }
+    list.replaceChildren(...byDay(shown).map((d) => el('div', { class: 'tl-day', 'data-tl-day': String(d.day) }, [
       el('h5', { class: 'eyebrow' }, [new Date(d.day).toLocaleDateString([], { dateStyle: 'medium' })]),
       ...d.entries.map(entryRow),
     ])))
@@ -68,6 +75,11 @@ export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => 
       el('i', { class: 'tl-dir' }, [ARROW[e.direction] + ' ' + new Date(e.at).toLocaleTimeString([], { timeStyle: 'short' })]),
     ])
     row.addEventListener('click', () => { more.hidden = !more.hidden; row.setAttribute('aria-expanded', String(!more.hidden)) })
+    if (e.met && h.setMet) {
+      const date = el('input', { class: 'field', type: 'datetime-local', 'aria-label': S.tlMetWhen, 'data-tl-met-when': '', value: localInput(e.at) }) as HTMLInputElement
+      date.addEventListener('change', () => { const at = new Date(date.value).getTime(); if (Number.isFinite(at) && at > 0) { h.setMet?.(at); draw() } })
+      more.append(' ', el('label', {}, [S.tlMetWhen, ' ', date]))
+    }
     return el('div', { class: 'tl-item' }, [row, more])
   }
 
@@ -90,23 +102,14 @@ export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => 
       el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => { form.hidden = true } }, [S.tlCancel]),
     ]))
 
-  const file = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-tl-file': '' }) as HTMLInputElement
-  file.addEventListener('change', () => {
-    const f = file.files?.[0]
-    file.value = ''
-    if (!f) return
-    if (f.size > IMPORT_MAX_BYTES) { toast(S.tlImportBig); return }
-    void f.text().then((t) => { toast(h.importText(t)); draw() }, () => toast(S.tlImportBad))
-  })
-
   panel.append(
-    el('div', { class: 'tl-actions' }, [
-      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-tl-add': '', onclick: () => { when.value = localInput(Date.now()); form.hidden = !form.hidden } }, [S.tlAdd]),
-      el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-tl-import': '', onclick: () => file.click() }, [S.tlImport]),
-      file,
-    ]),
     form, list,
   )
+  const plus = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-tl-add': '', 'aria-label': S.tlAddAria, title: S.tlAddAria, onclick: () => {
+    when.value = localInput(Date.now()); form.hidden = !form.hidden
+    if (!open) { open = true; panel.hidden = false; toggle.setAttribute('aria-expanded', 'true'); draw() }
+  } }, ['+'])
+  const arrow = openAll ? el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-tl-all': '', 'aria-label': S.tlOpenAll, title: S.tlOpenAll, onclick: openAll }, ['→']) : null
   toggle.addEventListener('click', () => {
     open = !open
     panel.hidden = !open
@@ -114,5 +117,21 @@ export function createTimelineSection(h: TimelineHooks, toast: (msg: string) => 
     draw()
   })
   draw()
-  return el('div', { class: 'person-timeline', 'data-person-timeline': '' }, [toggle, panel])
+  return el('div', { class: 'person-timeline', 'data-person-timeline': '' }, [el('div', { class: 'tl-head' }, [toggle, arrow, plus]), panel])
+}
+
+/** Curate page: "Import timeline" reads a JSON file into the person (timeline.ts shape); `done` runs after the message is shown. */
+export function timelineImportButton(importText: (text: string) => string, toast: (msg: string) => void, done: () => void = () => undefined): HTMLElement {
+  const file = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-tl-file': '' }) as HTMLInputElement
+  file.addEventListener('change', () => {
+    const f = file.files?.[0]
+    file.value = ''
+    if (!f) return
+    if (f.size > IMPORT_MAX_BYTES) { toast(S.tlImportBig); return }
+    void f.text().then((t) => { toast(importText(t)); done() }, () => toast(S.tlImportBad))
+  })
+  return el('div', { class: 'tl-actions' }, [
+    el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'data-tl-import': '', onclick: () => file.click() }, [S.cardImportTimeline]),
+    file,
+  ])
 }

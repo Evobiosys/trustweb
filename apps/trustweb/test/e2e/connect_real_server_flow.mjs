@@ -79,7 +79,7 @@ async function startPhone(page, name) {
   await page.goto(ORIGIN + '/')
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: 'No thanks' }).click({ timeout: 1500 }).catch(() => {})
 }
 async function codeOf(page) {
@@ -162,7 +162,7 @@ async function main() {
     // 5 the server forgot the code: the secret on the phone is wrong
     await ada.page.evaluate(() => { const k = 'trustweb.v1.me'; const r = JSON.parse(localStorage.getItem(k)); r.connectCode.secret = 'x'.repeat(43); r.connectCode.updatedAt = 0; localStorage.setItem(k, JSON.stringify(r)) })
     await ada.page.reload()
-    await ada.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await ada.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await ada.page.locator('.hdr [aria-label^="Show my code"]').click()
     const code2 = await until(async () => { const r = (await record(ada.page)).connectCode; return r && r.code !== code && /^[A-Za-z0-9_-]{22}$/.test(r.code) ? r.code : null }, 15_000)
     t.ok('5: a 403 on the update makes the phone mint a new code, and the QR carries it', !!code2 && (await until(async () => (await payload(ada.page)) === `${ORIGIN}/c/${code2}`)))

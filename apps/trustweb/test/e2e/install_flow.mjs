@@ -53,7 +53,7 @@ async function start(page, base, name) {
   await page.goto(base)
   await page.getByLabel('Your first name').fill(name)
   await page.getByRole('button', { name: 'Start on this phone' }).click()
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const noThanks = page.getByRole('button', { name: 'No thanks' })
   if (await noThanks.isVisible().catch(() => false)) await noThanks.click()
 }
@@ -77,7 +77,7 @@ async function demoWithOwnPerson(page, base, name, own) {
   const phone = page.frameLocator('iframe[title="Device 1"]')
   await phone.getByLabel('Your first name').fill(name)
   await phone.getByRole('button', { name: 'Start on this phone' }).click()
-  await phone.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await phone.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const gotIt = phone.getByRole('button', { name: 'Got it' })
   if (await gotIt.isVisible().catch(() => false)) await gotIt.click()
   await phone.locator('.rings-wrap').click({ position: { x: 176 + 152, y: 176 } })
@@ -110,7 +110,7 @@ async function demoToLive(browser, base, shot, errors) {
   await pa.setViewportSize({ width: 1280, height: 900 })
   await pa.locator('[data-d2l="clean"]').click()
   await pa.waitForURL((u) => u.pathname === '/' , { timeout: 15_000 })
-  await pa.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await pa.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   await pa.locator('.sheet.on [data-install-path]').waitFor({ timeout: 10_000 })
   ok('then the live app opens with the Install sheet (?install=1)', true)
   const liveA = (await records(pa))['trustweb.v1.me']
@@ -129,7 +129,7 @@ async function demoToLive(browser, base, shot, errors) {
   await demoWithOwnPerson(pb, base, 'Jakob', 'Max')
   await pb.locator('[data-demo-install]').click()
   await pb.locator('[data-d2l="keep"]').click()
-  await pb.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await pb.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
   const liveB = (await records(pb))['trustweb.v1.me']
   ok('"Keep them": the imaginary friends come along with their own person', liveB.people.length === 7 && liveB.people.some((p) => p.name === 'Max'), String(liveB.people.length))
   await pb.locator('.sheet-veil').click({ position: { x: 20, y: 20 } })

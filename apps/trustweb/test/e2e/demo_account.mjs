@@ -163,7 +163,7 @@ async function main() {
     await a.goto(base)
     await a.getByLabel('Your first name').fill('Jakob')
     await a.getByRole('button', { name: 'Start on this phone' }).click()
-    await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await a.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await a.locator('.demo-friends').getByRole('button', { name: 'No thanks' }).click()
     await a.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await a.getByPlaceholder('e.g. Motorbike, can lend it for a weekend').fill('Ladder, can lend it for a weekend')
@@ -203,7 +203,7 @@ async function main() {
     ok('the name is set, nothing to type', (await b.locator('.test-name').innerText()) === 'Anna-demo' && (await b.locator('input.field').count()) === 0)
     await shot(b, '03-anna-invite')
     await b.getByRole('button', { name: 'Start as Anna-demo' }).click()
-    await b.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await b.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await b.locator('.query-dock').waitFor({ timeout: 20_000 })
     await b.locator('.toast.on').waitFor({ timeout: 20_000 })
     ok('Anna: "Waiting for Jakob to allow this demo account."', /Waiting for Jakob to allow/.test(await b.locator('.toast').innerText()), await b.locator('.toast').innerText())
@@ -294,7 +294,7 @@ async function main() {
     // A reload drops the in-memory draft (the take is never stored), so the QR button is back for the steps below;
     // the past meeting is in the record and survives.
     await a.reload()
-    await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await a.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     ok('Jakob\'s past meeting survives a reload', (await stored(a)).meetings?.length === 1 && (await a.locator('.status-pill.qr').count()) === 1)
     // Back where step 4 left him (Inventory), so step 5's tab clicks behave as before.
     await a.locator('nav.tabs button', { hasText: 'Resources' }).click()
@@ -375,7 +375,7 @@ async function main() {
     ok('the other phone: "Ben-demo is handed over to you"', /Ben-demo is handed over to you/.test(await d.locator('.test-invite').innerText()) && /with its connection and what it found/.test(await d.locator('.test-invite').innerText()))
     await shot(d, '13-other-phone-take-over')
     await d.getByRole('button', { name: 'Take over Ben-demo' }).click()
-    await d.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
+    await d.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 30_000 })
     const dState = await stored(d)
     ok('it took over identity, connection and finds', dState.me.displayName === 'Ben-demo' && dState.peers.length === demoPeers && dState.found?.length === 1 && dState.testOf?.name === 'Jakob' && !dState.testOf.own && !dState.testOf.handedOverAt)
     ok('Jakob is on its web', (await d.locator('.node', { hasText: 'Jakob' }).count()) === 1)
@@ -414,7 +414,7 @@ async function main() {
       ok('the card is served next to the app', (await (await fetch(base + 'demo-peer.json')).json()).did === peer.card.did)
     }
     await a.reload()
-    await a.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await a.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await openDemoTab(a)
     const link2 = await makeAccount(a, 'Carl')
     ok('with the peer published, the code names it in the fragment too', /&p=did%3Apeer/.test(link2) && /&pn=Jakob(&|$)/.test(link2), link2)

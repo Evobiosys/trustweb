@@ -27,7 +27,7 @@ const person = (id, name, device) => ({ id, name, context: '', ring: 'friend', m
 async function withPeople(page, base, people, extra = {}) {
   await page.evaluate(([ps, more]) => { const s = JSON.parse(localStorage.getItem('trustweb.v1.me')); s.people = ps; Object.assign(s, more); localStorage.setItem('trustweb.v1.me', JSON.stringify(s)) }, [people, extra])
   await page.goto(base)
-  await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 }
 async function openDevices(page) {
   await page.locator('nav.tabs button', { hasText: 'Web' }).click()

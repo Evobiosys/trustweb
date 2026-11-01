@@ -99,7 +99,7 @@ async function main() {
     await page.goto(base)
     await page.getByLabel('Your first name').fill('Jakob')
     await page.getByRole('button', { name: 'Start on this phone' }).click()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
     // --- origin (item 3) ---
     const tab = page.locator('nav.tabs .tab-record')
@@ -145,7 +145,7 @@ async function main() {
       localStorage.setItem(k, JSON.stringify(s))
     }, seedRecord(Date.now()))
     await page.reload()
-    await page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     await page.locator('nav.tabs button', { hasText: 'Resources' }).click()
     await tab.click()
     ok('Meeting has the magnifier too, in the same place', await page.locator('.hdr .past-search-btn').count() === 1 && Math.abs((await page.locator('.hdr .past-search-btn').boundingBox()).x - webSearch.x) < 1)

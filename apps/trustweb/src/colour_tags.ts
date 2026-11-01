@@ -6,7 +6,7 @@ export const COLOUR_TAGS_KEY = 'trustweb.v1.colourtags'
 export const COLOUR_TAGS_EVENT = 'tw-colour-tags'
 export const PERSON_GREEN = '#B8700A'   // warm amber by default, not green (Jakob 2026-10-15 16:10); the name stays for the callers
 
-export interface ColourTag { id: string; colour: string; label?: string }
+export interface ColourTag { id: string; colour: string; label?: string; /** Wave 28 (trustzones.ts communityTags): this tag is a #community node; the friends and community zone can add its holders. */ community?: boolean }
 
 /** Family is the preset: purple. */
 export const FAMILY_PRESET: readonly ColourTag[] = [{ id: FAMILY_FIELD, colour: '#7b1fa2', label: 'family' }]

@@ -47,7 +47,7 @@ async function main() {
     await page.waitForTimeout(1_700)
     ok('the ripple cleans itself up', await d1.locator('.ripple').count() === 0)
     await page.reload()
-    await d1.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+    await d1.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
     await page.waitForTimeout(1_000)
     ok('the friends popup does not come back on reload', await d1.locator('.demo-friends').isHidden())
     ok('the walkthrough and the live-phone steps are hidden behind "See TrustWeb in action"',

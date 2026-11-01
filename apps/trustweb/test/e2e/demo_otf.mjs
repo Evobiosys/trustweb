@@ -75,7 +75,7 @@ async function main() {
     const jonas = page.frameLocator('iframe[title="Device 2"]')
     await maya.getByLabel('Your first name').fill('Maya')
     await maya.getByRole('button', { name: 'Start on this phone' }).click()
-    await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+    await maya.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
     const people = await maya.locator('.node').allInnerTexts()
     c.ok('the first phone shows the internet-freedom web', people.some((t) => /Leyla/.test(t)) && people.some((t) => /Daniel/.test(t)), JSON.stringify(people))
     await page.getByRole('button', { name: /Add a device/ }).click()

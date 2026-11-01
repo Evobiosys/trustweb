@@ -60,7 +60,7 @@ async function sectionDemoPage(browser, base) {
   const jonas = page.frameLocator('iframe[title="Device 2"]')
   await maya.getByLabel('Your first name').fill('Maya')
   await maya.getByRole('button', { name: 'Start on this phone' }).click()
-  await maya.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await maya.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   // The person adds a "Pfanne" in the app, as the afternoon guest did (default: shared with acquaintances and up).
   await maya.locator('nav.tabs button', { hasText: 'Resources' }).click()
   await maya.getByPlaceholder(/Motorbike/).fill('Pfanne')
