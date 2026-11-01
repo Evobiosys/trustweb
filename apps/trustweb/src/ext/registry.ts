@@ -5,6 +5,7 @@ import { calendarModule } from './calendar'
 import { signalLinkModule } from './signal-link'
 import { matrixModule } from './matrix'
 import { gebModule } from './geb'
+import { whatsappModule } from './whatsapp'
 
 /** What the host app hands a module; modules never import main.ts. */
 export interface ExtHooks {
@@ -94,8 +95,10 @@ export interface ExtModule {
     /** Called once the record is loaded: starts the module's timers. */
     start?: () => void
   }
+  /** Wave 28: a link the host is about to open in a new tab; true = the module opened it itself (WhatsApp Web beside TrustWeb). */
+  openExternal?: (url: string) => boolean
   /** Wave 27: the messenger this module adds to the Chat screen's Extend. */
   messenger?: (h: ExtHooks) => MessengerSource
 }
 
-export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule]
+export const EXT_MODULES: ExtModule[] = [calendarModule, gebModule, matrixModule, signalLinkModule, whatsappModule]

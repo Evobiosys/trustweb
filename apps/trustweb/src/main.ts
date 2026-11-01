@@ -3254,7 +3254,7 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   const mainClass = chat && !quiet ? 'btn-electric' : 'btn-ghost'
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
-    if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer'); else chatSheet(p.id)
+    if (svc.url) { if (!EXT_MODULES.some((m) => m.openExternal?.(svc.url!))) window.open(svc.url, '_blank', 'noopener,noreferrer') } else chatSheet(p.id)
   }
   let b: HTMLElement
   if (services.length) {
