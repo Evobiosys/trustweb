@@ -137,3 +137,13 @@ export function cardFace(p: Person, face: HTMLElement, d: { save: () => void; re
   }, [face])
   return { button, menu }
 }
+
+/** Wave 28: a long line under an (i) button, folded until pressed (a line longer than one row is unreadable on the card). */
+export function infoNote(text: string): HTMLElement {
+  const note = el('p', { class: 'meta', hidden: true, 'data-info-note': '' }, [text])
+  const info = el('button', { class: 'btn btn-ghost btn-sm', type: 'button', 'aria-label': S.cardInfoAria, 'aria-expanded': 'false', 'data-info': '', onclick: (e: Event) => {
+    note.hidden = !note.hidden
+    ;(e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!note.hidden))
+  } }, ['(i)'])
+  return el('span', { class: 'info-note' }, [info, note])
+}
