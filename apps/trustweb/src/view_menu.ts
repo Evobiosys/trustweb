@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 25: the Web screen's view chooser (the eye): Web (default), Network, People, Map, then Dex and Contacts compact; Expand (top left of the rings) shows everyone. Pure, no DOM. */
-export type WebView = 'rings' | 'network'
+export type WebView = 'rings' | 'network' | 'map'
 
 /** Everything the eye menu can open, in menu order; the last two sit under "Other views". Map shows only when a map page exists. */
 export type ViewKey = WebView | 'people' | 'map' | 'dex' | 'compact'
@@ -37,9 +37,9 @@ export function viewHeading(current: WebView): WebView | null {
   return current === 'rings' ? null : current
 }
 
-/** The stored choice (`trustweb.ui.webView`); Network needs someone in the web, a stale 'desk' or 'complete' reads as the Web. */
+/** The stored choice (`trustweb.ui.webView`); Network and Map need someone in the web, a stale 'desk' or 'complete' reads as the Web. */
 export function webViewOf(stored: string | null, anyone: boolean): WebView {
-  return anyone && stored === 'network' ? 'network' : 'rings'
+  return anyone && (stored === 'network' || stored === 'map') ? stored : 'rings'
 }
 
 /** The stored Expand flag (`trustweb.ui.webExpand` = '1'); only the rings have it. */
