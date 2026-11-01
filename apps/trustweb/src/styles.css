@@ -315,10 +315,16 @@ textarea.field{resize:vertical; line-height:1.5}
 .toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
+/* Wave 28: the x on every toast/notice bar (closes at once) and the 400 ms fade after 5 s */
+.toast{padding-right:34px}
+.fade-x{position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; background:none; color:inherit; font-size:18px; line-height:1; cursor:pointer; opacity:.7; pointer-events:auto}
+.fade-x:hover,.fade-x:focus-visible{opacity:1}
+.toast.fading,.demo-friends.fading{opacity:0; transition:opacity .4s}
+@media (prefers-reduced-motion:reduce){ .toast.fading,.demo-friends.fading{transition:none} }
 .toast.on.tap{pointer-events:auto; cursor:pointer}
 /* "We have given you some (imaginary ;) friends :)": demo phones, once, under the header */
 .demo-friends{position:absolute; left:16px; right:16px; top:92px; z-index:30; background:var(--card); color:var(--ink); border-radius:16px;
-  padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
+  padding:12px 34px 12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
   font-size:13px; line-height:1.45; animation:tw-pop .25s ease-out}
 .demo-friends[hidden]{display:none}
 /* Jakob 2026-10-19: the card never swallows a tap on the web under it; only its buttons and ticks take taps. */
