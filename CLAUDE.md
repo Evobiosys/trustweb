@@ -31,6 +31,7 @@ Do not relicense either way without asking.
 
 ## Architecture
 - pnpm workspaces: `packages/protocol` (zod schemas, envelope v0.1, lifecycle state machine — no I/O), `packages/transport` (MatrixTransport via matrix-bot-sdk, MockTransport), `packages/agent-daemon` (SQLite stores, policy engine, matcher chain, REST/WS for UI), `apps/device-ui` (React 19 + Vite + Tailwind), `apps/dashboard` (side-by-side iframes :8080).
+- `packages/cli` (`trustweb`): a dependency-free command line over a local record file (`.trustweb/record.json`), reusing `apps/trustweb/src/share_sink` for zones, tags, shares and the one `canAccess` check; `src/sink.ts` is its only coupling point to the app. Tests with `node:test`, no network (`docs/cli.md`).
 - One agent-daemon codebase, N persona configs. UI talks only to its own agent (REST/WS, localhost). Agents talk only via TransportAdapter.
 - Matcher chain: embeddings (cosine ≥ 0.60) → LLM adjudication (strict JSON, temp 0) → keyword+synonym fallback. Demo must survive with no LLM at all.
 - Models: host ollama `http://localhost:11434`, `CHAT_MODEL=qwen3:4b`, `EMBED_MODEL=qwen3-embedding:8b` (see DECISIONS.md D4).

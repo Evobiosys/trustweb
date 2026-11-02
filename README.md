@@ -63,6 +63,7 @@ Claim your name in the app (Settings). If the website ever has a page with that 
 | `apps/crm` | The Web Curator (Svelte 5): sorting people into rings, Tana import and sync. Opened from the app. |
 | `apps/demo` | Shared modules the app imports (relay client, matcher, gates) and the earlier demos |
 | `packages/*` | Protocol, transport, relay crypto, network access, inventory store, person fields, policies |
+| `packages/cli` | `trustweb`, a small git-like command line over a local record: trust zones, persons, tags, shares, export/import. No network. See `docs/cli.md`. |
 | `services/trustweb-backup` | The server: relay-adjacent services (backups, hosting, transcription, links, usernames, organizers) |
 | `services/trustweb-peer` | Front doors |
 | `scripts/` | Dev server, deploys, Caddy edits (each anchored, validated, with backup and restore) |
