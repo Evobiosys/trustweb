@@ -121,9 +121,9 @@ Everything. The record is one file on this machine. The CLI does not sync, uploa
 Ids: bare (`ada`) where the kind is clear, or typed (`person:ada`, `tag:garden`, `zone:friend`, `item:bike`). Output
 uses typed ids. Every command answers `--help` with its usage, options and examples.
 
-Outputs marked *(illustrative)* are written from the specification, for commands built in parallel with this page;
-the shape of the text may differ in detail. Unmarked outputs were produced by running the command (paths shortened
-to `/home/me/web`, long runs of lines cut to `...`).
+Every output below was produced by running the command (paths shortened to `/home/me/web`, long runs of lines cut
+to `...`). The running example: zones friend, close and community set up; ada in friend, cy in close; bo carries
+`garden`, cy carries `roses`, which is nested in `garden`; a rule puts `garden` in community.
 
 ### init
 
@@ -169,12 +169,33 @@ Refusals (exit 1): `public`/`self` given to create, rename or archive; a zone no
 or tag; removing what is not there.
 
 ```
-$ trustweb zone create friend --label "Friends"          (illustrative)
-zone friend set up (Friends)
-$ trustweb zone add-person friend ada                    (illustrative)
-person:ada in zone friend
-$ trustweb zone add-person friend ada                    (illustrative)
-person:ada is already in zone friend
+$ trustweb zone create friend --label "Friends"
+set up zone friend ("Friends")
+$ trustweb zone add-person friend ada
+person:ada  added
+added ada to zone friend
+$ trustweb zone add-person friend ada
+person:ada  already in zone
+$ trustweb zone add-tag community garden
+tag:garden  added
+added tag garden to zone community (places 2 more persons)
+$ trustweb zone remove-person community bo
+trustweb: bo is in zone community only through tag:garden: run `trustweb zone remove-tag community garden` or `trustweb person untag bo garden`
+$ trustweb zone list
+zone          state       label                     members  tags
+------------  ----------  ------------------------  -------  ----
+public        always-on   Public                    0        0
+intending     not set up  Intending to connect      0        0
+acquaintance  not set up  Acquaintances             0        0
+community     on          Community                 2        1
+friend        on          Friends                   1        0
+close         on          Close friends and allies  1        0
+closest       not set up  Closest few               0        0
+self          always-on   Self                      0        0
+$ trustweb zone archive community
+trustweb: warning: 1 person in community now counts as a less intimate zone
+trustweb: warning: 1 item shared to community now opens only to friend and closer (one ring in)
+archived zone community (1 person now less intimate, 1 share moved one ring in)
 ```
 
 ### person
@@ -189,11 +210,21 @@ person:ada is already in zone friend
 | `person untag <id> <tag>...` | closes those tuples |
 
 ```
-$ trustweb person add ada --name "Ada"                   (illustrative)
-person:ada added (Ada)
-$ trustweb person tag bo garden                          (illustrative)
-person:bo tagged garden
+$ trustweb person add ada --name "Ada"
+added person ada ("Ada")
+$ trustweb person tag bo garden
+tag:garden  added
+tagged bo with garden
+$ trustweb person list
+person      name  zone    tags        added
+----------  ----  ------  ----------  ----------------
+person:ada  Ada   friend              2026-11-02 12:00
+person:bo   Bo    public  tag:garden  2026-11-02 12:00
+person:cy   Cy    close   tag:roses   2026-11-02 12:00
 ```
+
+(`zone` is what the person counts as now; here community is archived, so bo, in it only through `garden`, counts as
+public.)
 
 ### tag
 
@@ -207,10 +238,15 @@ person:bo tagged garden
 | `tag unnest <child> <parent>` | closes that tuple |
 
 ```
-$ trustweb tag nest roses garden                         (illustrative)
-tag:roses nested in tag:garden
-$ trustweb tag nest garden roses                         (illustrative)
-trustweb: tag:garden under tag:roses would make a cycle
+$ trustweb tag nest roses garden
+nested tag roses in garden
+$ trustweb tag nest garden roses
+trustweb: share sink: tag:garden under tag:roses would make a cycle
+$ trustweb tag list
+tag         label   carriers  nested-in   zones      added
+----------  ------  --------  ----------  ---------  ----------------
+tag:garden  garden  1                     community  2026-11-02 12:00
+tag:roses   roses   1         tag:garden             2026-11-02 12:00
 ```
 
 ### show
@@ -226,13 +262,62 @@ trustweb: tag:garden under tag:roses would make a cycle
 `canAccess` is asked, so the answer comes from the same oracle as everything else. `--markdown` prints the app's
 `toMarkdown` page.
 
+The probe is named in the why-lines (`person:_probe`); it is not a valid id, so it can never be a person of the record.
+
 ```
-$ trustweb show person bo                                (illustrative)
-person:bo (Bo)  zone friend (through tag:garden)
-tags: tag:garden
-can see:
-  item:bike  person:bo in_zone zone:friend; zone:friend may_read item:bike
+$ trustweb show zone community
+zone community
+state: on
+label: Community
+Members:
+  person:bo  bo (Bo)  via tag:garden
+  person:cy  cy (Cy)  via tag:garden
+Can see:
+  item:ladder
+    - person:_probe in_zone zone:community
+    - zone:community may_read item:ladder
+$ trustweb show tag garden
+tag garden
+label: garden
+parents: (none)
+children: tag:roses
+zones: zone:community
+Carried by:
+  person:bo  bo (Bo)
+Through nested tags:
+  person:cy  cy (Cy)  via tag:roses
+Opens:
+  item:ladder
+    - person:_probe in_zone zone:community
+    - zone:community may_read item:ladder
+$ trustweb show person cy
+person cy
+name: Cy
+zone: close (person:cy in_zone zone:close)
+tags: tag:roses, tag:garden (via tag:roses)
+Can see:
+  item:bike
+    - person:cy in_zone zone:close
+    - zone:friend may_read item:bike
+  item:ladder
+    - person:cy in_zone zone:close
+    - zone:community may_read item:ladder
+$ trustweb show item ladder
+item ladder
+zone: community
+also: (none)
+except: person:bo
+since: 2026-11-02 12:00 (seq 2)
+Who can see it now:
+  person:ada  ada (Ada)
+    - person:ada in_zone zone:friend
+    - zone:community may_read item:ladder
+  person:cy   cy (Cy)
+    - person:cy in_zone zone:close
+    - zone:community may_read item:ladder
 ```
+
+(bo sits in community through `garden`, but the share excludes bo: the exclusion wins.)
 
 ### share
 
@@ -246,11 +331,25 @@ can see:
 `--also` and `--except` take person or tag ids. The preview and the enforcement are the same check on the same store,
 so they cannot disagree.
 
+Names are printed: the CLI runs on the owner's device, for the owner (I2 hides them from askers, not from the owner).
+
 ```
-$ trustweb share preview bike --zone friend --except cy  (illustrative)
-item:bike to zone friend would be seen by 2: person:ada, person:bo
-$ trustweb share add bike --zone friend --except cy      (illustrative)
-item:bike shared to zone friend (except person:cy): 2 people see it
+$ trustweb share add ladder --zone community --except bo
+Shared item:ladder to zone community, except person:bo.
+2 people would see item:ladder: ada (Ada), cy (Cy)
+$ trustweb share add bike --zone friend
+Shared item:bike to zone friend.
+2 people would see item:bike: ada (Ada), cy (Cy)
+$ trustweb share add bike --zone friend
+item:bike is already shared with this scope (zone friend, since 2026-11-02 12:00); nothing written.
+2 people would see item:bike: ada (Ada), cy (Cy)
+$ trustweb share preview seeds --zone close --also tag:garden
+2 people would see item:seeds: bo (Bo), cy (Cy)
+$ trustweb share list
+item         zone       also  except     since             seq
+-----------  ---------  ----  ---------  ----------------  ---
+item:bike    friend     -     -          2026-11-02 12:00  1
+item:ladder  community  -     person:bo  2026-11-02 12:00  2
 ```
 
 ### export
