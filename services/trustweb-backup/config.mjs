@@ -88,6 +88,8 @@
 //   ORG_CREATE_PER_MINUTE, ORG_CREATE_PER_HOUR  6, 30     POST /org per network address (IPv6: /64), in memory
 //   ORG_WRITE_PER_MINUTE, ORG_WRITE_PER_HOUR    20, 200   POST /org/me and /org/event together, per network address
 //   ORG_HIT_PER_MINUTE               60           POST /org/hit per network address (the attendee phones' counter route)
+//   ORG_EVENT_MAX_BYTES              65536        body cap of POST /org/event (room for the event.logo data url); /org, /org/me, /org/hit keep 16 KB (413 above)
+//   ORG_PUBLIC_PER_MINUTE            120          GET /org/event/<id>/public per network address (the join sheet's name + logo)
 //   NAME_CAP                         3            wave 15: names CLAIMED per network address (IPv6: /64) in 30 days (persisted in the connect store); 429 name-cap above
 //   NAME_CAP_ALLOW                   (unset)      wave 15: JSON file of organizers with a higher cap (name_cap.mjs); read at start and on SIGHUP
 //   NAME_CAP_REQUESTS                (unset)      wave 21: JSONL of POST /names/cap-request asks; default name_cap_requests.jsonl beside NAME_CAP_ALLOW (else in BACKUP_DIR)
@@ -295,6 +297,8 @@ export function loadConfig(options = {}) {
     orgWritePerMinute: pick(options, 'orgWritePerMinute', 'ORG_WRITE_PER_MINUTE', 20),
     orgWritePerHour: pick(options, 'orgWritePerHour', 'ORG_WRITE_PER_HOUR', 200),
     orgHitPerMinute: pick(options, 'orgHitPerMinute', 'ORG_HIT_PER_MINUTE', 60),
+    orgEventMaxBytes: pick(options, 'orgEventMaxBytes', 'ORG_EVENT_MAX_BYTES', 65536),
+    orgPublicPerMinute: pick(options, 'orgPublicPerMinute', 'ORG_PUBLIC_PER_MINUTE', 120),
 
     reservedNames: options.reservedNames ?? parseReservedList(process.env.RESERVED_NAMES),
     adminToken: options.adminToken ?? readAdminToken(),

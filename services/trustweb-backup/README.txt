@@ -92,10 +92,16 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
   /org/*          (wave 8) organizer accounts, the paying side: POST /org {"name"} -> 201 {"org","secret","plan":"free","limits":{"events":3,"invitees":25}} (same
                   code/secret generator as /connect, only sha256 of the secret kept); POST /org/me {"org","secret"} -> name, plan, limits, events with counters;
                   POST /org/event {"org","secret","event","link","invitees"[,"id"]} -> 201 create / 200 update (counters kept), {..."id","delete":true} -> 204.
+                  Optional event.logo: a data:image/(png|jpeg|webp|gif);base64,... url of at most 32768 characters, else 400 field event.logo; stored with the
+                  event, returned by /org/me inside "event", dropped by an update that leaves it out (like the other optional fields).
+                  GET /org/event/<16 hex>/public -> 200 {"name"[,"logo"]} for the join sheet, nothing else (no invitees, counters, link, org, dates); an unknown
+                  id and a wrong shape give the same 404 not_found; other methods 405 (Allow: GET); same Origin guard; read-only (no hit, no `updated` change);
+                  ORG_PUBLIC_PER_MINUTE (120) per address.
                   The link must be an https LINK_HOSTS url with a #ev_host= fragment; a wrong secret and an unknown org give the identical 403. 409 limit_events /
-                  limit_invitees (free 3 events x 25 invitees, hosted 50 x 500). POST /org/hit {"event","kind":"opened|joined|tagged"} is the one route attendee
-                  phones touch: 204 always (unknown id too), +1 on the counter, no identity and no request data kept. 16 KB bodies, own-host Origin, 6/min+30/h (create),
-                  20/min+200/h (me, event), 60/min (hit) per address. POST /admin/org {"org","plan":"free|hosted"} is loopback-only like /admin/name (paid tier switch).
+                  limit_invitees (free 3 events x 25 invitees, hosted 50 x 500). POST /org/hit {"event","kind":"opened|joined|tagged"} is, with the public GET
+                  above, what attendee phones touch: 204 always (unknown id too), +1 on the counter, no identity and no request data kept. 16 KB bodies
+                  (POST /org/event: ORG_EVENT_MAX_BYTES, 64 KB, room for the logo), own-host Origin, 6/min+30/h (create), 20/min+200/h (me, event), 60/min (hit),
+                  120/min (public) per address. POST /admin/org {"org","plan":"free|hosted"} is loopback-only like /admin/name (paid tier switch).
                   Store <BACKUP_DIR>/organizers.json (0600). Never logged. ORG_* settings (config.mjs). organizer.mjs, organizer_store.mjs. Contract: section 11.
                   Retention: an org whose `updated` is older than ORG_DAYS (365) is swept with its events and invitee e-mails (every ORG_SWEEP_MS, in the
                   server process; no CLI, a second process would race the in-memory store) and then answers the same 403 as an unknown org. `updated`

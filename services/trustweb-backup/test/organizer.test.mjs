@@ -13,7 +13,7 @@ import { APP, BASE, admin, send } from './connect_helpers.mjs'
 
 const ORIGIN = `https://${APP}`
 const LINK = `https://${APP}/#ev_host=abc123&n=Wine`
-const ROOM = { orgCreatePerMinute: 10000, orgCreatePerHour: 10000, orgWritePerMinute: 10000, orgWritePerHour: 10000, orgHitPerMinute: 10000, orgHitFlushMs: 20 }
+const ROOM = { orgCreatePerMinute: 10000, orgCreatePerHour: 10000, orgWritePerMinute: 10000, orgWritePerHour: 10000, orgHitPerMinute: 10000, orgHitFlushMs: 20, orgPublicPerMinute: 10000 }
 const OPTS = { ...BASE, ...ROOM }
 const EVENT = { name: 'Weinlese Wachau', from: '2026-10-17 10:00', where: 'Dürnstein', themes: ['wine', 'soil'], tagName: 'Weinlese' }
 
@@ -279,11 +279,13 @@ test('Origin of another host and Sec-Fetch-Site cross-site are refused on every 
   })
 })
 
-test('bodies: over 16 KB is 413 (declared or streamed), not JSON 400, wrong content type 415, GET 405', async () => {
+test('bodies: over 16 KB is 413 (over 64 KB on /org/event; declared or streamed), not JSON 400, wrong content type 415, GET 405', async () => {
   await withServer(0, OPTS, async ({ srv }) => {
     const o = await mintOrg(srv.port)
-    const big = await save(srv.port, o, { invitees: [`${'a'.repeat(200)}@x.at`].concat(Array.from({ length: 100 }, (_, i) => `${'b'.repeat(200)}${i}@x.at`)) })
+    const big = await save(srv.port, o, { invitees: [`${'a'.repeat(200)}@x.at`].concat(Array.from({ length: 400 }, (_, i) => `${'b'.repeat(200)}${i}@x.at`)) })
     assert.equal(big.status, 413)
+    const bigStreamed = JSON.stringify({ org: o.org, secret: o.secret, event: EVENT, link: LINK, pad: 'p'.repeat(65 * 1024) })
+    assert.equal((await send(srv.port, '/org/event', bigStreamed, { headers: { 'Transfer-Encoding': 'chunked' } })).status, 413)
     const filler = JSON.stringify({ name: 'x', pad: 'p'.repeat(17 * 1024) })
     assert.equal((await send(srv.port, '/org', filler, { headers: { 'Transfer-Encoding': 'chunked' } })).status, 413)
     assert.equal((await send(srv.port, '/org', 'not json')).status, 400)

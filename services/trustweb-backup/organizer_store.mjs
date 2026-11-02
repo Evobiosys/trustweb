@@ -1,6 +1,7 @@
 // Disk layer of the organizer accounts (wave 8; contract: DEVLOG/trustweb-wave-1733/services-api-contract.txt, section 11).
 //
 //   <file>  {"version":1,"orgs":{"<org>":{name, secretHash, plan, created, updated, events:{"<id>":{event, link, invitees:[], counts:{opened,joined,tagged}, created, updated}}}}}
+//   (event holds the organizer's fields, the optional logo data url among them; publicEvent hands out only name and logo)
 //   mode 0600, rewritten atomically (temp file, fsync, rename), writes serialised through one promise queue.
 //
 // PRIVACY: the file holds what the ORGANIZER already has (their event fields and invitee e-mails) plus aggregate counters. Never an attendee's identity, web,
@@ -263,6 +264,17 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now, flus
     async close() {
       clearInterval(timer)
       await flush()
+    },
+
+    /**
+     * The public face of event `id` for the join sheet: {name} or {name, logo}, undefined for an unknown id. Read-only: touches no `updated` stamp and no
+     * counter, writes nothing.
+     */
+    publicEvent(id) {
+      const org = eventOrg.get(id)
+      const e = org === undefined ? undefined : orgs.get(org)?.events[id]?.event
+      if (e === null || typeof e !== 'object' || typeof e.name !== 'string') return undefined
+      return typeof e.logo === 'string' ? { name: e.name, logo: e.logo } : { name: e.name }
     },
 
     /** ADMIN: sets the plan. Resolves {kind: 'ok', plan} or {kind: 'unknown'}. */
