@@ -69,6 +69,8 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+      - name: cli (packages/cli; no runtime dependency, Node's own test runner with a 100% coverage gate)
+        run: pnpm --filter trustweb typecheck && pnpm --filter trustweb lint && pnpm --filter trustweb test
   # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
   reach-out-link:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'

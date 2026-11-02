@@ -469,3 +469,14 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
+
+## D-cli (2026-11-02): `trustweb` CLI over the share sink; created zones sit on a ladder level
+- packages/cli (name `trustweb`): a git-like CLI on ONE local JSON record (default ./trustweb-record.json). No network: the Io
+  passed into `run` has no network member, and scripts/lint.mjs fails on any network API in the runtime import graph.
+- Reuse, not copies: tuples/zones/check/share_lines/tags/export from apps/trustweb/src/share_sink. The relation store is DERIVED
+  from the record on every call (never stored), so `sees` runs the same canAccess enforcement would. Shares last a year (I9).
+- The ladder stays fixed (D-share-sink). "Create a zone" = a named group placed on a level; it never opens more than its level.
+  `share --zone` takes levels only; to reach exactly a created zone's people, name them with --include (no silent widening).
+- Archive, never delete: a built-in zone archived = its ring switched off (the share sink's `active`); a created zone archived
+  places nobody. Public cannot be archived. `init --force`, `import --force`, `export --out --force` move the old file to archive/.
+- Runs on Node >= 22.18 with no build and no runtime dependency (bin/ts-hooks.mjs: Node's own type transform + .ts resolution).
