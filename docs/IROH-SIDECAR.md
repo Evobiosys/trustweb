@@ -34,8 +34,8 @@ trustweb-iroh-sidecar [--relay-url <url>]... [--alpn <string>] [--secret-key-fil
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
-| `--relay-url <url>` | A relay this node may use as its home relay; repeatable, order = preference. | none: **no relay**, direct connections only (I9) |
-| `--n0-relays` | Opt in to iroh's public default relays (run by n0, outside the EU). Never implied. | off |
+| `--relay-url <url>` | A relay this node may use as its home relay; repeatable. iroh picks the home relay among them by latency, not by list order ⚠️ (iroh 0.35 behaviour, unverified in this session). | none: **no relay**, direct connections only (I9) |
+| `--n0-relays` | Opt in to iroh's public default relays (run by n0, outside the EU). Never implied. With `--relay-url`, the n0 relays are appended after yours. | off |
 | `--alpn <string>` | ALPN for TrustWeb connections. | `trustweb/didcomm/0.1` |
 | `--secret-key-file <path>` | Persist the node's Ed25519 secret key here (0600, created if absent) so the node id survives restarts. | ephemeral key, new node id per start |
 
@@ -53,16 +53,18 @@ stderr is free-form diagnostics for humans only.
 | Line | When |
 | --- | --- |
 | `{"type":"ready","v":1,"nodeId":"<id>","directAddrs":["<ip:port>",...],"relayUrl":"<url>"\|null}` | First line, once the endpoint is bound (host waits ≤ 10 s). `nodeId` is the iroh node id in iroh's canonical string form. `relayUrl` is the chosen home relay or `null`. |
-| `{"type":"recv","from":"<nodeId>","payload":"<base64>"}` | One inbound payload, after the sidecar has acknowledged it to the sender. `from` is the authenticated remote node id. |
+| `{"type":"recv","from":"<nodeId>","payload":"<base64>"}` | One inbound payload, printed first; the ack byte to the sender follows (see "Over the wire"). `from` is the authenticated remote node id. |
 | `{"type":"sent","id":"<id>","via":"relay"\|"direct"\|"unknown"}` | The peer acknowledged the payload for request `id`. |
 | `{"type":"pong","id":"<id>"}` | Answer to `ping`. |
 | `{"type":"error","id":"<id>"\|null,"code":"<code>","message":"<text>"}` | Request `id` failed (`id` null for a line that could not be parsed). |
 | `{"type":"log","level":"info"\|"warn","message":"<text>"}` | Optional diagnostics. Never contains payload bytes or keys. |
 
-Error codes: `bad_request` (malformed line or field), `too_large` (payload >
-1 MiB), `unreachable` (no connection within the attempt timeout, including
-"relay refused"), `timeout` (connected, but no ack within the attempt timeout),
-`closed` (endpoint shutting down), `internal`.
+Error codes: `bad_request` (malformed line or field; a parseable line with a bad
+field echoes its `id`, only an unparseable line gets `id: null`), `too_large`
+(payload > 1 MiB), `unreachable` (connect failed, answered at once, or no
+connection within the attempt timeout), `timeout` (connected, but no ack within
+the attempt timeout: stream reset, wrong ack byte or deadline), `closed`
+(endpoint shutting down; in-flight sends get it too), `internal`.
 
 ### Host → sidecar
 
