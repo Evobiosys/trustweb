@@ -8,7 +8,7 @@ What it is:
 
 - an append-only record log (`log.ts`): per-device sequence, hash chain, vector clock, verified merge, deterministic materialisation
   with conflicts listed instead of lost;
-- replay-protected seals (`seal.ts`, `replay.ts`): AES-GCM with the outer from/to bound as AAD, a per-direction counter and a 64-wide
+- replay-protected seals (`seal.ts`, `replay.ts`): AES-GCM with the outer from/to bound as AAD, a per-direction counter and a 1024-wide
   anti-replay window persisted before a wire is acknowledged;
 - pairing of own devices by QR or link (`keys.ts`, `sync.ts`): a one-time secret that never crosses the relay, X25519 ECDH, HKDF into
   two directional keys, a 6-digit short authentication string both people compare;
