@@ -208,6 +208,7 @@ import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
 import { sendHit } from './org_hits'
+import { loadPublic } from './org_public'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
 import { PersistState, persistState } from './storage_persist'
@@ -4792,7 +4793,16 @@ function maybeOpenPendingEvent(): void {
     if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
     save(); closeSheet(); openEvents(id)
   }
+  // The organizer's logo, if the server has one: filled in later, the sheet never waits for it (the title stays the link's own name).
+  const logoSlot = ev.srv ? el('div', { 'data-org-logo': '' }) : null
+  if (logoSlot && ev.srv) {
+    void loadPublic(ev.srv).then((pub) => {
+      if (!pub?.logo || !logoSlot.isConnected) return
+      logoSlot.replaceChildren(el('img', { src: pub.logo, alt: pub.name, style: 'max-height:64px;max-width:100%;object-fit:contain;display:block;margin:0 auto 8px' }))
+    })
+  }
   openSheet([
+    logoSlot,
     el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
     ev.by ? el('p', { class: 'meta', 'data-event-invited-by': '' }, [S.eventInvitedBy(ev.by.name)]) : null,
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,
