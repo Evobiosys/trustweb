@@ -3,5 +3,8 @@
 import type { Command } from '../cli.ts'
 import { init } from './init.ts'
 import { log } from './log.ts'
+import { person } from './person.ts'
+import { tag } from './tag.ts'
+import { zone } from './zone.ts'
 
-export const COMMANDS: readonly Command[] = [init, log]
+export const COMMANDS: readonly Command[] = [init, zone, person, tag, log]
