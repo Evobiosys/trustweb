@@ -483,3 +483,7 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
 - Toolchain: Node's own TypeScript stripping (transform mode) plus a resolve hook for the app's extensionless imports
   (`scripts/register.mjs`) runs the share sink sources unchanged; `tsc` typechecks them with two type shims for the browser-only
   libraries the model's type graph names. Zero runtime dependencies; `node:test` for the tests. Node >= 22.13.
+- Licence header on the CLI's files: `LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later`, as the task asked; this repo publishes under AGPL
+  (the OR permits it, `packages/cli/README.md` says AGPL). OPEN for the owner: keep the OR, or narrow the header to AGPL alone.
+- A merge takes nothing back: the same fact closed on either device stays closed, a share line older than our latest word on its
+  item is superseded, the merged tag graph must stay a DAG, and a write dated before the record's last change is refused.
