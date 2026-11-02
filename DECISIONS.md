@@ -469,3 +469,11 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
+
+## D-device-sync-e2ee (2026-11-02, PROPOSAL, not decided): device sync v2, per-direction keys, replay window, append-only record log
+- Prototype only (apps/trustweb/src/sync_e2ee.ts, sync_log.ts, sync_e2ee_link.ts; design docs/design/device-sync-e2ee.md); not wired into sync_view.ts; v1 untouched.
+- Same relay interface (RelayChannel.sendRaw / onRawWire), no server change. Root = HKDF(X25519 || one-time code secret), salted with both DIDs and a
+  per-pairing epoch; one AES-GCM key per direction; six-digit check; frames padded to 1/4/16/64 KiB; sequence numbers with a stored replay window.
+- The record as an append-only op log per device (content ids, hybrid logical clock, conflict = two edits on one base); merge = union of ops.
+- Findings in v1 it answers: reflection (one key both ways), replay within `exp`, 16-bit check, exact sizes, wall-clock merge, whole record per sync.
+- Not covered (I7): forward secrecy, keys at rest, per-device op signatures, timing. Open for the owner: per-sync confirm, link pairing, key storage, ratchet.
