@@ -210,9 +210,12 @@ export const applyStuck = (since: number, now: number): boolean => now - since >
 /** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
 export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
 
-/** The left panel greys out and stops reacting once Declare done has been pressed and the run did not end in failure or cancel. */
+/** The left panel greys out and stops reacting once Approve wave has been pressed and the run did not end in failure or cancel. */
 export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
 
+/** Dev panel button labels (dev_feature.ts): the release button and the personal one that also moves on to dev.trustweb.one. */
+export const APPROVE_WAVE_LABEL = 'Approve wave'
+export const APPROVE_WAVE_AND_CONTINUE_LABEL = 'Approve wave and continue to dev.trustweb.one'
 export const APPROVE_HINT = 'Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.'
 
 /** A name in a conflict text: the file, the first feature (or branch) and the second one (feature or main), each drawn in its own colour (Jakob 2026-10-28). */
@@ -238,7 +241,7 @@ export function conflictParts(text: string): Array<string | ConflictName> {
   return out
 }
 
-/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Declare done opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
+/** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Approve wave opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
 export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
