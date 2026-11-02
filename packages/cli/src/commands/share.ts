@@ -11,7 +11,7 @@ import { personLabel, requirePerson, requireTag, requireZone } from '../domain.t
 import { itemId, parseId, zoneOf } from '../ids.ts'
 import { count, table, when } from '../output.ts'
 import type { TrustRecord } from '../record.ts'
-import { Zone, activeZones, appendShare, canAccess, latestShares, scopeTuples, storeOf, type Scope, type ShareLine } from '../sink.ts'
+import { Zone, activeZones, appendShare, latestShares, previewShare, storeOf, type Scope, type ShareLine } from '../sink.ts'
 import { listedPersons, scopeOf, shareState } from './show.ts'
 
 const SCOPE_OPTIONS: readonly Option[] = [
@@ -43,16 +43,13 @@ function readScope(ctx: Ctx, r: TrustRecord): { item: string; scope: Scope } {
 }
 
 /**
- * Who would see `item` under `scope`: the record's store without this item's earlier lines (as share_page.ts previewOf),
- * plus the scope's tuples, through canAccess. This is previewShare's body with one difference: the zones that are on are
- * passed, because previewShare checks against every ring and would name a person whose only zone is archived, whom
- * enforcement (and `show item`) then refuses.
+ * Who would see `item` under `scope`: the app's previewShare (T12: the same canAccess as enforcement) on the record's
+ * store without this item's earlier lines (as share_page.ts previewOf), with the zones that are on, so a person whose
+ * only zone is archived is not named here and then refused by `show item`.
  */
 function previewOf(r: TrustRecord, item: string, scope: Scope, now: Date): { count: number; people: string[]; names: string[] } {
   const store = storeOf({ ...r, shares: r.shares.filter((l) => l.id !== item) }, now)
-  const augmented = [...store, ...scopeTuples(scope, item, 'preview', now)]
-  const active = activeZones(r)
-  const people = listedPersons(r).filter((p) => canAccess(augmented, p, item, now, active).allowed)
+  const people = previewShare(store, scope, listedPersons(r), item, now, activeZones(r)).names
   return { count: people.length, people, names: people.map((p) => personLabel(r, p)) }
 }
 
