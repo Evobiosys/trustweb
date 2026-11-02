@@ -1,0 +1,19 @@
+{
+  "name": "@resource-web/device-sync",
+  "version": "0.0.1",
+  "description": "End-to-end-encrypted sync of the owner's record between their own devices, behind the existing relay interface (append-only log, replay-protected seals, deterministic merge). WebCrypto only, no runtime dependencies.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": { "node": ">=22.18" },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.6.0"
+  }
+}

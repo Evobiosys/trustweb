@@ -69,6 +69,9 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+      # packages/device-sync (docs/design/device-sync-e2ee.md): zero-dependency package, tests run on node:test (Node >= 22.18 strips types itself).
+      - name: device-sync package (typecheck + unit tests)
+        run: pnpm --filter @resource-web/device-sync typecheck && pnpm --filter @resource-web/device-sync test
   # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
   reach-out-link:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'

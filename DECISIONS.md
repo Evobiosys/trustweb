@@ -469,3 +469,20 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
+
+## D-device-sync-e2ee (2026-11-02): own-device sync as an append-only log with replay-protected seals (prototype, packages/device-sync)
+- Problem: device sync v3 (sync_core.ts / sync_link.ts) ships the whole record as one bundle, decides by wall-clock stamps, and its only
+  defence against a relay that re-delivers an old wire is `exp` (10 min). A held wire inside that window, or a wire re-addressed by the relay,
+  is applied; a device restored from a backup silently re-uses stamps; the 4-hex fingerprint has 16 bits.
+- Decision: a new package `@resource-web/device-sync` (zero runtime dependencies, WebCrypto only) behind the existing relay interface
+  (`sendRaw` / `onRawWire` of apps/demo relay.ts, structurally typed as `RelayLike`). Design in docs/design/device-sync-e2ee.md.
+  Pairing: one-time secret in the QR / link only (`TWS2~address~pub~secret~exp`), X25519 ECDH from the public key in the code, HKDF into
+  two directional AES-GCM keys, a 6-digit SAS both people compare, Confirm on both sides. Seal: random IV, AAD binds the outer from/to, a
+  per-direction counter with a 64-wide anti-replay window persisted before the wire is acked. Record: an append-only log of field-level
+  puts and entity tombstones, per-device seq + hash chain + vector clock; merge is a verified set union (malformed / bad-hash / chain-gap /
+  fork are rejected and reported, nothing silently dropped); the record is materialised by causal field-level last-writer-wins, concurrent
+  edits are decided by (at, device) and the loser stays listed for "Review merge". Nothing is ever deleted from the log.
+- Not claimed (I7): no forward secrecy (static ECDH; a stolen device key opens what the relay still holds), no post-quantum, no metadata
+  protection (the relay sees addresses, sizes, timing). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
+  (derive DeviceKeys from the sync did:peer:2 `E` key, replay the record into a first log) is in the design doc.
+- Tests run on `node --test` (Node >= 22.18 strips types): the package has no dependency to install, and CI runs it as its own step.
