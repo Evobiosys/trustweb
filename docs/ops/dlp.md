@@ -115,7 +115,7 @@ A backup counts only after a restore has been timed and checked. Four levels:
 
 | Level | Cadence | What | Who |
 |---|---|---|---|
-| 0 automated | weekly | repository integrity check (sample of data), freshness of the newest snapshot per surface against its RPO, heartbeat seen | cron plus alert |
+| 0 automated | weekly (repository); **monthly in CI (fixture)** | repository integrity check (sample of data), freshness of the newest snapshot per surface against its RPO, heartbeat seen | cron plus alert |
 | 1 staging restore | **monthly** | restore the newest snapshot and one random older snapshot into the staging unit (`scripts/deploy_trustweb_backup.sh --staging`, own data directories, no public route), run the checks below, stop the unit again | operator |
 | 2 host-loss rehearsal | **quarterly** | fresh VM at the second provider, install the code with the deploy script's staging flavour, restore from escrow only (no access to the old host), time it against the RTO | operator plus a second person |
 | 3 people and device | yearly | the second person restores using only the runbook; a fresh phone install recovers a synthetic persona from its encrypted backup | two people |
@@ -146,6 +146,28 @@ returns the same ciphertext for a canary id; `restoreMs` recorded against the RT
 over the live directory: restore beside it, then swap by an operator after the drill passes.
 The automated test (`test/restore_drill.test.mjs`) does this end to end with synthetic data.
 
+### CI drill (level 0, built)
+
+`.github/workflows/dlp-drill.yml` runs `services/trustweb-backup/drill_ci.mjs` on the 1st of every month (04:23 UTC),
+on demand (`workflow_dispatch`), and on any push that touches the drill code. It builds a deterministic synthetic
+fixture (a `BACKUP_DIR` look-alike, seeded bytes, `example.test` hosts), snapshots it, restores into an empty
+directory, **diffs the restored tree against the fixture byte for byte**, and then runs a **negative control**: it corrupts a
+copy of the snapshot and requires verification to notice. A drill that cannot fail counts as failed.
+
+Alerting output, in order of loudness:
+
+1. exit code 1, so the run is red and GitHub mails the people watching the workflow;
+2. one `::error title=DLP restore drill failed::` annotation per problem (a `::notice` when green);
+3. a step summary that ends in the drill-log row template above, level `0 (CI fixture)`;
+4. on a **scheduled** failure, one GitHub issue labelled `dlp-drill` (a repeat failure comments on the open one);
+5. the JSON report is kept as the `dlp-drill-report` artifact for 90 days.
+
+What this does **not** prove (I7): the live host has an off-host copy, or that a real snapshot restores. It proves the
+drill tooling and the restore path on synthetic data, every month, without a person remembering. Levels 1 to 3 stay manual.
+Two caveats: GitHub pauses scheduled workflows after 60 days without repository activity, so a month with no run is
+a missed drill, not a pass; and the fixture has no RPO check (no real backup age exists to measure), so the freshness check for the real off-host
+repository stays open under D-7.
+
 Quarterly, add a full-host rehearsal from the off-host copy on a fresh machine with only the
 owner's offline key, to prove nothing lives only on the old host.
 
@@ -169,7 +191,7 @@ Everything above waits for the owner. Nothing here has been decided or built.
 | D-4 | Back up hosted recordings at all, weekly? | yes weekly, because the allowance makes them user value; revisit if size grows |
 | D-5 | Who are the two escrow holders? | owner plus one trusted operator |
 | D-6 | Does the app upload its encrypted backup automatically, and how often? | needs a product decision; it sets the device RPO |
-| D-7 | Follow-up code tasks: a tested `backupTo(path)` on the SQL driver, a drill script that writes and checks canaries, a backup freshness check | yes, one PR each, test first |
+| D-7 | Follow-up code tasks: a tested `backupTo(path)` on the SQL driver, a backup freshness check for the real off-host repository (CI fixture drill is done) | yes, one PR each, test first |
 
 ## What this plan does not cover
 

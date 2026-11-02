@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+# DLP restore drill, level 0 (docs/ops/dlp.md): back up a synthetic fixture, restore it, diff it, prove the check can fail.
+# Monthly, on demand, and on a push that touches the drill code. Stdlib node only: no install step, about 20 s.
+# Alerting: red run (GitHub emails the people watching the workflow) + error annotations + a step summary with the drill-log row.
+# A scheduled failure also opens (or comments on) ONE issue labelled dlp-drill, so a missed email is not a missed alarm.
+# Honest limit (I7): this proves the drill tooling and the restore path on synthetic data. It does NOT prove the live host
+# has an off-host copy; that stays the level 1 to 3 drills in the plan. GitHub pauses scheduled workflows after 60 days
+# without repository activity: a silent month is not a pass.
+name: dlp-drill
+on:
+  schedule:
+    - cron: '23 4 1 * *'   # 04:23 UTC on the 1st of every month
+  workflow_dispatch:
+  push:
+    paths:
+      - 'services/trustweb-backup/restore_drill.mjs'
+      - 'services/trustweb-backup/drill_ci.mjs'
+      - 'services/trustweb-backup/test/dlp_ci_drill.test.mjs'
+      - '.github/workflows/dlp-drill.yml'
+concurrency:
+  group: dlp-drill-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write   # only to raise the alert issue below
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: drill tooling tests
+        run: node --test services/trustweb-backup/test/dlp_ci_drill.test.mjs
+      - name: restore drill (fixture -> backup -> restore -> diff -> negative control)
+        run: node services/trustweb-backup/drill_ci.mjs --report "$RUNNER_TEMP/dlp-drill-report.json"
+      - name: keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dlp-drill-report
+          path: ${{ runner.temp }}/dlp-drill-report.json
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: alert issue on scheduled failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create dlp-drill --description "Monthly restore drill failed" --color B60205 2>/dev/null || true
+          existing="$(gh issue list --label dlp-drill --state open --json number --jq '.[0].number // empty')"
+          body="The monthly DLP restore drill failed. Run: ${RUN_URL}. A failed drill is an incident (docs/ops/dlp.md): fix the cause, repeat the drill, then close this issue."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --label dlp-drill --title "DLP restore drill failed" --body "$body"
+          fi
