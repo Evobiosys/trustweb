@@ -44,14 +44,18 @@ async function theirs(): Promise<string> {
 }
 
 describe('import into a place without a record', () => {
-  it('round trip: export, import into a fresh directory, and export again gives the same bytes', async () => {
+  it('round trip: export, import into a fresh directory, and export again gives the same record plus one log line for the import', async () => {
     const a = await ours()
     await a.ok('export', '--out', 'web.json')
     const fresh = new Cli()
     const r = await fresh.run('import', join(a.dir, 'web.json'))
     assert.equal(r.code, 0, r.stderr)
     assert.match(r.stdout, /new record/)
-    assert.equal(await fresh.ok('export'), await a.ok('export'))
+    const got = JSON.parse(await fresh.ok('export')) as { log: { text: string }[] }
+    const want = JSON.parse(await a.ok('export')) as { log: { text: string }[] }
+    const imported = got.log.pop()
+    assert.match(imported?.text ?? '', /^imported .*web\.json as the record here \(from device:laptop\)$/)
+    assert.deepEqual(got, want)
   })
   it('--record puts the new record there', async () => {
     const file = await theirs()

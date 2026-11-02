@@ -175,26 +175,26 @@ describe('share list', () => {
     const cli = await seeded()
     await cli.ok('share', 'add', 'bike', '--zone', 'friend')
     await cli.ok('share', 'add', 'bike', '--zone', 'close', '--also', 'bo', `--now=${LATER}`)
-    await cli.ok('share', 'add', 'seeds', '--zone', 'public', '--except', 'tag:roses')
-    await cli.ok('share', 'add', 'ladder', '--zone', 'friend')
-    await cli.ok('share', 'revoke', 'ladder')
+    await cli.ok('share', 'add', 'seeds', '--zone', 'public', '--except', 'tag:roses', `--now=${LATER}`)
+    await cli.ok('share', 'add', 'ladder', '--zone', 'friend', `--now=${LATER}`)
+    await cli.ok('share', 'revoke', 'ladder', `--now=${LATER}`)
     const text = await cli.ok('share', 'list')
     const rows = text.trimEnd().split('\n')
     assert.match(rows[0], /^item\s+zone\s+also\s+except\s+since\s+seq$/)
     assert.equal(rows.length, 4)
     assert.match(text, /^item:bike\s+close\s+person:bo\s+-\s+2026-11-03 09:30\s+2$/m)
-    assert.match(text, /^item:seeds\s+public\s+-\s+tag:roses\s+2026-11-02 12:00\s+3$/m)
+    assert.match(text, /^item:seeds\s+public\s+-\s+tag:roses\s+2026-11-03 09:30\s+3$/m)
     assert.doesNotMatch(text, /ladder/)
     const json = (await cli.run('share', 'list', '--json')).json()
     assert.deepEqual(json, [
       { item: 'item:bike', zone: 'close', also: ['person:bo'], except: [], since: LATER, seq: 2 },
-      { item: 'item:seeds', zone: 'public', also: [], except: ['tag:roses'], since: NOW, seq: 3 },
+      { item: 'item:seeds', zone: 'public', also: [], except: ['tag:roses'], since: LATER, seq: 3 },
     ])
     const all = await cli.ok('share', 'list', '--all')
     assert.match(all.split('\n')[0], /^seq\s+op\s+item\s+zone\s+also\s+except\s+when\s+live$/)
     assert.match(all, /^1\s+share\s+item:bike\s+friend\s+-\s+-\s+2026-11-02 12:00\s+no$/m)
     assert.match(all, /^2\s+share\s+item:bike\s+close\s+person:bo\s+-\s+2026-11-03 09:30\s+yes$/m)
-    assert.match(all, /^5\s+revoke\s+item:ladder\s+-\s+-\s+-\s+2026-11-02 12:00\s+-$/m)
+    assert.match(all, /^5\s+revoke\s+item:ladder\s+-\s+-\s+-\s+2026-11-03 09:30\s+-$/m)
     const allJson = (await cli.run('share', 'list', '--all', '--json')).json<{ seq: number; op: string; item: string; live: boolean | null }[]>()
     assert.deepEqual(allJson.map((l) => [l.seq, l.op, l.item, l.live]), [
       [1, 'share', 'item:bike', false], [2, 'share', 'item:bike', true], [3, 'share', 'item:seeds', true], [4, 'share', 'item:ladder', false], [5, 'revoke', 'item:ladder', null],

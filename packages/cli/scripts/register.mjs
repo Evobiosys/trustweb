@@ -13,6 +13,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const TS = /\.[cm]?ts$/
 const HAS_EXT = /\.[cm]?[jt]sx?$|\.json$/
 
+// The stripper emits a source map per file; without this, a stack trace would name the stripped line, not the TypeScript one.
+process.setSourceMapsEnabled(true)
+
 /** Node prints "stripTypeScriptTypes is experimental" once per process; the CLI's user did not ask for that line. Only that warning is held back, only during the call. */
 function quietly(fn) {
   const emit = process.emitWarning

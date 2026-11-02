@@ -165,10 +165,11 @@ const nestCmd: Command = {
       ctx.emit({ child: child.id, parent: parent.id, result: 'already' }, `${child.id} is already nested in ${parent.id}; nothing changed`)
       return
     }
-    // The checks run on the live tuples only: a nesting that was ended must not block a new one.
+    // The checks run on every nesting not yet ended at now, future-dated ones included: a nesting that was ended must not
+    // block a new one, and one that begins later must not be cycled around.
     let next: Store
     try {
-      next = nest(liveTuples(r, ctx.now), child.id, parent.id, r.device, ctx.now)
+      next = nest(r.tuples.filter((t) => t.until === undefined || Date.parse(t.until) > +ctx.now), child.id, parent.id, r.device, ctx.now)
     } catch (e) {
       throw new CommandError((e as Error).message)
     }

@@ -153,12 +153,13 @@ export async function execute(root: Command, argv: readonly string[], io: Io, ve
   try {
     // Two passes: first the command is found among the words (options skipped leniently, so an unknown one is reported
     // against the right command), then the line is parsed strictly with that command's options.
-    const wantsHelp = argv.includes('--help') || argv.includes('-h')
-    if (argv.includes('--version') || argv.includes('-V')) {
+    const scanned = scan(argv, [...GLOBAL_OPTIONS, ...allOptions(root)])
+    const wantsHelp = scanned.flags.has('help')
+    if (scanned.flags.has('version')) {
       io.stdout(`${PROGRAM} ${version}\n`)
       return 0
     }
-    const resolved = resolveCommand(root, words(argv, [...GLOBAL_OPTIONS, ...allOptions(root)]))
+    const resolved = resolveCommand(root, scanned.words)
     command = resolved.command
     path = resolved.path
     if (wantsHelp || (command.subcommands?.length && !command.run)) {
@@ -183,6 +184,10 @@ export async function execute(root: Command, argv: readonly string[], io: Io, ve
         return (record = loadRecord(p))
       },
       commit: (r, text, at) => {
+        // A write dated before the record's last change would put a line in the past and slip past every check that
+        // reads "what is live now" (a nesting, a membership): refused. Reads at any --now stay free.
+        const last = record?.log.length ? record.log[record.log.length - 1].at : undefined
+        if (last !== undefined && Date.parse(last) > +now) throw new CommandError(`--now ${now.toISOString()} is earlier than the record's last change (${last}); a write cannot go back in time`)
         appendLog(r, [...path, ...positionals].join(' '), text, now)
         saveRecord(at ?? ctx.recordPath() ?? '', r)
       },
@@ -204,21 +209,27 @@ export async function execute(root: Command, argv: readonly string[], io: Io, ve
   }
 }
 
-/** The non-option words of a line, for finding the command: a known value option takes the next token with it; `--` ends the options. */
-function words(argv: readonly string[], known: readonly Option[]): string[] {
-  const out: string[] = []
+/**
+ * A lenient first pass over a line: the non-option words (to find the command) and the global flags met as flags. A known
+ * value option takes the next token with it, so `--name -V` is a name and not the version; `--` ends the options.
+ */
+function scan(argv: readonly string[], known: readonly Option[]): { words: string[]; flags: Set<string> } {
+  const words: string[] = []
+  const flags = new Set<string>()
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '--') return [...out, ...argv.slice(i + 1)]
+    if (a === '--') return { words: [...words, ...argv.slice(i + 1)], flags }
     if (a === '-' || !a.startsWith('-')) {
-      out.push(a)
+      words.push(a)
       continue
     }
     if (a.includes('=')) continue
     const o = a.startsWith('--') ? known.find((k) => k.name === a.slice(2)) : known.find((k) => k.alias === a.slice(1))
-    if (o && o.kind !== 'flag') i++
+    if (!o) continue
+    if (o.kind === 'flag') flags.add(o.name)
+    else i++
   }
-  return out
+  return { words, flags }
 }
 
 /** Every option of every command, so the first pass can skip over a command's own `--opt value` while finding the command. */

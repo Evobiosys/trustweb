@@ -63,10 +63,22 @@ export function unfoldTagRules(tuples: Store, persons: readonly string[], now: D
   return out
 }
 
-/** The store every check runs on: the record's tuples, the tag rules unfolded, and the scope tuples of the latest shares. */
-export function storeOf(r: Pick<TrustRecord, 'tuples' | 'shares' | 'persons' | 'device'>, now: Date): Store {
+/** Is this `person:`/`tag:` id removed in the record? (Anything else, a zone say, is not.) */
+export function isRemoved(r: Pick<TrustRecord, 'persons' | 'tags'>, id: string): boolean {
+  const bare = id.slice(id.indexOf(':') + 1)
+  const entry = id.startsWith('person:') ? r.persons[bare] : id.startsWith('tag:') ? r.tags[bare] : undefined
+  return entry?.removedAt !== undefined
+}
+
+/**
+ * The store every check runs on: the record's tuples, the tag rules unfolded, and the scope tuples of the latest shares.
+ * A share's `--also` of a person or tag removed since gives nothing any more (removal ends their grants, the record says);
+ * its `--except` keeps standing (an exclusion is the conservative side, I9).
+ */
+export function storeOf(r: Pick<TrustRecord, 'tuples' | 'shares' | 'persons' | 'tags' | 'device'>, now: Date): Store {
   const derived = unfoldTagRules(r.tuples, personIds(r), now)
-  const scopes = latestShares(r.shares).flatMap((l) => scopeTuples(l.scope, l.id, r.device, new Date(l.ts)))
+  const scopes = latestShares(r.shares).flatMap((l) =>
+    scopeTuples({ ...l.scope, include: l.scope.include.filter((id) => !isRemoved(r, id)) }, l.id, r.device, new Date(l.ts)))
   return [...r.tuples, ...derived, ...scopes]
 }
 

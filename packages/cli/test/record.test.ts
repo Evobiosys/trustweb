@@ -18,7 +18,10 @@ describe('emptyRecord and canonical bytes', () => {
     assert.equal(r.kind, 'trustweb-cli-record')
     assert.equal(r.v, 1)
     assert.equal(r.device, 'device:laptop')
-    assert.deepEqual([r.zones, r.persons, r.tags, r.tuples, r.shares], [{}, {}, {}, [], []])
+    assert.deepEqual([Object.keys(r.zones), Object.keys(r.persons), Object.keys(r.tags), r.tuples, r.shares], [[], [], [], [], []])
+    // The id maps have no prototype: an id that names an object property is an ordinary id.
+    assert.equal(Object.getPrototypeOf(r.persons), null)
+    assert.equal(r.persons.toString, undefined)
     assert.equal(r.log.length, 1)
     assert.equal(r.log[0].at, NOW.toISOString())
   })

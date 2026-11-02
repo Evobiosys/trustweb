@@ -72,9 +72,15 @@ export class RecordError extends Error {
   }
 }
 
+/**
+ * The maps keyed by id have no prototype, so an id that is also the name of an object property (`toString`,
+ * `constructor`) is an ordinary id: absent until added, never confused with a built-in.
+ */
+export const idMap = <T>(from: Record<string, T> = {}): Record<string, T> => Object.assign(Object.create(null) as Record<string, T>, from)
+
 export function emptyRecord(device: string, now: Date): TrustRecord {
   return {
-    kind: RECORD_KIND, v: RECORD_VERSION, device, zones: {}, persons: {}, tags: {}, tuples: [], shares: [],
+    kind: RECORD_KIND, v: RECORD_VERSION, device, zones: idMap(), persons: idMap(), tags: idMap(), tuples: [], shares: [],
     log: [{ at: now.toISOString(), by: device, command: 'init', text: `record created by ${device}` }],
   }
 }
@@ -159,7 +165,7 @@ export function parseRecord(text: string): TrustRecord {
   ;(v.log as unknown[]).forEach((l, i) => logEntry(i, l))
   return {
     kind: RECORD_KIND, v: RECORD_VERSION, device: v.device,
-    zones: zones as TrustRecord['zones'], persons: v.persons as TrustRecord['persons'], tags: v.tags as TrustRecord['tags'],
+    zones: idMap(zones) as TrustRecord['zones'], persons: idMap(v.persons as TrustRecord['persons']), tags: idMap(v.tags as TrustRecord['tags']),
     tuples, shares: v.shares as ShareLine[], log: v.log as LogEntry[],
   }
 }

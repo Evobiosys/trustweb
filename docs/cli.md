@@ -86,7 +86,8 @@ a *rule*, and every live carrier of the tag, and of every tag nested under it, c
 
 `tag nest roses garden` puts `roses` under `garden`: a carrier of `roses` holds `garden` too. The tags form a DAG; a
 cycle is refused, and so is a chain deeper than 4 levels (`share_sink/tags.ts`, `MAX_DEPTH`; a root tag is level 1).
-Nesting goes only through the app's `nest`, so the CLI cannot write a graph the app would refuse.
+Nesting goes only through the app's `nest`, checked against every nesting not yet ended (future-dated ones included),
+and `import --merge` checks the merged graph the same way, so the CLI cannot write a graph the app would refuse.
 
 ### Shares
 
@@ -111,6 +112,9 @@ The record keeps facts. Every visibility answer runs on the store derived from t
 Every command that changes the record writes exactly one human-readable line to the record's log (I6): when, which
 device, the command as typed, and what it did. `trustweb log` shows it. A command that refuses writes nothing; a
 command that finds nothing to do (adding what is already there) says so, exits 0 and writes nothing.
+
+A write cannot go back in time: a `--now` earlier than the record's last log line is refused for any command that
+would change the record (it would slip past every check that reads what is live now). Reads at any `--now` are fine.
 
 ### What stays local
 
@@ -404,17 +408,21 @@ bike shared to friend except cy.)
 validated in full first (`record.parseRecord`, with the share sink's tuple check inside); a bad file exits 1, names
 the file and the problem, and writes nothing.
 
-- **No record here yet**: the file becomes the record (`./.trustweb/record.json`, or `--record`), byte for byte, like
-  a clone: the same device, the same log. `export` there gives the same bytes as `export` where it came from.
+- **No record here yet**: the file becomes the record (`./.trustweb/record.json`, or `--record`) in canonical bytes,
+  like a clone: the same device, the same log, plus one log line for the import. `export` there gives the same record
+  as `export` where it came from, with that one line more.
 - **A record here**, and neither option: refused, with the two choices.
 - `--replace`: the file's record takes its place. One log line is appended:
   `imported <file>, replacing the record of <old device>`.
 - `--merge`: ours stays and gains what it lacks. Zones, persons and tags by id: missing ones are added, ours are kept
-  as they are (a person removed here stays removed). Tuples: every one not already here (all fields equal). Share
-  lines: appended after ours, `seq` renumbered to follow ours, `cutoff` (share, agree) or `at` (revoke) moved by the
-  same amount, so a one-off share still shows exactly the lines it showed; a line already here is skipped. Logs: the
-  union in time order, then the import's own line. The device stays ours. Merging the same file again adds nothing
-  and writes nothing.
+  as they are (a person removed here stays removed). Tuples: the same fact (every field but `until`) is one tuple on
+  both sides, and the earlier `until` wins, so a membership closed on either device stays closed; a tuple that names a
+  person or tag removed here is closed at that removal; the rest are added. Share lines: a line older than our latest
+  line about the same item is superseded (left out: a revoke here is not undone by an older share there); the others
+  are appended after ours, `seq` renumbered to follow ours, `cutoff` (share, agree) or `at` (revoke) moved by the same
+  amount, so a one-off share still shows exactly the lines it showed; a line already here is skipped. The merged tags
+  must still nest as a DAG no deeper than 4, else nothing is imported. Logs: the union in time order, then the import's
+  own line. The device stays ours. Merging the same file again adds nothing and writes nothing.
 - `--dry-run`: the summary, nothing written. `--json`: `{file, record, mode, dryRun, added, skipped, replaced?}`.
 
 `--replace` with `--merge` is a usage error (exit 2).
@@ -437,8 +445,8 @@ $ trustweb import bad.json --merge
 trustweb: bad.json: kind must be "trustweb-cli-record"; nothing was imported
 ```
 
-A merge appends the other record's lines after ours, so for an item both records shared, the other record's latest
-line wins. Look at `--dry-run` first.
+For an item both records shared, the newer line wins: the other record's line comes in only when it is newer than
+our latest word on that item. Look at `--dry-run` first.
 
 ## Record format
 

@@ -112,7 +112,7 @@ describe('zone archive / unarchive', () => {
     assert.match(r.stderr, /warning: 1 item shared to friend now opens only to close/)
     assert.equal(cli.record().zones.friend?.archivedAt, LATER)
     assert.match(lastLog(cli), /^archived zone friend/)
-    const u = await cli.run('zone', 'unarchive', 'friend', '--json')
+    const u = await cli.run('zone', 'unarchive', 'friend', '--json', '--now', LATER)
     assert.equal(u.code, 0, u.stderr)
     assert.deepEqual(u.json(), { zone: 'friend', state: 'on' })
     assert.equal(cli.record().zones.friend?.archivedAt, undefined)
@@ -172,7 +172,7 @@ describe('zone add-person / remove-person', () => {
     assert.equal(t?.until, LATER)
     assert.equal(lastLog(cli), 'removed ada from zone friend')
     withRecord(cli, (rec) => { rec.tuples.push({ subject: 'person:bo', relation: 'in_zone', object: 'zone:community', since: NOW, by: 'device:laptop' }) })
-    await cli.ok('zone', 'remove-person', 'community', 'bo')
+    await cli.ok('zone', 'remove-person', 'community', 'bo', '--now', LATER)
     assert.equal(cli.record().tuples.filter((x) => x.subject === 'person:bo' && x.object === 'zone:community' && !x.until).length, 0)
   })
   it('refuses a non-member before writing anything, and names the tag when the person is only in through a rule', async () => {
