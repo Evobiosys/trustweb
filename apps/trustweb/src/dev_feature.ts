@@ -135,7 +135,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   bar.prepend(hx)
   try { bar.hidden = !!sessionStorage.getItem('twf-ok-hidden') } catch { /* shown */ }
   const preview = typeof __TW_PREVIEW__ !== 'undefined' && !!__TW_PREVIEW__
-  /** "Declare done": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
+  /** "Approve wave": Touch ID, rollback tag, tests, PR, checks, squash merge, release (POST /__tw/approve-merge); its status line replaces the buttons until it ends. */
   const pollMerge = (since: number): void => {
     bar.classList.add('prog'); head.textContent = 'IN PROGRESS'; body.className = 'body'
     const stale = (j: ApprovalStatus): boolean => j.step === 'none' || Date.parse(j.updated ?? '') < since
@@ -150,7 +150,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   }
   function buttons(): void {
     document.documentElement.classList.remove('twp-done'); bar.classList.remove('prog', 'ok'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
-    const personal = btn('Declare done and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
+    const personal = btn('Approve wave and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
       const since = Date.now() - 2000
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
     })
@@ -158,7 +158,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
       const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
       // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
-      const go = btn('Declare done', 'go big', () => {
+      const go = btn('Approve wave', 'go big', () => {
         const since = Date.now() - 2000
         void read().then((q) => {
           const g = approveGate(q)
