@@ -100,6 +100,23 @@ test('derivePairKeys: same SAS on both sides; A.send opens with B.recv and NOT w
   assert.equal(await dec(pa.send, back), null)
 })
 
+test('derivePairKeys: a context (pairing epoch) changes the keys and the SAS; both sides with the same context agree', async () => {
+  const a = await generateDeviceKeys()
+  const b = await generateDeviceKeys()
+  const ctx1 = utf8('epoch-one')
+  const ctx2 = utf8('epoch-two')
+  const a1 = await derivePairKeys(a, b.publicKey, ctx1)
+  const b1 = await derivePairKeys(b, a.publicKey, ctx1)
+  const a2 = await derivePairKeys(a, b.publicKey, ctx2)
+  assert.equal(a1.sas, b1.sas)
+  const m = await enc(a1.send, utf8('under epoch one'))
+  assert.deepEqual(await dec(b1.recv, m), utf8('under epoch one'))
+  const b2 = await derivePairKeys(b, a.publicKey, ctx2)
+  assert.equal(await dec(b2.recv, m), null, 'a wire of epoch one does not open under epoch two')
+  assert.equal(await dec((await derivePairKeys(b, a.publicKey)).recv, m), null, 'nor without a context')
+  assert.equal(a2.sas, (await derivePairKeys(b, a.publicKey, ctx2)).sas)
+})
+
 test('derivePairKeys: deterministic for the same pair (RFC vectors), different pairs → different keys', async () => {
   const a = await deviceKeysFromSecret(A_SECRET)
   const b = await deviceKeysFromSecret(B_SECRET)

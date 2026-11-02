@@ -127,12 +127,18 @@ async function aesKey(base: CryptoKey, salt: Uint8Array, info: string): Promise<
   return subtle().deriveKey(hkdfParams(salt, info), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
 }
 
-export async function derivePairKeys(mine: DeviceKeys, theirPublicKey: Uint8Array): Promise<PairKeys> {
+/**
+ * `context` (optional) is mixed into the HKDF salt: sync.ts passes the pairing epoch (SHA-256 of the one-time pairing secret), so two
+ * ceremonies between the SAME two device keys yield different keys and a different SAS. Without it, "unlink, pair again" would restart
+ * the counters under the old keys and a wire captured under the earlier pairing could be opened once more. Both sides know the secret
+ * (it was in the code), so both derive the same epoch; nothing of it crosses the relay in clear.
+ */
+export async function derivePairKeys(mine: DeviceKeys, theirPublicKey: Uint8Array, context: Uint8Array = new Uint8Array(0)): Promise<PairKeys> {
   need32(theirPublicKey, 'peer public key')
   const order = compareBytes(mine.publicKey, theirPublicKey)
   if (order === 0) throw new Error('refusing to pair a device with its own key')
   const [lo, hi] = order < 0 ? [mine.publicKey, theirPublicKey] : [theirPublicKey, mine.publicKey]
-  const salt = await sha256(concat(lo, hi))
+  const salt = await sha256(concat(lo, hi, context))
   const base = await hkdfBase(await sharedSecret(mine, theirPublicKey))
   const loHi = await aesKey(base, salt, LABEL_LO_HI)
   const hiLo = await aesKey(base, salt, LABEL_HI_LO)
