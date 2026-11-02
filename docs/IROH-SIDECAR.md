@@ -15,11 +15,16 @@ absent.
 
 ## Finding the binary
 
-1. `TRUSTWEB_IROH_SIDECAR` (absolute path), if set.
-2. `trustweb-iroh-sidecar` on `PATH`.
+1. `TRUSTWEB_IROH_SIDECAR` (absolute path), if set. A set-but-missing path is
+   "not found"; it never falls back to `PATH`, so a bad override cannot quietly
+   run a different binary.
+2. Otherwise `trustweb-iroh-sidecar` on `PATH` (`.exe` too on Windows).
 
-Neither found: `IrohSidecarEndpoint.isAvailable()` is `false`, `send` rejects,
-and the ladder falls through to its next rung. Nothing is downloaded.
+Neither found: `IrohSidecarEndpoint.isAvailable()` is `false`, `send` rejects
+with `unavailable: …` (a host-side code, not one of the sidecar's), and the
+ladder falls through to its next rung. Nothing is downloaded. A sidecar that
+exits, never reports `ready`, or was closed is not restarted by the endpoint;
+the ladder falls through until the daemon creates a new endpoint.
 
 ## Command line
 

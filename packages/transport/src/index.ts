@@ -71,7 +71,18 @@ export {
   DEFAULT_RELAY_MAX_COOLDOWN_MS as IROH_DEFAULT_RELAY_MAX_COOLDOWN_MS,
   type IrohRelaySelectorOptions,
 } from "./iroh_relay_selector.js";
-// (IrohSidecarEndpoint exports are added by the orchestrator)
+export {
+  IrohSidecarEndpoint,
+  IrohSidecarError,
+  findIrohSidecar,
+  IROH_SIDECAR_BINARY,
+  IROH_SIDECAR_ENV,
+  DEFAULT_READY_TIMEOUT_MS as IROH_SIDECAR_DEFAULT_READY_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS as IROH_SIDECAR_DEFAULT_REQUEST_TIMEOUT_MS,
+  type IrohSidecarEndpointOptions,
+  type IrohSidecarReady,
+  type IrohSidecarLogLevel,
+} from "./iroh_sidecar_endpoint.js";
 export {
   LadderChannel,
   type LadderRung,
