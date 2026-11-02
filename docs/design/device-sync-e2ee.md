@@ -48,6 +48,7 @@ Written 2026-11-02.
 | One symmetric key for both directions | A wire can be reflected back to its sender | Two directional keys |
 | AAD absent | The relay could re-address a wire to another pairing that shares a key | `from` and `to` bound in the AAD |
 | 4-hex fingerprint | 16 bits, compared by humans | 6-digit SAS, about 20 bits, secret to an attacker |
+| Same pair key for ever per pair of identities | Unlink and pair again gives the old key back | Per-pairing epoch in the HKDF salt: every pairing gets new keys and a new SAS |
 
 ### Relation to the invariants
 
@@ -85,26 +86,26 @@ Written 2026-11-02.
 
 - The record content (people, notes, resources, settings) in the log.
 - The device secret keys (X25519, 32 bytes each).
-- The pair keys derived from them.
+- The pair keys derived from them, one set per pairing epoch.
 - The integrity of the log: which device wrote what, in which order.
 - The pairing secret, during the 10 minutes it is valid.
 
 ### Adversaries
 
-Test file names are relative to `packages/device-sync/src/`. Quoted cases are exact test names; `sync.test.ts` cases in parentheses are the required cases from the build spec.
+Test file names are relative to `packages/device-sync/src/`. Quoted cases are exact test names.
 
 | Adversary | What the design stops | What it does not stop | Proven by |
 |---|---|---|---|
-| **Honest-but-curious relay** | Reading content: every payload is AES-GCM ciphertext | Seeing `from` / `to` addresses, sizes, timing, piece counts; learning that two addresses belong to one owner; under D-relay-send-auth it also learns an authenticated sender DID | `sync.test.ts` (the concatenated wire payloads contain no plaintext field value); `seal.test.ts` "the plaintext is canonical JSON of {ctr, kind, body} and does not appear on the wire" |
-| **Malicious relay: replay** | A re-delivered wire is dropped by the replay window; a merge of known entries is a no-op | Nothing further | `replay.test.ts` "duplicate rejected"; `sync.test.ts` (re-delivering a captured wire changes nothing) |
+| **Honest-but-curious relay** | Reading content: every payload is AES-GCM ciphertext | Seeing `from` / `to` addresses, sizes, timing, piece counts; learning that two addresses belong to one owner; under D-relay-send-auth it also learns an authenticated sender DID | `sync.test.ts` "syncNow converges both logs and the materialized state; the relay sees no plaintext and no entity id"; `seal.test.ts` "the plaintext is canonical JSON of {ctr, kind, body} and does not appear on the wire" |
+| **Malicious relay: replay** | A wire whose counter was already seen is acked and not processed: a replayed `have` gets no answer, a replayed `entries` changes nothing, the relay stops redelivering; a wire captured under an earlier pairing does not open at all | Nothing further | `replay.test.ts` "duplicate rejected"; `sync.test.ts` "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering", "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
 | **Malicious relay: reorder** | Out-of-order delivery within 64 messages is accepted once; pieces carry their index | A wire more than 64 counters behind is dropped (a liveness loss, not a safety loss) | `replay.test.ts` "out of order inside the window accepted exactly once", "too old (≤ high - 64) rejected, just inside accepted" |
-| **Malicious relay: drop** | Detection only: `syncNow` rejects with `offline`, an incomplete piece set merges nothing | Availability; the relay can stop all sync | `sync.test.ts` ('offline' rejection on no answer) |
-| **Malicious relay: re-address / re-attribute** | AAD binds `from` and `to`; a wire under another outer address fails AEAD | Nothing further | `seal.test.ts` "re-addressed or re-attributed wire → null"; `sync.test.ts` (delivering a wire with the outer from swapped is ignored) |
+| **Malicious relay: drop** | Detection only: `syncNow` rejects with `offline`, an incomplete piece set merges nothing | Availability; the relay can stop all sync | `sync.test.ts` "syncNow rejects offline when the peer never answers" |
+| **Malicious relay: re-address / re-attribute** | AAD binds `from` and `to`; a wire under another outer address fails AEAD | Nothing further | `seal.test.ts` "re-addressed or re-attributed wire → null"; `sync.test.ts` "a wire re-attributed to another linked address, or to an unlinked one, is ignored" |
 | **Malicious relay: forge / tamper** | AEAD (authenticated encryption) rejects any changed byte | Nothing further | `seal.test.ts` "tampering any single byte → null", "wrong key → null (other direction, other pair)" |
-| **Malicious relay: holds wires beyond any TTL** | A held wire is either too old for the window (dropped) or still carries authentic, idempotent state; offers expire after 10 minutes and are one-use | The relay can delay the newest wire; its content is then late, not wrong | `replay.test.ts` "too old (≤ high - 64) rejected, just inside accepted"; `sync.test.ts` (expired codes are refused by join) |
+| **Malicious relay: holds wires beyond any TTL** | A held wire is either too old for the window (dropped) or still carries authentic, idempotent state; offers expire after 10 minutes and are one-use | The relay can delay the newest wire; its content is then late, not wrong | `replay.test.ts` "too old (≤ high - 64) rejected, just inside accepted"; `sync.test.ts` "an expired code is refused by join; an expired offer ignores a pair wire" |
 | **Network observer** | Content (AEAD inside, TLS to the relay in deployment) | IP addresses, timing and sizes towards the relay | None (out of scope) |
-| **QR shoulder-surfer / link interceptor** | Cannot pose as the offerer (lacks its secret key); a raced `pair` message produces a different SAS on the offerer's screen; one use only | If the owner taps Confirm without comparing, the interloper is linked and receives the record | `keys.test.ts` "derivePairKeys: same SAS on both sides; ..."; `sync.test.ts` (pair via code (same SAS both sides, confirm)) |
-| **Lost or stolen device** | Remaining devices unlink it; its wires are no longer opened | The record on the device; past wires a relay kept or logged open with its static key (no forward secrecy) | `sync.test.ts` (unlink stops decryption) |
+| **QR shoulder-surfer / link interceptor** | Cannot pose as the offerer (lacks its secret key); a raced `pair` message produces a different SAS on the offerer's screen; one use only | If the owner taps Confirm without comparing, the interloper is linked and receives the record | `keys.test.ts` "derivePairKeys: same SAS on both sides; ..."; `sync.test.ts` "pair via code: same 6-digit SAS on both sides, confirm stores the pairing on both", "a code is one use; a code whose address is my own is refused; cancel stores nothing" |
+| **Lost or stolen device** | Remaining devices unlink it; its wires are no longer opened; any later pairing uses a new epoch, so its old pair keys open nothing new | The record on the device; past wires a relay kept or logged open with its static key (no forward secrecy) | `sync.test.ts` "after unlink a wire from that device is ignored, and syncNow says not linked" |
 | **Compromised paired device** | Forks it creates become visible to the others | It reads everything and can append entries in any device's name (no per-entry signatures); it can pre-empt another device's next `seq`, so the real entry is later rejected as a fork | `log.test.ts` "same id with different content → fork, the known entry stays" (detection only) |
 | **Cloned device / restore from backup (fork)** | A second writer under one device id is detected as a fork; a restored device that syncs first recovers its own later entries (merge accepts verified own-id entries); a rewound send counter is dropped as replay and never reuses a GCM IV (IVs are random) | Automatic fork repair; the restored device is silent until its counter passes the peer's high mark | `log.test.ts` "same id with different content → fork, the known entry stays"; `replay.test.ts` "duplicate rejected" |
 | **Wrong clocks** | Causal order ignores the clock; a delete beats a concurrent edit whatever the clocks say; the loser of a true tie is listed | Among truly concurrent edits the device with the later clock wins; a skewed joiner may misjudge a code's `exp` | `log.test.ts` "a causally later put wins without a conflict, even with an EARLIER wall clock", "a winner is never an entry that something else causally replaced (clock skew)" |
@@ -139,21 +140,22 @@ TWS2~<address>~<publicKey b64u>~<secret b64u>~<exp ms>
 | `exp` | Offer expiry, `now + OFFER_TTL_MS` (10 minutes), in ms since epoch |
 
 `~` cannot occur in base64url or in a did:peer:2, so splitting is unambiguous.
+An address may not contain `~`, `|` or whitespace: `pairingCode` and `createDeviceSync` refuse one (`~` would break the code, `|` the AAD).
 
 ### The ceremony, step by step
 
-1. **Offer.** Phone calls `offer()`. It draws a secret, keeps `{ secret, until: now + 10 min }` in memory, and shows the code as QR (and copyable text).
+1. **Offer.** Phone calls `offer()`. It draws a 32-byte secret, keeps only the derived `pair` key, the epoch and the expiry (`now + 10 min`) in memory, and shows the code as QR (and copyable text).
 2. **Scan or paste.** Laptop reads the code with `join(code)`. `parsePairingCode` rejects garbage; `join` refuses an expired code.
 3. **Sealed `pair` message.** Laptop derives `K_pair = HKDF-SHA256(secret, salt empty, info "trustweb-device-sync/v2/pair")` (RFC 5869). It sends one wire to the Phone's address: `pair` with body `{ deviceId, publicKey, name }`, sealed under `K_pair` with the AAD of section 6.
 4. **ECDH on both sides.** Laptop computes X25519(laptop secret, Phone public key from the QR). Phone, after opening the `pair` message, computes X25519(phone secret, Laptop public key from the message). The offer is consumed by the first valid `pair`.
-5. **HKDF.** Salt = `SHA-256(lo || hi)`, where `lo` and `hi` are the two public keys sorted bytewise. Three outputs from the shared secret:
+5. **HKDF.** Both sides compute the pairing **epoch** = base64url(SHA-256(secret)); it is known from the code and never sent. Salt = `SHA-256(lo || hi || epoch)`, where `lo` and `hi` are the two public keys sorted bytewise (`derivePairKeys(mine, theirPub, context)` with the epoch as `context`). Three outputs from the shared secret:
    - key for direction lo→hi (info `trustweb-device-sync/v2/lo>hi`),
    - key for direction hi→lo (info `.../hi>lo`),
    - SAS: 32 bits (info `.../sas`), `mod 1 000 000`, zero-padded to 6 digits.
 6. **Compare.** Both screens show the 6-digit SAS (short authentication string: a code two humans compare to detect a swapped key). The owner checks that they match.
-7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` (address, deviceId, public key, name, SAS, counters). Before Confirm nothing syncs.
+7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` `{ address, deviceId, publicKey, name, sas, epoch, linkedAt, lastSyncAt, sendCtr, replay }`, counters at zero. Cancel stores nothing. Before Confirm nothing syncs.
 
-`derivePairKeys` refuses to pair a device with its own key and rejects an all-zero ECDH result (a low-order public key).
+`derivePairKeys` refuses to pair a device with its own key and rejects an all-zero ECDH result (a low-order public key). `join` also refuses a code whose address is the device's own.
 
 ### Why each side is authenticated
 
@@ -182,9 +184,10 @@ It can only drop the `pair` message, which makes pairing fail visibly.
 
 ### Unlink, lost device, rotation
 
-- `unlink(address)` deletes the pairing (keys, counters, replay state). Later wires from that address are not opened.
+- `unlink(address)` deletes the pairing (keys, epoch, counters, replay state). Later wires from that address are ignored, and `syncNow` to it rejects with `not linked`.
+- Pairing the same two devices again uses a fresh secret, so a new epoch: new pair keys, a new SAS, counters from zero under those new keys. A wire captured under the earlier pairing does not open.
 - Unlink does not take back what the other device already has. Its entries stay in the log.
-- **Lost device:** unlink it on every remaining device. The lost device only ever held pair keys involving itself, so other pairs stay sound.
+- **Lost device:** unlink it on every remaining device. The lost device only ever held pair keys involving itself (for its stored epochs), so other pairs stay sound. If it is found and paired again, the new epoch gives keys the old copy does not have; its static key still opens past wires a relay kept.
 - **Rotation:** if a device's secret key may have leaked (a backup copy, a restore), that device gets a new key pair (new `deviceId`) and pairs again with the others. No `rotate()` call exists in the prototype; rotation is "new `SyncData`, pair again".
 - A replacement device is a new device. It starts with an empty log and receives everything in its first sync.
 
@@ -194,7 +197,8 @@ It can only drop the `pair` message, which makes pairing fail visibly.
 |---|---|---|
 | Size | 4 hex = 16 bits | 6 digits, about 20 bits |
 | Attacker success per pairing | about 1 in 65 536 | about 1 in 1 000 000 |
-| Derived from | SHA-256 of the shared secret | HKDF of the shared secret with its own label, salted by both public keys |
+| Derived from | SHA-256 of the shared secret | HKDF of the shared secret with its own label, salted by both public keys and the pairing epoch |
+| New per pairing | No: same two identities, same fingerprint | Yes: new epoch, new SAS |
 | Readability | Mixed letters and digits | Digits only, easy to read aloud |
 | Bias | none | `uint32 mod 1e6`, under 0.03 %, accepted |
 
@@ -210,7 +214,7 @@ The SAS is only as good as the human check. If nobody compares, an active attack
 - AAD (associated data: authenticated but not encrypted) = `trustweb-device-sync/v2|<from address>|<to address>`.
 - Wire payload: `base64url(iv || ciphertext)`. This is what `sendRaw(to, payload)` hands the relay.
 - The counter `ctr` sits inside the authenticated plaintext, never in cleartext. The relay cannot read or change it.
-- `seal.ts` refuses an address containing `|`. Otherwise the AAD would be ambiguous: `"a|b"` + `"c"` and `"a"` + `"b|c"` would give the same bytes.
+- `seal.ts` refuses an address containing `|` (`sync.ts` also refuses `~` and whitespace). Otherwise the AAD would be ambiguous: `"a|b"` + `"c"` and `"a"` + `"b|c"` would give the same bytes.
 - `openMessage` never throws. Every failure is the same `null`: bad base64url, short input, AEAD failure, bad UTF-8, bad JSON, or a missing or invalid `ctr` / `kind`.
 
 Binding `from` and `to` in the AAD means the relay's cleartext outer fields cannot be changed without the open failing.
@@ -222,7 +226,7 @@ Random 96-bit IVs stay far below the NIST limit of 2^32 messages per key for any
 - Each `Pairing` keeps `sendCtr`. Every sealed message carries the next value, starting at 1.
 - The receiver keeps `ReplayState { high, seen }` per pairing, in the style of the IPsec ESP window (RFC 4303, section 3.4.3).
 - `high` is the highest accepted counter. `seen` lists the accepted counters in `(high - 64, high]`.
-- Accept rule: `ctr` is a positive safe integer, not in `seen`, and `> high - 64`. Otherwise the wire is dropped.
+- Accept rule: `ctr` is a positive safe integer, not in `seen`, and `> high - 64`. Otherwise the wire is not processed.
 - A late wire within the window is accepted once. A wire 64 or more behind `high` is dropped.
 - Any stored state the guard could not have produced itself is treated as empty. The window then reopens; the idempotent log merge is the second line of defence.
 
@@ -231,9 +235,11 @@ The window is the first line of defence, not the only one.
 ### Persistence before acknowledgement
 
 - The relay delivers at-least-once. A wire stays queued until the receiver acks it.
-- `handle(from, payload)` returns `true` (ack) only after: open, replay check, and persisting the new replay state (and, for a completed `entries`, the merged log).
+- `handle(from, payload)` returns `true` (ack) for a fresh wire only after: open, replay check, and persisting the new replay state (and, for a completed `entries`, the merged log).
+- A wire that opens but whose counter was already seen (a replay, or an honest redelivery whose ack was lost) is acked (`true`) and not processed. Acking it makes the relay stop redelivering.
+- Only a wire that does not open (wrong key, tampered, re-attributed, unlinked sender) stays un-acked.
 - A crash before persist means no ack, so the relay redelivers, and the wire is processed then.
-- A crash after persist but before the ack means a redelivery, which the window drops.
+- A crash after persist but before the ack means a redelivery, which is acked and not processed. Merge is idempotent in any case.
 - If a crash loses `sendCtr` increments, the peer drops the repeated counters as replays until the counter passes its `high`. Because IVs are random, this never reuses a GCM nonce.
 
 ### Chunking
@@ -302,8 +308,6 @@ interface LogEntry {
 ### The materialize rule
 
 `materialize()` turns the entry set into `entities[kind][id][field]` plus a list of `FieldConflict { kind, id, field, kept, dropped }`.
-
-Per `(kind, id, field)`:
 
 The rule is set-based, not a fold over a sorted list.
 
@@ -396,7 +400,7 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 
 | Kind | Body | Sent when |
 |---|---|---|
-| `have` | `{ heads, name }` | `syncNow(address)` starts |
+| `have` | `{ heads, name }`, no `sid` | `syncNow(address)` starts |
 | `entries` | `{ sid, i, n, data, reply, name }`; `data` holds a piece of `{ entries, heads }` | In answer to `have` (`reply: false`), or as the closing half (`reply: true`) |
 
 ### One round
@@ -409,6 +413,8 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 | 4 | sends `entries` = `since(heads_L)`, `reply: true` | |
 | 5 | resolves with `{ sent, received, merge }` | merges, persists; sends nothing back |
 
+- `have` carries no `sid`. The waiter in `syncNow` resolves on the first `entries` with `reply: false` that arrives from that address.
+- A second `syncNow` to the same peer while one is running returns the same in-flight promise; no second round starts.
 - No answer within `handshakeMs` (default 30 s): `syncNow` rejects with `Error('offline')`.
 - A `have` that arrives unsolicited is answered the same way. The answering side merges the reply.
 - `syncNow` on an address without a pairing rejects with `Error('not linked')`. A `have` from an unlinked address is ignored.
@@ -428,7 +434,8 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 
 ### Idempotence
 
-- Replaying a whole round changes nothing: the window drops the wires, and if a fresh round re-sends known entries, merge counts them as duplicates.
+- Replaying a whole round changes nothing: every wire is acked and not processed, so a replayed `have` gets no answer and a replayed `entries` merges nothing. If a fresh round re-sends known entries, merge counts them as duplicates.
+- A crash between merge and persist cannot double-apply: after restart the redelivered wire merges idempotently.
 - Merge order does not matter (commutative), and materialize depends only on the set.
 
 ## 🚚 Migration path from v3
@@ -438,18 +445,19 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 - v3 stores a `SerializedIdentityV1` per device. Its `keyAgreementSecretKey` is the raw X25519 secret of the sync DID's `E` key.
 - `deviceKeysFromSecret(fromB64u(keyAgreementSecretKey))` gives the v2 `DeviceKeys`. The address stays the sync DID.
 - Each v3 `Pairing.did` yields the peer's public key through `x25519PublicKeyFromDidPeer2(did)`.
-- v2 keys are domain-separated from v3: different HKDF salt and labels (`.../v2/...` against `.../v1`), so no v2 key opens a v3 wire.
+- v2 keys are domain-separated from v3: different HKDF salt (public keys and epoch) and labels (`.../v2/...` against `.../v1`), so no v2 key opens a v3 wire.
+- A carried-over pairing has no one-time secret, so it needs an epoch from somewhere. Simplest: pair again with a `TWS2` code. A re-confirm path would have to define its epoch (for example from a fresh secret shown as a code) before it could be built.
 - Naming trap: the HKDF label `trustweb-device-sync/v1` belongs to the v3 bundle sync (`SYNC_VERSION = 3`). `/v2` is this design.
 
 ### 2. Carrying a pairing over
 
-Two options:
+Three options:
 
 | Option | How | Trust |
 |---|---|---|
-| Re-confirm (recommended) | Build the v2 `Pairing` from the v3 one, compute the SAS, show it on both devices once, Confirm | Upgraded to the SAS check |
-| Silent carry-over | Build the v2 `Pairing` without asking | Keeps only the v3 4-hex check; must be labeled as such |
-| Pair again | New `TWS2` code | Full v2 ceremony |
+| Pair again (recommended) | New `TWS2` code | Full v2 ceremony, fresh epoch |
+| Re-confirm | Build the v2 `Pairing` from the v3 one with a newly defined epoch, show the SAS on both devices, Confirm | SAS check; needs an epoch rule not in the package |
+| Silent carry-over | Build the v2 `Pairing` without asking | Keeps only the v3 4-hex check; must be labeled as such; needs an epoch rule too |
 
 ### 3. Seeding the log from the current record
 
@@ -512,7 +520,6 @@ The ratchets were rejected for now on effort and risk, not on value. Section 12 
 | Metadata padding | Sizes and piece counts reveal record growth | Pad pieces to fixed size, send cover `have`s |
 | Fork repair | Forks are detected, not repaired | UI to retire a forked `deviceId` and re-pair as a new device |
 | Behind `TransportAdapter` | Today the package couples only to `RelayLike` (`sendRaw` / `onRawWire`) | Move `RelayLike` into `packages/protocol` (I5), add a `MockTransport`-based test |
-| Ack of a replayed wire | Whether a replayed but authentic wire is acked decides whether the relay keeps redelivering it | Confirm in `sync.ts` that it is acked (consumed), and test it |
 
 ## 🧪 Test map
 
@@ -542,15 +549,22 @@ All files in `packages/device-sync/src/`. Run `node --test "src/**/*.test.ts"` f
 | Causality beats clocks | `log.test.ts` | "a causally later put wins without a conflict, even with an EARLIER wall clock", "a winner is never an entry that something else causally replaced (clock skew)" |
 | Tombstones and revival | `log.test.ts` | "del concurrent with a put: the tombstone wins and the put is listed (field \"\")", "a put that causally follows the del revives the entity, ...", "revival after a concurrent del/put keeps the concurrent put ..." |
 | Determinism | `log.test.ts` | "the same entry set in any insertion order → identical JSON and identical conflicts" |
-| Pairing end to end | `sync.test.ts` | pair via code (same SAS both sides, confirm) |
-| Convergence | `sync.test.ts` | syncNow converges both logs and materialized state |
-| Relay sees no content | `sync.test.ts` | the concatenated wire payloads contain no plaintext field value |
-| Replay and re-attribution over the relay | `sync.test.ts` | re-delivering a captured wire changes nothing; a wire with the outer `from` swapped is ignored |
-| Unlinked and unlinked-later peers | `sync.test.ts` | a `have` from an unlinked address is ignored; unlink stops decryption |
-| Offline and codes | `sync.test.ts` | 'offline' rejection on no answer; pairingLink/codeFromLink round trip; parsePairingCode rejects garbage; expired codes are refused by join |
-
-Cases in quotes are the exact test names at the time of writing (bytes 11, keys 12 including RFC 7748 vectors, seal 10, replay 12, log 32 in 6 suites).
-`sync.test.ts` was still being written; its rows name the required cases from the build spec, not exact test names.
+| Re-pairing gives new keys and SAS | `keys.test.ts` | "derivePairKeys: a context (pairing epoch) changes the keys and the SAS; both sides with the same context agree" |
+| Pairing code and link | `sync.test.ts` | "pairing code: format, parse, link round trip, garbage refused" |
+| Pairing end to end | `sync.test.ts` | "pair via code: same 6-digit SAS on both sides, confirm stores the pairing on both" |
+| One use, no self-pairing, cancel | `sync.test.ts` | "a code is one use; a code whose address is my own is refused; cancel stores nothing" |
+| Expiry | `sync.test.ts` | "an expired code is refused by join; an expired offer ignores a pair wire" |
+| Convergence; relay sees no content | `sync.test.ts` | "syncNow converges both logs and the materialized state; the relay sees no plaintext and no entity id" |
+| Replay over the relay is acked, not processed | `sync.test.ts` | "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering" |
+| Re-attribution | `sync.test.ts` | "a wire re-attributed to another linked address, or to an unlinked one, is ignored" |
+| Unlinked peers | `sync.test.ts` | "a have from an unlinked device is ignored", "after unlink a wire from that device is ignored, and syncNow says not linked" |
+| Offline | `sync.test.ts` | "syncNow rejects offline when the peer never answers" |
+| Three devices | `sync.test.ts` | "a third device pairs with both and all three converge" |
+| Persistence and crash safety | `sync.test.ts` | "persistence: a device recreated from its saved SyncData keeps pairing, keys, log and replay state", "a crash before persist cannot double-apply: re-delivery after restart merges idempotently" |
+| Re-pairing epoch over the relay | `sync.test.ts` | "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
+| Chunking | `sync.test.ts` | "large logs travel in several pieces under CHUNK_BYTES each" |
+| Address rules | `sync.test.ts` | "createDeviceSync refuses an address containing a separator" |
+All cases are exact test names. Totals: bytes 11, keys 13 (including RFC 7748 vectors), seal 10, replay 12, log 32 (6 suites), sync 16; 94 tests.
 
 ## 📚 Sources
 
