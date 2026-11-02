@@ -58,16 +58,27 @@ export { RelayChannel, type RelayChannelOptions, type BackoffOpts } from "./rela
 export {
   IrohRelayChannel,
   DEFAULT_MAX_WIRE_BYTES as IROH_DEFAULT_MAX_WIRE_BYTES,
+  DEFAULT_ATTEMPT_MS as IROH_DEFAULT_ATTEMPT_MS,
+  DEFAULT_MAX_RELAY_ATTEMPTS as IROH_DEFAULT_MAX_RELAY_ATTEMPTS,
   type IrohEndpointLike,
   type IrohPeerAddr,
   type IrohRelayChannelOptions,
+  type IrohRelayAuditEvent,
 } from "./iroh_relay_channel.js";
+export {
+  IrohRelaySelector,
+  DEFAULT_RELAY_COOLDOWN_MS as IROH_DEFAULT_RELAY_COOLDOWN_MS,
+  DEFAULT_RELAY_MAX_COOLDOWN_MS as IROH_DEFAULT_RELAY_MAX_COOLDOWN_MS,
+  type IrohRelaySelectorOptions,
+} from "./iroh_relay_selector.js";
+// (IrohSidecarEndpoint exports are added by the orchestrator)
 export {
   LadderChannel,
   type LadderRung,
   type LadderRungName,
   type LadderOptions,
   type LadderBudgets,
+  type LadderRungResult,
 } from "./ladder_channel.js";
 export {
   issueVrc,
