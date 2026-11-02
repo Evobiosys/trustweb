@@ -478,11 +478,13 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (`sendRaw` / `onRawWire` of apps/demo relay.ts, structurally typed as `RelayLike`). Design in docs/design/device-sync-e2ee.md.
   Pairing: one-time secret in the QR / link only (`TWS2~address~pub~secret~exp`), X25519 ECDH from the public key in the code, HKDF into
   two directional AES-GCM keys, a 6-digit SAS both people compare, Confirm on both sides. Seal: random IV, AAD binds the outer from/to, a
-  per-direction counter with a 64-wide anti-replay window persisted before the wire is acked. Record: an append-only log of field-level
-  puts and entity tombstones, per-device seq + hash chain + vector clock; merge is a verified set union (malformed / bad-hash / chain-gap /
-  fork are rejected and reported, nothing silently dropped); the record is materialised by causal field-level last-writer-wins, concurrent
-  edits are decided by (at, device) and the loser stays listed for "Review merge". Nothing is ever deleted from the log.
+  per-direction counter (started at the wall clock, so a restore from an older backup never falls behind) with a 1024-wide anti-replay
+  window persisted before the wire is acked. Record: an append-only log of field-level puts and entity tombstones, per-device seq + hash
+  chain + vector clock; merge is a verified set union (malformed / bad-hash / chain-gap / fork / own are rejected and reported, nothing
+  silently dropped; nobody may extend this device's own chain); the record is materialised by causal field-level last-writer-wins,
+  concurrent edits are decided by (at, device) and the loser stays listed for "Review merge". Nothing is ever deleted from the log.
 - Not claimed (I7): no forward secrecy (static ECDH; a stolen device key opens what the relay still holds), no post-quantum, no metadata
-  protection (the relay sees addresses, sizes, timing). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
+  protection (the relay sees addresses, sizes, timing), no per-device signatures (a compromised paired device can write under a third
+  device's id; it is caught as a fork only once both histories meet). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
   (derive DeviceKeys from the sync did:peer:2 `E` key, replay the record into a first log) is in the design doc.
 - Tests run on `node --test` (Node >= 22.18 strips types): the package has no dependency to install, and CI runs it as its own step.

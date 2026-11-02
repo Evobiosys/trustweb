@@ -5,9 +5,9 @@
  * WHY: the relay delivers at least once and keeps un-acked wires, and anyone who captured a wire can submit it again. v1 sync
  * relied on a 10-minute `exp` alone, so a captured wire replayed inside those 10 minutes was accepted. Here every sealed message
  * carries a strictly increasing counter `ctr` (sender side: `sendCtr`, one per direction, so counters of the two directions never
- * collide -- keys.ts gives each direction its own key). The receiver keeps an RFC 4303-style sliding window of REPLAY_WINDOW = 64:
- * the highest accepted counter `high` and the set of accepted counters in (high - 64, high]. A counter is accepted once if it is
- * a positive safe integer, not already seen, and newer than high - 64; everything else is dropped. Out-of-order delivery inside
+ * collide -- keys.ts gives each direction its own key). The receiver keeps an RFC 4303-style sliding window of REPLAY_WINDOW = 1024 (wider than one sync round of at most MAX_PIECES = 200 pieces, so a round delivered in any order still completes):
+ * the highest accepted counter `high` and the set of accepted counters in (high - 1024, high]. A counter is accepted once if it is
+ * a positive safe integer, not already seen, and newer than high - 1024; everything else is dropped. Out-of-order delivery inside
  * the window is fine (the relay does not promise order).
  *
  * The state is plain JSON so the caller can persist it BEFORE acknowledging the wire: if the device crashes after accepting but
@@ -16,13 +16,13 @@
  * WHAT IS NOT CLAIMED (I7):
  *  - A malformed persisted state is treated as EMPTY (by contract, so a corrupted store cannot brick sync). That re-opens the
  *    window: wires still held by the relay could then be accepted once more. The merge is the second line of defence there.
- *  - A message older than the window (more than 64 behind) is dropped even if it was never seen. With one `have`/`entries`
- *    round per sync this is not expected to bite; if it does, the next sync round resends what is missing.
+ *  - A message older than the window (more than 1024 behind) is dropped even if it was never seen. One sync round is at most
+ *    200 pieces, so this needs more than five whole rounds to be held back and delivered late; the next round then resends what is missing.
  *  - This prevents replay of a message to the SAME receiver state. It does not stop a relay from withholding or delaying
  *    wires (no availability or timeliness claim), and it hides nothing (no metadata protection).
  */
 
-export const REPLAY_WINDOW = 64
+export const REPLAY_WINDOW = 1024
 
 export interface ReplayState {
   high: number

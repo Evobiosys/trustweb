@@ -19,8 +19,11 @@
  *
  * Integrity: an entry's `hash` is SHA-256 over the canonical JSON of everything else, and `prev` links it to its device's previous entry,
  * so a relay or a buggy peer cannot alter, reorder or drop the middle of a device's history unnoticed. merge() verifies and REPORTS
- * every rejection (malformed / bad-hash / chain-gap / fork). The hashes are integrity, not authentication: who may send entries at all is
- * decided by the sealed channel (seal.ts, pair keys), not here.
+ * every rejection (malformed / bad-hash / chain-gap / fork / own). The hashes are integrity, not authentication: who may send entries at all is
+ * decided by the sealed channel (seal.ts, pair keys), not here. Entries are NOT signed per device: a paired device could write an entry
+ * under another device's id. What it cannot do is extend OUR chain (own-id entries are refused unless recovery is asked for) or alter
+ * history we already hold (that is a fork, reported). Between two other devices such a forgery shows up as a fork at the first device
+ * that holds both histories; until then it is indistinguishable from a real entry. Per-device signatures are future work (design doc).
  *
  * Wall-clock caveat: `at` is the author's clock. It never overrides causality, but between two CONCURRENT edits the larger `at` wins
  * (device id as tiebreak), so a device with a clock far ahead wins those ties it should not. The loser stays visible as a FieldConflict.
@@ -37,7 +40,7 @@ import { canonicalJson, sha256, toB64u, utf8 } from './bytes.ts'
 
 export type Op = { t: 'put'; kind: string; id: string; field: string; value: unknown } | { t: 'del'; kind: string; id: string }
 export interface LogEntry { id: string; device: string; seq: number; vc: Record<string, number>; at: number; prev: string; hash: string; op: Op }
-export type RejectReason = 'malformed' | 'bad-hash' | 'chain-gap' | 'fork'
+export type RejectReason = 'malformed' | 'bad-hash' | 'chain-gap' | 'fork' | 'own'
 export interface MergeReport { added: number; duplicates: number; rejected: { id: string; reason: RejectReason }[] }
 /** `field` is '' for an entity-level conflict (a put that lost against a concurrent del). */
 export interface FieldConflict { kind: string; id: string; field: string; kept: LogEntry; dropped: LogEntry }
@@ -51,9 +54,15 @@ export async function entryHash(e: Omit<LogEntry, 'hash'>): Promise<string> {
   return toB64u(await sha256(utf8(canonicalJson({ id, device, seq, vc, at, prev, op }))))
 }
 
+/** Device ids: base64url characters only (deviceIdOf gives 22 of them; tests use short names), so a name can never hit a prototype property. */
+export const DEVICE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
+
+/** Own-property read of a clock entry, 0 when absent; never falls through to Object.prototype (`constructor`, `__proto__`, ...). */
+const clockOf = (vc: Record<string, number>, d: string): number => (Object.hasOwn(vc, d) ? vc[d] : 0)
+
 /** a >= b on every device named in b. */
 export function dominates(a: Record<string, number>, b: Record<string, number>): boolean {
-  for (const [d, n] of Object.entries(b)) if ((a[d] ?? 0) < n) return false
+  for (const [d, n] of Object.entries(b)) if (clockOf(a, d) < n) return false
   return true
 }
 
@@ -120,10 +129,10 @@ function deepFreeze<T>(v: T): T {
 function parseEntry(x: unknown): LogEntry | null {
   if (!isRecord(x) || !onlyKeys(x, ENTRY_KEYS)) return null
   const { id, device, seq, vc, at, prev, hash } = x
-  if (typeof device !== 'string' || device === '' || !isSeq(seq) || id !== `${device}:${seq}`) return null
+  if (typeof device !== 'string' || !DEVICE_ID_RE.test(device) || !isSeq(seq) || id !== `${device}:${seq}`) return null
   if (typeof at !== 'number' || !Number.isFinite(at) || typeof prev !== 'string' || typeof hash !== 'string') return null
-  if (!isRecord(vc) || vc[device] !== seq) return null
-  for (const [d, n] of Object.entries(vc)) if (d === '' || !isSeq(n)) return null
+  if (!isRecord(vc) || clockOf(vc as Record<string, number>, device) !== seq) return null
+  for (const [d, n] of Object.entries(vc)) if (!DEVICE_ID_RE.test(d) || !isSeq(n)) return null
   const op = parseOp(x['op'])
   if (!op) return null
   return canonicalEntry({ id, device, seq, vc: vc as Record<string, number>, at, prev, hash, op })
@@ -150,6 +159,7 @@ export class RecordLog {
 
   /** `entries` are trusted (from own storage): copied into canonical shape, not verified. A repeated id keeps the first. */
   constructor(device: string, entries?: LogEntry[]) {
+    if (!DEVICE_ID_RE.test(device)) throw new TypeError('RecordLog: device id must match ' + String(DEVICE_ID_RE))
     this.device = device
     for (const e of entries ?? []) {
       if (this.byId.has(e.id)) continue
@@ -168,7 +178,7 @@ export class RecordLog {
     for (const d of [...new Set(this.list.map((e) => e.device))].sort()) {
       let n = 0
       while (this.byId.has(`${d}:${n + 1}`)) n++
-      if (n > 0) out[d] = n
+      if (n > 0) setOwn(out, d, n)
     }
     return out
   }
@@ -179,9 +189,11 @@ export class RecordLog {
     if (!Number.isFinite(at)) throw new TypeError('RecordLog.append: at must be a finite number')
     return this.locked(async () => {
       const heads = this.heads()
-      const seq = (heads[this.device] ?? 0) + 1
+      const seq = clockOf(heads, this.device) + 1
       const prev = seq === 1 ? '' : (this.byId.get(`${this.device}:${seq - 1}`)?.hash ?? '')
-      const body = { id: `${this.device}:${seq}`, device: this.device, seq, vc: sortedVc({ ...heads, [this.device]: seq }), at, prev, op: clean }
+      const vc = { ...heads }
+      setOwn(vc, this.device, seq)
+      const body = { id: `${this.device}:${seq}`, device: this.device, seq, vc: sortedVc(vc), at, prev, op: clean }
       const entry = canonicalEntry({ ...body, hash: await entryHash(body) })
       this.add(entry)
       return entry
@@ -190,11 +202,16 @@ export class RecordLog {
 
   /** Every entry (device, seq) with seq > heads[device] ?? 0, ordered by device then seq. */
   since(heads: Record<string, number>): LogEntry[] {
-    return this.list.filter((e) => e.seq > (heads[e.device] ?? 0)).sort((a, b) => cmpStr(a.device, b.device) || a.seq - b.seq)
+    return this.list.filter((e) => e.seq > clockOf(heads, e.device)).sort((a, b) => cmpStr(a.device, b.device) || a.seq - b.seq)
   }
 
-  /** Set union by id with verification; every rejection is reported. Never throws on bad input; never keeps a reference to it. */
-  async merge(incoming: unknown[]): Promise<MergeReport> {
+  /**
+   * Set union by id with verification; every rejection is reported. Never throws on bad input; never keeps a reference to it.
+   * Entries carrying THIS device's id are refused ('own') unless `opts.acceptOwn` is set: nobody else may extend our chain (a peer that
+   * could would silently write in our name and, by taking our next seq, block our real next entry everywhere). acceptOwn is for the one
+   * explicit recovery case, a device that lost its storage and takes its own history back from a peer, and nothing else.
+   */
+  async merge(incoming: unknown[], opts: { acceptOwn?: boolean } = {}): Promise<MergeReport> {
     return this.locked(async () => {
       const report: MergeReport = { added: 0, duplicates: 0, rejected: [] }
       const parsed: LogEntry[] = []
@@ -215,11 +232,20 @@ export class RecordLog {
           else report.rejected.push({ id: e.id, reason: 'fork' })
           continue
         }
+        if (e.device === this.device && !opts.acceptOwn) {
+          report.rejected.push({ id: e.id, reason: 'own' })
+          continue
+        }
         // Accepted entries of this batch are already in byId, so "earlier in the batch" is covered; a rejected one is not, so its
-        // successors land here as chain-gaps instead of being accepted on top of a hole.
+        // successors land here as chain-gaps instead of being accepted on top of a hole. A predecessor we hold whose hash is not this
+        // entry's `prev` means two histories for one device: a fork, not a gap.
         const expectedPrev = e.seq === 1 ? '' : this.byId.get(`${e.device}:${e.seq - 1}`)?.hash
-        if (expectedPrev === undefined || expectedPrev !== e.prev) {
+        if (expectedPrev === undefined) {
           report.rejected.push({ id: e.id, reason: 'chain-gap' })
+          continue
+        }
+        if (expectedPrev !== e.prev) {
+          report.rejected.push({ id: e.id, reason: 'fork' })
           continue
         }
         this.add(e)

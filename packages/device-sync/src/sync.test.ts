@@ -177,7 +177,7 @@ test('pair via code: same 6-digit SAS on both sides, confirm stores the pairing 
   assert.equal(lp[0].deviceId, phone.sync.deviceId)
   assert.equal(pp[0].sas, sas)
   assert.equal(lp[0].sas, sas)
-  assert.equal(pp[0].sendCtr, 0)
+  assert.ok(pp[0].sendCtr >= pp[0].linkedAt - 1000 && pp[0].sendCtr <= pp[0].linkedAt, 'send counter starts at the wall clock')
   assert.deepEqual(pp[0].replay, { high: 0, seen: [] })
   // Stored: the peer's public key, never derived keys.
   const saved = JSON.stringify(phone.storage.saved())
@@ -413,11 +413,15 @@ test('persistence: a device recreated from its saved SyncData keeps pairing, key
   const saved = phone.storage.saved()
   assert.ok(saved)
   assert.equal(saved.v, 1)
-  assert.equal(saved.pairings[0].sendCtr, 2)
+  const base = phone.sync.pairings()[0].linkedAt
+  assert.ok(saved.pairings[0].sendCtr >= base + 2 && saved.pairings[0].sendCtr < base + 2 + 60_000, 'two sends since linking')
 
   const again = await device(h, 'Phone', 'addr-phone', { storage: phone.storage })
   assert.equal(again.sync.deviceId, phone.sync.deviceId)
-  assert.deepEqual(again.sync.pairings(), phone.sync.pairings())
+  // identical but for the send counter, which is floored at the wall clock on every start (restore-from-backup safety)
+  const strip = (p: { sendCtr: number }) => ({ ...p, sendCtr: 0 })
+  assert.deepEqual(again.sync.pairings().map(strip), phone.sync.pairings().map(strip))
+  assert.ok(again.sync.pairings()[0].sendCtr >= phone.sync.pairings()[0].sendCtr)
   assert.deepEqual(ids(again), ids(phone))
   assert.equal(state(again), state(phone))
   for (const w of captured) assert.equal(await again.sync.handle(w.from, w.payload), true, 'replay state survived the restart: consumed, not applied')
@@ -488,15 +492,149 @@ test('re-pairing the same two devices derives new keys: a wire captured under th
   const epoch2 = phone.sync.pairings()[0].epoch
   assert.notEqual(epoch2, epoch1, 'a fresh secret gives a fresh epoch')
   assert.notEqual(sas2, sas1, 'and a fresh SAS')
-  assert.equal(phone.sync.pairings()[0].sendCtr, 0)
+  assert.deepEqual(phone.sync.pairings()[0].replay, { high: 0, seen: [] })
 
-  // Counters restarted at zero, but the old wire is under the old keys: it does not open, so it is neither applied nor acked.
+  // The replay window restarted, but the old wire is under the old keys: it does not open, so it is neither applied nor acked.
   assert.equal(await phone.sync.handle(old[0].from, old[0].payload), false)
   // The new pairing still syncs.
   await laptop.sync.append(put(ENTITY_B, 'note', 'hotel'))
   await phone.sync.syncNow('addr-laptop')
   await sleep(20)
   assert.equal(state(phone), state(laptop))
+})
+
+test('confirm is one decision: a second confirm throws and resets nothing; a stale confirm after unlink cannot revive the pairing', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop', { handshakeMs: 200 })
+  const mine = await laptop.sync.join(await phone.sync.offer())
+  assert.ok(mine)
+  await until(() => phone.requests.length === 1)
+  const theirs = phone.requests[0]
+  await mine.confirm()
+  await theirs.confirm()
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  await phone.sync.syncNow('addr-laptop')
+  await sleep(20)
+  const replayBefore = phone.sync.pairings()[0].replay
+  assert.ok(replayBefore.high > 0)
+  await assert.rejects(theirs.confirm(), /already decided/)
+  assert.deepEqual(phone.sync.pairings()[0].replay, replayBefore, 'a double tap resets no counters')
+
+  phone.sync.unlink('addr-laptop')
+  const stale = await laptop.sync.join(await phone.sync.offer())
+  assert.ok(stale)
+  await until(() => phone.requests.length === 2)
+  const staleReq = phone.requests[1]
+  // the person unlinks again before deciding the sheet: the sheet's confirm must not bring the pairing back
+  await staleReq.confirm()
+  phone.sync.unlink('addr-laptop')
+  assert.equal(phone.sync.pairings().length, 0)
+  await assert.rejects(staleReq.confirm(), /already decided/)
+  assert.equal(phone.sync.pairings().length, 0)
+  // and a request whose epoch was unlinked before it was ever confirmed is refused too
+  const req3 = await laptop.sync.join(await phone.sync.offer())
+  assert.ok(req3)
+  await until(() => phone.requests.length === 3)
+  const third = phone.requests[2]
+  await third.confirm()
+  phone.sync.unlink('addr-laptop')
+  await assert.rejects(third.confirm(), /already decided|unlinked/)
+  assert.equal(phone.sync.pairings().length, 0)
+})
+
+test('a device restored from an older backup keeps syncing: its send counter never falls behind the peer\'s window', async () => {
+  const h = hub()
+  let clock = 1_700_000_000_000
+  const now = () => clock
+  const phone = await device(h, 'Phone', 'addr-phone', { now })
+  const laptop = await device(h, 'Laptop', 'addr-laptop', { now })
+  await link(phone, laptop)
+  await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
+  const backup = phone.storage.saved()
+  assert.ok(backup)
+  // many rounds after the backup
+  for (let i = 0; i < 5; i++) {
+    await laptop.sync.append(put(ENTITY_B, 'n' + i, 'v' + i))
+    await phone.sync.syncNow('addr-laptop')
+    await sleep(20)
+  }
+  // restore the backup on a later day
+  clock += 24 * 3_600_000
+  const s = memStorage()
+  s.save(backup)
+  const restored = await device(h, 'Phone', 'addr-phone', { storage: s, now })
+  assert.ok(restored.sync.pairings()[0].sendCtr >= clock, 'counter floored at the wall clock')
+  const r = await restored.sync.syncNow('addr-laptop')
+  assert.equal(r.received, 5)
+  await sleep(20)
+  assert.equal(state(restored), state(laptop))
+})
+
+test('two piece streams from one peer at once both complete (the relay hands over several waiting have-answers together)', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop', { handshakeMs: 500 })
+  await link(phone, laptop)
+  // a log that needs several pieces
+  for (let i = 0; i < 40; i++) await phone.sync.append(put('item-' + i, 'blob', 'x'.repeat(3000)))
+  // laptop asked twice while phone was away: both `have`s wait at phone
+  h.sinks.delete('addr-phone')
+  const p1 = laptop.sync.syncNow('addr-phone').catch(() => null)
+  await sleep(30)
+  const haveA = h.wires.filter((w) => w.from === 'addr-laptop' && w.to === 'addr-phone').pop()
+  assert.ok(haveA)
+  await p1
+  const p2 = laptop.sync.syncNow('addr-phone').catch(() => null)
+  await sleep(30)
+  const haveB = h.wires.filter((w) => w.from === 'addr-laptop' && w.to === 'addr-phone').pop()
+  assert.ok(haveB && haveB !== haveA)
+  await p2
+  h.sinks.set('addr-phone', (f, p) => phone.sync.handle(f, p))
+  // phone comes back and answers both at once: two interleaved piece streams reach laptop
+  await Promise.all([phone.sync.handle(haveA.from, haveA.payload), phone.sync.handle(haveB.from, haveB.payload)])
+  await until(() => laptop.sync.log.entries().length === 40)
+  assert.equal(state(laptop), state(phone))
+})
+
+test('a round larger than the budget is sent in parts; the next round continues where it stopped', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  // ~ 9.3 MB of changes: more than one round (200 pieces of 45 000 bytes) can carry
+  for (let i = 0; i < 180; i++) await phone.sync.append(put('big-' + i, 'blob', 'y'.repeat(60_000)))
+  const r1 = await laptop.sync.syncNow('addr-phone')
+  assert.ok(r1.received > 0 && r1.received < 180, 'a first part')
+  assert.ok(laptop.logs.some((l) => l.includes('the rest goes with the next sync')) || phone.logs.some((l) => l.includes('the rest goes with the next sync')))
+  const r2 = await laptop.sync.syncNow('addr-phone')
+  assert.equal(r1.received + r2.received, 180)
+  await sleep(20)
+  assert.equal(state(laptop), state(phone))
+})
+
+test('register:false leaves the relay sink to the app, which can route to handle itself', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  let routed = 0
+  const relay = h.relay('addr-tablet')
+  const tablet = await createDeviceSync({
+    relay, address: 'addr-tablet', deviceName: () => 'Tablet', storage: memStorage(), register: false,
+    onPairRequest: () => undefined, onLog: () => undefined,
+  })
+  relay.onRawWire((f, p) => { routed++; return tablet.handle(f, p) })
+  const req = await tablet.join(await phone.sync.offer())
+  assert.ok(req)
+  await until(() => phone.requests.length === 2)
+  await req.confirm()
+  await phone.requests[1].confirm()
+  await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
+  await tablet.syncNow('addr-phone')
+  await sleep(20)
+  assert.ok(routed > 0)
+  assert.equal(JSON.stringify(tablet.materialize()), state(phone))
 })
 
 test('large logs travel in several pieces under CHUNK_BYTES each', async () => {

@@ -15,7 +15,8 @@
  *  - Pairing: `offer()` makes a one-time code `TWS2~<address>~<public key>~<secret>~<exp>` (QR or link; it never crosses the relay)
  *    and keeps {secret key, exp} for ONE use. `join(code)` sends `pair` {deviceId, publicKey, name} sealed under the key derived from
  *    the secret, with AAD (joiner address, offerer address). Both sides compute the 6-digit SAS from derivePairKeys; the people
- *    compare it and Confirm, which stores the Pairing (peer public key, the epoch, counters at zero). Derived keys are cached in memory only.
+ *    compare it and Confirm (one decision per request), which stores the Pairing (peer public key, the epoch, the send counter started at
+ *    the wall clock so a later restore from an older backup never falls behind the peer's replay window). Derived keys are cached in memory only.
  *  - Sync: `syncNow(addr)` sends `have` {heads, name}; the peer answers `entries` (what we lack by our heads, plus its own heads,
  *    chunked: ≤ CHUNK_BYTES raw bytes per piece, ≤ MAX_PIECES pieces) with reply:false; we merge, then send `entries` with
  *    reply:true for the heads it announced; the peer merges that. One round, both converge.
@@ -35,7 +36,11 @@
  *    processed: it changes nothing and the relay stops redelivering it. Only a wire that does not open stays un-acked.
  *  - Unlinking and pairing the SAME two device keys again derives NEW pair keys: the pairing epoch (SHA-256 of the one-time secret)
  *    is mixed into the key derivation, so a wire captured under an earlier pairing does not open under the new one.
- *  - `entries` from a paired device are merged without a review step; only the merge's own checks (hash, chain, fork) apply.
+ *  - `entries` from a paired device are merged without a review step; only the merge's own checks (hash, chain, fork, own) apply. Entries
+ *    are not signed per device: a compromised paired device can write under a third device's id (log.ts header); it cannot extend THIS
+ *    device's chain (own-id entries are refused unless `recoverOwn` is set for an explicit recovery).
+ *  - Storage is one synchronous blob saved on every accepted wire, the whole log included: fine for a prototype and small records,
+ *    quadratic for a large sync (open point in the design doc: split log and counters, async storage).
  */
 import { canonicalJson, concat, fromB64u, fromUtf8, randomBytes, sha256, toB64u, utf8 } from './bytes.ts'
 import { derivePairKeys, deviceIdOf, deviceKeysFromSecret, generateDeviceKeys, secretKeyFromPairingSecret } from './keys.ts'
@@ -77,6 +82,10 @@ export interface DeviceSyncDeps {
   onPairRequest: (r: PairRequest) => void
   onLog: (line: string) => void
   onChange?: () => void
+  /** false = do not register `handle` on relay.onRawWire (the relay keeps ONE raw sink; an app that also runs v3 sync_link.ts combines both). Default true. */
+  register?: boolean
+  /** true = this device lost its storage and takes its OWN earlier entries back from peers (log.ts merge acceptOwn). Default false: nobody may extend our chain. */
+  recoverOwn?: boolean
 }
 
 export const PAIR_PREFIX = 'TWS2'
@@ -90,6 +99,10 @@ const MIN_SECRET_BYTES = 16
 const KEY_BYTES = 32
 const MAX_NAME = 64
 const MAX_SID = 64
+/** Partial piece streams kept per peer (two `have`s answered at once arrive interleaved); the oldest beyond this is dropped and logged. */
+const MAX_ASSEMBLIES = 4
+/** Raw bytes of entries one round may carry; what does not fit waits for the next round (heads stay contiguous, so it continues there). */
+const ROUND_BUDGET = CHUNK_BYTES * MAX_PIECES - 4_096
 /** Upper bound for one piece's base64url text (CHUNK_BYTES raw → 4/3, rounded up). */
 const MAX_PIECE_TEXT = Math.ceil((CHUNK_BYTES * 4) / 3) + 4
 
@@ -161,7 +174,7 @@ export interface DeviceSync {
 
 type Heads = Record<string, number>
 interface Assembly { n: number; parts: Uint8Array[]; got: number; reply: boolean }
-interface Waiter { resolve(r: SyncReport): void; reject(e: Error): void }
+interface Waiter { resolve(r: SyncReport): void; reject(e: Error): void; /** A piece arrived: the answer is under way, restart the clock. */ touch(): void }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -239,14 +252,25 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
   const waiters = new Map<string, Waiter>()
   const inflight = new Map<string, Promise<SyncReport>>()
   let offer: { key: CryptoKey; epoch: string; exp: number } | null = null
+  /** Epochs of pairings that were unlinked: a request from before the unlink cannot bring them back. */
+  const retired = new Set<string>()
 
+  /** Saves everything; throws when the storage does (callers that must not lose a wire catch it). */
   function persist(): void {
     d.storage.save({ v: 1, secretKey: toB64u(mine.secretKey), pairings: pairings.map(copy), log: recordLog.toJSON() })
     d.onChange?.()
   }
-  persist()
+  // Counters never go backwards across a restore from an older backup: the floor is the wall clock, which is far above any count of
+  // messages ever sent, and the peer's replay window would otherwise drop every wire of a restored device as "already seen".
+  for (const p of pairings) p.sendCtr = Math.max(p.sendCtr, now())
+  try {
+    persist()
+  } catch (e) {
+    d.onLog(`Could not save the sync state: ${e instanceof Error ? e.message : String(e)}`)
+  }
 
   const find = (address: string): Pairing | undefined => pairings.find((p) => p.address === address)
+  const ownName = (): string => cleanName(d.deviceName(), 'This device')
 
   async function keysFor(p: Pairing): Promise<PairKeys> {
     const c = pairKeys.get(p.address)
@@ -268,20 +292,33 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
 
   /** Sends what the peer lacks by `heads`, in pieces; returns the number of entries sent. Throws 'too large' before sending anything. */
   async function sendEntries(p: Pairing, heads: Heads, reply: boolean): Promise<number> {
-    const entries = recordLog.since(heads)
+    const missing = recordLog.since(heads)
+    // A prefix of since() (sorted by device, then seq) keeps every device's run contiguous, so a partial round still merges cleanly.
+    const entries: LogEntry[] = []
+    let size = 0
+    for (const e of missing) {
+      const len = utf8(canonicalJson(e)).length + 1
+      if (size + len > ROUND_BUDGET) {
+        if (entries.length === 0) {
+          d.onLog(`One change is too large to send to ${p.name} (${len} bytes, the most is ${ROUND_BUDGET})`)
+          throw new Error('too large')
+        }
+        break
+      }
+      entries.push(e)
+      size += len
+    }
     const raw = utf8(canonicalJson({ entries, heads: recordLog.heads() }))
     const n = Math.max(1, Math.ceil(raw.length / CHUNK_BYTES))
-    if (n > MAX_PIECES) {
-      d.onLog(`The log is too large to send to ${p.name} (${n} pieces, the most is ${MAX_PIECES})`)
-      throw new Error('too large')
-    }
     const sid = toB64u(randomBytes(12))
-    const name = d.deviceName()
+    const name = ownName()
     for (let i = 0; i < n; i++) {
       const data = toB64u(raw.subarray(i * CHUNK_BYTES, (i + 1) * CHUNK_BYTES))
       await send(p, 'entries', { sid, i, n, data, reply, name })
     }
-    d.onLog(`Sent ${entries.length} change(s) to ${p.name}`)
+    d.onLog(entries.length < missing.length
+      ? `Sent ${entries.length} of ${missing.length} change(s) to ${p.name} (${n} pieces); the rest goes with the next sync`
+      : `Sent ${entries.length} change(s) to ${p.name}`)
     return entries.length
   }
 
@@ -317,13 +354,22 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     const key = `${p.address}\n${sid}`
     let acc = partial.get(key)
     if (!acc) {
-      for (const k of partial.keys()) if (k.startsWith(`${p.address}\n`)) partial.delete(k)
+      const mine = [...partial.keys()].filter((k) => k.startsWith(`${p.address}\n`))
+      if (mine.length >= MAX_ASSEMBLIES) {
+        partial.delete(mine[0])
+        d.onLog(`Dropped an unfinished sync message from ${p.name} (more than ${MAX_ASSEMBLIES} at once); it comes again with the next sync`)
+      }
       acc = { n: n as number, parts: [], got: 0, reply }
       partial.set(key, acc)
     }
-    if (acc.n !== n || acc.reply !== reply || acc.parts[i as number]) return
+    if (acc.n !== n || acc.reply !== reply) {
+      d.onLog(`Ignored a piece from ${p.name} that does not fit its message`)
+      return
+    }
+    if (acc.parts[i as number]) return
     acc.parts[i as number] = piece
     acc.got++
+    waiters.get(p.address)?.touch()
     if (acc.got < acc.n) return
     partial.delete(key)
 
@@ -339,7 +385,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
       return
     }
     const received = decoded['entries'].length
-    const merge = await recordLog.merge(decoded['entries'])
+    const merge = await recordLog.merge(decoded['entries'], { acceptOwn: d.recoverOwn === true })
     p.lastSyncAt = now()
     persist()
     d.onLog(
@@ -385,21 +431,29 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
   }
 
   function request(address: string, deviceId: string, publicKey: string, name: string, k: PairKeys, epoch: string): PairRequest {
+    // One request, one decision: a second Confirm (a double tap, or a stale sheet after an unlink) must not reset counters or revive a pairing.
+    let decided = false
     return {
       address,
       name,
       sas: k.sas,
       confirm: async () => {
+        if (decided) throw new Error('already decided')
+        decided = true
+        if (retired.has(epoch)) throw new Error('unlinked')
         pairings = [
           ...pairings.filter((p) => p.address !== address),
-          { address, deviceId, publicKey, name, sas: k.sas, linkedAt: now(), lastSyncAt: 0, sendCtr: 0, replay: { high: 0, seen: [] }, epoch },
+          { address, deviceId, publicKey, name, sas: k.sas, linkedAt: now(), lastSyncAt: 0, sendCtr: now(), replay: { high: 0, seen: [] }, epoch },
         ]
         pairKeys.set(address, { pub: publicKey, epoch, keys: k })
         for (const key of partial.keys()) if (key.startsWith(`${address}\n`)) partial.delete(key)
         persist()
         d.onLog(`Linked ${name} (${k.sas})`)
       },
-      cancel: () => d.onLog(`Link with ${name} cancelled`),
+      cancel: () => {
+        decided = true
+        d.onLog(`Link with ${name} cancelled`)
+      },
     }
   }
 
@@ -413,11 +467,22 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
         if (m) {
           if (find(from) !== p) return false // unlinked (or re-linked) while opening
           const guard = createReplayGuard(p.replay)
-          // Authentic but already seen (a replay, or an honest redelivery whose ack was lost): consumed without being processed, and
-          // acked, so the relay stops redelivering it. A replay therefore changes nothing and costs nothing but this check.
-          if (!guard.accept(m.ctr)) return true
+          // Authentic but already seen (a replay, or an honest redelivery whose ack was lost) or older than the window: consumed
+          // without being processed, and acked, so the relay stops redelivering it. A replay therefore changes nothing but this line.
+          if (!guard.accept(m.ctr)) {
+            d.onLog(`Ignored a ${m.kind} message from ${p.name} that was already seen (counter ${m.ctr})`)
+            return true
+          }
+          // Saved BEFORE it counts: if the storage fails, the wire stays un-acked and comes again instead of being lost.
+          const before = p.replay
           p.replay = guard.state()
-          persist()
+          try {
+            persist()
+          } catch (e) {
+            p.replay = before
+            d.onLog(`Could not save the sync state, the message from ${p.name} comes again: ${e instanceof Error ? e.message : String(e)}`)
+            return false
+          }
           try {
             if (m.kind === 'have') await onHave(p, m.body)
             else if (m.kind === 'entries') await onEntries(p, m.body)
@@ -441,11 +506,15 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     const run = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined
       const answered = new Promise<SyncReport>((resolve, reject) => {
-        timer = setTimeout(() => {
-          waiters.delete(address)
-          d.onLog(`${p.name} did not answer: open it there and try again`)
-          reject(new Error('offline'))
-        }, handshakeMs)
+        const arm = (): void => {
+          clearTimeout(timer)
+          timer = setTimeout(() => {
+            waiters.delete(address)
+            d.onLog(`${p.name} did not answer: open it there and try again`)
+            reject(new Error('offline'))
+          }, handshakeMs)
+        }
+        arm()
         waiters.set(address, {
           resolve: (r) => {
             clearTimeout(timer)
@@ -457,11 +526,12 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
             waiters.delete(address)
             reject(e)
           },
+          touch: arm,
         })
       })
       try {
         d.onLog(`Asking ${p.name} for its changes…`)
-        await send(p, 'have', { heads: recordLog.heads(), name: d.deviceName() })
+        await send(p, 'have', { heads: recordLog.heads(), name: ownName() })
       } catch (e) {
         clearTimeout(timer)
         waiters.delete(address)
@@ -478,7 +548,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     }
   }
 
-  d.relay.onRawWire((from, payload) => handle(from, payload))
+  if (d.register !== false) d.relay.onRawWire((from, payload) => handle(from, payload))
 
   return {
     deviceId: mine.deviceId,
@@ -506,11 +576,12 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
         return null
       }
       const key = await secretKeyFromPairingSecret(c.secret)
-      const body = { deviceId: mine.deviceId, publicKey: toB64u(mine.publicKey), name: d.deviceName() }
+      const body = { deviceId: mine.deviceId, publicKey: toB64u(mine.publicKey), name: ownName() }
       await d.relay.sendRaw(c.address, await sealMessage(key, me, c.address, { ctr: 1, kind: 'pair', body }))
       return request(c.address, await deviceIdOf(c.publicKey), toB64u(c.publicKey), 'Other device', k, epoch)
     },
     unlink(address: string): void {
+      for (const p of pairings) if (p.address === address) retired.add(p.epoch)
       pairings = pairings.filter((p) => p.address !== address)
       pairKeys.delete(address)
       for (const key of partial.keys()) if (key.startsWith(`${address}\n`)) partial.delete(key)

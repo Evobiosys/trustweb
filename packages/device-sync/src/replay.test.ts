@@ -3,8 +3,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { REPLAY_WINDOW, createReplayGuard } from './replay.ts'
 
-test('window is 64', () => {
-  assert.equal(REPLAY_WINDOW, 64)
+test('window is 1024 (wider than one sync round of 200 pieces)', () => {
+  assert.equal(REPLAY_WINDOW, 1024)
 })
 
 test('fresh guard: empty state, first counter accepted', () => {
@@ -30,13 +30,13 @@ test('duplicate rejected', () => {
   assert.equal(g.accept(6), false)
 })
 
-test('too old (≤ high - 64) rejected, just inside accepted', () => {
+test('too old (≤ high - window) rejected, just inside accepted', () => {
   const g = createReplayGuard()
-  assert.equal(g.accept(100), true)
-  assert.equal(g.accept(36), false) // 100 - 64
+  assert.equal(g.accept(2000), true)
+  assert.equal(g.accept(2000 - REPLAY_WINDOW), false)
   assert.equal(g.accept(1), false)
-  assert.equal(g.accept(37), true) // 100 - 63
-  assert.equal(g.accept(37), false)
+  assert.equal(g.accept(2000 - REPLAY_WINDOW + 1), true)
+  assert.equal(g.accept(2000 - REPLAY_WINDOW + 1), false)
 })
 
 test('out of order inside the window accepted exactly once', () => {
@@ -50,14 +50,14 @@ test('out of order inside the window accepted exactly once', () => {
 
 test('state keeps only counters inside the window, sorted, including high', () => {
   const g = createReplayGuard()
-  for (let c = 1; c <= 200; c++) assert.equal(g.accept(c), true)
+  for (let c = 1; c <= 2000; c++) assert.equal(g.accept(c), true)
   const s = g.state()
-  assert.equal(s.high, 200)
+  assert.equal(s.high, 2000)
   assert.equal(s.seen.length, REPLAY_WINDOW)
-  assert.equal(s.seen[0], 200 - REPLAY_WINDOW + 1)
-  assert.equal(s.seen[s.seen.length - 1], 200)
-  assert.equal(g.accept(500), true)
-  assert.deepEqual(g.state(), { high: 500, seen: [500] })
+  assert.equal(s.seen[0], 2000 - REPLAY_WINDOW + 1)
+  assert.equal(s.seen[s.seen.length - 1], 2000)
+  assert.equal(g.accept(5000), true)
+  assert.deepEqual(g.state(), { high: 5000, seen: [5000] })
 })
 
 test('state() is a fresh copy', () => {
@@ -103,7 +103,7 @@ test('malformed initial state → empty', () => {
     { high: 3, seen: [2, 2, 3] }, // duplicate
     { high: 3, seen: [0, 3] }, // non-positive
     { high: 3, seen: [3, 4] }, // above high
-    { high: 100, seen: [36, 100] }, // outside the window
+    { high: 2000, seen: [2000 - REPLAY_WINDOW, 2000] }, // outside the window
     { high: 3, seen: [1.5, 3] },
     { high: 0, seen: [1] },
     { high: Number.MAX_SAFE_INTEGER + 1, seen: [Number.MAX_SAFE_INTEGER + 1] },

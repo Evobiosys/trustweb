@@ -192,15 +192,67 @@ describe('merge', () => {
     assert.deepEqual(await laptop.merge([e1, e2]), { added: 2, duplicates: 0, rejected: [] })
   })
 
-  it('a correctly hashed entry whose prev does not match → chain-gap', async () => {
+  it('a correctly hashed entry whose prev does not match the predecessor we hold → fork (two histories), not chain-gap', async () => {
     const phone = new RecordLog('Phone')
     for (let i = 1; i <= 2; i++) await phone.append(put('p1', 'n', i), i)
     const [e1, e2] = phone.entries()
     const bad = await rehashed(e2!, { prev: 'A'.repeat(43) })
     const laptop = new RecordLog('Laptop')
-    assert.deepEqual((await laptop.merge([e1, bad])).rejected, [{ id: 'Phone:2', reason: 'chain-gap' }])
+    assert.deepEqual((await laptop.merge([e1, bad])).rejected, [{ id: 'Phone:2', reason: 'fork' }])
     const badFirst = await rehashed(e1!, { prev: 'x' })
-    assert.deepEqual((await new RecordLog('Tablet').merge([badFirst])).rejected, [{ id: 'Phone:1', reason: 'chain-gap' }])
+    assert.deepEqual((await new RecordLog('Tablet').merge([badFirst])).rejected, [{ id: 'Phone:1', reason: 'fork' }])
+  })
+
+  it('a forged "next" entry under another device id is caught as a fork when the real one arrives, and reported, not silently kept', async () => {
+    // Laptop (compromised) writes Phone:2 itself and sends it to Tablet first; Phone's real Phone:2 then arrives.
+    const phone = new RecordLog('Phone')
+    await phone.append(put('p1', 'n', 'real-1'), 1)
+    await phone.append(put('p1', 'n', 'real-2'), 2)
+    const [real1, real2] = phone.entries()
+    const forged = await rehashed(real2!, { op: put('p1', 'n', 'forged'), at: 99 })
+    const tablet = new RecordLog('Tablet')
+    assert.deepEqual(await tablet.merge([real1, forged]), { added: 2, duplicates: 0, rejected: [] })
+    const r = await tablet.merge([real2])
+    assert.deepEqual(r.rejected, [{ id: 'Phone:2', reason: 'fork' }])
+    // The forgery stays (entries are not signed: this is what the honest label admits); the report makes it visible.
+    assert.equal(tablet.materialize().entities['person']!['p1']!['n'], 'forged')
+  })
+
+  it('entries carrying MY OWN device id are refused (own) unless recovery is asked for', async () => {
+    const phone = new RecordLog('Phone')
+    await phone.append(put('p1', 'n', 'mine'), 1)
+    const mine = phone.entries()[0]!
+    const forgedNext = await rehashed(mine, { id: 'Phone:2', seq: 2, vc: { Phone: 2 }, prev: mine.hash, op: put('p1', 'n', 'not mine') })
+    assert.deepEqual((await phone.merge([forgedNext])).rejected, [{ id: 'Phone:2', reason: 'own' }])
+    assert.equal(phone.heads()['Phone'], 1)
+    // recovery: a fresh log for the same device takes its history back from a peer only when asked
+    const restored = new RecordLog('Phone')
+    assert.deepEqual((await restored.merge([mine])).rejected, [{ id: 'Phone:1', reason: 'own' }])
+    assert.deepEqual(await restored.merge([mine], { acceptOwn: true }), { added: 1, duplicates: 0, rejected: [] })
+    assert.equal((await restored.append(put('p1', 'n', 'after recovery'), 5)).seq, 2)
+  })
+
+  it('device ids are base64url names; a name like a prototype property is plain data everywhere', async () => {
+    assert.throws(() => new RecordLog('has space'))
+    assert.throws(() => new RecordLog(''))
+    assert.throws(() => new RecordLog('a|b'))
+    const odd = new RecordLog('constructor')
+    await odd.append(put('p1', 'n', 'odd'), 1)
+    const laptop = new RecordLog('Laptop')
+    assert.deepEqual(await laptop.merge(odd.entries() as unknown[]), { added: 1, duplicates: 0, rejected: [] })
+    assert.equal(Object.hasOwn(laptop.heads(), 'constructor'), true)
+    assert.equal(laptop.heads()['constructor'], 1)
+    assert.equal(laptop.since({}).length, 1)
+    assert.equal(laptop.since({ constructor: 1 } as Record<string, number>).length, 0)
+    assert.equal(laptop.since({ constructor: 0 } as Record<string, number>).length, 1)
+    // a vc naming __proto__ (an own key from JSON) is data too: nothing is polluted, dominance reads own keys only
+    const phone = new RecordLog('Phone')
+    await phone.append(put('p1', 'n', 1), 1)
+    const e = phone.entries()[0]!
+    const evilVc = await rehashed(e, { vc: JSON.parse('{"Phone":1,"__proto__":3}') as Record<string, number> })
+    assert.deepEqual(await new RecordLog('Tablet').merge([evilVc]), { added: 1, duplicates: 0, rejected: [] })
+    assert.equal(({} as Record<string, unknown>)['__proto__'] === Object.prototype, true, 'untouched prototype')
+    assert.equal(dominates({}, JSON.parse('{"constructor":5}') as Record<string, number>), false)
   })
 
   it('same id with different content → fork, the known entry stays', async () => {
