@@ -81,7 +81,9 @@
 //   ORG_MAX_EVENTS, ORG_MAX_INVITEES            3, 25      wave 8: free organizer limits (events per org, invitee e-mails per event)
 //   ORG_HOSTED_MAX_EVENTS, ORG_HOSTED_MAX_INVITEES  50, 500  the same for an org the admin switched to plan "hosted" (POST /admin/org)
 //   ORG_MAX_ORGS                     2000         organizers in total; beyond it POST /org answers 503 full
-//   ORG_DAYS                         365          an org untouched this long may be swept (only the `updated` stamp exists; no sweeper yet)
+//   ORG_DAYS                         365          an org with no organizer activity (a write, or a successful /org/me) this long is swept; <= 0 = never
+//   ORG_SWEEP_MS                     3600000      how often the ORG_DAYS sweep runs (also once at start)
+//   ORG_HIT_FLUSH_MS                 10000        how often counters from POST /org/hit are written to organizers.json (never per request)
 //   ORG_CREATE_PER_MINUTE, ORG_CREATE_PER_HOUR  6, 30     POST /org per network address (IPv6: /64), in memory
 //   ORG_WRITE_PER_MINUTE, ORG_WRITE_PER_HOUR    20, 200   POST /org/me and /org/event together, per network address
 //   ORG_HIT_PER_MINUTE               60           POST /org/hit per network address (the attendee phones' counter route)
@@ -284,6 +286,8 @@ export function loadConfig(options = {}) {
     orgHostedMaxInvitees: pick(options, 'orgHostedMaxInvitees', 'ORG_HOSTED_MAX_INVITEES', 500),
     orgMax: pick(options, 'orgMax', 'ORG_MAX_ORGS', 2000),
     orgDays: pick(options, 'orgDays', 'ORG_DAYS', 365),
+    orgSweepMs: pick(options, 'orgSweepMs', 'ORG_SWEEP_MS', 3_600_000),
+    orgHitFlushMs: pick(options, 'orgHitFlushMs', 'ORG_HIT_FLUSH_MS', 10_000),
     orgCreatePerMinute: pick(options, 'orgCreatePerMinute', 'ORG_CREATE_PER_MINUTE', 6),
     orgCreatePerHour: pick(options, 'orgCreatePerHour', 'ORG_CREATE_PER_HOUR', 30),
     orgWritePerMinute: pick(options, 'orgWritePerMinute', 'ORG_WRITE_PER_MINUTE', 20),

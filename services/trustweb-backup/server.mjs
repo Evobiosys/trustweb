@@ -175,11 +175,21 @@ export async function startServer(options = {}) {
   // Organizer accounts (wave 8): same rule, a store that cannot open turns the feature off (503 not_configured).
   let orgStore = null
   try {
-    orgStore = await createOrgStore({ file: path.join(cfg.dir, 'organizers.json'), max: cfg.orgMax, limitsOf: (plan) => limitsFor(cfg, plan), now: cfg.now })
+    orgStore = await createOrgStore({
+      file: path.join(cfg.dir, 'organizers.json'),
+      max: cfg.orgMax,
+      limitsOf: (plan) => limitsFor(cfg, plan),
+      now: cfg.now,
+      days: cfg.orgDays,
+      flushMs: cfg.orgHitFlushMs,
+    })
     if (orgStore.recovered) cfg.log('organizer store unreadable: moved aside, organizers start empty')
   } catch {
     cfg.log('organizer store unavailable: organizers off')
   }
+  const orgSweep = orgStore === null ? null : setInterval(() => orgStore.sweep().catch(() => undefined), cfg.orgSweepMs)
+  orgSweep?.unref()
+  await orgStore?.sweep().catch(() => undefined)
   const organizer = orgStore === null ? null : createOrganizer({ cfg, store: orgStore, clientOf, now: cfg.now })
   const admin = createAdmin({ cfg, store: connectStore, orgStore, clientOf, now: cfg.now })
   let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
@@ -481,8 +491,9 @@ export async function startServer(options = {}) {
       new Promise((resolve) => {
         clearInterval(linkSweep)
         clearInterval(connectSweep)
+        clearInterval(orgSweep)
         process.off('SIGHUP', nameCapAllow.reload)
-        server.close(() => resolve())
+        server.close(() => (orgStore === null ? Promise.resolve() : orgStore.close()).catch(() => undefined).then(() => resolve()))
         server.closeAllConnections()
       }),
   }

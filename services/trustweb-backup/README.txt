@@ -96,6 +96,9 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   limit_invitees (free 3 events x 25 invitees, hosted 50 x 500). POST /org/hit {"event","kind":"opened|joined|tagged"} is the one route attendee
                   phones touch: 204 always (unknown id too), +1 on the counter, no identity and no request data kept. 16 KB bodies, own-host Origin, 6/min+30/h (create),
                   20/min+200/h (me, event), 60/min (hit) per address. POST /admin/org {"org","plan":"free|hosted"} is loopback-only like /admin/name (paid tier switch).
+                  GET /org/event/<id>/public -> 200 {"name","logo"} (logo: png/jpeg/webp data URL or null) for the join sheet, 404 unknown, same 60/min budget.
+                  Hit counters live in memory and are written every ORG_HIT_FLUSH_MS (10 s) and on close, never per request. An org with no organizer
+                  activity (a write or a successful /org/me) for ORG_DAYS (365) is swept every ORG_SWEEP_MS (1 h) and once at start.
                   Store <BACKUP_DIR>/organizers.json (0600). Never logged. ORG_* settings (config.mjs). organizer.mjs, organizer_store.mjs. Contract: section 11.
 
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.

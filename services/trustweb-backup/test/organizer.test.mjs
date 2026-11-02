@@ -179,7 +179,7 @@ test('POST /org/hit: counts opened, joined, tagged; 204 for an unknown id; 400 f
 })
 
 test('POST /org/hit: counters reach the file; the file holds no address and no request data', async () => {
-  await withServer(0, OPTS, async ({ srv, backupDir }) => {
+  await withServer(0, { ...OPTS, orgHitFlushMs: 20 }, async ({ srv, backupDir }) => {
     const o = await mintOrg(srv.port)
     const { id } = (await save(srv.port, o)).json
     await hit(srv.port, id, 'opened', { ip: '203.0.113.77', headers: { 'User-Agent': 'phone-agent-marker' } })
@@ -326,7 +326,7 @@ test('the store: reload keeps orgs, events and counts; a file that does not pars
     const { org } = await first.create('Gruber', 'S'.repeat(43))
     const { id } = await first.saveEvent(org, 'S'.repeat(43), { event: EVENT, link: LINK, invitees: [] })
     first.hit(id, 'tagged')
-    await new Promise((r) => setTimeout(r, 100))
+    await first.flush() // counters reach the file on the flush tick (organizer_hardening.test.mjs), not per hit
     const second = await createOrgStore({ file, max: 10, limitsOf })
     const loaded = await second.me(org, 'S'.repeat(43))
     assert.equal(loaded.events[0].counts.tagged, 1)

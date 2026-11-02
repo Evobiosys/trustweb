@@ -10,10 +10,32 @@ export interface OrgEventFields {
   themes?: string[]
   tagName?: string
   organizer?: string
+  /** A small png, jpeg or webp data URL (never a remote url: its host would learn who opened the join sheet). */
+  logo?: string
 }
 export interface OrgEvent { id: string; event: OrgEventFields; link: string; invitees: string[]; counts: OrgCounts }
 /** The form as typed: every field is text. */
 export interface OrgForm { name: string; from: string; to: string; where: string; conditions: string; themes: string; tagName: string; invitees: string }
+
+const ORG_RE = /^[A-Za-z0-9_-]{22}$/
+const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
+const LOGO_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/
+/** The server's cap on event.logo (services/trustweb-backup/organizer.mjs). */
+export const MAX_LOGO_CHARS = 8192
+
+/** "Sign in with my key": the key as the page shows it ({"org","secret"}, the stored account shape works too), or null. */
+export function parseOrgKey(text: string): { org: string; secret: string } | null {
+  let v: unknown
+  try { v = JSON.parse(text.trim()) } catch { return null }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return null
+  const { org, secret } = v as Record<string, unknown>
+  return typeof org === 'string' && ORG_RE.test(org) && typeof secret === 'string' && SECRET_RE.test(secret) ? { org, secret } : null
+}
+
+/** Is `v` a logo the server takes and the join sheet may show? */
+export function logoOk(v: unknown): v is string {
+  return typeof v === 'string' && v.length <= MAX_LOGO_CHARS && LOGO_RE.test(v)
+}
 
 export const LANDING = 'Ever built rapport at an event and it vanished? Send everyone a link. Stay a resource for each other.'
 

@@ -7,7 +7,7 @@ import { randomId } from '../../demo/src/crypto'
 import { encodeEventLink, decodeEventLink, linkOrigin } from './event_link'
 import { newEvent } from './events'
 import {
-  LANDING, csv, errorWords, eventPayload, limitsLine, mailto, message, parseInvitees, withSrv,
+  LANDING, MAX_LOGO_CHARS, csv, errorWords, eventPayload, limitsLine, logoOk, mailto, message, parseInvitees, parseOrgKey, withSrv,
   type OrgEvent, type OrgForm, type OrgLimits,
 } from './organizer_rules'
 
@@ -101,14 +101,15 @@ function renderAccount(): void {
       renderAll()
       await refresh()
     })), err)
+    accountBox.append(signInWithKey())
     return
   }
   accountBox.append(el('p', {}, el('b', {}, account.name), me ? ` · ${limitsLine(me.plan, me.limits)}` : ''))
   if (fresh) {
     const key = JSON.stringify({ org: account.org, secret: account.secret })
-    accountBox.append(el('p', {}, 'Keep this: it is the only key to your events.'), el('div', { className: 'key' }, key), el('div', { className: 'actions' }, button('Copy', () => copy(key))))
+    accountBox.append(el('p', {}, 'Keep this: it is the only key to your events. Paste it under "Sign in with my key" to open them in another browser.'), el('div', { className: 'key' }, key), el('div', { className: 'actions' }, button('Copy', () => copy(key))))
   }
-  accountBox.append(el('div', { className: 'actions' }, button('Forget this browser', () => {
+  accountBox.append(el('div', { className: 'actions' }, ...(fresh ? [] : [button('Show my key', () => { fresh = true; renderAccount() }, true)]), button('Forget this browser', () => {
     localStorage.removeItem(KEY)
     account = null
     me = null
@@ -117,10 +118,56 @@ function renderAccount(): void {
   }, true)))
 }
 
+/** "Sign in with my key": the key copied from another browser restores the account here (checked against POST /org/me first). */
+function signInWithKey(): HTMLElement {
+  const box = el('textarea', { placeholder: '{"org":"…","secret":"…"}', spellcheck: false })
+  box.setAttribute('data-org-key-input', '')
+  const err = el('div', { className: 'err' })
+  const go = button('Sign in with my key', async () => {
+    err.textContent = ''
+    const key = parseOrgKey(box.value)
+    if (!key) { err.textContent = 'That is not an organizer key. Paste it exactly as copied: {"org":"…","secret":"…"}.'; return }
+    const r = await post('/org/me', key)
+    if (r.status !== 200) { err.textContent = errorWords(r.status, r.json?.error ?? '', { events: 3, invitees: 25 }); return }
+    account = { ...key, name: r.json.name }
+    localStorage.setItem(KEY, JSON.stringify(account))
+    me = r.json
+    fresh = false
+    renderAll()
+  })
+  go.setAttribute('data-org-key-signin', '')
+  return el('div', { className: 'card' }, el('h2', {}, 'Already have an account?'), field('Your organizer key', box), el('div', { className: 'actions' }, go), err)
+}
+
 // ---- form
 const f = {
   name: input(), from: input('datetime-local'), to: input('datetime-local'), where: input(),
   conditions: el('textarea'), themes: input(), tagName: input(), invitees: el('textarea'),
+}
+// The logo goes to the server only (GET /org/event/<id>/public serves it to the join sheet), never into the link.
+let logo = ''
+const logoInput = input('file')
+logoInput.accept = 'image/png,image/jpeg,image/webp'
+const logoPreview = el('img', { alt: '', hidden: true })
+logoPreview.style.cssText = 'max-height:48px;max-width:160px;margin-top:6px'
+const logoClear = button('Remove logo', () => setLogo(''), true)
+function setLogo(v: string): void {
+  logo = v
+  logoPreview.src = v
+  logoPreview.hidden = !v
+  logoClear.hidden = !v
+  if (!v) logoInput.value = ''
+}
+logoInput.onchange = () => {
+  const file = logoInput.files?.[0]
+  if (!file) return
+  const read = new FileReader()
+  read.onload = () => {
+    if (logoOk(read.result)) { formErr.textContent = ''; setLogo(read.result); return }
+    setLogo('')
+    formErr.textContent = `The logo must be a PNG, JPEG or WebP image of at most ${Math.floor((MAX_LOGO_CHARS * 3) / 4 / 1024)} KB.`
+  }
+  read.readAsDataURL(file)
 }
 const counter = el('div', { className: 'soft' })
 const formErr = el('div', { className: 'err' })
@@ -134,7 +181,8 @@ formBox.append(
   field('Name *', f.name),
   el('div', { className: 'row' }, field('From *', f.from), field('To', f.to)),
   field('Where *', f.where), field('Conditions', f.conditions), field('Themes (comma separated)', f.themes),
-  field('Tag name (the tag attendees get)', f.tagName), field('Invitees', f.invitees), counter, formErr,
+  field('Tag name (the tag attendees get)', f.tagName), field('Logo (optional, shown on the join sheet)', el('div', {}, logoInput, logoPreview, logoClear)),
+  field('Invitees', f.invitees), counter, formErr,
   el('div', { className: 'actions' }, submit, cancel),
 )
 
@@ -148,6 +196,7 @@ function resetForm(): void {
   submit.textContent = 'Create event'
   cancel.hidden = true
   formErr.textContent = ''
+  setLogo('')
   updateCounter()
 }
 
@@ -169,11 +218,12 @@ async function save(): Promise<void> {
   if (typeof ev === 'string') { formErr.textContent = FIELD_WORDS[ev]; return }
   const link = encodeEventLink({ ...ev, ...(event.tagName ? { tagName: event.tagName } : {}) }, linkOrigin(location.origin), 'host')
   const auth = { org: account.org, secret: account.secret }
+  const stored = logo ? { ...event, logo } : event
   let r: Reply
-  if (editing) r = await post('/org/event', { ...auth, id: editing.id, event, link: withSrv(link, editing.id), invitees: emails })
+  if (editing) r = await post('/org/event', { ...auth, id: editing.id, event: stored, link: withSrv(link, editing.id), invitees: emails })
   else {
-    r = await post('/org/event', { ...auth, event, link, invitees: emails })
-    if (r.status === 201) r = await post('/org/event', { ...auth, id: r.json.id, event, link: withSrv(link, r.json.id), invitees: emails })
+    r = await post('/org/event', { ...auth, event: stored, link, invitees: emails })
+    if (r.status === 201) r = await post('/org/event', { ...auth, id: r.json.id, event: stored, link: withSrv(link, r.json.id), invitees: emails })
   }
   if (r.status !== 200 && r.status !== 201) { formErr.textContent = errorWords(r.status, r.json?.error ?? '', limits); return }
   editing = null
@@ -220,6 +270,7 @@ function edit(e: OrgEvent): void {
   f.name.value = v.name; f.from.value = v.from; f.to.value = v.to ?? ''; f.where.value = v.where
   f.conditions.value = v.conditions ?? ''; f.themes.value = (v.themes ?? []).join(', '); f.tagName.value = v.tagName ?? ''
   f.invitees.value = e.invitees.join('\n')
+  setLogo(v.logo ?? '')
   submit.textContent = 'Save changes'
   cancel.hidden = false
   updateCounter()

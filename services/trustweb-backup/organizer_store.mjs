@@ -1,6 +1,6 @@
 // Disk layer of the organizer accounts (wave 8; contract: DEVLOG/trustweb-wave-1733/services-api-contract.txt, section 11).
 //
-//   <file>  {"version":1,"orgs":{"<org>":{name, secretHash, plan, created, updated, events:{"<id>":{event, link, invitees:[], counts:{opened,joined,tagged}, created, updated}}}}}
+//   <file>  {"version":1,"orgs":{"<org>":{name, secretHash, plan, created, updated, seen?, events:{"<id>":{event, link, invitees:[], counts:{opened,joined,tagged}, created, updated}}}}}
 //   mode 0600, rewritten atomically (temp file, fsync, rename), writes serialised through one promise queue.
 //
 // PRIVACY: the file holds what the ORGANIZER already has (their event fields and invitee e-mails) plus aggregate counters. Never an attendee's identity, web,
@@ -8,6 +8,12 @@
 //
 // Like connect_store: everything lives in memory; each mutation (secret check, limit check, change) is ONE synchronous block with no await, only the file write
 // is awaited and a failed write rolls the change back. Only sha256(secret) is kept, compared in constant time; an unknown org is compared against a dummy.
+//
+// COUNTERS: `hit` only changes memory and marks the store dirty; a timer (`flushMs`, ORG_HIT_FLUSH_MS) writes the whole map at most once per tick, and
+// `close()` writes what is left. A crash loses at most one tick of counts, never an account or an event (those are written before they answer).
+//
+// SWEEP: `sweep()` drops an org whose last organizer activity (`updated`: a write; `seen`: a successful me()) is older than `days` (ORG_DAYS; <= 0 = never).
+// Attendee hits do not keep an org alive: they are not the organizer's activity. The event links keep working in the app; only the counters go.
 //
 // LOGGING: none. No logger, nothing on stdout/stderr.
 
@@ -20,6 +26,7 @@ export const PLANS = Object.freeze(['free', 'hosted'])
 export const KINDS = Object.freeze(['opened', 'joined', 'tagged'])
 export const EVENT_ID_RE = /^[0-9a-f]{16}$/
 const HASH_RE = /^[0-9a-f]{64}$/
+const DAY_MS = 86_400_000
 
 /** The limits of `plan` ({events, invitees}) under `cfg`. */
 export const limitsFor = (cfg, plan) =>
@@ -35,13 +42,14 @@ const isOrg = (org, o) =>
  * Opens (or creates) the store; `recovered` is true when the file did not parse and was moved aside to <file>.unreadable.
  * Rejects when the file cannot be read or written: the caller treats that as "off". `limitsOf(plan)` = {events, invitees}.
  */
-export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
+export async function createOrgStore({ file, max, limitsOf, now = Date.now, days = 0, flushMs = 10_000 }) {
   const orgs = new Map() // org -> entry of the file shape
   const eventOrg = new Map() // event id -> org
   let recovered = false
   let chain = Promise.resolve()
-  let running = false
-  let again = false
+  let dirty = false // memory holds changes (counters, `seen`) the file does not have yet
+  let writes = 0
+  let timer = null
 
   async function load() {
     let text
@@ -77,6 +85,8 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
       const handle = await fs.open(tmp, 'w', 0o600)
       try {
         await handle.chmod(0o600)
+        dirty = false // this snapshot carries everything changed so far; a later change marks it again
+        writes += 1
         await handle.writeFile(JSON.stringify({ version: 1, orgs: Object.fromEntries(orgs) }))
         await handle.sync()
       } finally {
@@ -85,26 +95,15 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
       await fs.rename(tmp, file)
     }
     const next = chain.then(run, run)
-    chain = next.catch(() => undefined)
+    chain = next.catch(() => {
+      dirty = true // the file may lack changes the failed snapshot carried; the next tick tries again
+    })
     return next
   }
 
-  /** A counter write nobody waits for; writes that arrive while one runs collapse into one more. */
-  function background() {
-    if (running) {
-      again = true
-      return
-    }
-    running = true
-    persist()
-      .catch(() => undefined)
-      .finally(() => {
-        running = false
-        if (again) {
-          again = false
-          background()
-        }
-      })
+  /** Writes the map when memory is ahead of the file (counters, `seen`); a failed write leaves it dirty for the next tick. */
+  async function flush() {
+    if (dirty) await persist()
   }
 
   /** Persists after a synchronous change; on failure runs `rollback` and rethrows. */
@@ -131,10 +130,48 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
 
   await load()
   await persist() // proves the file can be written (else the caller turns the feature off) and leaves it at 0600
+  if (flushMs > 0) {
+    timer = setInterval(() => flush().catch(() => undefined), flushMs)
+    timer.unref()
+  }
 
   return {
     recovered,
     size: () => orgs.size,
+    /** How many times the file was written (tests: proves hits do not write per request). */
+    writes: () => writes,
+    flush,
+
+    /** Stops the flush timer and writes what is left. */
+    async close() {
+      if (timer !== null) clearInterval(timer)
+      timer = null
+      await flush()
+    },
+
+    /** Drops every org untouched for `days`. Resolves {removed}. Rejects when the file cannot be written (rolled back). */
+    async sweep() {
+      if (!(days > 0)) return { removed: 0 }
+      const cutoff = now() - days * DAY_MS
+      const gone = [...orgs].filter(([, o]) => Math.max(o.updated ?? 0, o.seen ?? 0) < cutoff)
+      if (gone.length === 0) return { removed: 0 }
+      const unlink = (fn) => gone.forEach(([org, o]) => Object.keys(o.events).forEach((id) => fn(id, org)))
+      for (const [org] of gone) orgs.delete(org)
+      unlink((id) => eventOrg.delete(id))
+      await commit(() => {
+        for (const [org, o] of gone) orgs.set(org, o)
+        unlink((id, org) => eventOrg.set(id, org))
+      })
+      return { removed: gone.length }
+    },
+
+    /** What the join sheet may show of event `id`: {name, logo} (logo null when none), or null for an unknown id. Nothing about the org or invitees. */
+    publicOf(id) {
+      const org = eventOrg.get(id)
+      if (org === undefined) return null
+      const { event } = orgs.get(org).events[id]
+      return { name: event.name, logo: event.logo ?? null }
+    },
 
     /** A new organizer on plan free. Resolves {kind: 'created', org} or {kind: 'full'}. Rejects when the file cannot be written (rolled back). */
     async create(name, secret) {
@@ -151,6 +188,8 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
     async me(org, secret) {
       const entry = opened(org, secret)
       if (entry === undefined) return { kind: 'forbidden' }
+      entry.seen = now() // organizer activity for the sweep; written on the next flush tick
+      dirty = true
       const events = Object.entries(entry.events).map(([id, e]) => ({ id, ...e }))
       return { kind: 'ok', name: entry.name, plan: entry.plan, events: events.sort((a, b) => a.created - b.created) }
     },
@@ -204,12 +243,12 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
       return { kind: 'deleted' }
     },
 
-    /** One count more for `kind` on event `id`; nothing happens for an unknown id. Keeps no request data and does not touch `updated`. */
+    /** One count more for `kind` on event `id`, in memory (the flush timer writes it); nothing happens for an unknown id. Keeps no request data, touches neither `updated` nor `seen`. */
     hit(id, kind) {
       const org = eventOrg.get(id)
       if (org === undefined) return
       orgs.get(org).events[id].counts[kind] += 1
-      background()
+      dirty = true
     },
 
     /** ADMIN: sets the plan. Resolves {kind: 'ok', plan} or {kind: 'unknown'}. */

@@ -207,7 +207,7 @@ import { decodeEventLink, encodeEventLink, linkOrigin } from './event_link'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
 import { eventDropItem } from './event_drop'
-import { sendHit } from './org_hits'
+import { loadEventPublic, sendHit } from './org_hits'
 import type { LinkedEvent } from './event_link'
 import { ImageStore, SHARE_SIDE, shrink } from './image_store'
 import { PersistState, persistState } from './storage_persist'
@@ -4792,7 +4792,11 @@ function maybeOpenPendingEvent(): void {
     if (ev.by && addBox.checked) addInviter(st(), ev.by, id, S.eventInvitedContext(ev.name), randomId(8), now)
     save(); closeSheet(); openEvents(id)
   }
+  // An organizer's event (srv): its logo comes from GET /org/event/<srv>/public, a same-origin data URL, never a remote image.
+  const logo = el('img', { alt: '', 'data-event-logo': '', hidden: true, style: 'max-height:56px;max-width:180px;display:block;margin-bottom:8px' })
+  if (ev.srv) void loadEventPublic(ev.srv).then((p) => { if (p?.logo) { logo.src = p.logo; logo.alt = p.name; logo.hidden = false } })
   openSheet([
+    logo,
     el('h2', {}, [S.eventLinkJoinTitle(ev.name, eventWhen(ev), ev.where)]),
     ev.by ? el('p', { class: 'meta', 'data-event-invited-by': '' }, [S.eventInvitedBy(ev.by.name)]) : null,
     ev.kind === 'host' ? el('p', { class: 'meta', 'data-event-hosted': '' }, [ev.hosts?.length ? `${S.eventLinkHostedBy(ev.hosts)}. ` : '', S.eventLinkHostNames]) : null,

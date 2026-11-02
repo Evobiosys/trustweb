@@ -3,7 +3,11 @@
 //   POST /org        {name}                                  mint an organizer: 201 {org, secret, plan, limits}
 //   POST /org/me     {org, secret}                           the organizer's own events and counters
 //   POST /org/event  {org, secret, event, link, invitees, id?} create or update an event; {org, secret, id, delete: true} deletes it
-//   POST /org/hit    {event, kind}                           204 always; counts opened | joined | tagged on a known event (the only route attendees touch)
+//   POST /org/hit    {event, kind}                           204 always; counts opened | joined | tagged on a known event (an attendee route)
+//   GET  /org/event/<id>/public                              200 {name, logo} for the join sheet (an attendee route); 404 for an unknown id
+//
+// LOGO: event.logo is a data URL (png, jpeg or webp, base64, at most 8192 characters) and never a remote url: a remote logo would tell its host who opened
+// the join sheet. SVG is refused (it can carry script).
 //
 // PRIVACY: the server holds what the organizer already has (event fields, invitee e-mails) plus aggregate counters, never an attendee's identity, web,
 // tags or notes. /org/hit carries no identity and keeps no request data.
@@ -24,6 +28,9 @@ const MAX_LINK_CHARS = 4096
 const MAX_EMAIL_CHARS = 254
 const MAX_THEMES = 20
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/
+const MAX_LOGO_CHARS = 8192
+const LOGO_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/
+const PUBLIC_RE = /^\/org\/event\/([^/]+)\/public$/
 /** [field, max chars] of the required event fields (1 char minimum) and of the optional ones (0 = absent). */
 const REQUIRED = [['name', 120], ['from', 200], ['where', 200]]
 const OPTIONAL = [['to', 2000], ['conditions', 2000]]
@@ -60,7 +67,12 @@ export function parseEvent(raw) {
     event.themes = themes
   }
   bad = take(OPTIONAL_AFTER_THEMES, 0)
-  return bad === null ? { event } : { field: bad }
+  if (bad !== null) return { field: bad }
+  if (raw.logo !== undefined) {
+    if (typeof raw.logo !== 'string' || raw.logo.length > MAX_LOGO_CHARS || !LOGO_RE.test(raw.logo)) return { field: 'event.logo' }
+    event.logo = raw.logo
+  }
+  return { event }
 }
 
 /** The normalized link when `raw` is an https url of one of `hosts` (no port, no userinfo) whose fragment starts with ev_host=, else null. */
@@ -89,6 +101,7 @@ export function createOrganizer({ cfg, store, clientOf, now = Date.now }) {
   const createLimits = [limiter(cfg.orgCreatePerMinute, 60_000), limiter(cfg.orgCreatePerHour, 3_600_000)]
   const writeLimits = [limiter(cfg.orgWritePerMinute, 60_000), limiter(cfg.orgWritePerHour, 3_600_000)]
   const hitLimits = [limiter(cfg.orgHitPerMinute, 60_000)]
+  const publicLimits = [limiter(cfg.orgHitPerMinute, 60_000)]
 
   /** Everything every POST checks before it looks at the fields. Returns {body} or {status} (already answered). The limits count invalid posts too. */
   async function receive(req, res, limits) {
@@ -203,10 +216,24 @@ export function createOrganizer({ cfg, store, clientOf, now = Date.now }) {
     return 204
   }
 
+  /** GET /org/event/<id>/public: the join sheet's name and logo. Read only, no body, same per-address budget size as /org/hit. */
+  function publicEvent(req, res, id) {
+    if (req.method !== 'GET') return jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'GET' })
+    const key = ipKey(clientOf(req))
+    const hits = publicLimits.map((l) => l.hit(key))
+    if (hits.some((h) => h.limited)) return tooManyRequests(res, 'rate_limited', Math.max(...hits.map((h) => h.retryAfter)))
+    const found = EVENT_ID_RE.test(id) ? store.publicOf(id) : null
+    if (found === null) return jsonError(res, 404, 'not_found')
+    sendJson(res, 200, found, { 'Cache-Control': 'public, max-age=60' })
+    return 200
+  }
+
   const routes = new Map([['/org', create], ['/org/me', me], ['/org/event', event], ['/org/hit', hit]])
 
   /** Dispatches an /org path. Returns the status it answered. */
   function handle(req, res, pathname) {
+    const pub = PUBLIC_RE.exec(pathname)
+    if (pub !== null) return publicEvent(req, res, pub[1])
     const run = routes.get(pathname)
     return run === undefined ? jsonError(res, 404, 'not_found') : run(req, res)
   }

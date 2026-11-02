@@ -24,6 +24,11 @@ http.createServer((req, res) => {
       for (const x of orgs.values()) { const e = x.events.get(b.event); if (e && e.counts[b.kind] !== undefined) e.counts[b.kind]++ }
       return send(res, 204)
     }
+    const pub = /^\/org\/event\/([0-9a-f]{16})\/public$/.exec(req.url)
+    if (pub && req.method === 'GET') {
+      for (const x of orgs.values()) { const e = x.events.get(pub[1]); if (e) return send(res, 200, { name: e.event.name, logo: e.event.logo ?? null }) }
+      return send(res, 404, { error: 'not_found' })
+    }
     if (!ok) return send(res, 403, { error: 'forbidden' })
     if (req.url === '/org/me') return send(res, 200, { name: o.name, plan: 'free', limits: L, events: [...o.events].map(([id, e]) => ({ id, ...e })) })
     if (req.url === '/org/event') {
