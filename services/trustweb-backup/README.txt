@@ -97,6 +97,10 @@ trustweb-backup: the TrustWeb Swiss server (node stdlib only, binds 127.0.0.1)
                   phones touch: 204 always (unknown id too), +1 on the counter, no identity and no request data kept. 16 KB bodies, own-host Origin, 6/min+30/h (create),
                   20/min+200/h (me, event), 60/min (hit) per address. POST /admin/org {"org","plan":"free|hosted"} is loopback-only like /admin/name (paid tier switch).
                   Store <BACKUP_DIR>/organizers.json (0600). Never logged. ORG_* settings (config.mjs). organizer.mjs, organizer_store.mjs. Contract: section 11.
+                  Retention: an org whose `updated` is older than ORG_DAYS (365) is swept with its events and invitee e-mails (every ORG_SWEEP_MS, in the
+                  server process; no CLI, a second process would race the in-memory store) and then answers the same 403 as an unknown org. `updated`
+                  moves on every organizer write and on /org/me at most once per ORG_TOUCH_HOURS (24); attendee hits never move it. Hit counters and
+                  touches stay in memory and are written in the background every ORG_HIT_FLUSH_MS (5000) and on shutdown, not per request.
 
 API contract (routes, headers, bodies, status codes, curl examples): DEVLOG/trustweb-wave-1733/services-api-contract.txt.
 Env vars: the header of server.mjs (backup) and config.mjs (hosted, transcribe, feedback).

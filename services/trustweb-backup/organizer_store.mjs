@@ -9,6 +9,13 @@
 // Like connect_store: everything lives in memory; each mutation (secret check, limit check, change) is ONE synchronous block with no await, only the file write
 // is awaited and a failed write rolls the change back. Only sha256(secret) is kept, compared in constant time; an unknown org is compared against a dummy.
 //
+// COUNTERS AND TOUCHES are not written per request: `hit` and the `updated` refresh of `me` only change memory and mark the store dirty; one unref'd timer
+// (flushMs, ORG_HIT_FLUSH_MS) writes the whole file when dirty, and close() writes what is pending. A crash loses at most flushMs of counters. Fewer writes
+// also mean the file's mtime no longer follows each attendee's tap.
+//
+// RETENTION: sweep() drops every org whose `updated` is older than ttlMs (ORG_DAYS), with its events and invitee e-mails. `updated` moves on every organizer
+// write and, at most once per touchMs, on an organizer read (me), never on an attendee hit. A swept org answers like an unknown one (no oracle).
+//
 // LOGGING: none. No logger, nothing on stdout/stderr.
 
 import crypto from 'node:crypto'
@@ -35,13 +42,13 @@ const isOrg = (org, o) =>
  * Opens (or creates) the store; `recovered` is true when the file did not parse and was moved aside to <file>.unreadable.
  * Rejects when the file cannot be read or written: the caller treats that as "off". `limitsOf(plan)` = {events, invitees}.
  */
-export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
+export async function createOrgStore({ file, max, limitsOf, now = Date.now, flushMs = 5000, touchMs = 86_400_000, ttlMs = Infinity }) {
   const orgs = new Map() // org -> entry of the file shape
   const eventOrg = new Map() // event id -> org
   let recovered = false
   let chain = Promise.resolve()
-  let running = false
-  let again = false
+  let dirty = false // memory holds counters or touches the file does not
+  let flushing = null // the background write in flight, if any
 
   async function load() {
     let text
@@ -65,7 +72,7 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
     for (const [org, o] of Object.entries(parsed.orgs)) {
       if (!isOrg(org, o)) continue
       const events = Object.fromEntries(Object.entries(o.events).filter(([id, e]) => isEvent(id, e)))
-      orgs.set(org, { ...o, events })
+      orgs.set(org, { ...o, updated: Number.isFinite(o.updated) ? o.updated : now(), events }) // no stamp: the retention clock starts now
       for (const id of Object.keys(events)) eventOrg.set(id, org)
     }
   }
@@ -89,29 +96,33 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
     return next
   }
 
-  /** A counter write nobody waits for; writes that arrive while one runs collapse into one more. */
-  function background() {
-    if (running) {
-      again = true
-      return
-    }
-    running = true
-    persist()
-      .catch(() => undefined)
-      .finally(() => {
-        running = false
-        if (again) {
-          again = false
-          background()
-        }
+  /**
+   * Writes the file when dirty; resolves at once when clean. A change made while a write runs waits for it and is written next. A failed write leaves the
+   * store dirty (the next tick retries) and rejects.
+   */
+  function flush() {
+    if (flushing !== null) return flushing.then(flush, flush)
+    if (!dirty) return Promise.resolve()
+    dirty = false
+    flushing = persist()
+      .catch((err) => {
+        dirty = true
+        throw err
       })
+      .finally(() => {
+        flushing = null
+      })
+    return flushing
   }
 
-  /** Persists after a synchronous change; on failure runs `rollback` and rethrows. */
+  /** Persists after a synchronous change (pending counters ride along); on failure runs `rollback` and rethrows. */
   async function commit(rollback) {
+    const was = dirty
+    dirty = false
     try {
       await persist()
     } catch (err) {
+      dirty ||= was
       rollback()
       throw err
     }
@@ -131,6 +142,10 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
 
   await load()
   await persist() // proves the file can be written (else the caller turns the feature off) and leaves it at 0600
+  const timer = setInterval(() => {
+    if (dirty) flush().catch(() => undefined)
+  }, flushMs)
+  timer.unref()
 
   return {
     recovered,
@@ -147,10 +162,18 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
       return { kind: 'created', org }
     },
 
-    /** The organizer's own data. Resolves {kind: 'ok', name, plan, events: [{id, ...}]} (oldest first) or {kind: 'forbidden'}. */
+    /**
+     * The organizer's own data. Resolves {kind: 'ok', name, plan, events: [{id, ...}]} (oldest first) or {kind: 'forbidden'}. Refreshes `updated` in memory
+     * when it is older than touchMs (written by the next flush), so an organizer who only reads stays clear of the sweeper.
+     */
     async me(org, secret) {
       const entry = opened(org, secret)
       if (entry === undefined) return { kind: 'forbidden' }
+      const t = now()
+      if (t - entry.updated > touchMs) {
+        entry.updated = t
+        dirty = true
+      }
       const events = Object.entries(entry.events).map(([id, e]) => ({ id, ...e }))
       return { kind: 'ok', name: entry.name, plan: entry.plan, events: events.sort((a, b) => a.created - b.created) }
     },
@@ -208,8 +231,38 @@ export async function createOrgStore({ file, max, limitsOf, now = Date.now }) {
     hit(id, kind) {
       const org = eventOrg.get(id)
       if (org === undefined) return
-      orgs.get(org).events[id].counts[kind] += 1
-      background()
+      const event = orgs.get(org)?.events[id]
+      if (event === undefined) return
+      event.counts[kind] += 1
+      dirty = true
+    },
+
+    /**
+     * Removes every org whose `updated` is older than ttlMs, with its events (a later hit on their ids is a no-op). Writes once when anything went.
+     * Resolves {removed}. A failed write keeps the removal in memory (it is never undone) and leaves the store dirty for the next tick, then rejects.
+     */
+    async sweep() {
+      const t = now()
+      let removed = 0
+      for (const [org, entry] of orgs) {
+        if (!(t - entry.updated > ttlMs)) continue
+        for (const id of Object.keys(entry.events)) eventOrg.delete(id)
+        orgs.delete(org)
+        removed += 1
+      }
+      if (removed === 0) return { removed }
+      dirty = true
+      await flush()
+      return { removed }
+    },
+
+    /** Writes pending counters and touches now (see flush above). */
+    flush,
+
+    /** Stops the timer, then writes what is pending. */
+    async close() {
+      clearInterval(timer)
+      await flush()
     },
 
     /** ADMIN: sets the plan. Resolves {kind: 'ok', plan} or {kind: 'unknown'}. */

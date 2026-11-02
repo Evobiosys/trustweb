@@ -13,7 +13,7 @@ import { APP, BASE, admin, send } from './connect_helpers.mjs'
 
 const ORIGIN = `https://${APP}`
 const LINK = `https://${APP}/#ev_host=abc123&n=Wine`
-const ROOM = { orgCreatePerMinute: 10000, orgCreatePerHour: 10000, orgWritePerMinute: 10000, orgWritePerHour: 10000, orgHitPerMinute: 10000 }
+const ROOM = { orgCreatePerMinute: 10000, orgCreatePerHour: 10000, orgWritePerMinute: 10000, orgWritePerHour: 10000, orgHitPerMinute: 10000, orgHitFlushMs: 20 }
 const OPTS = { ...BASE, ...ROOM }
 const EVENT = { name: 'Weinlese Wachau', from: '2026-10-17 10:00', where: 'Dürnstein', themes: ['wine', 'soil'], tagName: 'Weinlese' }
 
@@ -322,11 +322,11 @@ test('the store: reload keeps orgs, events and counts; a file that does not pars
   await withServer(0, OPTS, async ({ dir }) => {
     const file = path.join(dir, 'org-store.json')
     const limitsOf = () => ({ events: 3, invitees: 25 })
-    const first = await createOrgStore({ file, max: 10, limitsOf })
+    const first = await createOrgStore({ file, max: 10, limitsOf, flushMs: 20 })
     const { org } = await first.create('Gruber', 'S'.repeat(43))
     const { id } = await first.saveEvent(org, 'S'.repeat(43), { event: EVENT, link: LINK, invitees: [] })
     first.hit(id, 'tagged')
-    await new Promise((r) => setTimeout(r, 100))
+    await first.close() // writes the pending counter
     const second = await createOrgStore({ file, max: 10, limitsOf })
     const loaded = await second.me(org, 'S'.repeat(43))
     assert.equal(loaded.events[0].counts.tagged, 1)
