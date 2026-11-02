@@ -10,7 +10,7 @@ Written 2026-11-02.
 >
 > **Implemented in `packages/device-sync`:** `bytes.ts` (base64url, canonical JSON, SHA-256),
 > `keys.ts` (X25519 device keys, pair keys, 6-digit SAS, did:peer:2 `E` key reader),
-> `seal.ts` (AES-GCM seal with from/to bound in the AAD), `replay.ts` (64-message anti-replay window),
+> `seal.ts` (AES-GCM seal with from/to bound in the AAD), `replay.ts` (1024-message anti-replay window),
 > `log.ts` (append-only record log, verified merge, deterministic materialize),
 > `sync.ts` (pairing code, `have` / `entries` protocol over the existing relay's raw path).
 > Zero runtime dependencies (WebCrypto only). Tests run with `node --test`.
@@ -44,7 +44,7 @@ Written 2026-11-02.
 | Whole record per sync | Cost grows with the record; size of the whole record leaks per sync | Only the entries the other side lacks travel |
 | Entity-level last-writer-wins | Two edits to different fields of one person still conflict | Field-level ops |
 | Wall-clock "newer" | A fast clock wins even over an edit that saw its value | Causal order first (vector clocks), clock only to break true ties |
-| `exp` is the only replay defence | A captured wire replays for 10 minutes; a relay can hold and re-deliver | Counter per direction + 64-message window, idempotent merge |
+| `exp` is the only replay defence | A captured wire replays for 10 minutes; a relay can hold and re-deliver | Counter per direction + 1024-message window, idempotent merge |
 | One symmetric key for both directions | A wire can be reflected back to its sender | Two directional keys |
 | AAD absent | The relay could re-address a wire to another pairing that shares a key | `from` and `to` bound in the AAD |
 | 4-hex fingerprint | 16 bits, compared by humans | 6-digit SAS, about 20 bits, secret to an attacker |
@@ -98,23 +98,23 @@ Test file names are relative to `packages/device-sync/src/`. Quoted cases are ex
 |---|---|---|---|
 | **Honest-but-curious relay** | Reading content: every payload is AES-GCM ciphertext | Seeing `from` / `to` addresses, sizes, timing, piece counts; learning that two addresses belong to one owner; under D-relay-send-auth it also learns an authenticated sender DID | `sync.test.ts` "syncNow converges both logs and the materialized state; the relay sees no plaintext and no entity id"; `seal.test.ts` "the plaintext is canonical JSON of {ctr, kind, body} and does not appear on the wire" |
 | **Malicious relay: replay** | A wire whose counter was already seen is acked and not processed: a replayed `have` gets no answer, a replayed `entries` changes nothing, the relay stops redelivering; a wire captured under an earlier pairing does not open at all | Nothing further | `replay.test.ts` "duplicate rejected"; `sync.test.ts` "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering", "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
-| **Malicious relay: reorder** | Out-of-order delivery within 64 messages is accepted once; pieces carry their index | A wire more than 64 counters behind is dropped (a liveness loss, not a safety loss) | `replay.test.ts` "out of order inside the window accepted exactly once", "too old (≤ high - 64) rejected, just inside accepted" |
+| **Malicious relay: reorder** | Out-of-order delivery within 1024 counters is accepted once, which is wider than one round of at most 200 pieces, so a round delivered in any order completes; pieces carry their index | A wire more than 1024 counters behind is not processed (a liveness loss, not a safety loss) | `replay.test.ts` "out of order inside the window accepted exactly once", "too old (≤ high - window) rejected, just inside accepted", "window is 1024 (wider than one sync round of 200 pieces)" |
 | **Malicious relay: drop** | Detection only: `syncNow` rejects with `offline`, an incomplete piece set merges nothing | Availability; the relay can stop all sync | `sync.test.ts` "syncNow rejects offline when the peer never answers" |
 | **Malicious relay: re-address / re-attribute** | AAD binds `from` and `to`; a wire under another outer address fails AEAD | Nothing further | `seal.test.ts` "re-addressed or re-attributed wire → null"; `sync.test.ts` "a wire re-attributed to another linked address, or to an unlinked one, is ignored" |
 | **Malicious relay: forge / tamper** | AEAD (authenticated encryption) rejects any changed byte | Nothing further | `seal.test.ts` "tampering any single byte → null", "wrong key → null (other direction, other pair)" |
-| **Malicious relay: holds wires beyond any TTL** | A held wire is either too old for the window (dropped) or still carries authentic, idempotent state; offers expire after 10 minutes and are one-use | The relay can delay the newest wire; its content is then late, not wrong | `replay.test.ts` "too old (≤ high - 64) rejected, just inside accepted"; `sync.test.ts` "an expired code is refused by join; an expired offer ignores a pair wire" |
+| **Malicious relay: holds wires beyond any TTL** | A held wire is either too old for the window (dropped) or still carries authentic, idempotent state; offers expire after 10 minutes and are one-use | The relay can delay the newest wire; its content is then late, not wrong | `replay.test.ts` "too old (≤ high - window) rejected, just inside accepted"; `sync.test.ts` "an expired code is refused by join; an expired offer ignores a pair wire" |
 | **Network observer** | Content (AEAD inside, TLS to the relay in deployment) | IP addresses, timing and sizes towards the relay | None (out of scope) |
 | **QR shoulder-surfer / link interceptor** | Cannot pose as the offerer (lacks its secret key); a raced `pair` message produces a different SAS on the offerer's screen; one use only | If the owner taps Confirm without comparing, the interloper is linked and receives the record | `keys.test.ts` "derivePairKeys: same SAS on both sides; ..."; `sync.test.ts` "pair via code: same 6-digit SAS on both sides, confirm stores the pairing on both", "a code is one use; a code whose address is my own is refused; cancel stores nothing" |
 | **Lost or stolen device** | Remaining devices unlink it; its wires are no longer opened; any later pairing uses a new epoch, so its old pair keys open nothing new | The record on the device; past wires a relay kept or logged open with its static key (no forward secrecy) | `sync.test.ts` "after unlink a wire from that device is ignored, and syncNow says not linked" |
-| **Compromised paired device** | Forks it creates become visible to the others | It reads everything and can append entries in any device's name (no per-entry signatures); it can pre-empt another device's next `seq`, so the real entry is later rejected as a fork | `log.test.ts` "same id with different content → fork, the known entry stays" (detection only) |
-| **Cloned device / restore from backup (fork)** | A second writer under one device id is detected as a fork; a restored device that syncs first recovers its own later entries (merge accepts verified own-id entries); a rewound send counter is dropped as replay and never reuses a GCM IV (IVs are random) | Automatic fork repair; the restored device is silent until its counter passes the peer's high mark | `log.test.ts` "same id with different content → fork, the known entry stays"; `replay.test.ts` "duplicate rejected" |
+| **Compromised paired device** | It cannot extend our own chain (entries with our own id are refused as `own`); a forgery under a third device's id is reported as a `fork` at the first device that holds both histories | It reads everything; entries are not signed per device, so it can write under a THIRD device's id; until a device holds both histories the forgery is indistinguishable, and the forged entry stays (the real one is the one reported) | `log.test.ts` "a forged \"next\" entry under another device id is caught as a fork when the real one arrives, and reported, not silently kept", "entries carrying MY OWN device id are refused (own) unless recovery is asked for" (detection only) |
+| **Cloned device / restore from backup (fork)** | A second writer under one device id is detected as a fork; send counters are floored at the wall clock on every start, so a restored device never falls behind the peer's window and keeps syncing; with `recoverOwn` it takes its own later entries back from a peer; IVs are random, so no GCM nonce is reused | Automatic fork repair; a restored device whose clock is far behind the one that wrote the backup | `log.test.ts` "same id with different content → fork, the known entry stays"; `sync.test.ts` "a device restored from an older backup keeps syncing: its send counter never falls behind the peer's window" |
 | **Wrong clocks** | Causal order ignores the clock; a delete beats a concurrent edit whatever the clocks say; the loser of a true tie is listed | Among truly concurrent edits the device with the later clock wins; a skewed joiner may misjudge a code's `exp` | `log.test.ts` "a causally later put wins without a conflict, even with an EARLIER wall clock", "a winner is never an entry that something else causally replaced (clock skew)" |
 
 Notes on three rows:
 
 - **Shoulder-surfer.** The attacker knows the pairing secret, so it can send a valid `pair` message first. The offerer then shows SAS(offerer, attacker). The real joiner shows SAS(offerer, joiner). The attacker cannot steer its SAS to match, because the target depends on the offerer-joiner ECDH secret it cannot compute. One guess, about 1 in 1 000 000.
-- **Compromised paired device.** The hash chain proves that a device's entries are consistent with each other. It does not prove who wrote them. Per-entry signatures are future work (section 12).
-- **Restore from backup.** A fork occurs only if the restored device appends before it has caught up. `merge` accepts verified entries with the device's own id, so a restored device that syncs first gets its own later entries back and continues after them. Safest handling in the app: sync before the first edit, or treat a restored device as a new device (new key pair, new `deviceId`, pair again).
+- **Compromised paired device.** Entries are not signed per device. The hash chain proves that a device's entries are consistent with each other, not who wrote them. A compromised paired device can write the "next" entry under a third device's id. It cannot extend our own chain: entries with our own id are refused (`own`). The forgery is reported as a `fork` at the first device that holds both histories; until then it is indistinguishable, and the forged entry stays. Per-device signatures are future work (section 12).
+- **Restore from backup.** The restored device can sync again: its send counter is floored at the wall clock on start, so it is ahead of what the peer saw. A log fork occurs only if it appends before it has caught up. With `recoverOwn` (merge option `acceptOwn`) it takes its own later entries back from a peer and continues after them. Safest handling in the app: sync with `recoverOwn` before the first edit, or treat a restored device as a new device (new key pair, new `deviceId`, pair again).
 
 ## 🔑 Key exchange between own devices (QR / link)
 
@@ -122,6 +122,7 @@ Notes on three rows:
 
 - Each device holds one static X25519 key pair (RFC 7748).
 - `deviceId` = first 22 base64url characters of `SHA-256("trustweb-device-sync/v2/id" || publicKey)`. An id cannot be claimed without the key.
+- In the log a device id must match `^[A-Za-z0-9_-]{1,64}$`. A name like `__proto__` is plain data everywhere.
 - `address` is the opaque relay routing string. In TrustWeb it is the device's sync DID (did:peer:2).
 - In TrustWeb the key pair can be the `E` (key agreement) key of the existing sync DID (section 10).
 
@@ -153,7 +154,8 @@ An address may not contain `~`, `|` or whitespace: `pairingCode` and `createDevi
    - key for direction hi→lo (info `.../hi>lo`),
    - SAS: 32 bits (info `.../sas`), `mod 1 000 000`, zero-padded to 6 digits.
 6. **Compare.** Both screens show the 6-digit SAS (short authentication string: a code two humans compare to detect a swapped key). The owner checks that they match.
-7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` `{ address, deviceId, publicKey, name, sas, epoch, linkedAt, lastSyncAt, sendCtr, replay }`, counters at zero. Cancel stores nothing. Before Confirm nothing syncs.
+7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` `{ address, deviceId, publicKey, name, sas, epoch, linkedAt, lastSyncAt, sendCtr, replay }`, with `sendCtr` set to the wall clock (ms) and an empty replay state. Cancel stores nothing. Before Confirm nothing syncs.
+   `confirm` is one decision: a second call throws `already decided`, and a request whose pairing epoch was unlinked in the meantime cannot revive it (`unlinked`).
 
 `derivePairKeys` refuses to pair a device with its own key and rejects an all-zero ECDH result (a low-order public key). `join` also refuses a code whose address is the device's own.
 
@@ -223,11 +225,13 @@ Random 96-bit IVs stay far below the NIST limit of 2^32 messages per key for any
 
 ### Counters and the anti-replay window
 
-- Each `Pairing` keeps `sendCtr`. Every sealed message carries the next value, starting at 1.
+- Each `Pairing` keeps `sendCtr`. It starts at the wall clock (ms) when the pairing is confirmed and is floored at the wall clock on every start: `sendCtr = max(stored, now())`. Within a run it steps by 1.
+- Why the floor: a device restored from an older backup would otherwise reuse counters the peer already saw, or fall more than a window behind, and be silent. With the floor it is always ahead of the peer's `high` (given a sane clock).
 - The receiver keeps `ReplayState { high, seen }` per pairing, in the style of the IPsec ESP window (RFC 4303, section 3.4.3).
-- `high` is the highest accepted counter. `seen` lists the accepted counters in `(high - 64, high]`.
-- Accept rule: `ctr` is a positive safe integer, not in `seen`, and `> high - 64`. Otherwise the wire is not processed.
-- A late wire within the window is accepted once. A wire 64 or more behind `high` is not processed; like a replay it is acked (it opened, so it is ours), so the relay does not keep redelivering it.
+- `high` is the highest accepted counter. `seen` lists the accepted counters in `(high - 1024, high]`.
+- Accept rule: `ctr` is a positive safe integer, not in `seen`, and `> high - 1024`. Otherwise the wire is not processed.
+- `REPLAY_WINDOW` = 1024, wider than one round of at most 200 pieces, so a round delivered in any order completes.
+- A late wire within the window is accepted once. A wire more than 1024 counters behind `high` is not processed; like a replay it is acked (it opened, so it is ours), so the relay does not keep redelivering it.
 - Any stored state the guard could not have produced itself is treated as empty. The window then reopens; the idempotent log merge is the second line of defence.
 
 The window is the first line of defence, not the only one.
@@ -236,19 +240,23 @@ The window is the first line of defence, not the only one.
 
 - The relay delivers at-least-once. A wire stays queued until the receiver acks it.
 - `handle(from, payload)` returns `true` (ack) for a fresh wire only after: open, replay check, and persisting the new replay state (and, for a completed `entries`, the merged log).
+- The replay state is saved BEFORE the wire counts. If storage throws, the in-memory state is rolled back and the wire stays un-acked, so the relay delivers it again.
 - A wire that opens but whose counter was already seen (a replay, or an honest redelivery whose ack was lost) is acked (`true`) and not processed. Acking it makes the relay stop redelivering.
 - Only a wire that does not open (wrong key, tampered, re-attributed, unlinked sender) stays un-acked.
 - A crash before persist means no ack, so the relay redelivers, and the wire is processed then.
 - A crash after persist but before the ack means a redelivery, which is acked and not processed. Merge is idempotent in any case.
-- If a crash loses `sendCtr` increments, the peer drops the repeated counters as replays until the counter passes its `high`. Because IVs are random, this never reuses a GCM nonce.
+- If a crash loses `sendCtr` increments, the floor at the next start puts the counter ahead again. Because IVs are random, a repeated counter would never reuse a GCM nonce anyway.
+- Every drop is logged through `onLog` (I6): replays, too-old wires, dropped piece assemblies, pieces that do not fit, save failures.
 
 ### Chunking
 
 - `entries` carries `canonicalJson({ entries, heads })`, cut into pieces of at most `CHUNK_BYTES` = 45 000 bytes.
 - Each piece is its own sealed message `{ sid, i, n, data, reply, name }`, with `data` the base64url of the piece.
-- At most `MAX_PIECES` = 200 pieces, so at most about 9 MB of JSON per direction per round. More rejects with `Error('too large')`.
+- At most `MAX_PIECES` = 200 pieces. A round carries at most `CHUNK_BYTES * MAX_PIECES - 4096` bytes of entries (about 9 MB).
+- A longer backlog is sent as a prefix of `since()` (device, seq order, so each device's run stays contiguous); the rest goes with the next sync. Only a single entry larger than the budget rejects with `Error('too large')`.
 - Size on the wire per piece: 45 000 → about 60 000 base64url characters → sealed and encoded again, about 80 KB, under the relay's 128 KB limit.
 - A piece set is merged only when all `n` pieces of one `sid` arrived. A partial set merges nothing.
+- Up to 4 partial piece streams per peer are kept, keyed by `sid` (the relay may hand over several waiting answers at once). The oldest beyond that is dropped and logged.
 
 ## 📜 The append-only record log
 
@@ -285,8 +293,9 @@ interface LogEntry {
 | duplicate | Id known with the same hash (counted, not re-added) |
 | `malformed` | Not the shape of a `LogEntry` |
 | `bad-hash` | Stored hash does not match the recomputed one |
-| `chain-gap` | `prev` does not equal the hash of `seq - 1` of that device |
-| `fork` | Id known with a different hash; the known entry stays |
+| `chain-gap` | The predecessor (`seq - 1` of that device) is missing: neither held nor earlier in the batch |
+| `fork` | Id known with a different hash (the known entry stays), or the held predecessor's hash differs from `prev`: two histories |
+| `own` | Carries this device's own id, unless `merge(entries, { acceptOwn: true })` |
 
 - The batch is sorted first, so an out-of-order batch still chains.
 - A rejected entry makes the following entries of that device in the batch chain-gaps too. They are all reported.
@@ -294,13 +303,14 @@ interface LogEntry {
 - **Nothing is silently dropped.** Rejected entries are not stored, but every one is reported in `MergeReport.rejected` with its id and reason. The app logs these lines (I6).
 - **Nothing is ever deleted from the log.** A delete is an op (`del`), a tombstone (a marker that says "this entity was deleted", kept so the deletion itself syncs).
 - Foreign entries enter only through `merge` (verified). New own entries are created only by `append`. Entries loaded from own storage are trusted.
-- `merge` also accepts verified entries that carry this device's own id. That recovers a device's own history from a peer after local storage loss, before it appends again.
+- Entries with this device's own id are refused (`own`) by default, so no peer can extend our chain. `merge(…, { acceptOwn: true })` (sync option `recoverOwn`) accepts them, verified, for a device that lost its storage and recovers its own history from a peer before it appends again.
+- Device ids are base64url names (`^[A-Za-z0-9_-]{1,64}$`); anything else is `malformed`.
 
 ### Storage size
 
 - Overhead per entry is roughly 250 to 350 bytes plus the value (two 43-character hashes, id, vector clock with one number per device).
 - Example: 2 000 people × 8 fields = 16 000 entries ≈ 5 MB before any edit. Every edit adds one entry.
-- The log never shrinks. The first sync of a large migrated record can approach the 9 MB per-round limit.
+- The log never shrinks. The first sync of a large migrated record may exceed the per-round budget (about 9 MB); it then travels over several rounds.
 - Compaction (a signed snapshot that replaces a prefix of the log) is future work (section 12).
 
 ## ⚖️ Conflict handling
@@ -415,7 +425,7 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 
 - `have` carries no `sid`. The waiter in `syncNow` resolves on the first `entries` with `reply: false` that arrives from that address.
 - A second `syncNow` to the same peer while one is running returns the same in-flight promise; no second round starts.
-- No answer within `handshakeMs` (default 30 s): `syncNow` rejects with `Error('offline')`.
+- No answer within `handshakeMs` (default 30 s): `syncNow` rejects with `Error('offline')`. The timeout restarts whenever a piece arrives, so a long answer is not cut off.
 - A `have` that arrives unsolicited is answered the same way. The answering side merges the reply.
 - `syncNow` on an address without a pairing rejects with `Error('not linked')`. A `have` from an unlinked address is ignored.
 
@@ -423,7 +433,7 @@ Kinds under the pair keys (the `pair` kind uses `K_pair`, section 5):
 
 - After step 5 both logs hold the union of both entry sets, unless entries were rejected or appended during the round.
 - Same entry set, so same materialized record (section 8).
-- Entries appended during the round travel in the next round.
+- Entries appended during the round travel in the next round, and so does the rest of a backlog larger than one round's budget.
 - With three devices, entries reach a device through any paired path, so repeated pairwise rounds converge.
 
 ### Partial delivery
@@ -493,6 +503,7 @@ Three options:
 - Merge-on-receive: v2 merges authenticated entries without asking. v3 asked "Receive from <device>?" first. Since nothing is lost in v2, the sheet can move to "apply the merged record", or go. This is a product decision for the wiring.
 - Not in the package and still the app's job: the per-pairing "shares my username" tick, "this device only receives" (`canSend`), the pre-merge snapshot, the version hello.
 - Log lines (`onLog`) feed the existing sync log (I6). They name devices and counts, never values.
+- **One raw sink.** The relay keeps only one `onRawWire` callback, and v3's `sync_link.ts` registers one too. For the dual-run phase create the v2 sync with `register: false` (`DeviceSyncDeps.register`, default `true`) and let the app's single sink route each wire to v3 or to `handle(from, payload)` (v2), acking when either returns `true`.
 
 ## 🔀 Alternatives considered
 
@@ -503,7 +514,7 @@ Three options:
 | Matrix Olm / Megolm style ratchet | An Olm implementation (for example vodozemac via Wasm) | Forward secrecy per session; still metadata to the server | None: messaging only, sync still needed on top | Per-session message indices | Large |
 | Signal Double Ratchet | libsignal or an own implementation needing review | Forward secrecy and post-compromise security | None: messaging only | One-time message keys | Large: per-pair ratchet state, skipped-key storage, multi-device handling |
 | Syncthing-style block sync | Separate daemon and protocol (BEP) | TLS between devices; relays see TLS endpoints | File level, conflict copies | TLS | Very large; files, not a record |
-| **This design** | **None (WebCrypto)** | **Content sealed, directional keys, from/to in AAD; same metadata as today** | **Causal field-level LWW, deterministic, every loser listed** | **Counter + 64 window, idempotent merge** | **Small to medium; prototype exists** |
+| **This design** | **None (WebCrypto)** | **Content sealed, directional keys, from/to in AAD; same metadata as today** | **Causal field-level LWW, deterministic, every loser listed** | **Counter + 1024 window, idempotent merge** | **Small to medium; prototype exists** |
 
 The ratchets were rejected for now on effort and risk, not on value. Section 12 keeps forward secrecy open.
 
@@ -513,8 +524,11 @@ The ratchets were rejected for now on effort and risk, not on value. Section 12 
 |---|---|---|
 | Forward secrecy | A stolen device key opens every past wire a relay kept | Per-session ephemeral X25519 in `have`, or a symmetric ratchet per direction |
 | Post-quantum | Recorded traffic could be opened later | Hybrid X25519 + ML-KEM once WebCrypto or a vetted library offers it |
-| Per-entry signatures | A compromised paired device can write in another device's name | Ed25519 signature over the entry hash, key bound to `deviceId` |
-| Compaction and snapshots | The log only grows; 9 MB per round cap | Agreed snapshot entry plus pruning below a common head |
+| Per-device signatures | A compromised paired device can write under a third device's id; it is caught only as a fork once both histories meet | Ed25519 signature over the entry hash, key bound to `deviceId` |
+| Storage shape | Storage is one synchronous blob, saved on every accepted wire, including the whole log: quadratic for large syncs, and localStorage holds about 5 MB | Split counters and replay state from the log; async storage (IndexedDB) |
+| Old keys after unlink | Wires from an unlinked pairing no longer open, so they stay un-acked and count toward the relay's per-recipient queue | Keep an unlinked pairing's keys for a while, only to ack its wires |
+| Device name on the wire | Cleaned and truncated to 64 characters, but bidi and zero-width characters are kept (spoofable display) | Strip or flag them before showing the name |
+| Compaction and snapshots | The log only grows; a large backlog needs several rounds | Agreed snapshot entry plus pruning below a common head |
 | More than 5 devices | n(n-1)/2 pairings, vector clocks grow per device | Hub-and-spoke pairing through one trusted device, clock pruning |
 | Key backup and recovery | Losing all devices loses the key and the log | Encrypted export (the existing snapshot file), recovery phrase |
 | Metadata padding | Sizes and piece counts reveal record growth | Pad pieces to fixed size, send cover `have`s |
@@ -539,11 +553,12 @@ All files in `packages/device-sync/src/`. Run `node --test "src/**/*.test.ts"` f
 | Tamper, wrong key, re-address fail | `seal.test.ts` | "tampering any single byte → null", "wrong key → null (other direction, other pair)", "re-addressed or re-attributed wire → null" |
 | Fresh IV per seal | `seal.test.ts` | "two seals of the same message differ (fresh IV)" |
 | Open never throws | `seal.test.ts` | "garbage / empty / non-b64u / short → null, never throws" |
-| Replay window | `replay.test.ts` | "fresh guard: empty state, first counter accepted", "duplicate rejected", "too old (≤ high - 64) rejected, just inside accepted", "out of order inside the window accepted exactly once", "non-integer / non-positive / unsafe ctr rejected and not recorded" |
+| Replay window | `replay.test.ts` | "window is 1024 (wider than one sync round of 200 pieces)", "fresh guard: empty state, first counter accepted", "duplicate rejected", "too old (≤ high - window) rejected, just inside accepted", "out of order inside the window accepted exactly once", "non-integer / non-positive / unsafe ctr rejected and not recorded" |
 | Replay state survives a restart; bad state reopens the window | `replay.test.ts` | "state round-trips through JSON and keeps rejecting what it saw", "malformed initial state → empty" |
 | Chain and vector clock | `log.test.ts` | "builds the per-device chain, sequence, id and vector clock" |
 | Merge is idempotent and commutative | `log.test.ts` | "is idempotent: ...", "is commutative: A∪B and B∪A give byte-identical materialized JSON" |
-| Rejections are reported | `log.test.ts` | "tampered entry → bad-hash, ...", "missing predecessor → chain-gap; ...", "same id with different content → fork, ...", "malformed input → malformed (never throws), ..." |
+| Rejections are reported | `log.test.ts` | "tampered entry → bad-hash, ...", "missing predecessor → chain-gap; ...", "a correctly hashed entry whose prev does not match the predecessor we hold → fork (two histories), not chain-gap", "same id with different content → fork, ...", "malformed input → malformed (never throws), ..." |
+| Forgery under another id, own-id refusal, safe ids | `log.test.ts` | "a forged \"next\" entry under another device id is caught as a fork when the real one arrives, and reported, not silently kept", "entries carrying MY OWN device id are refused (own) unless recovery is asked for", "device ids are base64url names; a name like a prototype property is plain data everywhere" |
 | `since` sends exactly what is missing | `log.test.ts` | "since(heads) returns exactly the missing entries, by device then seq" |
 | Concurrent edit: one winner, one conflict | `log.test.ts` | "concurrent puts on one field: one winner (later at), one FieldConflict, the same on both devices" |
 | Causality beats clocks | `log.test.ts` | "a causally later put wins without a conflict, even with an EARLIER wall clock", "a winner is never an entry that something else causally replaced (clock skew)" |
@@ -564,7 +579,12 @@ All files in `packages/device-sync/src/`. Run `node --test "src/**/*.test.ts"` f
 | Re-pairing epoch over the relay | `sync.test.ts` | "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
 | Chunking | `sync.test.ts` | "large logs travel in several pieces under CHUNK_BYTES each" |
 | Address rules | `sync.test.ts` | "createDeviceSync refuses an address containing a separator" |
-All cases are exact test names. Totals: bytes 11, keys 13 (including RFC 7748 vectors), seal 10, replay 12, log 32 (6 suites), sync 16; 94 tests.
+| Confirm is one decision | `sync.test.ts` | "confirm is one decision: a second confirm throws and resets nothing; a stale confirm after unlink cannot revive the pairing" |
+| Restore from backup keeps syncing | `sync.test.ts` | "a device restored from an older backup keeps syncing: its send counter never falls behind the peer's window" |
+| Several piece streams per peer | `sync.test.ts` | "two piece streams from one peer at once both complete (the relay hands over several waiting have-answers together)" |
+| Backlog over several rounds | `sync.test.ts` | "a round larger than the budget is sent in parts; the next round continues where it stopped" |
+| App-owned relay sink (dual run) | `sync.test.ts` | "register:false leaves the relay sink to the app, which can route to handle itself" |
+All cases are exact test names. Totals: bytes 11, keys 13 (including RFC 7748 vectors), seal 10, replay 12, log 35, sync 21; 102 tests.
 
 ## 📚 Sources
 
