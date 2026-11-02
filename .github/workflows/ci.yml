@@ -69,6 +69,28 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+  # Full workspace gates from a clean clone (cloud/green-gates): every package's typecheck and test, no bail,
+  # so one run shows the whole failure inventory. Tightened to a hard gate once the tree is green.
+  gates:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: typecheck (all packages, no bail)
+        continue-on-error: true
+        run: pnpm -r --no-bail typecheck
+      - name: test (all packages, no bail)
+        continue-on-error: true
+        run: pnpm -r --no-bail test
   # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
   reach-out-link:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
