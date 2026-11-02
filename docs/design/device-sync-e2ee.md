@@ -227,7 +227,7 @@ Random 96-bit IVs stay far below the NIST limit of 2^32 messages per key for any
 - The receiver keeps `ReplayState { high, seen }` per pairing, in the style of the IPsec ESP window (RFC 4303, section 3.4.3).
 - `high` is the highest accepted counter. `seen` lists the accepted counters in `(high - 64, high]`.
 - Accept rule: `ctr` is a positive safe integer, not in `seen`, and `> high - 64`. Otherwise the wire is not processed.
-- A late wire within the window is accepted once. A wire 64 or more behind `high` is dropped.
+- A late wire within the window is accepted once. A wire 64 or more behind `high` is not processed; like a replay it is acked (it opened, so it is ours), so the relay does not keep redelivering it.
 - Any stored state the guard could not have produced itself is treated as empty. The window then reopens; the idempotent log merge is the second line of defence.
 
 The window is the first line of defence, not the only one.
