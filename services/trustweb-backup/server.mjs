@@ -506,7 +506,16 @@ export async function startServer(options = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startServer()
-    .then(({ port }) => console.log(`trustweb-backup listening on ${process.env.HOST ?? '127.0.0.1'}:${port}`))
+    .then((running) => {
+      console.log(`trustweb-backup listening on ${process.env.HOST ?? '127.0.0.1'}:${running.port}`)
+      // systemd stop: close() writes the organizer counters still in memory (ORG_HIT_FLUSH_MS) before the process ends.
+      const stop = () => {
+        running.close().finally(() => process.exit(0))
+        setTimeout(() => process.exit(0), 5000).unref()
+      }
+      process.once('SIGTERM', stop)
+      process.once('SIGINT', stop)
+    })
     .catch((err) => {
       console.error(String(err.message ?? err))
       process.exit(1)

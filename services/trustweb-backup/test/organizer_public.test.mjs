@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // Organizer events, the join-sheet side: the optional `logo` event field, the 64 KB body cap of POST /org/event and GET /org/event/<id>/public.
 // No fixed port (the server listens on port 0). Example addresses only.
 import test from 'node:test'

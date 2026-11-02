@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 // Organizer store housekeeping: hit counters flushed in the background (ORG_HIT_FLUSH_MS), /org/me touching `updated` (ORG_TOUCH_HOURS) and the sweeper
 // honouring ORG_DAYS (ORG_SWEEP_MS). No fixed port (the server listens on port 0).
 import test from 'node:test'

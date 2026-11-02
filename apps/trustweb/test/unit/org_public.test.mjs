@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** The event's public face (name and logo) for the join sheet: one GET without identity, every error swallowed. */
 import { fetchPublic } from '../../src/org_public.ts'
 
