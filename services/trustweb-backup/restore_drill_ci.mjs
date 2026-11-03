@@ -133,7 +133,7 @@ async function exists(file) {
 }
 
 /** Runs the five checks in <work> (which must be empty). Returns the report; never throws for a failed check. */
-export async function runCiDrill({ work, fault = '', env = process.env, now = () => new Date() }) {
+export async function runCiDrill({ work, fault = '', env = process.env, now = () => new Date(), clock = Date.now, rtoMs = RTO_MS }) {
   const t0 = now()
   const live = path.join(work, 'live')
   const drillDir = path.join(work, 'drill')
@@ -187,10 +187,11 @@ export async function runCiDrill({ work, fault = '', env = process.env, now = ()
 
   await attempt('drill', async () => {
     if (!fixtureOk) return { found: ['skipped: no fixture'] }
-    const r = await runDrill({ live, work: drillDir, now })
+    const r = await runDrill({ live, work: drillDir, now, clock })
     restoreMs = r.restoreMs
     files = r.files
-    return { found: r.problems, detail: `${r.files} files snapshotted, verified and restored in ${r.restoreMs} ms` }
+    const slow = r.restoreMs > rtoMs ? [`restore took ${r.restoreMs} ms, over the RTO of ${rtoMs} ms`] : []
+    return { found: [...r.problems, ...slow], detail: `${r.files} files snapshotted, verified and restored in ${r.restoreMs} ms` }
   })
 
   if (fault === 'bitrot') await fs.appendFile(path.join(restored, 'blobs', `${id}.bin`), Buffer.from([0x21])).catch(() => {})
@@ -258,7 +259,7 @@ export async function runCiDrill({ work, fault = '', env = process.env, now = ()
     fixture: { blobBytes: BLOB_BYTES, stores },
     checks,
     problems,
-    rto: { targetMs: RTO_MS, withinTarget: restoreMs !== null && restoreMs <= RTO_MS },
+    rto: { targetMs: rtoMs, withinTarget: restoreMs !== null && restoreMs <= rtoMs },
     run: { repository: g('GITHUB_REPOSITORY'), runId: g('GITHUB_RUN_ID'), sha: g('GITHUB_SHA'), ref: g('GITHUB_REF'), eventName: g('GITHUB_EVENT_NAME') },
     runner: { node: process.version, platform: process.platform },
   }
