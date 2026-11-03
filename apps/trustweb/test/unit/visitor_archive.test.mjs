@@ -10,7 +10,7 @@ function fakeEl() {
   const cls = new Set()
   const on = {}
   return {
-    textContent: '', dataset: {}, attrs, on,
+    textContent: '', replaceChildren(msg) { this.textContent = msg }, dataset: {}, attrs, on,
     classList: { add: (...c) => c.forEach((x) => cls.add(x)), remove: (...c) => c.forEach((x) => cls.delete(x)), contains: (c) => cls.has(c) },
     setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k),
     addEventListener: (type, fn) => { on[type] = fn },
@@ -26,11 +26,11 @@ describe('connect-add button label', () => {
 })
 
 describe('toast onClick', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
+  beforeEach(() => { vi.useFakeTimers(); globalThis.document = { createElement: fakeEl } })
+  afterEach(() => { vi.useRealTimers(); delete globalThis.document })
   it('a plain toast takes no taps; one with onClick is a keyboard-reachable button that runs it once', () => {
     const t = fakeEl()
-    const show = createToast(t)
+    const show = createToast(t, 'Close')
     const opened = []
     show('Saved.')
     expect(t.attrs.get('role')).toBe('status')
@@ -42,7 +42,7 @@ describe('toast onClick', () => {
     expect(t.attrs.get('role')).toBe('button')
     expect(t.attrs.get('tabindex')).toBe('0')
     expect(t.classList.contains('tap')).toBe(true)
-    t.on.keydown({ key: 'Enter', preventDefault() {} })
+    t.on.keydown({ target: t, key: 'Enter', preventDefault() {} })
     expect(opened).toEqual(['card'])
     expect(t.classList.contains('on')).toBe(false)
     t.on.click()
@@ -50,10 +50,10 @@ describe('toast onClick', () => {
   })
   it('the mark rides only while its message shows', () => {
     const t = fakeEl()
-    const show = createToast(t)
+    const show = createToast(t, 'Close')
     show(S.archivedToast, { mark: 'archivedToast' })
     expect('archivedToast' in t.dataset).toBe(true)
-    vi.advanceTimersByTime(3300)
+    vi.advanceTimersByTime(5500)
     expect('archivedToast' in t.dataset).toBe(false)
     show(S.archivedToast, { mark: 'archivedToast' })
     show('Other.')

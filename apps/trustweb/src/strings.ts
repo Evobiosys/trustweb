@@ -956,6 +956,7 @@ export const S = {
   hintOpen: (label: string) => `About ${label}`,
   hintAgain: 'Show this hint again',
   hintOk: 'OK',
+  toastClose: 'Close',
   hintDismiss: 'Dismiss this hint (bring it back in Settings: Show all hints again)',
   setTutorial: 'Tutorial',
   setHintsAll: 'Show all hints again',

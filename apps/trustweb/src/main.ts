@@ -251,7 +251,7 @@ import { route as notifyHome, type NotifyHome } from './notify_route'
 import type { NotifyKind } from './notify_kinds'
 import { pushBundleOf, pushSupported, showNotification, subscribePush, unsubscribePush, workerRegistration } from './push'
 import { apkParam, apkSessionVersion, isApkSession, latestApkVersion, newerVersion, rememberApkSession, updateCheckDue } from './apk'
-import { createToast, type ToastOpts } from './toast'
+import { createToast, fadeHost, type ToastOpts } from './toast'
 import { nativeApp, routeFetchToServer, SERVER_ORIGIN } from './native_app'
 import { clearNativeBundle, nativePushAvailable, nativePushPermission, registerNativePush, writeNativeBundle } from './native_push'
 // Static, not import(): a lazy import made Rolldown put its namespace helper into this entry's chunk, so the demo pages (solo.ts
@@ -888,7 +888,7 @@ const sovereign = createSovereignView({
 })
 const overlay = el('div', { class: 'overlay cosmic', role: 'alertdialog' })
 const toastEl = el('div', { class: 'toast', role: 'status' })
-const toastShow = createToast(toastEl)
+const toastShow = createToast(toastEl, S.toastClose)
 /** Wave 6i: the notice for a new message (not the toast: a toast never takes taps, this one does). */
 const msgNoticeEl = el('div', { class: 'msg-notice', role: 'status', 'data-msg-notice': '1' })
 /** Review 6i: declared with the element, ahead of anything that may open a sheet or the prompt (hideMsgNotice reads it). */
@@ -1433,8 +1433,8 @@ function toast(msg: string, o?: ToastOpts): void {
  * seeded, so say so (owner 2026-10-05). Non-blocking: it sits under the
  * header, only its own button takes taps, and it goes by itself.
  */
-let friendsTimer: ReturnType<typeof setTimeout> | undefined
-function hideNotice(): void { clearTimeout(friendsTimer); friendsEl.hidden = true }
+const friendsFade = fadeHost(friendsEl, () => { friendsEl.hidden = true })
+function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
   friendsEl.classList.remove('stack')
@@ -1442,10 +1442,10 @@ function showNotice(title: string, body: string, actions: HTMLElement[], autoHid
     el('b', {}, [title]),
     el('span', {}, [body]),
     el('div', { class: 'notice-actions' }, actions),
+    friendsFade.x(S.toastClose),
   )
   friendsEl.hidden = false
-  clearTimeout(friendsTimer)
-  if (autoHideMs) friendsTimer = setTimeout(hideNotice, autoHideMs)
+  friendsFade.start(autoHideMs)
 }
 function showDemoFriends(): void {
   showNotice(S.demoFriendsTitle, solo ? S.demoFriendsBody : S.demoFriendsBodyOwn, [
