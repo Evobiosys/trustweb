@@ -485,3 +485,6 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
 - Kept: default mode `optional` (owner's transition call, PR #50) — relay_only's header had claimed `required`; corrected. The demo client now signs.
 - Not covered: optional mode authenticates nothing; free DID minting bounds only honest senders; a leaked root key races its owner to
   rotate/revoke (FUTURE.md: pre-committed recovery key); the relay learns the sender DID.
+- Deploy order: the demo and browser clients now sign with `aud` = the page origin, which the relay checks even in `optional` mode. Set
+  RELAY_SENDER_AUTH_AUDIENCES on the relay unit (every origin that proxies /relay/*) and deploy the relay BEFORE the new app build;
+  a proxy hop that rewrites Host otherwise answers 401 bad_audience where unsigned sends used to get 202.

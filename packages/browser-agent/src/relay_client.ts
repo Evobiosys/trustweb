@@ -32,6 +32,14 @@
 // decrypt-then-verify (signature + from-binding) every drained wire. The
 // relay itself never decrypts anything — it only ever reads the outer `to`.
 //
+// SENDER AUTH (relay_send_auth.ts, v2): every send is signed for the audience
+// `new URL(relayUrl).origin`, optionally with a granted device key
+// (`deviceKey`, sends its `kid`). A 401 "stale" that carries a `Date` header
+// gets ONE re-signed retry with this device's clock offset applied (F4). In a
+// browser talking to a cross-origin relay, `Date` is only readable when the
+// relay lists it in Access-Control-Expose-Headers; without it the retry simply
+// does not happen and the 401 surfaces as before.
+//
 // AT-LEAST-ONCE: the relay may redeliver an unacked wire on reconnect (see
 // relay_server.ts's file header). This client acks a wire's queue id right
 // after handing it to the callback (success OR failure — a wire that fails
@@ -95,6 +103,10 @@ export interface RelayClientOptions {
   ingressPath?: string;
   /** Drain WS path. Defaults to "/relay/drain" (RelayServer's default). */
   drainPath?: string;
+  /** Per-device signing key granted by this identity's root key. When set, sends are signed with it and carry its `kid`. */
+  deviceKey?: { kid: string; secretKey: Uint8Array };
+  /** This device's clock (ms epoch) used for send timestamps. Injectable for tests; defaults to Date.now. */
+  now?: () => number;
 }
 
 export interface RelayClient {
@@ -129,6 +141,18 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
 }
 
 /**
+ * F4: the ms to add to the local clock when the relay refused a send as `stale` and told us its time in a `Date`
+ * header; undefined for any other response or a missing/unreadable header.
+ */
+function staleClockOffset(res: Response, body: { reason?: string }, localNow: number): number | undefined {
+  if (res.status !== 401 || typeof body.reason !== "string" || !body.reason.includes("stale")) return undefined;
+  const date = res.headers.get("date");
+  if (date === null) return undefined;
+  const serverNow = Date.parse(date);
+  return Number.isFinite(serverNow) ? serverNow - localNow : undefined;
+}
+
+/**
  * Builds the browser relay client described in the QR-onboarding Task 3
  * brief. One instance talks to exactly one relay endpoint (unlike
  * transport's RelayChannel, which fans out to every configured relay a peer
@@ -141,6 +165,8 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
   const wsCtor: WebSocketCtor | undefined = opts.wsCtor ?? (globalThis.WebSocket as unknown as WebSocketCtor | undefined);
   const ingressPath = opts.ingressPath ?? "/relay/send";
   const drainPath = opts.drainPath ?? "/relay/drain";
+  const deviceKey = opts.deviceKey;
+  const now = opts.now ?? Date.now;
   const backoffOpts: ResolvedBackoff = {
     baseMs: opts.reconnect?.baseMs ?? DEFAULT_BACKOFF_BASE_MS,
     maxMs: opts.reconnect?.maxMs ?? DEFAULT_BACKOFF_MAX_MS,
@@ -171,8 +197,17 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
     const wire = packMessage({ sender: identity, recipientDid: toDid, message });
 
     const url = new URL(ingressPath, relayUrl).toString();
-    const res = await fetch(url, { method: "POST", body: wire, headers: signSend(identity, wire) });
-    const parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
+    const aud = new URL(url).origin;
+    const sign = (at: number): Record<string, string> =>
+      signSend(identity, wire, { aud, now: at, ...(deviceKey ? { kid: deviceKey.kid, deviceSecretKey: deviceKey.secretKey } : {}) });
+    let res = await fetch(url, { method: "POST", body: wire, headers: sign(now()) });
+    let parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
+    // F4: our clock is outside the relay's window. Re-sign ONCE on the relay's clock (its `Date` header).
+    const offset = staleClockOffset(res, parsed, now());
+    if (offset !== undefined) {
+      res = await fetch(url, { method: "POST", body: wire, headers: sign(now() + offset) });
+      parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
+    }
     if (parsed.routed === "rejected") {
       throw new Error(`RelayClient.send: relay rejected wire for ${toDid}: ${parsed.reason ?? "no reason given"}`);
     }
@@ -247,8 +282,11 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
         if (msg.type === "challenge" && typeof msg.nonce === "string") {
           // Prove ownership of THIS identity's DID: sign the server-issued
           // nonce with our own Ed25519 signing key (relay_server.ts's 6b).
-          const sig = ed25519.sign(fromBase64url(msg.nonce), identity.signingSecretKey);
-          socket.send(JSON.stringify({ type: "auth", did: identity.did, sig: toBase64url(sig) }));
+          // With a granted device key, sign with it and name it by `kid`.
+          const sig = ed25519.sign(fromBase64url(msg.nonce), deviceKey?.secretKey ?? identity.signingSecretKey);
+          socket.send(
+            JSON.stringify({ type: "auth", did: identity.did, sig: toBase64url(sig), ...(deviceKey ? { kid: deviceKey.kid } : {}) })
+          );
           return;
         }
         if (msg.type === "auth_ok") {

@@ -443,3 +443,8 @@ the mail still queued under the old DID. Records are per relay: a peer publishes
 `RELAY_SENDER_AUTH` (required | optional | off; default **optional** during the transition), `RELAY_SENDER_AUTH_AUDIENCES`
 (comma-separated origins; unset = derive from `Host`), `RELAY_SENDER_AUTH_ALLOW_V1` (true | false), `RELAY_KEY_REGISTRY`
 (off to disable). Nonce memory and key records live in the queue db (`RELAY_QUEUE_DB`).
+
+Deploy order: clients sign `aud` = their page origin and the relay checks it even in `optional` mode, so set
+`RELAY_SENDER_AUTH_AUDIENCES` (every origin whose proxy forwards `/relay/*`) and restart the relay before shipping a client build
+that signs; a proxy that rewrites `Host` otherwise turns former `202`s into `401 bad_audience`. The agent-daemon mount
+(`scripts/alpha_server.ts`) uses the same stores and env as `relay_only.ts`.
