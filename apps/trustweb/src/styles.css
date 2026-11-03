@@ -1300,3 +1300,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   .zones-split{flex-direction:row}
   .zone-side{flex:0 0 260px; max-height:none}
 }
+.card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}

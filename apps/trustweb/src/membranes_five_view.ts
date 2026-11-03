@@ -5,6 +5,7 @@ import type { ColourTag } from './colour_tags'
 import { Ring } from './model'
 import type { Person } from './model'
 import { S } from './strings'
+import { andSep, type VisibleCategory } from './zone_visibility'
 import { editKey } from './tap_edit'
 import { nameEdit } from './ring_hover'
 import { HELLO_NAME_MAX } from './hello'
@@ -16,7 +17,12 @@ export interface SmallCardDeps {
   /** The defined tags this person lacks; a "+ tag" button offers them (empty: it says none are defined). */
   addableTags?: readonly ColourTag[]
   onAddTag?: (id: string) => void
-  shared: number
+  /** What the person sees of my resources, by granting category (zone_visibility.ts visibleVia). */
+  visible: { count: number; categories: readonly VisibleCategory[] }
+  /** Kind label of one resource for the inline list ("typed", "recorded"). */
+  kindOf: (item: VisibleCategory['items'][number]) => string
+  /** "Open in My Resources" under an expanded category. */
+  onOpenResources: (category: VisibleCategory) => void
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
   onOpen: () => void
   expanded?: boolean
@@ -44,6 +50,32 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
   return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-pin': '', 'aria-pressed': String(on), 'aria-label': S.cardPinAria(on, p.name), onclick: onToggle }, [on ? '📌' : '📍', ' ', S.cardPin])
 }
 
+/** "N resources are visible to them based on X, Y, and Z": each category presses open its resources inline (name and kind) with a link into My Resources. The line itself does nothing. */
+function sharesLine(d: SmallCardDeps): HTMLElement {
+  const { count, categories } = d.visible
+  const list = el('div', { class: 'card-shares-list', 'data-card-shares-list': '', hidden: true })
+  let open: string | null = null
+  const toggle = (c: VisibleCategory, btn: HTMLElement): void => {
+    open = open === c.key ? null : c.key
+    box.querySelectorAll('[data-card-shares-cat]').forEach((b) => b.setAttribute('aria-expanded', String(b === btn && open !== null)))
+    list.hidden = open === null
+    list.replaceChildren(...(open === null ? [] : [
+      ...c.items.map((i) => el('div', { class: 'meta', 'data-card-shares-item': i.id }, [i.text, ' · ', d.kindOf(i)])),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-card-shares-open': c.key, onclick: () => d.onOpenResources(c) }, [S.cardSharesOpen]),
+    ]))
+  }
+  const names: (Node | string)[] = []
+  categories.forEach((c, i) => {
+    const btn = el('button', { class: 'card-shares-cat', 'data-card-shares-cat': c.key, 'aria-expanded': 'false', onclick: () => toggle(c, btn) }, [c.label])
+    names.push(andSep(i, categories.length), btn)
+  })
+  const box = el('div', { class: 'card-shares meta', 'data-card-shares': '' }, [
+    d.person.ring === Ring.Unsorted ? S.cardSharesUnplaced : count === 0 ? S.cardShares(0, d.zone) : S.cardSharesVia(count, ''),
+    ...(d.person.ring === Ring.Unsorted || count === 0 ? [] : names),
+  ])
+  return el('div', {}, [box, list])
+}
+
 /** A compact page: name with the pin and QR at the right edge, the chat row, zone (press to move), tags as buttons (+ tag), what we share, Extended; expanded: the rest of the card below. */
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
@@ -60,6 +92,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
+    sharesLine(d),
     el('div', { class: 'chips', 'data-card-tags': '' }, [
       ...(d.tags.length
         ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
@@ -67,7 +100,6 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
     ]),
     tagPicker,
-    el('button', { class: 'card-shares meta', 'data-card-shares': '', title: S.cardRingChange(d.zone), onclick: togglePicker }, [p.ring === Ring.Unsorted ? S.cardSharesUnplaced : S.cardShares(d.shared, d.zone)]),
     el('div', { class: 'card-actions' }, [
       el('button', { class: 'btn btn-electric btn-sm', 'data-card-open': p.id, 'aria-expanded': String(d.expanded === true), onclick: d.onOpen }, [d.expanded ? S.membraneCardClose : S.membraneCardOpen]),
     ]),

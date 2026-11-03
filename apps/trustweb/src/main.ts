@@ -194,8 +194,9 @@ import { importGroup } from './import_view'
 import { openServicesImport, servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
-import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
+import { kindKey, visibleVia } from './zone_visibility'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { zoneSidebar } from './trustzones_view'
@@ -1102,6 +1103,7 @@ function go(s: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   if (s !== Screen.Web) web.resetZoom()
+  if (s !== Screen.Inventory) invOnly = null
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -2182,7 +2184,10 @@ function webPageScreen(page: WebPage): Node[] {
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
   return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
-    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
+    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags),
+    visible: visibleVia(s.inventory ?? [], webSlot(p), tagsOf(p, tags), { zone: S.ringLabel[webSlot(p)], web: S.cardSharesWeb }),
+    kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
+    onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
     heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
@@ -2278,6 +2283,8 @@ let otherViewsOpen = false
 let webViewNow: ViewKey = 'rings'
 let invSearchOpen = false
 let invQuery = ''
+/** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
+let invOnly: { label: string; ids: Set<string> } | null = null
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
@@ -6387,7 +6394,9 @@ function screenInventory(): Node[] {
     ? el('input', { class: 'field', type: 'search', placeholder: S.invSearchPh, 'aria-label': S.invSearchPh, 'data-inv-search': '', value: invQuery, oninput: (e: Event) => { invQuery = (e.target as HTMLInputElement).value; render() } })
     : null
   if (find) setTimeout(() => { find.focus(); find.setSelectionRange(invQuery.length, invQuery.length) }, 0)
-  const shown = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
+  const byQuery = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
+  const shown = invOnly ? byQuery.filter((i) => invOnly!.ids.has(i.id)) : byQuery
+  const onlyChip = invOnly ? tagFilterChip(invOnly.label, () => { invOnly = null; render() }) : null
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
@@ -6400,6 +6409,7 @@ function screenInventory(): Node[] {
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       find,
+      onlyChip,
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;
