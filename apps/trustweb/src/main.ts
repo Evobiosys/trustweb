@@ -2494,7 +2494,6 @@ function screenWeb(): Node[] {
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : web.ringsView(s, askMarks(), undefined, { complete: expanded }),
-    fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : null,
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,
@@ -2509,7 +2508,10 @@ function screenWeb(): Node[] {
     header(S.webTitle),
     webViewRow(view),
     ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
-    view === 'rings' ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), clip]) : clip,
+    // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
+    view === 'rings'
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), fiveRingsOn() ? el('div', { class: 'zones-main' }, [clip, fieldOverviewPanel(s, { live: st, save, render })]) : clip])
+      : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
