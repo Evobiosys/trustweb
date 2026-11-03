@@ -16,7 +16,7 @@ export function resetPeopleList(startQuery = ''): void {
   flipped.clear()
 }
 
-export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring) => void, autofocus: boolean, rowExtra?: (p: Person) => Node[]): HTMLElement {
+export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, autofocus: boolean, rowExtra?: (p: Person) => Node[]): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
   const open = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
     el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
@@ -39,7 +39,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
           onclick: () => { if (flipped.has(ring)) flipped.delete(ring); else flipped.add(ring); draw() },
         }, [el('span', { class: 'outliner', 'aria-hidden': 'true' }, [open ? '▾' : '▸']), el('b', {}, [label])]),
         // Unsorted is no ring the add sheet offers; it starts people on the acquaintance ring.
-        el('button', { class: 'people-zone-add', 'data-zone-add': ring, 'aria-label': S.peopleZoneAdd(label), onclick: () => addTo(ring === Ring.Unsorted ? Ring.Acquaintance : ring) }, ['⊕']),
+        el('button', { class: 'people-zone-add', 'data-zone-add': ring, 'aria-label': S.peopleZoneAdd(label), onclick: () => (ring === Ring.Unsorted ? addTo(Ring.Acquaintance, true) : addTo(ring)) }, ['⊕']),
         el('small', {}, [String(people.length)]),
       ]),
       ...(open ? (people.length ? people.map(row) : [el('p', { class: 'meta', 'data-zone-empty': '' }, [S.peopleZoneEmpty])]) : []),

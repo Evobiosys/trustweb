@@ -2562,7 +2562,7 @@ function dismissWanted(peerId: string): void {
   void curator.hide(p.id).then(archivedNotice, (e: unknown) => console.warn('archive reach-out', e))
 }
 
-function addPersonSheet(ring: Ring): void {
+function addPersonSheet(ring: Ring, presetHint = false): void {
   let picked = ring
   let busy = false
   const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
@@ -2630,6 +2630,7 @@ function addPersonSheet(ring: Ring): void {
     codeStatus,
     el('p', { class: 'meta' }, [S.addCodeHint]),
     radios,
+    ...(presetHint ? [el('p', { class: 'meta', 'data-add-preset-hint': '' }, [S.addPresetHint])] : []),
     addBtn,
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.addCancel]),
   ])
