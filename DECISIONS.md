@@ -499,8 +499,10 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   origin and not encrypted at rest; code on the unlocked device can use the key, not export it.
 - (4) Forward secrecy before rollout: a symmetric ratchet per pairing and direction (`ratchet.ts`, HKDF chain, one AES-GCM key per
   counter, deleted after use, up to 1024 skipped keys for out-of-order delivery) replaces the static pair keys and the replay window
-  (`archive/replay.ts`). The counter travels in clear in the wire prefix and in the AAD. Consequences, stated: no post-compromise
-  security yet (no DH ratchet step; open point), and a device restored from an older backup must pair again (its keys are gone on the
-  peer); nothing is lost, the log merges after re-pairing. Round-1's wall-clock counter floor is gone with it.
+  (`archive/replay.ts`). The counter travels in clear in the wire prefix and in the AAD. The pairing epoch is NOT stored (a `pairId`
+  hash guards stale confirms), so a captured device state re-derives no earlier key. Consequences, stated: no post-compromise security
+  yet (no DH ratchet step; open point); a device restored from an older backup has its first sync dropped on the peer (used counters,
+  logged there) and catches up on the next try because its sending chain moves 32 steps ahead per unanswered `have`; the backup's own
+  keys open the wires of its time. Round-1's wall-clock counter floor is gone with it. Send and receive paths are serialised per peer.
 - PR #68 finding 4 (the relay learns the exact record size): plaintexts are padded to 1 / 4 / 16 / 64 KiB buckets (`seal.ts`); the
   bucket and the piece count stay visible.

@@ -8,8 +8,9 @@
  *    direction and deletes it after use, so a replay has no key left to open it with.
  *  - Forward secrecy (owner decision, PR #71 / #68 §10): v3 sealed everything under one static pair key, so a device state captured
  *    later opened every wire the relay (or anyone) had kept. Here the chain and message keys of earlier messages are gone from the
- *    device state the moment they were used; what a thief of the current state can open is bounded to skipped keys kept for
- *    out-of-order delivery (ratchet.ts MAX_SKIP) and everything still to come under the current chain (no break-in recovery yet).
+ *    device state the moment they were used, and the pairing epoch (which would re-derive the roots) is not stored either; what a
+ *    thief of the current state (blob + key store) can open is bounded to skipped keys kept for out-of-order delivery (ratchet.ts
+ *    MAX_SKIP) and everything still to come under the current chain (no break-in recovery yet).
  *  - Re-addressing: v3 sealed without AAD. Here the outer from/to and the counter are bound as AAD (seal.ts) and keys are directional.
  *  - Keys at rest (owner decision): the X25519 private key lives in a KeyStore (keystore.ts: IndexedDB, a non-extractable CryptoKey)
  *    and never as bytes in the record blob. A v1 blob that still carries `secretKey` is migrated on first start and rewritten without it.
@@ -21,8 +22,8 @@
  *    as a QR code and nowhere else (never in a link: a link is forwarded, logged in histories and previewed by messengers, a QR is
  *    read by the device in the same room). It is kept for ONE use. `join(code)` sends `pair` {deviceId, publicKey, name} sealed under
  *    the key derived from the secret, with AAD (joiner address, offerer address). Both sides compute the 6-digit SAS from the pair
- *    roots; the people compare it and Confirm (one decision per request), which stores the Pairing: the peer public key, the epoch and
- *    the two ratchet chains (send, receive) seeded from the roots, counters starting at 1.
+ *    roots; the people compare it and Confirm (one decision per request), which stores the Pairing: the peer public key, a pairing id
+ *    and the two ratchet chains (send, receive) seeded from the roots, counters starting at 1. The epoch and the roots are not kept.
  *  - Sync: `syncNow(addr)` sends `have` {heads, name}; the peer answers `entries` (what we lack by our heads, plus its own heads,
  *    chunked: ≤ CHUNK_BYTES raw bytes per piece, ≤ MAX_PIECES pieces) with reply:false. A complete `entries` message is NOT merged by
  *    itself: the person is asked "Receive from <device>?" (onIncoming; owner decision: the per-sync prompt stays). Accept merges and,
@@ -31,15 +32,19 @@
  *  - Every wire from a linked address: counter from the wire prefix → ratchet key for that counter → open → commit the ratchet state
  *    and persist (rollback and leave un-acked when the storage fails) → process → true. A counter without a key (used, or older than
  *    the skipped window) is consumed and acked without being processed (a replay changes nothing). A wire that opens with no key at
- *    all is tried as a `pair` while an offer is open; anything else → false (not ours, not acked).
+ *    all is tried as a `pair` while an offer is open; anything else → false (not ours, not acked). A counter more than MAX_SKIP ahead
+ *    is consumed the same way (no key will ever exist for it).
  *
  * WHAT IS NOT CLAIMED (I7):
  *  - Forward secrecy, not post-compromise security: a stolen CURRENT chain key opens everything that follows on that chain until the
  *    devices pair again (no DH ratchet step yet; design doc open points). NO post-quantum security.
  *  - NO metadata protection: the relay sees both addresses, timing, number and size bucket of pieces (seal.ts pads to 1/4/16/64 KiB)
  *    and the per-direction counter in the wire prefix.
- *  - A restore from an OLDER backup rewinds the ratchet: the peer has deleted those keys, so that device cannot sync until the two pair
- *    again (the price of forward secrecy, logged as such). Nothing is lost: the log merges after re-pairing.
+ *  - A restore from an OLDER backup rewinds the ratchet: its next sends reuse counters the peer already consumed, so they are dropped
+ *    there (silently: no key can tell a restored device from a replay), the sync reports 'offline', and the sending chain is moved
+ *    32 steps ahead per failed try until it passes the peer again; the backup's own old keys can open the wires of its time (a backup
+ *    is a copy of the state, forward secrecy cannot undo that). Nothing is lost: the log merges once the chains line up (or after
+ *    pairing again, which is immediate).
  *  - NO availability: the relay can drop, delay or reorder wires; a sync then fails with 'offline' or converges on the next round.
  *  - The SAS only helps if the people really compare it; the pairing secret is the only thing authenticating the joining device.
  *  - A wire is persisted as accepted before it is processed: a crash in between loses that wire's content (not its safety); the
@@ -74,8 +79,13 @@ export interface Pairing {
   sas: string
   linkedAt: number
   lastSyncAt: number
-  /** SHA-256 of the one-time pairing secret (base64url), mixed into the pair roots so a later pairing of the same two devices has new keys. */
-  epoch: string
+  /**
+   * Names this pairing (base64url of a hash over the pairing epoch) so an unlinked pairing's stale Confirm cannot bring it back. The epoch
+   * itself (SHA-256 of the one-time secret, mixed into the pair roots) is NEVER stored: with it, the key in the key store and the peer's
+   * public key, every past chain could be re-derived, and forward secrecy would be a claim about the relay only. Without it, a device
+   * state captured later holds nothing that opens earlier wires.
+   */
+  pairId: string
   /** The sending ratchet chain (ratchet.ts): one key per message, deleted after use. */
   send: ChainState
   /** The receiving ratchet chain: the counter of the next expected message, and skipped keys for out-of-order delivery. */
@@ -135,6 +145,8 @@ const MAX_ASSEMBLIES = 4
 const ROUND_BUDGET = CHUNK_BYTES * MAX_PIECES - 4_096
 /** Upper bound for one piece's base64url text (CHUNK_BYTES raw → 4/3, rounded up). */
 const MAX_PIECE_TEXT = Math.ceil((CHUNK_BYTES * 4) / 3) + 4
+/** Chain steps skipped after an unanswered `have` (see fastForward). */
+const FAST_FORWARD = 32
 
 const badAddress = (a: string): boolean => a === '' || a.includes('~') || a.includes('|') || /\s/.test(a)
 
@@ -182,7 +194,14 @@ export interface DeviceSync {
 
 type Heads = Record<string, number>
 interface Assembly { n: number; parts: Uint8Array[]; got: number; reply: boolean }
-interface Waiter { resolve(r: SyncReport): void; reject(e: Error): void; /** A piece arrived: the answer is under way, restart the clock. */ touch(): void }
+interface Waiter {
+  resolve(r: SyncReport): void
+  reject(e: Error): void
+  /** A piece arrived: the answer is under way, restart the clock. */
+  touch(): void
+  /** The answer is complete and waits for the person here: the peer did answer, so the clock stops. */
+  pause(): void
+}
 interface Roots { send: Uint8Array; recv: Uint8Array; sas: string }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -213,11 +232,11 @@ function parsePairing(v: unknown): Pairing | null {
   if (
     typeof p['address'] !== 'string' || badAddress(p['address']) || typeof p['deviceId'] !== 'string' || typeof p['publicKey'] !== 'string' ||
     typeof p['name'] !== 'string' || typeof p['sas'] !== 'string' || typeof p['linkedAt'] !== 'number' || typeof p['lastSyncAt'] !== 'number' ||
-    typeof p['epoch'] !== 'string' || p['epoch'] === '' || !send || !recv
+    typeof p['pairId'] !== 'string' || p['pairId'] === '' || !send || !recv
   ) return null
   return {
     address: p['address'], deviceId: p['deviceId'], publicKey: p['publicKey'], name: p['name'], sas: p['sas'],
-    linkedAt: p['linkedAt'], lastSyncAt: p['lastSyncAt'], epoch: p['epoch'], send, recv,
+    linkedAt: p['linkedAt'], lastSyncAt: p['lastSyncAt'], pairId: p['pairId'], send, recv,
   }
 }
 
@@ -237,25 +256,20 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     stored = null
   }
   const blob = isRecord(stored) ? stored : null
+  // Fail closed: a key store that cannot be READ (as opposed to one that is empty) must not lead to new keys, because new keys would
+  // disown the stored log and the pairings. The app shows the error and tries again later; nothing is overwritten.
   let keys: DeviceKeys | null = null
-  try {
+  let migrated = false
+  if (blob && blob['v'] === 1 && typeof blob['secretKey'] === 'string') {
+    // A v1 blob always carries the key its pairings and log were made with: that key wins (keystore.ts migrateSecretToKeyStore).
+    keys = await migrateSecretToKeyStore(d.keyStore, blob['secretKey'])
+    migrated = true
+    d.onLog('Moved the device key out of the record store into the key store')
+  } else {
     const held = await d.keyStore.load()
     if (held) keys = await deviceKeysFromPrivateKey(held.privateKey, held.publicKey)
-  } catch (e) {
-    d.onLog(`Could not read the device key: ${e instanceof Error ? e.message : String(e)}`)
-  }
-  let migrated = false
-  if (!keys && blob && blob['v'] === 1 && typeof blob['secretKey'] === 'string') {
-    try {
-      keys = await migrateSecretToKeyStore(d.keyStore, blob['secretKey'])
-      migrated = true
-      d.onLog('Moved the device key out of the record store into the key store')
-    } catch (e) {
-      d.onLog(`Could not move the device key into the key store: ${e instanceof Error ? e.message : String(e)}`)
-    }
   }
   if (!keys) {
-    if (blob) d.onLog('The saved sync keys could not be read; this device starts with new keys and has to be linked again')
     keys = await generateDeviceKeys()
     await d.keyStore.save({ publicKey: keys.publicKey, privateKey: keys.privateKey })
   }
@@ -269,10 +283,11 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     pairings = blob['v'] === 2 ? list.map(parsePairing).filter((p): p is Pairing => p !== null) : []
     if (blob['v'] === 1 && list.length) d.onLog(`${list.length} device link(s) from the earlier sync version need pairing again (new keys per message)`)
     log = RecordLog.fromJSON(blob['log'])
-    if (!log || log.device !== mine.deviceId) {
-      d.onLog('The saved sync log could not be read; starting an empty log')
-      log = null
+    if (log && log.device !== mine.deviceId) {
+      // Never persist over a record that belongs to another key: that would be the silent loss of the owner's log.
+      throw new Error(`device-sync: the saved log belongs to device ${log.device}, this key is ${mine.deviceId}; refusing to overwrite it`)
     }
+    if (!log) d.onLog('The saved sync log could not be read; starting an empty log')
   }
   const recordLog: RecordLog = log ?? new RecordLog(mine.deviceId)
 
@@ -280,8 +295,22 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
   const waiters = new Map<string, Waiter>()
   const inflight = new Map<string, Promise<SyncReport>>()
   let offer: { key: CryptoKey; epoch: string; exp: number } | null = null
-  /** Epochs of pairings that were unlinked: a request from before the unlink cannot bring them back. */
+  /** pairIds of pairings that were unlinked: a request from before the unlink cannot bring them back. */
   const retired = new Set<string>()
+  /** One chain of work per peer address: send and receive paths never interleave on the same ratchet (a race would reuse a key). */
+  const locks = new Map<string, Promise<unknown>>()
+  function locked<T>(address: string, fn: () => Promise<T>): Promise<T> {
+    const run = (locks.get(address) ?? Promise.resolve()).then(fn)
+    locks.set(address, run.catch(() => undefined))
+    return run
+  }
+  /** Lines a forger could make us write: the first few per peer, then every hundredth (I6 without a flood). */
+  const dropped = new Map<string, number>()
+  function logDrop(address: string, line: string): void {
+    const n = (dropped.get(address) ?? 0) + 1
+    dropped.set(address, n)
+    if (n <= 3 || n % 100 === 0) d.onLog(n > 3 ? `${line} (${n} such messages so far)` : line)
+  }
 
   /** Saves the blob (never any key material); throws when the storage does (callers that must not lose a wire catch it). */
   function persist(): void {
@@ -300,14 +329,35 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
 
   /** The pairing epoch: SHA-256 of the one-time secret, known to both sides from the code, never sent. */
   const epochOf = async (secret: Uint8Array): Promise<string> => toB64u(await sha256(secret))
+  /** What is stored about a pairing's origin: a hash of the epoch, from which the epoch cannot be recovered. */
+  const pairIdOf = async (epoch: string): Promise<string> => toB64u(await sha256(concat(utf8('trustweb-device-sync/v2/pair-id'), fromB64u(epoch))))
   const rootsFor = (publicKey: Uint8Array, epoch: string): Promise<Roots> => derivePairRoots(mine, publicKey, fromB64u(epoch))
 
   async function send(p: Pairing, kind: string, body: unknown): Promise<void> {
-    const r = await sendKey(p.send)
-    // The advanced chain is saved BEFORE the wire leaves: a counter (and its key) is never used twice, whatever happens next.
-    p.send = r.state
-    persist()
-    await d.relay.sendRaw(p.address, await sealMessage(r.key, me, p.address, { ctr: r.ctr, kind, body }))
+    const wire = await locked(p.address, async () => {
+      if (find(p.address) !== p) throw new Error('not linked')
+      const r = await sendKey(p.send)
+      // The advanced chain is saved BEFORE the wire leaves: a counter (and its key) is never used twice, whatever happens next.
+      p.send = r.state
+      persist()
+      return sealMessage(r.key, me, p.address, { ctr: r.ctr, kind, body })
+    })
+    await d.relay.sendRaw(p.address, wire)
+  }
+
+  /**
+   * After a peer did not answer: move the sending chain forward by a step. A device restored from an older backup re-sends counters the
+   * peer has already consumed (silently, as it must); jumping ahead lets it pass the peer's position within a few tries instead of one
+   * try per message sent since the backup. Harmless otherwise: the receiver keeps skipped keys for exactly this (ratchet.ts MAX_SKIP).
+   */
+  async function fastForward(p: Pairing): Promise<void> {
+    await locked(p.address, async () => {
+      if (find(p.address) !== p) return
+      let st = p.send
+      for (let i = 0; i < FAST_FORWARD; i++) st = (await sendKey(st)).state
+      p.send = st
+      persist()
+    })
   }
 
   /** Sends what the peer lacks by `heads`, in pieces; returns the number of entries sent. Throws 'too large' before sending anything. */
@@ -361,14 +411,17 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
   /** The person's decision on a complete `entries` message (onIncoming). */
   function incoming(p: Pairing, entries: unknown[], heads: Heads, reply: boolean): Incoming {
     let decided = false
-    const devices = new Set(entries.map((e) => (isRecord(e) && typeof e['device'] === 'string' ? e['device'] : ''))).size
+    // Counted only over well-formed entries, so a paired device cannot inflate the prompt with junk.
+    const wellFormed = entries.filter((e) => isRecord(e) && typeof e['device'] === 'string' && typeof e['id'] === 'string' && isRecord(e['op']))
+    const devices = new Set(wellFormed.map((e) => (e as Record<string, unknown>)['device'] as string)).size
     return {
       from: { address: p.address, deviceId: p.deviceId, name: p.name, sas: p.sas },
-      counts: { entries: entries.length, devices },
+      counts: { entries: wellFormed.length, devices },
       reply,
       accept: async () => {
         if (decided) throw new Error('already decided')
         decided = true
+        if (find(p.address) !== p) throw new Error('not linked') // unlinked or paired again while the sheet was open
         const merge = await recordLog.merge(entries, { acceptOwn: d.recoverOwn === true })
         p.lastSyncAt = now()
         persist()
@@ -392,7 +445,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
         if (decided) return
         decided = true
         d.onLog(`Declined the record from ${p.name}`)
-        if (!reply) waiters.get(p.address)?.reject(new Error('declined'))
+        if (!reply && find(p.address) === p) waiters.get(p.address)?.reject(new Error('declined'))
       },
     }
   }
@@ -445,6 +498,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     }
     const entries = decoded['entries']
     d.onLog(`${p.name} sends ${entries.length} change(s)${acc.reply ? ' back' : ''}: waiting for Receive`)
+    if (!acc.reply) waiters.get(p.address)?.pause() // the peer answered; the rest is up to the person here
     d.onIncoming(incoming(p, entries, heads, acc.reply))
   }
 
@@ -468,16 +522,18 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     if (offer !== o || now() > o.exp) return false // consumed by another pair wire meanwhile, or expired
     offer = null
     const name = cleanName(m.body['name'], 'Other device')
-    d.onPairRequest(await request(from, deviceId, toB64u(pub), name, roots, o.epoch))
+    d.onPairRequest(await request(from, deviceId, toB64u(pub), name, roots, await pairIdOf(o.epoch)))
     d.onLog(`${name} asks to link (code ${roots.sas})`)
     return true
   }
 
-  async function request(address: string, deviceId: string, publicKey: string, name: string, roots: Roots, epoch: string): Promise<PairRequest> {
+  async function request(address: string, deviceId: string, publicKey: string, name: string, roots: Roots, pairId: string): Promise<PairRequest> {
     // One request, one decision: a second Confirm (a double tap, or a stale sheet after an unlink) must not reset chains or revive a pairing.
     let decided = false
     const send = await initChain(roots.send)
     const recv = await initChain(roots.recv)
+    roots.send.fill(0) // the chains are all that is kept; the roots (and the epoch they came from) are not
+    roots.recv.fill(0)
     return {
       address,
       name,
@@ -485,10 +541,10 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
       confirm: async () => {
         if (decided) throw new Error('already decided')
         decided = true
-        if (retired.has(epoch)) throw new Error('unlinked')
+        if (retired.has(pairId)) throw new Error('unlinked')
         pairings = [
           ...pairings.filter((p) => p.address !== address),
-          { address, deviceId, publicKey, name, sas: roots.sas, linkedAt: now(), lastSyncAt: 0, epoch, send, recv },
+          { address, deviceId, publicKey, name, sas: roots.sas, linkedAt: now(), lastSyncAt: 0, pairId, send, recv },
         ]
         for (const key of partial.keys()) if (key.startsWith(`${address}\n`)) partial.delete(key)
         persist()
@@ -505,15 +561,18 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     try {
       if (typeof from !== 'string' || typeof payload !== 'string') return false
       const p = find(from)
-      let seen = false
+      let seen: 'used' | 'far' | null = null
       if (p) {
         const ctr = peekCtr(payload)
-        const r = ctr === null ? null : await receiveKey(p.recv, ctr)
-        if (ctr !== null && !r) seen = true
-        const m = r ? await openMessage(r.key, from, me, payload) : null
-        if (m && r) {
-          if (find(from) !== p) return false // unlinked (or re-linked) while opening
-          // Committed BEFORE it counts: the used key is gone from the state; if the storage fails, the wire stays un-acked and comes again.
+        // Under the peer's lock: derive, open and commit as one step, so two wires handled at once cannot both commit from the same
+        // state (the second would bring a used key back). The chain is committed only when the wire opened: a forged counter moves nothing.
+        type Opened = { outcome: 'opened'; m: { kind: string; body: unknown } } | { outcome: 'closed' | 'used' | 'far' | 'storage' }
+        const got = await locked(from, async (): Promise<Opened> => {
+          if (ctr === null || find(from) !== p) return { outcome: 'closed' }
+          const r = await receiveKey(p.recv, ctr)
+          if (!r) return { outcome: ctr < p.recv.next ? 'used' : 'far' }
+          const m = await openMessage(r.key, from, me, payload)
+          if (!m) return { outcome: 'closed' }
           const before = p.recv
           p.recv = r.state
           try {
@@ -521,22 +580,31 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
           } catch (e) {
             p.recv = before
             d.onLog(`Could not save the sync state, the message from ${p.name} comes again: ${e instanceof Error ? e.message : String(e)}`)
-            return false
+            return { outcome: 'storage' }
           }
+          return { outcome: 'opened', m }
+        })
+        // Processing runs outside the lock: answering a `have` sends, and sending takes the same lock.
+        if (got.outcome === 'opened') {
           try {
-            if (m.kind === 'have') await onHave(p, m.body)
-            else if (m.kind === 'entries') await onEntries(p, m.body)
+            if (got.m.kind === 'have') await onHave(p, got.m.body)
+            else if (got.m.kind === 'entries') await onEntries(p, got.m.body)
           } catch (e) {
             d.onLog(`Could not process a message from ${p.name}: ${e instanceof Error ? e.message : String(e)}`)
           }
           return true
         }
+        if (got.outcome === 'storage') return false
+        if (got.outcome === 'used' || got.outcome === 'far') seen = got.outcome
       }
       if (await tryPair(from, payload)) return true
       if (p && seen) {
-        // A counter whose key was already used (a replay, or an honest redelivery whose ack was lost) or older than the skipped window:
-        // there is no key left to open it with. Consumed and acked, so the relay stops redelivering it; nothing is processed.
-        d.onLog(`Ignored a message from ${p.name} whose key was already used (counter ${peekCtr(payload)})`)
+        // No key for this counter: either already used (a replay, an honest redelivery whose ack was lost, or a peer restored from an
+        // older backup re-sending what it sent before) or more than MAX_SKIP ahead. Nothing can open it, now or later: consumed and acked,
+        // so the relay stops redelivering it; nothing is processed. A stream of such wires is logged sparingly (a forger can produce them).
+        logDrop(from, seen === 'used'
+          ? `Ignored a message from ${p.name} whose key was already used (counter ${peekCtr(payload)}); if ${p.name} was restored from a backup, its next syncs catch up`
+          : `Ignored a message from ${p.name} too far ahead to have a key (counter ${peekCtr(payload)})`)
         return true
       }
       return false
@@ -558,6 +626,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
           timer = setTimeout(() => {
             waiters.delete(address)
             d.onLog(`${p.name} did not answer: open it there and try again`)
+            void fastForward(p).catch(() => undefined)
             reject(new Error('offline'))
           }, handshakeMs)
         }
@@ -574,6 +643,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
             reject(e)
           },
           touch: arm,
+          pause: () => clearTimeout(timer),
         })
       })
       try {
@@ -625,11 +695,12 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
       const key = await secretKeyFromPairingSecret(c.secret)
       const body = { deviceId: mine.deviceId, publicKey: toB64u(mine.publicKey), name: ownName() }
       await d.relay.sendRaw(c.address, await sealMessage(key, me, c.address, { ctr: 1, kind: 'pair', body }))
-      return request(c.address, await deviceIdOf(c.publicKey), toB64u(c.publicKey), 'Other device', roots, epoch)
+      return request(c.address, await deviceIdOf(c.publicKey), toB64u(c.publicKey), 'Other device', roots, await pairIdOf(epoch))
     },
     unlink(address: string): void {
-      for (const p of pairings) if (p.address === address) retired.add(p.epoch)
+      for (const p of pairings) if (p.address === address) retired.add(p.pairId)
       pairings = pairings.filter((p) => p.address !== address)
+      waiters.get(address)?.reject(new Error('not linked')) // a sync waiting on this device (or on the person's Receive) ends here
       for (const key of partial.keys()) if (key.startsWith(`${address}\n`)) partial.delete(key)
       persist()
       d.onLog(`Unlinked ${address}`)

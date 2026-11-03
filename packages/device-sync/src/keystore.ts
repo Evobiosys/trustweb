@@ -121,9 +121,23 @@ export function indexedDbKeyStore(opts: IndexedDbKeyStoreOptions = {}): KeyStore
         const db = r.result
         if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName)
       }
-      r.onsuccess = () => resolve(r.result)
-      r.onerror = () => reject(reqError(r, 'key store: opening IndexedDB'))
-      r.onblocked = () => reject(new Error('key store: IndexedDB open is blocked by another connection'))
+      let settled = false
+      r.onsuccess = () => {
+        if (settled) {
+          r.result.close() // the promise already failed (blocked): do not leak the connection that opened later
+          return
+        }
+        settled = true
+        resolve(r.result)
+      }
+      r.onerror = () => {
+        settled = true
+        reject(reqError(r, 'key store: opening IndexedDB'))
+      }
+      r.onblocked = () => {
+        settled = true
+        reject(new Error('key store: IndexedDB open is blocked by another connection'))
+      }
     })
   }
 

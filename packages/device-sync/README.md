@@ -17,11 +17,13 @@ What it is:
 - a sync module (`sync.ts`) behind the relay's raw path (`RelayLike` = `sendRaw` / `onRawWire` of `apps/demo/src/relay.ts`) that asks
   the person "Receive from <device>?" before anything is merged.
 
-What it is not (honest labeling, I7): no post-compromise security (no DH ratchet step yet: a stolen current chain key opens what
-follows until the devices pair again), no post-quantum, no metadata protection beyond size buckets (the relay sees addresses, timing,
-piece counts, size buckets and per-direction counters); IndexedDB is per origin and not encrypted at rest by the browser. A restore from
-an older backup needs pairing again (the price of forward secrecy; nothing is lost). Not yet wired into `apps/trustweb` (sync v3 in
-`sync_link.ts` stays in force). `archive/` holds the retired replay window of round 1.
+What it is not (honest labeling, I7): no post-compromise security (no DH ratchet step yet: a stolen current device state, blob plus
+key store, opens the skipped keys it holds and everything that follows until the devices pair again; it opens nothing earlier, the
+pairing epoch is never stored), no post-quantum, no metadata protection beyond size buckets (the relay sees addresses, timing, piece
+counts, size buckets and per-direction counters); IndexedDB is per origin and not encrypted at rest by the browser. A device restored
+from an older backup has its first sync dropped on the peer (used counters) and catches up on the next try (its chain moves ahead);
+the backup's own old keys open the wires of its time. Not yet wired into `apps/trustweb` (sync v3 in `sync_link.ts` stays in force).
+`archive/` holds the retired replay window of round 1.
 
 Zero runtime dependencies: WebCrypto only. Tests run on Node's own runner:
 

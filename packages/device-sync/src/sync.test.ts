@@ -489,7 +489,7 @@ test('re-pairing the same two devices derives new keys: a wire captured under th
   const phone = await device(h, 'Phone', 'addr-phone')
   const laptop = await device(h, 'Laptop', 'addr-laptop', { handshakeMs: 200 })
   const sas1 = await link(phone, laptop)
-  const epoch1 = phone.sync.pairings()[0].epoch
+  const id1 = phone.sync.pairings()[0].pairId
   await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
   const start = h.wires.length
   await phone.sync.syncNow('addr-laptop')
@@ -500,8 +500,8 @@ test('re-pairing the same two devices derives new keys: a wire captured under th
   phone.sync.unlink('addr-laptop')
   laptop.sync.unlink('addr-phone')
   const sas2 = await link(phone, laptop)
-  const epoch2 = phone.sync.pairings()[0].epoch
-  assert.notEqual(epoch2, epoch1, 'a fresh secret gives a fresh epoch')
+  const id2 = phone.sync.pairings()[0].pairId
+  assert.notEqual(id2, id1, 'a fresh secret gives a fresh pairing id')
   assert.notEqual(sas2, sas1, 'and a fresh SAS')
   assert.equal(phone.sync.pairings()[0].recv.next, 1)
 
@@ -554,7 +554,7 @@ test('confirm is one decision: a second confirm throws and resets nothing; a sta
   assert.equal(phone.sync.pairings().length, 0)
 })
 
-test('a device restored from an older backup cannot sync (its keys are gone on the peer: forward secrecy) until it pairs again', async () => {
+test('a device restored from an older backup: its first sync is dropped on the peer (used counters), the next one catches up without re-pairing', async () => {
   const h = hub()
   const phone = await device(h, 'Phone', 'addr-phone', { handshakeMs: 200 })
   const laptop = await device(h, 'Laptop', 'addr-laptop')
@@ -570,17 +570,90 @@ test('a device restored from an older backup cannot sync (its keys are gone on t
   const s = memStorage()
   s.save(backup)
   const restored = await device(h, 'Phone', 'addr-phone', { storage: s, keyStore: phone.keyStore, handshakeMs: 200 })
-  // its `have` goes out under a counter the laptop already used: consumed there, never answered
+  const nextBefore = restored.sync.pairings()[0].send.next
+  // its `have` goes out under a counter the laptop already consumed: dropped there (no key can tell a restore from a replay), never answered
   await assert.rejects(restored.sync.syncNow('addr-laptop'), /offline/)
-  assert.ok(laptop.logs.some((l) => l.includes('already used')), 'the laptop logs why')
-  // pairing again (new epoch, new chains) brings it back; nothing was lost
-  restored.sync.unlink('addr-laptop')
-  laptop.sync.unlink('addr-phone')
-  await link(restored, laptop)
+  assert.ok(laptop.logs.some((l) => l.includes('already used') && l.includes('restored from a backup')), 'the laptop logs the likely cause')
+  await sleep(20)
+  assert.ok(restored.sync.pairings()[0].send.next >= nextBefore + 32, 'the sending chain was moved ahead')
+  // the next try passes the laptop's position: no re-pairing needed, nothing lost
   const r = await restored.sync.syncNow('addr-laptop')
   assert.equal(r.received, 3)
   await sleep(20)
   assert.equal(state(restored), state(laptop))
+})
+
+test('two wires handled at once cannot bring a used key back', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop', { handshakeMs: 300 })
+  await link(phone, laptop)
+  for (let i = 0; i < 20; i++) await phone.sync.append(put('item-' + i, 'blob', 'z'.repeat(3000)))
+  // laptop asks; phone's answer (several pieces, consecutive counters 1, 2, ...) is captured, not delivered
+  h.sinks.delete('addr-laptop')
+  await assert.rejects(laptop.sync.syncNow('addr-phone'), /offline/)
+  const pieces = h.wires.filter((w) => w.from === 'addr-phone' && w.to === 'addr-laptop')
+  assert.ok(pieces.length >= 2)
+  h.sinks.set('addr-laptop', (f, p) => laptop.sync.handle(f, p))
+  const [w1, w2] = pieces
+  const results = await Promise.all([laptop.sync.handle(w1.from, w1.payload), laptop.sync.handle(w2.from, w2.payload)])
+  assert.deepEqual(results, [true, true])
+  const recv = laptop.sync.pairings()[0].recv
+  assert.equal(recv.next, 3)
+  assert.deepEqual(Object.keys(recv.skipped), [], 'no used key came back')
+  assert.equal(await laptop.sync.handle(w1.from, w1.payload), true, 'replayed: consumed')
+  assert.equal(await laptop.sync.handle(w2.from, w2.payload), true)
+  assert.deepEqual(laptop.sync.pairings()[0].recv, recv)
+})
+
+test('a key store that cannot be read fails closed: no new keys, the record blob is untouched', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
+  const blobBefore = JSON.stringify(phone.storage.saved())
+  const saves = phone.storage.saves()
+  const broken: KeyStore = { load: async () => { throw new Error('IndexedDB is not available') }, save: async () => undefined, clear: async () => undefined }
+  await assert.rejects(device(h, 'Phone', 'addr-phone', { storage: phone.storage, keyStore: broken }), /IndexedDB/)
+  assert.equal(JSON.stringify(phone.storage.saved()), blobBefore)
+  assert.equal(phone.storage.saves(), saves, 'nothing was written')
+  // a blob whose log belongs to another key is refused too, instead of being overwritten
+  await assert.rejects(device(h, 'Phone', 'addr-phone', { storage: phone.storage, keyStore: memoryKeyStore() }), /belongs to device/)
+  assert.equal(JSON.stringify(phone.storage.saved()), blobBefore)
+})
+
+test('a pending Receive prompt dies with the pairing: accept after unlink merges nothing and sends nothing; the sync clock waits for the person', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone', { prompt: true, handshakeMs: 200 })
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  const round = phone.sync.syncNow('addr-laptop')
+  await until(() => phone.incoming.length === 1)
+  // the person takes longer than the handshake: the peer did answer, so the sync does not time out
+  await sleep(400)
+  const wiresBefore = h.wires.length
+  const ended = assert.rejects(round, /not linked/)
+  phone.sync.unlink('addr-laptop')
+  await ended
+  await assert.rejects(phone.incoming[0].accept(), /not linked/)
+  assert.equal(phone.sync.log.entries().length, 0)
+  await sleep(30)
+  assert.equal(h.wires.length, wiresBefore, 'nothing was sent to the unlinked device')
+})
+
+test('a counter too far ahead to ever have a key is consumed, logged as such, and moves the chain nowhere', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  const before = phone.sync.pairings()[0].recv
+  const far = new Uint8Array(8 + 12 + 16)
+  new DataView(far.buffer).setBigUint64(0, 5000n)
+  assert.equal(await phone.sync.handle('addr-laptop', toB64u(far)), true)
+  assert.deepEqual(phone.sync.pairings()[0].recv, before)
+  assert.ok(phone.logs.some((l) => l.includes('too far ahead')))
+  // and the stored pairing holds no epoch (nothing that re-derives the roots)
+  assert.ok(!JSON.stringify(phone.storage.saved()).includes('epoch'))
 })
 
 test('Receive from <device>?: nothing is merged before accept; decline applies nothing and fails the waiting sync', async () => {
@@ -731,9 +804,14 @@ test('two piece streams from one peer at once both complete (the relay hands ove
   await p2
   h.sinks.set('addr-phone', (f, p) => phone.sync.handle(f, p))
   // phone comes back and answers both at once: two interleaved piece streams reach laptop
+  const before = h.wires.length
   await Promise.all([phone.sync.handle(haveA.from, haveA.payload), phone.sync.handle(haveB.from, haveB.payload)])
   await until(() => laptop.sync.log.entries().length === 40)
   assert.equal(state(laptop), state(phone))
+  // the two answers were sent at once: every piece still got its own counter (the send path is serialised per peer)
+  const ctrs = h.wires.slice(before).filter((w) => w.from === 'addr-phone').map((w) => { const b = fromB64u(w.payload); return Number(new DataView(b.buffer, b.byteOffset, 8).getBigUint64(0)) })
+  assert.ok(ctrs.length >= 4)
+  assert.equal(new Set(ctrs).size, ctrs.length, `distinct counters: ${ctrs.join(',')}`)
 })
 
 test('a round larger than the budget is sent in parts; the next round continues where it stopped', async () => {

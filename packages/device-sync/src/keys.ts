@@ -3,7 +3,7 @@
  * keys.ts -- device identity and pair keys for device sync v2.
  *
  * WHY: the current sync (apps/trustweb/src/sync_link.ts) derives ONE symmetric key per pair and shows a 4-hex fingerprint. v2
- * keeps the same ceremony (a one-time code carried only in the QR / link, Confirm on both screens) but tightens what comes out
+ * keeps the same ceremony (a one-time code carried only in the QR code, Confirm on both screens) but tightens what comes out
  * of the key agreement:
  *  - Each device has a static X25519 key pair; `deviceId` is a hash of the public key, so an id cannot be claimed without the key.
  *  - X25519 ECDH → HKDF-SHA256 (salt = sha256 of the two public keys in byte order, so both sides agree without negotiating
@@ -13,13 +13,14 @@
  *    instead of 16; an active attacker who substitutes a key during pairing has about a one-in-a-million chance per attempt of
  *    producing the same digits.
  *  - The pairing-secret key (`secretKeyFromPairingSecret`) seals the single `pair` message. The secret travels only inside the
- *    QR / link, never through the relay, which is what authenticates the joining device's public key to the offering device.
+ *    QR code, never through the relay, which is what authenticates the joining device's public key to the offering device.
  *  - `x25519PublicKeyFromDidPeer2` reads the `E` key of an existing sync did:peer:2 (apps/demo/src/did.ts format), with a
  *    hand-rolled base58btc codec because this package has no dependencies.
  *
  * WHAT IS NOT CLAIMED (I7):
- *  - NO forward secrecy. The keys are static; whoever later obtains a device's secret key can derive every pair key it ever had
- *    and open any past wire the relay (or anyone) still holds. There is no ratchet and no ephemeral key.
+ *  - The keys here are static: whoever obtains a device's private key AND the pairing epoch AND the peer's public key can re-derive
+ *    the pair roots. Forward secrecy comes from the layer above (ratchet.ts: keys deleted after use; sync.ts: the epoch is never
+ *    stored), not from this file. No ephemeral DH step yet (no post-compromise security).
  *  - NO post-quantum security. X25519 falls to a large quantum computer; recorded traffic could be opened then.
  *  - NO metadata protection. Nothing here hides who talks to whom, when, or how much; the relay sees all of that.
  *  - The SAS is only as good as the humans comparing it. If nobody looks, an active attacker at pairing time is not detected.
