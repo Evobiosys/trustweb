@@ -574,8 +574,7 @@ test('a device restored from an older backup: its first sync is dropped on the p
   // its `have` goes out under a counter the laptop already consumed: dropped there (no key can tell a restore from a replay), never answered
   await assert.rejects(restored.sync.syncNow('addr-laptop'), /offline/)
   assert.ok(laptop.logs.some((l) => l.includes('already used') && l.includes('restored from a backup')), 'the laptop logs the likely cause')
-  await sleep(20)
-  assert.ok(restored.sync.pairings()[0].send.next >= nextBefore + 32, 'the sending chain was moved ahead')
+  await until(() => restored.sync.pairings()[0].send.next >= nextBefore + 32).catch(() => assert.fail('the sending chain was moved ahead'))
   // the next try passes the laptop's position: no re-pairing needed, nothing lost
   const r = await restored.sync.syncNow('addr-laptop')
   assert.equal(r.received, 3)
@@ -819,13 +818,15 @@ test('two piece streams from one peer at once both complete (the relay hands ove
   for (let i = 0; i < 40; i++) await phone.sync.append(put('item-' + i, 'blob', 'x'.repeat(3000)))
   // laptop asked twice while phone was away: both `have`s wait at phone
   h.sinks.delete('addr-phone')
+  const haves = (): typeof h.wires => h.wires.filter((w) => w.from === 'addr-laptop' && w.to === 'addr-phone')
+  const asked = haves().length
   const p1 = laptop.sync.syncNow('addr-phone').catch(() => null)
-  await sleep(30)
-  const haveA = h.wires.filter((w) => w.from === 'addr-laptop' && w.to === 'addr-phone').pop()
+  await until(() => haves().length === asked + 1)
+  const haveA = haves().pop()
   assert.ok(haveA)
   await p1
   const p2 = laptop.sync.syncNow('addr-phone').catch(() => null)
-  await sleep(30)
+  await until(() => haves().length === asked + 2)
   const haveB = h.wires.filter((w) => w.from === 'addr-laptop' && w.to === 'addr-phone').pop()
   assert.ok(haveB && haveB !== haveA)
   await p2

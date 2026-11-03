@@ -663,13 +663,14 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
           pause: () => clearTimeout(timer),
         })
       })
+      // the timer can reject before `answered` is returned (a slow send): mark it handled now; the caller still sees the rejection
+      answered.catch(() => undefined)
       try {
         d.onLog(`Asking ${p.name} for its changes…`)
         await send(p, 'have', { heads: recordLog.heads(), name: ownName() })
       } catch (e) {
         clearTimeout(timer)
         waiters.delete(address)
-        answered.catch(() => undefined)
         throw e
       }
       return answered
