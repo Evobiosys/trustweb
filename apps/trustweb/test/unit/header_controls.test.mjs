@@ -3,20 +3,24 @@
 import { headerControls, headerPins, togglePinned, qrTarget, advancedKeyOf } from '../../src/header_controls.ts'
 
 describe('header_controls', () => {
-  it('orders search, views, pins, QR, settings left to right on web, chat, events and inventory', () => {
-    for (const s of ['web', 'chat', 'events', 'inventory']) expect(headerControls(s)).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
+  it('orders search, views, pins, QR, settings left to right on web, events and inventory', () => {
+    for (const s of ['web', 'events', 'inventory']) expect(headerControls(s)).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
+  })
+  it('gives Chat no views (expand) button', () => {
+    expect(headerControls('chat')).toEqual(['search', 'pins', 'qr', 'settings'])
   })
   it('leaves Record and every other screen to its own header', () => {
     for (const s of ['record', 'meeting', 'meet', 'start', 'review', 'people']) expect(headerControls(s)).toBeUndefined()
   })
-  it('pins Do Not Disturb by default, and an explicit list replaces the default', () => {
-    expect(headerPins(undefined)).toEqual(['dnd'])
+  it('pins nothing by default (Do Not Disturb lives in Settings > Chat), and an explicit list is kept', () => {
+    expect(headerPins(undefined)).toEqual([])
+    expect(headerPins(['dnd'])).toEqual(['dnd'])
     expect(headerPins([])).toEqual([])
     expect(headerPins(['advanced', 'bogus'])).toEqual(['advanced'])
   })
   it('toggles a pin from the default and back', () => {
-    expect(togglePinned(undefined, 'dnd')).toEqual([])
-    expect(togglePinned(undefined, 'advanced')).toEqual(['dnd', 'advanced'])
+    expect(togglePinned(undefined, 'dnd')).toEqual(['dnd'])
+    expect(togglePinned(undefined, 'advanced')).toEqual(['advanced'])
     expect(togglePinned(['qr-only'], 'qr-only')).toEqual([])
   })
   it('QR shows the open event, then the tag filter, else the connect code', () => {
