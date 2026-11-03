@@ -12,6 +12,7 @@ import { S } from './strings'
 import { tapEdit } from './tap_edit'
 import { TONE_ORDER, communityOf, communityTags, filterOpen, openRings, setUi, toggleRing, toneVar, unsortedShown, acquaintancesShown, zoneFor } from './trustzones'
 import type { MoveKind } from './trustzones'
+import { connectionsShown } from './zone_connections'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -138,6 +139,9 @@ export function zoneSidebar(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'on
   const open = d.s.uiRings?.sidebarOpen !== false
   return el('aside', { class: 'zone-side', 'data-zone-side': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneSidebarTitle, () => { setUi(d.s, 'sidebarOpen', !open); d.onChange() }, { 'data-zone-side-toggle': '' }), el('b', {}, [S.zoneSidebarTitle])]),
-    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add]), tagFilters(d)] : []),
+    ...(open ? [el('div', { class: 'zone-tools' }, [d.expand, d.add]), el('label', { class: 'zone-check' }, [
+      el('input', { type: 'checkbox', 'data-zone-connections': '', ...(connectionsShown(d.s) ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, 'connections', (e.target as HTMLInputElement).checked); d.onChange() } }),
+      ' ', S.zoneConnections,
+    ]), tagFilters(d)] : []),
   ])
 }

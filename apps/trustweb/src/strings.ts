@@ -448,6 +448,7 @@ export const S = {
   zoneCommunityNone: 'no tag',
   zonePinned: 'Pinned',
   zoneSidebarTitle: 'Tools',
+  zoneConnections: 'Connections between my contacts',
   zoneShowOnly: 'Show only',
   zoneHide: 'Hide',
   zoneRename: (name: string) => `Edit the name of ${name}`,
