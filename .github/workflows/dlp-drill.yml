@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+# DLP restore drill, level 0 (docs/ops/dlp.md "CI drill"). Monthly on a GitHub runner: the real server writes a synthetic
+# fixture record, restore_drill.mjs snapshots, verifies and restores it, the tool and GNU diff compare the copy, and a fresh
+# server must serve it byte-identical with slot ownership intact, and a tampered copy must be caught (negative control).
+# Proves the tool and the restore path; does NOT prove production has an off-host backup (it has none yet, I7).
+# No install: node stdlib only, so a run is about a minute.
+# A failed scheduled or manual run (or one on main) opens or updates one issue labelled dlp-drill: a failed drill is an incident.
+# GitHub pauses scheduled workflows after 60 days without repository activity, so a silent month is not a pass:
+# the optional heartbeat (dead-man's switch, secret DLP_DRILL_HEARTBEAT_URL) is what catches a drill that never ran.
+name: dlp-drill
+on:
+  schedule:
+    - cron: '23 4 1 * *'   # monthly, the 1st at 04:23 UTC (off the hour; GitHub runs schedules on main only)
+  workflow_dispatch: {}
+  push:
+    paths:   # a push touching the drill path runs it on that branch
+      - 'services/trustweb-backup/restore_drill.mjs'
+      - 'services/trustweb-backup/restore_drill_ci.mjs'
+      - 'services/trustweb-backup/server.mjs'
+      - '.github/workflows/dlp-drill.yml'
+concurrency:
+  group: dlp-drill-${{ github.ref }}
+  cancel-in-progress: false   # a drill must finish; a second run waits
+permissions:
+  contents: read
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22   # no pnpm install: the drill is node stdlib only
+      - name: restore drill on a synthetic fixture (writes the step summary and the drill-log row)
+        id: drill
+        run: node services/trustweb-backup/restore_drill_ci.mjs --work "$RUNNER_TEMP/dlp-drill" --report dlp-drill-report.json
+      - name: independent diff (GNU diff -r, outside the tool)
+        if: ${{ !cancelled() }}
+        run: diff -r --exclude=tmp "$RUNNER_TEMP/dlp-drill/live" "$RUNNER_TEMP/dlp-drill/drill/restored"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: dlp-drill-report-${{ github.run_id }}
+          path: dlp-drill-report.json
+          retention-days: 90
+      - name: heartbeat to the dead-man's switch (docs/ops/dlp.md backup plan item 2; optional, needs the secret)
+        if: ${{ !cancelled() }}
+        env:
+          URL: ${{ secrets.DLP_DRILL_HEARTBEAT_URL }}
+          OUTCOME: ${{ steps.drill.outcome }}
+        run: |
+          if [ -z "$URL" ]; then echo "no DLP_DRILL_HEARTBEAT_URL secret: heartbeat skipped"; exit 0; fi
+          ping="$URL"; [ "$OUTCOME" = "success" ] || ping="$URL/fail"   # healthchecks.io convention
+          if curl -fsS -m 10 -o /dev/null "$ping" 2>/dev/null; then echo "heartbeat sent (drill $OUTCOME)"; else echo "::warning title=DLP drill heartbeat::ping failed (drill $OUTCOME)"; fi
+  alert:
+    needs: drill
+    if: ${{ failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write   # the only job that writes: one open issue per failure streak
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'DLP restore drill failed'
+            const label = 'dlp-drill'
+            const { owner, repo } = context.repo
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const line = `Run ${run} (event ${context.eventName}, commit ${context.sha.slice(0, 12)}) failed.`
+            const open = await github.paginate(github.rest.issues.listForRepo, { owner, repo, state: 'open', labels: label, per_page: 100 })
+            const found = open.find((i) => i.title === title && !i.pull_request)
+            if (found) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: found.number, body: `Failed again. ${line}` })
+              core.notice(`commented on issue #${found.number}`)
+              return
+            }
+            try {
+              await github.rest.issues.createLabel({ owner, repo, name: label, color: 'b60205', description: 'DLP restore drill (docs/ops/dlp.md)' })
+            } catch (e) {
+              if (e.status !== 422) throw e   // 422: the label exists already
+            }
+            const body = [
+              line,
+              '',
+              'A failed drill is an incident (docs/ops/dlp.md, Restore drills): the restore path is not proven until it passes again.',
+              '',
+              '1. Read the run step summary (checks table and drill-log row) and the dlp-drill-report artifact (90 days).',
+              '2. Fix the cause in the drill tool, the server or the workflow.',
+              '3. Re-run via Actions > dlp-drill > Run workflow (workflow_dispatch) and close this issue with the passing run link.',
+              '',
+              'The drill uses a synthetic fixture only; this issue carries no production data and no secrets.',
+            ].join('\n')
+            const created = await github.rest.issues.create({ owner, repo, title, body, labels: [label] })
+            core.notice(`opened issue #${created.data.number}`)
