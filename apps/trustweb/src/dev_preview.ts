@@ -12,7 +12,7 @@ import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
-import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
 interface Preview {
   id: string; short: string; created: string; base: string; baseSha: string; branch: string
@@ -131,11 +131,12 @@ export function initDevPreview(): void {
   document.head.appendChild(h('style', { textContent: CSS }))
   document.body.appendChild(root)
   const pointer = createPointer(() => root.getBoundingClientRect(), () => { lit = null; render() }, (seen) => { pointing = seen; steps.seen(seen); if (lit) render() })
-  const steps = createSteps(pointer, () => { lit = null; render() })
+  const steps = createSteps(pointer, () => { lit = null; steps.close(); render() })
 
   const tab = collapseStore(sessionStorage)
   const collapsed = tab.get
-  const setCollapsed = (on: boolean): void => { tab.set(on); render() }
+  const fold = stepFold()   // a "?" press folds the panel; the end of the walk unfolds it again, unless the owner folded it
+  const setCollapsed = (on: boolean): void => { fold.owner(); tab.set(on); render() }
   const loading = (): boolean => busy !== null || (prText !== '' && prStep !== 'ready' && prStep !== 'failed')
   const elapsed = (): number => Math.floor((Date.now() - since) / 1000)
   const begin = (): void => { since = Date.now() }
@@ -315,7 +316,7 @@ export function initDevPreview(): void {
       else { individual.set([...new Set([...individual.get(), ...subtreeKeys(p!.features, f.key)])]); render() }   // approved by the registry before: the note is the owner's own press
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
-    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f) })
+    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); if (steps.active() && fold.press(collapsed())) tab.set(true); render() })
     const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkShown(f) ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
@@ -512,6 +513,7 @@ export function initDevPreview(): void {
     if (!pill) root.scrollTop = scrolled.get()
     if (searching && !pill) { const i = root.querySelector<HTMLInputElement>('.srch'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length) }
     if (!lit) steps.close()
+    if (!steps.active() && fold.end()) { tab.set(false); render(); return }
     if (!steps.active()) pointer.set(lit ? q.features.find((f) => f.key === lit)?.selector : null)
   }
 
