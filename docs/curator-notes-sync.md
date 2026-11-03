@@ -178,9 +178,28 @@ journalctl --user -u trustweb-notes-pull.service     # the log
 loginctl enable-linger "$USER"                       # optional: keep running while logged out
 ```
 
-## Cleanup
+## Cleanup: blocks of people who left the record
 
-Placeholder: the sibling part documents `notes_sync.mjs cleanup` here.
+The bridge writes one marked block per person into the note where that person was found. When a person leaves the record
+(merged, hidden, forgotten), their block would stay behind. The cleanup pass cuts those blocks out, but never silently:
+
+```sh
+node apps/crm/scripts/notes_sync.mjs cleanup --vault ~/Notes --record ~/trustweb/record.json --dry-run   # list first
+node apps/crm/scripts/notes_sync.mjs cleanup --vault ~/Notes --record ~/trustweb/record.json             # then do it
+```
+
+For every block removed, in this order:
+
+1. the block text is archived verbatim under `<vault>/archive/trustweb-blocks/<YYYY-MM-DD>/<note path, "/" as "__">.<person id>.md`
+   with a four-line header (note, person, archived stamp); a same-day repeat gets `.2.md`, `.3.md`, nothing is overwritten;
+2. the archive folder is marked with `.trustweb-generated`, so the reader never reads it back as notes;
+3. the note is rewritten without the block (the rest byte for byte);
+4. one JSON line `{ at, path, id, archived }` is appended to `<vault>/assets/local-notes/cleanup.log.jsonl`.
+
+A block in a note that opted out (`trustweb: no`) is cleaned too: it is TrustWeb's own residue, not your text. An empty
+people list removes nothing, so an empty or missing record can never strip the vault. `--archive <dir>` moves the archive
+elsewhere. The same pass runs from the bridge (`notes_bridge.mjs cleanup --record …`, or `POST /cleanup {people, dryRun?}`
+with the Curator's live people, which already leaves out hidden and merged people). Pruning the archive is yours to do by hand.
 
 ## Join offers
 
