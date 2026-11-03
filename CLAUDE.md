@@ -9,8 +9,10 @@ open. Three remotes are configured: `github`, `ecstatic-world`, `jakobs-branch`.
 
 The licence rule, which is the thing that actually has to hold:
 
-- **This repo is AGPL-3.0-or-later**, because the owner leads it himself. Anything pushed publicly
-  from here must be under AGPL, never AMPL.
+- **This repo is dual licensed `LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later`** (owner decision
+  2026-10-24, confirmed 2026-11-03): every new source, build and test file carries that SPDX line;
+  both LICENSE texts sit in the repo root. Package manifests may state AGPL-3.0-or-later, the OR
+  expression permits it.
 - **A project the owner does not lead defaults to AMPL 1.0.** That is the standing default; AGPL is
   the exception that applies when he is leading.
 - Anyone wanting terms outside AGPL is told to write to connect@japossert.com. Keep that route in
