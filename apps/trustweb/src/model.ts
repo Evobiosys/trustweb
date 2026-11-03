@@ -19,6 +19,7 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
+import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
@@ -950,7 +951,7 @@ export interface AppState {
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
-  shareProfiles?: import('./share_profiles').ShareProfile[]
+  shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
   shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */
