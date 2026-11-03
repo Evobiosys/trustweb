@@ -312,6 +312,16 @@ button.view-drop-sep{border:0; background:none; color:inherit; font-family:inher
 .advanced-panel{display:flex; flex-direction:column; gap:8px; width:100%}
 .advanced-panel[hidden]{display:none}
 .advanced-panel .meta{margin:0}
+.share-count{color:var(--teal); font-size:22px; font-weight:600; margin:22px 2px 4px}
+.share-chip{display:inline-flex; position:relative; align-items:center; gap:2px; padding:0}
+.share-chip-label,.share-chip-x{background:none; border:0; color:inherit; font:inherit; padding:6px 4px 6px 11px; cursor:pointer}
+.share-chip-x{padding:6px 11px 6px 4px}
+button.share-chip-label{text-decoration:underline}
+.share-peek{position:absolute; top:100%; left:0; z-index:5; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 12px; box-shadow:0 2px 10px rgba(36,27,46,.18); white-space:nowrap}
+.share-peek[hidden]{display:none}
+.share-more{background:none; border:0; color:var(--teal); font:inherit; padding:4px 0; cursor:pointer; text-decoration:underline}
+.share-profiles{margin:10px 0 0}
+.share-member{margin:6px 2px}
 .share-row-wrap{margin:4px 0 8px}
 .share-row-wrap .meta{margin:4px 0 0}
 .share-row button{padding:8px 6px; line-height:1.2}

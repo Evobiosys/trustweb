@@ -43,16 +43,29 @@ export const candidates = (b: Basis): Candidate[] => [
   ...b.tags.map((t) => ({ id: `tag:${t.id}`, label: t.label ?? t.id })),
 ]
 
-/** Up to five candidates for what was typed: prefix or substring first, then the fuzzy match; the ones already chosen stay out. */
+/**
+ * Up to five candidates for what was typed: prefix or substring first, then the fuzzy match; the ones already chosen stay out.
+ * No prefix offers people and tags; "@" only people, "#" only tags (a bare "@" or "#" lists that kind).
+ */
 export function suggest(query: string, all: readonly Candidate[], taken: readonly string[], max = 5): Candidate[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return []
+  const kind = query.trim().startsWith('@') ? 'person:' : query.trim().startsWith('#') ? 'tag:' : ''
+  const q = (kind ? query.trim().slice(1) : query).trim().toLowerCase()
+  if (!q && !kind) return []
   const score = (c: Candidate): number => {
     const l = c.label.toLowerCase()
-    return l.startsWith(q) ? 1 : l.includes(q) ? 0.9 : termSimilarity(q, l)
+    return !q || l.startsWith(q) ? 1 : l.includes(q) ? 0.9 : termSimilarity(q, l)
   }
-  return all.filter((c) => !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
+  return all.filter((c) => c.id.startsWith(kind) && !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
     .sort((a, b) => b.s - a.s).slice(0, max).map((x) => x.c)
+}
+
+/** The tag chip's hover list shows this many people; "more..." shows all. */
+export const MEMBERS_PEEK = 3
+
+/** The people who carry a tag chip (`tag:<id>`), in record order (the community list). */
+export const membersOf = (b: Basis, tagId: string): Pick<Person, 'id' | 'name'>[] => {
+  const tag = tagId.slice('tag:'.length)
+  return b.people.filter((p) => tagsOf(p, b.tags).some((t) => t.id === tag)).map((p) => ({ id: p.id, name: p.name }))
 }
 
 /** The relation store: each person's zone and tags, plus the scope tuples of the latest share line per item. */
