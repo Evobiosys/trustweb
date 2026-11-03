@@ -6,7 +6,7 @@ Written 2026-11-02. Revised 2026-11-03 (round 2: the owner's four decisions, imp
 
 ## 📦 Status
 
-> **Prototype.** Branch `cloud/device-sync-e2ee-f`. 136 tests green (`node --test`).
+> **Prototype.** Branch `cloud/device-sync-e2ee-f`. 140 tests green (`node --test`).
 >
 > **Owner decisions (PR #71 / PR #68 §10), all decided and implemented in `packages/device-sync`:**
 >
@@ -29,17 +29,17 @@ Written 2026-11-02. Revised 2026-11-03 (round 2: the owner's four decisions, imp
 >
 > | Property | v2 round 2 | Detail |
 > |---|---|---|
-> | Forward secrecy | **Yes**, against a later capture of the stored state | Symmetric ratchet: one key per message, deleted after use |
+> | Forward secrecy | **Yes**, against a later capture of the whole device state (record blob and key store) | Symmetric ratchet: one key per message, deleted after use. The pairing epoch is not stored and the roots are zeroed once the chains are seeded |
 > | Post-compromise security | **No** | No DH ratchet step: a stolen current chain key opens everything that follows on that chain until the devices pair again |
 > | Post-quantum | **No** | X25519 |
 > | Metadata | **Not hidden** | The relay sees addresses, timing, the size BUCKET (1 / 4 / 16 / 64 KiB padding), the piece count and the per-direction counter |
 > | Keys at rest | IndexedDB, non-extractable `CryptoKey` | Per origin; not encrypted at rest by the browser; usable (not exportable) by code on the unlocked device |
-> | Restore from an older backup | Needs re-pairing | The price of forward secrecy. Nothing is lost: the log merges after re-pairing |
+> | Restore from an older backup | Catches up by itself, no re-pairing | Its first sync is dropped on the peer (used counters) and reports `offline`; the sending chain then jumps 32 steps ahead per unanswered `have` until it passes the peer. Nothing is lost. The backup's own old keys can open the wires of its time |
 >
-> Forward secrecy has one more limit: the chain roots come from the static device key and the pairing epoch. Whoever can USE the
-> device key (code on the unlocked device) and reads the epoch from the record blob can re-derive the roots of a current pairing,
-> and with them every message key of that pairing. The ratchet protects against a copied state (a backup, a copied blob), not against
-> a fully compromised, unlocked device.
+> Why the epoch is not stored: with the epoch in the blob, the key in the key store and the peer's public key, every past chain
+> could be re-derived. Forward secrecy would then have held against the relay only. Now a `Pairing` keeps a `pairId` (a hash of the
+> epoch, for the unlink guard) and the two chains. A captured device state opens only the skipped keys it holds (at most 1024 per
+> direction) and everything that follows under the current chains until the devices pair again.
 > Entries are hash-chained but not signed per device, so a compromised paired device can write in another device's name.
 
 ## 🧭 Context
@@ -130,7 +130,7 @@ What the findings did not cover and v2 adds: forward secrecy (decision 4), keys 
 - The record content (people, notes, resources, settings) in the log.
 - The device private key (X25519): a non-extractable `CryptoKey` in IndexedDB.
 - The ratchet state per pairing and direction: chain key, next counter, skipped message keys. It lives in the record blob.
-- The pairing epoch per pairing (record blob). With the device key it re-derives the chain roots.
+- The pairing epoch, during pairing only. With the device key and the peer's public key it would re-derive the chain roots, so it is never stored: the `Pairing` keeps `pairId` = base64url(SHA-256(`trustweb-device-sync/v2/pair-id` || epoch)), from which the epoch cannot be recovered.
 - The integrity of the log: which device wrote what, in which order.
 - The pairing secret, during the 10 minutes it is valid.
 
