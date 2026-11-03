@@ -8,7 +8,7 @@
  *  - Each device has a static X25519 key pair; `deviceId` is a hash of the public key, so an id cannot be claimed without the key.
  *  - X25519 ECDH → HKDF-SHA256 (salt = sha256 of the two public keys in byte order, so both sides agree without negotiating
  *    who is "first") → TWO directional AES-GCM-256 keys. A message sealed A→B cannot be reflected back to A as if it came from
- *    B, and each direction runs its own replay counter (replay.ts) without collisions.
+ *    B, and each direction runs its own ratchet chain and counter (ratchet.ts) without collisions.
  *  - A 6-digit SAS (short authentication string) from the same HKDF, for the two humans to compare. 20 bits of comparison
  *    instead of 16; an active attacker who substitutes a key during pairing has about a one-in-a-million chance per attempt of
  *    producing the same digits.

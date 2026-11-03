@@ -14,7 +14,7 @@
  * Out-of-order delivery (the relay does not promise order): a counter ahead of `next` derives and keeps the message keys of the
  * gap in `skipped`, at most MAX_SKIP of them (oldest evicted); a counter more than MAX_SKIP ahead is refused. A skipped key is
  * handed out once and deleted, so a second delivery of the same wire finds no key: that is the replay defence (it replaces
- * replay.ts for ratcheted traffic). Every function is pure: it never mutates its input and returns a fresh, JSON-safe state the
+ * the retired archive/replay.ts window for ratcheted traffic). Every function is pure: it never mutates its input and returns a fresh, JSON-safe state the
  * caller persists. A caller must commit the new state only after the wire actually opened (the counter comes from an
  * unauthenticated wire prefix; see seal.ts).
  *

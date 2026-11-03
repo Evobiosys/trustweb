@@ -27,7 +27,7 @@
  *
  * WHAT IS NOT CLAIMED (I7):
  *  - Opening a wire proves only that someone holding this key sealed it for this (from, to, ctr). It does NOT prove freshness:
- *    replays are stopped by the caller (the ratchet's one-time message keys, or replay.ts), not here.
+ *    replays are stopped by the caller (the ratchet's one-time message keys, ratchet.ts), not here.
  *  - Forward secrecy is NOT a property of this file: with a static key (keys.ts derivePairKeys) there is none; with per-message
  *    keys from ratchet.ts there is what that module claims, no more. NO post-quantum security.
  *  - NO metadata protection. The relay sees both addresses and the time, and now also the COUNTER: how many messages this

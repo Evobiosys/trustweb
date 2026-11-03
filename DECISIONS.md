@@ -488,3 +488,19 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   device's id; it is caught as a fork only once both histories meet). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
   (derive DeviceKeys from the sync did:peer:2 `E` key, replay the record into a first log) is in the design doc.
 - Tests run on `node --test` (Node >= 22.18 strips types): the package has no dependency to install, and CI runs it as its own step.
+
+## D-device-sync-e2ee-2 (2026-11-03): owner decisions on PR #71 / #68 §10, implemented (packages/device-sync round 2)
+- (1) The per-sync "Receive from <device>?" prompt STAYS: a complete `entries` message goes to `onIncoming`; nothing merges before accept,
+  decline applies nothing and fails the waiting sync with 'declined'; both halves of a round are asked about.
+- (2) Pairing by QR only: the `TWS2~…` code is shown as a QR code and never put into a link (a link is forwarded, logged and previewed;
+  a QR is read in the same room). `pairingLink` / `codeFromLink` are gone.
+- (3) Keys move out of the record blob now: the X25519 private key lives in a KeyStore (`indexedDbKeyStore`, a non-extractable CryptoKey);
+  a v1 blob with `secretKey` is migrated on first start and rewritten as v2 without it (same deviceId). Not claimed: IndexedDB is per
+  origin and not encrypted at rest; code on the unlocked device can use the key, not export it.
+- (4) Forward secrecy before rollout: a symmetric ratchet per pairing and direction (`ratchet.ts`, HKDF chain, one AES-GCM key per
+  counter, deleted after use, up to 1024 skipped keys for out-of-order delivery) replaces the static pair keys and the replay window
+  (`archive/replay.ts`). The counter travels in clear in the wire prefix and in the AAD. Consequences, stated: no post-compromise
+  security yet (no DH ratchet step; open point), and a device restored from an older backup must pair again (its keys are gone on the
+  peer); nothing is lost, the log merges after re-pairing. Round-1's wall-clock counter floor is gone with it.
+- PR #68 finding 4 (the relay learns the exact record size): plaintexts are padded to 1 / 4 / 16 / 64 KiB buckets (`seal.ts`); the
+  bucket and the piece count stay visible.
