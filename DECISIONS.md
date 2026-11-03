@@ -504,3 +504,40 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   "Interchangeable" is narrowed: a relay only reaches peers connected to it.
 - Not covered: sidecar not built/run in CI; iroh address not yet published in did:peer:2 / contact card; offline inbox stays on the mediator rung;
   no relay-side allowlists; no relay deployed.
+
+## D-device-sync-e2ee (2026-11-02): own-device sync as an append-only log with replay-protected seals (prototype, packages/device-sync)
+- Problem: device sync v3 (sync_core.ts / sync_link.ts) ships the whole record as one bundle, decides by wall-clock stamps, and its only
+  defence against a relay that re-delivers an old wire is `exp` (10 min). A held wire inside that window, or a wire re-addressed by the relay,
+  is applied; a device restored from a backup silently re-uses stamps; the 4-hex fingerprint has 16 bits.
+- Decision: a new package `@resource-web/device-sync` (zero runtime dependencies, WebCrypto only) behind the existing relay interface
+  (`sendRaw` / `onRawWire` of apps/demo relay.ts, structurally typed as `RelayLike`). Design in docs/design/device-sync-e2ee.md.
+  Pairing: one-time secret in the QR / link only (`TWS2~address~pub~secret~exp`), X25519 ECDH from the public key in the code, HKDF into
+  two directional AES-GCM keys, a 6-digit SAS both people compare, Confirm on both sides. Seal: random IV, AAD binds the outer from/to, a
+  per-direction counter (started at the wall clock, so a restore from an older backup never falls behind) with a 1024-wide anti-replay
+  window persisted before the wire is acked. Record: an append-only log of field-level puts and entity tombstones, per-device seq + hash
+  chain + vector clock; merge is a verified set union (malformed / bad-hash / chain-gap / fork / own are rejected and reported, nothing
+  silently dropped; nobody may extend this device's own chain); the record is materialised by causal field-level last-writer-wins,
+  concurrent edits are decided by (at, device) and the loser stays listed for "Review merge". Nothing is ever deleted from the log.
+- Not claimed (I7): no forward secrecy (static ECDH; a stolen device key opens what the relay still holds), no post-quantum, no metadata
+  protection (the relay sees addresses, sizes, timing), no per-device signatures (a compromised paired device can write under a third
+  device's id; it is caught as a fork only once both histories meet). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
+  (derive DeviceKeys from the sync did:peer:2 `E` key, replay the record into a first log) is in the design doc.
+- Tests run on `node --test` (Node >= 22.18 strips types): the package has no dependency to install, and CI runs it as its own step.
+
+## D-device-sync-e2ee-2 (2026-11-03): owner decisions on PR #71 / #68 §10, implemented (packages/device-sync round 2)
+- (1) The per-sync "Receive from <device>?" prompt STAYS: a complete `entries` message goes to `onIncoming`; nothing merges before accept,
+  decline applies nothing and fails the waiting sync with 'declined'; both halves of a round are asked about.
+- (2) Pairing by QR only: the `TWS2~…` code is shown as a QR code and never put into a link (a link is forwarded, logged and previewed;
+  a QR is read in the same room). `pairingLink` / `codeFromLink` are gone.
+- (3) Keys move out of the record blob now: the X25519 private key lives in a KeyStore (`indexedDbKeyStore`, a non-extractable CryptoKey);
+  a v1 blob with `secretKey` is migrated on first start and rewritten as v2 without it (same deviceId). Not claimed: IndexedDB is per
+  origin and not encrypted at rest; code on the unlocked device can use the key, not export it.
+- (4) Forward secrecy before rollout: a symmetric ratchet per pairing and direction (`ratchet.ts`, HKDF chain, one AES-GCM key per
+  counter, deleted after use, up to 1024 skipped keys for out-of-order delivery) replaces the static pair keys and the replay window
+  (`archive/replay.ts`). The counter travels in clear in the wire prefix and in the AAD. The pairing epoch is NOT stored (a `pairId`
+  hash guards stale confirms), so a captured device state re-derives no earlier key. Consequences, stated: no post-compromise security
+  yet (no DH ratchet step; open point); a device restored from an older backup has its first sync dropped on the peer (used counters,
+  logged there) and catches up on the next try because its sending chain moves 32 steps ahead per unanswered `have`; the backup's own
+  keys open the wires of its time. Round-1's wall-clock counter floor is gone with it. Send and receive paths are serialised per peer.
+- PR #68 finding 4 (the relay learns the exact record size): plaintexts are padded to 1 / 4 / 16 / 64 KiB buckets (`seal.ts`); the
+  bucket and the piece count stay visible.
