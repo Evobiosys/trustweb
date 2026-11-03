@@ -4,9 +4,10 @@ import { el } from '../../demo/src/ui/dom'
 import { type ColourTag } from './colour_tags'
 import { candidates, initial, suggest, withChip, withoutChip } from './share_page'
 import type { ChipRow } from './share_page'
-import type { AppState, Person } from './model'
+import type { AppState, Person, Ring } from './model'
 import { S } from './strings'
-import { communityOf, communityTags, filterOpen, setUi, unsortedShown, acquaintancesShown } from './trustzones'
+import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
+import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -26,12 +27,12 @@ export interface ZonePanelDeps {
   onChange: () => void
 }
 
-/** Filter (advanced): Acquaintances, Not yet sorted, Community tag. Wave 28b: drawn in the Network view (the TrustZones sidebar has the tag filters instead). */
+/** Filter (advanced): one checkbox per trust ring, Community tag. Wave 28b: drawn in the Network view (the TrustZones sidebar has the tag filters instead). */
 export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>): HTMLElement {
   const open = filterOpen(d.s)
-  const check = (key: 'acquaintances' | 'unsorted', label: string, on: boolean): HTMLElement => el('label', { class: 'zone-check' }, [
-    el('input', { type: 'checkbox', 'data-zone-filter': key, ...(on ? { checked: '' } : {}), onchange: (e: Event) => { setUi(d.s, key, (e.target as HTMLInputElement).checked); d.onChange() } }),
-    ' ', label,
+  const check = (ring: Ring): HTMLElement => el('label', { class: 'zone-check' }, [
+    el('input', { type: 'checkbox', 'data-zone-filter': ring, ...(ringShown(d.s, ring) ? { checked: '' } : {}), onchange: (e: Event) => { setRingShown(d.s, ring, (e.target as HTMLInputElement).checked); d.onChange() } }),
+    ' ', S.ringLabel[ring],
   ])
   const community = communityOf(d.s)
   const pick = el('select', { class: 'field', 'data-zone-community': '', 'aria-label': S.zoneCommunity, onchange: (e: Event) => { setUi(d.s, 'community', (e.target as HTMLSelectElement).value || undefined); d.onChange() } }, [
@@ -40,7 +41,7 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
   ])
   return el('section', { class: 'zone-filter', 'data-zone-filter-section': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle])]),
-    ...(open ? [check('acquaintances', S.zoneFilterAcq, acquaintancesShown(d.s)), check('unsorted', S.zoneFilterUnsorted, unsortedShown(d.s)), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
+    ...(open ? [...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
   ])
 }
 
