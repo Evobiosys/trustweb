@@ -469,3 +469,26 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
+
+## D-curator-notes-sync (2026-11-03): scheduled pull, cleanup with archive, join offers for first names, people: skip (owner 2026-11-03)
+- Scheduled pull = the existing `notes_sync.mjs pull` (reader resumable by content hash, converter one-shot) under a lock file
+  `<work>/pull.lock` (pid + start time; a dead pid or a lock older than 6 h is stale and taken over; exit 3 while held). A run with
+  nothing new rewrites nothing: the converter leaves a byte-identical record alone and makes no `.bak`. launchd, cron and a systemd
+  user timer are documented in docs/curator-notes-sync.md; the lock is what makes an overlapping firing harmless.
+- Cleanup pass (`notes_sync.mjs cleanup`, `notes_cleanup.mjs`, bridge `POST /cleanup`): a TrustWeb block in a note whose person id is
+  no longer in the record is cut out of the note, but its text is archived first under `<vault>/archive/trustweb-blocks/<day>/` (the
+  folder carries `.trustweb-generated`, so the reader never reads it back) and one JSON line goes to the cleanup log (I6). Nothing is
+  deleted silently; the archive folder is the owner's to prune by hand. An opted-out note (`trustweb: no`) is cleaned too: the block
+  is TrustWeb's own residue, not the owner's text.
+- Join offers: a mention that is only a first name creates no local person any more (it used to). The converter emits a pending offer
+  (`<work>/join-offers.json`: name, note, date, facts, candidates = people with the same first name, diacritics folded) and the
+  Curator lists them under Settings > Obsidian / Logseq as "Names from your notes to join": Join puts the facts on the chosen person
+  as lines with local provenance (the same path as a bullet pulled from the vault), Not them dismisses. Decisions are appended to
+  `<work>/join-decisions.jsonl` through the bridge and honoured by every later pull (idempotent), so the scheduled run and the
+  owner's choices never fight. A full name still joins by exact name as before; a single name never auto-joins anybody.
+- Per-note rules: `trustweb: no` stays "TrustWeb never touches this note" (not read, no block written). New `people: skip` in the
+  front matter = "this note names people but creates none" (not read for people; a block may still be written there). A folder
+  list does the same for whole folders: `--skip-folders a,b` or `<vault>/.trustweb-notes.json` `{ "skipFolders": [...] }`, meant
+  for speaker scans and pitch notes. Skipped notes never reach the reader (no model cost).
+- Verification note: the container building this had no npm registry, so the vitest files were run through a node:test shim
+  (same describe/it/expect surface); CI runs the real gates.
