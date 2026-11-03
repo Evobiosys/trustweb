@@ -4,6 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
+import { approveEach, retryFor, unapprovedLine, waveBusy, waveIdle, waveLabel, waveStep, type WaveEvent } from './dev_wave_press'
 import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
@@ -21,7 +22,7 @@ const CSS = `
 .twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
-.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok .big.fail{background:#a3271f;color:#fff}.twf-ok .big.grey{background:#5b6b70;color:#fff}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
+.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok .big.fail{background:#a3271f;color:#fff}.twf-ok .big.grey{background:#5b6b70;color:#fff}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .more{font-size:12px;font-weight:600;color:#b8650a;text-align:center}.twf-ok .more:empty,.twf-ok .warn:empty{display:none}.twf-ok .big.closed{opacity:.45}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok.ok{border-color:#1f7a4d}.twf-ok.ok header{background:#1f7a4d}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twc-file,.twc-a,.twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twc-file{color:#0e6b73;background:#d9f3f2}.twc-a{color:#8a4a00;background:#ffe8c7}.twc-b{color:#6a2c9e;background:#efe0fb}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
@@ -174,29 +175,50 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
         hint.replaceChildren(...conflictNodes(head), ...(detail ? [Object.assign(document.createElement('details'), { innerHTML: '<summary>details</summary>' })] : []))
         if (detail) hint.querySelector('details')!.append(...conflictNodes(detail))
       }
+      // The press state (dev_wave_press.ts) decides the label and the button, never a refresh tick: a tick only updates what the gate says (`view`).
+      let press = waveIdle
+      let view = { ok: true, light: false, title: '', open: 0 }
+      const more = Object.assign(document.createElement('div'), { className: 'more' })
+      const why = Object.assign(document.createElement('div'), { className: 'warn' })
       const go = btn(APPROVE_WAVE_LABEL, 'go big', () => {
-        const since = Date.now() - 2000
-        void read().then(async (q) => {
+        if (waveBusy(press)) return
+        step({ type: 'press' })
+        void run(Date.now() - 2000)
+      })
+      const paint = (): void => {
+        go.textContent = waveLabel(press); go.disabled = waveBusy(press)
+        go.classList.toggle('light', view.light); go.classList.toggle('closed', !view.ok && !waveBusy(press)); go.title = view.title
+        more.textContent = view.open ? unapprovedLine(view.open) : ''
+        why.textContent = press.error ? hintParts(press.error).head : ''
+      }
+      const step = (e: WaveEvent): void => { press = waveStep(press, e); paint() }
+      const fail = (reason: string): void => { step({ type: 'fail', reason }) }
+      // A restarting server answers 5xx or not at all: both are retried for 10 s.
+      const sure = (r: Response): Response => { if (r.status >= 500) throw new Error('HTTP ' + r.status); return r }
+      async function run(since: number): Promise<void> {
+        try {
+          const q = await retryFor(read).catch(() => { throw new Error('Preview server not answering') })
           const g = approveGate(asApproved(q))
-          if (!g.ok) { go.disabled = true; setHint(g.hint); return }
+          if (!g.ok) { fail(g.hint); setHint(g.hint); return }
           const w = waveState(q.features, individualStore(localStorage, id).get())
           if (w.warn) { foldStore(sessionStorage, id).set(expandFor(q.features, w.implicit, foldStore(sessionStorage, id).get())); loadOpenStore(sessionStorage, id).set(true) }
-          go.disabled = true
-          for (const f of unapproved(q.features)) if (!(await post(f.key)).ok) { hint.textContent = `Could not approve ${f.title}`; go.disabled = false; return }
-          return fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
-        }).catch(() => { hint.textContent = 'Preview server not answering' })
-      })
+          await approveEach(unapproved(q.features), async (k) => (await retryFor(async () => sure(await post(k)))).ok)
+          step({ type: 'merging' })
+          const r = await retryFor(async () => sure(await fetch('/__tw/approve-merge', { method: 'POST' })))
+          if (r.status === 202 || r.status === 409) { step({ type: 'handed' }); pollMerge(since) } else fail(`Approve wave refused (HTTP ${r.status})`)
+        } catch (e) { fail((e as Error).message || 'Preview server not answering') }
+      }
       const refresh = (): void => {
         if (!go.isConnected) return
         void read().then((q) => {
-          const g = approveGate(asApproved(q)); go.disabled = !g.ok; setHint(g.ok ? APPROVE_HINT : g.hint)
+          const g = approveGate(asApproved(q)); setHint(g.ok ? APPROVE_HINT : g.hint)
           const w = waveState(q.features, individualStore(localStorage, id).get())
-          go.textContent = (w.warn ? '⚠ ' : '') + APPROVE_WAVE_LABEL; go.classList.toggle('light', w.light)
-          go.title = w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one'
+          view = { ok: g.ok, light: w.light, open: w.implicit.length, title: w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one' }
+          paint()
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }
-      body.append(go, hint); refresh(); const t = setInterval(() => { if (!go.isConnected) clearInterval(t); else refresh() }, 3000)
+      body.append(go, more, why, hint); refresh(); const t = setInterval(() => { if (!go.isConnected) clearInterval(t); else refresh() }, 3000)
     }
     body.append(personal)
     if (stockLink && bld.stockUrl) body.append(btn('Open stock preview', 'alt', () => { window.open(bld.stockUrl, '_blank') }))
