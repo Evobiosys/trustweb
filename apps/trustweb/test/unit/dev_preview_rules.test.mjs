@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -307,9 +307,9 @@ describe('approve (merge to main) rules', () => {
     expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
   })
   it('Declare done opens with nothing running, every loaded row approved (>= 1) and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
-    expect(approveGate({ ...passed, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
-    expect(approveGate({ ...passed, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
-    expect(approveGate({ ...passed, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
+    expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
+    expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, pending: true, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, tested: { ...passed.tested, running: true }, features: [g('a', true, 'merge')] }).hint).toBe('Tests are running')
     expect(approveGate({ ...passed, features: [g('a', true, null), g('b', false, 'merge')] }).hint).toBe('Approve first: T-a')
@@ -439,5 +439,54 @@ describe('conflictParts: the names in a conflict text, each with its own colour'
   it('text without a conflict stays one plain string', () => {
     expect(conflictParts('PR #49: merging')).toEqual(['PR #49: merging'])
     expect(conflictParts('')).toEqual([])
+  })
+})
+
+describe('panel-approve-2', () => {
+  const g = (key, checked, verdict, extra = {}) => ({ key, branch: 'b/' + key, title: 'T-' + key, requires: [], checked, verdict, ...extra })
+  it('approve on an unticked row loads it (and what it requires) first; a loaded row stays as it is', () => {
+    const list = [g('a', true, null), g('b', false, null, { requires: ['a'] }), g('c', false, null)]
+    expect(ensureLoaded(list, 'b').find((x) => x.key === 'b').checked).toBe(true)
+    expect(ensureLoaded(list, 'c').find((x) => x.key === 'c').checked).toBe(true)
+    expect(ensureLoaded(list, 'a')).toBe(list)
+  })
+  it('the reminder is collapsed per preview until opened', () => {
+    const mem = {}
+    const st = { getItem: (k) => mem[k] ?? null, setItem: (k, v) => { mem[k] = v } }
+    expect(remindOpenStore(st, 'p1').get()).toBe(false)
+    remindOpenStore(st, 'p1').set(true)
+    expect(remindOpenStore(st, 'p1').get()).toBe(true)
+    expect(remindOpenStore(st, 'p2').get()).toBe(false)
+  })
+  it('search keeps rows by title, key, where or steps; empty keeps all', () => {
+    const list = [g('rec', true, null, { title: 'Recording icon' }), g('map', true, null, { where: 'Map view', steps: ['Tap the pin @ .pin'] }), g('x', true, null)]
+    expect(searchRows(list, ' RECORD').map((x) => x.key)).toEqual(['rec'])
+    expect(searchRows(list, 'map').map((x) => x.key)).toEqual(['map'])
+    expect(searchRows(list, 'tap the pin').map((x) => x.key)).toEqual(['map'])
+    expect(searchRows(list, '')).toBe(list)
+  })
+  it('compat line and hint (real registry shape)', () => {
+    const loaded = [g('a', true, 'merge', { ref: 'r1' }), g('b', true, 'merge', { ref: 'r2' })]
+    const c = (o) => ({ baseSha: 'B', refs: { a: 'r1', b: 'r2' }, singles: { a: 'ok', b: 'ok' }, pairs: { 'a+b': 'ok' }, full: 'ok', state: 'ok', ...o })
+    expect(compatLine(undefined)).toBeNull()
+    expect(compatLine({ state: 'running' }).text).toBe('compat: checking…')
+    expect(compatLine(c({}))).toEqual({ text: 'compat ✓ 1 pairs, full set', ok: true, conflicts: [] })
+    expect(compatLine(c({}), false).text).toBe('compat: out of date')
+    const bad = compatLine(c({ state: 'conflict', pairs: { 'a+b': 'conflict: strings.ts' }, full: 'conflict: b (main.ts)' }))
+    expect(bad.text).toBe('compat ✗ a+b: strings.ts (+1)')
+    expect(bad.conflicts).toEqual(['a+b: strings.ts', 'full: b (main.ts)'])
+    expect(compatHint(undefined, 'B', loaded)).toBe('compat check not run yet')
+    expect(compatHint(c({ state: 'running' }), 'B', loaded)).toBe('compat check running')
+    expect(compatHint(c({}), 'X', loaded)).toBe('compat check out of date')
+    expect(compatHint(c({ state: 'conflict', pairs: { 'a+b': 'conflict: strings.ts' } }), 'B', loaded)).toBe('compat: fix a+b (strings.ts)')
+    expect(compatHint(c({}), 'B', loaded)).toBe('')
+    const p = { assembled: { sha: 'x', error: null }, features: loaded, baseSha: 'B' }
+    expect(approveGate({ ...p, compat: c({ state: 'running' }) })).toEqual({ ok: false, hint: 'compat check running' })
+    expect(approveGate({ ...p, compat: c({}) }).ok).toBe(true)
+    expect(approveGate({ ...p, compat: undefined, pending: true }).ok).toBe(true)
+  })
+  it('a long conflict hint folds into head and detail', () => {
+    expect(hintParts('Fix the conflict first: a\nb')).toEqual({ head: 'Fix the conflict first', detail: 'a\nb' })
+    expect(hintParts('Approve first: T-a')).toEqual({ head: 'Approve first: T-a', detail: '' })
   })
 })

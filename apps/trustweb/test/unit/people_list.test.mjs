@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { peopleByZone, pinnedPeople, lastContact } from '../../src/people_list'
+import { peopleByZone, pinnedPeople, lastContact, zoneOpen } from '../../src/people_list'
 import { Ring } from '../../src/model'
 
 const DAY = 86_400_000
@@ -39,5 +39,21 @@ describe('people list by trust zone', () => {
   it('no pinned people, no pinned group; a search filters it too', () => {
     expect(pinnedPeople({ people }, '')).toEqual([])
     expect(pinnedPeople({ people: [p('g', 'Gus', Ring.Close, 1, { pinned: true })] }, 'zzz')).toEqual([])
+  })
+  it('the closest few show even when empty, on top; other empty zones stay out', () => {
+    const g = peopleByZone({ people: [p('b', 'Ben', Ring.Close, 2 * DAY)] }, '')
+    expect(g.map((x) => x.ring)).toEqual([Ring.Closest, Ring.Close])
+    expect(g[0].people).toEqual([])
+    expect(peopleByZone({ people: [] }, '').map((x) => x.ring)).toEqual([Ring.Closest])
+  })
+  it('a search that matches nobody in the closest few drops it', () => {
+    expect(peopleByZone({ people }, 'Ben').map((x) => x.ring)).toEqual([Ring.Close])
+  })
+  it('the closest few start open, the rest collapsed; a press flips; a search opens all', () => {
+    expect(zoneOpen(Ring.Closest, new Set(), false)).toBe(true)
+    expect(zoneOpen(Ring.Close, new Set(), false)).toBe(false)
+    expect(zoneOpen(Ring.Closest, new Set([Ring.Closest]), false)).toBe(false)
+    expect(zoneOpen(Ring.Close, new Set([Ring.Close]), false)).toBe(true)
+    expect(zoneOpen(Ring.Close, new Set(), true)).toBe(true)
   })
 })

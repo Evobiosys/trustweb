@@ -2,6 +2,7 @@
 /** Wave 22 small-wording: "See TrustWeb in action", and the lock / "(primary)" on username rows. */
 import { readFileSync } from 'node:fs'
 import { S } from '../../src/strings.ts'
+import { demoUrl } from '../../src/page_foot.ts'
 
 const src = (f) => readFileSync(new URL(`../../src/${f}`, import.meta.url), 'utf8')
 
@@ -20,9 +21,21 @@ describe('See TrustWeb in action', () => {
 describe('username rows', () => {
   it('the lock is a button that explains itself; the primary row carries "(primary)"', () => {
     const v = src('sync_view.ts')
-    expect(v).toMatch(/'data-un-lock': name, title: S\.unLockedWhy, 'aria-label': S\.unLockedWhy, onclick: \(\) => h\.toast\(S\.unLockedWhy\)/)
+    expect(v).toMatch(/'data-un-lock': name, 'aria-label': S\.unLockedWhy/)
+    expect(v).toContain("'data-un-lock-why': name")
+    expect(v).toContain('onpointerenter')
+    expect(v).not.toContain('h.toast(S.unLockedWhy)')
     expect(v).toContain('S.unPrimaryHint')
     expect(S.unLockedWhy).toBe('Locked: this name was granted by the operator. The app can neither release nor replace it.')
     expect(S.unPrimaryHint).toBe('(primary)')
+  })
+})
+
+describe('connect and share page foot', () => {
+  it('links "See TrustWeb in action" to the demo build, from both pages', () => {
+    expect(demoUrl('https://x.test/app/')).toBe('https://x.test/app/demo/')
+    expect(S.seeInAction).toBe('See TrustWeb in action')
+    expect(src('share_page_view.ts')).toContain('seeInActionFoot()')
+    expect(src('main.ts')).toContain('seeInActionFoot(),')
   })
 })

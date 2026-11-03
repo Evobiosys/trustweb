@@ -4,10 +4,10 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { approveGate, mergeHead, conflictParts, panelDone, personalApprove, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
+import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
-declare const __TW_PREVIEW__: object | null | undefined
+declare const __TW_PREVIEW__: { id: string } | null | undefined
 declare const __TW_BUILD__: { branch: string; sha: string; time: string; mode: string; stockUrl: string; n?: number; approved?: string | null } | null | undefined
 
 const CSS = `
@@ -21,7 +21,7 @@ const CSS = `
 .twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
-.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
+.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok.ok{border-color:#1f7a4d}.twf-ok.ok header{background:#1f7a4d}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twc-file,.twc-a,.twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twc-file{color:#0e6b73;background:#d9f3f2}.twc-a{color:#8a4a00;background:#ffe8c7}.twc-b{color:#6a2c9e;background:#efe0fb}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
@@ -150,7 +150,7 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   }
   function buttons(): void {
     document.documentElement.classList.remove('twp-done'); bar.classList.remove('prog', 'ok'); head.textContent = 'Personal preview'; body.className = 'body'; body.replaceChildren()
-    const personal = btn('Declare done and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
+    const personal = btn('Approve wave and continue to dev.trustweb.one', preview ? 'alt small' : 'go', () => {
       const since = Date.now() - 2000
       void fetch(personalApprove(preview, []).url, { method: 'POST' }).then((r) => r.ok && poll(since))
     })
@@ -158,18 +158,35 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const hint = Object.assign(document.createElement('small'), { className: 'hint', textContent: APPROVE_HINT })
       const read = (): Promise<Parameters<typeof approveGate>[0]> => fetch('/__tw/preview').then((r) => r.json())
       // Open from the start; the press reads the registry fresh (and closes with the reason), so it works without a reload after boxes or verdicts changed.
-      const go = btn('Declare done', 'go big', () => {
+      // "Approve wave" approves every loaded row first (a press per row, in the background of this click: it may take a moment), then runs the merge flow.
+      const post = (feature: string): Promise<Response> => fetch('/__tw/preview/verdict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature, verdict: 'merge' }) })
+      const asApproved = (q: Parameters<typeof approveGate>[0]): Parameters<typeof approveGate>[0] => ({ ...q, features: applyVerdicts(q.features, unapproved(q.features).map((f) => f.key), 'merge') })
+      const id = __TW_PREVIEW__!.id
+      // The conflict text sits folded under "details", never as a paragraph.
+      const setHint = (text: string): void => {
+        const { head, detail } = hintParts(text)
+        hint.replaceChildren(...conflictNodes(head), ...(detail ? [Object.assign(document.createElement('details'), { innerHTML: '<summary>details</summary>' })] : []))
+        if (detail) hint.querySelector('details')!.append(...conflictNodes(detail))
+      }
+      const go = btn('Approve wave', 'go big', () => {
         const since = Date.now() - 2000
-        void read().then((q) => {
-          const g = approveGate(q)
-          if (!g.ok) { go.disabled = true; hint.replaceChildren(...conflictNodes(g.hint)); return }
+        void read().then(async (q) => {
+          const g = approveGate(asApproved(q))
+          if (!g.ok) { go.disabled = true; setHint(g.hint); return }
+          const w = waveState(q.features, individualStore(localStorage, id).get())
+          if (w.warn) { foldStore(sessionStorage, id).set(expandFor(q.features, w.implicit, foldStore(sessionStorage, id).get())); loadOpenStore(sessionStorage, id).set(true) }
+          go.disabled = true
+          for (const f of unapproved(q.features)) if (!(await post(f.key)).ok) { hint.textContent = `Could not approve ${f.title}`; go.disabled = false; return }
           return fetch('/__tw/approve-merge', { method: 'POST' }).then((r) => { if (r.status === 202 || r.status === 409) pollMerge(since) })
         }).catch(() => { hint.textContent = 'Preview server not answering' })
       })
       const refresh = (): void => {
         if (!go.isConnected) return
         void read().then((q) => {
-          const g = approveGate(q); go.disabled = !g.ok; hint.replaceChildren(...conflictNodes(g.ok ? APPROVE_HINT : g.hint))
+          const g = approveGate(asApproved(q)); go.disabled = !g.ok; setHint(g.ok ? APPROVE_HINT : g.hint)
+          const w = waveState(q.features, individualStore(localStorage, id).get())
+          go.textContent = (w.warn ? '⚠ ' : '') + 'Approve wave'; go.classList.toggle('light', w.light)
+          go.title = w.warn ? `${w.implicit.length} loaded row(s) not approved one by one: the press approves them and opens them in the list` : 'Every loaded row was approved one by one'
           personal.disabled = !personalApprove(true, q.features).ok
         }).catch(() => { /* server restarting: the next tick asks again */ })
       }

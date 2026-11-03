@@ -5,7 +5,7 @@ import { recStartNext, recStartFailure } from '../../src/record_start.ts'
 import { S } from '../../src/strings.ts'
 
 describe('record tab glyph', () => {
-  it('defaults to the pulse', () => expect(RECORD_TAB_GLYPH).toBe('pulse'))
+  it('defaults to the pulse mic (reverted, wave 28b); person-waves stays selectable', () => expect(RECORD_TAB_GLYPH).toBe('pulse'))
   it('pulse: pulses only on the solo recorder while not recording', () => {
     expect(recordTabGlyph('pulse', { live: false, solo: true, onRecord: true })).toEqual({ glyph: 'mic', pulse: true })
     expect(recordTabGlyph('pulse', { live: true, solo: true, onRecord: true })).toEqual({ glyph: 'mic', pulse: false })

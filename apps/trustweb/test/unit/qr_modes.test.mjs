@@ -34,6 +34,15 @@ describe('mode() per context', () => {
     expect(decodeModeLink(mode(base, ['username', 'profile']).payload)).toEqual({ kind: 'person', username: 'kaja' })
   })
 
+  it('person: the profile option is offered when the setting passes it in (wave 28)', () => {
+    const base = { kind: 'person', link: LINK, name: 'Kaja', username: 'kaja', profile: 'https://signal.me/#eu/x', introducePermission: 'one-ring-closer' }
+    expect(mode(base, ['profile'], true).options.map((o) => o.id)).toEqual(['username', 'profile'])
+    expect(mode(base, ['profile'], false).options.map((o) => o.id)).toEqual(['username'])
+  })
+  it('the wired header contexts: tag carries tag and usernames; item carries its share link', () => {
+    expect(decodeModeLink(mode({ kind: 'community', link: LINK, tag: 'family', people: ['kaja'] }).payload)).toEqual({ kind: 'tag', tag: 'family', people: ['kaja'], access: 'request' })
+    expect(decodeModeLink(mode({ kind: 'item', link: LINK, shareLink: 'https://x.test/#item=abc' }).payload)).toEqual({ kind: 'item', link: 'https://x.test/#item=abc' })
+  })
   it.skip('person: the acquaintance-level profile is offered only for one-ring-closer (needs QR_PROFILE_OPTION)', () => {
     const base = { kind: 'person', link: LINK, name: 'Kaja', username: 'kaja', profile: 'https://signal.me/#eu/x' }
     expect(mode({ ...base, introducePermission: 'public' }).options.map((o) => o.id)).toEqual(['username'])

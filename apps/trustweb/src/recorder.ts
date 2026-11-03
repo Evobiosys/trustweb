@@ -11,6 +11,8 @@
  * LAN URLs, which is why support is reported separately from "unavailable".
  */
 
+import { rmsLevel, smoothLevel } from './audio_level'
+
 export enum RecorderSupport {
   Ready = 'ready',
   NeedsSecurePage = 'insecure',
@@ -87,6 +89,33 @@ export class MeetingRecorder {
   private rec: MediaRecorder | null = null
   private current: TakeState | null = null
   private waiter: (() => void) | null = null
+  private meter: { ctx: AudioContext; analyser: AnalyserNode; buf: Uint8Array<ArrayBuffer>; level: number } | null = null
+
+  /** Smoothed live microphone level 0..1 (RMS), 0 when idle or paused; read once per animation frame. */
+  level(): number {
+    const m = this.meter
+    if (!m || this.paused) return 0
+    m.analyser.getByteTimeDomainData(m.buf)
+    m.level = smoothLevel(m.level, rmsLevel(m.buf))
+    return m.level
+  }
+
+  private openMeter(stream: MediaStream): void {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctx) return
+    try {
+      const ctx = new Ctx()
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      this.meter = { ctx, analyser, buf: new Uint8Array(analyser.fftSize), level: 0 }
+    } catch { this.meter = null }
+  }
+
+  private closeMeter(): void {
+    void this.meter?.ctx.close().catch(() => {})
+    this.meter = null
+  }
 
   /** Recording or paused: a take is open. */
   get live(): boolean {
@@ -131,6 +160,7 @@ export class MeetingRecorder {
       const type = rec.mimeType || chunks[0]?.type || 'audio/webm'
       const blob = new Blob(chunks, { type })
       stream.getTracks().forEach((t) => t.stop())
+      this.closeMeter()
       if (this.rec === rec) { this.rec = null; this.current = null }
       const durationMs = recordedMs(take, Date.now())
       if (!take.discarding && blob.size > 0) onTake({ blob, mimeType: type, startedAt, durationMs }, take.stopping)
@@ -145,6 +175,7 @@ export class MeetingRecorder {
     }
     this.rec = rec
     this.current = take
+    this.openMeter(stream)
     // A timeslice keeps memory in small chunks instead of one growing buffer.
     rec.start(1000)
   }

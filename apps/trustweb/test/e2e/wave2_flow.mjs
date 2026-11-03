@@ -57,7 +57,7 @@ async function partQuery(a) {
   ok('it sits opposite "Review requests", never over it', Boolean(cb && rb) && cb.x + cb.width <= rb.x, JSON.stringify({ cb, rb }))
   await shot(a, 'w2-01-inventory-call')
   await call.click()
-  ok('Inventory: one tap lands on Web with the query open', await dockOpen(a) && await a.getByRole('heading', { name: 'Your TrustWeb' }).isVisible())
+  ok('Inventory: one tap lands on Web with the query open', await dockOpen(a) && await a.getByRole('heading', { name: 'TrustZones' }).isVisible())
   await shot(a, 'w2-02-query-from-inventory')
   await a.locator('.query-dock .x').click()
 

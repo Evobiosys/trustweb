@@ -42,7 +42,12 @@ function listed(s: ListState, query: string, keep: (p: Person) => boolean, now: 
   return rank(cands, { now, query }).map((r) => r.person.person)
 }
 
-/** Zones in ladder order (not placed yet last), empty ones left out; pinned people sit in `pinnedPeople`, not here. */
+/** Zones in ladder order (not placed yet last), empty ones left out except the closest few, which always show; pinned people sit in `pinnedPeople`, not here. */
 export function peopleByZone(s: ListState, query: string, now = Date.now()): ZoneGroup[] {
-  return ZONES.map((ring) => ({ ring, people: listed(s, query, (p) => !isPinned(p) && webSlot(p) === ring, now) })).filter((g) => g.people.length > 0)
+  return ZONES.map((ring) => ({ ring, people: listed(s, query, (p) => !isPinned(p) && webSlot(p) === ring, now) })).filter((g) => g.people.length > 0 || (g.ring === Ring.Closest && !query.trim()))
+}
+
+/** Wave 28b: the closest few start open, every other zone collapsed; a press flips that default. A typed search opens the zones with hits. */
+export function zoneOpen(ring: Ring, flipped: ReadonlySet<Ring>, searching: boolean): boolean {
+  return searching || (ring === Ring.Closest) !== flipped.has(ring)
 }

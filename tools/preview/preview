@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Wrapper: runs the ops repo's bin/preview, so a session needs only this folder's path (see README.md).
+exec "$(cat ~/.cache/trustweb-dev/ops.path 2>/dev/null || echo "$HOME/Documents/SingularStructure/PROJECTS/evobiosys/PROJECTS_evobiosys/EvoBioSys-cross/PROJECTS_evobiosys-cross/web-of-trust/Code/trustweb-ops")/bin/preview" "$@"

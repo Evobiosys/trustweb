@@ -56,7 +56,7 @@ async function connect(host, joiner, joinerName, hostName) {
   await joiner.getByRole('button', { name: 'Connect', exact: true }).click()
   await until(async () => (await record(host)).peers.length === before + 1, 60_000)
   await host.getByRole('button', { name: 'Back' }).click().catch(() => {})
-  await joiner.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 30_000 })
+  await joiner.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 30_000 })
 }
 
 /** On `page`, the person card of `name`: switch "Pass their asks on" to `on`. */

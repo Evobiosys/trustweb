@@ -103,6 +103,10 @@ the API is documented in `services/trustweb-backup/README.txt`.
 Previews are password-protected and use demo data only. Every build carries `release.json` with its
 commit, so https://app.trustweb.one/release.json shows what is live.
 
+## Preview / dev panel
+
+See `tools/preview/README.md`.
+
 ## Privacy, in one paragraph
 
 Your record never leaves your device unless you back it up (encrypted on your phone before upload) or

@@ -3,8 +3,10 @@ export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
+/** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
+export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
 
 /** The rows the panel shows: a feature whose branch is on main already (merged, set by the CLI) is in the build but no longer a choice (Jakob 2026-10-15). */
 export function visible(features: PreviewFeature[]): PreviewFeature[] {
@@ -151,6 +153,104 @@ export const pillPress = (features: PreviewFeature[], key: string, v: 'merge' | 
 /** Select all / none as the exact boxes to POST: every available (not merged) row on = loaded into the preview, or off (approval is the pill verdict, not the box); merged rows keep their box. */
 export const selectAll = (features: PreviewFeature[], on: boolean): Record<string, boolean> => Object.fromEntries(features.map((f) => [f.key, f.merged ? f.checked : on]))
 
+/** The panel's write before the server answers (wave 28: Approve is instant): the verdict on `keys`; needs work also unloads the row and its dependants, as the registry does. */
+export function applyVerdicts(features: PreviewFeature[], keys: string[], v: Verdict): PreviewFeature[] {
+  const base = v === 'needs-work' ? keys.reduce((fs, k) => toggled(fs, k, false), features) : features
+  return base.map((f) => (keys.includes(f.key) ? { ...f, verdict: v } : f))
+}
+
+/** The panel's write of a box before the server answers: the cascade of `toggled`, and a row that is no longer loaded loses a merge verdict (as the registry settles it). */
+export const withBox = (features: PreviewFeature[], key: string, checked: boolean): PreviewFeature[] =>
+  toggled(features, key, checked).map((f) => (!f.checked && f.verdict === 'merge' ? { ...f, verdict: null } : f))
+
+/** The features with `key` loaded (and what it requires); a press on approve or Walk on an unticked row loads it first, so no "tick the box first". */
+export const ensureLoaded = (features: PreviewFeature[], key: string): PreviewFeature[] => (features.find((f) => f.key === key)?.checked ? features : withBox(features, key, true))
+
+/** The rows whose title, key, where or steps contain `query` (case-insensitive, trimmed); an empty query keeps every row. */
+export function searchRows(features: PreviewFeature[], query: string): PreviewFeature[] {
+  const q = query.trim().toLowerCase()
+  return q ? features.filter((f) => [f.title, f.key, f.where, ...(f.steps ?? [])].some((t) => t?.toLowerCase().includes(q))) : features
+}
+
+/** Mirror of compatFresh in the ops repo: the check was computed for this base and these loaded rows' refs. */
+export const compatFresh = (c: Compat | undefined, baseSha: string | undefined, loaded: PreviewFeature[]): boolean =>
+  !!c && c.baseSha === baseSha && Object.keys(c.refs ?? {}).length === loaded.length && loaded.every((f) => f.key in (c.refs ?? {}) && c.refs![f.key] === (f.ref ?? null))
+
+const loadedRows = (features: PreviewFeature[]): PreviewFeature[] => features.filter((f) => f.checked && !f.merged)
+const conflictsOf = (c: Compat): string[] => [...Object.entries({ ...c.singles, ...c.pairs }), ['full', c.full ?? 'ok']].filter(([, v]) => v !== 'ok').map(([k, v]) => `${k}: ${v.replace(/^conflict:?\s*/, '')}`)
+
+/** The compat line under the header: text, whether it is clean, and the conflicts ("a+b: file") for the folded list. */
+export function compatLine(c: Compat | undefined, fresh = true): { text: string; ok: boolean; conflicts: string[] } | null {
+  if (!c) return null
+  if (c.state === 'running') return { text: 'compat: checking…', ok: false, conflicts: [] }
+  if (!fresh) return { text: 'compat: out of date', ok: false, conflicts: [] }
+  const conflicts = conflictsOf(c)
+  if (c.state === 'ok' && !conflicts.length) return { text: `compat ✓ ${Object.keys(c.pairs ?? {}).length} pairs, full set`, ok: true, conflicts }
+  return { text: `compat ✗ ${conflicts[0] ?? 'conflict'}${conflicts.length > 1 ? ` (+${conflicts.length - 1})` : ''}`, ok: false, conflicts }
+}
+
+/** Mirror of compatHint in the ops repo: why Approve wave stays closed on the compat check, or ''. */
+export function compatHint(c: Compat | undefined, baseSha: string | undefined, loaded: PreviewFeature[]): string {
+  if (!c) return 'compat check not run yet'
+  if (!compatFresh(c, baseSha, loaded)) return c.state === 'running' ? 'compat check running' : 'compat check out of date'
+  if (c.state === 'running') return 'compat check running'
+  return c.state === 'ok' ? '' : `compat: fix ${conflictsOf(c)[0]?.replace(/: (.*)$/, ' ($1)') ?? 'full'}`
+}
+
+/** A gate hint split for the Approve box: the short head and the long detail kept under a folded "details" (the conflict text is never a paragraph). */
+export function hintParts(hint: string): { head: string; detail: string } {
+  const m = /^(Fix the conflict first):\s*([\s\S]*)$/.exec(hint)
+  return m ? { head: m[1], detail: m[2] } : { head: hint, detail: '' }
+}
+
+/** A row and the loaded rows below it (their `requires` chain): one approve covers them all. */
+export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
+  const out: string[] = []
+  const walk = (n: TreeNode): void => { if (n.feature.checked) out.push(n.feature.key); n.children.forEach(walk) }
+  const find = (ns: TreeNode[]): TreeNode | undefined => { for (const n of ns) { const hit = n.feature.key === key ? n : find(n.children); if (hit) return hit } return undefined }
+  const top = find(tree(visible(features)))
+  if (top) walk(top)
+  return out
+}
+
+/** "Approve wave": warn (and light green) while a loaded row was not approved on its own press (`individual` = the keys the owner pressed); dark green when every one was. */
+export function waveState(features: PreviewFeature[], individual: string[]): { warn: boolean; light: boolean; implicit: string[] } {
+  const implicit = visible(features).filter((f) => f.checked && !individual.includes(f.key)).map((f) => f.key)
+  return { warn: implicit.length > 0, light: implicit.length > 0, implicit }
+}
+
+/** The folded keys left after the rows in `keys` must be seen: their folded parents (the `requires` chain) open. */
+export function expandFor(features: PreviewFeature[], keys: string[], foldedKeys: string[]): string[] {
+  const open = new Set<string>()
+  const walk = (n: TreeNode, parents: string[]): void => {
+    if (keys.includes(n.feature.key)) parents.forEach((k) => open.add(k))
+    n.children.forEach((c) => walk(c, [...parents, n.feature.key]))
+  }
+  tree(visible(features)).forEach((n) => walk(n, []))
+  return foldedKeys.filter((k) => !open.has(k))
+}
+
+/** Walk is offered only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk). */
+export const walkShown = (f: { walkOk?: boolean }): boolean => f.walkOk === true
+
+/** What the note button copies: the preview, the row, its title, branch and ref, to paste into the pi session. */
+export const noteText = (id: string, f: PreviewFeature): string => `${id} | ${f.key} | ${f.title} | ${f.branch}@${f.ref ?? '?'}`
+
+/** How an apply ended, read from the registry: a newer assembly (moved), nothing left to assemble 5 s after the press (idle), else running. */
+export function applyOutcome(q: { pending?: boolean; assembled?: { at: string } | null }, start: number, now: number): 'moved' | 'idle' | 'running' {
+  if (q.pending) return 'running'
+  if (q.assembled && Date.parse(q.assembled.at) > start) return 'moved'
+  return now - start > 5000 ? 'idle' : 'running'
+}
+
+/** Boxes are picked in a row: the reassembly starts this long after the last one. */
+export const APPLY_DELAY_MS = 1300
+export function debounce(fn: () => void, ms: number): (() => void) & { waiting(): boolean } {
+  let t: ReturnType<typeof setTimeout> | undefined
+  const d = (): void => { clearTimeout(t); t = setTimeout(() => { t = undefined; fn() }, ms) }
+  return Object.assign(d, { waiting: (): boolean => t !== undefined })
+}
+
 // unused since wave27 review, archive candidate
 export const allApproved = (features: PreviewFeature[]): boolean => visible(features).every((f) => shownVerdict(f) === 'merge')
 export const allLoaded = (features: PreviewFeature[]): boolean => visible(features).every((f) => f.checked)
@@ -203,6 +303,13 @@ export const reloadMark = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: st
 export const scrollStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) =>
   tabValue<number>(storage, 'twp-scroll-' + id, 0, (v): v is number => typeof v === 'number' && v >= 0)
 
+const isKeys = (v: unknown): v is string[] => Array.isArray(v) && v.every((k) => typeof k === 'string')
+/** Wave 28: the rows the owner approved with their own press (localStorage: survives tabs), the folded rows of the tree and whether the load list is open (sessionStorage), per preview. */
+export const individualStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-indiv-' + id, [], isKeys)
+export const foldStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<string[]>(storage, 'twp-tree-' + id, [], isKeys)
+export const remindOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-remind-' + id, false, (v): v is boolean => typeof v === 'boolean')
+export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id: string) => tabValue<boolean>(storage, 'twp-load-' + id, false, (v): v is boolean => typeof v === 'boolean')
+
 /** What moves while an apply runs; unchanged for 90 s = stuck. */
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
@@ -239,11 +346,12 @@ export function conflictParts(text: string): Array<string | ConflictName> {
 }
 
 /** Mirror of approveGate in the ops repo (bin/preview_lib.mjs): Declare done opens with no test run going, every loaded row approved (>= 1 row) and no conflict; pending changes never close it (the press applies them first), the tests run after the press. */
-export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean }): { ok: boolean; hint: string } {
+export function approveGate(p: { assembled?: { sha: string; error: string | null } | null; tested?: Tested | null; features: PreviewFeature[]; pending?: boolean; baseSha?: string; compat?: Compat }): { ok: boolean; hint: string } {
   const hint = p.tested?.running ? 'Tests are running'
     : p.assembled?.error && !p.pending ? `Fix the conflict first: ${p.assembled.error.split('\n')[0]}`
     : unapproved(p.features).length ? `Approve first: ${unapproved(p.features).map((f) => f.title).join(', ')}`
-    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature' : ''
+    : approvedKeys(p.features).length === 0 ? 'Approve at least one feature'
+    : p.pending ? '' : compatHint(p.compat, p.baseSha, loadedRows(p.features))   // pending: the press applies first, which starts a new compat run
   return { ok: hint === '', hint }
 }
 

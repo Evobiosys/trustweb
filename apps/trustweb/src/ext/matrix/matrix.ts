@@ -11,6 +11,8 @@ export const DEFAULT_HOMESERVER = 'https://matrix.org'
 /** The deep link into Element X for a room id, alias or user id. ONE place to change the scheme (Element X documents no element:// room link). */
 export const ELEMENT_LINK = (target: string): string => `https://matrix.to/#/${target}`
 
+export { elementXUri } from '../../messenger_links'
+
 /** https only; http only for localhost (dev). Returns the origin, or null. A bare "host" is taken as https. */
 export function normalizeHomeserver(input: string): string | null {
   const raw = input.trim()

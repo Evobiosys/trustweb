@@ -5,8 +5,16 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import type { Person } from './model'
-import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR, TIER_COLOUR } from './network_graph'
-import type { Forces, Graph, GraphEdge, GraphNode, Pins } from './network_graph'
+import { Ring } from './model'
+import type { AppState } from './model'
+import { filterSection } from './trustzones_view'
+import { acquaintancesShown, communityOf, unsortedShown, zoneFor } from './trustzones'
+import { ringColor } from './ring_palette'
+import { needleAt, needleHead, settleTarget, startUnpin, unpinAt } from './network_pin'
+import type { UnpinTween } from './network_pin'
+import type { ColourTag } from './colour_tags'
+import { DEFAULT_FORCES, LAYOUT_ITERATIONS, alphaAt, applyPins, buildGraph, isArchived, labelAt, mutualIds, pinsOf, matchIds, shake, step, tierOf, FAMILY_COLOUR } from './network_graph'
+import type { Forces, Graph, GraphEdge, GraphNode, LabelBox, Pins } from './network_graph'
 import { fitBounds, refitCamera } from './network_fit'
 import type { Camera, Size } from './network_fit'
 import { LONG_PRESS_MS, PRESS_SLOP, canvasScale, isLongPress, menuActions, placeMenu } from './network_menu'
@@ -19,6 +27,8 @@ export interface NetworkOptions {
   people: readonly Person[]
   openPerson: (id: string) => void
   openMe: () => void
+  /** Wave 28b: the Filter (advanced) block (acquaintances, not yet sorted, community tag) lives here; absent = no block, no filtering. */
+  ui?: { s: AppState; tags: readonly ColourTag[]; save: () => void }
 }
 
 const SETTINGS_KEY = 'trustweb.ui.netSettings'
@@ -28,13 +38,13 @@ const LOGSEQ = { bg: '#00323a', edge: '#b8d2d6', node: '#8c9ea2', lit: '#eef6f7'
 const STEPS_PER_FRAME = 20
 const TAP_SLOP = PRESS_SLOP
 
-/** Per device: the Logseq look, the forces, and whether people outside my web (tier "outside") are drawn. */
-interface Settings { logseq: boolean; showAll: boolean; forces: Forces }
+/** Per device: the Logseq look, the forces, whether people outside my web (tier "outside") are drawn, and whether people connected only to me are. */
+interface Settings { logseq: boolean; showAll: boolean; showOthers: boolean; forces: Forces }
 function loadSettings(): Settings {
   try {
     const v = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<Settings>
-    return { logseq: v.logseq === true, showAll: v.showAll === true, forces: { ...DEFAULT_FORCES, ...v.forces } }
-  } catch { return { logseq: false, showAll: false, forces: { ...DEFAULT_FORCES } } }
+    return { logseq: v.logseq === true, showAll: v.showAll === true, showOthers: v.showOthers === true, forces: { ...DEFAULT_FORCES, ...v.forces } }
+  } catch { return { logseq: false, showAll: false, showOthers: false, forces: { ...DEFAULT_FORCES } } }
 }
 function saveSettings(v: Settings): void {
   try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)) } catch { /* not remembered */ }
@@ -45,8 +55,13 @@ function loadPins(): Pins {
   try { return JSON.parse(window.localStorage.getItem(PINS_KEY) ?? '{}') as Pins } catch { return {} }
 }
 function savePins(g: Graph): void {
-  try { window.localStorage.setItem(PINS_KEY, JSON.stringify(pinsOf(g))) } catch { /* not remembered */ }
+  const pins = pinsOf(g)
+  for (const id of unpinning.keys()) delete pins[id] // a dot gliding home is already unpinned for the next load
+  try { window.localStorage.setItem(PINS_KEY, JSON.stringify(pins)) } catch { /* not remembered */ }
 }
+
+/** Dots gliding back to their natural place after the needle was pressed (wave 28b), by person id; any view of the same graph advances them. */
+const unpinning = new Map<string, { node: GraphNode; tween: UnpinTween }>()
 
 function download(name: string, blob: Blob): void {
   const a = el('a', { href: URL.createObjectURL(blob), download: name }) as HTMLAnchorElement
@@ -66,8 +81,18 @@ function keyOf(o: NetworkOptions): string {
 
 export function createNetworkView(o: NetworkOptions): HTMLElement {
   const settings = loadSettings()
-  const people = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id))
-  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '')
+  const community = o.ui ? communityOf(o.ui.s) : null
+  const shownIn = (p: Person): boolean => {
+    const t = tierOf(p)
+    return !o.ui || (t === Ring.Acquaintance ? acquaintancesShown(o.ui.s) : t === Ring.Unsorted ? unsortedShown(o.ui.s) : true)
+  }
+  // The community tag lifts acquainted holders into the friends tier (as on the TrustZones web, display only).
+  const lifted = (p: Person): Person => (community && tierOf(p) === Ring.Acquaintance && zoneFor(p, community) === Ring.Friend ? { ...p, ring: Ring.Friend } : p)
+  const inWeb = (settings.showAll ? o.people : o.people.filter((p) => tierOf(p) !== 'outside')).filter((p) => !hiddenIds.has(p.id) && !isArchived(p) && shownIn(p)).map(lifted)
+  // Default: only people who are connected with other contacts too; the rest (only connected with me) sit behind "Show only connected with me".
+  const mutual = mutualIds(o.me, inWeb)
+  const people = settings.showOthers ? inWeb : inWeb.filter((p) => mutual.has(p.id))
+  const key = keyOf({ ...o, people }) + (settings.showAll ? '+all' : '') + (settings.showOthers ? '+others' : '')
   if (!cached || cached.key !== key) cached = { key, graph: buildGraph(o.me, people), iteration: 0, camera: null, touched: false, size: null }
   if (cached.iteration === 0 && cached.camera === null) applyPins(cached.graph, loadPins())
   const state = cached
@@ -77,13 +102,15 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let matches = new Set<string>()
   let hover: GraphNode | null = null
   let dirty = true
+  let shown: LabelBox[] = [] // the labels of the last frame, for taps on a name
+  let needles: { id: string; x: number; y: number; r: number; lit: boolean }[] = [] // the needles of the last frame, for taps on a red head
   let w = 0
   let h = 0
 
   const canvas = el('canvas', { class: 'net-canvas', role: 'img', 'aria-label': S.netAria(people.length) }) as HTMLCanvasElement
   const ctx = canvas.getContext('2d')
   const search = el('input', { class: 'field net-search', type: 'search', placeholder: S.netSearchPh, 'aria-label': S.netSearchPh, autocomplete: 'off' }) as HTMLInputElement
-  const shakeBtn = el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { shake(g, Date.now()); state.iteration = 0; dirty = true } }, [S.netShake])
+  const shakeBtn = el('button', { class: 'btn btn-ghost btn-sm', 'data-net-shake': '', onclick: () => { shake(g, Date.now()); state.iteration = 0; dirty = true } }, [S.netShake])
   const rebuild = (): void => { saveSettings(settings); root.replaceWith(createNetworkView(o)) }
   const reheat = (): void => { saveSettings(settings); state.iteration = 0; dirty = true }
   const check = (label: string, on: boolean, set: (v: boolean) => void): HTMLElement =>
@@ -98,6 +125,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     download('network.json', new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }))
   }
   const menu = el('div', { class: 'net-menu', hidden: '' }, [
+    shakeBtn,
     check(S.netLogseq, settings.logseq, (v) => { settings.logseq = v; saveSettings(settings); dirty = true }),
     check(S.netShowAll, settings.showAll, (v) => { settings.showAll = v; rebuild() }),
     el('button', { class: 'btn btn-ghost btn-sm', onclick: () => { for (const v of g.nodes) if (v.tier !== undefined) v.pinned = false; savePins(g); reheat() } }, [S.netUnpinAll]),
@@ -111,19 +139,16 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ]),
   ])
   const menuBtn = el('button', { class: 'btn btn-ghost btn-sm', 'aria-label': S.netMenu, onclick: () => { menu.hidden = !menu.hidden } }, ['⋯'])
+  const othersBtn = el('button', { class: 'btn btn-ghost btn-sm net-others', 'data-net-others': '', 'aria-pressed': String(settings.showOthers),
+    onclick: () => { settings.showOthers = !settings.showOthers; rebuild() } }, [settings.showOthers ? S.netHideOthers : S.netShowOthers])
   const tip = el('div', { class: 'net-tip', 'data-net-tip': '', hidden: '' })
   const pop = el('div', { class: 'net-pop', 'data-net-pop': '', hidden: '' })
   let tipTimer = 0
-  // Wave 27: the legend sits under an (i); a tap shows or hides the one line.
-  const legendInfo = (): HTMLElement => {
-    const line = el('small', { class: 'net-legend', 'data-net-legend': '', hidden: true }, [S.netLegend])
-    const btn = el('button', { class: 'hint-i legend-i', 'data-net-legend-btn': '', 'aria-label': S.netLegendAria, 'aria-expanded': 'false', onclick: () => {
-      line.hidden = !line.hidden
-      btn.setAttribute('aria-expanded', String(!line.hidden))
-    } }, ['i'])
-    return el('div', { class: 'net-legend-box' }, [btn, line])
-  }
-  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, shakeBtn, menuBtn]), menu, canvas, tip, pop, legendInfo()])
+  // Wave 28b: the legend is plain text at the bottom left of the canvas (placed in resize).
+  const legend = el('small', { class: 'net-legend', 'data-net-legend': '' }, [S.netLegend])
+  // Wave 28b: Filter (advanced) moved here from the TrustZones web: folded by default, same saved state.
+  const filters = o.ui ? filterSection({ s: o.ui.s, tags: o.ui.tags, onChange: () => { o.ui?.save(); root.replaceWith(createNetworkView(o)) } }) : el('span', { hidden: '' })
+  const root = el('div', { class: 'net', 'data-view': 'network', 'data-own-zoom': '' }, [el('div', { class: 'net-bar' }, [search, menuBtn]), menu, filters, canvas, tip, pop, othersBtn, legend])
 
   const fit = (): Camera => fitBounds(g.nodes, w, h)
   const cam = (): Camera => (state.camera ??= { k: 0.8, x: w / 2, y: h / 2 })
@@ -165,7 +190,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   }
 
   const colour = (v: GraphNode): string =>
-    v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : TIER_COLOUR[v.tier]
+    v.tier === undefined ? getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#FF715B' : ringColor(v.tier)
 
   const label = (v: GraphNode): string => (v.desire === undefined ? shortLabel(v.name) : `${shortLabel(v.name)} · ${S.netWants(v.desire)}`)
 
@@ -201,7 +226,8 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     ctx.font = lq ? '10px system-ui, sans-serif' : '600 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     const fade = Math.min(1, c.k / settings.forces.labelZoom)
-    const labels: { text: string; x: number; y: number; alpha: number; fill: string }[] = [] // drawn after every dot and edge, above the dot
+    needles = []
+    const labels: { id: string; text: string; x: number; y: number; alpha: number; fill: string; pinned: boolean }[] = [] // drawn after every dot and edge, above the dot
     g.nodes.forEach((v, i) => {
       const lit = lq ? inFocus(i) : !filtering || matches.has(v.id) || v.tier === undefined
       const x = v.x * c.k + c.x
@@ -216,28 +242,47 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
         ctx.beginPath(); ctx.arc(x, y, rad + 3, 0, Math.PI * 2); ctx.stroke()
         ctx.lineWidth = lq ? 0.6 : 1
       }
-      if (v.pinned && v.tier !== undefined) {
-        ctx.globalAlpha = 1
-        ctx.fillStyle = lq ? LOGSEQ.lit : ink
-        ctx.beginPath(); ctx.arc(x + rad * 0.8, y - rad * 0.8, 3.2, 0, Math.PI * 2); ctx.fill()
-        ctx.globalAlpha = lit ? 1 : 0.15
-      }
+      if (v.pinned && v.tier !== undefined && !unpinning.has(v.id)) needles.push({ id: v.id, x, y, r: rad, lit })
       if (lq) {
         const a = lit ? fade : fade * 0.15
         if (a < 0.5 * (lit ? 1 : 0.15) && v !== hover && !matches.has(v.id)) return
-        labels.push({ text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label })
+        labels.push({ id: v.id, text: label(v), x, y: y - rad - 4, alpha: v === hover || matches.has(v.id) ? 1 : a, fill: v === hover ? LOGSEQ.lit : LOGSEQ.label, pinned: v.pinned && v.tier !== undefined })
       } else if (v === hover || matches.has(v.id) || v.tier === undefined || (c.k >= settings.forces.labelZoom && lit)) {
-        labels.push({ text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink })
+        labels.push({ id: v.id, text: label(v), x, y: y - rad - 4, alpha: 1, fill: ink, pinned: v.pinned && v.tier !== undefined })
       }
     })
     ctx.lineJoin = 'round'; ctx.lineWidth = 3.5
     ctx.strokeStyle = lq ? LOGSEQ.bg : css.getPropertyValue('--linen').trim() || '#FFFFFF' // halo: readable over edges
-    for (const l of labels) { ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y) }
+    // Names in the body font, pinned people's in the second family (--font-pinned); the boxes make a name tappable.
+    const bodyFont = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif'
+    const pinnedFont = css.getPropertyValue('--font-pinned').trim() || 'ui-monospace, Menlo, monospace'
+    shown = []
+    for (const l of labels) {
+      ctx.font = `${l.pinned ? '500' : lq ? '400' : '600'} ${lq ? 10 : 11}px ${l.pinned ? pinnedFont : bodyFont}`
+      ctx.globalAlpha = l.alpha; ctx.strokeText(l.text, l.x, l.y); ctx.fillStyle = l.fill; ctx.fillText(l.text, l.x, l.y)
+      shown.push({ id: l.id, x: l.x, y: l.y, w: ctx.measureText(l.text).width })
+    }
+    // Wave 28b: a pinned dot's needle (thin line, red head), over the names so the head always shows; a press on the head unpins.
+    for (const n of needles) {
+      const head = needleHead(n.x, n.y, n.r)
+      ctx.globalAlpha = n.lit ? 1 : 0.3
+      ctx.strokeStyle = lq ? LOGSEQ.lit : ink; ctx.lineWidth = 1.4
+      ctx.beginPath(); ctx.moveTo(n.x + n.r * 0.7, n.y - n.r * 0.7); ctx.lineTo(head.x, head.y); ctx.stroke()
+      ctx.fillStyle = '#D93025'
+      ctx.beginPath(); ctx.arc(head.x, head.y, 3.6, 0, Math.PI * 2); ctx.fill()
+    }
     ctx.globalAlpha = 1
   }
 
   const frame = (): void => {
     if (!canvas.isConnected) { sizes.disconnect(); return } // the screen was redrawn: this view is gone
+    const now = Date.now()
+    for (const [id, u] of unpinning) {
+      if (!g.nodes.includes(u.node)) { unpinning.delete(id); continue }
+      const m = unpinAt(u.tween, now)
+      u.node.x = m.x; u.node.y = m.y; dirty = true
+      if (m.done) { u.node.pinned = false; unpinning.delete(id); state.iteration = Math.min(state.iteration, LAYOUT_ITERATIONS - 30) }
+    }
     if (state.iteration < LAYOUT_ITERATIONS) {
       for (let i = 0; i < STEPS_PER_FRAME && state.iteration < LAYOUT_ITERATIONS; i++) step(g, alphaAt(state.iteration++), settings.forces)
       if (state.iteration >= LAYOUT_ITERATIONS && !state.touched) { state.camera = fit(); state.size = { w, h } }
@@ -257,6 +302,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     const dpr = canvasScale(window.devicePixelRatio || 1, w, h)
     canvas.width = w * dpr; canvas.height = h * dpr
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
+    legend.style.left = canvas.offsetLeft + 10 + 'px'; legend.style.top = canvas.offsetTop + h - 24 + 'px'
     // The cached camera was fitted to the size of an earlier box (another layout, window or orientation): fit it to this one.
     if (state.iteration >= LAYOUT_ITERATIONS) state.camera = refitCamera(state.camera, state.touched, g.nodes, state.size, { w, h })
     state.size = { w, h }
@@ -280,7 +326,12 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   let press = 0
   let opening = 0
   let lastTap = { id: '', at: 0 }
-  const unpin = (v: GraphNode): void => { v.pinned = false; savePins(g); state.iteration = Math.min(state.iteration, LAYOUT_ITERATIONS - 60); dirty = true }
+  // Wave 28b: unpinning glides the dot to where the layout would put it (~1.5 s, ease-out) instead of jumping.
+  const unpin = (v: GraphNode): void => {
+    if (unpinning.has(v.id)) return
+    unpinning.set(v.id, { node: v, tween: startUnpin(v, settleTarget(g, g.nodes.indexOf(v)), Date.now()) })
+    savePins(g); dirty = true
+  }
   const endDrag = (): void => { clearTimeout(press); drag = null }
   const closePop = (): void => { pop.hidden = true }
   const act = (v: GraphNode, a: MenuAction): void => {
@@ -352,7 +403,11 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
     if (dragged && travelled > TAP_SLOP && tap) { savePins(g); return }
     if (dragged) dragged.pinned = dragPinned
     if (!tap || was !== 1 || travelled > TAP_SLOP) return
-    const v = hit(local(e).x, local(e).y)
+    const needle = needleAt(needles, local(e).x, local(e).y)
+    const pinnedNode = needle ? g.nodes.find((n) => n.id === needle) : undefined
+    if (pinnedNode) { clearTimeout(opening); unpin(pinnedNode); return }
+    const lid = labelAt(shown, local(e).x, local(e).y)
+    const v = hit(local(e).x, local(e).y) ?? g.nodes.find((n) => n.id === lid) ?? null
     if (!v) { const ed = hitEdge(local(e).x, local(e).y); if (ed) showTip(ed); return }
     if (v.pinned && v.tier !== undefined) {
       if (lastTap.id === v.id && e.timeStamp - lastTap.at < DOUBLE_TAP_MS) { clearTimeout(opening); lastTap = { id: '', at: 0 }; unpin(v); return }

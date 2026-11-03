@@ -2,6 +2,7 @@
    ported from apps/mobile-ui/src/styles.css; the notes-flow pieces follow the
    owner's note-taking mockup (teal call-to-action, tag pills). */
 :root{
+  --font-pinned:ui-monospace,Menlo,monospace;
   --violet:#2F6F74; --electric:#1A9AA6; --coral:#C2573A; --mint:#3FBFA0; --teal:#13867E;
   --mist:#ECE7DC; --linen:#F5F0E8; --ink:#1F2A28; --ink-soft:#5A6B66;
   --page-bg:#FAFAF7; --page-ink:#1F2A28; --panel:#fff;
@@ -9,6 +10,9 @@
   /* surface tokens: --linen is the screen, --card the raised panels */
   --card:#fff; --line:rgba(31,42,40,.14); --tab-bg:rgba(255,255,255,.94);
   --tint-teal:#E3F4F1; --tint-ok:#DDF3EA; --tint-warn:#FBE6DD; --tint-violet:#E1EFEF;
+  /* Wave 28 (trustzones.ts TONE_ORDER): the orange of a rung, strongest inside, the outermost grey. */
+  --ring-0:#A63A00; --ring-1:#D2570A; --ring-2:#EE7A1C; --ring-3:#F6A24F; --ring-4:#FAC98F; --ring-5:#9E9E9E;
+  --pin-edge:#F2A0A0;
   --tint-blue:#E0F2F4; --tint-sand:#F5EEDC; --ok-ink:#0E6B55; --warn-ink:#9C3B2E;
 }
 /* Dark is the default (light only with data-theme="light" on <html>). A deep teal night instead of a darkened beige, with the same accents.
@@ -149,11 +153,23 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle.off::before{background:transparent}
 .ring-more{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:1.5px solid var(--rc,#8a8f94); border-radius:50%; background:#fff; color:var(--rc,#8a8f94); font-size:11px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .membrane-all{position:absolute; left:50%; transform:translateX(-50%); z-index:7; max-width:90%; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:11px; color:var(--ink); display:flex; flex-direction:column; gap:2px; pointer-events:none}
-.add-node{position:absolute; top:4px; right:4px; z-index:6; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
+.add-node{flex:none; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
 .small-card{display:flex; flex-direction:column; gap:10px; padding:14px}
 .small-card .card-actions{display:flex; gap:8px; align-items:center}
 .card-name-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
 .card-name-row .btn{margin-left:auto; flex-shrink:0}
+.card-name-row .btn + .btn{margin-left:0}
+.chips[hidden]{display:none}
+.card-zone,.card-shares{background:none; border:0; padding:0; text-align:left; font:inherit; color:inherit; text-decoration:underline dotted; cursor:pointer}
+.card-zone{font-weight:700; font-size:13px}
+.card-shares{font-size:12.5px; color:var(--ink-soft)}
+.msg-glyphs{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 0}
+.msg-glyph{display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:1.5px solid var(--teal); border-radius:8px; background:none; color:var(--teal); cursor:pointer; text-decoration:none}
+.msg-glyph.linked{border-style:dashed; color:var(--ink-soft); border-color:var(--ink-soft)}
+.msg-glyph svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2}
+.tl-head{display:flex; align-items:center; gap:6px}
+.tl-head .tl-toggle{flex:1; text-align:left}
+.card-compose{display:flex; flex-direction:column; gap:6px}
 .card-more{display:flex; flex-direction:column; gap:12px; margin-top:12px}
 .passon-line{display:flex; align-items:center; gap:6px}
 .passon-line .passon-row{flex:1}
@@ -203,6 +219,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .view-drop .view-opt.on{background:rgba(127,127,127,.15)}
 .view-drop .view-opt svg{width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round}
 .view-drop-sep{margin:6px 10px 2px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.6}
+button.view-drop-sep{border:0; background:none; color:inherit; font-family:inherit; text-align:left; cursor:pointer; text-decoration:underline; opacity:.8}
+.view-drop .view-opt:disabled{opacity:.45; cursor:default}
 .curator-page{display:flex; flex-direction:column; min-height:0; padding-bottom:0}
 .curator-page .curator{flex:1; min-height:0}
 .view-opt.on{font-weight:700}
@@ -254,7 +272,7 @@ textarea.field{resize:vertical; line-height:1.5}
   background:linear-gradient(135deg,var(--coral),var(--violet)); color:#fff; box-shadow:0 8px 24px rgba(23,143,134,.4), 0 0 0 5px var(--linen);
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; align-self:flex-start}
 .tab-record.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
-.tab-record.live{background:var(--coral); animation:pulse 1.4s ease-in-out infinite}
+.tab-record.live{background:var(--coral); box-shadow:0 0 0 var(--pulse-px,4px) rgba(255,113,91,.25)}
 /* On the solo recorder, not recording yet: the glyph breathes ("press to start"); reduced motion gets a static ring */
 .tab-record.pulse svg{animation:tab-breathe 1.6s ease-in-out infinite}
 @keyframes tab-breathe{50%{transform:scale(1.12); opacity:.6}}
@@ -294,6 +312,16 @@ textarea.field{resize:vertical; line-height:1.5}
 .advanced-panel{display:flex; flex-direction:column; gap:8px; width:100%}
 .advanced-panel[hidden]{display:none}
 .advanced-panel .meta{margin:0}
+.share-count{color:var(--teal); font-size:22px; font-weight:600; margin:22px 2px 4px}
+.share-chip{display:inline-flex; position:relative; align-items:center; gap:2px; padding:0}
+.share-chip-label,.share-chip-x{background:none; border:0; color:inherit; font:inherit; padding:6px 4px 6px 11px; cursor:pointer}
+.share-chip-x{padding:6px 11px 6px 4px}
+button.share-chip-label{text-decoration:underline}
+.share-peek{position:absolute; top:100%; left:0; z-index:5; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 12px; box-shadow:0 2px 10px rgba(36,27,46,.18); white-space:nowrap}
+.share-peek[hidden]{display:none}
+.share-more{background:none; border:0; color:var(--teal); font:inherit; padding:4px 0; cursor:pointer; text-decoration:underline}
+.share-profiles{margin:10px 0 0}
+.share-member{margin:6px 2px}
 .share-row-wrap{margin:4px 0 8px}
 .share-row-wrap .meta{margin:4px 0 0}
 .share-row button{padding:8px 6px; line-height:1.2}
@@ -315,10 +343,16 @@ textarea.field{resize:vertical; line-height:1.5}
 .toast{position:absolute; left:16px; right:16px; bottom:100px; z-index:60; background:var(--ink); color:#fff; font-size:13.5px; border-radius:14px; padding:12px 14px;
   opacity:0; transform:translateY(10px); transition:opacity .2s, transform .2s; pointer-events:none}
 .toast.on{opacity:1; transform:none}
+/* Wave 28: the x on every toast/notice bar (closes at once) and the 400 ms fade after 5 s */
+.toast{padding-right:34px}
+.fade-x{position:absolute; top:4px; right:6px; width:26px; height:26px; border:0; background:none; color:inherit; font-size:18px; line-height:1; cursor:pointer; opacity:.7; pointer-events:auto}
+.fade-x:hover,.fade-x:focus-visible{opacity:1}
+.toast.fading,.demo-friends.fading{opacity:0; transition:opacity .4s}
+@media (prefers-reduced-motion:reduce){ .toast.fading,.demo-friends.fading{transition:none} }
 .toast.on.tap{pointer-events:auto; cursor:pointer}
 /* "We have given you some (imaginary ;) friends :)": demo phones, once, under the header */
 .demo-friends{position:absolute; left:16px; right:16px; top:92px; z-index:30; background:var(--card); color:var(--ink); border-radius:16px;
-  padding:12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
+  padding:12px 34px 12px 14px; box-shadow:0 10px 30px rgba(36,27,46,.22); display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center;
   font-size:13px; line-height:1.45; animation:tw-pop .25s ease-out}
 .demo-friends[hidden]{display:none}
 /* Jakob 2026-10-19: the card never swallows a tap on the web under it; only its buttons and ticks take taps. */
@@ -452,7 +486,7 @@ textarea.field{resize:vertical; line-height:1.5}
   display:grid; place-items:center; transition:transform .15s}
 .rec-circle:active,.rec-circle.pressed{transform:scale(.97)}
 .rec-circle.requesting{opacity:.7}
-.rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); animation:pulse 1.4s ease-in-out infinite}
+.rec-circle.live{background:radial-gradient(circle at 35% 30%, #FFB3A6, var(--coral) 75%); box-shadow:0 0 0 var(--pulse-px,4px) rgba(255,113,91,.25)}
 .rec-circle.paused{background:radial-gradient(circle at 35% 30%, #E3E8E6, #B4C0BC 75%)}
 .rec-circle.small{width:62px; height:62px; box-shadow:0 6px 18px rgba(23,143,134,.25)}
 .rec-circle svg{width:26px; height:26px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round}
@@ -489,7 +523,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .hint-i{position:absolute; top:-8px; right:-8px; z-index:6; width:19px; height:19px; padding:0; border-radius:50%; cursor:pointer;
   border:1.5px solid var(--ink-soft); background:var(--card); color:var(--ink-soft); display:grid; place-items:center;
   font:italic 700 11.5px/1 Georgia,"Times New Roman",serif}
-.hint-i.legend-i{position:static; margin:4px auto 0; display:block}
+.hint-i.legend-i{position:relative; margin:4px auto 0; display:block}
 .wants{margin:14px 12px 0; padding:10px 12px; border:1px solid var(--line); border-radius:14px}
 .wants h3{font-size:13px; margin:0 0 6px}
 .wants-row{display:flex; align-items:center; gap:8px; padding:4px 0}
@@ -943,6 +977,19 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-menu-open{flex:1; text-align:left; background:none; border:0; padding:10px 8px; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .chat-menu-pin{background:none; border:0; padding:8px; cursor:pointer; opacity:.5}
 .chat-menu-pin.on{opacity:1}
+/* Wave 28: the source pill, its menu, and the combined list (a C-shaped bracket on the left edge in the source colour; side by side from 900px). */
+.chat-source-wrap{display:inline-block; margin-left:8px; vertical-align:middle}
+.chat-source-pill{display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); background:var(--card); color:inherit; border-radius:999px; padding:4px 10px; font:inherit; font-size:13px; cursor:pointer}
+@media (max-width:480px){.hdr [data-chat-dots]{display:none} .chat-source-pill{white-space:nowrap} .hdr-left:has(.chat-source-pill) h2{display:none}} /* the pill opens the same list and names the view; five header buttons leave no room for the title too */
+.chat-source-menu{min-width:240px}
+.chat-menu-item.grey .chat-menu-open{opacity:.55}
+.chat-menu-item small{font-size:11px}
+.src-row{position:relative; padding-left:16px}
+.src-row::before{content:''; position:absolute; left:2px; top:5px; bottom:5px; width:8px; border:3px solid var(--src); border-right:0; border-radius:8px 0 0 8px}
+.src-tag{display:block}
+.msg-merged{display:block}
+@media (min-width:900px){.msg-merged{display:grid; grid-template-columns:repeat(var(--cols),1fr); column-gap:12px; align-items:start}.msg-merged>.src-row{grid-column:var(--col)}.msg-merged>:not(.src-row){grid-column:1/-1}}
+.chat-dnd.on{color:var(--coral)}
 .card-chat .btn svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; vertical-align:-3px; margin-right:6px}
 .page-layer{position:absolute; inset:0; z-index:60; background:var(--linen); overflow-y:auto; padding:14px 22px 30px}
 .page-bar{display:flex; align-items:center; gap:12px; margin-bottom:12px}
@@ -1073,8 +1120,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .net-tip[hidden]{display:none}
 .net-pop{position:absolute; z-index:5; display:grid; gap:2px; padding:6px; border-radius:12px; background:var(--card); box-shadow:0 4px 18px rgba(0,0,0,.25)}
 .net-pop[hidden]{display:none}
-.net-legend[hidden]{display:none}
-.net-legend{display:block; margin:4px 0; opacity:.7; text-align:center}
+.net-others{display:block; margin:6px auto 0}
+.net-legend{position:absolute; z-index:2; pointer-events:none; font-size:11px; opacity:.75; max-width:60%}
+.net .zone-filter{margin:0 0 6px}
 .net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}
 /* Wave 16 (Jakob 2026-10-19): after an archive the Web header's Curator icon shows where the Archive lives; the card's Archive above a quiet Delete */
 .search-btn.pulse,.view-menu-btn.pulse{outline:2px solid var(--electric); outline-offset:2px; animation:curator-pulse 1s ease-out 4}
@@ -1160,7 +1208,13 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .update-banner .btn{margin:0; white-space:nowrap}
 
 .people-list .field{width:100%; margin-bottom:10px}
-.people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
+.people-zone-head{display:flex; align-items:center; gap:8px; width:100%; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:4px 12px 4px 0; margin:8px 0 6px; color:var(--ink)}
+.people-zone-toggle{flex:1; display:flex; align-items:center; gap:8px; border:0; background:none; font:inherit; color:inherit; padding:8px 0 8px 10px; text-align:left; cursor:pointer}
+.people-zone-toggle .outliner{display:inline-block; width:1.1em; text-align:center}
+.people-zone-add{border:0; background:none; font:inherit; font-size:1.3em; line-height:1; color:inherit; padding:6px; cursor:pointer}
+.people-unsorted{margin-top:28px}
+.people-zone-head small{min-width:1.6em; text-align:right}
+.people-pinned .people-zone-head b{flex:1; padding:8px 0 8px 10px}
 .people-zone .zoom-row small{display:block}
 .chat-dnd.on{background:var(--electric); color:#fff}
 .sov-svc{padding:8px 0; border-bottom:1px solid var(--line, #e4e2dc)}
@@ -1179,3 +1233,48 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-body{margin-top:10px}
 .who button.link{background:none; border:0; padding:0; font:inherit; color:var(--teal); text-decoration:underline; cursor:pointer}
 .status-pill[hidden]{display:none}
+.page-foot{text-align:right; margin:18px 16px 0; font-size:12.5px}
+.page-foot a{color:var(--ink-soft); text-decoration:underline}
+/* wave 28: card picture slot and the who-they-know entries */
+.card-face{border:0; background:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:50%}
+.card-face .ava{width:56px; height:56px; font-size:22px}
+.card-face:focus-visible{outline:3px solid var(--electric); outline-offset:2px}
+.card-face-menu{display:flex; gap:6px; flex-wrap:wrap}
+.card-face-menu[hidden]{display:none}
+.card-name-row .card-face + *{margin-right:auto}
+.knows-chip{border-radius:18px; display:inline-flex; flex-wrap:wrap; align-items:center; gap:2px; padding:2px 4px 2px 10px}
+.knows-name{border:0; background:none; padding:4px 2px; font:inherit; color:inherit; cursor:pointer; text-decoration:underline}
+.knows-peek{flex-basis:100%; display:flex; gap:8px; align-items:flex-start; padding:6px 4px 4px}
+.knows-peek[hidden]{display:none}
+.knows-peek .ava{width:64px; height:64px; font-size:24px}
+.knows-note{font-size:12px; color:var(--ink-soft); white-space:normal; max-width:220px}
+/* Wave 28 (trustzones.ts): TrustZones. Dots take the rung's orange; pinned = light red edge; the zone panel; zzz; the outliner triangle. */
+.rings-wrap .node[data-tone="3"] .ava,.rings-wrap .node[data-tone="4"] .ava{color:#3a1d00}
+.rings-wrap .node.pinned .ava,.zone-row.pinned{border-color:var(--pin-edge); box-shadow:0 0 0 2px var(--pin-edge)}
+.zone-row.pinned{box-shadow:none; border:1.5px solid var(--pin-edge)}
+.outliner-toggle{font-size:11px; line-height:1}
+.ring-more.outliner-toggle,.ring-list{background:#fff; color:#3a1d00; border-color:var(--rc)}
+.ring-list{font-size:9px}
+.zzz{position:absolute; transform:translate(-30%,-80%); z-index:4; padding:0 3px; border:0; border-radius:6px; background:#fff; color:var(--ink-soft); font-size:9px; font-weight:700; font-style:italic; line-height:12px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.zzz:hover,.zzz:focus-visible{color:var(--ink); box-shadow:0 0 0 2px var(--ring-2)}
+.zones-split{flex:1; min-height:0; display:flex; flex-direction:column}
+.zones-split>.scroll{flex:1 1 auto; min-height:0}
+.zone-column{flex:0 1 auto; max-height:40%; overflow-y:auto; padding:6px 12px; display:flex; flex-direction:column; gap:6px}
+.zone-panel{display:flex; flex-direction:column; gap:6px}
+.zone-head{display:flex; align-items:center; gap:6px}
+.zone-list{border-left:3px solid var(--tone,var(--ring-5)); padding-left:8px; display:flex; flex-direction:column; gap:2px}
+.zone-row{display:flex; align-items:center; justify-content:space-between; gap:6px; padding:1px 6px; border:1.5px solid transparent; border-radius:10px}
+.zone-name{flex:1; min-width:0}
+.zone-name .tap-edit{background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:text; text-align:left}
+.zone-check{display:flex; align-items:center; gap:6px; font-size:13px}
+.zzz-strip{display:flex; flex-direction:column; gap:4px}
+/* Wave 28b: the TrustZones sidebar (expand all, add, tag filters): above the rings on the phone, left on desktop */
+.ring-more.fill-expand{font-size:10px; background:#fff; color:#3a1d00; border-color:var(--rc)}
+.ring-more.fill-expand.on{background:var(--rc); color:#fff}
+.zone-side{flex:0 0 auto; max-height:40%; overflow-y:auto; padding:6px 12px; display:flex; flex-direction:column; gap:6px}
+.zone-tools{display:flex; align-items:center; gap:8px}
+.zone-chip-row{display:flex; flex-direction:column; gap:4px; font-size:13px}
+@media (min-width:760px){
+  .zones-split{flex-direction:row}
+  .zone-side{flex:0 0 260px; max-height:none}
+}
