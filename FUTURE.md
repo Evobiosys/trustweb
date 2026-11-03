@@ -37,3 +37,5 @@ Three alignment/architecture notes were written ahead of v0.1's next phase. They
 - `trustweb` CLI (D-cli) temptations, not done: custom zone names beyond the ladder; a `sync` that pushes the record into the app's
   device sync; tag-scoped field sets; an OpenFGA/SpiceDB export of the effective store (the adapter stubs in tuples.ts); a `--watch`
   that re-renders `show` as the record changes; shell completion.
+
+- **Curator notes sync, deferred (D-curator-notes-sync):** (1) `people: skip` could still let a full-name match add lines to an EXISTING person (today the note is not read at all; cheaper and simpler). (2) An offer with no candidate has no "add as new person" button; the owner adds the person by hand, then the next pull offers the join. (3) The scheduled pull does not push blocks into the vault (`notes_bridge.mjs push --record` is a separate cron line); one `pull --push` flag would chain them. (4) Offers are keyed by (name, note): a renamed note re-offers once. (5) The cleanup archive is never pruned automatically.

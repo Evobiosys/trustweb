@@ -62,6 +62,14 @@ PULL FROM TANA (the other direction; the CRM only pushes field edits)
                                  next to the nodes file, .bak first). 50 ms between calls; <nodes>.pull-progress.json lets an interrupted run resume.
                                  --only is the one-node refresh. --since compares with the index entry's edited, else created. stderr: counts and ids only.
 
+PULL FROM NOTES (an Obsidian / Logseq vault; scripts/notes_*.mjs, usage in each file's header)
+  node scripts/notes_sync.mjs pull --vault <dir> --seed <record.json> --reader ollama:<model> [--skip-folders a,b]
+                                 scheduled every 15 min (lock, exit codes, trustweb: no / people: skip / .trustweb-notes.json,
+                                 launchd / cron / systemd examples): ../../docs/curator-notes-sync.md
+  node scripts/notes_sync.mjs cleanup --vault <dir> --record <record.json> [--dry-run]
+                                 blocks of people who left the record: archived under <vault>/archive/trustweb-blocks/, then cut.
+                                 A first name alone in a note creates nobody: Settings > Obsidian / Logseq lists it as a join offer.
+
 RUN (from this directory; the toolchain is project-local, node >= 20)
   /opt/homebrew/bin/npm install          once; installs into apps/crm/node_modules only
   npm run dev                            http://127.0.0.1:5195/
