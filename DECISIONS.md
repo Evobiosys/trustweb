@@ -605,3 +605,29 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   for speaker scans and pitch notes. Skipped notes never reach the reader (no model cost).
 - Verification note: the container building this had no npm registry, so the vitest files were run through a node:test shim
   (same describe/it/expect surface); CI runs the real gates.
+
+## D-profile-sections (2026-11-03): My profile in sections, each with a share-sink scope; preview as a viewer; name reveal per event (E3)
+- Sections group the profile fields: picture | about (intro, interests) | contact (norms, favourite way) | address | work (website, offers,
+  working) | availability. `interests` and `availability` are new one-line fields (wire keys `r`, `v`; older builds ignore unknown keys).
+- One rule for every section: a share-sink Scope `{zone, include, exclude}` (share_lines.ts scopeTuples) on the item `profile:<section>`,
+  checked with the SAME canAccess the Share page and the person card use (T12). Who may see a section = zone ladder, plus `tag:<id>`,
+  `event:<id>` and `person:<id>` inclusions, minus exclusions (exclusion beats everything, D3). Events join the relation store as tags:
+  storeOf emits `person has_tag event:<id>` from Person.events, so a Resource share can name an event too.
+- The per-field ring audience of wave 19/20 (`MyProfile.audience`) is superseded by the section scope and stays readable as the fallback:
+  a section without a scope takes the LEAST reach among its fields' legacy audiences (`nobody` -> zone self = only me), so nobody sees
+  more than before. Cost accepted: two fields of one section can no longer differ (e.g. offers Friends, website Public); the owner moves
+  the field or the scope. Section defaults equal the old field defaults: picture Friend, address Friend, work Public, the rest Acquaintance.
+  Saving a section's scope retires the legacy audience of its fields (one truth in the record). Three old unit expectations that asserted
+  per-field divergence inside one section were rewritten to the section model, each with a comment.
+- Wave 20's "no zone, no profile" holds: a real person without a ring (Unsorted, None) gets no zone grant, not even Public; only an
+  explicit Also (person, tag, event) opens a section to them. The tag and event preview viewers do see Public sections.
+- Profile scopes are stored on the profile (`MyProfile.sections`), not as share lines: a share line's one-year expiry would silently
+  widen a section set to "only me" back to the default. scopeTuples are built with since = now at check time, so profile rules never lapse.
+- Preview "as seen by": the sheet renders my profile through `theirProfileBlock`, the renderer the receiving phone uses, from
+  `sliceForViewer` — the function that also builds what is sent. A tag or event viewer is the least-trusted member: someone who holds
+  only that tag/event and sits in no ring (public). A person viewer uses their real zone, tags and events. Names are for the owner only (I2).
+- Name reveal per event (`TwEvent.nameReveal`: full | first | hidden, default full = today's behaviour): applied to the `by` part of every
+  event link this device makes (events_view copy/preview, QR, extension event links). `first` sends the first word of the display name
+  and no did; `hidden` drops `by` entirely (name AND did: the did alone would let attendees pair with me). The host link never carried a
+  name. Device-local: never in the link payload (event_link.ts whitelist), kept by localSettings on edit, rides the own-device sync.
+- Not changed: the wire (profile.ts profileText), auto-send on connect/ring change (zone viewer), what a connected card shows.

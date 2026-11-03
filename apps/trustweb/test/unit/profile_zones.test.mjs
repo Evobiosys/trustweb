@@ -44,13 +44,17 @@ describe('sliceFor', () => {
   })
   it('closer rings get everything but what is set to nobody', () => {
     expect(keys(sliceFor(mine(), 'close'))).toEqual(['address', 'favourite', 'intro', 'norms', 'offers', 'website', 'working'])
-    expect(keys(sliceFor(mine({ address: 'nobody', website: 'nobody' }), 'close'))).toEqual(['favourite', 'intro', 'norms', 'offers', 'working'])
+    // E3: website, offers and working form ONE section (work); a legacy 'nobody' on website now hides the whole section (least reach wins).
+    expect(keys(sliceFor(mine({ address: 'nobody', website: 'nobody' }), 'close'))).toEqual(['favourite', 'intro', 'norms'])
   })
   it('a section at an audience goes to that zone and every closer one, never to a wider one', () => {
+    // E3: per-field audiences inside one section collapse to the section's least reach: website 'acquaintance' + offers 'friend' put the
+    // whole work section (working too) at Friends; before E3 each field went its own way.
     const p = mine({ address: 'close', website: 'acquaintance', offers: 'friend' })
-    expect(keys(sliceFor(p, 'public'))).toEqual(['working'])
-    expect(keys(sliceFor(p, 'acquaintance'))).toEqual(['favourite', 'intro', 'norms', 'website', 'working'])
+    expect(sliceFor(p, 'public')).toBeNull()
+    expect(keys(sliceFor(p, 'acquaintance'))).toEqual(['favourite', 'intro', 'norms'])
     expect(keys(sliceFor(p, 'friend'))).toEqual(['favourite', 'intro', 'norms', 'offers', 'website', 'working'])
+    expect(keys(sliceFor(p, 'close'))).toEqual(['address', 'favourite', 'intro', 'norms', 'offers', 'website', 'working'])
   })
   it('the picture can be public; nobody-audience never leaves; no zone, no profile', () => {
     const pic = 'data:image/jpeg;base64,AAAA'
