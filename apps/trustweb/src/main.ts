@@ -70,7 +70,7 @@ import { cardSections, mergedTimeline } from './card_sections'
 import { createPages } from './page_view'
 import { createSovereignView } from './sovereign_switch_view'
 import { applyForget, forgetText, noteForgetAck, parseForgetText } from './forget'
-import { seenLine, sharePageBody, sharingSettings } from './share_page_view'
+import { basisOf, seenLine, sharePageBody, sharingSettings } from './share_page_view'
 import { linkEntries } from './person_links'
 import { decodeModeLink, INTRODUCE_PERMISSIONS, parseIntroducePermission } from './qr_modes'
 import type { QrContext } from './qr_modes'
@@ -162,10 +162,10 @@ import { initDevFeature } from './dev_feature'
 import { AgreementStatus, acceptAgreement, acceptText, addAgreement, parseAgreementText, proposalText, receiveAgreement, removeAgreement } from './agreements'
 import { agreementsSection } from './agreements_view'
 import { isJpegDataUrl } from '../../demo/src/types'
-import { addNorm, autoSendRank, buildProfileText, receiveProfileText, removeNorm, setOne, sliceFor, zoneOf } from './profile'
+import { addNorm, autoSendRank, buildProfileText, profileFor, receiveProfileText, removeNorm, setOne, setScope, sliceFor, zoneOf } from './profile'
 import type { Zone } from './profile'
 import type { MyProfile } from './profile'
-import { profileSheetNodes, theirProfileBlock } from './profile_view'
+import { profileSheetNodes, scopePageNodes, theirProfileBlock, type ProfileViewDeps } from './profile_view'
 import { APK_URL, apkPart, currentEnv, isAndroidAgent, isIosAgent, onApkDownload, setUpInstall } from './install'
 import { apkHintKind, apkSettingsRow, type ApkHintEnv } from './apk_hint'
 import { runsAsInstalledApp } from './standalone_app'
@@ -204,7 +204,7 @@ import { createEventsView } from './events_view'
 import { EXT_MODULES, type ExtHooks, type ThreadSummary } from './ext/registry'
 import { appLinkFor, browserOpenEnv, openLocalFirst } from './messenger_links'
 import { chatView } from './messenger_combined_view'
-import { addInviter, applyHostLink, eventLabel, joinEvent, tagLabel, whenLabel as eventWhen } from './events'
+import { addInviter, applyHostLink, eventLabel, joinEvent, revealedBy, tagLabel, whenLabel as eventWhen } from './events'
 import { decodeEventLink, encodeEventLink, linkOrigin, toBase64Url } from './event_link'
 import type { EventBy } from './event_link'
 import { acceptEvent, dragPerson } from './drag_payload'
@@ -1150,7 +1150,8 @@ function screenQr(plain = false): void {
 }
 
 function eventQr(ev: TwEvent, plain = false): void {
-  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()) }), plain)
+  // E3: every event link says of me only what that event's name reveal allows (events.ts revealedBy).
+  void qrPage((link) => ({ kind: 'event', link, eventLink: encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)) }), plain)
 }
 
 /** The tag's code carries the tag and the public usernames of the people who carry it (never those who asked to be asked first). */
@@ -3299,21 +3300,28 @@ async function sharePicture(): Promise<string | undefined> {
 function profileNodes(redraw: () => void): Node[] {
   const mine = (): MyProfile => st().profile ?? { norms: [] }
   const withProfile = (f: (p: MyProfile) => void): void => { const p = mine(); f(p); st().profile = p }
-  return profileSheetNodes({
+  const deps: ProfileViewDeps = {
     profile: mine, inventory: () => st().inventory, now: Date.now,
     commit: () => { save(); redraw() },
     addNorm: (norm, text) => withProfile((p) => addNorm(p, norm, text, Date.now())),
     removeNorm: (i) => withProfile((p) => removeNorm(p, i)),
     setOne: (key, text) => withProfile((p) => setOne(p, key, text, Date.now())),
-    setAudience: (section, a) => withProfile((p) => { p.audience = { ...p.audience, [section]: a } }),
+    // E3: one scope per section, edited on a page of its own (like the Share page); Done saves, redraws the sheet and goes back.
+    setScope: (section, scope) => withProfile((p) => setScope(p, section, scope)),
+    openScopeEditor: (section) => pages.open(S.scopeTitle(S.profSection[section]), scopePageNodes(deps, section, () => history.back()), 'profile-scope'),
+    basis: () => basisOf(st()),
+    myName: () => st().me.displayName,
     picture: {
       face: () => pictured(avatar(st().me.displayName, st().me.id), ownPictureUrl),
+      url: () => ownPictureUrl,
       has: () => Boolean(mine().pictureId),
       choose: (file) => { void setOwnPicture(file).then(redraw, () => toast(S.agrSendFailed)) },
       remove: () => { void removeOwnPicture().then(redraw) },
-    },    openInventory: () => { closeSheet(); go(Screen.Inventory) },
+    },
+    openInventory: () => { closeSheet(); go(Screen.Inventory) },
     city: { get: () => st().city ?? '', set: (v) => { const c = v.trim(); if (c) st().city = c; else delete st().city } },
-  })
+  }
+  return profileSheetNodes(deps)
 }
 
 /** Wave 7: the "My profile" sheet, opened from the contact box. */
@@ -3373,9 +3381,11 @@ function sendProfileTo(peer: Peer): void {
 async function sendProfile(peer: Peer): Promise<void> {
   const person = st().people.find((x) => x.peerId === peer.id)
   const pic = await sharePicture()
-  const text = person ? buildProfileText(APP_URL, st().profile, person, pic) : null
+  // E3: the sections this person may see, by the same check as the profile's "as seen by" preview (their zone, tags and events).
+  const basis = basisOf(st())
+  const text = person ? buildProfileText(APP_URL, st().profile, person, pic, basis) : null
   if (!text) { toast(buildProfileText(APP_URL, st().profile, undefined, pic) ? S.profNothingFor(peer.displayName) : S.profEmpty); return }
-  net.sendText(peer, text, Date.now(), undefined, sliceFor(st().profile, zoneOf(person!), pic)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
+  net.sendText(peer, text, Date.now(), undefined, profileFor(st().profile, person!, pic, basis)?.picture).then(() => toast(S.profSent(peer.displayName))).catch(() => toast(S.agrSendFailed))
 }
 
 /**
@@ -3383,18 +3393,20 @@ async function sendProfile(peer: Peer): Promise<void> {
  * lands (`public`: only the sections set to Public) and again when the person is placed on a closer ring (changeRing, the add sheets).
  * Never when switched off in Settings, never to demo phones, never on moving outward. Silent: no toast on this side.
  */
-async function autoShareProfile(peer: Peer, zone: Zone | null): Promise<void> {
+async function autoShareProfile(peer: Peer, zone: Zone | null, person?: Person): Promise<void> {
   const s = st()
   const rank = zone && !s.profileAutoOff && !noSendTo(peer) ? autoSendRank(s.autoSentRank?.[peer.id], zone) : null
   if (rank === null || !zone) return
   const pic = await sharePicture()
-  const slice = sliceFor(s.profile, zone, pic)
-  const text = slice ? buildProfileText(APP_URL, s.profile, zone, pic) : null
+  // E3: a known person is checked with the basis (their tags and events count); a fresh connection gets the zone's slice only.
+  const basis = person ? basisOf(s) : undefined
+  const slice = person ? profileFor(s.profile, person, pic, basis) : sliceFor(s.profile, zone, pic)
+  const text = slice ? (person ? buildProfileText(APP_URL, s.profile, person, pic, basis) : buildProfileText(APP_URL, s.profile, zone, pic)) : null
   if (!text) return
   await net.sendText(peer, text, Date.now(), undefined, slice!.picture).then(() => { s.autoSentRank = { ...s.autoSentRank, [peer.id]: rank }; save() }, () => undefined)
 }
 
-const autoShareToPerson = (p: Person): void => { const peer = st().peers.find((x) => x.id === p.peerId); if (peer) void autoShareProfile(peer, zoneOf(p)) }
+const autoShareToPerson = (p: Person): void => { const peer = st().peers.find((x) => x.id === p.peerId); if (peer) void autoShareProfile(peer, zoneOf(p), p) }
 
 /** Tells a newly connected phone my name (hello.ts): a code link or a bare DID reaches it with no name in it. Never to demo accounts or demo phones. */
 function sendHelloTo(peer: Peer): void {
@@ -4171,7 +4183,7 @@ const extHooks: ExtHooks = {
   atEventChanged: () => { if (!draftInProgress()) draft.eventId = eventForDraft(st()) },
   openItem: (id) => { closeSheet(); itemSheet(id) },
   openCalendar: () => { closeSheet(); go(Screen.Events) },
-  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', eventsBy()),
+  eventLink: (ev) => encodeEventLink(ev, linkOrigin(location.origin), 'peer', revealedBy(eventsBy(), ev)),
   sheet: openSheet, closeSheet, toast: (msg) => toast(msg), origin: linkOrigin(location.origin),
   me: () => ({ name: st().me.displayName, ...(st().identity?.did ? { did: st().identity?.did } : {}) }),
   sendInvite: async (personId, text) => {

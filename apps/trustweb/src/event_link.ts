@@ -10,7 +10,7 @@ import { SHORT_LINK_ORIGINS } from './short_link'
 export type LinkKind = 'peer' | 'host'
 
 /** What travels: the event without my own attendance or when I made it, and the kind of link. */
-export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked'> & { kind: LinkKind; by?: EventBy }
+export type LinkedEvent = Omit<TwEvent, 'createdAt' | 'attended' | 'fromLink' | 'tagLocked' | 'nameReveal'> & { kind: LinkKind; by?: EventBy }
 
 /** Who sent the link: their own name and own identity, nothing about third people (I1). */
 export interface EventBy { name: string; did?: string }
