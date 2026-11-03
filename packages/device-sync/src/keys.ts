@@ -24,10 +24,16 @@
  *  - NO metadata protection. Nothing here hides who talks to whom, when, or how much; the relay sees all of that.
  *  - The SAS is only as good as the humans comparing it. If nobody looks, an active attacker at pairing time is not detected.
  *  - The SAS is `uint32 mod 1e6`: the modulo bias (< 0.03 %) is accepted, not removed.
- *  - Secret keys are returned as raw bytes for the caller to store; how they are stored at rest is the caller's problem and,
- *    in the browser, is plain local storage -- not an OS key store.
+ *  - Private keys are WebCrypto CryptoKeys. `generateDeviceKeys` makes a NON-extractable one, so its secret bytes never exist in
+ *    JavaScript; keystore.ts persists that CryptoKey object in IndexedDB. `deviceKeysFromSecret` still accepts raw bytes (the
+ *    migration from the v1 localStorage blob, and tests) and then carries them in `secretKey`; keys loaded from the key store
+ *    never do. Non-extractable is not "unusable": code running in the page can still call deriveBits with the key.
+ *
+ * Round 2: `derivePairRoots` gives two 32-byte directional ROOT keys (same salt and SAS as derivePairKeys) that seed the
+ * per-direction KDF chains of ratchet.ts; the chain, not these roots, is what brings forward secrecy for message keys. The roots
+ * themselves are still derivable from the static device keys, so a stolen device key still reveals them.
  */
-import { concat, equalBytes, fromB64u, randomBytes, sha256, toB64u, utf8 } from './bytes.ts'
+import { concat, equalBytes, fromB64u, sha256, toB64u, utf8 } from './bytes.ts'
 
 const subtle = (): SubtleCrypto => globalThis.crypto.subtle
 const X25519 = { name: 'X25519' } as const
@@ -41,13 +47,19 @@ const LABEL_LO_HI = 'trustweb-device-sync/v2/lo>hi'
 const LABEL_HI_LO = 'trustweb-device-sync/v2/hi>lo'
 const LABEL_SAS = 'trustweb-device-sync/v2/sas'
 const LABEL_PAIR = 'trustweb-device-sync/v2/pair'
+const LABEL_ROOT_LO_HI = 'trustweb-device-sync/v2/root/lo>hi'
+const LABEL_ROOT_HI_LO = 'trustweb-device-sync/v2/root/hi>lo'
 /** A pairing secret shorter than this is refused: it is the only thing authenticating the joining device. */
 const MIN_PAIRING_SECRET = 16
 
 export interface DeviceKeys {
   readonly deviceId: string
+  /** Raw X25519 public key, 32 bytes. */
   readonly publicKey: Uint8Array
-  readonly secretKey: Uint8Array
+  /** X25519 private key, usages ['deriveBits']; non-extractable when generated here or loaded from the key store. */
+  readonly privateKey: CryptoKey
+  /** Raw 32-byte secret: present ONLY for keys built from raw bytes (migration, tests); never for generated or stored keys. */
+  readonly secretKey?: Uint8Array
 }
 
 export interface PairKeys {
@@ -66,9 +78,9 @@ export async function deviceIdOf(publicKey: Uint8Array): Promise<string> {
   return toB64u(await sha256(concat(utf8(LABEL_ID), publicKey))).slice(0, 22)
 }
 
-async function importSecret(secretKey: Uint8Array): Promise<CryptoKey> {
+async function importSecret(secretKey: Uint8Array, extractable: boolean): Promise<CryptoKey> {
   need32(secretKey, 'secret key')
-  return subtle().importKey('pkcs8', concat(PKCS8_X25519_PREFIX, secretKey) as BufferSource, X25519, true, ['deriveBits'])
+  return subtle().importKey('pkcs8', concat(PKCS8_X25519_PREFIX, secretKey) as BufferSource, X25519, extractable, ['deriveBits'])
 }
 
 async function publicOf(priv: CryptoKey): Promise<Uint8Array> {
@@ -80,23 +92,21 @@ async function publicOf(priv: CryptoKey): Promise<Uint8Array> {
   return pub
 }
 
-export async function deviceKeysFromSecret(secretKey: Uint8Array): Promise<DeviceKeys> {
-  const priv = await importSecret(secretKey)
-  const publicKey = await publicOf(priv)
-  return { deviceId: await deviceIdOf(publicKey), publicKey, secretKey: Uint8Array.from(secretKey) }
+async function importPublic(publicKey: Uint8Array): Promise<CryptoKey> {
+  return subtle().importKey('raw', publicKey as BufferSource, X25519, true, [])
 }
 
-export async function generateDeviceKeys(): Promise<DeviceKeys> {
-  // A raw 32-byte secret is a valid X25519 private key (clamping happens inside the scalar multiplication), so generating
-  // the bytes ourselves and importing them is equivalent to generateKey and avoids a PKCS#8 export round trip.
-  return deviceKeysFromSecret(randomBytes(KEY_LEN))
+function isX25519Private(k: unknown): k is CryptoKey {
+  return (
+    typeof CryptoKey !== 'undefined' &&
+    k instanceof CryptoKey &&
+    k.type === 'private' &&
+    k.algorithm.name === 'X25519' &&
+    k.usages.includes('deriveBits')
+  )
 }
 
-/** Raw X25519 ECDH. Throws on bad lengths and on an all-zero result (a low-order peer key). */
-export async function sharedSecret(mine: DeviceKeys, theirPublicKey: Uint8Array): Promise<Uint8Array> {
-  need32(theirPublicKey, 'peer public key')
-  const priv = await importSecret(mine.secretKey)
-  const pub = await subtle().importKey('raw', theirPublicKey as BufferSource, X25519, true, [])
+async function ecdh(priv: CryptoKey, pub: CryptoKey): Promise<Uint8Array> {
   let bits: ArrayBuffer
   try {
     bits = await subtle().deriveBits({ name: 'X25519', public: pub }, priv, 256)
@@ -107,6 +117,48 @@ export async function sharedSecret(mine: DeviceKeys, theirPublicKey: Uint8Array)
   const s = new Uint8Array(bits)
   if (equalBytes(s, new Uint8Array(KEY_LEN))) throw new Error('X25519: shared secret is all zero (low-order peer key)')
   return s
+}
+
+/**
+ * From raw secret bytes (the v1 storage format; tests). The returned private key is non-extractable; the public key is read
+ * from a short-lived extractable import that is dropped right away. `secretKey` keeps a copy of the bytes for the caller
+ * that still needs them (the migration); nothing else should.
+ */
+export async function deviceKeysFromSecret(secretKey: Uint8Array): Promise<DeviceKeys> {
+  const publicKey = await publicOf(await importSecret(secretKey, true))
+  const privateKey = await importSecret(secretKey, false)
+  return { deviceId: await deviceIdOf(publicKey), publicKey, privateKey, secretKey: Uint8Array.from(secretKey) }
+}
+
+/**
+ * From a stored CryptoKey and its public key (the key store's format). A non-extractable key cannot be asked for its public
+ * key, so the pairing of the two is CHECKED instead: an ephemeral key pair `e` must give ECDH(priv, e.pub) == ECDH(e.priv, pub).
+ * A store that hands back a mismatched pair is refused rather than producing a device that can never decrypt anything.
+ */
+export async function deviceKeysFromPrivateKey(privateKey: CryptoKey, publicKey: Uint8Array): Promise<DeviceKeys> {
+  if (!isX25519Private(privateKey)) throw new Error('not an X25519 private key with usage deriveBits')
+  need32(publicKey, 'public key')
+  const pub = Uint8Array.from(publicKey)
+  const eph = (await subtle().generateKey(X25519, false, ['deriveBits'])) as CryptoKeyPair
+  const viaPriv = await ecdh(privateKey, eph.publicKey)
+  const viaPub = await ecdh(eph.privateKey, await importPublic(pub))
+  if (!equalBytes(viaPriv, viaPub)) throw new Error('public key does not match the private key')
+  return { deviceId: await deviceIdOf(pub), publicKey: pub, privateKey }
+}
+
+/** A fresh device key: the private key is generated NON-extractable, so its bytes never exist outside WebCrypto. */
+export async function generateDeviceKeys(): Promise<DeviceKeys> {
+  const pair = (await subtle().generateKey(X25519, false, ['deriveBits'])) as CryptoKeyPair
+  const publicKey = new Uint8Array(await subtle().exportKey('raw', pair.publicKey))
+  need32(publicKey, 'generated public key')
+  return { deviceId: await deviceIdOf(publicKey), publicKey, privateKey: pair.privateKey }
+}
+
+/** Raw X25519 ECDH with `mine.privateKey`. Throws on bad lengths and on an all-zero result (a low-order peer key). */
+export async function sharedSecret(mine: DeviceKeys, theirPublicKey: Uint8Array): Promise<Uint8Array> {
+  need32(theirPublicKey, 'peer public key')
+  if (!isX25519Private(mine.privateKey)) throw new Error('not an X25519 private key with usage deriveBits')
+  return ecdh(mine.privateKey, await importPublic(theirPublicKey))
 }
 
 function compareBytes(a: Uint8Array, b: Uint8Array): number {
@@ -127,6 +179,26 @@ async function aesKey(base: CryptoKey, salt: Uint8Array, info: string): Promise<
   return subtle().deriveKey(hkdfParams(salt, info), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
 }
 
+interface PairBase {
+  readonly base: CryptoKey
+  readonly salt: Uint8Array
+  /** True when my public key sorts first (I am "lo"). */
+  readonly iAmLo: boolean
+  readonly sas: string
+}
+
+/** The part derivePairKeys and derivePairRoots share: order, salt, HKDF base from the ECDH secret, and the SAS. */
+async function pairBase(mine: DeviceKeys, theirPublicKey: Uint8Array, context: Uint8Array): Promise<PairBase> {
+  need32(theirPublicKey, 'peer public key')
+  const order = compareBytes(mine.publicKey, theirPublicKey)
+  if (order === 0) throw new Error('refusing to pair a device with its own key')
+  const [lo, hi] = order < 0 ? [mine.publicKey, theirPublicKey] : [theirPublicKey, mine.publicKey]
+  const salt = await sha256(concat(lo, hi, context))
+  const base = await hkdfBase(await sharedSecret(mine, theirPublicKey))
+  const sasBits = new DataView(await subtle().deriveBits(hkdfParams(salt, LABEL_SAS), base, 32)).getUint32(0, false)
+  return { base, salt, iAmLo: order < 0, sas: String(sasBits % 1_000_000).padStart(6, '0') }
+}
+
 /**
  * `context` (optional) is mixed into the HKDF salt: sync.ts passes the pairing epoch (SHA-256 of the one-time pairing secret), so two
  * ceremonies between the SAME two device keys yield different keys and a different SAS. Without it, "unlink, pair again" would restart
@@ -134,17 +206,26 @@ async function aesKey(base: CryptoKey, salt: Uint8Array, info: string): Promise<
  * (it was in the code), so both derive the same epoch; nothing of it crosses the relay in clear.
  */
 export async function derivePairKeys(mine: DeviceKeys, theirPublicKey: Uint8Array, context: Uint8Array = new Uint8Array(0)): Promise<PairKeys> {
-  need32(theirPublicKey, 'peer public key')
-  const order = compareBytes(mine.publicKey, theirPublicKey)
-  if (order === 0) throw new Error('refusing to pair a device with its own key')
-  const [lo, hi] = order < 0 ? [mine.publicKey, theirPublicKey] : [theirPublicKey, mine.publicKey]
-  const salt = await sha256(concat(lo, hi, context))
-  const base = await hkdfBase(await sharedSecret(mine, theirPublicKey))
+  const { base, salt, iAmLo, sas } = await pairBase(mine, theirPublicKey, context)
   const loHi = await aesKey(base, salt, LABEL_LO_HI)
   const hiLo = await aesKey(base, salt, LABEL_HI_LO)
-  const sasBits = new DataView(await subtle().deriveBits(hkdfParams(salt, LABEL_SAS), base, 32)).getUint32(0, false)
-  const sas = String(sasBits % 1_000_000).padStart(6, '0')
-  return order < 0 ? { send: loHi, recv: hiLo, sas } : { send: hiLo, recv: loHi, sas }
+  return iAmLo ? { send: loHi, recv: hiLo, sas } : { send: hiLo, recv: loHi, sas }
+}
+
+/**
+ * Two 32-byte directional root keys for ratchet.ts (HKDF-SHA256 bits, infos 'trustweb-device-sync/v2/root/lo>hi' and
+ * '.../root/hi>lo', the same salt as derivePairKeys) plus the same SAS. `send` seeds my sending chain, `recv` my receiving
+ * chain; the peer gets them crosswise. The roots are raw bytes because the chain state is persisted (ratchet.ts ChainState).
+ */
+export async function derivePairRoots(
+  mine: DeviceKeys,
+  theirPublicKey: Uint8Array,
+  context: Uint8Array = new Uint8Array(0),
+): Promise<{ send: Uint8Array; recv: Uint8Array; sas: string }> {
+  const { base, salt, iAmLo, sas } = await pairBase(mine, theirPublicKey, context)
+  const loHi = new Uint8Array(await subtle().deriveBits(hkdfParams(salt, LABEL_ROOT_LO_HI), base, 256))
+  const hiLo = new Uint8Array(await subtle().deriveBits(hkdfParams(salt, LABEL_ROOT_HI_LO), base, 256))
+  return iAmLo ? { send: loHi, recv: hiLo, sas } : { send: hiLo, recv: loHi, sas }
 }
 
 /** HKDF(secret, salt empty, info 'trustweb-device-sync/v2/pair') → AES-GCM-256, for the one `pair` message. */

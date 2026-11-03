@@ -6,20 +6,22 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomBytes, toB64u } from './bytes.ts'
-import { generateDeviceKeys } from './keys.ts'
+import { fromB64u, randomBytes, toB64u, utf8 } from './bytes.ts'
+import { deviceKeysFromSecret, generateDeviceKeys } from './keys.ts'
+import { memoryKeyStore } from './keystore.ts'
+import type { KeyStore } from './keystore.ts'
+import { RATCHET_INFO_CHAIN, RATCHET_INFO_MSG } from './ratchet.ts'
+import { AAD_PREFIX } from './seal.ts'
 import {
   CHUNK_BYTES,
   MAX_PIECES,
   OFFER_TTL_MS,
   PAIR_PREFIX,
-  codeFromLink,
   createDeviceSync,
   pairingCode,
-  pairingLink,
   parsePairingCode,
 } from './sync.ts'
-import type { DeviceSync, PairRequest, RelayLike, SyncData, SyncStorage } from './sync.ts'
+import type { DeviceSync, Incoming, PairRequest, RelayLike, SyncData, SyncStorage } from './sync.ts'
 
 type Sink = (from: string, payload: string) => boolean | void | Promise<boolean | void>
 interface Wire { to: string; from: string; payload: string }
@@ -41,14 +43,18 @@ function hub() {
 type Hub = ReturnType<typeof hub>
 
 /** Storage that behaves like localStorage: what is saved is a JSON copy, never a live reference. */
-function memStorage(): SyncStorage & { saved: () => SyncData | null; saves: () => number } {
+function memStorage(): SyncStorage & { saved: () => SyncData | null; saves: () => number; put: (v: unknown) => void } {
   let raw: string | null = null
   let n = 0
   return {
-    load: () => (raw === null ? null : (JSON.parse(raw) as SyncData)),
+    load: () => (raw === null ? null : (JSON.parse(raw) as unknown)),
     save: (d) => {
       raw = JSON.stringify(d)
       n++
+    },
+    /** Any blob, e.g. a v1 one for the migration test. */
+    put: (v) => {
+      raw = JSON.stringify(v)
     },
     saved: () => (raw === null ? null : (JSON.parse(raw) as SyncData)),
     saves: () => n,
@@ -59,30 +65,40 @@ interface Dev {
   sync: DeviceSync
   address: string
   requests: PairRequest[]
+  /** Every "Receive from <device>?" shown; auto-accepted unless the device was made with `prompt: true`. */
+  incoming: Incoming[]
   logs: string[]
   storage: ReturnType<typeof memStorage>
+  keyStore: KeyStore
 }
 
 async function device(
   h: Hub,
   name: string,
   address: string,
-  opts: { storage?: ReturnType<typeof memStorage>; handshakeMs?: number; now?: () => number } = {},
+  opts: { storage?: ReturnType<typeof memStorage>; keyStore?: KeyStore; handshakeMs?: number; now?: () => number; prompt?: boolean } = {},
 ): Promise<Dev> {
   const requests: PairRequest[] = []
+  const incoming: Incoming[] = []
   const logs: string[] = []
   const storage = opts.storage ?? memStorage()
+  const keyStore = opts.keyStore ?? memoryKeyStore()
   const sync = await createDeviceSync({
     relay: h.relay(address),
     address,
     deviceName: () => name,
     storage,
+    keyStore,
     handshakeMs: opts.handshakeMs ?? 3000,
     ...(opts.now ? { now: opts.now } : {}),
     onPairRequest: (r) => requests.push(r),
+    onIncoming: (i) => {
+      incoming.push(i)
+      if (!opts.prompt) void i.accept()
+    },
     onLog: (l) => logs.push(l),
   })
-  return { sync, address, requests, logs, storage }
+  return { sync, address, requests, incoming, logs, storage, keyStore }
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -119,7 +135,7 @@ const ENTITY_B = 'entity-bravo-0002'
 const VALUE_A = 'alpha-plaintext-value'
 const VALUE_B = 'bravo-plaintext-value'
 
-test('pairing code: format, parse, link round trip, garbage refused', async () => {
+test('pairing code: format, parse, garbage refused (QR only: there is no link form)', async () => {
   const k = await generateDeviceKeys()
   const secret = randomBytes(32)
   const code = pairingCode('addr-phone', k.publicKey, secret, 1_700_000_000_000)
@@ -131,13 +147,6 @@ test('pairing code: format, parse, link round trip, garbage refused', async () =
   assert.deepEqual(p.secret, secret)
   assert.equal(p.exp, 1_700_000_000_000)
   assert.ok(parsePairingCode(`  ${code}\n`), 'surrounding whitespace is tolerated')
-
-  const link = pairingLink('https://app.example/', code)
-  assert.equal(link, `https://app.example/#sync=${encodeURIComponent(code)}`)
-  assert.equal(codeFromLink(link), code)
-  assert.equal(codeFromLink('https://app.example/#other=1'), null)
-  assert.equal(codeFromLink('https://app.example/'), null)
-  assert.equal(codeFromLink('https://app.example/#sync=%E0%A4%A'), null)
 
   for (const bad of [
     '',
@@ -177,11 +186,15 @@ test('pair via code: same 6-digit SAS on both sides, confirm stores the pairing 
   assert.equal(lp[0].deviceId, phone.sync.deviceId)
   assert.equal(pp[0].sas, sas)
   assert.equal(lp[0].sas, sas)
-  assert.ok(pp[0].sendCtr >= pp[0].linkedAt - 1000 && pp[0].sendCtr <= pp[0].linkedAt, 'send counter starts at the wall clock')
-  assert.deepEqual(pp[0].replay, { high: 0, seen: [] })
-  // Stored: the peer's public key, never derived keys.
+  assert.equal(pp[0].send.next, 1, 'the sending chain starts at counter 1')
+  assert.equal(pp[0].recv.next, 1)
+  assert.notEqual(pp[0].send.chain, pp[0].recv.chain, 'two directions, two chains')
+  assert.equal(pp[0].send.chain, lp[0].recv.chain, 'my sending chain is their receiving chain')
+  // Stored: the peer's public key and the ratchet chains; never the device's private key.
   const saved = JSON.stringify(phone.storage.saved())
   assert.ok(saved.includes(pp[0].publicKey))
+  assert.ok(!saved.includes('secretKey'))
+  assert.ok(await phone.keyStore.load(), 'the private key lives in the key store')
 })
 
 test('a code is one use; a code whose address is my own is refused; cancel stores nothing', async () => {
@@ -399,7 +412,7 @@ test('a third device pairs with both and all three converge', async () => {
   assert.equal(phone.sync.materialize().conflicts.length, 1)
 })
 
-test('persistence: a device recreated from its saved SyncData keeps pairing, keys, log and replay state', async () => {
+test('persistence: a device recreated from its saved SyncData and key store keeps pairing, keys, log and ratchet state', async () => {
   const h = hub()
   const phone = await device(h, 'Phone', 'addr-phone')
   const laptop = await device(h, 'Laptop', 'addr-laptop')
@@ -412,16 +425,12 @@ test('persistence: a device recreated from its saved SyncData keeps pairing, key
   const captured = h.wires.slice(start).filter((w) => w.to === 'addr-phone')
   const saved = phone.storage.saved()
   assert.ok(saved)
-  assert.equal(saved.v, 1)
-  const base = phone.sync.pairings()[0].linkedAt
-  assert.ok(saved.pairings[0].sendCtr >= base + 2 && saved.pairings[0].sendCtr < base + 2 + 60_000, 'two sends since linking')
+  assert.equal(saved.v, 2)
+  assert.equal(saved.pairings[0].send.next, 3, 'two sends since linking')
 
-  const again = await device(h, 'Phone', 'addr-phone', { storage: phone.storage })
+  const again = await device(h, 'Phone', 'addr-phone', { storage: phone.storage, keyStore: phone.keyStore })
   assert.equal(again.sync.deviceId, phone.sync.deviceId)
-  // identical but for the send counter, which is floored at the wall clock on every start (restore-from-backup safety)
-  const strip = (p: { sendCtr: number }) => ({ ...p, sendCtr: 0 })
-  assert.deepEqual(again.sync.pairings().map(strip), phone.sync.pairings().map(strip))
-  assert.ok(again.sync.pairings()[0].sendCtr >= phone.sync.pairings()[0].sendCtr)
+  assert.deepEqual(again.sync.pairings(), phone.sync.pairings())
   assert.deepEqual(ids(again), ids(phone))
   assert.equal(state(again), state(phone))
   for (const w of captured) assert.equal(await again.sync.handle(w.from, w.payload), true, 'replay state survived the restart: consumed, not applied')
@@ -456,16 +465,18 @@ test('a crash before persist cannot double-apply: re-delivery after restart merg
   // (1) The crash happened before the wire was persisted: storage still holds the state before it. Re-delivery applies it once.
   const s1 = memStorage()
   s1.save(beforeRound)
-  const r1 = await device(h, 'Phone', 'addr-phone', { storage: s1 })
+  const r1 = await device(h, 'Phone', 'addr-phone', { storage: s1, keyStore: phone.keyStore })
   assert.equal(await r1.sync.handle(entriesWire.from, entriesWire.payload), true)
+  await sleep(20)
   assert.equal(await r1.sync.handle(entriesWire.from, entriesWire.payload), true, 'second delivery: consumed, not applied')
   assert.equal(r1.sync.log.entries().length, 2)
   assert.equal(state(r1), state(laptop))
 
-  // (2) Worst case: the log was saved but the replay state was lost. The wire is accepted again; the merge adds nothing.
+  // (2) Worst case: the log was saved but the ratchet state was not (the key for that counter still exists). The wire is accepted
+  // again; the merge adds nothing.
   const s2 = memStorage()
-  s2.save({ ...after, pairings: after.pairings.map((p) => ({ ...p, replay: { high: 0, seen: [] } })) })
-  const r2 = await device(h, 'Phone', 'addr-phone', { storage: s2 })
+  s2.save({ ...after, pairings: beforeRound.pairings })
+  const r2 = await device(h, 'Phone', 'addr-phone', { storage: s2, keyStore: phone.keyStore })
   const stateBefore = state(r2)
   assert.equal(await r2.sync.handle(entriesWire.from, entriesWire.payload), true)
   await sleep(20)
@@ -492,9 +503,9 @@ test('re-pairing the same two devices derives new keys: a wire captured under th
   const epoch2 = phone.sync.pairings()[0].epoch
   assert.notEqual(epoch2, epoch1, 'a fresh secret gives a fresh epoch')
   assert.notEqual(sas2, sas1, 'and a fresh SAS')
-  assert.deepEqual(phone.sync.pairings()[0].replay, { high: 0, seen: [] })
+  assert.equal(phone.sync.pairings()[0].recv.next, 1)
 
-  // The replay window restarted, but the old wire is under the old keys: it does not open, so it is neither applied nor acked.
+  // The chains restarted at 1, but the old wire is under the old roots: it does not open, so it is neither applied nor acked.
   assert.equal(await phone.sync.handle(old[0].from, old[0].payload), false)
   // The new pairing still syncs.
   await laptop.sync.append(put(ENTITY_B, 'note', 'hotel'))
@@ -516,10 +527,10 @@ test('confirm is one decision: a second confirm throws and resets nothing; a sta
   await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
   await phone.sync.syncNow('addr-laptop')
   await sleep(20)
-  const replayBefore = phone.sync.pairings()[0].replay
-  assert.ok(replayBefore.high > 0)
+  const recvBefore = phone.sync.pairings()[0].recv
+  assert.ok(recvBefore.next > 1)
   await assert.rejects(theirs.confirm(), /already decided/)
-  assert.deepEqual(phone.sync.pairings()[0].replay, replayBefore, 'a double tap resets no counters')
+  assert.deepEqual(phone.sync.pairings()[0].recv, recvBefore, 'a double tap resets no chain')
 
   phone.sync.unlink('addr-laptop')
   const stale = await laptop.sync.join(await phone.sync.offer())
@@ -543,32 +554,160 @@ test('confirm is one decision: a second confirm throws and resets nothing; a sta
   assert.equal(phone.sync.pairings().length, 0)
 })
 
-test('a device restored from an older backup keeps syncing: its send counter never falls behind the peer\'s window', async () => {
+test('a device restored from an older backup cannot sync (its keys are gone on the peer: forward secrecy) until it pairs again', async () => {
   const h = hub()
-  let clock = 1_700_000_000_000
-  const now = () => clock
-  const phone = await device(h, 'Phone', 'addr-phone', { now })
-  const laptop = await device(h, 'Laptop', 'addr-laptop', { now })
+  const phone = await device(h, 'Phone', 'addr-phone', { handshakeMs: 200 })
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
   await link(phone, laptop)
   await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
   const backup = phone.storage.saved()
   assert.ok(backup)
-  // many rounds after the backup
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     await laptop.sync.append(put(ENTITY_B, 'n' + i, 'v' + i))
     await phone.sync.syncNow('addr-laptop')
     await sleep(20)
   }
-  // restore the backup on a later day
-  clock += 24 * 3_600_000
   const s = memStorage()
   s.save(backup)
-  const restored = await device(h, 'Phone', 'addr-phone', { storage: s, now })
-  assert.ok(restored.sync.pairings()[0].sendCtr >= clock, 'counter floored at the wall clock')
+  const restored = await device(h, 'Phone', 'addr-phone', { storage: s, keyStore: phone.keyStore, handshakeMs: 200 })
+  // its `have` goes out under a counter the laptop already used: consumed there, never answered
+  await assert.rejects(restored.sync.syncNow('addr-laptop'), /offline/)
+  assert.ok(laptop.logs.some((l) => l.includes('already used')), 'the laptop logs why')
+  // pairing again (new epoch, new chains) brings it back; nothing was lost
+  restored.sync.unlink('addr-laptop')
+  laptop.sync.unlink('addr-phone')
+  await link(restored, laptop)
   const r = await restored.sync.syncNow('addr-laptop')
-  assert.equal(r.received, 5)
+  assert.equal(r.received, 3)
   await sleep(20)
   assert.equal(state(restored), state(laptop))
+})
+
+test('Receive from <device>?: nothing is merged before accept; decline applies nothing and fails the waiting sync', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone', { prompt: true, handshakeMs: 500 })
+  const laptop = await device(h, 'Laptop', 'addr-laptop', { prompt: true })
+  await link(phone, laptop)
+  await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  await laptop.sync.append(put(ENTITY_B, 'note', 'india'))
+
+  const round = phone.sync.syncNow('addr-laptop')
+  await until(() => phone.incoming.length === 1)
+  const ask = phone.incoming[0]
+  assert.deepEqual(ask.counts, { entries: 2, devices: 1 })
+  assert.equal(ask.reply, false)
+  assert.equal(ask.from.name, 'Laptop')
+  assert.ok(!('send' in ask.from) && !('recv' in ask.from), 'the prompt carries no key material')
+  assert.equal(phone.sync.log.entries().length, 1, 'nothing merged before accept')
+  assert.ok(phone.logs.some((l) => l.includes('waiting for Receive')))
+
+  ask.decline()
+  await assert.rejects(round, /declined/)
+  assert.equal(phone.sync.log.entries().length, 1)
+  assert.equal(laptop.incoming.length, 0, 'nothing was sent back')
+  await ask.accept().catch(() => undefined)
+  assert.equal(phone.sync.log.entries().length, 1, 'a declined message cannot be accepted later')
+
+  // next round: accept on both sides, each side asked once
+  const round2 = phone.sync.syncNow('addr-laptop')
+  await until(() => phone.incoming.length === 2)
+  const merge = await phone.incoming[1].accept()
+  assert.equal(merge.added, 2)
+  const r = await round2
+  assert.equal(r.received, 2)
+  await until(() => laptop.incoming.length === 1)
+  assert.equal(laptop.incoming[0].reply, true)
+  assert.equal(laptop.incoming[0].counts.entries, 1)
+  assert.equal(laptop.sync.log.entries().length, 2, 'the laptop waits for its own Receive')
+  await laptop.incoming[0].accept()
+  assert.equal(state(phone), state(laptop))
+})
+
+test('migration: a v1 blob with the secret key moves the key into the key store and is rewritten without it', async () => {
+  const h = hub()
+  const secret = randomBytes(32)
+  const original = await deviceKeysFromSecret(secret)
+  const storage = memStorage()
+  storage.put({ v: 1, secretKey: toB64u(secret), pairings: [{ address: 'addr-old', deviceId: 'x', publicKey: 'y', name: 'Old', sas: '000000', linkedAt: 1, lastSyncAt: 0, sendCtr: 5, replay: { high: 0, seen: [] }, epoch: 'e' }], log: { v: 1, device: original.deviceId, entries: [] } })
+  const keyStore = memoryKeyStore()
+  const phone = await device(h, 'Phone', 'addr-phone', { storage, keyStore })
+  assert.equal(phone.sync.deviceId, original.deviceId, 'the same device identity')
+  const held = await keyStore.load()
+  assert.ok(held)
+  assert.deepEqual(held.publicKey, original.publicKey)
+  assert.equal(held.privateKey.extractable, false)
+  const saved = storage.saved()
+  assert.ok(saved)
+  assert.equal(saved.v, 2)
+  assert.ok(!JSON.stringify(saved).includes(toB64u(secret)), 'the secret is gone from the blob')
+  assert.equal(saved.pairings.length, 0, 'v1 pairings have no ratchet state: they are dropped, and the person pairs again')
+  assert.ok(phone.logs.some((l) => l.includes('pairing again')))
+  assert.ok(phone.logs.some((l) => l.includes('key store')))
+  // a second start reads the key store, not the blob
+  const again = await device(h, 'Phone', 'addr-phone', { storage, keyStore })
+  assert.equal(again.sync.deviceId, original.deviceId)
+  // and the migrated key still pairs and syncs
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(again, laptop)
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  await again.sync.syncNow('addr-laptop')
+  await sleep(20)
+  assert.equal(state(again), state(laptop))
+})
+
+test('forward secrecy: no key left in a device state captured after a round opens the wires of that round', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone')
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  await phone.sync.append(put(ENTITY_A, 'title', VALUE_A))
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  const start = h.wires.length
+  await phone.sync.syncNow('addr-laptop')
+  await sleep(20)
+  const round = h.wires.slice(start)
+  assert.equal(round.length, 3)
+  const after = JSON.stringify(phone.storage.saved())
+  // every 32-byte base64url string in the captured state, used directly, as a message key root and along the chain
+  const candidates = new Set((after.match(/[A-Za-z0-9_-]{43}/g) ?? []).filter((x) => { try { return fromB64u(x).length === 32 } catch { return false } }))
+  assert.ok(candidates.size >= 4, 'chains are in the state')
+  const subtle = globalThis.crypto.subtle
+  const hkdfBits = async (ikm: Uint8Array, info: string): Promise<Uint8Array> => {
+    const base = await subtle.importKey('raw', ikm as BufferSource, 'HKDF', false, ['deriveBits'])
+    return new Uint8Array(await subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: utf8(info) as BufferSource }, base, 256))
+  }
+  const aes = (raw: Uint8Array) => subtle.importKey('raw', raw as BufferSource, { name: 'AES-GCM' }, false, ['decrypt'])
+  const opens = async (raw: Uint8Array, w: { from: string; to: string; payload: string }): Promise<boolean> => {
+    const bytes = fromB64u(w.payload)
+    const ctr = Number(new DataView(bytes.buffer, bytes.byteOffset, 8).getBigUint64(0))
+    const aad = utf8(`${AAD_PREFIX}|${w.from}|${w.to}|${ctr}`)
+    try {
+      await subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(8, 20) as BufferSource, additionalData: aad as BufferSource }, await aes(raw), bytes.subarray(20) as BufferSource)
+      return true
+    } catch {
+      return false
+    }
+  }
+  let tried = 0
+  for (const c of candidates) {
+    let chain = fromB64u(c)
+    for (let step = 0; step < 6; step++) {
+      for (const w of round) {
+        tried++
+        assert.equal(await opens(chain, w), false, 'a state key opens a past wire')
+        assert.equal(await opens(await hkdfBits(chain, RATCHET_INFO_MSG), w), false, 'a message key derived from a state key opens a past wire')
+      }
+      chain = await hkdfBits(chain, RATCHET_INFO_CHAIN)
+    }
+  }
+  assert.ok(tried > 50)
+  // and the device itself, recreated from that state, cannot apply them again
+  const again = await device(h, 'Phone', 'addr-phone', { storage: phone.storage, keyStore: phone.keyStore })
+  const before = state(again)
+  for (const w of round.filter((x) => x.to === 'addr-phone')) assert.equal(await again.sync.handle(w.from, w.payload), true)
+  await sleep(20)
+  assert.equal(state(again), before)
 })
 
 test('two piece streams from one peer at once both complete (the relay hands over several waiting have-answers together)', async () => {
@@ -621,8 +760,8 @@ test('register:false leaves the relay sink to the app, which can route to handle
   let routed = 0
   const relay = h.relay('addr-tablet')
   const tablet = await createDeviceSync({
-    relay, address: 'addr-tablet', deviceName: () => 'Tablet', storage: memStorage(), register: false,
-    onPairRequest: () => undefined, onLog: () => undefined,
+    relay, address: 'addr-tablet', deviceName: () => 'Tablet', storage: memStorage(), keyStore: memoryKeyStore(), register: false,
+    onPairRequest: () => undefined, onIncoming: (i) => void i.accept(), onLog: () => undefined,
   })
   relay.onRawWire((f, p) => { routed++; return tablet.handle(f, p) })
   const req = await tablet.join(await phone.sync.offer())
@@ -649,8 +788,11 @@ test('large logs travel in several pieces under CHUNK_BYTES each', async () => {
   assert.equal(r.received, 4)
   const pieces = h.wires.slice(start).filter((w) => w.to === 'addr-phone')
   assert.ok(pieces.length >= 3, `pieces: ${pieces.length}`)
-  // ciphertext b64u of a piece: 4/3 of (b64u chunk + JSON framing) -- bound loosely
-  for (const w of pieces) assert.ok(w.payload.length < (CHUNK_BYTES * 4) / 3 * 4 / 3 + 2000)
+  // a piece is padded to the 65 536-byte bucket (seal.ts PAD_BUCKETS) plus the 8-byte counter, 12-byte IV and 16-byte tag, then base64url:
+  // every piece has the same length on the wire, and with two did:peer:2 addresses around it stays well under the relay's 128 KiB
+  const wireLen = Math.ceil(((65_536 + 8 + 12 + 16) * 4) / 3)
+  for (const w of pieces) assert.ok(w.payload.length <= wireLen && w.payload.length > wireLen - 8, `piece length ${w.payload.length}`)
+  assert.ok(wireLen + 2 * 1_600 + 64 < 128 * 1024)
   assert.equal(state(phone), state(laptop))
 })
 

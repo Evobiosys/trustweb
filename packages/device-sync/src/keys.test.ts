@@ -6,7 +6,9 @@ import {
   base58btcDecode,
   base58btcEncode,
   derivePairKeys,
+  derivePairRoots,
   deviceIdOf,
+  deviceKeysFromPrivateKey,
   deviceKeysFromSecret,
   generateDeviceKeys,
   secretKeyFromPairingSecret,
@@ -36,10 +38,16 @@ async function dec(key: CryptoKey, m: { iv: Uint8Array; ct: Uint8Array }): Promi
   }
 }
 
-test('generateDeviceKeys: 32-byte keys, id derived from the public key', async () => {
+test('generateDeviceKeys: 32-byte public key, NON-extractable private CryptoKey, no raw secret, id derived from the public key', async () => {
   const k = await generateDeviceKeys()
   assert.equal(k.publicKey.length, 32)
-  assert.equal(k.secretKey.length, 32)
+  assert.equal(k.secretKey, undefined, 'a generated key never exists as raw bytes')
+  assert.equal(k.privateKey.type, 'private')
+  assert.equal(k.privateKey.algorithm.name, 'X25519')
+  assert.equal(k.privateKey.extractable, false)
+  assert.deepEqual([...k.privateKey.usages], ['deriveBits'])
+  await assert.rejects(crypto.subtle.exportKey('pkcs8', k.privateKey))
+  await assert.rejects(crypto.subtle.exportKey('jwk', k.privateKey))
   assert.equal(k.deviceId, await deviceIdOf(k.publicKey))
   const k2 = await generateDeviceKeys()
   assert.notEqual(k.deviceId, k2.deviceId)
@@ -52,9 +60,13 @@ test('deviceIdOf: 22 b64u chars of sha256(label || pub)', async () => {
   await assert.rejects(deviceIdOf(new Uint8Array(31)))
 })
 
-test('deviceKeysFromSecret reproduces the generated public key (and the RFC 7748 vector)', async () => {
-  const k = await generateDeviceKeys()
-  const r = await deviceKeysFromSecret(k.secretKey)
+test('deviceKeysFromSecret reproduces the public key of the same secret (and the RFC 7748 vector); keeps secretKey; private key non-extractable', async () => {
+  const secret = randomBytes(32)
+  const k = await deviceKeysFromSecret(secret)
+  assert.deepEqual(k.secretKey, secret)
+  assert.notEqual(k.secretKey, secret, 'a copy, not the caller\'s buffer')
+  assert.equal(k.privateKey.extractable, false)
+  const r = await deviceKeysFromSecret(k.secretKey!)
   assert.deepEqual(r.publicKey, k.publicKey)
   assert.equal(r.deviceId, k.deviceId)
   assert.equal(toHex((await deviceKeysFromSecret(A_SECRET)).publicKey), toHex(A_PUBLIC))
@@ -79,7 +91,36 @@ test('sharedSecret: rejects bad lengths and low-order (all-zero result) public k
   const one = new Uint8Array(32)
   one[0] = 1 // u = 1, also low order
   await assert.rejects(sharedSecret(x, one))
-  await assert.rejects(sharedSecret({ ...x, secretKey: new Uint8Array(5) }, (await generateDeviceKeys()).publicKey))
+  // sharedSecret uses the CryptoKey, not the raw bytes: a bogus secretKey next to a good privateKey changes nothing.
+  const y = await generateDeviceKeys()
+  assert.deepEqual(await sharedSecret({ ...x, secretKey: new Uint8Array(5) }, y.publicKey), await sharedSecret(y, x.publicKey))
+})
+
+test('sharedSecret works from a generated (non-extractable) key against an RFC 7748 key', async () => {
+  const x = await generateDeviceKeys()
+  const a = await deviceKeysFromSecret(A_SECRET)
+  assert.deepEqual(await sharedSecret(x, A_PUBLIC), await sharedSecret(a, x.publicKey))
+})
+
+test('deviceKeysFromPrivateKey: rebuilds DeviceKeys from a CryptoKey + public key, without secretKey', async () => {
+  const a = await deviceKeysFromSecret(A_SECRET)
+  const r = await deviceKeysFromPrivateKey(a.privateKey, A_PUBLIC)
+  assert.equal(r.deviceId, a.deviceId)
+  assert.deepEqual(r.publicKey, A_PUBLIC)
+  assert.notEqual(r.publicKey, A_PUBLIC, 'a copy')
+  assert.equal(r.secretKey, undefined)
+  assert.equal(r.privateKey, a.privateKey)
+  assert.equal(toHex(await sharedSecret(r, B_PUBLIC)), AB_SHARED)
+})
+
+test('deviceKeysFromPrivateKey: rejects a public key that does not belong to the private key, bad lengths, and non-X25519 keys', async () => {
+  const a = await deviceKeysFromSecret(A_SECRET)
+  await assert.rejects(deviceKeysFromPrivateKey(a.privateKey, B_PUBLIC), /does not match/)
+  await assert.rejects(deviceKeysFromPrivateKey(a.privateKey, new Uint8Array(31)))
+  const pubOnly = await crypto.subtle.importKey('raw', A_PUBLIC as BufferSource, { name: 'X25519' }, true, [])
+  await assert.rejects(deviceKeysFromPrivateKey(pubOnly, A_PUBLIC), /X25519 private key/)
+  const aes = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt'])
+  await assert.rejects(deviceKeysFromPrivateKey(aes as CryptoKey, A_PUBLIC), /X25519 private key/)
 })
 
 test('derivePairKeys: same SAS on both sides; A.send opens with B.recv and NOT with B.send', async () => {
@@ -136,6 +177,38 @@ test('derivePairKeys: deterministic for the same pair (RFC vectors), different p
 test('derivePairKeys: refuses to pair a device with its own key', async () => {
   const a = await generateDeviceKeys()
   await assert.rejects(derivePairKeys(a, a.publicKey))
+})
+
+test('derivePairRoots: both sides agree crosswise, send != recv, 32 bytes, sas equals derivePairKeys\' sas', async () => {
+  const a = await generateDeviceKeys()
+  const b = await generateDeviceKeys()
+  const ctx = utf8('epoch')
+  const ra = await derivePairRoots(a, b.publicKey, ctx)
+  const rb = await derivePairRoots(b, a.publicKey, ctx)
+  assert.equal(ra.send.length, 32)
+  assert.equal(ra.recv.length, 32)
+  assert.deepEqual(ra.send, rb.recv)
+  assert.deepEqual(ra.recv, rb.send)
+  assert.ok(!equalBytes(ra.send, ra.recv))
+  assert.equal(ra.sas, rb.sas)
+  assert.equal(ra.sas, (await derivePairKeys(a, b.publicKey, ctx)).sas)
+  assert.equal((await derivePairRoots(a, b.publicKey)).sas, (await derivePairKeys(a, b.publicKey)).sas, 'default context matches too')
+})
+
+test('derivePairRoots: deterministic; context and peer change the roots; own key refused', async () => {
+  const a = await deviceKeysFromSecret(A_SECRET)
+  const b = await deviceKeysFromSecret(B_SECRET)
+  const c = await generateDeviceKeys()
+  const r1 = await derivePairRoots(a, b.publicKey, utf8('e1'))
+  const r1b = await derivePairRoots(a, b.publicKey, utf8('e1'))
+  assert.deepEqual(r1, r1b)
+  const r2 = await derivePairRoots(a, b.publicKey, utf8('e2'))
+  assert.ok(!equalBytes(r1.send, r2.send))
+  assert.ok(!equalBytes(r1.recv, r2.recv))
+  const rc = await derivePairRoots(a, c.publicKey, utf8('e1'))
+  assert.ok(!equalBytes(r1.send, rc.send))
+  await assert.rejects(derivePairRoots(a, a.publicKey))
+  await assert.rejects(derivePairRoots(a, new Uint8Array(31)))
 })
 
 test('secretKeyFromPairingSecret: same secret → same key; other secret → no', async () => {
