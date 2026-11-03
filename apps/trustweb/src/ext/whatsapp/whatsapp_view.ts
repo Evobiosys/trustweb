@@ -6,11 +6,14 @@ import { S } from '../../strings'
 import type { ExtHooks, MessengerSource } from '../registry'
 import { createWindowOpener } from './window'
 
-const opener = createWindowOpener({
-  open: (url, name, features) => window.open(url, name, features),
-  host: () => window,
-  store: localStorage,
-})
+let opener: ReturnType<typeof createWindowOpener> | undefined
+/** Built on first use: module load must not touch `localStorage` (absent outside a browser). */
+const windowOpener = (): ReturnType<typeof createWindowOpener> =>
+  (opener ??= createWindowOpener({
+    open: (url, name, features) => window.open(url, name, features),
+    host: () => window,
+    store: localStorage,
+  }))
 let toast: (msg: string) => void = () => {}
 
 const onPhone = (): boolean => nativeApp || window.matchMedia('(pointer: coarse)').matches
@@ -18,7 +21,7 @@ const isWhatsAppLink = (url: string): boolean => /^https:\/\/(wa\.me|web\.whatsa
 
 /** Opens `url` (or WhatsApp Web) in the WhatsApp window; says so when the browser blocks it. */
 function openInWindow(url?: string): void {
-  if (opener.open(url) === 'blocked') toast(S.whatsapp.blocked)
+  if (windowOpener().open(url) === 'blocked') toast(S.whatsapp.blocked)
 }
 
 /** The card's Chat on a WhatsApp link: true when handled here (desktop only; the phone opens the app link as before). */
@@ -35,7 +38,7 @@ export function createWhatsApp(h: ExtHooks): MessengerSource {
     const blocked = el('p', { class: 'meta', 'data-wa-blocked': '', hidden: true }, [S.whatsapp.blocked])
     const go = phone
       ? el('a', { class: 'btn', href: 'https://wa.me/', target: '_blank', rel: 'noopener', 'data-wa-open': '' }, [S.whatsapp.openPhone])
-      : el('button', { class: 'btn', 'data-wa-open': '', onclick: () => { blocked.hidden = opener.open() !== 'blocked' } }, [S.whatsapp.open])
+      : el('button', { class: 'btn', 'data-wa-open': '', onclick: () => { blocked.hidden = windowOpener().open() !== 'blocked' } }, [S.whatsapp.open])
     h.page(S.whatsapp.setupTitle, [
       go,
       blocked,
