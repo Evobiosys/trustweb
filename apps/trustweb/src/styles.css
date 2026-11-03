@@ -1221,6 +1221,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-body{margin-top:10px}
 .who button.link{background:none; border:0; padding:0; font:inherit; color:var(--teal); text-decoration:underline; cursor:pointer}
 .status-pill[hidden]{display:none}
+.page-foot{text-align:right; margin:18px 16px 0; font-size:12.5px}
+.page-foot a{color:var(--ink-soft); text-decoration:underline}
 /* wave 28: card picture slot and the who-they-know entries */
 .card-face{border:0; background:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:50%}
 .card-face .ava{width:56px; height:56px; font-size:22px}

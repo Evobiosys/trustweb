@@ -45,6 +45,7 @@ import { addTagTo, chatShown, messengerGlyphs, setMetAt, setRing, tagsAddable } 
 import { addEntries, parseTimelineImport } from './timeline'
 import type { ConnectKeeper } from './connect_code'
 import { createConnectView } from './connect_view'
+import { seeInActionFoot } from './page_foot'
 import type { ConnectView } from './connect_view'
 import { renderConnectAdd } from './connect_add_view'
 import { acceptWant, addWant, dismissWant } from './wants_to_connect'
@@ -5643,6 +5644,7 @@ function meetTrustWebPage(): HTMLElement {
     // Where the browser can write a tag (Chrome on Android), the link can go onto one; phone to phone stays "later".
     nfc,
     nfc ? nfcStatus : null,
+    seeInActionFoot(),
   ])
 }
 
