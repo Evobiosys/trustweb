@@ -4,7 +4,7 @@
  * Draws a draggable "FEATURE · <title>" box top-left; when `selector` matches, a pulsing outline and an arrow line point at it.
  */
 import { createPointer } from './dev_pointer'
-import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
+import { hintParts, applyVerdicts, approveGate, expandFor, foldStore, individualStore, loadOpenStore, mergeHead, mergeResult, mergeResume, conflictParts, panelDone, personalApprove, unapproved, waveState, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, MERGE_DONE } from './dev_preview_rules'
 
 declare const __TW_FEATURE__: { title: string; hint: string; selector?: string } | null | undefined
 declare const __TW_PREVIEW__: { id: string } | null | undefined
@@ -21,7 +21,7 @@ const CSS = `
 .twf-ok .hx{position:absolute;top:4px;right:6px;width:auto;margin:0;padding:0 5px;background:none;color:#fff;font-size:16px;line-height:1}
 .twf-ok header{padding:8px 10px;background:#b8650a;color:#fff;border-radius:12px 12px 0 0;cursor:move;user-select:none;font-weight:700}
 .twf-ok .body{padding:8px 10px;display:grid;gap:6px}.twf-ok button{font:inherit;border-radius:9px;border:0;padding:9px 10px;cursor:pointer;width:100%}
-.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
+.twf-ok .go{background:#b8650a;color:#fff;font-weight:700}.twf-ok .big{padding:13px 10px;font-size:15px;background:#1f7a4d}.twf-ok .big.light{background:#8fd9ae;color:#10361f}.twf-ok .big.fail{background:#a3271f;color:#fff}.twf-ok .big.grey{background:#5b6b70;color:#fff}.twf-ok button{text-decoration:underline}.twf-ok .small{padding:5px 10px;font-size:12px}.twf-ok button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.twf-ok .hint{font-size:11px;color:#5b6b70}.twf-ok .alt{background:none;color:#b8650a;border:1px solid #b8650a}
 .twf-ok.prog{border-color:#5b6b70}.twf-ok.prog header{background:#5b6b70}.twf-ok.ok{border-color:#1f7a4d}.twf-ok.ok header{background:#1f7a4d}.twf-ok .warn{color:#a3271f;font-weight:600}
 .twc-file,.twc-a,.twc-b{padding:0 3px;border-radius:4px;font-weight:700;overflow-wrap:anywhere}.twc-file{color:#0e6b73;background:#d9f3f2}.twc-a{color:#8a4a00;background:#ffe8c7}.twc-b{color:#6a2c9e;background:#efe0fb}
 .twf-new{display:inline-block;margin-right:6px;padding:0 5px;border-radius:5px;background:#ffbf47;color:#241b2e}`
@@ -145,7 +145,13 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
       const h = mergeHead(j.step); head.textContent = h.text; bar.classList.toggle('ok', h.ok); bar.classList.toggle('prog', !h.ok)
       body.replaceChildren(statusLine(j.text ?? 'starting', j.url))
       if (j.step === 'checks-failed' || j.step === 'failed') body.className = 'body warn'
-      if (MERGE_DONE.includes(j.step) && j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
+      // An ended run always leaves a big success (green) or failure (red) button (Jakob 2026-11-03): success opens the release, failure or cancel goes back to the panel.
+      if (MERGE_DONE.includes(j.step)) {
+        const r = mergeResult(j.step)
+        const cls = r.ok === true ? 'go big' : r.ok === false ? 'go big fail' : 'go big grey'
+        body.append(btn(`${r.ok === true ? '✓' : r.ok === false ? '✗' : '–'} ${r.text}${r.ok === true ? (j.url ? ': open app.trustweb.one' : '') : ': back to the panel'}`, cls, () => { if (r.ok === true) { if (j.url) window.open(j.url, '_blank') } else buttons() }))
+        if (j.step !== 'released') body.append(btn('Back', 'alt small', buttons))
+      }
     }, '/__tw/approve-merge', (j) => !stale(j) && MERGE_DONE.includes(j.step))
   }
   function buttons(): void {
@@ -198,8 +204,9 @@ function approveBar(bld: { stockUrl: string; sha?: string; approved?: string | n
   if (bld.approved) poll()
   else {
     buttons()
-    // A reload while a run is going (or ended for this very commit) shows its line again.
-    if (preview) void fetch('/__tw/approve-merge').then((r) => r.json()).then((j: ApprovalStatus) => { if (j.step !== 'none' && (!bld.sha || !j.sha || j.sha.startsWith(bld.sha))) pollMerge(0) }).catch(() => { /* no status: buttons stay */ })
+    // A reload while a run is going, or after one ended today, shows its line and result again, whatever commit this page was built from
+    // (the assembly and the test step move HEAD and restart vite; a sha match hid the result behind the default buttons, Jakob 2026-11-03).
+    if (preview) void fetch('/__tw/approve-merge').then((r) => r.json()).then((j: ApprovalStatus) => { if (mergeResume(j, Date.now()) !== 'none') pollMerge(0) }).catch(() => { /* no status: buttons stay */ })
   }
   head.addEventListener('pointerdown', (down) => {
     const dx = down.clientX - bar.offsetLeft, dy = down.clientY - bar.offsetTop
