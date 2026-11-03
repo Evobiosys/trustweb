@@ -73,3 +73,25 @@ describe('person card line', () => {
     expect(seenBy(basis(shares), 'ada', NOW)).toEqual([])
   })
 })
+
+describe('events in the basis (E3)', () => {
+  const events = [{ id: 'ev1', name: 'Probe Forum' }, { id: 'ev2', name: 'Probe Camp', tagName: 'camp 26' }]
+  const withEvents = () => ({ ...basis(), people: [...basis().people.slice(0, 3), { ...P('di', 'Di', Ring.Friend), events: ['ev1'] }], events })
+  it('storeOf says who carries which event tag; a basis without events adds nothing', () => {
+    const got = storeOf(withEvents()).filter((t) => t.object.startsWith('event:'))
+    expect(got.map((t) => [t.subject, t.relation, t.object])).toEqual([['person:di', 'has_tag', 'event:ev1']])
+    expect(storeOf(basis()).some((t) => t.object.startsWith('event:'))).toBe(false)
+  })
+  it('candidates list each event by its tag label', () => {
+    const c = candidates(withEvents())
+    expect(c.filter((x) => x.id.startsWith('event:'))).toEqual([{ id: 'event:ev1', label: 'Probe Forum' }, { id: 'event:ev2', label: 'camp 26' }])
+    expect(suggest('camp', c, []).map((x) => x.id)).toContain('event:ev2')
+  })
+  it('an event in Also lets its attendees in below the zone; the same check enforces it', () => {
+    const scope = { zone: 'close', include: ['event:ev1'], exclude: [] }
+    expect(previewOf(withEvents(), scope, 'bike', NOW).names).toEqual(['Cy', 'Di'])
+    const shares = shareItem(withEvents(), 'bike', scope, NOW)
+    expect(seenBy({ ...withEvents(), shares }, 'di', NOW)).toEqual(['bike'])
+    expect(seenBy({ ...withEvents(), shares }, 'ada', NOW)).toEqual([])
+  })
+})
