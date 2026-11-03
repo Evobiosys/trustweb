@@ -3,15 +3,15 @@
  * Wave 28 views-header: the controls in the header of Web, People, Chat, Events and Resources, left to right: search, views (the eye),
  * the pinned buttons, QR, settings (so right to left: settings, QR, pins, views, search). Record keeps its own header. Pure, no DOM.
  */
-export type HeaderControl = 'search' | 'views' | 'pins' | 'qr' | 'settings'
+export type HeaderControl = 'search' | 'views' | 'switch' | 'pins' | 'qr' | 'settings'
 
 const SCREENS = ['web', 'chat', 'events', 'inventory']
 
 /** The header's controls for a screen id (Screen enum value); undefined = the screen draws its own. */
 export function headerControls(screen: string): HeaderControl[] | undefined {
-  if (screen === 'chat') return ['search', 'pins', 'qr', 'settings']
   // Wave 29: People is a view the eye switches to; the page keeps its own search field.
   if (screen === 'people') return ['views', 'pins', 'qr', 'settings']
+  if (screen === 'chat') return ['search', 'switch', 'pins', 'qr', 'settings'] // wave 29: the messenger switch sits where the other screens keep the eye
   return SCREENS.includes(screen) ? ['search', 'views', 'pins', 'qr', 'settings'] : undefined
 }
 

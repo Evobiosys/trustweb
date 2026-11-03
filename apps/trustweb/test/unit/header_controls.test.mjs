@@ -9,8 +9,8 @@ describe('header_controls', () => {
   it('puts the eye left of the QR left of the gear on the People page, which has its own search', () => {
     expect(headerControls('people')).toEqual(['views', 'pins', 'qr', 'settings'])
   })
-  it('gives Chat no views (expand) button', () => {
-    expect(headerControls('chat')).toEqual(['search', 'pins', 'qr', 'settings'])
+  it('gives Chat no views (expand) button but the messenger switch', () => {
+    expect(headerControls('chat')).toEqual(['search', 'switch', 'pins', 'qr', 'settings'])
   })
   it('leaves Record and every other screen to its own header', () => {
     for (const s of ['record', 'meeting', 'meet', 'start', 'review']) expect(headerControls(s)).toBeUndefined()
