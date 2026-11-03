@@ -3,6 +3,7 @@
 import { scopeTuples, previewShare, appendShare, oneOffVisible } from '../../src/share_sink/share_lines.ts'
 import { canAccess } from '../../src/share_sink/check.ts'
 import { parseJsonl } from '../../src/share_sink/tuples.ts'
+import { ALL_ZONES } from '../../src/share_sink/zones.ts'
 import { NOW } from '../helpers/share_sink_store.mjs'
 
 const WHEN = new Date(NOW)
@@ -31,6 +32,12 @@ describe('preview equals enforcement (T12)', () => {
     expect(p.names).toEqual(enforced)
     expect(p.count).toBe(enforced.length)
     expect(p.names).toEqual(['person:bo'])
+  })
+  it('honours rings switched off like canAccess does: a person whose only zone is off is not named (the CLI passes its active zones)', () => {
+    const wide = { zone: 'acquaintance', include: [], exclude: [] }
+    const noAcquaintance = ALL_ZONES.filter((z) => z !== 'acquaintance')
+    expect(previewShare(base, wide, ['person:ada', 'person:bo'], 'item:bike', WHEN).names).toEqual(['person:ada', 'person:bo'])
+    expect(previewShare(base, wide, ['person:ada', 'person:bo'], 'item:bike', WHEN, noAcquaintance).names).toEqual(['person:ada'])
   })
 })
 
