@@ -1,5 +1,6 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
 export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../dev_preview_rules.mjs'
+import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
@@ -314,8 +315,29 @@ export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id:
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
 
-/** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
-export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
+/** The ended run's verdict for the merge box's big button: Success (green) once merged, Failed (red) after a failed or checks-failed run, Cancelled (neither) after a cancelled Touch ID. */
+export const mergeResult = (step: string): { text: string; ok: boolean | null } =>
+  step === 'released' ? { text: 'Success', ok: true }
+    : step === 'release-pending' ? { text: 'Merged, release pending', ok: true }
+    : step === 'cancelled' ? { text: 'Cancelled', ok: null }
+    : { text: 'Failed', ok: false }
+
+/** The merge box's head: DONE (green, class ok) once released, MERGED, RELEASE PENDING (green) while the slot catches up, FAILED / CANCELLED (red head) after a run that ended without a merge, IN PROGRESS while it runs. */
+export const mergeHead = (step: string): { text: string; ok: boolean } => {
+  if (!MERGE_DONE.includes(step)) return { text: 'IN PROGRESS', ok: false }
+  const r = mergeResult(step)
+  return { text: step === 'released' ? 'DONE' : r.text.toUpperCase(), ok: r.ok === true }
+}
+
+/** After a reload: what the box does with the status file of the last Approve wave run (Jakob 2026-11-03: the result vanished into the default buttons
+ *  because the page was built from another commit than the run started on; the assembly and the tests move HEAD and restart vite).
+ *  'result' = an ended run within a day: its success or failure button shows, whatever commit; 'poll' = a run still going (touched within the hour); 'none' = nothing, or too old. */
+export const mergeResume = (j: { step: string; updated?: string }, now: number): 'poll' | 'result' | 'none' => {
+  if (!j.step || j.step === 'none') return 'none'
+  const age = now - Date.parse(j.updated ?? '')
+  if (MERGE_DONE.includes(j.step)) return age < 86_400e3 ? 'result' : 'none'
+  return age < 3_600e3 ? 'poll' : 'none'
+}
 
 /** The left panel greys out and stops reacting once Approve wave has been pressed and the run did not end in failure or cancel. */
 export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
