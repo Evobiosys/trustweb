@@ -1,14 +1,19 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
 const on = (fs) => fs.filter((x) => x.checked).map((x) => x.key)
 
 describe('dev preview rules', () => {
-  it('the left panel is done once a Declare done run is going or released, free again after a failed or cancelled run', () => {
+  it('the dev panel buttons say Approve wave, never Declare done', () => {
+    expect(APPROVE_WAVE_LABEL).toBe('Approve wave')
+    expect(APPROVE_WAVE_AND_CONTINUE_LABEL).toBe('Approve wave and continue to dev.trustweb.one')
+    for (const l of [APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL]) expect(l).not.toContain('Declare done')
+  })
+  it('the left panel is done once an Approve wave run is going or released, free again after a failed or cancelled run', () => {
     for (const step of ['tests', 'merging', 'released', 'release-pending']) expect(panelDone(step)).toBe(true)
     for (const step of ['none', '', 'failed', 'checks-failed', 'cancelled']) expect(panelDone(step)).toBe(false)
   })
@@ -306,7 +311,7 @@ describe('approve (merge to main) rules', () => {
     expect(prGate({ ...passed, tested: { ...passed.tested, ok: false } })).toBe('failed')
     expect(testLine('passed', passed.tested)).toBe('Checks passed for abc1234')
   })
-  it('Declare done opens with nothing running, every loaded row approved (>= 1) and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
+  it('Approve wave opens with nothing running, every loaded row approved (>= 1) and no conflict; pending changes, tests not run or failed do not block; the hint names the blocker', () => {
     expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, features: [g('a', true, 'merge'), g('b', false, 'needs-work'), g('m', true, null, { merged: true })] })).toEqual({ ok: true, hint: '' })
     expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: undefined, features: [g('a', true, 'merge')] }).ok).toBe(true)
     expect(approveGate({ ...passed, baseSha: 'B', compat: { state: 'ok', baseSha: 'B', refs: { a: null } }, tested: { ...passed.tested, ok: false }, features: [g('a', true, 'merge')] }).ok).toBe(true)
