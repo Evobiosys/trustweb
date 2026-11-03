@@ -22,11 +22,6 @@ export interface ZonePanelDeps {
   /** Everyone the zones show (trustzones.ts inZones). */
   people: readonly Person[]
   tags: readonly ColourTag[]
-  /** The name as shown. */
-  nameOf: (p: Person) => string
-  onOpen: (id: string) => void
-  /** A renamed person: the caller stores it and redraws. */
-  onRename: (p: Person, next: string) => void
   /** A view setting changed (already written to s.uiRings): save and redraw. */
   onChange: () => void
 }
