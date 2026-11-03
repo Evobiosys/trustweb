@@ -1,8 +1,10 @@
 # Data loss prevention (DLP): backup and restore-drill plan
 
-Status: **proposal, not built** (2026-10-27). Nothing below changes a running system. Where it names
-something that exists today it says so; everything else is a proposal for the owner to accept, change or reject
-(see "Open decisions"). The invariants it must not break are I1 (local sovereignty), I7 (honest labeling) and
+Status: **proposal, partly built** (2026-11-02; first written 2026-10-27). Built: the drill tool
+(`services/trustweb-backup/restore_drill.mjs`), its CI wrapper (`services/trustweb-backup/restore_drill_ci.mjs`) and the
+monthly CI drill (`.github/workflows/dlp-drill.yml`). Not built: the off-host backup itself, the host-side weekly check,
+drill levels 1 to 3. Nothing below changes a running system. Where it names something that exists today it says so;
+everything else is a proposal for the owner to accept, change or reject (see "Open decisions"). The invariants it must not break are I1 (local sovereignty), I7 (honest labeling) and
 I9 (conservative defaults) in `CLAUDE.md`.
 
 "DLP" here means **loss prevention** (data that disappears or becomes unrecoverable), not leak prevention.
@@ -13,7 +15,8 @@ Leak prevention is the privacy design itself (I1 to I3, `PRIVACY.md`).
 1. **Today there is exactly one copy of the server state, on one host, with no off-host backup and no restore ever rehearsed.**
    The deploy script takes a `.bak.<timestamp>` copy of the unit and Caddyfile before it changes them
    (`scripts/deploy_trustweb_backup.sh`), and the phone keeps its last 5 local snapshots before merges
-   (R1/R2 in `DECISIONS.md`). Neither survives loss of the questhub host.
+   (R1/R2 in `DECISIONS.md`). Neither survives loss of the questhub host. The restore path is now rehearsed monthly in CI
+   on a synthetic fixture (see "CI drill"); that proves the tool, and does not change the one-copy-on-one-host fact.
 2. **The comparable SaaS products do not protect you the way their marketing suggests, and most do not publish numbers.**
    What they share is simple: the vendor backs up its own platform, the customer gets a short undo window (trash,
    version history), and anything stronger (customer-held export, point-in-time restore) is either absent or sold by
@@ -115,7 +118,7 @@ A backup counts only after a restore has been timed and checked. Four levels:
 
 | Level | Cadence | What | Who |
 |---|---|---|---|
-| 0 automated | weekly | repository integrity check (sample of data), freshness of the newest snapshot per surface against its RPO, heartbeat seen | cron plus alert |
+| 0 automated | **monthly** in CI on a synthetic fixture (built; `.github/workflows/dlp-drill.yml`); weekly on the host against real snapshots: proposed | CI (built): backs up a fixture record, restores it, diffs, serves it from the restored copy, and checks that a tampered copy is caught (five checks: fixture, drill, diff, serve, control); a failed scheduled run opens or updates a GitHub issue labelled dlp-drill, the step summary carries the drill-log row, the report is a 90-day artifact, optional heartbeat to a dead-man's switch (secret DLP_DRILL_HEARTBEAT_URL). Host (proposed): repository integrity check (sample of data), freshness of the newest snapshot per surface against its RPO, heartbeat seen | CI plus issue; on the host cron plus alert |
 | 1 staging restore | **monthly** | restore the newest snapshot and one random older snapshot into the staging unit (`scripts/deploy_trustweb_backup.sh --staging`, own data directories, no public route), run the checks below, stop the unit again | operator |
 | 2 host-loss rehearsal | **quarterly** | fresh VM at the second provider, install the code with the deploy script's staging flavour, restore from escrow only (no access to the old host), time it against the RTO | operator plus a second person |
 | 3 people and device | yearly | the second person restores using only the runbook; a fresh phone install recovers a synthetic persona from its encrypted backup | two people |
@@ -149,8 +152,37 @@ The automated test (`test/restore_drill.test.mjs`) does this end to end with syn
 Quarterly, add a full-host rehearsal from the off-host copy on a fresh machine with only the
 owner's offline key, to prove nothing lives only on the old host.
 
+### CI drill (built 2026-11-02)
+
+`.github/workflows/dlp-drill.yml` runs `services/trustweb-backup/restore_drill_ci.mjs` on the 1st of every month (04:23 UTC),
+on manual dispatch, and on a push that touches the drill or the server. Five checks, each a row in the report:
+fixture (the real server takes a random 4096-byte record through `PUT /backup/<id>`, a canary connect code through `POST /connect`
+and a canary short link through `POST /link`, so the three JSON stores exist; the report lists the stores it wrote), drill (snapshot,
+verify, restore), diff (file list and sha256 per file, independent of the manifest; GNU `diff -r` repeats it outside the tool), serve
+(a fresh server on the restored copy returns the record byte-identical, a `PUT` with the original write token still succeeds, the
+connect code and the short link still redirect) and control (a tampered copy of the snapshot must be detected, so a check that always
+passes would fail here).
+
+What it proves: the tool works, the restore path works end to end, bytes survive it, slot ownership survives it, on every
+runner month. What it does not prove (I7): nothing about production data, no off-host copy exists because of it, and it
+measures no RPO (the fixture is seconds old). It is level 0 on a fixture, not a backup.
+
+GitHub pauses scheduled workflows after 60 days without repository activity, so a silent month is not a pass. The optional
+heartbeat to a dead-man's switch (secret DLP_DRILL_HEARTBEAT_URL; a ping on pass, the `/fail` variant on failure) is what
+catches a drill that never ran. The URL is a secret and is never printed.
+
+Alerting: the job fails; a failed scheduled, manual or main-branch run opens one issue labelled dlp-drill (or comments on the
+open one); the step summary carries the checks table and one drill-log row; the JSON report is a 90-day artifact; the tool
+prints a `::notice` or `::error` line. A failed CI drill is an incident like any other.
+
+By hand: Actions > dlp-drill > Run workflow, or locally `node services/trustweb-backup/restore_drill_ci.mjs --work /tmp/dlp-drill`
+(an empty or absent directory; the tool refuses a non-empty one and never deletes). Tests: `services/trustweb-backup/test/restore_drill.test.mjs`,
+`services/trustweb-backup/test/restore_drill_ci.test.mjs` and the workflow contract `services/trustweb-backup/test/dlp_drill_workflow.test.mjs`,
+run by the `checks` job in `.github/workflows/ci.yml`.
+
 ### Drill log
 
+CI rows live in the run's step summary and its report artifact; they name no host. Levels 1 to 3 still go to the private log.
 Append one row per drill to a log kept next to the runbook (a private place, since it names hosts). Template:
 
 | Date | Level | Snapshot ids restored | Elapsed vs RTO | Newest canary age vs RPO | Checksums | Result | Findings and fixes | Operator |
@@ -159,7 +191,7 @@ Append one row per drill to a log kept next to the runbook (a private place, sin
 
 ## Open decisions
 
-Everything above waits for the owner. Nothing here has been decided or built.
+Everything above waits for the owner. Nothing in this table has been decided; only the D-7 items marked done are built.
 
 | # | Question | Lean |
 |---|---|---|
@@ -169,7 +201,8 @@ Everything above waits for the owner. Nothing here has been decided or built.
 | D-4 | Back up hosted recordings at all, weekly? | yes weekly, because the allowance makes them user value; revisit if size grows |
 | D-5 | Who are the two escrow holders? | owner plus one trusted operator |
 | D-6 | Does the app upload its encrypted backup automatically, and how often? | needs a product decision; it sets the device RPO |
-| D-7 | Follow-up code tasks: a tested `backupTo(path)` on the SQL driver, a drill script that writes and checks canaries, a backup freshness check | yes, one PR each, test first |
+| D-7 | Follow-up code tasks: a tested `backupTo(path)` on the SQL driver, a drill script that writes and checks canaries (done for the server side, 2026-11-02: `services/trustweb-backup/restore_drill_ci.mjs`), a backup freshness check | yes, one PR each, test first |
+| D-8 | Where does the heartbeat go (healthchecks.io EU, self-hosted)? | self-hosted or EU-hosted; the ping carries no personal data |
 
 ## What this plan does not cover
 

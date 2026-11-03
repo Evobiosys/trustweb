@@ -469,3 +469,11 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (channel.ts keeps https: sgnl:// fails silently without the app). Element X documents no element:// user link: matrix.to is used.
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
+
+## D-dlp-ci-drill (2026-11-02): the restore drill runs monthly in CI on a fixture; a failed scheduled drill is an incident
+- What runs: .github/workflows/dlp-drill.yml (1st of the month 04:23 UTC, manual dispatch, push to the drill paths) runs restore_drill_ci.mjs:
+  fixture, drill, diff, serve, control (a tampered copy must be caught), plus GNU diff -r outside the tool. Node stdlib only, no install.
+- Proves the tool and the restore path (byte-identity, slot ownership); does not prove an off-host backup exists or measure RPO (I7, docs/ops/dlp.md level 0).
+- Alerting: a failed scheduled, manual or main run opens or comments on one issue labelled dlp-drill; step summary with the drill-log row; 90-day report
+  artifact; optional heartbeat (secret DLP_DRILL_HEARTBEAT_URL), needed because GitHub pauses schedules after 60 days without activity.
+- A fixture, not production data: I1 and the synthetic data rule; nothing real ever reaches a GitHub runner. Open: the off-host backup, the host-side weekly check, levels 1 to 3, D-8.
