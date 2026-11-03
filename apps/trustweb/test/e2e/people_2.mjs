@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/** Wave 28b people-2 proof (headless, dev only): People page zones. PORT=5441 SHOTS=<dir> EXE=<chromium> PW=<playwright-core index.mjs> node people_2.mjs */
+const { chromium } = await import(process.env.PW ?? 'playwright-core')
+const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const ck = (n, c) => console.log((c ? 'PASS ' : 'FAIL ') + n)
+const pp = (id, name, ring) => ({ id, name, context: '', ring, metAt: 1, lines: [] })
+for (const [tag, vp, touch] of [['390', { width: 390, height: 844 }, true], ['1440', { width: 1440, height: 900 }, false]]) {
+  const ctx = await b.newContext({ viewport: vp, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' })
+  const page = await ctx.newPage(); const errs = []; page.on('pageerror', (e) => errs.push(String(e)))
+  await page.goto(`http://127.0.0.1:${process.env.PORT ?? 5441}/`); await page.waitForTimeout(1500)
+  await page.evaluate((ps) => { localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ben Beispiel' }, peers: [], log: [], inventory: [], people: ps })) },
+    [pp('b', 'Bea Beispiel', 'close'), pp('c', 'Cem Probe', 'intending'), pp('d', 'Dora Probe', 'unsorted')])
+  await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(800)
+  await page.getByRole('button', { name: 'Search people' }).click(); await page.waitForTimeout(300)
+  await page.keyboard.press('Enter'); await page.waitForTimeout(500)
+  const z = (k) => page.locator(`[data-zone="${k}"]`)
+  ck('closest few first, open, "No one yet"', (await page.locator('.people-zone').first().getAttribute('data-zone')) === 'closest' && await z('closest').locator('[data-zone-empty]').isVisible())
+  ck('labels', /Closest few/.test(await z('closest').innerText()) && /Intending to connect/.test(await z('intending').innerText()) && /Not yet sorted/.test(await z('unsorted').innerText()))
+  ck('others collapsed, ▸', (await z('close').locator('.outliner').innerText()) === '▸' && (await z('closest').locator('.outliner').innerText()) === '▾')
+  ck('import entry off the page', await page.locator('[data-people-import]').count() === 0)
+  await page.screenshot({ path: `${process.env.SHOTS}/people-${tag}.png` })
+  await z('close').locator('.people-zone-toggle').click(); await page.waitForTimeout(200)
+  ck('press opens ▾ with the person', (await z('close').locator('.outliner').innerText()) === '▾' && await z('close').locator('[data-person]').count() === 1)
+  await z('intending').locator('[data-zone-add]').click(); await page.waitForTimeout(700)
+  ck('⊕ opens the add sheet with the ring preset', await page.locator('.add-rings .radio.on').count() === 1 && /Intending|Public/.test(await page.locator('.add-rings .radio.on').innerText()))
+  await page.screenshot({ path: `${process.env.SHOTS}/people-add-${tag}.png` })
+  ck('no page errors', errs.length === 0); if (errs.length) console.log(errs)
+  await ctx.close()
+}
+await b.close()

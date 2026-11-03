@@ -1202,7 +1202,13 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .update-banner .btn{margin:0; white-space:nowrap}
 
 .people-list .field{width:100%; margin-bottom:10px}
-.people-zone-head{display:flex; justify-content:space-between; align-items:center; width:100%; border:0; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:10px 12px; margin:8px 0 6px; font:inherit; color:var(--ink); cursor:pointer}
+.people-zone-head{display:flex; align-items:center; gap:8px; width:100%; border-left:6px solid var(--rc); background:var(--card); border-radius:12px; padding:4px 12px 4px 0; margin:8px 0 6px; color:var(--ink)}
+.people-zone-toggle{flex:1; display:flex; align-items:center; gap:8px; border:0; background:none; font:inherit; color:inherit; padding:8px 0 8px 10px; text-align:left; cursor:pointer}
+.people-zone-toggle .outliner{display:inline-block; width:1.1em; text-align:center}
+.people-zone-add{border:0; background:none; font:inherit; font-size:1.3em; line-height:1; color:inherit; padding:6px; cursor:pointer}
+.people-unsorted{margin-top:28px}
+.people-zone-head small{min-width:1.6em; text-align:right}
+.people-pinned .people-zone-head b{flex:1; padding:8px 0 8px 10px}
 .people-zone .zoom-row small{display:block}
 .chat-dnd.on{background:var(--electric); color:#fff}
 .sov-svc{padding:8px 0; border-bottom:1px solid var(--line, #e4e2dc)}

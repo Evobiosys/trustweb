@@ -1078,8 +1078,7 @@ function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
     el('div', { class: 'scroll pad' }, [
-      el('button', { class: 'btn btn-ghost btn-sm', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
-      peopleListBody(st, openCardPage, !window.matchMedia('(pointer: coarse)').matches),
+      peopleListBody(st, openCardPage, addPersonSheet, !window.matchMedia('(pointer: coarse)').matches),
     ]),
   ]
 }
@@ -6540,6 +6539,7 @@ function settingsSheet(): void {
     web: [
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
       ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [

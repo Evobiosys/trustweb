@@ -683,6 +683,19 @@ export const S = {
   // Wave 25: the people list page behind it.
   peopleSearchPh: 'Search people',
   peoplePinned: 'Pinned',
+  /** The People page's own zone names (wave 28b); the ring labels elsewhere stay. */
+  peopleZone: {
+    [Ring.Closest]: 'Closest few',
+    [Ring.Close]: 'Close friends and allies',
+    [Ring.Friend]: 'Friends and community members',
+    [Ring.Acquaintance]: 'Acquaintances',
+    [Ring.Intending]: 'Intending to connect',
+    [Ring.None]: 'Not in my web',
+    [Ring.Family]: 'Family',
+    [Ring.Unsorted]: 'Not yet sorted',
+  } as Record<Ring, string>,
+  peopleZoneEmpty: 'No one yet',
+  peopleZoneAdd: (zone: string) => `Add someone to ${zone}`,
   peopleTitle: 'People',
   // Wave 7: the outliner's rows and views.
   olNoContext: 'intending to connect',
