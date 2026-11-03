@@ -131,6 +131,33 @@ export function tierOf(p: Person): Tier {
   return p.name.includes('@') || f[F_FAMOUS] || f[F_DECEASED] ? 'outside' : Ring.Unsorted
 }
 
+/** A person in the Web Curator's Archive (a set-aside invitation or a dismissed reach-out): never drawn. */
+export const isArchived = (p: Person): boolean => p.pendingInvite !== undefined || p.wantsToConnect !== undefined
+
+/** Ids of people with a connection to another contact (not only to me): shared context, imported links, "knows". */
+export function mutualIds(me: { id: string; displayName: string }, people: readonly Person[]): Set<string> {
+  const g = buildGraph(me, people)
+  const out = new Set<string>()
+  for (const e of g.edges) if (e.a !== 0 && e.b !== 0) { out.add(g.nodes[e.a].id); out.add(g.nodes[e.b].id) }
+  return out
+}
+
+/** A drawn name label: centre x, baseline y, text width (screen px). */
+export interface LabelBox { id: string; x: number; y: number; w: number }
+const TOUCH = 44
+/** The label under (px, py): its box is at least a fingertip (44 px) wide and tall; the nearest centre wins. */
+export function labelAt(boxes: readonly LabelBox[], px: number, py: number): string | null {
+  let best: string | null = null
+  let bestD = Infinity
+  for (const b of boxes) {
+    const dx = Math.abs(px - b.x); const dy = Math.abs(py - (b.y - 6))
+    if (dx > Math.max(b.w / 2, TOUCH / 2) || dy > TOUCH / 2) continue
+    const d = dx + dy
+    if (d < bestD) { best = b.id; bestD = d }
+  }
+  return best
+}
+
 /** Desire 0..10 of an intending person (absent or out of range: 0). */
 export const desireOf = (p: Person): number => Math.min(10, Math.max(0, Math.round(Number((p as Stored).desire) || 0)))
 

@@ -2,6 +2,7 @@
    ported from apps/mobile-ui/src/styles.css; the notes-flow pieces follow the
    owner's note-taking mockup (teal call-to-action, tag pills). */
 :root{
+  --font-pinned:ui-monospace,Menlo,monospace;
   --violet:#2F6F74; --electric:#1A9AA6; --coral:#C2573A; --mint:#3FBFA0; --teal:#13867E;
   --mist:#ECE7DC; --linen:#F5F0E8; --ink:#1F2A28; --ink-soft:#5A6B66;
   --page-bg:#FAFAF7; --page-ink:#1F2A28; --panel:#fff;
@@ -492,7 +493,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .hint-i{position:absolute; top:-8px; right:-8px; z-index:6; width:19px; height:19px; padding:0; border-radius:50%; cursor:pointer;
   border:1.5px solid var(--ink-soft); background:var(--card); color:var(--ink-soft); display:grid; place-items:center;
   font:italic 700 11.5px/1 Georgia,"Times New Roman",serif}
-.hint-i.legend-i{position:static; margin:4px auto 0; display:block}
+.hint-i.legend-i{position:relative; margin:4px auto 0; display:block}
 .wants{margin:14px 12px 0; padding:10px 12px; border:1px solid var(--line); border-radius:14px}
 .wants h3{font-size:13px; margin:0 0 6px}
 .wants-row{display:flex; align-items:center; gap:8px; padding:4px 0}
@@ -1076,6 +1077,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .net-tip[hidden]{display:none}
 .net-pop{position:absolute; z-index:5; display:grid; gap:2px; padding:6px; border-radius:12px; background:var(--card); box-shadow:0 4px 18px rgba(0,0,0,.25)}
 .net-pop[hidden]{display:none}
+.net-others{display:block; margin:6px auto 0}
 .net-legend[hidden]{display:none}
 .net-legend{display:block; margin:4px 0; opacity:.7; text-align:center}
 .net-slider{display:grid; grid-template-columns:130px 1fr; align-items:center}
