@@ -373,3 +373,73 @@ schema change), and mounts — additively, without touching `daemon.ts` —
 `POST /didcomm` (inbound) and `GET /api/trust/export?format=vrc` on the API
 server. The meet-card payload (`getCardPayload(identity, display)`) gains
 `did` + `endpoint`; wiring that into `/api/card` (Task 5) happens at integration.
+
+## 11. Relay ingress authentication v2 and DID key rotation (2026-11-03)
+
+Audit of the per-DID signature on `POST /relay/send` (PR #50, DECISIONS.md D-relay-send-auth), with the fixes that followed.
+Code: `packages/transport/src/relay_send_auth.ts` (verifier + signer), `send_nonce_store.ts` (replay memory),
+`did_key_records.ts` / `did_key_registry.ts` / `did_key_store.ts` (rotation, revocation, device keys), `relay_server.ts`
+(`ingress()`, `keyRecord()`, drain auth), `relay_env.ts` (operator env). Browser port: `packages/browser-agent/src/relay_send_auth.ts`.
+
+### 11.1 Threat model of the v1 scheme (what was found)
+
+| # | Weakness | Consequence | Fix |
+|---|---|---|---|
+| F1 | Audience unbound | one captured request replays verbatim to every other relay (and the daemon's own `/relay/send` mount) inside the window | v2 signs the relay origin (`x-tw-relay-aud`); the relay checks it against `senderAuthAudiences` or the request `Host` |
+| F2 | Nonce memory only in RAM | a relay restart reopens the whole ±window to replay | `SendNonceStore`: SQLite on the queue db by default (`relay_only.ts`) |
+| F3 | Relay clock stepping back (NTP) | pruned nonces become valid again | prune against a monotonic high-water clock; freshness against the live clock |
+| F4 | Client clock skew > 5 min | `401 stale` forever, no recovery | clients read the `Date` response header once and re-sign with the offset |
+| F5 | No rotation / revocation | did:peer:2 *is* the key: a leaked key is forever, a DID can never move | signed key records (`rotate`, `revoke`), `POST /relay/keys`, consulted by send **and** drain auth; the successor drains the old DID's held mail |
+| F6 | One root key on every device | losing a phone means losing the DID | per-device Ed25519 keys (`device_grant` / `device_revoke`, `x-tw-relay-kid`), expiring after one year (I9) |
+| F7 | v1 accepted in `required` mode | audience-unbound signatures pass the strict mode | v1 only with `senderAuthAllowV1` (default: on in `optional`, off in `required`) → `401 legacy_signature` |
+| F8 | relay_only header said "required (default)" | operators believed strict mode was on; the code default is `optional` | comment and env docs corrected; the default stays `optional` until every client signs |
+| F9 | `apps/demo` client never signed | forces operators to keep `optional` | demo signs v2 |
+
+Not fixed, by design or deferred: `optional` gives no sender authenticity (unsigned passes); anyone can mint DIDs, so per-DID caps
+bound honest senders only (use `isAllowedSender` plus proxy rate limits); one Ed25519 verify per unauthenticated request (bounded
+by the body cap); the relay learns the sender DID (D-relay-send-auth); a key leaked together with the owner's recovery is a race
+(see FUTURE.md, pre-committed recovery key).
+
+### 11.2 The v2 send signature
+
+Headers: `x-tw-relay-did`, `x-tw-relay-kid` (optional device key, `z6Mk…`), `x-tw-relay-aud` (origin of the ingress URL, e.g.
+`https://relay.example`), `x-tw-relay-ts`, `x-tw-relay-nonce`, `x-tw-relay-sig`. Signed bytes, UTF-8, newline separated:
+
+```
+trustweb-relay-send/v2
+<did>
+<kid or empty>
+<aud>
+<ts>
+<nonce>
+<hex(sha256(body))>
+```
+
+Verification order (fail closed, never throws): presence → shape → window (±5 min, live clock) → version (`aud` present = v2;
+absent = v1, only with `allowV1`) → audience (configured list, else `URL(aud).host == Host`; the scheme is not compared because
+TLS ends at the proxy) → key lookup (`SendKeyPolicy`: root key from the DID, or a granted device key from the registry) →
+Ed25519 → replay memory (`(did, nonce)` once; 429 per-DID budget, 503 global budget; fails closed). Only a verified signature
+touches the nonce store.
+
+### 11.3 Key records (`POST /relay/keys`)
+
+Self-authenticating JSON, signatures base64url, times in ms:
+
+| type | signed input | signed by |
+|---|---|---|
+| `rotate` | `trustweb-did-rotate/v1 \n did \n successorDid \n at` | old root key (`sig`) **and** new root key (`successorSig`) |
+| `revoke` | `trustweb-did-revoke/v1 \n did \n at` | root key |
+| `device_grant` | `trustweb-did-device/v1 \n did \n kid \n at \n expiresAt` | root key (`sig`) **and** the device key (`kidSig`, proof of possession) |
+| `device_revoke` | `trustweb-did-device-revoke/v1 \n did \n kid \n at` | root key |
+
+Rules: `revoke` is terminal; a rotated DID accepts nothing further; the successor must be active, not the DID itself nor any
+predecessor (no cycles); records dated more than the window into the future are refused; an older record than the stored
+state is refused; the identical record again is idempotent. A rotation ends every device grant of the old DID; the successor
+grants anew. Rotation and revocation apply to the drain handshake too: the old DID can no longer drain, the successor drains
+the mail still queued under the old DID. Records are per relay: a peer publishes them to every relay it uses.
+
+### 11.4 Operator settings
+
+`RELAY_SENDER_AUTH` (required | optional | off; default **optional** during the transition), `RELAY_SENDER_AUTH_AUDIENCES`
+(comma-separated origins; unset = derive from `Host`), `RELAY_SENDER_AUTH_ALLOW_V1` (true | false), `RELAY_KEY_REGISTRY`
+(off to disable). Nonce memory and key records live in the queue db (`RELAY_QUEUE_DB`).
