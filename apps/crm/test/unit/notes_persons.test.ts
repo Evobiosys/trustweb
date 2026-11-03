@@ -135,4 +135,72 @@ describe('notes_sync pull', () => {
     expect(a.read).toEqual(['/v', a.readings, '--reader', 'ollama:qwen3.5:4b', '--include', 'journals,pages'])
     expect(a.convert).toEqual([a.readings, '/s/record.json', '--merge', '/s/record.json', '--tana-links', '/v/assets/local-notes/tana-links.md', '--me', 'Me'])
   })
+  it('the lock sits in the work dir; --skip-folders goes to the reader', async () => {
+    const { pullArgs } = await import('../../scripts/notes_sync.mjs')
+    const a = pullArgs({ vault: '/v', seed: '/s/record.json', reader: 'ollama:m', 'skip-folders': 'speakers,pitches' })
+    expect(a.lockPath).toBe('/v/assets/local-notes/pull.lock')
+    expect(a.read).toEqual(['/v', a.readings, '--reader', 'ollama:m', '--skip-folders', 'speakers,pitches'])
+    expect(pullArgs({ vault: '/v', seed: '/s', reader: 'r', work: '/w' }).lockPath).toBe('/w/pull.lock')
+  })
+})
+
+describe('reader: what gets read', () => {
+  const vault = () => {
+    const v = mkdtempSync(path.join(tmpdir(), 'vault-'))
+    const body = '\n- Coffee with Taro Lindqvist about the community garden, he offered seedlings.\n'
+    const notes = {
+      'journals/2026_10_01.md': `# day${body}`,
+      'speakers/conf.md': `# Speakers${body}`,
+      'a/speakers/nested.md': `# Nested${body}`,
+      'pitches/deck.md': `# Deck${body}`,
+      'pages/talk.md': `---\npeople: skip\n---\n# Talk${body}`,
+      'pages/private.md': `---\ntrustweb: no\n---\n# Private${body}`,
+      'pages/tiny.md': 'Ines',
+    }
+    for (const [rel, text] of Object.entries(notes)) { mkdirSync(path.dirname(path.join(v, rel)), { recursive: true }); writeFileSync(path.join(v, rel), text) }
+    return v
+  }
+  it('inSkippedFolder: entries are vault-relative folder paths, matched on whole segments from the root', async () => {
+    const { inSkippedFolder } = await import('../../scripts/notes_read_persons.mjs')
+    expect(inSkippedFolder('speakers/x.md', ['speakers'])).toBe(true)
+    expect(inSkippedFolder('speakers/2026/x.md', ['speakers'])).toBe(true)
+    expect(inSkippedFolder('a/speakers/y.md', ['speakers'])).toBe(false)
+    expect(inSkippedFolder('a/speakers/y.md', ['a/speakers'])).toBe(true)
+    expect(inSkippedFolder('speakers-old/x.md', ['speakers'])).toBe(false)
+    expect(inSkippedFolder('speakers.md', ['speakers'])).toBe(false)
+    expect(inSkippedFolder('x.md', [])).toBe(false)
+  })
+  it('skipFolders: the flag list plus <vault>/.trustweb-notes.json, cleaned and unique', async () => {
+    const { skipFolders } = await import('../../scripts/notes_read_persons.mjs')
+    const v = mkdtempSync(path.join(tmpdir(), 'vault-'))
+    expect(skipFolders(v, [' speakers/ ', ''])).toEqual(['speakers'])
+    writeFileSync(path.join(v, '.trustweb-notes.json'), JSON.stringify({ skipFolders: ['/pitches', 'speakers', 'a\\b'] }))
+    expect(skipFolders(v, ['speakers'])).toEqual(['speakers', 'pitches', 'a/b'])
+    writeFileSync(path.join(v, '.trustweb-notes.json'), '{ not json')
+    expect(() => skipFolders(v, [])).toThrow(/\.trustweb-notes\.json/)
+    writeFileSync(path.join(v, '.trustweb-notes.json'), JSON.stringify({ skipFolders: 'speakers' }))
+    expect(() => skipFolders(v, [])).toThrow(/skipFolders/)
+  })
+  it('selectNotes: skipped folders are never loaded; people: skip and trustweb: no are counted, not read', async () => {
+    const { selectNotes, noteKey } = await import('../../scripts/notes_read_persons.mjs')
+    const texts = { 'speakers/x.md': 'never loaded', 'j/a.md': `---\npeople: skip\n---\n${'x'.repeat(60)}`, 'j/b.md': `---\ntrustweb: no\n---\n${'x'.repeat(60)}`, 'j/c.md': 'short', 'j/d.md': 'y'.repeat(60), 'j/e.md': 'z'.repeat(60) }
+    const loaded = []
+    const load = (rel) => { loaded.push(rel); return { text: texts[rel], mtimeMs: Date.UTC(2026, 9, 1) } }
+    const done = new Set([noteKey('j/e.md', 'z'.repeat(60), 'r')])
+    const s = selectNotes(Object.keys(texts), load, { done, reader: 'r', folders: ['speakers'] })
+    expect(loaded).not.toContain('speakers/x.md')
+    expect(s.todo.map((t) => t.rel)).toEqual(['j/d.md'])
+    expect([s.folderSkipped, s.peopleSkipped, s.optedOut, s.skippedSmall]).toEqual([1, 1, 1, 1])
+  })
+  it('--dry-run lists the todo without a reader: no folder-skipped, people: skip or opted-out note in it', async () => {
+    const { spawnSync } = await import('node:child_process')
+    const v = vault()
+    writeFileSync(path.join(v, '.trustweb-notes.json'), JSON.stringify({ skipFolders: ['pitches'] }))
+    const script = path.join(import.meta.dirname, '../../scripts/notes_read_persons.mjs')
+    const r = spawnSync(process.execPath, [script, v, path.join(v, 'out.jsonl'), '--dry-run', '--skip-folders', 'speakers'], { encoding: 'utf8' })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('7 notes, 2 in skipped folders, 1 too small, 1 opted out (#no-trustweb), 1 people: skip')
+    const listed = r.stdout.split('\n').slice(1).filter(Boolean)
+    expect(listed.map((l) => l.split('  ')[1]).sort()).toEqual(['a/speakers/nested.md', 'journals/2026_10_01.md'])
+  })
 })

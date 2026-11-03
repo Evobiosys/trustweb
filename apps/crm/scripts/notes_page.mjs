@@ -218,3 +218,9 @@ export function blockChanges(block, person, fileMtime) {
   const fileRing = block.ring && block.ring !== person.ring && fileEdited(block, fileMtime) ? block.ring : null
   return { fileRing, newLines }
 }
+
+// ---- people: skip (2026-11-03): the note names people but creates none (speaker lists, pitch notes). Unlike `trustweb: no` the
+// note stays a normal note for TrustWeb otherwise; only the people reader passes it by. Front matter `people: skip|no|none|false`.
+export function notePeopleSkip(text) {
+  return /^people\s*:\s*(skip|no|none|false)\s*$/mi.test(frontMatter(text))
+}
