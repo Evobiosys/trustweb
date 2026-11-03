@@ -7,15 +7,19 @@
 //                                                                         --everyone also one page per person under <vault>/TrustWeb/People (one shot)
 //   node scripts/notes_bridge.mjs changes --record <record.json>          what the vault says that the record does not (ring edits, added bullets)
 //   node scripts/notes_bridge.mjs cleanup --record <record.json> [--dry-run]  blocks of people no longer in the record: archived, then cut (notes_cleanup.mjs)
-// HTTP (all need `Authorization: Bearer <token>`): GET /status, POST /push {people, everyone?}, POST /changes {people}, POST /cleanup {people, dryRun?}
+// HTTP (all need `Authorization: Bearer <token>`): GET /status, POST /push {people, everyone?}, POST /changes {people}, POST /cleanup {people, dryRun?},
+//   GET /offers -> {offers, decided}, POST /offers {key, decision: join|dismiss, into?} -> {ok} (join offers, owner 2026-11-03:
+//   a note naming only a first name creates nobody; the converter's pending offers are assets/local-notes/join-offers.json,
+//   the owner's answers are appended to assets/local-notes/join-decisions.jsonl, which the next pull honours)
 import { createHash, randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, watch, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, watch, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { MARK_FOLDER, blockChanges, noteOptOut, parseBlocks, slug, updatePage, upsertBlock } from './notes_page.mjs'
 import { cleanup } from './notes_cleanup.mjs'
+import { loadDecisions } from './notes_persons_to_record.mjs'
 
 const CONFIG = path.join(process.env.XDG_CONFIG_HOME ?? path.join(homedir(), '.config'), 'trustweb', 'notes-bridge.json')
 const PAGES_DIR = path.join('TrustWeb', 'People')
@@ -143,6 +147,24 @@ export function changes(vault, people) {
   return out
 }
 
+/** The offers still open: the converter's pending ones minus the keys the owner decided since. A missing or broken file is no offers. */
+export function pendingOffers(offersText, decisionsText) {
+  let offers = []
+  try { const o = JSON.parse(offersText || '{}'); if (Array.isArray(o.offers)) offers = o.offers } catch { /* broken: none */ }
+  const decided = new Set(loadDecisions(decisionsText).map((d) => d.key))
+  return { offers: offers.filter((o) => !decided.has(o?.key)), decided: decided.size }
+}
+
+const offersDir = (vault) => path.join(vault, 'assets', 'local-notes')
+const readIf = (f) => (existsSync(f) ? readFileSync(f, 'utf8') : '')
+
+/** A valid decision body as the JSONL line to append, or null. */
+export function decisionLine(b, now = Date.now()) {
+  if (!b || typeof b.key !== 'string' || !b.key || b.key.length > 64 || (b.decision !== 'join' && b.decision !== 'dismiss')) return null
+  if (b.decision === 'join' && (typeof b.into !== 'string' || !b.into)) return null
+  return { key: b.key, decision: b.decision, ...(b.decision === 'join' ? { into: b.into } : {}), at: new Date(now).toISOString() }
+}
+
 // ---- HTTP ------------------------------------------------------------------------------------------------------------
 const LOCAL_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/
 
@@ -195,6 +217,17 @@ export function handler(cfg, watched = { changedAt: 0, own: new Map() }) {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost')
       if (req.method === 'GET' && url.pathname === '/status') return send(200, { vault: path.basename(cfg.vault), changedAt: watched.changedAt })
+      if (req.method === 'GET' && url.pathname === '/offers') {
+        const dir = offersDir(cfg.vault)
+        return send(200, pendingOffers(readIf(path.join(dir, 'join-offers.json')), readIf(path.join(dir, 'join-decisions.jsonl'))))
+      }
+      if (req.method === 'POST' && url.pathname === '/offers') {
+        const d = decisionLine(JSON.parse(await body(req) || '{}'))
+        if (!d) return send(400, { error: 'key, decision join|dismiss (join needs into) needed' })
+        mkdirSync(offersDir(cfg.vault), { recursive: true })
+        appendFileSync(path.join(offersDir(cfg.vault), 'join-decisions.jsonl'), `${JSON.stringify(d)}\n`)
+        return send(200, { ok: true })
+      }
       if (req.method === 'POST' && (url.pathname === '/push' || url.pathname === '/changes' || url.pathname === '/cleanup')) {
         const b = JSON.parse(await body(req) || '{}')
         if (!validPeople(b.people)) return send(400, { error: 'people[] needed' })

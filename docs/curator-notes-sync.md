@@ -201,6 +201,23 @@ people list removes nothing, so an empty or missing record can never strip the v
 elsewhere. The same pass runs from the bridge (`notes_bridge.mjs cleanup --record …`, or `POST /cleanup {people, dryRun?}`
 with the Curator's live people, which already leaves out hidden and merged people). Pruning the archive is yours to do by hand.
 
-## Join offers
+## Join offers: a first name alone creates nobody
 
-Placeholder: the sibling part documents Settings > Obsidian / Logseq > names to join here.
+A note that names only a first name ("coffee with Taro") used to create a local person called "Taro". It no longer does:
+the converter turns the mention into a **join offer** and the Curator asks you who it is.
+
+- The pull writes the open offers to `<work>/join-offers.json`: `{ v: 1, generatedAt, offers: [{ key, name, path, date,
+  context, facts, candidates: [{ id, name }] }] }`. Candidates are the people in the record with the same first name
+  (case and diacritics folded: "Zoë" matches "Zoe"). An offer with nobody matching is still listed, with no candidates.
+- The Curator shows them under **Settings > Obsidian / Logseq > Names from your notes to join (n)**, one row per offer:
+  the name, the note and date, how many facts, a dropdown of candidates recomputed against the live people, **Join** and
+  **Not them**. Join adds the facts to the chosen person right away as note lines with local provenance (the note's path
+  and date); Not them removes the row.
+- Either answer is appended through the bridge to `<work>/join-decisions.jsonl` (`{ key, decision: "join"|"dismiss",
+  into?, at }`, last line per key wins). Every later pull honours it: a joined mention's facts go onto that person, a
+  dismissed one is skipped, and a join into a person who has since left the record is offered again. The scheduled run
+  and your answers therefore never fight.
+- A full name ("Taro Lindqvist") still joins the person with exactly that name, as before. A single name never joins
+  anybody on its own.
+
+The bridge routes are `GET /offers` (open offers minus decided keys) and `POST /offers {key, decision, into?}`.

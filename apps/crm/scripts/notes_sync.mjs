@@ -37,7 +37,8 @@ export function pullArgs(o) {
   const work = o.work ?? path.join(o.vault, 'assets', 'local-notes')
   const readings = path.join(work, `people-${String(o.reader).replace(/[^a-z0-9.]+/gi, '-')}.jsonl`)
   const read = [o.vault, readings, '--reader', o.reader, ...(o.include ? ['--include', o.include] : []), ...(o['skip-folders'] ? ['--skip-folders', o['skip-folders']] : []), ...(o.concurrency ? ['--concurrency', o.concurrency] : [])]
-  const convert = [readings, o.seed, '--merge', o.seed, '--tana-links', path.join(work, 'tana-links.md'), ...(o.me ? ['--me', o.me] : []), ...(o['min-confidence'] ? ['--min-confidence', o['min-confidence']] : [])]
+  const convert = [readings, o.seed, '--merge', o.seed, '--tana-links', path.join(work, 'tana-links.md'),
+    '--decisions', path.join(work, 'join-decisions.jsonl'), '--offers', path.join(work, 'join-offers.json'), ...(o.me ? ['--me', o.me] : []), ...(o['min-confidence'] ? ['--min-confidence', o['min-confidence']] : [])]
   return { work, readings, lockPath: path.join(work, 'pull.lock'), read, convert }
 }
 
