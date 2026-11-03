@@ -481,12 +481,17 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   a section without a scope takes the LEAST reach among its fields' legacy audiences (`nobody` -> zone self = only me), so nobody sees
   more than before. Cost accepted: two fields of one section can no longer differ (e.g. offers Friends, website Public); the owner moves
   the field or the scope. Section defaults equal the old field defaults: picture Friend, address Friend, work Public, the rest Acquaintance.
+  Saving a section's scope retires the legacy audience of its fields (one truth in the record). Three old unit expectations that asserted
+  per-field divergence inside one section were rewritten to the section model, each with a comment.
+- Wave 20's "no zone, no profile" holds: a real person without a ring (Unsorted, None) gets no zone grant, not even Public; only an
+  explicit Also (person, tag, event) opens a section to them. The tag and event preview viewers do see Public sections.
 - Profile scopes are stored on the profile (`MyProfile.sections`), not as share lines: a share line's one-year expiry would silently
   widen a section set to "only me" back to the default. scopeTuples are built with since = now at check time, so profile rules never lapse.
 - Preview "as seen by": the sheet renders my profile through `theirProfileBlock`, the renderer the receiving phone uses, from
   `sliceForViewer` — the function that also builds what is sent. A tag or event viewer is the least-trusted member: someone who holds
   only that tag/event and sits in no ring (public). A person viewer uses their real zone, tags and events. Names are for the owner only (I2).
 - Name reveal per event (`TwEvent.nameReveal`: full | first | hidden, default full = today's behaviour): applied to the `by` part of every
-  event link this device makes (events_view copy/preview, QR). `hidden` drops `by` entirely (name AND did: the did alone would let
-  attendees pair with me). Device-local: never in the link payload (event_link.ts whitelist), kept by localSettings on edit.
+  event link this device makes (events_view copy/preview, QR, extension event links). `first` sends the first word of the display name
+  and no did; `hidden` drops `by` entirely (name AND did: the did alone would let attendees pair with me). The host link never carried a
+  name. Device-local: never in the link payload (event_link.ts whitelist), kept by localSettings on edit, rides the own-device sync.
 - Not changed: the wire (profile.ts profileText), auto-send on connect/ring change (zone viewer), what a connected card shows.
