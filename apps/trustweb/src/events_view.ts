@@ -4,7 +4,7 @@
  */
 import { contextPress } from './context_press'
 import { el } from '../../demo/src/ui/dom'
-import { attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, newEvent, restoreEvent, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
+import { DEFAULT_NAME_REVEAL, NAME_REVEALS, attendees, deleteEvent, eventLabel, eventMatches, eventsSorted, inWeb, localSettings, matchPeople, nameRevealOf, newEvent, restoreEvent, revealedBy, splitThemes, tagLabel, tagPerson, todayIso, untagPerson, whenLabel } from './events'
 import { encodeEventLink, type EventBy } from './event_link'
 import type { EventError, EventFields } from './events'
 import { dragEvent, dragPerson } from './drag_payload'
@@ -219,9 +219,9 @@ export function createEventsView(h: EventsViewHooks): EventsView {
     h.undoNotice(S.eventsDeleted(ev.name), () => { restoreEvent(h.state(), gone); h.save(); h.redraw() })
   }
 
-  /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. */
+  /** Copies the link the toggle now shows (the host one says so in the toast) and redraws to preview it. E3: the peer link says of me only what the event's name reveal allows. */
   function copyShown(ev: TwEvent): void {
-    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : h.by())
+    lastLink = encodeEventLink(ev, h.origin, hostLink ? 'host' : 'peer', hostLink ? undefined : revealedBy(h.by(), ev))
     h.copyLink(lastLink, hostLink ? S.eventHostLinkCopied : undefined)
     h.redraw()
   }
@@ -247,6 +247,24 @@ export function createEventsView(h: EventsViewHooks): EventsView {
         copyShown(ev)
       },
     }, [S.eventHostLinkToggle])
+  }
+
+  /** E3: "Your name to other attendees": Full name | First name | Hidden. A change saves (the default is not stored) and copies the shown link again. */
+  function nameReveal(ev: TwEvent): HTMLElement {
+    const cur = nameRevealOf(ev)
+    return el('div', { class: 'event-reveal', 'data-event-reveal': cur }, [
+      el('label', { class: 'meta' }, [S.eventNameReveal]),
+      el('div', { class: 'seg', role: 'group', 'aria-label': S.eventNameReveal }, NAME_REVEALS.map((r) => el('button', {
+        type: 'button', class: r === cur ? 'on' : '', 'aria-pressed': String(r === cur), 'data-event-name-reveal': r,
+        onclick: () => {
+          if (r === cur) return
+          if (r === DEFAULT_NAME_REVEAL) delete ev.nameReveal; else ev.nameReveal = r
+          h.save()
+          if (lastLink) copyShown(ev); else h.redraw()
+        },
+      }, [S.eventNameRevealOpt[r]]))),
+      el('p', { class: 'meta' }, [S.eventNameRevealHint]),
+    ])
   }
 
   /** Renaming the tag locks it against the host and copies the link now showing (host or peer) again at once with the new name. */
@@ -293,6 +311,7 @@ export function createEventsView(h: EventsViewHooks): EventsView {
       hostToggle(ev),
       linkPreview(),
       el('p', { class: 'meta' }, [S.eventLinkHint]),
+      nameReveal(ev),
       el('h3', {}, [S.eventsTagged(tagLabel(ev))]),
       people.length ? el('div', {}, people.map((p) => attendeeRow(ev, p))) : el('p', { class: 'empty meta' }, [S.eventsNoAttendees]),
       ev.fromLink ? el('p', { class: 'meta', 'data-event-nudge': '' }, [S.eventLinkNudge]) : null,
