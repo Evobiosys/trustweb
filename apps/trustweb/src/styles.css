@@ -151,6 +151,11 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
+.ring-card{position:absolute; z-index:8; max-width:80%; max-height:60%; overflow:auto; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:12px; color:var(--ink); display:flex; flex-direction:column; gap:2px}
+.ring-card-row{display:flex; align-items:center; gap:6px}
+.ring-card-name{padding:0; border:0; background:none; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; text-align:left}
+.ring-card-edit{padding:0 2px; border:0; background:none; color:var(--muted-grey,#8a8f94); font-size:11px; cursor:pointer}
+.ring-card-row .tap-edit-input{font-size:12px; padding:1px 4px}
 .ring-more{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:1.5px solid var(--rc,#8a8f94); border-radius:50%; background:#fff; color:var(--rc,#8a8f94); font-size:11px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .membrane-all{position:absolute; left:50%; transform:translateX(-50%); z-index:7; max-width:90%; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:11px; color:var(--ink); display:flex; flex-direction:column; gap:2px; pointer-events:none}
 .add-node{flex:none; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}

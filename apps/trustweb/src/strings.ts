@@ -462,6 +462,7 @@ export const S = {
   membraneRest: (zone: string, n: number) => `${zone}: ${n} more`,
   membraneRestNone: 'Nobody here yet.',
   membraneAddTo: (zone: string) => `Add someone to ${zone}`,
+  ringCardEditName: 'Edit name',
   membraneAllTitle: (zone: string) => `Everyone in ${zone}`,
   membraneCardOpen: 'Extended',
   membraneCardClose: 'Less',
