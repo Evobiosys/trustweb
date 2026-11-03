@@ -1207,7 +1207,8 @@ function mountHeaderControls(): void {
     b.setAttribute('data-header-pin', id)
     return b
   })
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views], pins, qr: [qr], settings: [gear] }
+  const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -3463,10 +3464,13 @@ function cardChatButton(p: Person, quiet: boolean): HTMLElement {
   }
   const open = (svc: ChatService): void => {
     noteUsed(st(), p.id, svc.id, Date.now()); save()
-    const app = svc.url ? appLinkFor(svc.url) : null
-    if (svc.url && app) openLocalFirst(app, svc.url, browserOpenEnv())
-    else if (svc.url) window.open(svc.url, '_blank', 'noopener,noreferrer')
-    else chatSheet(p.id)
+    if (svc.url) {
+      if (!EXT_MODULES.some((m) => m.openExternal?.(svc.url!))) {
+        const app = appLinkFor(svc.url)
+        if (app) openLocalFirst(app, svc.url, browserOpenEnv())
+        else window.open(svc.url, '_blank', 'noopener,noreferrer')
+      }
+    } else chatSheet(p.id)
   }
   const b = chatRow({
     personId: p.id, services: chatServices(p), prefs: () => st().chatPrefs?.[p.id], mainClass: quiet ? 'btn-ghost' : 'btn-electric', iconHtml: icon('chat'), open,

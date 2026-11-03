@@ -1476,6 +1476,16 @@ export const S = {
     roomHint: 'Read only: the last 30 text messages. Encrypted messages are not shown here, and TrustWeb cannot send. Element X does both.',
   },
   // Wave 27 (msg-geb): Geb through a bridge on the user's own computer (src/ext/geb).
+  whatsapp: {
+    label: 'WhatsApp',
+    setupTitle: 'WhatsApp beside TrustWeb',
+    open: 'Open WhatsApp Web',
+    openPhone: 'Open WhatsApp',
+    info: 'More about this',
+    infoText: 'WhatsApp does not allow embedding; this opens WhatsApp Web beside TrustWeb.',
+    infoPhone: 'WhatsApp does not allow embedding; on a phone this opens the WhatsApp app. TrustWeb reads nothing from WhatsApp.',
+    blocked: 'Your browser blocked the WhatsApp window. Allow pop-ups for this site, then tap again.',
+  },
   geb: {
     label: 'Geb',
     openGeb: 'Open Geb',
