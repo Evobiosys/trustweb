@@ -27,13 +27,13 @@ export const ICONS: Record<string, string> = {
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   // Wave 28: the Android Do Not Disturb sign (a circle with a bar) replaces the moon on the header button.
-  dnd: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7.5 12h9"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
   expand: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
   collapse: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
   eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   network: '<svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="8" r="2"/><circle cx="8" cy="19" r="2"/><circle cx="17" cy="18" r="2"/><path d="M7 6.5l10 1M6 8l2 9M10 18.5l5-.5M18 10l-1 6"/></svg>',
   map: '<svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
+  dnd: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7 12h10"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
   // "Ask your web": only the sound waves (owner 2026-10-05: "simpler and
   // less confusing"), the call going out and the resonance coming back.
