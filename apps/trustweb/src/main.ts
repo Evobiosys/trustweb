@@ -22,7 +22,7 @@ import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, loadColourTags, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
@@ -195,7 +195,8 @@ import { openServicesImport, servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
-import { pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
+import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { zoneSidebar } from './trustzones_view'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -2167,7 +2168,13 @@ function webPageScreen(page: WebPage): Node[] {
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
-    return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
+    const rec = st()
+    const tagList = loadColourTags()
+    const zoneTags = zoneTagIds(rec, page.ring).flatMap((id) => tagList.filter((t) => t.id === id))
+    const zoneTagRow = zoneTagsRow(page.ring, zoneTags, (text) => suggestZoneTags(rec, tagList, page.ring, text),
+      (name) => { const out = addZoneTag(rec, tagList, page.ring, name, Date.now()); if (out.created) saveColourTags(out.tags); save(); render() },
+      (id) => { removeZoneTag(rec, page.ring, id, Date.now()); save(); render() })
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
