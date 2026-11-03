@@ -6,11 +6,14 @@ describe('header_controls', () => {
   it('orders search, views, pins, QR, settings left to right on web, events and inventory', () => {
     for (const s of ['web', 'events', 'inventory']) expect(headerControls(s)).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
   })
+  it('puts the eye left of the QR left of the gear on the People page, which has its own search', () => {
+    expect(headerControls('people')).toEqual(['views', 'pins', 'qr', 'settings'])
+  })
   it('gives Chat no views (expand) button', () => {
     expect(headerControls('chat')).toEqual(['search', 'pins', 'qr', 'settings'])
   })
   it('leaves Record and every other screen to its own header', () => {
-    for (const s of ['record', 'meeting', 'meet', 'start', 'review', 'people']) expect(headerControls(s)).toBeUndefined()
+    for (const s of ['record', 'meeting', 'meet', 'start', 'review']) expect(headerControls(s)).toBeUndefined()
   })
   it('pins nothing by default (Do Not Disturb lives in Settings > Chat), and an explicit list is kept', () => {
     expect(headerPins(undefined)).toEqual([])

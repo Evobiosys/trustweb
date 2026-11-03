@@ -16,6 +16,8 @@ export interface MapOptions {
   openPerson: (id: string) => void
   /** Persist the record after a place was written or removed. */
   save: () => void
+  /** The People view body (ring categories) with `extra` drawn beside every person's row. */
+  peopleList: (extra: (p: Person) => Node[]) => HTMLElement
 }
 
 const W = 720
@@ -47,10 +49,9 @@ function worldPath(): Promise<string> {
   return outline
 }
 
-const byPinnedThenName = (a: Person, b: Person): number => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name)
 
 export function createMapView(opts: MapOptions): HTMLElement {
-  const { people, openPerson, save } = opts
+  const { people, openPerson, save, peopleList } = opts
   const land = svg('path', { class: 'map-land', d: '' })
   const dots = svg('g', { class: 'map-dots' })
   const map = svg('svg', { class: 'map-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': S.mapAria }) as SVGSVGElement
@@ -71,13 +72,8 @@ export function createMapView(opts: MapOptions): HTMLElement {
   }
   drawDots()
 
-  const rows = el('div', { class: 'map-rows' })
-  const fill = (query: string): void => {
-    const q = query.trim().toLocaleLowerCase()
-    rows.replaceChildren(...[...people].sort(byPinnedThenName).filter((p) => !q || p.name.toLocaleLowerCase().includes(q)).map(personRow))
-  }
-
-  function personRow(p: Person): HTMLElement {
+  /** The place box of one person: type a place, pick a suggestion, undo. Rides beside the person's row in the People view. */
+  function placeEditor(p: Person): Node[] {
     const input = el('input', { class: 'field map-place', type: 'text', 'data-map-place': p.id, placeholder: S.mapPlacePh, 'aria-label': S.mapPlaceAria(p.name), value: p.place?.name ?? '', autocomplete: 'off' }) as HTMLInputElement
     const suggest = el('div', { class: 'map-sug' })
     const undo = el('button', { class: 'btn btn-ghost btn-sm', 'data-map-undo': p.id }, [S.mapUndo])
@@ -102,21 +98,12 @@ export function createMapView(opts: MapOptions): HTMLElement {
       if (first) apply(first)
       else if (!input.value.trim() && p.place) apply(undefined)
     })
-    return el('div', { class: 'map-row', 'data-map-row': p.id }, [
-      el('button', { class: 'link map-name', onclick: () => openPerson(p.id) }, [p.name]),
-      input,
-      undo,
-      suggest,
-    ])
+    return [input, undo, suggest]
   }
-  fill('')
-
-  const filter = el('input', { class: 'field net-search', type: 'search', placeholder: S.mapFilterPh, 'aria-label': S.mapFilterPh, 'data-map-filter': '' }) as HTMLInputElement
-  filter.addEventListener('input', () => fill(filter.value))
   return el('div', { class: 'map-view', 'data-map-view': '' }, [
     map as unknown as Node,
     el('p', { class: 'meta map-credit' }, [S.mapCredit]),
-    filter,
-    rows,
+    // Wave 29: the flat 'Find someone' list is the People view (ring categories); each row keeps its place box.
+    peopleList(placeEditor),
   ])
 }
