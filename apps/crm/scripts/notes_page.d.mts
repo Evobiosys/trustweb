@@ -19,5 +19,6 @@ export function renderBlock(person: Person, o?: { now?: number; keep?: { text: s
 export function fileEdited(block: Block, fileMtime: number): boolean
 export function parseBlocks(text: string): Block[]
 export function upsertBlock(noteText: string, person: Person, o?: { now?: number; fileMtime?: number }): string
+export function removeBlocks(text: string, keepIds: Set<string> | readonly string[]): { text: string; removed: { id: string; block: string }[] }
 export function blockChanges(block: Block, person: Person, fileMtime: number): { fileRing: string | null; newLines: { text: string; date: string }[] }
 export function notePeopleSkip(text: string): boolean

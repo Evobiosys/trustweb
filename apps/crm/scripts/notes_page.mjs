@@ -224,3 +224,20 @@ export function blockChanges(block, person, fileMtime) {
 export function notePeopleSkip(text) {
   return /^people\s*:\s*(skip|no|none|false)\s*$/mi.test(frontMatter(text))
 }
+
+// ---- cleanup (a person left the record): their blocks cut out, the exact text handed back for the archive ----
+/**
+ * The note without the blocks whose id is not in `keepIds` (Set or array), plus each cut block verbatim. Same whitespace rule
+ * as stripBlocks (the block and the blank lines before it become one newline; a block at the very start leaves nothing behind);
+ * the rest stays byte for byte. Nothing to cut -> the same text back, removed [].
+ */
+export function removeBlocks(text, keepIds) {
+  const keep = keepIds instanceof Set ? keepIds : new Set(keepIds)
+  const removed = []
+  const out = text.replace(/(\n*)(<!-- trustweb:begin ([^ ]+) -->\n[\s\S]*?<!-- trustweb:end \3 -->\n?)/g, (all, lead, block, id, at) => {
+    if (keep.has(id)) return all
+    removed.push({ id, block })
+    return at === 0 && !lead ? '' : '\n'
+  })
+  return { text: removed.length ? out : text, removed }
+}

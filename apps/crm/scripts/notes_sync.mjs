@@ -7,6 +7,8 @@
 //     (notes_lock.mjs; stale once its pid died or after 6 h); a second run meanwhile exits 3 and changes nothing. A run with no
 //     new notes reads nothing and merges to the same record. Exit: 0 done, 2 usage / no seed / broken .trustweb-notes.json,
 //     3 another pull holds the lock, else the failing step's code. Scheduling (launchd, cron, systemd): docs/curator-notes-sync.md.
+//   node scripts/notes_sync.mjs cleanup --vault <dir> --record <record.json> [--archive <dir>] [--dry-run]
+//     runs notes_cleanup.mjs: TrustWeb blocks of people no longer in the record are archived, then cut from the notes.
 // `push` (record -> pages) and `serve` (loopback bridge for the Curator) follow once the direction's rules are settled (2026-10-16).
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
@@ -39,11 +41,15 @@ export function pullArgs(o) {
   return { work, readings, lockPath: path.join(work, 'pull.lock'), read, convert }
 }
 
+/** cleanup: the arguments notes_cleanup.mjs gets (blocks of people gone from the record, archived then cut). */
+export const cleanupArgs = (o) => ['--vault', o.vault, '--record', o.record, ...(typeof o.archive === 'string' ? ['--archive', o.archive] : []), ...(o['dry-run'] === true ? ['--dry-run'] : [])]
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const o = args(process.argv.slice(2))
   const cmd = o._[0]
+  if (cmd === 'cleanup' && typeof o.vault === 'string' && typeof o.record === 'string') { run('notes_cleanup.mjs', cleanupArgs(o)); process.exit(0) }
   if (cmd !== 'pull' || !o.vault || !o.seed || !o.reader) {
-    console.error('usage: notes_sync.mjs pull --vault <dir> --seed <record.json> --reader claude:<model>|ollama:<model> [--include a,b] [--skip-folders a,b] [--me "<name>"] [--work <dir>] [--no-lock]')
+    console.error('usage: notes_sync.mjs pull --vault <dir> --seed <record.json> --reader claude:<model>|ollama:<model> [--include a,b] [--skip-folders a,b] [--me "<name>"] [--work <dir>] [--no-lock] | cleanup --vault <dir> --record <record.json> [--archive <dir>] [--dry-run]')
     process.exit(2)
   }
   if (!existsSync(o.seed)) { console.error(`no seed at ${o.seed}`); process.exit(2) }
