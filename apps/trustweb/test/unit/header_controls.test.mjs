@@ -6,8 +6,8 @@ describe('header_controls', () => {
   it('orders search, views, pins, QR, settings left to right on web, events and inventory', () => {
     for (const s of ['web', 'events', 'inventory']) expect(headerControls(s)).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
   })
-  it('gives Chat no views (expand) button', () => {
-    expect(headerControls('chat')).toEqual(['search', 'pins', 'qr', 'settings'])
+  it('gives Chat no views (expand) button but the messenger switch', () => {
+    expect(headerControls('chat')).toEqual(['search', 'switch', 'pins', 'qr', 'settings'])
   })
   it('leaves Record and every other screen to its own header', () => {
     for (const s of ['record', 'meeting', 'meet', 'start', 'review', 'people']) expect(headerControls(s)).toBeUndefined()

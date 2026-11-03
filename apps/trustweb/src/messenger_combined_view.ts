@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 28 (messengers-combined): the Chat screen's source pill + three-dots menu and the combined list (rows from every chosen source, a C-bracket in the source colour on the left edge). DOM + localStorage. */
+import { ICONS } from './icons'
 import { el } from '../../demo/src/ui/dom'
 import type { MessengerSource, ThreadSummary } from './ext/registry'
 import { activateKey, dismissOnOutside } from './key_press'
@@ -55,25 +56,25 @@ export function chatView(d: CombinedDeps): ChatView {
   const usable = entries.filter((e) => e.state === 'on').length
   const title = viewTitle(selection, labels, S.chatViewAll, usable)
   const choose = (sel: string[]): void => { write(SELECTION_KEY, JSON.stringify(sel)); focus = null; d.redraw() }
-  const wrap = el('span', { class: 'chat-row-wrap chat-source-wrap' })
+  const wrap = el('span', { class: 'chat-row-wrap chat-source-wrap', 'data-chat-switch': '' })
   const menu = el('div', { class: 'chat-menu chat-source-menu', role: 'menu', 'data-chat-source-menu': '', hidden: '' })
-  const pill = el('button', { class: 'chat-source-pill', 'data-chat-source-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.chatViewMenu, title: S.chatViewMenu }, [
-    el('span', { 'data-chat-view-name': '' }, [title]), el('span', { class: 'caret', 'aria-hidden': 'true' }, ['▾']),
-  ])
+  // Wave 29: a round ⇄ button in the header's views slot (like the Web's eye); the current service's name sits under it.
+  const pill = el('button', { class: 'hdr-btn icon-only chat-switch-btn', 'data-chat-source-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.chatSwitchAria, title: S.chatViewMenu })
+  pill.innerHTML = ICONS.switch
+  const name = el('small', { class: 'chat-switch-name', 'data-chat-view-name': '' }, [title])
   const dots = el('button', { class: 'hdr-btn icon-only', 'data-chat-dots': '', 'aria-haspopup': 'menu', 'aria-label': S.chatViewMore, title: S.chatViewMore }, ['⋯'])
   let stop: (() => void) | null = null
-  const hide = (): void => { menu.hidden = true; pill.setAttribute('aria-expanded', 'false'); pill.querySelector('.caret')!.textContent = '▾'; stop?.(); stop = null }
+  const hide = (): void => { menu.hidden = true; pill.setAttribute('aria-expanded', 'false'); stop?.(); stop = null }
   const show = (): void => {
     menu.replaceChildren(...menuRows(d, entries, selection, off, choose, hide))
     menu.hidden = false
     pill.setAttribute('aria-expanded', 'true')
-    pill.querySelector('.caret')!.textContent = '▴'
     stop = dismissOnOutside((t) => t instanceof Node && (wrap.contains(t) || dots.contains(t)), hide)
   }
   const toggle = (e: Event): void => { e.stopPropagation(); if (menu.hidden) show(); else hide() }
   pill.addEventListener('click', toggle)
   dots.addEventListener('click', toggle)
-  wrap.append(pill, menu)
+  wrap.append(pill, name, menu)
   const simple = selection.length === 1 && selection[0] === TRUSTWEB_SOURCE
   return { selection, simple, title, pill: wrap, dots, body: simple ? null : combinedBody(d, selection, labels) }
 }

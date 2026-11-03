@@ -1208,7 +1208,8 @@ function mountHeaderControls(): void {
     return b
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], pins, qr: [qr], settings: [gear] }
+  const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
   const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : null
   if (drop) host.querySelector('.hdr')?.after(drop)
@@ -2428,7 +2429,7 @@ function screenChat(): Node[] {
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
   search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
   return [
-    header(S.chatListTitle, { glyph: view.pill, after: view.dots }),
+    header(S.chatListTitle, { right: view.pill, after: view.dots }),
     el('div', { class: 'scroll ppl' }, [
       s.chatsHidden ? el('p', { class: 'meta', 'data-chats-hidden': '' }, [S.chatDndHint]) : null,
       view.body,
