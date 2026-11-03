@@ -96,6 +96,27 @@ jobs:
         run: pnpm lint
       - name: test (all packages)
         run: pnpm -r --no-bail test
+  # cloud/iroh-relay-live (2026-11-02): packages/transport had no CI coverage at all (the iroh rung, relay failover and the
+  # sidecar endpoint live there). Typecheck + vitest for protocol and transport; the synapse-bound suites self-skip, the iroh
+  # sidecar integration suite self-skips while no `trustweb-iroh-sidecar` binary is on PATH (building it needs cargo + crates.io).
+  transport:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build @resource-web/protocol (transport imports its dist/)
+        run: pnpm --filter @resource-web/protocol build
+      - name: typecheck (protocol, transport)
+        run: pnpm --filter @resource-web/protocol --filter @resource-web/transport typecheck
+      - name: unit tests (protocol, transport)
+        run: pnpm --filter @resource-web/protocol --filter @resource-web/transport test
   # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
   reach-out-link:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'

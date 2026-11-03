@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+[package]
+name = "trustweb-iroh-sidecar"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later"
+description = "The real iroh node behind TrustWeb's IrohSidecarEndpoint (docs/IROH-SIDECAR.md)"
+publish = false
+rust-version = "1.81"
+
+[[bin]]
+name = "trustweb-iroh-sidecar"
+path = "src/main.rs"
+
+[dependencies]
+# Pinned exactly: the code was written against this API without compiling in
+# the authoring session (see README, "Not yet compiled").
+iroh = "=0.35.0"
+tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time"] }
+serde_json = "1"
+anyhow = "1"
+base64 = "0.22"
+
+[profile.release]
+strip = true
