@@ -231,8 +231,9 @@ export function expandFor(features: PreviewFeature[], keys: string[], foldedKeys
   return foldedKeys.filter((k) => !open.has(k))
 }
 
-/** Walk is offered only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk). */
-export const walkShown = (f: { walkOk?: boolean }): boolean => f.walkOk === true
+/** Walk shows on every row with steps (null = none); it is enabled only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk), else greyed with a title. */
+export const walkShown = (f: { walkOk?: boolean; steps?: unknown[] }): { disabled: boolean; title: string } | null =>
+  !f.steps?.length ? null : f.walkOk === true ? { disabled: false, title: '' } : { disabled: true, title: 'Walk not verified for this row yet' }
 
 /** What the note button copies: the preview, the row, its title, branch and ref, to paste into the pi session. */
 export const noteText = (id: string, f: PreviewFeature): string => `${id} | ${f.key} | ${f.title} | ${f.branch}@${f.ref ?? '?'}`
