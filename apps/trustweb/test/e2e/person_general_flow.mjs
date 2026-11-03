@@ -68,7 +68,7 @@ async function main() {
         meeting: false, lines: [], transcript: [], late: { keyText: 'TW1R-NOTAREALKEY', since: a.now - 1000 } }]
     `, { now })
     await ada.reload()
-    await ada.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await ada.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
 
     // 1 collapsed, the notes list stays, transcribing named next to the typed note
     await openPerson(ada, 'Dana')
@@ -114,7 +114,7 @@ async function main() {
 
     // 4 reload, list, search
     await ada.reload()
-    await ada.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 15_000 })
+    await ada.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 15_000 })
     ok('4. the note survives a reload (record)', (await personOf(ada, 'Dana')).generalNote.includes(SECRET))
     await openPerson(ada, 'Dana')
     ok('4. it shows in "Your notes on them" as the General note', /Allergic to nuts/.test(await ada.locator('.sheet.on [data-pn-general]').innerText()))

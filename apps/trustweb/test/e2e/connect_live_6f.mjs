@@ -124,7 +124,7 @@ async function offlineAdd(browser) {
 
   const back = await tab(a.ctx)
   await back.goto(HOST + '/')
-  await back.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await back.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   const seen = await until(() => inWeb(back, NAME('B')), 40_000)
   ok('3: A reopens: B is in A\'s web', Boolean(seen), JSON.stringify(await webNames(back)))
   const ra = await record(back)

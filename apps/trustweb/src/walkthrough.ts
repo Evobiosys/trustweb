@@ -55,7 +55,7 @@ interface Mode {
 
 // ----------------------------------------------------------------- screens
 const web = (names: string[]): string =>
-  `<div class="wt-h">Your TrustWeb</div><div class="wt-rings">${names.length ? names.map((n) => `<span>${n}</span>`).join('') : '<em>Nobody yet</em>'}</div>`
+  `<div class="wt-h">TrustZones</div><div class="wt-rings">${names.length ? names.map((n) => `<span>${n}</span>`).join('') : '<em>Nobody yet</em>'}</div>`
 const card = (cls: string, body: string): string => `<div class="wt-card ${cls}">${body}</div>`
 const quiet = (body: string): string => `<div class="wt-quiet">${body}</div>`
 const ask = (q: string, n: number): string => `<div class="wt-h">Ask your web</div>${card('q', `"${q}"`)}<small>Asked ${n === 1 ? '1 person' : `${n} people`} in your web.</small>`

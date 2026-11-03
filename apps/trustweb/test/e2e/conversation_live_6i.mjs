@@ -128,7 +128,7 @@ async function run(browser) {
     localStorage.setItem('trustweb.v1.me', JSON.stringify(r))
   }, BIKE)
   await a.page.reload()
-  await a.page.getByRole('heading', { name: 'Your TrustWeb' }).waitFor({ timeout: 20_000 })
+  await a.page.getByRole('heading', { name: 'TrustZones' }).waitFor({ timeout: 20_000 })
   const link = await realCode(a.page)
   ok('1: A has a REAL code from the server', Boolean(link), String(link))
   if (!link) return
