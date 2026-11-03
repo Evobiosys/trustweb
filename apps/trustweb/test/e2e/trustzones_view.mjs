@@ -50,8 +50,8 @@ try {
     check(`${name}: second press folds back to five`, (await page.locator('.rings-wrap .node[data-tone="2"]').count()) === 5)
     // filter section
     await tap('[data-zone-filter-toggle]'); await page.waitForTimeout(300)
-    check(`${name}: filter unfolds: acquaintances on, not yet sorted off`, (await page.locator('[data-zone-filter="acquaintances"]').isChecked()) && !(await page.locator('[data-zone-filter="unsorted"]').isChecked()))
-    await page.locator('[data-zone-filter="unsorted"]').check(); await page.waitForTimeout(300)
+    check(`${name}: filter unfolds: one checkbox per ring, all on`, (await page.locator('[data-zone-filter]').count()) === 6 && (await page.locator('[data-zone-filter]:checked').count()) === 6)
+    await page.locator('[data-zone-filter="unsorted"]').uncheck(); await page.waitForTimeout(300); await page.locator('[data-zone-filter="unsorted"]').check(); await page.waitForTimeout(300)
     check(`${name}: not yet sorted on shows the grey dot, six tone steps`, (await page.locator('[data-pid="u1"]').count()) === 1 && (await page.evaluate(() => new Set([...document.querySelectorAll('.rings-wrap .node[data-tone]')].map((n) => n.dataset.tone)).size)) === 6)
     await page.screenshot({ path: `${SHOTS}/${name}-six-tones.png` })
     await page.reload(); await page.waitForTimeout(800)
