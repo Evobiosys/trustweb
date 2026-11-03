@@ -7,6 +7,7 @@ import { Ring } from './model'
 import type { AppState, Person } from './model'
 import { type ColourTag, tagsOf } from './colour_tags'
 import { isBlocked } from './non_responsive'
+import { ringShown } from './rings_filter'
 import { webSlot } from './rings_layout'
 
 /** Rung order from the centre out: the index is the colour token (`--ring-N` in styles.css: five oranges, strongest inside; the outermost grey). */
@@ -22,8 +23,6 @@ type UiState = Partial<Pick<AppState, 'uiRings'>>
 
 /** Rings drawn with everyone in them, not only the closest five. Absent = acquaintances (the default fill). */
 export const filledRings = (s: UiState): readonly Ring[] => s.uiRings?.filled ?? [Ring.Acquaintance]
-export const acquaintancesShown = (s: UiState): boolean => s.uiRings?.acquaintances !== false
-export const unsortedShown = (s: UiState): boolean => s.uiRings?.unsorted === true
 export const filterOpen = (s: UiState): boolean => s.uiRings?.filterOpen === true
 /** List sections unfolded; the closest few show by default. */
 export const openRings = (s: UiState): readonly Ring[] => s.uiRings?.open ?? [Ring.Closest]
@@ -38,12 +37,12 @@ export function toggleRing(s: UiState & { uiRings?: AppState['uiRings'] }, key: 
   setUi(s, key, now.includes(ring) ? now.filter((r) => r !== ring) : [...now, ring])
 }
 
-/** Who the rings and lists show: not blocked, not archived, and the two filters (acquaintances on, not yet sorted off by default). */
+/** Who the rings and lists show: not blocked, not archived, and the ring filter (every ring shown by default). */
 export function inZones<P extends Pick<Person, 'ring' | 'fields' | 'ringSuggested' | 'blocked'>>(people: readonly P[], s: UiState): P[] {
   return people.filter((p) => {
     if (isBlocked(p) || isArchived(p)) return false
     const slot = webSlot(p)
-    return slot === Ring.Unsorted ? unsortedShown(s) : slot === Ring.Acquaintance ? acquaintancesShown(s) : true
+    return ringShown(s, slot)
   })
 }
 

@@ -3,7 +3,8 @@
 import { Ring } from '../../src/model.ts'
 import { angleOf, ringsGeometry, lapRadius } from '../../src/rings_layout.ts'
 import { DAY_MS, dueMoves, releaseTies } from '../../src/engagement.ts'
-import { TONE_ORDER, acquaintancesShown, communityTags, filledRings, inZones, isArchived, moveKinds, openRings, toggleRing, toneIndex, toneVar, unsortedShown, zoneFor, setUi } from '../../src/trustzones.ts'
+import { ringShown, setRingShown } from '../../src/rings_filter.ts'
+import { TONE_ORDER, communityTags, filledRings, inZones, isArchived, moveKinds, openRings, toggleRing, toneIndex, toneVar, zoneFor } from '../../src/trustzones.ts'
 import { pinnedOrder } from '../../src/membranes_five.ts'
 import { S } from '../../src/strings.ts'
 import { readFileSync } from 'node:fs'
@@ -91,16 +92,15 @@ describe('orange gradient tokens', () => {
 
 describe('who the zones show', () => {
   const ppl = [person({ id: 'a', ring: Ring.Acquaintance }), person({ id: 'u', ring: Ring.Unsorted }), person({ id: 'x', ring: Ring.None }), person({ id: 'b', blocked: 5 }), person({ id: 'c' })]
-  it('archived (Not in my web) and blocked are never shown; unsorted is off by default, acquaintances on', () => {
+  it('archived (Not in my web) and blocked are never shown; every ring is shown by default', () => {
     expect(isArchived(ppl[2])).toBe(true)
-    expect(inZones(ppl, {}).map((p) => p.id)).toEqual(['a', 'c'])
-    expect(acquaintancesShown({})).toBe(true)
-    expect(unsortedShown({})).toBe(false)
+    expect(inZones(ppl, {}).map((p) => p.id)).toEqual(['a', 'u', 'c'])
+    expect(ringShown({}, Ring.Unsorted)).toBe(true)
   })
   it('the filters save in uiRings and change the result', () => {
     const s = {}
-    setUi(s, 'unsorted', true); setUi(s, 'acquaintances', false)
-    expect(inZones(ppl, s).map((p) => p.id)).toEqual(['u', 'c'])
+    setRingShown(s, Ring.Unsorted, false); setRingShown(s, Ring.Acquaintance, false)
+    expect(inZones(ppl, s).map((p) => p.id)).toEqual(['c'])
   })
 })
 
