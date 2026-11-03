@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
+/**
+ * Wave 28 import-examples proof (headless, dev only): the three example files from ~/Desktop/trustweb-example-exports through
+ * People > "Import from other services" at 390x844 with touch: summary, Yes, Curate, Accept, Undo, a failed read with retry.
+ * PORT=5431 SHOTS=<dir> EXE=<chromium> PW=<playwright-core index.mjs> node import_examples.mjs
+ */
+const { chromium } = await import(process.env.PW ?? 'playwright-core')
+const D = process.env.HOME + '/Desktop/trustweb-example-exports/', S = process.env.SHOTS
+const b = await chromium.launch({ headless: true, executablePath: process.env.EXE, args: ['--use-mock-keychain', '--password-store=basic'] })
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
+const page = await ctx.newPage(); const errs = []; page.on('pageerror', (e) => errs.push(String(e))); page.on('dialog', (d) => d.accept())
+const ck = (n, c) => console.log((c ? 'PASS ' : 'FAIL ') + n)
+await page.goto(`http://127.0.0.1:${process.env.PORT ?? 5431}/`); await page.waitForTimeout(1500)
+await page.evaluate(() => { localStorage.setItem('trustweb.v1.me', JSON.stringify({ v: 1, me: { id: 'me1', displayName: 'Ben Beispiel' }, peers: [], log: [], inventory: [], people: [] })) })
+await page.reload(); await page.addStyleTag({ content: '.twf, .twf-ok { display: none !important }' }); await page.waitForTimeout(800)
+const people = () => page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')).people)
+await page.getByRole('button', { name: 'Search people' }).tap(); await page.waitForTimeout(300)
+await page.keyboard.press('Enter'); await page.waitForTimeout(500)
+ck('entry visible on Contacts (People) screen', await page.locator('[data-people-import]').isVisible())
+await page.screenshot({ path: S + '/01-contacts-entry.png' })
+await page.locator('[data-people-import]').tap(); await page.waitForTimeout(400)
+ck('opens as a page with Back', await page.locator('[data-page="import-services"]').count() === 1)
+await page.setInputFiles('[data-svc-file]', [D + '_chat.txt', D + 'Connections.csv', D + 'contacts.vcf']); await page.waitForTimeout(800)
+const sum = await page.locator('[data-svc-summary]').innerText(); console.log(sum.replace(/\n/g, ' | '))
+ck('summary counts', /WhatsApp 1/.test(sum) && /LinkedIn 4/.test(sum) && /Phone contacts 3/.test(sum))
+ck('nothing written before Yes', (await people()).length === 0)
+await page.screenshot({ path: S + '/02-summary.png' })
+await page.locator('[data-svc-yes]').tap(); await page.waitForTimeout(500)
+ck('curate page', await page.locator('[data-page="import-curate"]').count() === 1)
+const rows = await page.locator('[data-svc-row]').count(); console.log('rows', rows)
+await page.screenshot({ path: S + '/03-curate.png' })
+await page.locator('[data-svc-accept]').first().tap(); await page.waitForTimeout(300)
+ck('accept writes one person', (await people()).length === 1)
+await page.locator('[data-page-back]').last().tap(); await page.waitForTimeout(400)
+console.log('pages after back', await page.locator('[data-page]').count(), 'people screen?', await page.locator('[data-people-import]').count())
+await page.locator('[data-svc-undo]').tap(); await page.waitForTimeout(400)
+const after = await people(); ck('undo moves person out of the web', after.length === 1 && after[0].ring === 'none')
+await page.screenshot({ path: S + '/04-after-undo.png' })
+// failure -> retry line, not an endless spinner
+await page.evaluate(() => { File.prototype.text = () => Promise.reject(new Error('x')) })
+await page.setInputFiles('[data-svc-file]', [D + '_chat.txt']); await page.waitForTimeout(500)
+ck('failed read shows a line and retry', await page.locator('[data-svc-failed]').count() === 1 && await page.locator('[data-svc-retry]').count() === 1)
+await page.screenshot({ path: S + '/05-failed.png' })
+ck('no page errors ' + errs.join(';'), errs.length === 0)
+await b.close()

@@ -2103,6 +2103,11 @@ export const S = {
   // From other services (wave 27): WhatsApp, LinkedIn and contact files -> summary -> Curate page.
   svcGroup: 'From other services',
   svcButton: 'Pick export files',
+  svcEntry: 'Import from other services',
+  svcReading: 'Reading your files ...',
+  svcReadFailed: 'The files could not be read.',
+  svcTimedOut: 'Reading took too long and was stopped.',
+  svcRetry: 'Pick again',
   svcHint: 'WhatsApp chats, LinkedIn Connections, phone or Google contacts. Read on this phone only.',
   svcInfoMark: '(i)',
   svcInfo: 'Pick the exported files (a WhatsApp _chat.txt, LinkedIn Connections.csv, a .vcf or Google .csv); the kind is found from the content. Only who wrote when and in which direction is counted, never what was said. Nothing is added to your web before you accept a person on the Curate page, and nothing leaves this phone. Drop a newer export later to see what was added or changed.',

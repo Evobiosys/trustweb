@@ -7,6 +7,8 @@ import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { Ring } from './model'
 import type { AppState } from './model'
+import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
+import type { Run } from './import_run'
 import type { Pages } from './page_view'
 import { bulkAccept, commitPlan, countsLine, decide, pendingProposals, planServices, undoBatch } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
@@ -34,6 +36,7 @@ let files: ServiceFile[] = []
 let me = ''
 let dayFirst: boolean | undefined
 let notRecognised = 0
+let run: Run = IDLE_RUN
 
 export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   const box = el('div', { 'data-import-services': '1' })
@@ -41,17 +44,29 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
 
   const replan = (): void => { plan = planServices(h.state(), files, { me, now: Date.now(), dayFirst }) }
   const input = el('input', { type: 'file', multiple: true, accept: '.txt,.csv,.vcf,.json,text/*', hidden: true, 'data-svc-file': '1' }) as HTMLInputElement
-  input.addEventListener('change', () => {
-    const list = [...(input.files ?? [])]
-    input.value = ''
+  const pick = (list: File[]): void => {
+    run = startRun(Date.now())
+    draw()
     void Promise.all(list.filter((f) => f.size <= FILE_MAX_BYTES).map(async (f) => ({ name: f.name, text: await f.text() }))).then((read) => {
       files = read
       dayFirst = undefined
       replan()
       notRecognised = plan!.files.filter((f) => !f.source).length
+      run = finishRun(run)
       draw()
-    }, () => h.toast(S.impNotJson))
+    }).catch(() => { run = failRun(run, S.svcReadFailed); draw() })
+  }
+  input.addEventListener('change', () => {
+    const list = [...(input.files ?? [])]
+    input.value = ''
+    pick(list)
   })
+  // While a pass runs the box checks the clock itself: it never waits for a manual refresh.
+  const timer = setInterval(() => {
+    if (!box.isConnected) { clearInterval(timer); return }
+    const next = tickRun(run, Date.now())
+    if (next !== run) { run = failRun(run, S.svcTimedOut); draw() }
+  }, 1000)
 
   function summary(p: ServicePlan): HTMLElement {
     const n = p.rows.length
@@ -94,7 +109,9 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
       input,
       el('button', { class: 'btn btn-ghost', 'data-svc-open': '1', onclick: () => input.click() }, [S.svcButton]),
       el('p', { class: 'meta' }, [S.svcHint, ' ', info(S.svcInfo)]),
-      plan ? summary(plan) : null,
+      run.phase === 'reading' ? el('p', { class: 'meta', role: 'status', 'data-svc-reading': '1' }, [S.svcReading]) : null,
+      run.phase === 'failed' ? el('p', { class: 'warn', 'data-svc-failed': '1' }, [run.error ?? S.svcReadFailed, ' ', el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-retry': '1', onclick: () => input.click() }, [S.svcRetry])]) : null,
+      plan && run.phase !== 'reading' ? summary(plan) : null,
       last ? el('div', { class: 'conn-row', 'data-svc-last': last.id }, [
         el('span', {}, [S.svcLast(new Date(last.at).toLocaleDateString(), last.rows.length)]),
         waiting ? el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-curate': '1', onclick: () => curatePage(h) }, [S.svcCurate(waiting)]) : null,
@@ -104,6 +121,11 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
   }
   draw()
   return [box]
+}
+
+/** The one way in from Contacts and from Settings: the same section, as a page with Back (shared state lives in this module). */
+export function openServicesImport(h: ServicesHooks): void {
+  h.pages.open(S.svcGroup, servicesGroup(h), 'import-services')
 }
 
 /** The Curate page: one row per proposal, Accept / Change / Leave; bulk accept only for rows with no flag. */
