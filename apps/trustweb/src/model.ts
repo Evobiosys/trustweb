@@ -25,6 +25,7 @@ import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
+import type { NameReveal } from './events'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -346,6 +347,8 @@ export interface TwEvent {
   people?: string[]
   /** Wave 24 (cal6): the UID of the .ics event this was imported from, so a second import updates it. Absent = none. */
   icsUid?: string
+  /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
+  nameReveal?: NameReveal
 }
 
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */

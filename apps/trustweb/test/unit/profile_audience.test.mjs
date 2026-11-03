@@ -15,10 +15,13 @@ describe('profileFor', () => {
     for (const r of [Ring.Close, Ring.Friend, Ring.Acquaintance]) expect(sections(profileFor(full(), who(r)))).toEqual(['norms', 'favourite', 'intro'])
   })
   it('close sees all, acquaintance only what is open to acquaintances', () => {
+    // E3: norms and favourite form ONE section (contact); its legacy audiences collapse to the least reach (friend), so acquaintances
+    // no longer get the norms alone (before E3: ['norms']).
     const p = full({ norms: 'acquaintance', favourite: 'friend', intro: 'close' })
     expect(sections(profileFor(p, who(Ring.Close)))).toEqual(['norms', 'favourite', 'intro'])
     expect(sections(profileFor(p, who(Ring.Friend)))).toEqual(['norms', 'favourite'])
-    expect(sections(profileFor(p, who(Ring.Acquaintance)))).toEqual(['norms'])
+    expect(profileFor(p, who(Ring.Acquaintance))).toBeNull()
+    expect(sections(profileFor(full({ norms: 'acquaintance', favourite: 'acquaintance', intro: 'close' }), who(Ring.Acquaintance)))).toEqual(['norms', 'favourite'])
   })
   it("'nobody' hides a section even from close", () => {
     expect(sections(profileFor(full({ intro: 'nobody' }), who(Ring.Close)))).toEqual(['norms', 'favourite'])
@@ -28,7 +31,7 @@ describe('profileFor', () => {
     const p = full({ norms: 'acquaintance', favourite: 'friend', intro: 'close' })
     expect(sections(profileFor(p, who(Ring.Family)))).toEqual(['norms', 'favourite', 'intro'])
     expect(sections(profileFor(p, who(Ring.Family, Ring.Friend)))).toEqual(['norms', 'favourite'])
-    expect(sections(profileFor(p, who(Ring.Family, Ring.Acquaintance)))).toEqual(['norms'])
+    expect(profileFor(p, who(Ring.Family, Ring.Acquaintance))).toBeNull() // E3: the contact section is at friend (see above)
     expect(profileFor(p, who(Ring.Family, Ring.Intending))).toBeNull()
   })
   it('intending, not in my web and unsorted get nothing', () => {

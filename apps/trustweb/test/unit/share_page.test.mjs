@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 27 share page: the page state, its share line, and the preview that equals enforcement (T12). */
-import { DEFAULT_ZONE, ZONE_CHOICES, initial, withChip, withoutChip, suggest, candidates, storeOf, previewOf, shareItem, seenBy } from '../../src/share_page.ts'
+import { DEFAULT_ZONE, ZONE_CHOICES, initial, withChip, withoutChip, suggest, candidates, storeOf, previewOf, shareItem, seenBy, membersOf } from '../../src/share_page.ts'
+import { basisOf } from '../../src/share_page_view.ts'
 import { canAccess } from '../../src/share_sink/check.ts'
 import { Ring } from '../../src/model.ts'
 
@@ -71,5 +72,50 @@ describe('person card line', () => {
     const shares = shareItem(basis(), 'bike', { zone: 'friend', include: [], exclude: ['person:ada'] }, NOW)
     expect(seenBy(basis(shares), 'cy', NOW)).toEqual(['bike'])
     expect(seenBy(basis(shares), 'ada', NOW)).toEqual([])
+  })
+})
+
+describe('events in the basis (E3)', () => {
+  const events = [{ id: 'ev1', name: 'Probe Forum' }, { id: 'ev2', name: 'Probe Camp', tagName: 'camp 26' }]
+  const withEvents = () => ({ ...basis(), people: [...basis().people.slice(0, 3), { ...P('di', 'Di', Ring.Friend), events: ['ev1'] }], events })
+  it('storeOf says who carries which event tag; a basis without events adds nothing', () => {
+    const got = storeOf(withEvents()).filter((t) => t.object.startsWith('event:'))
+    expect(got.map((t) => [t.subject, t.relation, t.object])).toEqual([['person:di', 'has_tag', 'event:ev1']])
+    expect(storeOf(basis()).some((t) => t.object.startsWith('event:'))).toBe(false)
+  })
+  it('candidates list each event by its tag label', () => {
+    const c = candidates(withEvents())
+    expect(c.filter((x) => x.id.startsWith('event:'))).toEqual([{ id: 'event:ev1', label: 'Probe Forum' }, { id: 'event:ev2', label: 'camp 26' }])
+    expect(suggest('camp', c, []).map((x) => x.id)).toContain('event:ev2')
+  })
+  it('an event in Also lets its attendees in below the zone; the same check enforces it', () => {
+    const scope = { zone: 'close', include: ['event:ev1'], exclude: [] }
+    expect(previewOf(withEvents(), scope, 'bike', NOW).names).toEqual(['Cy', 'Di'])
+    const shares = shareItem(withEvents(), 'bike', scope, NOW)
+    expect(seenBy({ ...withEvents(), shares }, 'di', NOW)).toEqual(['bike'])
+    expect(seenBy({ ...withEvents(), shares }, 'ada', NOW)).toEqual([])
+  })
+})
+
+describe('wave 28 and E3 together (port of #76)', () => {
+  const events = [{ id: 'ev1', name: 'Probe Forum' }]
+  const withEv = () => ({ ...basis(), people: [P('ada', 'Ada', Ring.Friend), { ...P('di', 'Di', Ring.Friend), events: ['ev1'] }, { ...P('ed', 'Ed', Ring.Acquaintance), events: ['ev1'] }], events })
+  it('an event chip lists its people like a tag chip does (membersOf)', () => {
+    expect(membersOf(withEv(), 'event:ev1').map((m) => m.name)).toEqual(['Di', 'Ed'])
+    expect(membersOf(withEv(), 'tag:garden')).toEqual([])
+  })
+  it('# offers tags and events, @ only people', () => {
+    const c = candidates(withEv())
+    expect(suggest('#', c, []).map((x) => x.id)).toEqual(expect.arrayContaining(['tag:garden', 'event:ev1']))
+    expect(suggest('@', c, []).every((x) => x.id.startsWith('person:'))).toBe(true)
+  })
+  it('basisOf carries the events and leaves archived contacts out of counts and chip lists', () => {
+    const store = { 'trustweb-crm.v1.me': JSON.stringify({ hiddenPeople: [{ id: 'ed' }] }) }
+    globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: () => undefined }
+    const b = basisOf({ people: withEv().people.map((p) => ({ ...p, lines: [] })), shares: [], events })
+    delete globalThis.localStorage
+    expect(b.events).toEqual(events)
+    expect(membersOf(b, 'event:ev1').map((m) => m.name)).toEqual(['Di'])
+    expect(previewOf(b, { zone: 'close', include: ['event:ev1'], exclude: [] }, 'bike', NOW).names).toEqual(['Di'])
   })
 })
