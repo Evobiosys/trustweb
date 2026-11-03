@@ -128,3 +128,18 @@ describe('stripBlocks', async () => {
     expect(noteKey('a.md', stripBlocks(note), 'r')).toBe(noteKey('a.md', '# day\n- Met Mira.\n\n- after\n', 'r'))
   })
 })
+
+describe('notePeopleSkip', async () => {
+  const { notePeopleSkip, noteOptOut } = await import('../../scripts/notes_page.mjs')
+  it('front matter people: skip (or no / none / false, any case) keeps the note from creating people', () => {
+    for (const v of ['skip', 'no', 'none', 'false', 'Skip', 'NONE']) expect(notePeopleSkip(`---\ntitle: talk\npeople: ${v}\n---\n# Speakers\n- Taro Lindqvist`)).toBe(true)
+    expect(notePeopleSkip('---\npeople: [Ines]\n---\n')).toBe(false)
+    expect(notePeopleSkip('---\npeople: skipped\n---\n')).toBe(false)
+    expect(notePeopleSkip('people: skip\nbody, no front matter')).toBe(false)
+    expect(notePeopleSkip('plain note')).toBe(false)
+  })
+  it('is independent of the full opt out', () => {
+    expect(noteOptOut('---\npeople: skip\n---\n')).toBe(false)
+    expect(notePeopleSkip('---\ntrustweb: no\n---\n')).toBe(false)
+  })
+})
