@@ -19,6 +19,10 @@
 - `TRANSPORT=matrix` wiring into `agent-daemon/src/main.ts` + WhatsApp/Signal bridge onboarding on matrix.myceli.al — the transport and Synapse profile exist in-tree but the factory throws on `matrix` today (D17 stub, D12 vision).
 - Persist signed VRC trust credentials — v0.1 issues them on-demand at `/api/trust` export, not stored (D17 stub).
 
+- **Pre-committed recovery key for DID rotation (relay-auth-hardening, 2026-11-03).** Today `rotate`/`revoke` records are signed by the DID's own root key, so an attacker holding a leaked key races the owner: whoever reaches each relay first wins. A DID could commit, at creation, to a hash of a cold recovery key (a did:peer:2 element, or a first `recovery_commit` record) so that only that key may rotate. Needs a DID-format change (did_identity.ts) and a UX for cold storage.
+- **Cross-relay nonce memory / global key records.** Replay memory and key records are per relay. A peer must publish its rotation to every relay it uses; a relay it never told keeps serving the old key. A gossip of signed key records between trusted relays (same trust-graph rule as routing) would close that gap without a registry.
+- **Cheap pre-filter before Ed25519 on ingress.** Every unauthenticated POST costs one sha256 + one verify. A per-IP token bucket at the proxy is the expected mitigation today; an in-process bucket keyed by the claimed DID is the next step if the proxy is missing.
+
 ## Next-phase research tracks (decision inputs — `docs/research/*.md`, untracked, NOT shipping docs)
 
 Three alignment/architecture notes were written ahead of v0.1's next phase. They are decision inputs for Jakob, each ending in an explicit ❗ decision block — surfaced here so the calls do not get lost:
