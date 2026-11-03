@@ -4,12 +4,18 @@ import { randomBytes } from 'node:crypto'
 
 const orgs = new Map()
 const L = { events: 3, invitees: 25 }
+const LOGO_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/
 const send = (res, code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(o === undefined ? '' : JSON.stringify(o)) }
 
 http.createServer((req, res) => {
   let text = ''
   req.on('data', (c) => { text += c })
   req.on('end', () => {
+    const pub = /^\/org\/event\/([0-9a-f]{16})\/public$/.exec(req.url)
+    if (pub && req.method === 'GET') {
+      for (const x of orgs.values()) { const e = x.events.get(pub[1]); if (e) return send(res, 200, { name: e.event.name, ...(e.event.logo ? { logo: e.event.logo } : {}) }) }
+      return send(res, 404, { error: 'not_found' })
+    }
     let b = {}
     try { b = JSON.parse(text || '{}') } catch { return send(res, 400, { error: 'bad_json' }) }
     const o = orgs.get(b.org)
@@ -29,6 +35,7 @@ http.createServer((req, res) => {
     if (req.url === '/org/event') {
       if (b.delete) { o.events.delete(b.id); return send(res, 204) }
       if (!Array.isArray(b.invitees) || !b.event?.name || !String(b.link).includes('#ev_host=')) return send(res, 400, { error: 'bad_request' })
+      if (b.event.logo !== undefined && (typeof b.event.logo !== 'string' || b.event.logo.length > 32768 || !LOGO_RE.test(b.event.logo))) return send(res, 400, { error: 'bad_request', field: 'event.logo' })
       if (b.invitees.length > L.invitees) return send(res, 409, { error: 'limit_invitees' })
       const old = o.events.get(b.id)
       if (b.id && !old) return send(res, 403, { error: 'forbidden' })

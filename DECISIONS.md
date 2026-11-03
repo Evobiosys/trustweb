@@ -477,3 +477,16 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
 - Alerting: a failed scheduled, manual or main run opens or comments on one issue labelled dlp-drill; step summary with the drill-log row; 90-day report
   artifact; optional heartbeat (secret DLP_DRILL_HEARTBEAT_URL), needed because GitHub pauses schedules after 60 days without activity.
 - A fixture, not production data: I1 and the synthetic data rule; nothing real ever reaches a GitHub runner. Open: the off-host backup, the host-side weekly check, levels 1 to 3, D-8.
+
+## D-organizer-hardening (2026-11-02): key sign-in, retention sweep, background counters, public event face
+- Sign in with my key: the organizer page restores an account from the pasted key line `{"org","secret"}`, checked against POST /org/me
+  before it is kept; "Show my key" shows the same line again for another browser. The key stays the only credential (no e-mail, no reset).
+- Retention: organizers.json is swept in the server process every ORG_SWEEP_MS; an org whose `updated` is older than ORG_DAYS goes with its
+  events and invitee e-mails. `updated` moves on organizer writes and, at most once per ORG_TOUCH_HOURS, on an organizer read; never on an
+  attendee hit, so attendee activity alone keeps nothing alive. No CLI sweeper: the store is in-memory, a second process would race it.
+- Counters: /org/hit and the read touch only change memory; one timer writes the file every ORG_HIT_FLUSH_MS and on close()/SIGTERM.
+  Honest cost: a crash loses up to ORG_HIT_FLUSH_MS of counters. Gain: the file's mtime no longer follows each attendee's tap.
+- Public face: GET /org/event/<id>/public answers the event name and an optional logo and nothing else, for the join sheet. The logo is a
+  data url (png/jpeg/webp/gif, ≤ 32 KB) stored on our server on purpose: a URL to the organizer's own host would make every attendee's phone
+  fetch it there (address and timing leak, the reason web_search.ts shows no favicons). The route carries no identity, counts as no hit,
+  touches no stamp; an unknown id and a malformed id answer the same 404. POST /org/event's body cap is ORG_EVENT_MAX_BYTES (64 KB) for it.
