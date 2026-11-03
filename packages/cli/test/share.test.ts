@@ -56,6 +56,7 @@ describe('share add', () => {
       count: 3,
       people: ['person:ada', 'person:bo', 'person:cy'],
       names: ['ada (Ada)', 'bo (Bo)', 'cy (Cy)'],
+      widens: null,
     })
   })
   it('re-sharing appends a new line that replaces the earlier one; the preview ignores the earlier line', async () => {
@@ -111,6 +112,48 @@ describe('share add', () => {
     assert.equal(both.code, 2)
     assert.match(both.stderr, /person:ada.*both --also and --except/)
     assert.equal(cli.record().shares.length, 0)
+  })
+})
+
+describe('a created zone is a share target as it stands (owner decision on PR #72)', () => {
+  it('a created zone with members through a tag rule is accepted directly; nothing points the person elsewhere', async () => {
+    const cli = await seeded()
+    withRecord(cli, (r) => {
+      delete r.zones.community!.archivedAt
+      r.tuples.push({ subject: 'tag:garden', relation: 'in_zone', object: 'zone:community', since: NOW, by: 'device:laptop' })
+    })
+    const r = await cli.run('share', 'add', 'bike', '--zone', 'community')
+    assert.equal(r.code, 0, r.stderr)
+    assert.doesNotMatch(r.stdout + r.stderr, /--include|--also/)
+    // The zone's current members (bo and cy through garden) and, the ladder nesting, everyone more intimate (ada in friend).
+    assert.match(r.stdout, /^3 people would see item:bike: ada \(Ada\), bo \(Bo\), cy \(Cy\)$/m)
+    assert.equal(r.stderr, '', 'a first share widens nothing')
+  })
+  it('warns when the zone is wider than the item\'s current scope, naming who comes in; narrowing does not warn', async () => {
+    const cli = await seeded()
+    await cli.ok('share', 'add', 'bike', '--zone', 'close')
+    const wider = await cli.run('share', 'add', 'bike', '--zone', 'friend', '--json', `--now=${LATER}`)
+    assert.equal(wider.code, 0, wider.stderr)
+    assert.match(wider.stderr, /^trustweb: warning: zone friend is wider than item:bike's current scope \(close\): 1 more person would see it: ada \(Ada\)$/m)
+    assert.deepEqual(wider.json<{ widens: unknown }>().widens, { from: 'close', to: 'friend', more: ['person:ada'], names: ['ada (Ada)'] })
+    const text = await cli.run('share', 'add', 'bike', '--zone', 'public', `--now=${LATER}`)
+    assert.match(text.stderr, /zone public is wider than item:bike's current scope \(friend\): 1 more person would see it: bo \(Bo\)/)
+    const narrower = await cli.run('share', 'add', 'bike', '--zone', 'closest', '--json', `--now=${LATER}`)
+    assert.equal(narrower.code, 1, 'closest is not set up: still refused')
+    const back = await cli.run('share', 'add', 'bike', '--zone', 'close', '--json', `--now=${LATER}`)
+    assert.equal(back.code, 0, back.stderr)
+    assert.equal(back.stderr, '')
+    assert.equal(back.json<{ widens: unknown }>().widens, null)
+  })
+  it('a wider zone that lets nobody new in still says the level widened, without a count of people', async () => {
+    const cli = await seeded()
+    await cli.ok('share', 'add', 'bike', '--zone', 'friend', '--also', 'bo')
+    const r = await cli.run('share', 'add', 'bike', '--zone', 'friend', '--also', 'bo', '--also', 'tag:garden', `--now=${LATER}`)
+    assert.equal(r.code, 0, r.stderr)
+    assert.equal(r.stderr, '', 'the same zone level: no widening warning')
+    withRecord(cli, (r) => { delete r.zones.community!.archivedAt })
+    const w = await cli.run('share', 'add', 'bike', '--zone', 'community', '--also', 'bo', `--now=${LATER}`)
+    assert.match(w.stderr, /zone community is wider than item:bike's current scope \(friend\): nobody new would see it$/m)
   })
 })
 

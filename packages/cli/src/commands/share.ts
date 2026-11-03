@@ -11,7 +11,7 @@ import { personLabel, requirePerson, requireTag, requireZone } from '../domain.t
 import { itemId, parseId, zoneOf } from '../ids.ts'
 import { count, table, when } from '../output.ts'
 import type { TrustRecord } from '../record.ts'
-import { Zone, activeZones, appendShare, latestShares, previewShare, storeOf, type Scope, type ShareLine } from '../sink.ts'
+import { Zone, activeZones, appendShare, latestShares, previewShare, rank, storeOf, type Scope, type ShareLine } from '../sink.ts'
 import { listedPersons, scopeOf, shareState } from './show.ts'
 
 const SCOPE_OPTIONS: readonly Option[] = [
@@ -53,6 +53,15 @@ function previewOf(r: TrustRecord, item: string, scope: Scope, now: Date): { cou
   return { count: people.length, people, names: people.map((p) => personLabel(r, p)) }
 }
 
+/** How a share to a wider zone than the item's current one widens the audience: who sees it now and did not before. */
+export interface Widening { from: Zone; to: Zone; more: string[]; names: string[] }
+
+function widening(r: TrustRecord, item: string, current: Scope, next: Scope, after: { people: string[] }, now: Date): Widening {
+  const before = new Set(previewOf(r, item, current, now).people)
+  const more = after.people.filter((p) => !before.has(p))
+  return { from: current.zone, to: next.zone, more, names: more.map((p) => personLabel(r, p)) }
+}
+
 const previewLine = (item: string, p: { count: number; names: string[] }): string =>
   `${count(p.count, 'person', 'people')} would see ${item}${p.count ? `: ${p.names.join(', ')}` : ''}`
 
@@ -65,12 +74,15 @@ const add: Command = {
   name: 'add',
   summary: 'Share an item with a zone, plus or minus persons and tags',
   description: [
-    'Appends one share line. The item is open to everyone in the zone and in every zone inside it, plus --also, minus --except',
-    '(an exception beats everything). The zone must be on (public always is); self is not a share. --also/--except ids must be',
-    'in the record. Sharing an item again appends a new line that replaces the earlier one; the same scope again writes nothing.',
+    'Appends one share line. A created zone is taken as it stands: the item is open to its current members (directly or',
+    'through a tag rule) and, the ladder nesting, to everyone in a zone inside it; plus --also, minus --except (an exception',
+    'beats everything). The zone must be on (public always is); self is not a share. --also/--except ids must be in the',
+    'record. Sharing an item again appends a new line that replaces the earlier one; the same scope again writes nothing.',
+    'A zone wider (less intimate) than the item\'s current scope goes through, with a warning that names who comes in.',
     'Then prints who would see it, by the same check enforcement runs. Names are printed: the CLI runs on the owner\'s',
     'device, for the owner (I2 hides them from askers, not from the owner).',
-    '--json: {item, line, replaces: <iso> | null, count, people: [person], names: [label]} (plus already: true when nothing was written)',
+    '--json: {item, line, replaces: <iso> | null, count, people: [person], names: [label],',
+    '        widens: {from: zone, to: zone, more: [person], names: [label]} | null} (plus already: true when nothing was written)',
   ].join('\n'),
   positionals: [{ name: 'item', help: 'An item id: bike or item:bike' }],
   options: SCOPE_OPTIONS,
@@ -88,14 +100,21 @@ const add: Command = {
       ctx.emit({ item, already: true, line: live, replaces: null, ...p }, [`${item} is already shared with this scope (${scopeText(scope)}, since ${when(live.ts)}); nothing written.`, previewLine(item, p)])
       return
     }
+    // Owner decision (PR #72): a created zone is a share target as it stands. When its level is wider (less intimate) than the
+    // item's current scope, the share goes through and a warning names who comes in through the wider level.
+    const widens = live && rank(scope.zone) < rank(live.scope.zone) ? widening(r, item, live.scope, scope, p, ctx.now) : null
     r.shares = appendShare(r.shares, { id: item, scope, to: `zone:${scope.zone}`, ts: ctx.now.toISOString() })
     const line = r.shares[r.shares.length - 1]
     const replaces = live ? live.ts : null
     const lines = [`Shared ${item} to ${scopeText(scope)}.`]
     if (replaces) lines.push(`replaces the share from ${when(replaces)} (${scopeText(live!.scope)})`)
     lines.push(previewLine(item, p))
-    ctx.commit(r, `shared ${item} to ${scopeText(scope)}${replaces ? `, replacing the share from ${when(replaces)}` : ''}: ${count(p.count, 'person', 'people')} would see it`)
-    ctx.emit({ item, line, replaces, ...p }, lines)
+    ctx.commit(r, `shared ${item} to ${scopeText(scope)}${replaces ? `, replacing the share from ${when(replaces)}` : ''}: ${count(p.count, 'person', 'people')} would see it${widens ? ` (wider than ${widens.from}: ${count(widens.more.length, 'more person', 'more people')})` : ''}`)
+    if (widens) {
+      const who = widens.more.length ? `${count(widens.more.length, 'more person', 'more people')} would see it: ${widens.names.join(', ')}` : 'nobody new would see it'
+      ctx.warn(`zone ${widens.to} is wider than ${item}'s current scope (${widens.from}): ${who}`)
+    }
+    ctx.emit({ item, line, replaces, ...p, widens }, lines)
   },
 }
 

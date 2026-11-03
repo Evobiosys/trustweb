@@ -335,6 +335,13 @@ Who can see it now:
 `--also` and `--except` take person or tag ids. The preview and the enforcement are the same check on the same store,
 so they cannot disagree.
 
+**A created zone is a share target as it stands** (owner decision on PR #72): `--zone <zone>` takes any zone set up
+here and on, and the item opens to the zone's current members, directly or through a tag rule. The ladder nests, so
+everyone in a zone inside it sees the item too; the preview line names exactly who. Nothing points you to `--also`
+instead. When the zone's level is wider (less intimate) than the item's current scope, the share goes through and a
+warning on stderr names who comes in through the wider level (`widens` in the JSON; `null` when nothing widened).
+Only `self`, an archived zone and a zone not set up are refused, each with the command that changes that.
+
 Names are printed: the CLI runs on the owner's device, for the owner (I2 hides them from askers, not from the owner).
 
 ```
@@ -349,6 +356,11 @@ item:bike is already shared with this scope (zone friend, since 2026-11-02 12:00
 2 people would see item:bike: ada (Ada), cy (Cy)
 $ trustweb share preview seeds --zone close --also tag:garden
 2 people would see item:seeds: bo (Bo), cy (Cy)
+$ trustweb share add bike --zone friend          (bike was shared to close; friend is wider)
+trustweb: warning: zone friend is wider than item:bike's current scope (close): 1 more person would see it: ada (Ada)
+Shared item:bike to zone friend.
+replaces the share from 2026-11-03 09:00 (zone close)
+2 people would see item:bike: ada (Ada), cy (Cy)
 $ trustweb share list
 item         zone       also  except     since             seq
 -----------  ---------  ----  ---------  ----------------  ---

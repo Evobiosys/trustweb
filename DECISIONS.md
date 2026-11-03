@@ -487,3 +487,7 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   (the OR permits it, `packages/cli/README.md` says AGPL). OPEN for the owner: keep the OR, or narrow the header to AGPL alone.
 - A merge takes nothing back: the same fact closed on either device stays closed, a share line older than our latest word on its
   item is superseded, the merged tag graph must stay a DAG, and a write dated before the record's last change is refused.
+- Owner decision on PR #72 (2026-11-03): `share --zone` takes a created zone directly, as it stands: the item opens to the zone's
+  current members (and, the ladder nesting, to the zones inside it); no refusal points at `--also`. When the zone's level is wider
+  than the item's current scope, the share goes through and one warning line names who comes in. Refused still: `self`, an
+  archived zone, a zone not set up (each with the command that changes that).
