@@ -1,11 +1,11 @@
 /** Dev-only step overlay: a yellow card over the phone walks through the steps to a feature, one at a time, the pointer's red ring on each step's element. Used by dev_preview.ts. */
 import type { Pointer } from './dev_pointer'
-import { parseStep, stepCardPlace } from './dev_preview_rules'
+import { clampCard, parseStep, stepCardPlace, stepCardPosStore } from './dev_preview_rules'
 
 const CSS = `
 .twp-step{position:fixed;z-index:99999;padding:8px 10px;border-radius:10px;background:#ffd24a;color:#241b2e;font:600 13px/1.35 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4);display:grid;gap:6px}
 .twp-step div{display:flex;gap:6px}.twp-step button{font:600 12px system-ui;border:0;border-radius:6px;padding:5px 10px;background:#241b2e;color:#fff;cursor:pointer}
-.twp-step button:disabled{opacity:.4;cursor:default}.twp-step button.alt{background:none;color:#241b2e;border:1px solid #241b2e;margin-left:auto}`
+.twp-step .txt{cursor:move;touch-action:none;user-select:none}.twp-step button:disabled{opacity:.4;cursor:default}.twp-step button.alt{background:none;color:#241b2e;border:1px solid #241b2e;margin-left:auto}`
 
 export interface Steps {
   /** Show `steps` one at a time (the last one is the feature itself); replaces an open overlay. */
@@ -24,6 +24,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   let here = false
   let card: HTMLElement | null = null
   let on = false
+  const saved = stepCardPosStore(localStorage)
 
   const button = (text: string, onclick: () => void, className = '', disabled = false): HTMLButtonElement =>
     Object.assign(document.createElement('button'), { textContent: text, onclick, className, disabled })
@@ -34,6 +35,11 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     const target = list[at].selector ? document.querySelector(list[at].selector!)?.getBoundingClientRect() : undefined
     const p = stepCardPlace(phone, target, card.offsetHeight, innerWidth, innerHeight)
     Object.assign(card.style, { left: p.left + 'px', width: p.width + 'px', top: p.top !== undefined ? p.top + 'px' : '', bottom: p.bottom !== undefined ? p.bottom + 'px' : '' })
+    const mine = saved.get()
+    if (mine) {
+      const c = clampCard(mine.left, mine.top, card.offsetWidth, card.offsetHeight, innerWidth, innerHeight)
+      Object.assign(card.style, { left: c.left + 'px', top: c.top + 'px', bottom: '' })
+    }
   }
 
   function draw(): void {
@@ -43,7 +49,23 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     card = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'twp-step' }))
     const row = document.createElement('div')
     row.append(button('Back', () => { go(at - 1) }, '', at === 0), ...(last ? [] : [button('Next', () => { go(at + 1) })]), button('Done', onDone, 'alt'))
-    card.append(text, row)
+    const handle = Object.assign(document.createElement('span'), { className: 'txt', textContent: text, title: 'Drag to move · double-click puts it back at the bottom' })
+    handle.addEventListener('pointerdown', (down) => {
+      const box = card!.getBoundingClientRect()
+      const dx = down.clientX - box.left, dy = down.clientY - box.top
+      handle.setPointerCapture(down.pointerId)
+      const move = (e: PointerEvent): void => {
+        const c = clampCard(e.clientX - dx, e.clientY - dy, box.width, box.height, innerWidth, innerHeight)
+        Object.assign(card!.style, { left: c.left + 'px', top: c.top + 'px', bottom: '' })
+      }
+      handle.addEventListener('pointermove', move)
+      handle.addEventListener('pointerup', () => {
+        handle.removeEventListener('pointermove', move)
+        saved.set({ left: card!.offsetLeft, top: card!.offsetTop })
+      }, { once: true })
+    })
+    handle.addEventListener('dblclick', () => { saved.clear(); place() })
+    card.append(handle, row)
     place()
   }
 
