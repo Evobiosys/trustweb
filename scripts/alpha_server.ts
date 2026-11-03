@@ -41,8 +41,11 @@ import {
   LadderChannel,
   RelayChannel,
   RelayServer,
-  parseSenderAuthMode,
+  parseSenderAuthEnv,
   SqliteRelayQueueStore,
+  SqliteSendNonceStore,
+  SqliteDidKeyStore,
+  DidKeyRegistry,
   HttpPostChannel,
   SqliteDedupStore,
   type Identity,
@@ -82,6 +85,9 @@ export interface BootedPersona {
   relayServer?: RelayServer;
   /** The mediator's durable relay queue (finding 4) — present only on the mediator persona; its SQLite handle is closed by shutdownAll. */
   relayQueueStore?: SqliteRelayQueueStore;
+  /** The mediator's consumed-nonce memory (relay send-auth F2) and DID key records (F5/F6), on the same db — closed by shutdownAll. */
+  relayNonceStore?: SqliteSendNonceStore;
+  relayKeyStore?: SqliteDidKeyStore;
 }
 
 export interface BootOptions {
@@ -183,10 +189,23 @@ export async function bootPersonas(personas: PersonaConfig[], opts: BootOptions)
   const mediatorEndpoint = externalRelayUrl ?? mediatorIdentity.serviceEndpoint;
 
   let relayQueueStore: SqliteRelayQueueStore | undefined;
+  let relayNonceStore: SqliteSendNonceStore | undefined;
+  let relayKeyStore: SqliteDidKeyStore | undefined;
   let relayServer: RelayServer | undefined;
   if (!externalRelayUrl) {
-    relayQueueStore = new SqliteRelayQueueStore(join(opts.stateDir, mediatorKey, "relay_queue.db"));
-    relayServer = new RelayServer({ queueStore: relayQueueStore, senderAuth: parseSenderAuthMode(process.env.RELAY_SENDER_AUTH) });
+    const relayDb = join(opts.stateDir, mediatorKey, "relay_queue.db");
+    relayQueueStore = new SqliteRelayQueueStore(relayDb);
+    // Same shape as relay_only.ts: consumed nonces (F2) and DID key records (F5/F6) persist on the queue db, so a
+    // restart of the alpha neither reopens the replay window nor forgets a rotation/revocation the daemon's
+    // POST /relay/keys mount accepted. RELAY_SENDER_AUTH / _AUDIENCES / _ALLOW_V1 via transport's relay_env.ts.
+    relayNonceStore = new SqliteSendNonceStore(relayDb);
+    relayKeyStore = new SqliteDidKeyStore(relayDb);
+    relayServer = new RelayServer({
+      queueStore: relayQueueStore,
+      ...parseSenderAuthEnv(process.env),
+      senderNonceStore: relayNonceStore,
+      keyRegistry: new DidKeyRegistry({ store: relayKeyStore }),
+    });
   }
 
   // Pass 2: store + transport + daemon + server, per persona.
@@ -262,6 +281,8 @@ export async function bootPersonas(personas: PersonaConfig[], opts: BootOptions)
       dedup,
       relayServer: isMediator ? relayServer : undefined,
       relayQueueStore: isMediator ? relayQueueStore : undefined,
+      relayNonceStore: isMediator ? relayNonceStore : undefined,
+      relayKeyStore: isMediator ? relayKeyStore : undefined,
     });
   }
 
@@ -304,6 +325,8 @@ export async function shutdownAll(booted: BootedPersona[]): Promise<void> {
       p.dedup.close();
       p.store.close();
       if (p.relayQueueStore) p.relayQueueStore.close(); // release the durable relay-queue SQLite handle (finding 4)
+      if (p.relayNonceStore) p.relayNonceStore.close();
+      if (p.relayKeyStore) p.relayKeyStore.close();
     })
   );
 }

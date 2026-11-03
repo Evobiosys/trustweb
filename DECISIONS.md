@@ -563,3 +563,22 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   current members (and, the ladder nesting, to the zones inside it); no refusal points at `--also`. When the zone's level is wider
   than the item's current scope, the share goes through and one warning line names who comes in. Refused still: `self`, an
   archived zone, a zone not set up (each with the command that changes that).
+
+## D-relay-auth-hardening (2026-11-03): audit of the PR #50 send signature; v2 binds the relay, nonces persist, keys rotate
+- Audit (threat model in docs/TRANSPORT.md §11.1): the v1 signature bound sender, time, nonce and body but not the relay, so a capture replayed to every
+  other relay inside the window; the nonce memory died with the process; a relay clock stepping back revived pruned nonces; a client more than
+  5 min off could never recover; did:peer:2 is its key, so nothing let a DID rotate or revoke, and every device had to hold the one root key.
+- Decision: signing scheme v2 (`trustweb-relay-send/v2`, seven lines: did, kid, aud, ts, nonce, sha256(body)); `aud` is the ingress origin and
+  is checked against RELAY_SENDER_AUTH_AUDIENCES or, unset, the request Host (host only: TLS ends at the proxy). v1 verifies only with
+  RELAY_SENDER_AUTH_ALLOW_V1 (default on in `optional`, off in `required`). Replay memory behind `SendNonceStore`, SQLite on the queue db in
+  relay_only; prune runs on a monotonic clock. Clients re-sign once from the `Date` header on `401 stale`.
+- Key registry (`DidKeyRegistry`, `POST /relay/keys`): self-signed `rotate` (both keys sign), `revoke` (terminal), `device_grant` (root + device
+  key sign, expires after one year, I9), `device_revoke`. Send auth and drain auth both consult it; the successor drains the old DID's queue.
+  Records are per relay, not global: no registry beyond the relays a peer already trusts (D-relay-send-auth's "no registry" stays true for keys
+  themselves; the relay stores only statements the DID signed).
+- Kept: default mode `optional` (owner's transition call, PR #50) — relay_only's header had claimed `required`; corrected. The demo client now signs.
+- Not covered: optional mode authenticates nothing; free DID minting bounds only honest senders; a leaked root key races its owner to
+  rotate/revoke (FUTURE.md: pre-committed recovery key); the relay learns the sender DID.
+- Deploy order: the demo and browser clients now sign with `aud` = the page origin, which the relay checks even in `optional` mode. Set
+  RELAY_SENDER_AUTH_AUDIENCES on the relay unit (every origin that proxies /relay/*) and deploy the relay BEFORE the new app build;
+  a proxy hop that rewrites Host otherwise answers 401 bad_audience where unsigned sends used to get 202.
