@@ -7,6 +7,7 @@ import { el } from '../../demo/src/ui/dom'
 import { foldKey, foldOpen, foldStored } from './fold'
 import { ICONS } from './icons'
 import type { AppState, Person } from './model'
+import { pictureFromFile } from './person_image'
 import { LINK_KINDS, linkEntries, setLink } from './person_links'
 import type { LinkKind } from './person_links'
 import { DAYS_PAGE, personDays } from './person_days'
@@ -102,6 +103,39 @@ export function daysSection(state: () => AppState, p: Person): HTMLElement {
   head.addEventListener('click', () => { open = !open; try { window.localStorage.setItem(foldKey('days'), foldStored(open)) } catch { /* not remembered */ } draw() })
   draw()
   return el('div', { class: 'card-days', 'data-card-days': p.id }, [el('h4', { class: 'fold-head' }, [head]), body])
+}
+
+/**
+ * Wave 28 (Jakob 2026-11-01): the card's picture slot. `face` (initials or the stored picture) is a button; a press opens a small row
+ * under the name: Take photo (camera, front), Choose file, Remove. The picture is stored as Person.image (person_image.ts).
+ */
+export function cardFace(p: Person, face: HTMLElement, d: { save: () => void; redraw: () => void; toast: (msg: string) => void }): { button: HTMLElement; menu: HTMLElement } {
+  const input = (data: string, capture: boolean): HTMLInputElement => {
+    const i = el('input', { type: 'file', accept: 'image/*', hidden: true, 'data-card-face-input': data, ...(capture ? { capture: 'user' } : {}) }) as HTMLInputElement
+    i.addEventListener('change', () => {
+      const file = i.files?.[0]
+      i.value = ''
+      if (!file) return
+      void pictureFromFile(file).then((url) => {
+        if (!url) { d.toast(S.faceBad); return }
+        p.image = url; d.save(); d.redraw()
+      }, () => d.toast(S.faceBad))
+    })
+    return i
+  }
+  const camera = input('camera', true)
+  const files = input('file', false)
+  const menu = el('div', { class: 'card-face-menu', hidden: true, 'data-card-face-menu': p.id }, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-card-face-take': '', onclick: () => camera.click() }, [S.faceTake]),
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-card-face-choose': '', onclick: () => files.click() }, [S.faceChoose]),
+    p.image ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-face-remove': '', onclick: () => { delete p.image; d.save(); d.redraw() } }, [S.faceRemove]) : null,
+    camera, files,
+  ])
+  const button = el('button', {
+    class: 'card-face', 'data-card-face': p.id, 'aria-label': S.faceAria(p.name), 'aria-expanded': 'false',
+    onclick: () => { menu.hidden = !menu.hidden; button.setAttribute('aria-expanded', String(!menu.hidden)) },
+  }, [face])
+  return { button, menu }
 }
 
 /** Wave 28: a long line under an (i) button, folded until pressed (a line longer than one row is unreadable on the card). */

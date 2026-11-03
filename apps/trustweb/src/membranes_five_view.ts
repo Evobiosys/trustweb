@@ -22,6 +22,8 @@ export interface SmallCardDeps {
   /** The rest of the person's card, drawn under the small card while it is expanded. */
   more?: readonly (Node | null)[]
   onPin: () => void
+  /** The picture slot (card_pages_view.ts cardFace): the button left of the name, its menu under the name row. Absent: none. */
+  face?: { button: HTMLElement; menu: HTMLElement }
   /** The QR code of this person: top right, small and extended alike. */
   onQr?: () => void
   /** The zones the person can move to; the ring chip and the "visible to" line open them. */
@@ -49,8 +51,9 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     ? d.addableTags.map((t) => el('button', { class: 'chip', 'data-tag-choice': t.id, onclick: () => d.onAddTag?.(t.id) }, [t.label ?? t.id]))
     : [el('span', { class: 'meta' }, [S.cardTagsUndefined])])
   return el('div', { class: 'small-card', 'data-small-card': p.id }, [
-    el('div', { class: 'card-name-row' }, [d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
+    el('div', { class: 'card-name-row' }, [d.face?.button, d.heading ?? el('h3', {}, [p.name]), pinButton(p, d.onPin),
       d.onQr ? el('button', { class: 'btn btn-ghost btn-sm', 'data-card-qr': p.id, 'aria-label': S.qrShowAria, title: S.qrShowAria, onclick: d.onQr }, [S.qrPageTitle]) : null]),
+    d.face?.menu,
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
