@@ -42,7 +42,7 @@ export function createWhatsApp(h: ExtHooks): MessengerSource {
       : [
           // noopener makes window.open return null, so a blocked tab cannot be told apart; the browser shows its own notice.
           el('button', { class: 'btn', 'data-wa-tab': '', onclick: () => { window.open(WA_URL, '_blank', 'noopener') } }, [S.whatsapp.open]),
-          el('button', { class: 'btn small', 'data-wa-open': '', onclick: () => { const r = windowOpener().open(); blocked.hidden = r !== 'blocked'; hint.hidden = r === 'blocked' } }, [S.whatsapp.openBeside]),
+          el('button', { class: 'btn btn-sm', 'data-wa-open': '', onclick: () => { const r = windowOpener().open(); blocked.hidden = r !== 'blocked'; hint.hidden = r === 'blocked' } }, [S.whatsapp.openBeside]),
         ]
     h.page(S.whatsapp.setupTitle, [
       ...go,
