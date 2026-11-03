@@ -10,8 +10,11 @@
     "dev:ben": "vite --port 5174",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
+    "build:deps": "pnpm --filter \"@resource-web/device-ui^...\" build",
+    "pretest": "pnpm build:deps",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretypecheck": "pnpm build:deps",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "mock:anna": "node mock/mock_server.mjs --persona=anna --port=4101 --scene=0",
     "mock:ben": "node mock/mock_server.mjs --persona=ben --port=4102 --scene=0"

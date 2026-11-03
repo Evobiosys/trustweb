@@ -74,7 +74,7 @@ describe('findDuplicates', () => {
     expect(g[0].members).toEqual([0, 1, 2])
     expect(g[0].sure).toBe(false)
   })
-  it('handles 5000 contacts under 1 s', () => {
+  it('handles 5000 contacts under 5 s', () => {
     const given = ['Maria', 'Anna', 'Lukas', 'Jonas', 'Sophie', 'Felix', 'Laura', 'Paul', 'Eva', 'Max']
     const family = ['Huber', 'Gruber', 'Bauer', 'Wagner', 'Pichler', 'Moser', 'Mayer', 'Hofer', 'Leitner', 'Berger']
     const list = Array.from({ length: 5000 }, (_, i) =>
@@ -82,7 +82,9 @@ describe('findDuplicates', () => {
     )
     const t = Date.now()
     findDuplicates(list)
-    expect(Date.now() - t).toBeLessThan(1000)
+    // Wall-clock budgets in apps/crm are generous on purpose: `pnpm -r test` runs four packages at once on a shared GitHub
+    // runner, where 1 s budgets failed at 1.1-1.5 s (2026-11-02). Super-linear regressions still blow these by far.
+    expect(Date.now() - t).toBeLessThan(5000)
   })
 })
 

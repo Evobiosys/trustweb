@@ -58,11 +58,13 @@ describe('parseFacebookJson', () => {
     expect(parseFacebookJson('', 'x.json')).toEqual({ contacts: [], skipped: 0 })
   })
 
-  it('parses 5,000 friends under 1 s', () => {
+  it('parses 5,000 friends under 5 s', () => {
     const friends = Array.from({ length: 5000 }, (_, i) => ({ name: `Fr\u00c3\u00bcnd ${i}`, timestamp: 1500000000 + i }))
     const t = performance.now()
     const r = parseFacebookJson(JSON.stringify({ friends_v2: friends }), 'big.json')
-    expect(performance.now() - t).toBeLessThan(1000)
+    // Wall-clock budgets in apps/crm are generous on purpose: `pnpm -r test` runs four packages at once on a shared GitHub
+    // runner, where 1 s budgets failed at 1.1-1.5 s (2026-11-02). Super-linear regressions still blow these by far.
+    expect(performance.now() - t).toBeLessThan(5000)
     expect(r.contacts).toHaveLength(5000)
     expect(r.contacts[4999].sourceRef).toBe('#5000')
   })
