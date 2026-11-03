@@ -30,7 +30,10 @@
   import { ringOf } from './rings'
   import { S } from './strings'
   import TagChip from './tag_chip.svelte'
-  import { personTimeline } from './timeline'
+  import { EventKind, personTimeline } from './timeline'
+  import { InteractionKind } from './model'
+  import { DUPLICATE_FIELD_KEYS } from '../../trustweb/src/card_small'
+  import { loadColourTags } from '../../trustweb/src/colour_tags'
   import { foldKey, foldOpen, foldStored } from '../../trustweb/src/fold'
   import { newestFirst } from './person_sections'
 
@@ -38,10 +41,11 @@
     personId: string
     /** Where the back arrow and a hidden person go; the Curator tab's own list by default. */
     onclose?: () => void
-    /** Inside the host's person card, which shows the name and its own close bar: no back arrow, no second big name. */
-    embedded?: boolean
+    /** Inside the host's person card, which shows the name and its own close bar: no back arrow, no second big name. 'curate' (wave 28): only the Curate page's tools (Keep in touch, Merge with) at its bottom. */
+    embedded?: boolean | 'curate'
   }
   const { personId, onclose = closePerson, embedded = false }: Props = $props()
+  const curate = $derived(embedded === 'curate')
 
   let form = $state<PersonForm>(PersonForm.None)
   let editing = $state<string | null>(null)
@@ -65,6 +69,9 @@
   const textOf = (l: { id: string; text: string }): string => store.crm.lineEdits?.[l.id]?.text ?? l.text
   const lines = $derived(newestFirst((person?.lines ?? []).filter((l) => l.status === LineStatus.Current && norm(textOf(l)).includes(norm(find.trim())))))
   const events = $derived(person ? personTimeline({ app: store.app, crm: store.crm }, person.id) : [])
+  /** Interaction notes typed on this card (AddNote); the NoteLines above are Tana's. */
+  const notes = $derived(events.filter((e) => e.kind === EventKind.Interaction && e.interaction?.kind === InteractionKind.Note))
+  const duplicateKeys = [...DUPLICATE_FIELD_KEYS, ...loadColourTags().map((t) => t.id)]
   const meta = $derived(
     person === undefined ? '' : person.ring === Ring.Intending
       ? S.sheetPlanned(person.context)
@@ -112,6 +119,10 @@
 </script>
 
 <section class="person" data-screen="person">
+  {#if curate}
+    <label class="fld"><span>{S.desk.keepLabel}</span><KeepSelect {personId} /></label>
+    <MergeSheet {personId} />
+  {:else}
   {#if !embedded}<button class="back" onclick={onclose}>&larr; {S.back}</button>{/if}
   {#if person}
     {#if !embedded}<!-- Wave 27: embedded in the TrustWeb card the name, zone and state are already the card's own (no second copy of the person). -->
@@ -143,7 +154,7 @@
     <IntendingChips value={intendingOf(values)} since={valueText(values[SINCE_KEY])} onchoose={(n): void => { setIntending(person.id, n) }} />
     {/if}
 
-    <MergeSheet personId={person.id} />
+    {#if !embedded}<MergeSheet personId={person.id} />{/if}
 
     <ContactInfo {person} />
     {#if !embedded}<ConnectPanel {person} />{/if}
@@ -175,13 +186,15 @@
           title={checked ? S.stillTrueOn(fmtDate(checked)) : S.stillTrueTip} onclick={(): void => editLine(line.id, { checkedAt: Date.now() })}>{checked ? '✔' : '✓'}</button>
       </div>
     {:else}
-      <p class="muted">{S.sheetNoNotes}</p>
+      {#if !(embedded && notes.length)}<p class="muted">{S.sheetNoNotes}</p>{/if}
     {/each}
+    <!-- Wave 28: a note typed here is a Curator interaction; embedded (no "What happened" below) it shows right under the notes. -->
+    {#if embedded}{#each notes as event (event.id)}<EventRow {event} showDate={true} />{/each}{/if}
     {/if}
 
     <!-- Wave 27: the fields sit under the notes, so "Add a note" stays above them. -->
-    <button class="link" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{S.fieldsToggle(Object.values(values).filter(isSet).length)}</button>
-    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} />{/if}
+    <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-fields" aria-expanded={fieldsOpen} onclick={(): void => { fieldsOpen = !fieldsOpen }}>{fieldsOpen ? '▾' : '▸'} {S.fieldsToggle(Object.values(values).filter(isSet).length)}</button></h3>
+    {#if fieldsOpen}<EntityFields kind={Kind.Person} id={person.id} {values} duplicates={embedded ? duplicateKeys : []} />{/if}
 
     {#if !embedded}
     <h3 class="fold-head"><button class="link fold-btn" data-action="toggle-happened" aria-expanded={happenedOpen} onclick={(): void => { happenedOpen = !happenedOpen; fold('happened', happenedOpen) }}>{happenedOpen ? '▾' : '▸'} {S.personTimeline} ({events.length})</button></h3>
@@ -205,5 +218,6 @@
     {/if}
   {:else}
     <p class="empty">{S.noPeople}</p>
+  {/if}
   {/if}
 </section>

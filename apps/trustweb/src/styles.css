@@ -158,6 +158,18 @@ textarea.field{resize:vertical; line-height:1.5}
 .small-card .card-actions{display:flex; gap:8px; align-items:center}
 .card-name-row{display:flex; align-items:center; justify-content:space-between; gap:8px}
 .card-name-row .btn{margin-left:auto; flex-shrink:0}
+.card-name-row .btn + .btn{margin-left:0}
+.chips[hidden]{display:none}
+.card-zone,.card-shares{background:none; border:0; padding:0; text-align:left; font:inherit; color:inherit; text-decoration:underline dotted; cursor:pointer}
+.card-zone{font-weight:700; font-size:13px}
+.card-shares{font-size:12.5px; color:var(--ink-soft)}
+.msg-glyphs{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 0}
+.msg-glyph{display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:1.5px solid var(--teal); border-radius:8px; background:none; color:var(--teal); cursor:pointer; text-decoration:none}
+.msg-glyph.linked{border-style:dashed; color:var(--ink-soft); border-color:var(--ink-soft)}
+.msg-glyph svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2}
+.tl-head{display:flex; align-items:center; gap:6px}
+.tl-head .tl-toggle{flex:1; text-align:left}
+.card-compose{display:flex; flex-direction:column; gap:6px}
 .card-more{display:flex; flex-direction:column; gap:12px; margin-top:12px}
 .passon-line{display:flex; align-items:center; gap:6px}
 .passon-line .passon-row{flex:1}

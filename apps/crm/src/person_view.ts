@@ -1,5 +1,6 @@
 /** What the three person views read: merged values, the person with the user's own edits laid over, the TrustWeb icon and the favourite way to connect. Pure. */
 import { channelLink } from '../../trustweb/src/channel'
+import { contextWithoutDate } from '../../trustweb/src/card_small'
 import { Channel } from '../../trustweb/src/model'
 import type { Person, Ring } from '../../trustweb/src/model'
 import { baseFields, mergedFields, valueText } from './fields'
@@ -21,7 +22,7 @@ export function splitName(name: string): { first: string; last: string } {
 /** The record's values, the name split where Given/Last are empty, and the person's own edits on top. */
 export function entityValues(entity: Pick<Person, 'name' | 'context'> & { ring?: Ring }, base: FieldValues | undefined, edits: FieldValues | undefined): FieldValues {
   const { first, last } = splitName(entity.name)
-  const own = { 'tw-first': first, 'tw-context': entity.context, ...(entity.ring ? { 'tw-ring': entity.ring } : {}), ...(last ? { [LAST_NAME_KEY]: last } : {}) }
+  const own = { 'tw-first': first, 'tw-context': contextWithoutDate(entity.context), ...(entity.ring ? { 'tw-ring': entity.ring } : {}), ...(last ? { [LAST_NAME_KEY]: last } : {}) }
   return mergedFields({ ...own, ...base }, edits)
 }
 

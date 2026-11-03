@@ -31,7 +31,7 @@ try {
   check('tap-edit saves a channel value', (await page.evaluate(() => JSON.parse(localStorage.getItem('trustweb.v1.me')).people[0].channels.signal)) === '+436609999999')
   await page.keyboard.press('Escape'); await page.waitForTimeout(200)
   await page.locator('[data-pid="p2"]').tap(); await page.waitForTimeout(400)
-  check('unconnected card: Chat button says why', (await page.locator('[data-card-chat="p2"]').count()) === 1 && (await page.locator('.card-chat .meta').innerText()).includes('connected on TrustWeb yet'))
+  check('unconnected card (wave 28): no Chat button, it says why', (await page.locator('[data-card-chat="p2"]').count()) === 0 && (await page.locator('.card-chat .meta').innerText()).includes('connected on TrustWeb yet'))
   await page.screenshot({ path: `${SHOTS}/card-views-unconnected.png` })
   check('no page errors', errors.length === 0)
   if (errors.length) console.log(errors)
