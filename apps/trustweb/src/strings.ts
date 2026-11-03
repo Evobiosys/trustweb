@@ -446,18 +446,11 @@ export const S = {
   zoneFilterUnsorted: 'Not yet sorted',
   zoneCommunity: 'Community tag',
   zoneCommunityNone: 'no tag',
-  zonePinned: 'Pinned',
   zoneSidebarTitle: 'Tools',
   zoneShowOnly: 'Show only',
   zoneHide: 'Hide',
-  zoneRename: (name: string) => `Edit the name of ${name}`,
-  zoneLegendInfo: 'About the lines',
-  zoneLegend: 'solid = both know each other, dashed = one-way',
   zoneZzzAria: (name: string, to: string) => `Quiet for a long time: move ${name} to ${to}`,
   zoneZzzTitle: (to: string) => `It has been a long time: tap to move to ${to}`,
-  zoneZzzAll: (n: number, from: string, to: string) => `${n} quiet in ${from}: move all to ${to}`,
-  zoneFold: 'Fold',
-  zoneUnfold: 'Unfold',
 
   membraneRest: (zone: string, n: number) => `${zone}: ${n} more`,
   membraneRestNone: 'Nobody here yet.',
@@ -1383,8 +1376,6 @@ export const S = {
   chatListEmpty: 'No chats yet. Open a card and write to someone.',
   chatNotifOff: 'Turn these off',
   chatNotifOffDone: 'Chat notifications are off. Settings > Notifications turns them back on.',
-  // Wave 27 (msg-host): "Extend" in the Chat header opens the extended messenger in place; the simple chat stays the default.
-  chatExtend: 'Extend',
   chatSimple: 'Simple chat',
   // Wave 28 (messengers-combined): one chat view over TrustWeb, Matrix, Geb and Signal; the pill and the three dots choose which.
   chatViewAll: 'All chats',
