@@ -606,6 +606,33 @@ test('two wires handled at once cannot bring a used key back', async () => {
   assert.deepEqual(laptop.sync.pairings()[0].recv, recv)
 })
 
+test('fast-forward is capped: unanswered tries never move the chain out of the peer\'s skipped-key window', async () => {
+  const h = hub()
+  const phone = await device(h, 'Phone', 'addr-phone', { handshakeMs: 30 })
+  const laptop = await device(h, 'Laptop', 'addr-laptop')
+  await link(phone, laptop)
+  h.sinks.delete('addr-laptop') // the relay loses everything
+  let refused = 0
+  for (let i = 0; i < 80; i++) await phone.sync.syncNow('addr-laptop').catch((e: Error) => { if (e.message === 'pair again') refused++; else assert.match(e.message, /offline/) })
+  await sleep(20)
+  const p = phone.sync.pairings()[0]
+  assert.ok(p.send.next - p.sendBase <= 1024 - 1, `jumped ${p.send.next - p.sendBase}`)
+  assert.ok(refused > 0, 'past the cap syncNow refuses instead of moving further away')
+  assert.ok(phone.logs.some((l) => l.includes('pair the two devices again')))
+  // at the cap the pairing is stuck by design (sending more would only move further away): pairing again recovers, nothing is lost
+  h.sinks.set('addr-laptop', (f, pl) => laptop.sync.handle(f, pl))
+  await laptop.sync.append(put(ENTITY_B, 'title', VALUE_B))
+  await assert.rejects(phone.sync.syncNow('addr-laptop'), /pair again/)
+  phone.sync.unlink('addr-laptop')
+  laptop.sync.unlink('addr-phone')
+  await link(phone, laptop)
+  const r = await phone.sync.syncNow('addr-laptop')
+  assert.equal(r.received, 1)
+  await sleep(20)
+  assert.equal(state(phone), state(laptop))
+  assert.equal(phone.sync.pairings()[0].sendBase, phone.sync.pairings()[0].send.next - 1, 'the base follows the answered have')
+})
+
 test('a key store that cannot be read fails closed: no new keys, the record blob is untouched', async () => {
   const h = hub()
   const phone = await device(h, 'Phone', 'addr-phone')

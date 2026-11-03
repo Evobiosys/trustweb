@@ -2,11 +2,11 @@
 
 Design document for `packages/device-sync` (`@resource-web/device-sync`).
 Audience: the engineer who wires it into `apps/trustweb`.
-Written 2026-11-02. Revised 2026-11-03 (round 2: the owner's four decisions, implemented).
+Written 2026-11-02. Revised 2026-11-03 (round 2: the owner's four decisions, implemented; then the fixes from a red-team pass on round 2).
 
 ## 📦 Status
 
-> **Prototype.** Branch `cloud/device-sync-e2ee-f`. 140 tests green (`node --test`).
+> **Prototype.** Branch `cloud/device-sync-e2ee-f`. 141 tests green (`node --test`).
 >
 > **Owner decisions (PR #71 / PR #68 §10), all decided and implemented in `packages/device-sync`:**
 >
@@ -72,7 +72,7 @@ Naming: PR #68 calls today's app sync "v1". This document calls it v3, after `SY
 | AAD absent | 1 | The relay could re-address a wire to another pairing that shares a key | `from`, `to` and the counter bound in the AAD |
 | 4-hex fingerprint | 3 | 16 bits, compared by humans | 6-digit SAS, about 20 bits, secret to an attacker |
 | Same pair key for ever per pair of identities | | Unlink and pair again gives the old key back | Per-pairing epoch in the HKDF salt: every pairing gets new roots and a new SAS |
-| Static key, no forward secrecy | | A key captured later opens every kept wire | Symmetric ratchet; used keys are deleted |
+| Static key, no forward secrecy | | A key captured later opens every kept wire | Symmetric ratchet; used keys are deleted; the pairing epoch is not stored, so the static key alone cannot re-derive the roots |
 | Raw secret in the localStorage blob | | Anything that reads localStorage can copy the device key | Non-extractable `CryptoKey` in IndexedDB |
 
 ### Relation to the invariants
@@ -141,27 +141,27 @@ Test file names are relative to `packages/device-sync/src/`. Quoted cases are ex
 | Adversary | What the design stops | What it does not stop | Proven by |
 |---|---|---|---|
 | **Honest-but-curious relay** | Reading content: every payload is AES-GCM ciphertext, padded to a bucket | Seeing `from` / `to`, timing, the size bucket, piece counts and the per-direction counter; learning that two addresses belong to one owner; under D-relay-send-auth also an authenticated sender DID | `sync.test.ts` "syncNow converges both logs and the materialized state; the relay sees no plaintext and no entity id"; `seal.test.ts` "wire layout: ctr (8 bytes BE, visible) \|\| iv \|\| ct; the plaintext is padded canonical JSON of {kind, body}" |
-| **Malicious relay: replay** | No key is left for a used counter: the wire is acked and not processed; a replayed `have` gets no answer, a replayed `entries` changes nothing; a wire from an earlier pairing does not open | Nothing further | `ratchet.test.ts` "second use of a skipped key → null"; `sync.test.ts` "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering", "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
-| **Malicious relay: reorder** | Up to 1024 counters ahead, the gap keys are kept as skipped keys, so a round in any order completes (a round is at most 201 wires) | A wire more than 1024 ahead, or whose skipped key was evicted, is not processed (liveness loss, not safety loss) | `ratchet.test.ts` "out of order within MAX_SKIP: receive 5 first, then 1..4, each exactly once", "a ctr more than MAX_SKIP ahead → null, state unchanged; exactly MAX_SKIP ahead is accepted", "skipped keys are bounded by MAX_SKIP: the smallest ctrs are evicted" |
+| **Malicious relay: replay** | No key is left for a used counter: the wire is acked and not processed; a replayed `have` gets no answer, a replayed `entries` changes nothing; a wire from an earlier pairing does not open. The relay starts one handler per wire, so a replay can arrive while the original is still being handled: send and receive paths are serialised per peer address, so two wires handled at once cannot bring a used key back | Nothing further | `ratchet.test.ts` "second use of a skipped key → null"; `sync.test.ts` "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering", "two wires handled at once cannot bring a used key back", "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
+| **Malicious relay: reorder** | Up to 1024 counters ahead, the gap keys are kept as skipped keys, so a round in any order completes (a round is at most 201 wires) | A wire more than 1024 ahead, or whose skipped key was evicted, is not processed (liveness loss, not safety loss). It is consumed, acked and logged "too far ahead" | `ratchet.test.ts` "out of order within MAX_SKIP: receive 5 first, then 1..4, each exactly once", "a ctr more than MAX_SKIP ahead → null, state unchanged; exactly MAX_SKIP ahead is accepted", "skipped keys are bounded by MAX_SKIP: the smallest ctrs are evicted"; `sync.test.ts` "a counter too far ahead to ever have a key is consumed, logged as such, and moves the chain nowhere" |
 | **Malicious relay: drop** | Detection only: `syncNow` rejects with `offline`, an incomplete piece set merges nothing | Availability; the relay can stop all sync | `sync.test.ts` "syncNow rejects offline when the peer never answers" |
 | **Malicious relay: re-address / re-attribute / re-number** | AAD binds `from`, `to` and the counter; any change fails AEAD | Nothing further | `seal.test.ts` "re-addressed or re-attributed wire → null", "ctr tampered in the prefix → null (AAD mismatch), even to a valid counter"; `sync.test.ts` "a wire re-attributed to another linked address, or to an unlinked one, is ignored" |
-| **Malicious relay: forge / tamper** | AEAD (authenticated encryption) rejects any changed byte; a forged counter does not advance the chain, because the state is committed only after the wire opened | Making the receiver spend up to 2 × 1024 HKDF steps on a garbage wire (bounded) | `seal.test.ts` "tampering any single byte → null (prefix, iv, ciphertext, tag)"; `ratchet.test.ts` "with the seal key resolver: the receiver commits the new state only after the wire opened" |
+| **Malicious relay: forge / tamper** | AEAD (authenticated encryption) rejects any changed byte; a forged counter does not advance the chain, because the state is committed only after the wire opened | CPU before authentication: a garbage wire with `ctr = next + 1024` costs about 4 000 WebCrypto operations before it fails (bounded; nothing is persisted; see open points). Log lines a forger can provoke are rate-limited per peer | `seal.test.ts` "tampering any single byte → null (prefix, iv, ciphertext, tag)"; `ratchet.test.ts` "with the seal key resolver: the receiver commits the new state only after the wire opened" |
 | **Malicious relay: holds wires beyond any TTL** | A held wire opens at most once, and only while its skipped key is still held; its content is authentic and idempotent and still waits for Receive; offers expire after 10 minutes and are one-use | Delay: late content is late, not wrong. A held wire keeps its skipped key alive on the receiver until it arrives or is evicted | `ratchet.test.ts` "skipped keys are bounded by MAX_SKIP: the smallest ctrs are evicted"; `sync.test.ts` "an expired code is refused by join; an expired offer ignores a pair wire" |
 | **Network observer** | Content (AEAD inside, TLS to the relay in deployment) | IP addresses, timing and sizes towards the relay | None (out of scope) |
-| **Stolen device state, later** (a copied blob, a backup, a profile copy) | Earlier wires stay closed: used chain and message keys are not in the state (forward secrecy) | Opens later wires on the current chains until the devices pair again (no post-compromise security), and wires whose skipped keys are held. With USE of the device key (see next row) and the epoch it re-derives the roots | `sync.test.ts` "forward secrecy: no key left in a device state captured after a round opens the wires of that round"; `ratchet.test.ts` "chain keys differ per step; a later state cannot re-derive or open an earlier message" |
-| **Lost or stolen device** | Remaining devices unlink it; its wires no longer open; a later pairing uses a new epoch. The private key cannot be exported from IndexedDB by JavaScript | On the unlocked device the key can be USED (with the epoch: every wire of its current pairings that a relay kept); the record on the device; what the browser writes to disk for the key | `sync.test.ts` "after unlink a wire from that device is ignored, and syncNow says not linked"; `keystore.test.ts` "indexedDbKeyStore (fake IDB): what is stored is a CryptoKey object and the public key, never secret bytes" |
+| **Stolen device state, later** (a copied blob and key store, a backup, a profile copy) | Earlier wires stay closed: used chain and message keys are not in the state, and the epoch that would re-derive the roots is not stored (forward secrecy, also against someone who holds the device key) | Opens wires whose skipped keys are held (at most 1024 per direction) and everything that follows under the current chains until the devices pair again (no post-compromise security) | `sync.test.ts` "forward secrecy: no key left in a device state captured after a round opens the wires of that round", "a counter too far ahead to ever have a key is consumed, logged as such, and moves the chain nowhere" (no `epoch` in storage); `ratchet.test.ts` "chain keys differ per step; a later state cannot re-derive or open an earlier message" |
+| **Lost or stolen device** | Remaining devices unlink it; its wires no longer open; a later pairing uses a new epoch. The private key cannot be exported from IndexedDB by JavaScript. Earlier wires stay closed as in the row above | On the unlocked device: the current chains (as in the row above), USE of the key, the record on the device; what the browser writes to disk for the key | `sync.test.ts` "after unlink a wire from that device is ignored, and syncNow says not linked"; `keystore.test.ts` "indexedDbKeyStore (fake IDB): what is stored is a CryptoKey object and the public key, never secret bytes" |
 | **QR shoulder-surfer** | Cannot pose as the offerer (lacks its private key); a raced `pair` message produces a different SAS on the offerer's screen; one use only | If the owner taps Confirm without comparing, the interloper is linked and can send records (each still needs Receive) and receives ours | `keys.test.ts` "derivePairKeys: same SAS on both sides; A.send opens with B.recv and NOT with B.send"; `sync.test.ts` "pair via code: same 6-digit SAS on both sides, confirm stores the pairing on both", "a code is one use; a code whose address is my own is refused; cancel stores nothing" |
 | **Link interceptor** | No link exists: the code is shown only as a QR | Someone who photographs the QR is the shoulder-surfer above | `sync.test.ts` "pairing code: format, parse, garbage refused (QR only: there is no link form)" |
 | **Compromised paired device** | It cannot extend our own chain (`own`); a forgery under a third device's id is reported as a `fork` at the first device that holds both histories | It reads everything; entries are not signed per device, so it can write under a THIRD device's id; the forged entry stays (the real one is the one reported) | `log.test.ts` "a forged \"next\" entry under another device id is caught as a fork when the real one arrives, and reported, not silently kept", "entries carrying MY OWN device id are refused (own) unless recovery is asked for" |
-| **Restore from an older backup / cloned device** | The restored device cannot open or send anything the peer accepts (its keys are gone there); it pairs again and the log merges, nothing lost; a second writer under one id is a detected fork | Sync until it pairs again; automatic fork repair | `sync.test.ts` "a device restored from an older backup cannot sync (its keys are gone on the peer: forward secrecy) until it pairs again"; `log.test.ts` "same id with different content → fork, the known entry stays" |
+| **Restore from an older backup / cloned device** | The restored device's first sync is dropped on the peer (used counters) and reports `offline`; its sending chain then jumps ahead and the next sync catches up, without re-pairing, nothing lost; a second writer under one id is a detected fork | One failed sync; the backup's own old keys open the wires of its time (a backup is a copy of the state); automatic fork repair | `sync.test.ts` "a device restored from an older backup: its first sync is dropped on the peer (used counters), the next one catches up without re-pairing"; `log.test.ts` "same id with different content → fork, the known entry stays" |
 | **Wrong clocks** | Causal order ignores the clock; a delete beats a concurrent edit whatever the clocks say; the loser of a true tie is listed | Among truly concurrent edits the later clock wins; a skewed joiner may misjudge a code's `exp` | `log.test.ts` "a causally later put wins without a conflict, even with an EARLIER wall clock", "a winner is never an entry that something else causally replaced (clock skew)" |
 
 Notes on four rows:
 
 - **Shoulder-surfer.** The attacker knows the pairing secret, so it can send a valid `pair` message first. The offerer then shows SAS(offerer, attacker). The real joiner shows SAS(offerer, joiner). The attacker cannot steer its SAS to match, because the target depends on the offerer-joiner ECDH secret it cannot compute. One guess, about 1 in 1 000 000.
 - **Compromised paired device.** The hash chain proves that a device's entries are consistent with each other, not who wrote them. Per-device signatures are future work (open points).
-- **Stolen state.** "Deleted" means not kept by the module or in the state it returns. JavaScript cannot wipe memory, and old copies of a saved state may survive in the storage layer (browser files, OS swap, backups).
-- **Restore from backup.** The backup holds chain states from before later rounds. Its `have` goes out under a counter the peer already used: the peer acks it, logs "already used", and does not answer, so `syncNow` rejects `offline`. Unlink and pair again on both devices; the next round brings everything back. With `recoverOwn` (merge option `acceptOwn`) the restored device also takes its own later entries back from a peer.
+- **Stolen state.** "Deleted" means not kept by the module or in the state it returns. The roots are zeroed after the chains are seeded. JavaScript cannot wipe memory, and old copies of a saved state may survive in the storage layer (browser files, OS swap, backups). The chain state lives in the localStorage blob, not in the key store (open points).
+- **Restore from backup.** The backup holds chain states from before later rounds. Its `have` goes out under a counter the peer already used. The peer drops it silently (no key can tell a restore from a replay), acks it and logs "... already used ...; if <device> was restored from a backup, its next syncs catch up". `syncNow` rejects `offline`. The restored device then moves its sending chain 32 steps ahead (`FAST_FORWARD`) per unanswered `have`, so the next try passes the peer's position. The jump is harmless: the receiver keeps up to 1024 skipped keys for exactly this. Pairing again is an option, not a requirement. With `recoverOwn` (merge option `acceptOwn`) the restored device also takes its own later entries back from a peer.
 
 ## 🔑 Key exchange between own devices (QR only)
 
@@ -210,11 +210,13 @@ The owner decided: QR only (PR #71). The package has no link helpers any more.
    - SAS: 32 bits (info `.../sas`), `mod 1 000 000`, zero-padded to 6 digits.
    My send root is the other side's receive root (crosswise).
 6. **Compare.** Both screens show the 6-digit SAS (short authentication string: a code two humans compare to detect a swapped key). The owner checks that they match.
-7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` `{ address, deviceId, publicKey, name, sas, epoch, linkedAt, lastSyncAt, send, recv }`. `send` and `recv` are the two ratchet chains, seeded from the roots (`initChain`: chain = root, `next` = 1, no skipped keys). Counters start at 1. Cancel stores nothing. Before Confirm nothing syncs.
-   `confirm` is one decision: a second call throws `already decided`, and a request whose pairing epoch was unlinked in the meantime cannot revive it (`unlinked`).
+7. **Confirm on both.** Each side's `PairRequest.confirm()` stores a `Pairing` `{ address, deviceId, publicKey, name, sas, linkedAt, lastSyncAt, pairId, send, recv }`. `send` and `recv` are the two ratchet chains, seeded from the roots (`initChain`: chain = root, `next` = 1, no skipped keys). Counters start at 1. Cancel stores nothing. Before Confirm nothing syncs.
+   The epoch is not stored, and the roots are zeroed once the chains are seeded. `pairId` = base64url(SHA-256(`trustweb-device-sync/v2/pair-id` || epoch)) names the pairing for the unlink and stale-confirm guard; the epoch cannot be recovered from it.
+   `confirm` is one decision: a second call throws `already decided`, and a request whose `pairId` was unlinked in the meantime cannot revive it (`unlinked`).
 
 `derivePairRoots` refuses to pair a device with its own key and rejects an all-zero ECDH result (a low-order public key).
 `derivePairKeys` (round 1: static directional AES keys, same salt and SAS) is still exported; the seal tests use it. `sync.ts` does not.
+The keys in `keys.ts` are static. Forward secrecy comes from the layer above: `ratchet.ts` deletes keys after use, and `sync.ts` never stores the epoch. The `keys.ts` header says so (it no longer claims "no forward secrecy").
 
 ### Why each side is authenticated
 
@@ -236,10 +238,10 @@ It can only drop the `pair` message, which makes pairing fail visibly.
 
 ### Unlink, lost device, rotation
 
-- `unlink(address)` deletes the pairing (epoch and both chains). Later wires from that address are ignored, and `syncNow` to it rejects with `not linked`.
+- `unlink(address)` deletes the pairing (both chains) and remembers its `pairId` as retired. Later wires from that address are ignored, and `syncNow` to it rejects with `not linked`. A sync waiting on that device, or on the person's Receive, ends with `not linked`; an open Receive prompt for it can no longer merge or send (see the Receive prompt).
 - Pairing the same two devices again uses a fresh secret, so a new epoch: new roots, new chains, a new SAS. A wire captured under the earlier pairing does not open.
 - Unlink does not take back what the other device already has. Its entries stay in the log.
-- **Lost device:** unlink it on every remaining device. It only ever held chains involving itself, so other pairs stay sound. Until the unlink, whoever can use its key and read its blob can open that pairing's wires.
+- **Lost device:** unlink it on every remaining device. It only ever held chains involving itself, so other pairs stay sound. Until the unlink, whoever holds its state can open that pairing's wires from now on (current chains, skipped keys), not the earlier ones.
 - **Rotation:** if a device's key may be misused, that device clears its key store, starts fresh (new key pair, new `deviceId`) and pairs again with the others. No `rotate()` call exists.
 - A replacement device is a new device. It starts with an empty log and receives everything in its first sync.
 
@@ -308,8 +310,9 @@ J         = canonical JSON of { kind, body } (keys sorted)
 ### Counters and the ratchet
 
 - Each direction counts from 1. The counter is the ratchet position, not a clock. Round 1's wall-clock counter floor is gone.
-- **A used counter has no key.** A wire that repeats it (a replay, or an honest redelivery whose ack was lost) cannot open. It is consumed and acked, so the relay stops redelivering, and nothing is processed. The device logs "already used".
-- **A counter more than 1024 ahead** is rejected: no key is derived, nothing is processed. In the current code it takes the same path as a used counter (acked, logged as "already used").
+- **A used counter has no key.** A wire that repeats it (a replay, an honest redelivery whose ack was lost, or a peer restored from an older backup) cannot open. It is consumed and acked, so the relay stops redelivering, and nothing is processed. The device logs "already used".
+- **A counter more than 1024 ahead** (from a linked address) is rejected: no key is derived, nothing is processed. No key will ever exist for it, so it is consumed and acked, with its own log line ("too far ahead").
+- Lines about used and too-far counters are rate-limited per peer (the first three, then every hundredth), because a forger can produce them.
 - **A forged counter does not advance the chain.** The prefix is unauthenticated until the wire opens. The new state is committed only after `openMessage` returned a message.
 - Each message key is used once, so a GCM key and IV pair can never repeat, even apart from the random IVs.
 
@@ -322,6 +325,7 @@ J         = canonical JSON of { kind, body } (keys sorted)
 - A crash after the save but before processing loses that wire's content, not its safety: the next round resends what is missing.
 - A crash after the save but before the ack means a redelivery, which finds no key and is acked.
 - Only a wire that does not open (wrong key, tampered, re-attributed, unlinked sender) stays un-acked.
+- **One lock per peer address.** The relay starts one handler per wire, so wires of one peer can be handled at once. Each path runs under an async lock per peer: receive is derive, open, commit, persist; send is derive, commit, persist, seal. Processing (merge prompt, answering a `have`) runs outside the lock, because answering sends and sending takes the same lock. So two wires handled at once cannot both commit from the same state (which would bring a used key back), and two sends never share a counter.
 - Every drop is logged through `onLog` (I6): used counters, dropped piece assemblies, pieces that do not fit, save failures, declines.
 
 ### Chunking
@@ -466,16 +470,18 @@ A complete `entries` message is never merged by itself. It is handed to `onIncom
 | Field | Meaning |
 |---|---|
 | `from` | `{ address, deviceId, name, sas }` of the sender. No key material |
-| `counts` | `{ entries, devices }`: entries in the message and the distinct devices they name, counted before merge verification |
+| `counts` | `{ entries, devices }`: well-formed entries in the message (a record with string `id` and `device` and an `op` object) and the distinct devices they name, counted before merge verification. Junk cannot inflate them |
 | `reply` | `false`: the other side's answer to our `have`. `true`: the closing half of a round the other side started |
 | `accept()` | Merges (with the usual checks), saves, logs the merge report, returns the `MergeReport`. For `reply: false` it then sends our `entries` back with `reply: true` |
 | `decline()` | Applies nothing, logs the decline. For `reply: false` it fails the waiting `syncNow` with `Error('declined')` and nothing is sent back |
 
 - Nothing merges before `accept`.
 - One decision per message: a second `accept` throws `already decided`; `decline` after a decision does nothing; a declined message cannot be accepted later.
+- **The prompt dies with the pairing.** `accept()` after an unlink, or after the same address was paired again, throws `not linked` and merges and sends nothing. A stale `decline` cannot fail another sync: it only fails the waiting `syncNow` while its own pairing is still the current one.
 - The closing half (`reply: true`) is asked about too, on the other device. Each person decides about what arrives on their own device.
 - Answering a `have` is not a Receive: a device sends what the peer lacks without asking its person. The person is asked on the receiving side.
-- The `syncNow` timeout keeps running while the prompt is open. A person who answers later than `handshakeMs` after the last piece sees `syncNow` reject with `offline`; a later `accept` still merges and sends ours back. The wiring should pick `handshakeMs` with that in mind.
+- **The sync clock waits for the person.** While a Receive prompt for the answer (`reply: false`) is open, the `syncNow` timeout is paused: the peer did answer. The sync ends when the person accepts (resolves), declines (`declined`) or the device is unlinked (`not linked`).
+- Proven by `sync.test.ts` "a pending Receive prompt dies with the pairing: accept after unlink merges nothing and sends nothing; the sync clock waits for the person".
 
 ### One round
 
@@ -489,7 +495,8 @@ A complete `entries` message is never merged by itself. It is handed to `onIncom
 
 - `have` carries no `sid`. The waiter in `syncNow` resolves when the person accepted and our half was sent.
 - A second `syncNow` to the same peer while one is running returns the same in-flight promise.
-- No answer within `handshakeMs` (default 30 s): `syncNow` rejects with `Error('offline')`. The timeout restarts whenever a piece arrives.
+- No answer within `handshakeMs` (default 30 s): `syncNow` rejects with `Error('offline')`. The timeout restarts whenever a piece arrives and stops once the complete answer waits at the Receive prompt.
+- After an unanswered `have` the sending chain moves 32 steps ahead (`FAST_FORWARD`). This lets a device restored from an older backup pass the peer's position (threat model notes). For an honest peer that was only offline it costs 32 skipped keys per try on the receiver, within its 1024, as long as the queued `have`s arrive in order. The jump is capped relative to the position the peer last reached (`sendBase`), and past the cap `syncNow` refuses with `pair again` (open points, "Fast-forward and lost wires").
 - `syncNow` on an address without a pairing rejects with `Error('not linked')`. A `have` from an unlinked address is ignored.
 
 ### Convergence
@@ -510,12 +517,15 @@ A complete `entries` message is never merged by itself. It is handed to `onIncom
 
 ### 1. Keys at rest and the record blob (owner decision 3, implemented)
 
-- `SyncData` v2 is `{ v: 2, pairings, log }`. It holds no device key. It does hold the pairings with their epochs and chain states.
+- `SyncData` v2 is `{ v: 2, pairings, log }`. It holds no device key. It does hold the pairings with their `pairId` and chain states (never the epoch).
 - The private key lives in a `KeyStore`. In the app: `indexedDbKeyStore()`, which stores `{ publicKey (raw 32 bytes), privateKey (non-extractable X25519 CryptoKey) }` in database `trustweb-device-sync`, object store `keys`, key `device`. In tests: `memoryKeyStore()`.
 - IndexedDB keeps a `CryptoKey` object by structured clone, so it comes back still non-extractable. No IndexedDB means every call rejects; it never falls back to localStorage.
 - **Migration on first start:** a v1 blob with `secretKey` is moved by `migrateSecretToKeyStore`: the secret is imported non-extractable, saved in the key store, and the blob is rewritten as v2 without it. Same `deviceId`. A second start reads the key store, not the blob.
 - **v1 pairings are dropped**, with a log line: they carry no ratchet state. The person pairs those devices again. The log is kept.
-- If the key store holds a key, the blob's `secretKey` is not used. If nothing can be read, the device makes new keys and logs that it has to be linked again.
+- A v1 blob with `secretKey` is always migrated, even when the key store already holds a key: the v1 key wins, because the blob's log was made with it (`keystore.ts` contract of `migrateSecretToKeyStore`).
+- **Start-up fails closed.** A key store that cannot be read (as opposed to one that is empty) makes `createDeviceSync` reject: no new keys are made and the blob is untouched. The app shows the error and tries again later.
+- New keys are made only when the key store is empty and there is no v1 secret. A blob whose log belongs to another device key is then refused (`refusing to overwrite it`): `createDeviceSync` rejects instead of replacing the owner's log. Clearing such a blob is a deliberate step for the app, not something the package does.
+- Proven by `sync.test.ts` "a key store that cannot be read fails closed: no new keys, the record blob is untouched".
 - `deviceKeysFromPrivateKey` checks that the stored public key belongs to the stored private key (by an ephemeral ECDH), so a mismatched record is refused.
 
 ### 2. Keys from the v3 sync identity
@@ -565,7 +575,8 @@ A complete `entries` message is never merged by itself. It is handed to `onIncom
 - Confirm sheet: the 6-digit SAS replaces the 4-hex `fp`.
 - "Receive from <device>?" sheet stays (owner decision 1), fed by `onIncoming`: name, entry and device counts, Receive / Decline.
 - "Review merge" lists `FieldConflict`s: field, kept and dropped value with device and time.
-- A device that logs "already used" from a peer after a restore needs re-pairing: say so in the sync log, offer the QR.
+- After a restore from an older backup the first sync reports `offline` and the peer logs "already used ... its next syncs catch up". The restored device catches up on its next sync without re-pairing. The app can say "try again"; re-pairing stays an option, not a requirement.
+- `createDeviceSync` can reject at start-up (key store unreadable, or a log of another device key). Show the error and keep the data; never retry by clearing storage silently.
 - Still the app's job: the per-pairing "shares my username" tick, `canSend`, the pre-merge snapshot, the version hello.
 - Log lines (`onLog`) feed the existing sync log (I6). They name devices and counts, never values.
 - **One raw sink.** The relay keeps one `onRawWire` callback. During dual run create the v2 sync with `register: false` and let the app's sink route each wire to v3 or to `handle(from, payload)`, acking when either returns `true`.
@@ -589,12 +600,16 @@ Adding that DH step is the main open point.
 | Topic | Why it matters | Direction |
 |---|---|---|
 | Post-compromise security | A stolen current chain key opens everything that follows until re-pairing | A DH ratchet step per sync round (fresh X25519 per `have`) |
-| Restore from an older backup | Requires re-pairing (by design) | A future "re-key" handshake could shorten that |
+| Restore from an older backup | Catches up without re-pairing, after one failed (`offline`) sync per about 32 counters it is behind; the peer cannot tell it from a replay, so the first drop is silent there | A future "re-key" handshake could make the first sync succeed |
+| Fast-forward and lost wires | Each unanswered `have` moves the sending chain 33 counters on (the `have` plus 32). If the relay loses the queued `have`s, repeated tries could have pushed the chain out of the peer's 1024-key window for good. Fixed in code: the jump is capped at `MAX_SKIP - FAST_FORWARD` counters past `sendBase` (the position the peer last demonstrably reached, set whenever it answers), and at `MAX_SKIP - 1` `syncNow` refuses with `pair again` instead of sending. Test: "fast-forward is capped: unanswered tries never move the chain out of the peer's skipped-key window" | A "too far ahead" answer under the pairing key would let the peer state its position; until then re-pairing recovers |
+| CPU cost before authentication | A garbage wire with `ctr = next + 1024` costs about 4 000 WebCrypto operations before AEAD fails. Nothing is persisted. Precondition: a malicious relay, or relay sender authentication (D-relay-send-auth) not enforced, so that anyone can submit a wire under a linked `from` (`senderAuth` `"off"`, or the server default `"optional"`, under which unsigned sends still pass) | One `deriveBits(512)` per chain step, a memoised tentative walk, or a lower skip limit before authentication |
+| Chain state at rest | The chains and skipped keys live in the localStorage blob, not in the key store. Whatever reads localStorage can copy them | Move the ratchet state into IndexedDB next to the key (see "Storage blob") |
 | Post-quantum | Recorded traffic could be opened later | Hybrid X25519 + ML-KEM once WebCrypto or a vetted library offers it |
 | Per-device signatures | A compromised paired device can write under a third device's id | Ed25519 signature over the entry hash, key bound to `deviceId` |
 | Storage blob | The blob (now without keys, still with chain states and the whole log) is one synchronous localStorage write per accepted wire: quadratic for large syncs, about 5 MB limit | Split chain states from the log; IndexedDB for both |
 | Unlinked-key acking | Wires from an unlinked pairing no longer open, so they stay un-acked and fill the relay's queue | Keep an unlinked pairing's state for a while, only to ack its wires |
-| Device names: bidi | Names are cleaned and truncated to 64 characters, but bidi and zero-width characters are kept (spoofable display) | Strip or flag them before showing the name |
+| Device names: bidi | Names are cleaned of control characters and truncated to 64 characters, but bidi and zero-width characters are kept (spoofable display) | Strip or flag them before showing the name |
+| IndexedDB open blocked (fixed) | An open request that was blocked rejected, but the connection that opened later stayed open | Fixed in `keystore.ts` `open()`: a connection that opens after the promise failed is closed at once |
 | Compaction and snapshots | The log only grows | Agreed snapshot entry plus pruning below a common head |
 | More than 5 devices | n(n-1)/2 pairings, vector clocks grow per device | Hub-and-spoke pairing, clock pruning |
 | Key backup and recovery | Losing all devices loses the key and the log | Encrypted export, recovery phrase |
@@ -605,7 +620,7 @@ Adding that DH step is the main open point.
 ## 🧪 Test map
 
 All files in `packages/device-sync/src/`. Run `node --test "src/**/*.test.ts"` from `packages/device-sync`.
-All cases are exact test names. Totals: bytes 11, keys 18, keystore 13, log 35, ratchet 15, seal 20, sync 24 = **136**.
+All cases are exact test names. Totals: bytes 11, keys 18, keystore 13, log 35, ratchet 15, seal 20, sync 29 = **141**.
 
 ### `bytes.test.ts` (11)
 
@@ -674,18 +689,22 @@ All cases are exact test names. Totals: bytes 11, keys 18, keystore 13, log 35, 
 | Fresh IV; open never throws | "two seals of the same message differ (fresh IV)", "garbage / empty / non-b64u / short → null, never throws", "authentic but invalid content → null (bad UTF-8, bad JSON, bad kind, bad ctr in the prefix)", "sealMessage rejects a message it could never open again" |
 | Padding (finding 4) | "PAD_BUCKETS", "a 10-byte and a 900-byte message produce the same wire length (bucket 1024 + 12 IV + 16 tag, + 8 counter)", "bucket edges: 4 + JSON = 1024 stays in 1024, one byte more goes to 4096; 1 200 bytes → 4096; 20 000 → 65536", "too large: JSON longer than 65 536 - 4 → throws; exactly 65 532 seals", "padding bytes altered (under a valid AEAD) → null; bad length prefix → null; off-bucket size → null", "a sync.ts 'entries' piece of CHUNK_BYTES (45 000) raw bytes seals and opens (fits the 65 536 bucket)" |
 
-### `sync.test.ts` (24)
+### `sync.test.ts` (28)
 
 | Claim | Cases |
 |---|---|
 | QR pairing | "pairing code: format, parse, garbage refused (QR only: there is no link form)", "pair via code: same 6-digit SAS on both sides, confirm stores the pairing on both", "a code is one use; a code whose address is my own is refused; cancel stores nothing", "an expired code is refused by join; an expired offer ignores a pair wire", "confirm is one decision: a second confirm throws and resets nothing; a stale confirm after unlink cannot revive the pairing" |
 | Convergence; relay sees no content | "syncNow converges both logs and the materialized state; the relay sees no plaintext and no entity id", "a third device pairs with both and all three converge" |
 | Replay, re-attribution, unlinked | "replay: re-delivering a captured entries wire changes nothing; it is consumed (acked) so the relay stops redelivering", "a wire re-attributed to another linked address, or to an unlinked one, is ignored", "a have from an unlinked device is ignored", "after unlink a wire from that device is ignored, and syncNow says not linked", "re-pairing the same two devices derives new keys: a wire captured under the earlier pairing does not open" |
+| Counters without a key | "a counter too far ahead to ever have a key is consumed, logged as such, and moves the chain nowhere" (also: no `epoch` in storage) |
+| Concurrency (one lock per peer) | "two wires handled at once cannot bring a used key back"; the distinct-counter check in "two piece streams from one peer at once both complete (the relay hands over several waiting have-answers together)" |
 | Offline | "syncNow rejects offline when the peer never answers" |
 | Persistence and crash safety | "persistence: a device recreated from its saved SyncData and key store keeps pairing, keys, log and ratchet state", "a crash before persist cannot double-apply: re-delivery after restart merges idempotently" |
+| Start-up fails closed | "a key store that cannot be read fails closed: no new keys, the record blob is untouched" |
+| Fast-forward stays inside the peer's window; past the cap re-pairing is asked for | "fast-forward is capped: unanswered tries never move the chain out of the peer's skipped-key window" |
 | Forward secrecy | "forward secrecy: no key left in a device state captured after a round opens the wires of that round" |
-| Restore needs re-pairing | "a device restored from an older backup cannot sync (its keys are gone on the peer: forward secrecy) until it pairs again" |
-| The Receive prompt | "Receive from <device>?: nothing is merged before accept; decline applies nothing and fails the waiting sync" |
+| Restore catches up without re-pairing | "a device restored from an older backup: its first sync is dropped on the peer (used counters), the next one catches up without re-pairing" |
+| The Receive prompt | "Receive from <device>?: nothing is merged before accept; decline applies nothing and fails the waiting sync", "a pending Receive prompt dies with the pairing: accept after unlink merges nothing and sends nothing; the sync clock waits for the person" |
 | Key migration | "migration: a v1 blob with the secret key moves the key into the key store and is rewritten without it" |
 | Pieces and rounds | "two piece streams from one peer at once both complete (the relay hands over several waiting have-answers together)", "a round larger than the budget is sent in parts; the next round continues where it stopped", "large logs travel in several pieces under CHUNK_BYTES each" |
 | Wiring | "register:false leaves the relay sink to the app, which can route to handle itself", "createDeviceSync refuses an address containing a separator" |

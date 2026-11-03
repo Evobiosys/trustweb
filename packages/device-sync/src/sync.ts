@@ -63,7 +63,7 @@ import { migrateSecretToKeyStore } from './keystore.ts'
 import type { KeyStore } from './keystore.ts'
 import { RecordLog } from './log.ts'
 import type { LogEntry, LogJson, Materialized, MergeReport, Op } from './log.ts'
-import { initChain, parseChainState, receiveKey, sendKey } from './ratchet.ts'
+import { MAX_SKIP, initChain, parseChainState, receiveKey, sendKey } from './ratchet.ts'
 import type { ChainState } from './ratchet.ts'
 import { openMessage, peekCtr, sealMessage } from './seal.ts'
 
@@ -79,6 +79,8 @@ export interface Pairing {
   sas: string
   linkedAt: number
   lastSyncAt: number
+  /** `send.next` the last time the peer demonstrably processed one of our wires (it answered): the base for the fast-forward cap. */
+  sendBase: number
   /**
    * Names this pairing (base64url of a hash over the pairing epoch) so an unlinked pairing's stale Confirm cannot bring it back. The epoch
    * itself (SHA-256 of the one-time secret, mixed into the pair roots) is NEVER stored: with it, the key in the key store and the peer's
@@ -232,11 +234,12 @@ function parsePairing(v: unknown): Pairing | null {
   if (
     typeof p['address'] !== 'string' || badAddress(p['address']) || typeof p['deviceId'] !== 'string' || typeof p['publicKey'] !== 'string' ||
     typeof p['name'] !== 'string' || typeof p['sas'] !== 'string' || typeof p['linkedAt'] !== 'number' || typeof p['lastSyncAt'] !== 'number' ||
+    typeof p['sendBase'] !== 'number' || !Number.isSafeInteger(p['sendBase']) || p['sendBase'] < 1 ||
     typeof p['pairId'] !== 'string' || p['pairId'] === '' || !send || !recv
   ) return null
   return {
     address: p['address'], deviceId: p['deviceId'], publicKey: p['publicKey'], name: p['name'], sas: p['sas'],
-    linkedAt: p['linkedAt'], lastSyncAt: p['lastSyncAt'], pairId: p['pairId'], send, recv,
+    linkedAt: p['linkedAt'], lastSyncAt: p['lastSyncAt'], sendBase: p['sendBase'], pairId: p['pairId'], send, recv,
   }
 }
 
@@ -349,10 +352,17 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
    * After a peer did not answer: move the sending chain forward by a step. A device restored from an older backup re-sends counters the
    * peer has already consumed (silently, as it must); jumping ahead lets it pass the peer's position within a few tries instead of one
    * try per message sent since the backup. Harmless otherwise: the receiver keeps skipped keys for exactly this (ratchet.ts MAX_SKIP).
+   * Capped: the chain never moves more than MAX_SKIP - FAST_FORWARD counters past `sendBase` (the last position the peer is known to have
+   * reached), so a run of unanswered tries over a relay that lost the wires cannot push us out of the peer's skipped-key window for good.
+   * A device restored from a backup older than that many messages has to pair again (logged; syncNow then rejects 'pair again').
    */
   async function fastForward(p: Pairing): Promise<void> {
     await locked(p.address, async () => {
       if (find(p.address) !== p) return
+      if (p.send.next + FAST_FORWARD - p.sendBase > MAX_SKIP - FAST_FORWARD) {
+        d.onLog(`Not moving further ahead of ${p.name}; if it keeps not answering, pair the two devices again`)
+        return
+      }
       let st = p.send
       for (let i = 0; i < FAST_FORWARD; i++) st = (await sendKey(st)).state
       p.send = st
@@ -497,6 +507,8 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
       return
     }
     const entries = decoded['entries']
+    p.sendBase = p.send.next // the peer answered, so it has processed what we sent so far
+    persist()
     d.onLog(`${p.name} sends ${entries.length} change(s)${acc.reply ? ' back' : ''}: waiting for Receive`)
     if (!acc.reply) waiters.get(p.address)?.pause() // the peer answered; the rest is up to the person here
     d.onIncoming(incoming(p, entries, heads, acc.reply))
@@ -544,7 +556,7 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
         if (retired.has(pairId)) throw new Error('unlinked')
         pairings = [
           ...pairings.filter((p) => p.address !== address),
-          { address, deviceId, publicKey, name, sas: roots.sas, linkedAt: now(), lastSyncAt: 0, pairId, send, recv },
+          { address, deviceId, publicKey, name, sas: roots.sas, linkedAt: now(), lastSyncAt: 0, sendBase: 1, pairId, send, recv },
         ]
         for (const key of partial.keys()) if (key.startsWith(`${address}\n`)) partial.delete(key)
         persist()
@@ -618,6 +630,11 @@ export async function createDeviceSync(d: DeviceSyncDeps): Promise<DeviceSync> {
     if (!p) throw new Error('not linked')
     const running = inflight.get(address)
     if (running) return running
+    // Beyond this the peer could not open our next wire any more (its skipped-key window): sending would only move us further away.
+    if (p.send.next - p.sendBase >= MAX_SKIP - 1) {
+      d.onLog(`${p.name} has not answered for ${p.send.next - p.sendBase} messages: pair the two devices again`)
+      throw new Error('pair again')
+    }
     const run = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined
       const answered = new Promise<SyncReport>((resolve, reject) => {
