@@ -5,6 +5,10 @@ import type { ColourTag } from './colour_tags'
 import { Ring } from './model'
 import type { Person } from './model'
 import { S } from './strings'
+import { andSep, type VisibleCategory } from './zone_visibility'
+import { editKey } from './tap_edit'
+import { nameEdit } from './ring_hover'
+import { HELLO_NAME_MAX } from './hello'
 
 export interface SmallCardDeps {
   person: Person
@@ -13,7 +17,12 @@ export interface SmallCardDeps {
   /** The defined tags this person lacks; a "+ tag" button offers them (empty: it says none are defined). */
   addableTags?: readonly ColourTag[]
   onAddTag?: (id: string) => void
-  shared: number
+  /** What the person sees of my resources, by granting category (zone_visibility.ts visibleVia). */
+  visible: { count: number; categories: readonly VisibleCategory[] }
+  /** Kind label of one resource for the inline list ("typed", "recorded"). */
+  kindOf: (item: VisibleCategory['items'][number]) => string
+  /** "Open in My Resources" under an expanded category. */
+  onOpenResources: (category: VisibleCategory) => void
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
   onOpen: () => void
   expanded?: boolean
@@ -41,6 +50,32 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
   return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-pin': '', 'aria-pressed': String(on), 'aria-label': S.cardPinAria(on, p.name), onclick: onToggle }, [on ? '📌' : '📍', ' ', S.cardPin])
 }
 
+/** "N resources are visible to them based on X, Y, and Z": each category presses open its resources inline (name and kind) with a link into My Resources. The line itself does nothing. */
+function sharesLine(d: SmallCardDeps): HTMLElement {
+  const { count, categories } = d.visible
+  const list = el('div', { class: 'card-shares-list', 'data-card-shares-list': '', hidden: true })
+  let open: string | null = null
+  const toggle = (c: VisibleCategory, btn: HTMLElement): void => {
+    open = open === c.key ? null : c.key
+    box.querySelectorAll('[data-card-shares-cat]').forEach((b) => b.setAttribute('aria-expanded', String(b === btn && open !== null)))
+    list.hidden = open === null
+    list.replaceChildren(...(open === null ? [] : [
+      ...c.items.map((i) => el('div', { class: 'meta', 'data-card-shares-item': i.id }, [i.text, ' · ', d.kindOf(i)])),
+      el('button', { class: 'btn btn-ghost btn-sm', 'data-card-shares-open': c.key, onclick: () => d.onOpenResources(c) }, [S.cardSharesOpen]),
+    ]))
+  }
+  const names: (Node | string)[] = []
+  categories.forEach((c, i) => {
+    const btn = el('button', { class: 'card-shares-cat', 'data-card-shares-cat': c.key, 'aria-expanded': 'false', onclick: () => toggle(c, btn) }, [c.label])
+    names.push(andSep(i, categories.length), btn)
+  })
+  const box = el('div', { class: 'card-shares meta', 'data-card-shares': '' }, [
+    d.person.ring === Ring.Unsorted ? S.cardSharesUnplaced : count === 0 ? S.cardShares(0, d.zone) : S.cardSharesVia(count, ''),
+    ...(d.person.ring === Ring.Unsorted || count === 0 ? [] : names),
+  ])
+  return el('div', {}, [box, list])
+}
+
 /** A compact page: name with the pin and QR at the right edge, the chat row, zone (press to move), tags as buttons (+ tag), what we share, Extended; expanded: the rest of the card below. */
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
@@ -57,6 +92,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
     el('div', { 'data-chat-row': '' }, [d.chat]),
     el('button', { class: 'card-zone', 'data-card-zone': '', 'aria-expanded': 'false', title: S.cardRingChange(d.zone), onclick: togglePicker }, [d.zone]),
     picker,
+    sharesLine(d),
     el('div', { class: 'chips', 'data-card-tags': '' }, [
       ...(d.tags.length
         ? d.tags.map((t) => el('button', { class: 'chip', 'data-card-tag': t.id, onclick: () => d.onTag(t.id) }, [t.label ?? t.id]))
@@ -64,7 +100,6 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
     ]),
     tagPicker,
-    el('button', { class: 'card-shares meta', 'data-card-shares': '', title: S.cardRingChange(d.zone), onclick: togglePicker }, [p.ring === Ring.Unsorted ? S.cardSharesUnplaced : S.cardShares(d.shared, d.zone)]),
     el('div', { class: 'card-actions' }, [
       el('button', { class: 'btn btn-electric btn-sm', 'data-card-open': p.id, 'aria-expanded': String(d.expanded === true), onclick: d.onOpen }, [d.expanded ? S.membraneCardClose : S.membraneCardOpen]),
     ]),
@@ -91,10 +126,67 @@ export function tagFilterChip(label: string, onClear: () => void): HTMLElement {
   ])
 }
 
+/** The tags of one zone: chips with an x, then "+ tag" turning into an input that suggests the defined tags (Enter adds, a new name defines one). */
+export function zoneTagsRow(zone: string, tags: readonly ColourTag[], suggest: (text: string) => readonly ColourTag[], onAdd: (name: string) => void, onRemove: (id: string) => void): HTMLElement {
+  const name = (t: ColourTag): string => t.label ?? t.id
+  const list = el('datalist', { id: 'zone-tag-options-' + zone })
+  const input = el('input', { type: 'text', class: 'input', hidden: true, 'data-zone-tag-input': zone, list: list.id, placeholder: S.zoneTagInputPlaceholder, 'aria-label': S.zoneTagInputAria, autocomplete: 'off' }) as HTMLInputElement
+  const fill = (): void => { list.replaceChildren(...suggest(input.value).map((t) => el('option', { value: name(t) }))) }
+  input.addEventListener('input', fill)
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); onAdd(input.value) } })
+  return el('div', { class: 'chips', 'data-zone-tags': zone }, [
+    ...(tags.length
+      ? tags.map((t) => el('span', { class: 'chip', 'data-zone-tag': t.id }, [name(t), el('button', { class: 'btn btn-ghost btn-sm', 'data-zone-tag-remove': t.id, 'aria-label': S.zoneTagRemoveAria(name(t)), onclick: () => onRemove(t.id) }, ['×'])]))
+      : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
+    el('button', { class: 'chip', 'data-zone-tag-add': zone, 'aria-label': S.cardTagAddAria, onclick: () => { input.hidden = false; fill(); input.focus() } }, [S.cardTagAdd]),
+    input, list,
+  ])
+}
+
 /** The names of everyone in one membrane, shown while hovering or holding its diamond. */
 export function membraneAll(zone: string, people: readonly Person[]): HTMLElement {
   return el('div', { class: 'membrane-all', 'data-membrane-all': '', role: 'status' }, [
     el('b', {}, [S.membraneAllTitle(zone)]),
     el('span', {}, [people.map((p) => p.name).join(', ')]),
+  ])
+}
+
+export interface RingCardDeps {
+  /** A name was pressed: open that person. */
+  onOpen: (id: string) => void
+  /** A name was changed (already stored on `p` by the caller); the card stays open and shows it. */
+  onRename: (p: Person, next: string) => void
+}
+
+/** Wave 29: the interactive "Everyone in <ring>" card: each name opens its person, a pencil turns the name into an input (Enter or blur saves, Esc cancels). */
+export function ringCard(zone: string, people: readonly Person[], d: RingCardDeps): HTMLElement {
+  const row = (p: Person): HTMLElement => {
+    const host = el('span', { class: 'ring-card-row', 'data-ring-card-row': p.id })
+    const show = (): void => host.replaceChildren(
+      el('button', { class: 'ring-card-name', 'data-ring-card-open': p.id, onclick: () => d.onOpen(p.id) }, [p.name]),
+      el('button', { class: 'ring-card-edit', 'data-ring-card-edit': p.id, 'aria-label': S.ringCardEditName, title: S.ringCardEditName, onclick: edit }, ['✎']),
+    )
+    const edit = (): void => {
+      const input = el('input', { class: 'field tap-edit-input', 'aria-label': S.zoneRename(p.name), maxlength: String(HELLO_NAME_MAX), 'data-ring-card-input': p.id })
+      input.value = p.name
+      let done = false
+      const finish = (how: 'save' | 'cancel'): void => {
+        if (done) return
+        done = true
+        const r = nameEdit(p.name, input.value, how)
+        if (r.kind === 'commit') d.onRename(p, r.name)
+        show()
+      }
+      input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); finish(a) } })
+      input.addEventListener('blur', () => finish('save'))
+      host.replaceChildren(input)
+      input.focus(); input.select()
+    }
+    show()
+    return host
+  }
+  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.membraneAllTitle(zone), onpointerdown: (e: Event) => { e.stopPropagation() } }, [
+    el('b', {}, [S.membraneAllTitle(zone)]),
+    ...people.map(row),
   ])
 }

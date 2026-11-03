@@ -8,7 +8,8 @@ import type { Person } from './model'
 import { Ring } from './model'
 import type { AppState } from './model'
 import { filterSection } from './trustzones_view'
-import { acquaintancesShown, communityOf, unsortedShown, zoneFor } from './trustzones'
+import { ringShown } from './rings_filter'
+import { communityOf, zoneFor } from './trustzones'
 import { ringColor } from './ring_palette'
 import { needleAt, needleHead, settleTarget, startUnpin, unpinAt } from './network_pin'
 import type { UnpinTween } from './network_pin'
@@ -84,7 +85,7 @@ export function createNetworkView(o: NetworkOptions): HTMLElement {
   const community = o.ui ? communityOf(o.ui.s) : null
   const shownIn = (p: Person): boolean => {
     const t = tierOf(p)
-    return !o.ui || (t === Ring.Acquaintance ? acquaintancesShown(o.ui.s) : t === Ring.Unsorted ? unsortedShown(o.ui.s) : true)
+    return !o.ui || t === 'outside' || ringShown(o.ui.s, t)
   }
   // The community tag lifts acquainted holders into the friends tier (as on the TrustZones web, display only).
   const lifted = (p: Person): Person => (community && tierOf(p) === Ring.Acquaintance && zoneFor(p, community) === Ring.Friend ? { ...p, ring: Ring.Friend } : p)

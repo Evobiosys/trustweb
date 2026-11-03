@@ -56,4 +56,8 @@ describe('people list by trust zone', () => {
     expect(zoneOpen(Ring.Close, new Set([Ring.Close]), false)).toBe(true)
     expect(zoneOpen(Ring.Close, new Set(), true)).toBe(true)
   })
+  it('a query filters inside the categories: the hit stays in its own zone, other zones drop out', () => {
+    const g = peopleByZone({ people }, 'dora')
+    expect(g.map((x) => [x.ring, x.people.map((y) => y.id)])).toEqual([[Ring.Intending, ['d']]])
+  })
 })

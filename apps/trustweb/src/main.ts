@@ -22,7 +22,7 @@ import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
-import { COLOUR_TAGS_EVENT, loadColourTags, tagsOf } from './colour_tags'
+import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
@@ -194,8 +194,10 @@ import { importGroup } from './import_view'
 import { openServicesImport, servicesGroup } from './services_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
-import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, sharedCount, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
-import { pinButton, restList, smallCard, tagFilterChip } from './membranes_five_view'
+import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
+import { kindKey, visibleVia } from './zone_visibility'
+import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
 import { zoneSidebar } from './trustzones_view'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
@@ -1101,6 +1103,7 @@ function go(s: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   if (s !== Screen.Web) web.resetZoom()
+  if (s !== Screen.Inventory) invOnly = null
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -1201,6 +1204,7 @@ function mountHeaderControls(): void {
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
+    : screen === Screen.People ? viewControls('people', anyone)
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1208,9 +1212,10 @@ function mountHeaderControls(): void {
     return b
   })
   const dots = screen === Screen.Chat ? right.querySelector('[data-chat-dots]') : null // the combined chat view's source menu button (messenger_combined_view.ts) rides with the views
-  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], pins, qr: [qr], settings: [gear] }
+  const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
+  const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people', anyone) : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -2167,13 +2172,22 @@ function webPageScreen(page: WebPage): Node[] {
   if (page.kind === 'more') {
     const people = s.people.filter((p) => !isBlocked(p) && !isArchived(p) && zoneFor(p, communityOf(s)) === page.ring)
     const zone = S.ringLabel[page.ring]
-    return [header(zone, { back }), el('div', { class: 'scroll' }, [restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
+    const rec = st()
+    const tagList = loadColourTags()
+    const zoneTags = zoneTagIds(rec, page.ring).flatMap((id) => tagList.filter((t) => t.id === id))
+    const zoneTagRow = zoneTagsRow(page.ring, zoneTags, (text) => suggestZoneTags(rec, tagList, page.ring, text),
+      (name) => { const out = addZoneTag(rec, tagList, page.ring, name, Date.now()); if (out.created) saveColourTags(out.tags); save(); render() },
+      (id) => { removeZoneTag(rec, page.ring, id, Date.now()); save(); render() })
+    return [header(zone, { back }), el('div', { class: 'scroll' }, [zoneTagRow, restList(wholeZone(withTag(people, tagFilter), s, Date.now()), zone, (id) => openWebPage({ kind: 'card', id }), () => addPersonSheet(page.ring))])]
   }
   const p = s.people.find((x) => x.id === page.id)
   if (!p) { webPage = null; return screenWeb() }
   const tags = loadColourTags()
   return [header(S.cardPageTitle, { back }), el('div', { class: 'scroll' }, [smallCard({
-    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags), shared: sharedCount(s, p),
+    person: p, zone: S.ringLabel[webSlot(p)], tags: tagsOf(p, tags),
+    visible: visibleVia(s.inventory ?? [], webSlot(p), tagsOf(p, tags), { zone: S.ringLabel[webSlot(p)], web: S.cardSharesWeb }),
+    kindOf: (i) => S.cardSharesKind[kindKey(i.source?.kind)],
+    onOpenResources: (c) => { invOnly = { label: c.label, ids: new Set(c.items.map((i) => i.id)) }; go(Screen.Inventory) },
     face: cardFace(p, personFace(p), { save, redraw: render, toast }),
     heading: cardNameHeading(p), expanded: cardExpanded, more: cardExpanded ? cardMore(p) : undefined,
     onOpen: toggleCardExpanded,
@@ -2269,6 +2283,8 @@ let otherViewsOpen = false
 let webViewNow: ViewKey = 'rings'
 let invSearchOpen = false
 let invQuery = ''
+/** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
+let invOnly: { label: string; ids: Set<string> } | null = null
 
 const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
 
@@ -2353,7 +2369,7 @@ function toggleExpand(expanded: boolean): void {
 /** Web and Network are remembered (WEB_VIEW_KEY); People, Dex and Contacts compact open as pages with Back. */
 function chooseView(view: ViewKey): void {
   eyeOpen = false
-  if (view === 'people') { openPeople(); return }
+  if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
@@ -2428,7 +2444,7 @@ function screenChat(): Node[] {
   const search = el('input', { class: 'field', type: 'search', placeholder: S.chatSearch, 'aria-label': S.chatSearch, 'data-chat-search': '', value: chatQuery })
   search.addEventListener('input', () => { chatQuery = search.value; body.replaceChildren(...chatListBody()) })
   return [
-    header(S.chatListTitle, { glyph: view.pill, after: view.dots }),
+    header(S.chatListTitle, { right: view.pill, after: view.dots }),
     el('div', { class: 'scroll ppl' }, [
       s.chatsHidden ? el('p', { class: 'meta', 'data-chats-hidden': '' }, [S.chatDndHint]) : null,
       view.body,
@@ -2493,7 +2509,7 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, false, extra) } })])
     : el('div', { class: 'scroll' }, [layer])
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
@@ -2561,7 +2577,7 @@ function dismissWanted(peerId: string): void {
   void curator.hide(p.id).then(archivedNotice, (e: unknown) => console.warn('archive reach-out', e))
 }
 
-function addPersonSheet(ring: Ring): void {
+function addPersonSheet(ring: Ring, presetHint = false): void {
   let picked = ring
   let busy = false
   const name = el('input', { class: 'field', placeholder: S.addNamePh, maxlength: '40', 'aria-label': S.addNamePh })
@@ -2629,6 +2645,7 @@ function addPersonSheet(ring: Ring): void {
     codeStatus,
     el('p', { class: 'meta' }, [S.addCodeHint]),
     radios,
+    ...(presetHint ? [el('p', { class: 'meta', 'data-add-preset-hint': '' }, [S.addPresetHint])] : []),
     addBtn,
     el('button', { class: 'btn btn-ghost', onclick: closeSheet }, [S.addCancel]),
   ])
@@ -6377,7 +6394,9 @@ function screenInventory(): Node[] {
     ? el('input', { class: 'field', type: 'search', placeholder: S.invSearchPh, 'aria-label': S.invSearchPh, 'data-inv-search': '', value: invQuery, oninput: (e: Event) => { invQuery = (e.target as HTMLInputElement).value; render() } })
     : null
   if (find) setTimeout(() => { find.focus(); find.setSelectionRange(invQuery.length, invQuery.length) }, 0)
-  const shown = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
+  const byQuery = invQuery.trim() ? s.inventory.filter((i) => i.text.toLowerCase().includes(invQuery.trim().toLowerCase())) : s.inventory
+  const shown = invOnly ? byQuery.filter((i) => invOnly!.ids.has(i.id)) : byQuery
+  const onlyChip = invOnly ? tagFilterChip(invOnly.label, () => { invOnly = null; render() }) : null
   const requests = el('button', { class: 'query-fab call requests-fab', 'aria-label': S.reqAria, onclick: requestsSheet }, [
     el('span', { class: 'fab-two' }, [el('span', {}, [S.reqTop]), el('span', {}, [S.reqBottom])]),
   ])
@@ -6390,6 +6409,7 @@ function screenInventory(): Node[] {
       s.testOf ? foundView(s) : null,
       el('p', { class: 'hint' }, [S.invLead]),
       find,
+      onlyChip,
       el('div', { class: 'add-row' }, [input, el('button', { class: 'btn btn-electric btn-sm', onclick: add }, [S.invAdd])]),
       s.inventory.length === 0 ? el('p', { class: 'empty' }, [S.invEmpty]) : null,
       // Jakob's sketch (10-07, #21/#22): the X top right of the item, the on/off switch below it on the right;

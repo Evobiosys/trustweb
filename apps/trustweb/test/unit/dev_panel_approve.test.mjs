@@ -35,8 +35,10 @@ describe('panel approve (wave 28)', () => {
     expect(expandFor(rows, ['c'], ['a', 'b', 'd'])).toEqual(['d'])
     expect(expandFor(rows, ['d'], ['a'])).toEqual(['a'])
   })
-  it('Walk shows only on a stored positive verdict (absent = hidden)', () => {
-    expect([undefined, false, true].map((walkOk) => walkShown({ walkOk }))).toEqual([false, false, true])
+  it('Walk shows on every row with steps; enabled only on a stored positive verdict (absent = greyed)', () => {
+    expect([undefined, false, true].map((walkOk) => walkShown({ walkOk, steps: ['x'] }))).toEqual([{ disabled: true, title: 'Walk not verified for this row yet' }, { disabled: true, title: 'Walk not verified for this row yet' }, { disabled: false, title: '' }])
+    expect(walkShown({ walkOk: true })).toBeNull()
+    expect(walkShown({ walkOk: true, steps: [] })).toBeNull()
   })
   it('the note names the preview, row, branch and ref so it pastes identifiably', () => {
     expect(noteText('tw261101_1147', rows[0])).toBe('tw261101_1147 | a | T-a | b/a@abc1234')

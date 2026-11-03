@@ -7,6 +7,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { activateKey } from './key_press'
 import type { Person } from './model'
+import { nextMapLoad } from './map_load_state'
+import type { MapLoad } from './map_load_state'
 import { clearPlace, pinGroups, placeSuggest, project, setPlace } from './place_suggest'
 import type { PersonPlace, PlaceHit } from './place_suggest'
 import { S } from './strings'
@@ -16,6 +18,8 @@ export interface MapOptions {
   openPerson: (id: string) => void
   /** Persist the record after a place was written or removed. */
   save: () => void
+  /** The People view body (ring categories) with `extra` drawn beside every person's row. */
+  peopleList: (extra: (p: Person) => Node[]) => HTMLElement
 }
 
 const W = 720
@@ -43,19 +47,33 @@ function worldPath(): Promise<string> {
   outline ??= import('./data/world_110m.json').then((m) => {
     const fc = (m.default ?? m) as unknown as { features: { geometry: Geometry }[] }
     return fc.features.map((f) => outlinePath(f.geometry)).join('')
-  })
+  }).catch((e: unknown) => { outline = null; throw e })
   return outline
 }
 
-const byPinnedThenName = (a: Person, b: Person): number => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name)
 
 export function createMapView(opts: MapOptions): HTMLElement {
-  const { people, openPerson, save } = opts
+  const { people, openPerson, save, peopleList } = opts
   const land = svg('path', { class: 'map-land', d: '' })
   const dots = svg('g', { class: 'map-dots' })
   const map = svg('svg', { class: 'map-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': S.mapAria }) as SVGSVGElement
   map.append(land, dots)
-  void worldPath().then((d) => land.setAttribute('d', d))
+
+  const notice = el('div', { class: 'map-notice', 'data-map-notice': '', role: 'status' })
+  let state: MapLoad = 'loading'
+  const show = (): void => {
+    notice.classList.toggle('map-notice-done', state === 'ready')
+    if (state === 'loading') notice.replaceChildren(S.mapLoading)
+    else if (state === 'failed') notice.replaceChildren(S.mapLoadFailed, el('button', { class: 'btn btn-sm', type: 'button', 'data-map-retry': '', onclick: () => { state = nextMapLoad(state, 'retry'); show(); load() } }, [S.mapRetry]))
+  }
+  const load = (): void => {
+    void worldPath().then(
+      (d) => { land.setAttribute('d', d); state = nextMapLoad(state, 'loaded'); show() },
+      () => { state = nextMapLoad(state, 'error'); show() },
+    )
+  }
+  show()
+  load()
 
   const drawDots = (): void => {
     dots.replaceChildren(...pinGroups(people).flatMap((g) => {
@@ -71,13 +89,8 @@ export function createMapView(opts: MapOptions): HTMLElement {
   }
   drawDots()
 
-  const rows = el('div', { class: 'map-rows' })
-  const fill = (query: string): void => {
-    const q = query.trim().toLocaleLowerCase()
-    rows.replaceChildren(...[...people].sort(byPinnedThenName).filter((p) => !q || p.name.toLocaleLowerCase().includes(q)).map(personRow))
-  }
-
-  function personRow(p: Person): HTMLElement {
+  /** The place box of one person: type a place, pick a suggestion, undo. Rides beside the person's row in the People view. */
+  function placeEditor(p: Person): Node[] {
     const input = el('input', { class: 'field map-place', type: 'text', 'data-map-place': p.id, placeholder: S.mapPlacePh, 'aria-label': S.mapPlaceAria(p.name), value: p.place?.name ?? '', autocomplete: 'off' }) as HTMLInputElement
     const suggest = el('div', { class: 'map-sug' })
     const undo = el('button', { class: 'btn btn-ghost btn-sm', 'data-map-undo': p.id }, [S.mapUndo])
@@ -102,21 +115,12 @@ export function createMapView(opts: MapOptions): HTMLElement {
       if (first) apply(first)
       else if (!input.value.trim() && p.place) apply(undefined)
     })
-    return el('div', { class: 'map-row', 'data-map-row': p.id }, [
-      el('button', { class: 'link map-name', onclick: () => openPerson(p.id) }, [p.name]),
-      input,
-      undo,
-      suggest,
-    ])
+    return [input, undo, suggest]
   }
-  fill('')
-
-  const filter = el('input', { class: 'field net-search', type: 'search', placeholder: S.mapFilterPh, 'aria-label': S.mapFilterPh, 'data-map-filter': '' }) as HTMLInputElement
-  filter.addEventListener('input', () => fill(filter.value))
   return el('div', { class: 'map-view', 'data-map-view': '' }, [
-    map as unknown as Node,
+    el('div', { class: 'map-stage' }, [map as unknown as Node, notice]),
     el('p', { class: 'meta map-credit' }, [S.mapCredit]),
-    filter,
-    rows,
+    // Wave 29: the flat 'Find someone' list is the People view (ring categories); each row keeps its place box.
+    peopleList(placeEditor),
   ])
 }

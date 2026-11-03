@@ -1,7 +1,7 @@
 /** Dev preview overlay: disabled boxes and toggle cascade. */
 import { readyToGo as readyToGoSource } from '../../dev_preview_rules.mjs'
 import { approveMergeRoute, mergeStatusFile } from '../../dev_preview_rules.mjs'
-import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
+import { ensureLoaded, remindOpenStore, searchRows, compatLine, compatHint, hintParts, conflictParts, mergeHead, mergeResume, mergeResult, panelDone, approveGate, prGate, testLine, verdictAfter, shownVerdict, pillPress, selectAll, allApproved, allLoaded, approvedKeys, loadedKeys, unapproved, reminderText, pendingCount, pendingText, applyStamp, applyStuck, autoApply, assemblyMoved, shouldReload, reloadMark, scrollStore, RELOAD_GAP_MS, APPROVE_HINT, APPROVE_WAVE_LABEL, APPROVE_WAVE_AND_CONTINUE_LABEL, cascaded, ciDiagnostics, diagnosticsFor, ghBin, ciLine, typedValue, collapseStore, confirmText, descendants, devLabel, devUrl, needsHint, parseStep, personalApprove, prMerged, prRunning, readyToGo, rowPlan, setMap, stepText, readSeen, sections, seenState, tapped, tapSeen, toggled, tree } from '../../src/dev_preview_rules.ts'
 
 const f = (key, requires = [], checked = true) => ({ key, branch: 'wave7/' + key, title: 'T-' + key, requires, checked })
 const set = [f('events'), f('event-link', ['events']), f('deep', ['event-link']), f('overlay')]
@@ -330,9 +330,35 @@ describe('approve (merge to main) rules', () => {
     expect(reminderText(list)).toBe('2 loaded, not yet approved: T-a, T-b')
     expect(reminderText([g('a', true, 'merge'), g('d', false, null)])).toBe('')
   })
-  it('the box head says DONE (class ok) once the released step ended the flow, IN PROGRESS before', () => {
+  it('the box head says DONE (class ok) once the released step ended the flow, FAILED / CANCELLED after a run that ended without a merge, IN PROGRESS before', () => {
     expect(mergeHead('released')).toEqual({ text: 'DONE', ok: true })
-    for (const step of ['tests', 'merging', 'release-pending', 'failed']) expect(mergeHead(step)).toEqual({ text: 'IN PROGRESS', ok: false })
+    expect(mergeHead('release-pending')).toEqual({ text: 'MERGED, RELEASE PENDING', ok: true })
+    for (const step of ['failed', 'checks-failed']) expect(mergeHead(step)).toEqual({ text: 'FAILED', ok: false })
+    expect(mergeHead('cancelled')).toEqual({ text: 'CANCELLED', ok: false })
+    for (const step of ['tests', 'merging', 'checks']) expect(mergeHead(step)).toEqual({ text: 'IN PROGRESS', ok: false })
+  })
+  describe('merge box after a reload (Jakob 2026-11-03: the result vanished into the default buttons; a run always ends in a success or failure button)', () => {
+    const t0 = Date.parse('2026-11-03T12:00:00Z')
+    const at = (min) => new Date(t0 - min * 60e3).toISOString()
+    it('an ended run within a day shows its result, whatever commit the page was built from', () => {
+      expect(mergeResume({ step: 'checks-failed', updated: at(5), sha: 'f062cdc4' }, t0)).toBe('result')
+      expect(mergeResume({ step: 'released', updated: at(600) }, t0)).toBe('result')
+      expect(mergeResume({ step: 'cancelled', updated: at(1) }, t0)).toBe('result')
+      expect(mergeResume({ step: 'failed', updated: at(1500) }, t0)).toBe('none')
+    })
+    it('a run still going is polled for an hour, then counts as dead; no status file = nothing', () => {
+      expect(mergeResume({ step: 'tests', updated: at(2) }, t0)).toBe('poll')
+      expect(mergeResume({ step: 'checks', updated: at(90) }, t0)).toBe('none')
+      expect(mergeResume({ step: 'none' }, t0)).toBe('none')
+      expect(mergeResume({ step: '' }, t0)).toBe('none')
+    })
+    it('the result button: green success, red failure, cancelled neither', () => {
+      expect(mergeResult('released')).toEqual({ text: 'Success', ok: true })
+      expect(mergeResult('release-pending')).toEqual({ text: 'Merged, release pending', ok: true })
+      expect(mergeResult('checks-failed')).toEqual({ text: 'Failed', ok: false })
+      expect(mergeResult('failed')).toEqual({ text: 'Failed', ok: false })
+      expect(mergeResult('cancelled')).toEqual({ text: 'Cancelled', ok: null })
+    })
   })
   it('the hint under Approve says what happens and never asks for a test run first', () => {
     expect(APPROVE_HINT).toBe('Touch ID, then the tests run here; green = pushed, merged and released. Red = nothing leaves this Mac.')

@@ -953,6 +953,8 @@ export interface AppState {
   shares?: import('./share_sink/share_lines').ShareLine[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
+  /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
+  zoneTags?: Record<string, { ids: string[]; stamp: number }>
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
@@ -1003,7 +1005,7 @@ export interface AppState {
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
-  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean }
+  uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle
   /** My own messenger handles (Meet shows my Signal / Matrix code). Leaves this phone only to the owner's own linked devices, sealed (sync_core.ts). */

@@ -151,6 +151,11 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
+.ring-card{position:absolute; z-index:8; max-width:80%; max-height:60%; overflow:auto; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:12px; color:#3a1d00; display:flex; flex-direction:column; gap:2px}
+.ring-card-row{display:flex; align-items:center; gap:6px}
+.ring-card-name{padding:0; border:0; background:none; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; text-align:left}
+.ring-card-edit{padding:0 2px; border:0; background:none; color:var(--muted-grey,#8a8f94); font-size:11px; cursor:pointer}
+.ring-card-row .tap-edit-input{font-size:12px; padding:1px 4px}
 .ring-more{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:1.5px solid var(--rc,#8a8f94); border-radius:50%; background:#fff; color:var(--rc,#8a8f94); font-size:11px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .membrane-all{position:absolute; left:50%; transform:translateX(-50%); z-index:7; max-width:90%; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:11px; color:var(--ink); display:flex; flex-direction:column; gap:2px; pointer-events:none}
 .add-node{flex:none; width:28px; height:28px; padding:0; border:0; border-radius:50%; background:var(--electric,#12A8E3); color:#fff; font-size:18px; line-height:1; cursor:pointer}
@@ -205,6 +210,9 @@ textarea.field{resize:vertical; line-height:1.5}
 .map-dot circle{fill:var(--electric,#3a6cf0)}
 .map-dot text{font-size:9px; fill:var(--ink)}
 .map-credit{font-size:11px; margin:0}
+.map-stage{position:relative}
+.map-notice{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; background:color-mix(in srgb, var(--card) 80%, transparent); border-radius:16px; transition:opacity .4s}
+.map-notice.map-notice-done{opacity:0; pointer-events:none}
 .map-row{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 3.5rem; gap:6px 8px; align-items:center}
 .map-name{background:none; padding:0; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .map-sug{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px}
@@ -991,8 +999,10 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .chat-menu-pin.on{opacity:1}
 /* Wave 28: the source pill, its menu, and the combined list (a C-shaped bracket on the left edge in the source colour; side by side from 900px). */
 .chat-source-wrap{display:inline-block; margin-left:8px; vertical-align:middle}
-.chat-source-pill{display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); background:var(--card); color:inherit; border-radius:999px; padding:4px 10px; font:inherit; font-size:13px; cursor:pointer}
-@media (max-width:480px){.hdr [data-chat-dots]{display:none} .chat-source-pill{white-space:nowrap} .hdr-left:has(.chat-source-pill) h2{display:none}} /* the pill opens the same list and names the view; five header buttons leave no room for the title too */
+.hdr .chat-source-wrap{position:relative; display:inline-flex; flex-direction:column; align-items:center; margin:0}
+.chat-switch-name{max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; line-height:1.1; margin-top:2px}
+.hdr .chat-source-menu{left:auto; right:0}
+@media (max-width:480px){.hdr [data-chat-dots]{display:none}}
 .chat-source-menu{min-width:240px}
 .chat-menu-item.grey .chat-menu-open{opacity:.55}
 .chat-menu-item small{font-size:11px}
@@ -1290,3 +1300,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
   .zones-split{flex-direction:row}
   .zone-side{flex:0 0 260px; max-height:none}
 }
+.card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}

@@ -1,5 +1,6 @@
 /** Dev-only preview overlay rules (pure): which boxes are disabled and what a toggle cascades to. Interface: previews-interface.txt. */
 export { ciDiagnostics, diagnosticsFor, ghBin, MERGE_DONE, readyToGo } from '../dev_preview_rules.mjs'
+import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
@@ -98,6 +99,36 @@ export function stepCardPlace(phone: Box | null, target: Box | undefined, cardH:
   const below = target.bottom + 8
   const top = below + cardH <= vh - 8 ? below : Math.max(8, target.top - 8 - cardH)
   return { left, width, top }
+}
+
+/** A dragged card's top-left, kept inside the viewport. */
+export function clampCard(left: number, top: number, w: number, h: number, vw: number, vh: number): { left: number; top: number } {
+  return { left: Math.max(0, Math.min(left, vw - w)), top: Math.max(0, Math.min(top, vh - h)) }
+}
+
+/** Where the owner dragged the step card (localStorage: per origin, kept across reloads); clear() = back to the bottom. Unavailable storage = not remembered. */
+export function stepCardPosStore(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>): { get(): { left: number; top: number } | null; set(p: { left: number; top: number }): void; clear(): void } {
+  const key = 'twp-step-pos'
+  return {
+    get: () => {
+      try {
+        const p = JSON.parse(storage.getItem(key) ?? 'null') as { left?: unknown; top?: unknown } | null
+        return p && typeof p.left === 'number' && typeof p.top === 'number' ? { left: p.left, top: p.top } : null
+      } catch { return null }
+    },
+    set: (p) => { try { storage.setItem(key, JSON.stringify(p)) } catch { /* not remembered */ } },
+    clear: () => { try { storage.removeItem(key) } catch { /* not remembered */ } },
+  }
+}
+
+/** Remembers that a "?" press (not the owner) collapsed the panel: press(wasCollapsed) says whether to collapse; end() says whether to expand again; owner() = the owner changed the fold meanwhile. */
+export function stepFold(): { press(wasCollapsed: boolean): boolean; end(): boolean; owner(): void } {
+  let ours = false
+  return {
+    press: (wasCollapsed) => { ours = !wasCollapsed; return ours },
+    end: () => { const was = ours; ours = false; return was },
+    owner: () => { ours = false },
+  }
 }
 
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
@@ -230,8 +261,9 @@ export function expandFor(features: PreviewFeature[], keys: string[], foldedKeys
   return foldedKeys.filter((k) => !open.has(k))
 }
 
-/** Walk is offered only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk). */
-export const walkShown = (f: { walkOk?: boolean }): boolean => f.walkOk === true
+/** Walk shows on every row with steps (null = none); it is enabled only on a stored positive verdict (a one-time check by a Haiku subagent or pc24, kept in the registry as walkOk), else greyed with a title. */
+export const walkShown = (f: { walkOk?: boolean; steps?: unknown[] }): { disabled: boolean; title: string } | null =>
+  !f.steps?.length ? null : f.walkOk === true ? { disabled: false, title: '' } : { disabled: true, title: 'Walk not verified for this row yet' }
 
 /** What the note button copies: the preview, the row, its title, branch and ref, to paste into the pi session. */
 export const noteText = (id: string, f: PreviewFeature): string => `${id} | ${f.key} | ${f.title} | ${f.branch}@${f.ref ?? '?'}`
@@ -314,8 +346,29 @@ export const loadOpenStore = (storage: Pick<Storage, 'getItem' | 'setItem'>, id:
 export const applyStamp = (p: { pending?: boolean; assembled?: { at: string; set?: string[] } | null; features: PreviewFeature[] }): string => JSON.stringify([p.pending, p.assembled?.at, p.assembled?.set, loadedKeys(p.features)])
 export const applyStuck = (since: number, now: number): boolean => now - since > 90e3
 
-/** The merge box's head: the released step ends the flow for good, so DONE (green, class ok); every other step is still IN PROGRESS. */
-export const mergeHead = (step: string): { text: string; ok: boolean } => step === 'released' ? { text: 'DONE', ok: true } : { text: 'IN PROGRESS', ok: false }
+/** The ended run's verdict for the merge box's big button: Success (green) once merged, Failed (red) after a failed or checks-failed run, Cancelled (neither) after a cancelled Touch ID. */
+export const mergeResult = (step: string): { text: string; ok: boolean | null } =>
+  step === 'released' ? { text: 'Success', ok: true }
+    : step === 'release-pending' ? { text: 'Merged, release pending', ok: true }
+    : step === 'cancelled' ? { text: 'Cancelled', ok: null }
+    : { text: 'Failed', ok: false }
+
+/** The merge box's head: DONE (green, class ok) once released, MERGED, RELEASE PENDING (green) while the slot catches up, FAILED / CANCELLED (red head) after a run that ended without a merge, IN PROGRESS while it runs. */
+export const mergeHead = (step: string): { text: string; ok: boolean } => {
+  if (!MERGE_DONE.includes(step)) return { text: 'IN PROGRESS', ok: false }
+  const r = mergeResult(step)
+  return { text: step === 'released' ? 'DONE' : r.text.toUpperCase(), ok: r.ok === true }
+}
+
+/** After a reload: what the box does with the status file of the last Approve wave run (Jakob 2026-11-03: the result vanished into the default buttons
+ *  because the page was built from another commit than the run started on; the assembly and the tests move HEAD and restart vite).
+ *  'result' = an ended run within a day: its success or failure button shows, whatever commit; 'poll' = a run still going (touched within the hour); 'none' = nothing, or too old. */
+export const mergeResume = (j: { step: string; updated?: string }, now: number): 'poll' | 'result' | 'none' => {
+  if (!j.step || j.step === 'none') return 'none'
+  const age = now - Date.parse(j.updated ?? '')
+  if (MERGE_DONE.includes(j.step)) return age < 86_400e3 ? 'result' : 'none'
+  return age < 3_600e3 ? 'poll' : 'none'
+}
 
 /** The left panel greys out and stops reacting once Approve wave has been pressed and the run did not end in failure or cancel. */
 export const panelDone = (step: string): boolean => !['', 'none', 'cancelled', 'failed', 'checks-failed'].includes(step)
