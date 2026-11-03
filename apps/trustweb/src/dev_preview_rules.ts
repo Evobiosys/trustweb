@@ -101,6 +101,36 @@ export function stepCardPlace(phone: Box | null, target: Box | undefined, cardH:
   return { left, width, top }
 }
 
+/** A dragged card's top-left, kept inside the viewport. */
+export function clampCard(left: number, top: number, w: number, h: number, vw: number, vh: number): { left: number; top: number } {
+  return { left: Math.max(0, Math.min(left, vw - w)), top: Math.max(0, Math.min(top, vh - h)) }
+}
+
+/** Where the owner dragged the step card (localStorage: per origin, kept across reloads); clear() = back to the bottom. Unavailable storage = not remembered. */
+export function stepCardPosStore(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>): { get(): { left: number; top: number } | null; set(p: { left: number; top: number }): void; clear(): void } {
+  const key = 'twp-step-pos'
+  return {
+    get: () => {
+      try {
+        const p = JSON.parse(storage.getItem(key) ?? 'null') as { left?: unknown; top?: unknown } | null
+        return p && typeof p.left === 'number' && typeof p.top === 'number' ? { left: p.left, top: p.top } : null
+      } catch { return null }
+    },
+    set: (p) => { try { storage.setItem(key, JSON.stringify(p)) } catch { /* not remembered */ } },
+    clear: () => { try { storage.removeItem(key) } catch { /* not remembered */ } },
+  }
+}
+
+/** Remembers that a "?" press (not the owner) collapsed the panel: press(wasCollapsed) says whether to collapse; end() says whether to expand again; owner() = the owner changed the fold meanwhile. */
+export function stepFold(): { press(wasCollapsed: boolean): boolean; end(): boolean; owner(): void } {
+  let ours = false
+  return {
+    press: (wasCollapsed) => { ours = !wasCollapsed; return ours },
+    end: () => { const was = ours; ours = false; return was },
+    owner: () => { ours = false },
+  }
+}
+
 /** The highlighted row after a tap on `key`: the same row again switches it off. */
 export function tapped(lit: string | null, key: string): string | null {
   return lit === key ? null : key
