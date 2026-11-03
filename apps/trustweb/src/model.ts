@@ -987,7 +987,9 @@ export interface AppState {
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
-  uiPins?: { views: string[] }
+  uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
+  /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
+  qrProfileOption?: boolean
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Local; rides the device sync with the other settings. */
   uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; open?: Ring[]; filterOpen?: boolean; community?: string }
   /** Absent: QueryStyle.Call. */

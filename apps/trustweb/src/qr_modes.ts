@@ -20,7 +20,7 @@ export type CommunityPermission = 'public' | 'invite' | 'request'
  * The "profile" option puts the first messenger link typed on the person's card (Person.links, ONLY ME) into the code, which can be
  * a phone number. Hidden until a real acquaintance-level profile exists (review finding 4); the code path stays for then.
  */
-export const QR_PROFILE_OPTION = false
+export const QR_PROFILE_OPTION = false // the default; Settings > Advanced can turn it on (AppState.qrProfileOption, wave 28)
 
 export const parseIntroducePermission = (v: unknown): IntroducePermission => INTRODUCE_PERMISSIONS.find((p) => p === v) ?? 'public'
 
@@ -55,7 +55,7 @@ const withMode = (link: string, m: string, body?: unknown): string => {
   return `${base}#${hash ? `${hash}&` : ''}m=${m}&x=${toBase64Url(JSON.stringify(body))}`
 }
 
-export function mode(ctx: QrContext, on: readonly QrOption['id'][] = []): QrMode {
+export function mode(ctx: QrContext, on: readonly QrOption['id'][] = [], profileOption: boolean = QR_PROFILE_OPTION): QrMode {
   const done = (payload: string, options: QrOption['id'][] = []): QrMode => ({
     kind: ctx.kind, payload, options: options.map((id) => ({ id, on: on.includes(id) })), chosen: options.filter((id) => on.includes(id)),
   })
@@ -63,7 +63,7 @@ export function mode(ctx: QrContext, on: readonly QrOption['id'][] = []): QrMode
     case 'web-root': return done(ctx.link)
     case 'person': {
       const perm = ctx.introducePermission ?? 'public'
-      const offered: QrOption['id'][] = perm === 'ask-first' ? [] : [...(ctx.username ? ['username' as const] : []), ...(QR_PROFILE_OPTION && perm === 'one-ring-closer' && ctx.profile ? ['profile' as const] : [])]
+      const offered: QrOption['id'][] = perm === 'ask-first' ? [] : [...(ctx.username ? ['username' as const] : []), ...(profileOption && perm === 'one-ring-closer' && ctx.profile ? ['profile' as const] : [])]
       const m = done(ctx.link, offered)
       if (!m.chosen.length) return m
       return { ...m, payload: withMode(ctx.link, 'person', { ...(m.chosen.includes('username') ? { u: ctx.username } : {}), ...(m.chosen.includes('profile') ? { p: ctx.profile } : {}) }) }
