@@ -69,6 +69,9 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+      # packages/device-sync (docs/design/device-sync-e2ee.md): zero-dependency package, tests run on node:test (Node >= 22.18 strips types itself).
+      - name: device-sync package (typecheck + unit tests)
+        run: pnpm --filter @resource-web/device-sync typecheck && pnpm --filter @resource-web/device-sync test
       - name: DLP restore drill tool, its CI wrapper and the workflow contract (node:test, stdlib only)
         run: node --test services/trustweb-backup/test/restore_drill.test.mjs services/trustweb-backup/test/restore_drill_ci.test.mjs services/trustweb-backup/test/dlp_drill_workflow.test.mjs
   # Full workspace gates from a clean clone (cloud/green-gates, 2026-11-02): what `pnpm typecheck && pnpm lint && pnpm test`
