@@ -5,13 +5,10 @@ import type { ColourTag } from './colour_tags'
 import { Ring } from './model'
 import type { Person } from './model'
 import { S } from './strings'
-<<<<<<< HEAD
 import { andSep, type VisibleCategory } from './zone_visibility'
-=======
 import { editKey } from './tap_edit'
 import { nameEdit } from './ring_hover'
 import { HELLO_NAME_MAX } from './hello'
->>>>>>> wave29/ring-hover-overlay
 
 export interface SmallCardDeps {
   person: Person
@@ -126,6 +123,23 @@ export function restList(people: readonly Person[], zone: string, onPick: (id: s
 export function tagFilterChip(label: string, onClear: () => void): HTMLElement {
   return el('div', { class: 'chips tag-filter', 'data-tag-filter': '' }, [
     el('span', { class: 'chip' }, [S.tagFilterOn(label), el('button', { class: 'btn btn-ghost btn-sm', 'data-tag-filter-clear': '', 'aria-label': S.tagFilterClear, onclick: onClear }, ['×'])]),
+  ])
+}
+
+/** The tags of one zone: chips with an x, then "+ tag" turning into an input that suggests the defined tags (Enter adds, a new name defines one). */
+export function zoneTagsRow(zone: string, tags: readonly ColourTag[], suggest: (text: string) => readonly ColourTag[], onAdd: (name: string) => void, onRemove: (id: string) => void): HTMLElement {
+  const name = (t: ColourTag): string => t.label ?? t.id
+  const list = el('datalist', { id: 'zone-tag-options-' + zone })
+  const input = el('input', { type: 'text', class: 'input', hidden: true, 'data-zone-tag-input': zone, list: list.id, placeholder: S.zoneTagInputPlaceholder, 'aria-label': S.zoneTagInputAria, autocomplete: 'off' }) as HTMLInputElement
+  const fill = (): void => { list.replaceChildren(...suggest(input.value).map((t) => el('option', { value: name(t) }))) }
+  input.addEventListener('input', fill)
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); onAdd(input.value) } })
+  return el('div', { class: 'chips', 'data-zone-tags': zone }, [
+    ...(tags.length
+      ? tags.map((t) => el('span', { class: 'chip', 'data-zone-tag': t.id }, [name(t), el('button', { class: 'btn btn-ghost btn-sm', 'data-zone-tag-remove': t.id, 'aria-label': S.zoneTagRemoveAria(name(t)), onclick: () => onRemove(t.id) }, ['×'])]))
+      : [el('span', { class: 'meta' }, [S.cardTagsNone])]),
+    el('button', { class: 'chip', 'data-zone-tag-add': zone, 'aria-label': S.cardTagAddAria, onclick: () => { input.hidden = false; fill(); input.focus() } }, [S.cardTagAdd]),
+    input, list,
   ])
 }
 
