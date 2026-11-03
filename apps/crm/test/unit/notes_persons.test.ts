@@ -1,11 +1,12 @@
 // @ts-nocheck  (fs/os/path: the crm tsconfig carries no node types; vitest runs this in node)
-import { mkdtempSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isAppState } from '../../src/model'
 import { chunks, listNotes, mergePeople, noteDate, parseAnswer } from '../../scripts/notes_read_persons.mjs'
-import { loadReadings, merge, tanaLinksMarkdown, withoutLocal, withoutTana } from '../../scripts/notes_persons_to_record.mjs'
+import { firstNameKey, loadDecisions, loadReadings, merge, offerKey, tanaLinksMarkdown, withoutLocal, withoutTana, writeIfChanged } from '../../scripts/notes_persons_to_record.mjs'
 
 const line = (id: string, text: string, extra = {}) => ({ id, text, tag: 'note', audience: 'me', status: 'current', notedAt: 1, checkedAt: 1, ...extra })
 const seed = () => ({
@@ -65,7 +66,7 @@ describe('reader: pure parts', () => {
 })
 
 describe('converter', () => {
-  const { record, stats, matched } = merge(seed(), readings())
+  const { record, stats, matched, offers } = merge(seed(), readings())
   it('a full name joins its Tana person, keeps the tana- id, gains note lines with local provenance and the note date', () => {
     const mira = record.people.find((p) => p.id === 'tana-abc')!
     expect(mira.lines.map((l) => l.text)).toEqual(['ring: derived', 'Runs a repair café in Graz', 'Offered her 3D printer'])
@@ -75,13 +76,15 @@ describe('converter', () => {
     expect(mira.metAt).toBe(1_700_000_000_000)
     expect(stats.joinedExisting).toBe(1)
   })
-  it('a single first name never joins a Tana person: it becomes its own local person', () => {
+  it('a single first name never joins a Tana person and creates nobody: it becomes a join offer (owner 2026-11-03)', () => {
     expect(record.people.find((p) => p.id === 'tana-def')!.lines).toHaveLength(1)
-    const tobias = record.people.find((p) => p.name === 'Tobias')!
-    expect(tobias.id).toMatch(/^local-[0-9a-f]{12}$/)
-    expect(tobias.ring).toBe('unsorted')
-    expect(tobias.context).toBe('Call about OTF')
-    expect(stats.singleNames).toBe(1)
+    expect(record.people.find((p) => p.name === 'Tobias')).toBeUndefined()
+    expect(offers).toEqual([{
+      key: offerKey('Tobias', 'journals/2026_07_11.md'), name: 'Tobias', path: 'journals/2026_07_11.md', date: '2026-07-11', context: 'Call about OTF',
+      facts: ['Wants the Dec deadline confirmed'], candidates: [{ id: 'tana-def', name: 'Tobias Rainer' }],
+    }])
+    expect(offers[0].key).toMatch(/^[0-9a-f]{16}$/)
+    expect([stats.singleNames, stats.offers, stats.joinedByDecision, stats.dismissed]).toEqual([1, 1, 0, 0])
   })
   it('a new person collects lines across notes without duplicates; metAt = explicit met date or earliest note', () => {
     const lena = record.people.find((p) => p.name === 'Lena Berger')!
@@ -94,7 +97,7 @@ describe('converter', () => {
   it('low confidence is dropped and counted; the record stays a valid AppState', () => {
     expect(record.people.find((p) => p.name === 'Jonas')).toBeUndefined()
     expect(stats.belowConfidence).toBe(1)
-    expect(stats.newPersons).toBe(4)
+    expect(stats.newPersons).toBe(3)
     expect(record.people.find((p) => p.name === 'Olga Nowak')!.lines).toEqual([])
     expect(record.people.find((p) => p.name === 'Pat Name-Only')).toBeUndefined()
     expect(isAppState(record)).toBe(true)
@@ -111,7 +114,7 @@ describe('converter', () => {
   })
   it('withoutTana keeps the notes half of a person in both sources as a local person and drops Tana-only ones', () => {
     const r = withoutTana(record)
-    expect(r.people.map((p) => p.name).sort()).toEqual(['Lena Berger', 'Mira Hollenstein', 'Olga Nowak', 'Tobias'])
+    expect(r.people.map((p) => p.name).sort()).toEqual(['Lena Berger', 'Mira Hollenstein', 'Olga Nowak'])
     const mira = r.people.find((p) => p.name === 'Mira Hollenstein')!
     expect(mira.id).toMatch(/^local-/)
     expect(mira.lines.map((l) => l.text)).toEqual(['Runs a repair café in Graz', 'Offered her 3D printer'])
@@ -127,13 +130,111 @@ describe('converter', () => {
   })
 })
 
+describe('converter: join offers and decisions (owner 2026-11-03)', () => {
+  const TOBIAS = offerKey('Tobias', 'journals/2026_07_11.md')
+  const at = '2026-11-03T09:00:00.000Z'
+  it('join: the mention\'s facts become lines on the chosen person, local provenance and the note date; one shot; tana-links knows', () => {
+    const r = merge(seed(), readings(), { decisions: [{ key: TOBIAS, decision: 'join', into: 'tana-def', at }] })
+    const t = r.record.people.find((p) => p.id === 'tana-def')!
+    expect(t.lines.map((l) => l.text)).toEqual(['Reviews OTF', 'Wants the Dec deadline confirmed'])
+    expect(t.lines[1].id).toMatch(/^local-[0-9a-f]{12}-[0-9a-f]{8}-0$/)
+    expect(t.lines[1].source).toEqual({ kind: 'local', path: 'journals/2026_07_11.md', reader: 'claude:haiku' })
+    expect(t.lines[1].notedAt).toBe(Date.parse('2026-07-11T12:00:00Z'))
+    expect(r.offers).toEqual([])
+    expect([r.stats.offers, r.stats.joinedByDecision, r.stats.newPersons]).toEqual([0, 1, 3])
+    expect(tanaLinksMarkdown(r.matched, readings())).toContain('- [[Tobias Rainer]] — Tana: https://app.tana.inc?nodeid=def — in: [[2026_07_11]] (2026-07-11)')
+    expect(merge(r.record, readings(), { decisions: [{ key: TOBIAS, decision: 'join', into: 'tana-def', at }] }).record).toEqual(r.record)
+    expect(isAppState(r.record)).toBe(true)
+  })
+  it('join into a local person the same run makes (a later note) works too', () => {
+    const lenaId = merge(seed(), readings()).record.people.find((p) => p.name === 'Lena Berger')!.id
+    const r = merge(seed(), readings(), { decisions: [{ key: TOBIAS, decision: 'join', into: lenaId, at }] })
+    expect(r.record.people.find((p) => p.id === lenaId)!.lines.map((l) => l.text)).toContain('Wants the Dec deadline confirmed')
+    expect(r.offers).toEqual([])
+  })
+  it('dismiss drops the mention; a join into an id the record no longer has is offered again', () => {
+    const d = merge(seed(), readings(), { decisions: [{ key: TOBIAS, decision: 'dismiss', at }] })
+    expect([d.offers.length, d.stats.dismissed]).toEqual([0, 1])
+    expect(d.record.people.find((p) => p.id === 'tana-def')!.lines).toHaveLength(1)
+    const g = merge(seed(), readings(), { decisions: [{ key: TOBIAS, decision: 'join', into: 'tana-gone', at }] })
+    expect(g.offers.map((o) => o.name)).toEqual(['Tobias'])
+    expect(g.stats.joinedByDecision).toBe(0)
+  })
+  it('one offer per name and note (facts merged); first names match with diacritics folded; no candidate is still an offer', () => {
+    const s = seed()
+    s.people.push({ id: 'tana-zoe', name: 'Zoë Brandt', context: '', ring: 'unsorted', metAt: 1, lines: [], fields: {} } as never)
+    const r = merge(s, [{ path: 'journals/2026_08_01.md', date: '2026-08-01', people: [
+      { name: 'Zoe', aliases: [], context: '', facts: ['Bakes bread'], met: '', confidence: 0.9 },
+      { name: 'zoe', aliases: [], context: 'At the market', facts: ['Bakes bread', 'Has a van'], met: '', confidence: 0.9 },
+      { name: 'Ines', aliases: [], context: 'Neighbour', facts: [], met: '', confidence: 0.9 },
+    ] }] as never)
+    expect(r.offers.map((o) => [o.name, o.context, o.facts, o.candidates])).toEqual([
+      ['Zoe', 'At the market', ['Bakes bread', 'Has a van'], [{ id: 'tana-zoe', name: 'Zoë Brandt' }]],
+      ['Ines', 'Neighbour', [], []],
+    ])
+    expect(r.stats.singleNames).toBe(3)
+    expect(r.stats.offers).toBe(2)
+  })
+  it('firstNameKey: first word, lowercased, diacritics folded, ß as ss', () => {
+    expect(firstNameKey('Zoë Brandt')).toBe('zoe')
+    expect(firstNameKey('  zoe ')).toBe('zoe')
+    expect(firstNameKey('Joß Weber')).toBe('joss')
+    expect(firstNameKey('')).toBe('')
+  })
+  it('loadDecisions: last line per key wins; malformed lines and a join without into are ignored', () => {
+    const text = [
+      JSON.stringify({ key: 'a', decision: 'dismiss', at }),
+      'not json',
+      JSON.stringify({ key: 'b', decision: 'maybe', at }),
+      JSON.stringify({ key: 'c', decision: 'join', at }),
+      JSON.stringify({ key: 'a', decision: 'join', into: 'tana-x', at }),
+      '',
+    ].join('\n')
+    expect(loadDecisions(text)).toEqual([{ key: 'a', decision: 'join', into: 'tana-x', at }])
+    expect(loadDecisions('')).toEqual([])
+  })
+  it('writeIfChanged: no rewrite and no backup when the bytes are the same; a backup only before a real change', () => {
+    const d = mkdtempSync(path.join(tmpdir(), 'out-'))
+    const out = path.join(d, 'record.json')
+    const now = Date.UTC(2026, 10, 3, 9, 15)
+    expect(writeIfChanged(out, 'a\n', { now })).toBe('written')
+    expect(writeIfChanged(out, 'a\n', { now })).toBe('unchanged')
+    expect(readdirSync(d)).toEqual(['record.json'])
+    expect(writeIfChanged(out, 'b\n', { now })).toBe('written')
+    expect(readdirSync(d).sort()).toEqual(['record.json', 'record.json.bak.20261103T091500'])
+    expect(readFileSync(`${out}.bak.20261103T091500`, 'utf8')).toBe('a\n')
+  })
+  it('CLI: --decisions honoured, --offers written every run (pending only), a second identical run says unchanged', () => {
+    const d = mkdtempSync(path.join(tmpdir(), 'cli-'))
+    const f = (n: string) => path.join(d, n)
+    writeFileSync(f('people.jsonl'), readings().map((r) => JSON.stringify(r)).join('\n') + '\n')
+    writeFileSync(f('seed.json'), JSON.stringify(seed()))
+    const script = path.join(path.dirname(new URL(import.meta.url).pathname), '../../scripts/notes_persons_to_record.mjs')
+    const run = () => spawnSync(process.execPath, [script, f('people.jsonl'), f('seed.json'), '--merge', f('seed.json'), '--decisions', f('decisions.jsonl'), '--offers', f('offers.json')], { encoding: 'utf8' })
+    const one = run()
+    expect(one.status).toBe(0)
+    expect(one.stdout).toContain('offers 1')
+    const o = JSON.parse(readFileSync(f('offers.json'), 'utf8'))
+    expect([o.v, typeof o.generatedAt, o.offers.map((x) => x.name)]).toEqual([1, 'string', ['Tobias']])
+    const two = run()
+    expect(two.stdout).toContain('unchanged')
+    expect(readdirSync(d).filter((n) => n.includes('.bak.'))).toHaveLength(1)
+    writeFileSync(f('decisions.jsonl'), JSON.stringify({ key: o.offers[0].key, decision: 'dismiss', at: '2026-11-03T09:00:00.000Z' }) + '\n')
+    const three = run()
+    expect(three.stdout).toContain('offers 0')
+    expect(JSON.parse(readFileSync(f('offers.json'), 'utf8')).offers).toEqual([])
+    expect(existsSync(f('seed.json'))).toBe(true)
+  })
+})
+
 describe('notes_sync pull', () => {
   it('chains the reader (resumable) and the converter on the same seed, work files beside the vault assets', async () => {
     const { pullArgs } = await import('../../scripts/notes_sync.mjs')
     const a = pullArgs({ vault: '/v', seed: '/s/record.json', reader: 'ollama:qwen3.5:4b', include: 'journals,pages', me: 'Me' })
     expect(a.readings).toBe('/v/assets/local-notes/people-ollama-qwen3.5-4b.jsonl')
     expect(a.read).toEqual(['/v', a.readings, '--reader', 'ollama:qwen3.5:4b', '--include', 'journals,pages'])
-    expect(a.convert).toEqual([a.readings, '/s/record.json', '--merge', '/s/record.json', '--tana-links', '/v/assets/local-notes/tana-links.md', '--me', 'Me'])
+    expect(a.convert).toEqual([a.readings, '/s/record.json', '--merge', '/s/record.json', '--tana-links', '/v/assets/local-notes/tana-links.md',
+      '--decisions', '/v/assets/local-notes/join-decisions.jsonl', '--offers', '/v/assets/local-notes/join-offers.json', '--me', 'Me'])
   })
   it('the lock sits in the work dir; --skip-folders goes to the reader', async () => {
     const { pullArgs } = await import('../../scripts/notes_sync.mjs')

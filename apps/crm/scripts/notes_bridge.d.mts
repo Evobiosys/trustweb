@@ -11,6 +11,8 @@ export function loadReadings(vault: string): Reading[]
 export function safePath(vault: string, rel: unknown): string | null
 export function push(vault: string, people: Person[], o?: { everyone?: boolean; now?: number }): PushResult
 export function changes(vault: string, people: Person[]): Change[]
+export function pendingOffers(offersText: string, decisionsText: string): { offers: import('./notes_persons_to_record.mjs').JoinOffer[]; decided: number }
+export function decisionLine(b: unknown, now?: number): import('./notes_persons_to_record.mjs').JoinDecision | null
 export function allowed(req: { headers: Record<string, string | undefined>; method?: string }, cfg: BridgeConfig): 'host' | 'origin' | 'token' | null
 export function watchVault(cfg: BridgeConfig): { changedAt: number; own: Map<string, number> }
 export function serve(cfg: BridgeConfig, onListen?: (server: import('node:http').Server) => void): import('node:http').Server
