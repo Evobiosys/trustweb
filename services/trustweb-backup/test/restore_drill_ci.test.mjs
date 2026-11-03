@@ -8,7 +8,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { diffDirs, renderSummary, redact, CHECKS } from '../restore_drill_ci.mjs'
+import { diffDirs, renderSummary, redact, runCiDrill, CHECKS } from '../restore_drill_ci.mjs'
 
 const TOOL = fileURLToPath(new URL('../restore_drill_ci.mjs', import.meta.url))
 const HEX64 = /[0-9a-f]{64}/i
@@ -220,5 +220,26 @@ test('CLI without --work: temp work dir is removed, the report is printed as the
     assert.equal(report.ok, true)
     assert.deepEqual(await fs.readdir(tmp), [], 'temp work dir removed')
     assert.ok(!HEX64.test(r.stdout))
+  })
+})
+
+// Lifted from cloud/dlp-ci-drill (#60): a fake clock proves a restore over the RTO fails the drill, without sleeping.
+test('a restore that exceeds the RTO is a problem and fails the drill (fake clock, no sleeping)', async () => {
+  await inTemp(async (root) => {
+    let t = 0
+    const clock = () => (t += 5 * 60 * 1000)
+    const r = await runCiDrill({ work: path.join(root, 'work'), clock, rtoMs: 60 * 1000 })
+    assert.equal(r.ok, false)
+    assert.ok(r.problems.some((p) => /RTO/.test(p)), r.problems.join('|'))
+    assert.equal(r.restoreMs, 5 * 60 * 1000)
+    assert.deepEqual(r.rto, { targetMs: 60 * 1000, withinTarget: false })
+  })
+})
+
+test('a restore within the RTO leaves the drill green', async () => {
+  await inTemp(async (root) => {
+    const r = await runCiDrill({ work: path.join(root, 'work'), clock: () => 0 })
+    assert.equal(r.ok, true, r.problems.join('|'))
+    assert.equal(r.rto.withinTarget, true)
   })
 })
