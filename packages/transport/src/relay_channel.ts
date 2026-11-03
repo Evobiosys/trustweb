@@ -42,6 +42,14 @@
 //   wire to the callback, so a clean reconnect only re-drains whatever the
 //   relay still has queued (i.e. whatever never got acked).
 //
+// Sender auth (relay_send_auth.ts, v2): every ingress POST is signed for the
+// audience `new URL(endpoint).origin`, so a captured request cannot be
+// replayed to a different relay. With `deviceKey` the send (and the drain
+// handshake) is signed by a per-device key the DID's root key granted
+// (did_key_records.ts), and the `kid` travels with it. A relay that answers
+// 401 "stale" with a `Date` header gets ONE re-signed retry with this
+// device's clock offset applied (F4) — never more than one per attempt.
+//
 // Reconnect: each endpoint's drain connection reconnects independently with
 // capped exponential backoff on any drop (mirrors
 // apps/mobile-ui/src/api_client_live.js's reconnect: 1s -> 2s -> 4s -> ...
@@ -57,6 +65,18 @@ function b64u(bytes: Uint8Array): string {
 }
 function unb64u(s: string): Uint8Array {
   return new Uint8Array(Buffer.from(s, "base64url"));
+}
+
+/**
+ * F4: the ms to add to the local clock when a relay refused a send as `stale` and told us its time in a `Date`
+ * header; undefined when the response is anything else (or the header is missing/unparseable).
+ */
+function staleClockOffset(res: Response, body: { reason?: string }, localNow: number): number | undefined {
+  if (res.status !== 401 || typeof body.reason !== "string" || !body.reason.includes("stale")) return undefined;
+  const date = res.headers.get("date");
+  if (date === null) return undefined;
+  const serverNow = Date.parse(date);
+  return Number.isFinite(serverNow) ? serverNow - localNow : undefined;
 }
 
 export interface BackoffOpts {
@@ -87,6 +107,14 @@ export interface RelayChannelOptions {
   ingressPath?: string;
   /** Drain WS path. Defaults to "/relay/drain" (RelayServer's default). */
   drainPath?: string;
+  /**
+   * Per-device signing key granted by this identity's root key (did_key_records.ts#signDeviceGrant). When set, sends
+   * and the drain handshake are signed with it and carry its `kid` (z6Mk… multibase public key); the relay resolves it
+   * through its DidKeyRegistry. Absent: the DID's own root signing key, no kid.
+   */
+  deviceKey?: { kid: string; secretKey: Uint8Array };
+  /** This device's clock (ms epoch) used for send timestamps. Injectable for tests; defaults to Date.now. */
+  now?: () => number;
 }
 
 /** Wire shape validated loosely at the JSON layer, matching relay_server.ts's own ClientMessage convention. */
@@ -120,7 +148,8 @@ class DrainConnection {
     private readonly wsUrl: string,
     private readonly identity: Identity,
     private readonly onWire: (wire: string) => void,
-    private readonly backoffOpts: ResolvedBackoff
+    private readonly backoffOpts: ResolvedBackoff,
+    private readonly deviceKey?: { kid: string; secretKey: Uint8Array }
   ) {
     this.backoff = backoffOpts.baseMs;
   }
@@ -149,9 +178,18 @@ class DrainConnection {
       }
       if (msg.type === "challenge" && typeof msg.nonce === "string") {
         // Prove ownership of THIS identity's DID: sign the server-issued
-        // nonce with our own Ed25519 signing key (relay_server.ts's 6b).
-        const sig = ed25519.sign(unb64u(msg.nonce), this.identity.signing.secretKey);
-        ws.send(JSON.stringify({ type: "auth", did: this.identity.did, sig: b64u(sig) }));
+        // nonce with our own Ed25519 signing key (relay_server.ts's 6b) —
+        // or with the granted device key, naming it by `kid`.
+        const secretKey = this.deviceKey?.secretKey ?? this.identity.signing.secretKey;
+        const sig = ed25519.sign(unb64u(msg.nonce), secretKey);
+        ws.send(
+          JSON.stringify({
+            type: "auth",
+            did: this.identity.did,
+            sig: b64u(sig),
+            ...(this.deviceKey ? { kid: this.deviceKey.kid } : {}),
+          })
+        );
         return;
       }
       if (msg.type === "auth_ok") {
@@ -229,6 +267,8 @@ export class RelayChannel implements DeliveryChannel {
   private readonly ingressPath: string;
   private readonly drainPath: string;
   private readonly backoffOpts: ResolvedBackoff;
+  private readonly deviceKey: { kid: string; secretKey: Uint8Array } | undefined;
+  private readonly now: () => number;
   private drains: DrainConnection[] = [];
   private sink: ((wire: string) => void) | null = null;
 
@@ -244,6 +284,8 @@ export class RelayChannel implements DeliveryChannel {
       baseMs: opts.reconnect?.baseMs ?? DEFAULT_BACKOFF_BASE_MS,
       maxMs: opts.reconnect?.maxMs ?? DEFAULT_BACKOFF_MAX_MS,
     };
+    this.deviceKey = opts.deviceKey;
+    this.now = opts.now ?? Date.now;
   }
 
   /**
@@ -269,14 +311,34 @@ export class RelayChannel implements DeliveryChannel {
     );
   }
 
+  /** v2 send-auth headers for `wire`, bound to `aud` (the ingress origin). */
+  private signFor(wire: string, aud: string, now: number): Record<string, string> {
+    return signSend(this.identity, wire, {
+      aud,
+      now,
+      ...(this.deviceKey ? { kid: this.deviceKey.kid, deviceSecretKey: this.deviceKey.secretKey } : {}),
+    });
+  }
+
   private async submitOnce(endpoint: string, wire: string): Promise<"accepted" | "rejected"> {
     const url = new URL(this.ingressPath, endpoint).toString();
+    // The audience is the origin we actually POST to (lower-case host, default port dropped) — exactly what the
+    // relay compares against its configured audiences or its own Host header.
+    const aud = new URL(url).origin;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.ackTimeoutMs);
     try {
+      const post = (headers: Record<string, string>) => fetch(url, { method: "POST", body: wire, headers, signal: controller.signal });
       // Sender authentication (relay_send_auth.ts): a fresh signature per attempt, so each endpoint sees its own nonce.
-      const res = await fetch(url, { method: "POST", body: wire, headers: signSend(this.identity, wire), signal: controller.signal });
-      const body = (await res.json().catch(() => ({}))) as { routed?: string };
+      let res = await post(this.signFor(wire, aud, this.now()));
+      let body = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
+      // F4: our clock is off by more than the relay's window. Take the relay's own clock from its `Date` header and
+      // re-sign ONCE with the offset applied; a second "stale" is final.
+      const offset = staleClockOffset(res, body, this.now());
+      if (offset !== undefined) {
+        res = await post(this.signFor(wire, aud, this.now() + offset));
+        body = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string };
+      }
       // The mediator's success response is a single non-informative
       // `{ routed: "accepted" }` (relay_server.ts finding 1) — it deliberately
       // no longer distinguishes live vs queued, and deliver() only needs
@@ -300,7 +362,7 @@ export class RelayChannel implements DeliveryChannel {
     this.sink = cb;
     this.drains = this.relayEndpoints.map((endpoint) => {
       const wsUrl = httpBaseToWsUrl(endpoint, this.drainPath);
-      const conn = new DrainConnection(wsUrl, this.identity, (wire) => this.sink?.(wire), this.backoffOpts);
+      const conn = new DrainConnection(wsUrl, this.identity, (wire) => this.sink?.(wire), this.backoffOpts, this.deviceKey);
       conn.start();
       return conn;
     });
