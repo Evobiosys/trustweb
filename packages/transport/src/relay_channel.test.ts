@@ -2,7 +2,7 @@
 // client<->server round-trips against a live RelayServer instance, mirroring
 // relay_server.test.ts's "real listeners, poll-don't-assert-immediately"
 // discipline.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
@@ -13,6 +13,9 @@ import { ENVELOPE_TYPE, DidCommTransport } from "./didcomm_transport.js";
 import { ENVELOPE_FIXTURES } from "./test_support/envelope_fixtures.js";
 import { RelayServer } from "./relay_server.js";
 import { RelayChannel } from "./relay_channel.js";
+import { SEND_AUTH_HEADERS } from "./relay_send_auth.js";
+import { DidKeyRegistry } from "./did_key_registry.js";
+import { signDeviceGrant } from "./did_key_records.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -27,6 +30,7 @@ const rawSockets: WebSocket[] = [];
 const plainHttpServers: HttpServer[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const ws of rawSockets.splice(0)) {
     if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.terminate();
   }
@@ -312,5 +316,132 @@ describe("RelayChannel — onInbound() drain handshake", () => {
     // wire1 must not have been redelivered (it was acked before the drop).
     expect(received.filter((w) => w === wire1)).toHaveLength(1);
     expect(received.filter((w) => w === wire2)).toHaveLength(1);
+  });
+});
+
+// ---- v2 sender auth (SPEC "B"): the channel signs for the relay's origin, recovers from a skewed clock once, and can
+// sign with a granted device key. Every test here runs against a relay booted with senderAuth "required", so an
+// accepted delivery IS proof the relay verified the v2 signature (aud derived from the Host header, which fetch sets
+// to 127.0.0.1:<port>).
+interface SeenPost {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/** Wraps the real fetch so a test can count ingress POSTs and inspect their headers; the request still goes out. */
+function spyOnIngress(): SeenPost[] {
+  const seen: SeenPost[] = [];
+  const realFetch = globalThis.fetch;
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    if (init?.method === "POST") {
+      seen.push({ url: String(input), headers: { ...((init.headers as Record<string, string> | undefined) ?? {}) } });
+    }
+    return realFetch(input, init);
+  });
+  return seen;
+}
+
+async function bootRequiredRelay(opts: { keyRegistry?: DidKeyRegistry } = {}): Promise<{ relay: RelayServer; endpoint: string }> {
+  const relay = new RelayServer({ senderAuth: "required", ...(opts.keyRegistry ? { keyRegistry: opts.keyRegistry } : {}) });
+  servers.push(relay);
+  const { port } = await relay.listen(0, "127.0.0.1");
+  return { relay, endpoint: `http://127.0.0.1:${port}` };
+}
+
+async function drainOne(endpoint: string, identity: Identity): Promise<string> {
+  const drain = openRawDrain(endpoint);
+  await waitForOpen(drain.ws);
+  await authenticateRaw(drain, identity);
+  await waitFor(() => drain.messages.some((m) => m.type === "wire"));
+  return drain.messages.find((m) => m.type === "wire")!.wire as string;
+}
+
+describe("RelayChannel — v2 sender auth", () => {
+  it("delivers to a relay that REQUIRES sender auth, signing for the endpoint's origin", async () => {
+    const anna = createIdentity("http://anna.example/didcomm");
+    const ben = createIdentity("http://ben.example/didcomm");
+    const { endpoint } = await bootRequiredRelay();
+    const seen = spyOnIngress();
+
+    const channel = new RelayChannel(anna, { relayEndpoints: [endpoint] });
+    channels.push(channel);
+    const wire = buildWire(anna, ben, "v2-required-1");
+    await expect(channel.deliver(ben.did, wire)).resolves.toBeUndefined();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.headers[SEND_AUTH_HEADERS.aud]).toBe(endpoint);
+    expect(seen[0]!.headers[SEND_AUTH_HEADERS.did]).toBe(anna.did);
+    expect(seen[0]!.headers[SEND_AUTH_HEADERS.kid]).toBeUndefined();
+    expect(await drainOne(endpoint, ben)).toBe(wire);
+  });
+
+  it("a sender whose clock is 10 minutes slow still delivers: one 401 stale, then ONE re-signed retry using the relay's Date header", async () => {
+    const anna = createIdentity("http://anna.example/didcomm");
+    const ben = createIdentity("http://ben.example/didcomm");
+    const { endpoint } = await bootRequiredRelay();
+    const seen = spyOnIngress();
+
+    const skewMs = 10 * 60_000;
+    const channel = new RelayChannel(anna, { relayEndpoints: [endpoint], now: () => Date.now() - skewMs });
+    channels.push(channel);
+    const wire = buildWire(anna, ben, "v2-skewed-1");
+    await expect(channel.deliver(ben.did, wire)).resolves.toBeUndefined();
+
+    expect(seen).toHaveLength(2);
+    const firstTs = Number(seen[0]!.headers[SEND_AUTH_HEADERS.ts]);
+    const retryTs = Number(seen[1]!.headers[SEND_AUTH_HEADERS.ts]);
+    // the retry moved forward by ~the skew (Date has 1 s resolution)
+    expect(retryTs - firstTs).toBeGreaterThan(skewMs - 5_000);
+    expect(seen[1]!.headers[SEND_AUTH_HEADERS.nonce]).not.toBe(seen[0]!.headers[SEND_AUTH_HEADERS.nonce]);
+    expect(await drainOne(endpoint, ben)).toBe(wire);
+  });
+
+  it("a stale refusal without a Date header is not retried (no blind loop)", async () => {
+    const anna = createIdentity("http://anna.example/didcomm");
+    const ben = createIdentity("http://ben.example/didcomm");
+    // A plain server that always answers like a relay refusing a stale send, but without a Date header.
+    let posts = 0;
+    const staleServer = createHttpServer((req, res) => {
+      posts++;
+      req.resume();
+      res.sendDate = false;
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ routed: "rejected", reason: "sender authentication failed: stale" }));
+    });
+    plainHttpServers.push(staleServer);
+    await new Promise<void>((r) => staleServer.listen(0, "127.0.0.1", () => r()));
+    const port = (staleServer.address() as AddressInfo).port;
+
+    const channel = new RelayChannel(anna, { relayEndpoints: [`http://127.0.0.1:${port}`] });
+    channels.push(channel);
+    await expect(channel.deliver(ben.did, buildWire(anna, ben, "stale-no-date"))).rejects.toThrow();
+    expect(posts).toBe(1);
+  });
+
+  it("a channel with a granted device key sends x-tw-relay-kid and the relay (with a key registry) accepts it", async () => {
+    const anna = createIdentity("http://anna.example/didcomm");
+    const ben = createIdentity("http://ben.example/didcomm");
+    const deviceSecret = ed25519.utils.randomSecretKey();
+    const device = { secretKey: deviceSecret, publicKey: ed25519.getPublicKey(deviceSecret) };
+    const grant = signDeviceGrant(anna, device, {});
+
+    const keyRegistry = new DidKeyRegistry();
+    expect(keyRegistry.apply(grant)).toMatchObject({ ok: true });
+    const { endpoint } = await bootRequiredRelay({ keyRegistry });
+    const seen = spyOnIngress();
+
+    const channel = new RelayChannel(anna, { relayEndpoints: [endpoint], deviceKey: { kid: grant.kid, secretKey: deviceSecret } });
+    channels.push(channel);
+    const wire = buildWire(anna, ben, "v2-device-1");
+    await expect(channel.deliver(ben.did, wire)).resolves.toBeUndefined();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.headers[SEND_AUTH_HEADERS.kid]).toBe(grant.kid);
+    expect(await drainOne(endpoint, ben)).toBe(wire);
+
+    // The same device key without its kid is just a wrong root signature: refused.
+    const impostor = new RelayChannel({ ...anna, signing: device }, { relayEndpoints: [endpoint] });
+    channels.push(impostor);
+    await expect(impostor.deliver(ben.did, buildWire(anna, ben, "v2-device-2"))).rejects.toThrow();
   });
 });

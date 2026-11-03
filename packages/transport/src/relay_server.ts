@@ -10,15 +10,27 @@
 //   packMessage — {typ,alg,epk,nonce,ciphertext,to}) to decide where the
 //   wire goes. The ciphertext is never touched, never decrypted, and the
 //   wire is never parsed as a protocol Envelope — this relay cannot read
-//   plaintext even if it wanted to.
+//   plaintext even if it wanted to. submit() itself is the unauthenticated
+//   in-process core; the HTTP path (ingress(), POST /relay/send) first
+//   checks the SENDER's per-DID signature (relay_send_auth.ts, v2: bound to
+//   this relay's audience, replay-protected by a nonce store) according to
+//   `senderAuth` — "optional" by default during the transition, so unsigned
+//   sends still pass there; only "required" makes ingress authenticated.
 //
 //   egress (6b/6c) — an authenticated, long-lived WebSocket "drain": a
 //   recipient MUST prove DID ownership (Ed25519-sign a server-issued,
-//   single-use nonce with the DID's did:peer:2 signing key) before any
-//   queued wire is streamed to them. A signature that doesn't verify
-//   against the CLAIMED did's key is rejected outright — the socket is
-//   closed, nothing is queued or leaked, and the relay never associates
-//   that connection with any DID's queue.
+//   single-use nonce with the DID's did:peer:2 signing key, or with a device
+//   key the DID granted) before any queued wire is streamed to them. A
+//   signature that doesn't verify against the CLAIMED did's key is rejected
+//   outright — the socket is closed, nothing is queued or leaked, and the
+//   relay never associates that connection with any DID's queue.
+//
+// Key rotation / revocation (F5/F6, optional `keyRegistry`): POST /relay/keys
+// applies the self-authenticating records of did_key_records.ts to a
+// DidKeyRegistry, which both send auth and drain auth consult. A rotated or
+// revoked DID can neither send nor drain; a successor's drain also receives
+// the mail held for (and later sent to) every DID that rotated into it.
+// Without a registry, a DID's key is the one inside its did:peer:2 string.
 //
 // Design note on "forward immediately, else enqueue" (6a's requirement):
 // this implementation ALWAYS persists first (queueStore.enqueue), then
@@ -42,12 +54,21 @@ import { createServer as createHttpServer, type IncomingMessage, type Server as 
 import { WebSocketServer, WebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { randomBytes } from "@noble/hashes/utils.js";
-import { resolveDidPeer } from "./did_identity.js";
 import { InMemoryRelayQueueStore, MAX_HOLD_HORIZON_MS, type RelayQueueStore } from "./relay_queue_store.js";
 import type { PushSubscriptionStore } from "./push_store.js";
 import { isApnsTarget, parsePushSubscription, sendWake, type PushSubscriptionJson, type VapidKeys, type WakeOutcome } from "./web_push.js";
 import { sendApns, type ApnsConfig, type ApnsTarget } from "./apns_push.js";
-import { SendAuthVerifier, hasSendAuthHeaders, type SendAuthHeaders, type SenderAuthMode } from "./relay_send_auth.js";
+import {
+  DEFAULT_KEY_POLICY,
+  SendAuthVerifier,
+  hasSendAuthHeaders,
+  type KeyLookup,
+  type SendAuthHeaders,
+  type SendNonceStore,
+  type SenderAuthMode,
+} from "./relay_send_auth.js";
+import type { DidKeyRegistry } from "./did_key_registry.js";
+import { parseKeyRecord } from "./did_key_records.js";
 
 function b64u(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64url");
@@ -57,7 +78,7 @@ function unb64u(s: string): Uint8Array {
 }
 
 // Ingress result. DELIBERATELY non-informative on success: a single
-// `{ routed: "accepted" }` crosses the wire back to an (unauthenticated)
+// `{ routed: "accepted" }` crosses the wire back to a (possibly unauthenticated)
 // submitter whether the wire was delivered live to a connected recipient or
 // queued for an offline one, and carries NO queue id or recipient DID.
 //
@@ -91,9 +112,10 @@ const ACCEPTED: SubmitResult = { routed: "accepted" };
 const AUTH_DEADLINE_MS = 5_000;
 
 /**
- * Hard cap on a single accepted wire (raw bytes). DoS hardening: ingress is
- * unauthenticated store-and-forward (by design — see file header), so without
- * a cap anyone could push arbitrary amounts of data into this process.
+ * Hard cap on a single accepted wire (raw bytes). DoS hardening: submit() is
+ * unauthenticated store-and-forward, and even authenticated ingress only says
+ * WHO sent (see file header), so without a cap anyone could push arbitrary
+ * amounts of data into this process.
  *
  * ENFORCED IN TWO PLACES (finding 2 — the cap was previously dead on the
  * shipped path): (1) `submit()` itself rejects an over-cap `rawWire` BEFORE
@@ -112,8 +134,7 @@ const AUTH_DEADLINE_MS = 5_000;
 const MAX_WIRE_BYTES = 128 * 1024;
 
 /**
- * Per-recipient queue-depth cap. Bounds queue-poisoning: an unauthenticated
- * submitter (or a flood of them) cannot grow one DID's held-mail queue without
+ * Per-recipient queue-depth cap. Bounds queue-poisoning: a submitter (or a flood of them) cannot grow one DID's held-mail queue without
  * limit — the (N+1)th undelivered wire for a DID already holding this many is
  * rejected (submit → "rejected"), never silently dropping already-queued mail.
  * 1000 undelivered wires for a single offline recipient is far beyond any
@@ -130,6 +151,16 @@ const MAX_QUEUE_PER_DID = 1000;
  * practice) — a generous alpha ceiling that still refuses an unbounded flood.
  */
 const MAX_QUEUE_GLOBAL = 100_000;
+
+/** Cap on a POST /relay/keys body: a key record is a few hundred bytes; two did:peer:2 strings and two signatures at most. */
+const MAX_KEY_RECORD_BYTES = 16 * 1024;
+const KEY_RECORD_PATH = "/relay/keys";
+
+/** What keyRecord() answers (POST /relay/keys). */
+export interface KeyRecordResult {
+  status: number;
+  body: { ok: boolean; applied?: boolean; code?: string };
+}
 
 export interface RelayServerOptions {
   /** Persistence for undelivered wires. Defaults to an in-memory store (lost on restart — pass a SqliteRelayQueueStore for production use). */
@@ -149,13 +180,24 @@ export interface RelayServerOptions {
   /** Web Push wake-ups (wave 11). Absent: the relay never pushes, phones are reached by their open drain only. */
   push?: RelayPushOptions;
   /**
-   * Sender authentication on ingress (relay_send_auth.ts). "required" (default): every send needs a valid per-DID
-   * signature. "optional": unsigned sends pass (staged rollout of old clients), but a send that carries credentials
-   * must verify. "off": legacy open ingress.
+   * Sender authentication on ingress (relay_send_auth.ts). "optional" (default, transition): unsigned sends pass, but a
+   * send that carries credentials must verify. "required": every send needs a valid per-DID signature. "off": legacy
+   * open ingress.
    */
   senderAuth?: SenderAuthMode;
   /** Clock-skew / replay window for signed sends in ms. Defaults to 5 minutes. */
   senderAuthWindowMs?: number;
+  /**
+   * Origins a v2 signature's `aud` may name (e.g. ["https://relay.example"]) — set this behind a proxy, where the Host
+   * the relay sees is not the origin clients post to. Unset: `aud`'s host must equal the request's Host header.
+   */
+  senderAuthAudiences?: string[];
+  /** Accept legacy v1 signatures (not bound to a relay). Default: true in "optional" mode, false in "required". */
+  senderAuthAllowV1?: boolean;
+  /** Replay cache for signed sends. Default in-memory (a restart reopens the window); pass a SqliteSendNonceStore to persist. */
+  senderNonceStore?: SendNonceStore;
+  /** Key rotation / revocation / device keys (did_key_registry.ts). Enables POST /relay/keys; consulted by send AND drain auth. */
+  keyRegistry?: DidKeyRegistry;
   /** Authorisation hook, called only for a verified sender DID. Return false to refuse it (403). Default: any authentic DID may send. */
   isAllowedSender?: (senderDid: string) => boolean;
 }
@@ -193,6 +235,10 @@ interface ConnState {
   peek?: boolean;
   /** Single-use challenge; cleared after the first auth attempt (success or failure) so it can never be replayed. */
   nonce?: string;
+  /** Device key the drain authenticated with (registry only); undefined = the DID's root key. */
+  kid?: string;
+  /** Every DID whose queue this socket drains: `did` plus, with a registry, every DID that rotated into it. */
+  aliases?: string[];
   /** Queue ids already pushed on this socket, awaiting ack — avoids resending on every flush() while a delivery is in flight. */
   sentPending: Set<string>;
   isAlive: boolean;
@@ -206,6 +252,8 @@ interface ClientMessage {
   type?: unknown;
   did?: unknown;
   sig?: unknown;
+  /** Optional device key id on `auth` (registry only): the signature is made with that granted device key. */
+  kid?: unknown;
   ids?: unknown;
   subscription?: unknown;
   /** Wave 11: `auth` with `peek: true` reads the queue once without becoming the DID's drain (the service worker). */
@@ -224,6 +272,7 @@ export class RelayServer {
   private readonly senderAuth: SenderAuthMode;
   private readonly senderVerifier: SendAuthVerifier;
   private readonly isAllowedSender: ((senderDid: string) => boolean) | null;
+  private readonly keyRegistry: DidKeyRegistry | null;
   /** DID -> when its last wake went out (push coalescing). */
   private readonly lastWake = new Map<string, number>();
   /** DIDs with an ack check pending (a wire flushed to an open drain, waiting PUSH_ACK_WAIT_MS before waking). */
@@ -246,7 +295,14 @@ export class RelayServer {
     this.maxQueueGlobal = opts.maxQueueGlobal ?? MAX_QUEUE_GLOBAL;
     this.push = opts.push ?? null;
     this.senderAuth = opts.senderAuth ?? "optional";
-    this.senderVerifier = new SendAuthVerifier({ windowMs: opts.senderAuthWindowMs });
+    this.keyRegistry = opts.keyRegistry ?? null;
+    this.senderVerifier = new SendAuthVerifier({
+      windowMs: opts.senderAuthWindowMs,
+      audiences: opts.senderAuthAudiences,
+      allowV1: opts.senderAuthAllowV1 ?? this.senderAuth === "optional",
+      keyPolicy: opts.keyRegistry,
+      nonceStore: opts.senderNonceStore,
+    });
     this.isAllowedSender = opts.isAllowedSender ?? null;
   }
 
@@ -333,7 +389,7 @@ export class RelayServer {
     }
     if (this.queueStore.total() >= this.maxQueueGlobal) {
       // TrustWeb review 6h: with a long hold (RELAY_QUEUE_HOLD_MS), wires for recipients that never come back (a reset phone, a demo
-      // persona) would fill the relay for good, and an unauthenticated flood would shut it for everyone, for good. Under that pressure
+      // persona) would fill the relay for good, and a flood (unsigned in "optional" mode, or from freshly minted DIDs) would shut it for everyone, for good. Under that pressure
       // the wires older than the shared horizon go first, as they always did before the long hold; recent mail is never dropped.
       this.queueStore.prune(Date.now(), MAX_HOLD_HORIZON_MS);
       if (this.queueStore.total() >= this.maxQueueGlobal) {
@@ -353,6 +409,62 @@ export class RelayServer {
     return ACCEPTED;
   }
 
+  // ---- F5/F6: key records -------------------------------------------------
+
+  /**
+   * POST /relay/keys: apply one self-authenticating key record (did_key_records.ts) to the registry. 200
+   * {ok:true, applied} on success (applied:false = this exact record was already applied), else the registry's
+   * status/code (400/401/409), 413 for an oversize body, 503 `no_registry` when this relay keeps no registry.
+   * An applied rotate/revoke closes the live drain of the DID it retires; a device_revoke closes drains that
+   * authenticated with that device key. Never throws.
+   */
+  keyRecord(body: string): KeyRecordResult {
+    const registry = this.keyRegistry;
+    if (!registry) return { status: 503, body: { ok: false, code: "no_registry" } };
+    if (Buffer.byteLength(body, "utf8") > MAX_KEY_RECORD_BYTES) return { status: 413, body: { ok: false, code: "too_large" } };
+    const result = registry.apply(body);
+    if (!result.ok) return { status: result.status, body: { ok: false, code: result.code } };
+    if (result.applied) {
+      const record = parseKeyRecord(body);
+      if (record) this.closeRetiredDrains(record.did, record.type === "device_revoke" ? record.kid : undefined);
+      if (record?.type === "rotate") this.adoptPredecessors(record.successorDid);
+    }
+    return { status: 200, body: { ok: true, applied: result.applied } };
+  }
+
+  /** A successor already draining when its rotation lands takes over the retired DIDs' queues at once. */
+  private adoptPredecessors(successorDid: string): void {
+    const ws = this.liveDrains.get(successorDid);
+    const state = ws ? this.connState.get(ws) : undefined;
+    if (!ws || !state || state.did !== successorDid || !this.keyRegistry) return;
+    const known = new Set(state.aliases ?? [successorDid]);
+    const added = this.keyRegistry.predecessors(successorDid).filter((d) => !known.has(d));
+    if (added.length === 0) return;
+    state.aliases = [...known, ...added];
+    for (const alias of added) {
+      const prior = this.liveDrains.get(alias);
+      if (prior && prior !== ws) prior.close();
+      this.liveDrains.set(alias, ws);
+    }
+    for (const alias of added) this.flush(alias);
+  }
+
+  /** Close every live drain that authenticated as `did` (only those using device key `kid`, when given). */
+  private closeRetiredDrains(did: string, kid: string | undefined): void {
+    const retired = new Set<WebSocket>();
+    for (const ws of this.liveDrains.values()) {
+      const state = this.connState.get(ws);
+      if (state?.did !== did) continue;
+      if (kid !== undefined && state.kid !== kid) continue;
+      retired.add(ws);
+    }
+    for (const ws of retired) {
+      const state = this.connState.get(ws);
+      if (state) this.dropLiveAliases(ws, state);
+      ws.close();
+    }
+  }
+
   // ---- wave 11: push wake-ups --------------------------------------------
 
   /** A drain is open but may belong to a frozen tab: wake the phone if the queue still holds something after a short wait. */
@@ -367,9 +479,11 @@ export class RelayServer {
   }
 
   /** One contentless wake for `toDid`, at most once per coalescing window; a dead subscription is dropped. */
-  private async wake(toDid: string): Promise<void> {
+  private async wake(addressedDid: string): Promise<void> {
     const push = this.push;
     if (!push) return;
+    // mail for a DID that rotated away wakes the successor's phone (whose drain reads it)
+    const toDid = this.keyRegistry ? this.keyRegistry.canonical(addressedDid) : addressedDid;
     const sub = push.store.get(toDid);
     if (!sub) return;
     const now = Date.now();
@@ -480,11 +594,17 @@ export class RelayServer {
   /**
    * Verify DID ownership: the client must return Ed25519.sign(nonce) using
    * the claimed DID's signing key. A signature that does not verify against
-   * resolveDidPeer(did).signingPublicKey is REJECTED — no queue for `did`
-   * is ever attached to this socket, so a spoofed claim cannot drain (or
-   * even learn whether mail exists for) another peer's queue. The nonce is
-   * single-use: cleared here regardless of outcome, so a failed guess
-   * cannot be retried on the same challenge.
+   * that key is REJECTED — no queue for `did` is ever attached to this
+   * socket, so a spoofed claim cannot drain (or even learn whether mail
+   * exists for) another peer's queue. The nonce is single-use: cleared here
+   * regardless of outcome, so a failed guess cannot be retried on the same
+   * challenge.
+   *
+   * Which key: without a registry, resolveDidPeer(did).signingPublicKey (a
+   * `kid` is refused — nothing could vouch for it). With a registry,
+   * registry.signingKeyFor(did, kid): a rotated or revoked DID is refused, and
+   * an optional `kid` names a device key the DID granted. On success the
+   * socket also becomes the drain for every DID that rotated into `did`.
    */
   private handleAuth(ws: WebSocket, state: ConnState, msg: ClientMessage): void {
     if (state.authenticated) return; // already authenticated on this socket; ignore repeats
@@ -492,17 +612,22 @@ export class RelayServer {
     state.nonce = undefined;
 
     let verified = false;
-    if (nonce && typeof msg.did === "string" && typeof msg.sig === "string") {
-      try {
-        const resolved = resolveDidPeer(msg.did);
-        verified = ed25519.verify(unb64u(msg.sig), unb64u(nonce), resolved.signingPublicKey);
-      } catch {
-        verified = false; // malformed DID, bad base64, wrong-length signature, etc. — all reject
+    let reason = "signature does not verify for claimed DID";
+    if (nonce && typeof msg.did === "string" && typeof msg.sig === "string" && (msg.kid === undefined || typeof msg.kid === "string")) {
+      const key = this.drainKeyFor(msg.did, msg.kid as string | undefined);
+      if (!key.ok) {
+        reason = `key not accepted for claimed DID: ${key.code}`;
+      } else {
+        try {
+          verified = ed25519.verify(unb64u(msg.sig), unb64u(nonce), key.publicKey);
+        } catch {
+          verified = false; // bad base64, wrong-length signature, etc. — all reject
+        }
       }
     }
 
     if (!verified) {
-      ws.send(JSON.stringify({ type: "auth_failed", reason: "signature does not verify for claimed DID" }));
+      ws.send(JSON.stringify({ type: "auth_failed", reason }));
       ws.close();
       return;
     }
@@ -510,6 +635,9 @@ export class RelayServer {
     const did = msg.did as string;
     state.authenticated = true;
     state.did = did;
+    if (typeof msg.kid === "string") state.kid = msg.kid;
+    const aliases = [did, ...(this.keyRegistry?.predecessors(did) ?? [])];
+    state.aliases = aliases;
     if (state.authDeadlineTimer) {
       clearTimeout(state.authDeadlineTimer);
       state.authDeadlineTimer = undefined;
@@ -520,7 +648,9 @@ export class RelayServer {
       state.peek = true;
       ws.send(JSON.stringify({ type: "auth_ok", peek: true }));
       this.queueStore.prune(Date.now());
-      for (const q of this.queueStore.drain(did)) ws.send(JSON.stringify({ type: "wire", id: q.id, wire: q.wire }));
+      for (const alias of aliases) {
+        for (const q of this.queueStore.drain(alias)) ws.send(JSON.stringify({ type: "wire", id: q.id, wire: q.wire }));
+      }
       ws.send(JSON.stringify({ type: "peek_end" }));
       const closer = setTimeout(() => ws.close(), 2_000);
       closer.unref?.();
@@ -528,21 +658,38 @@ export class RelayServer {
     }
     // One active drain per DID: a fresh, successfully-authenticated connection
     // for the same DID displaces the previous one rather than leaving two
-    // sockets racing to drain (and double-deliver) the same queue.
-    const prior = this.liveDrains.get(did);
-    if (prior && prior !== ws) prior.close();
-    this.liveDrains.set(did, ws);
+    // sockets racing to drain (and double-deliver) the same queue. With a
+    // registry this holds per alias: the successor's socket takes over the
+    // queues of the DIDs that rotated into it.
+    for (const alias of aliases) {
+      const prior = this.liveDrains.get(alias);
+      if (prior && prior !== ws) prior.close();
+      this.liveDrains.set(alias, ws);
+    }
 
     ws.send(JSON.stringify({ type: "auth_ok" }));
     this.startHeartbeat(ws, state);
-    this.flush(did); // 6c: forward-on-connect
+    for (const alias of aliases) this.flush(alias); // 6c: forward-on-connect (and the predecessors' held mail)
+  }
+
+  /** The public key a drain `auth` must verify against (see handleAuth). */
+  private drainKeyFor(did: string, kid: string | undefined): KeyLookup {
+    return (this.keyRegistry ?? DEFAULT_KEY_POLICY).signingKeyFor(did, kid, Date.now());
+  }
+
+  /** Forget every liveDrains entry that still points at `ws` (its own DID and all its aliases). */
+  private dropLiveAliases(ws: WebSocket, state: ConnState): void {
+    for (const alias of state.aliases ?? (state.did ? [state.did] : [])) {
+      if (this.liveDrains.get(alias) === ws) this.liveDrains.delete(alias);
+    }
   }
 
   private handleAck(state: ConnState, msg: ClientMessage): void {
     if (!state.authenticated || !state.did || state.peek || !Array.isArray(msg.ids)) return;
     const ids = msg.ids.filter((x): x is string => typeof x === "string");
     if (ids.length === 0) return;
-    this.queueStore.ackDelivered(state.did, ids);
+    // queue ids are relay-wide, and ackDelivered only removes rows addressed to the DID it is given: ack per alias
+    for (const alias of state.aliases ?? [state.did]) this.queueStore.ackDelivered(alias, ids);
     for (const id of ids) state.sentPending.delete(id);
   }
 
@@ -564,9 +711,7 @@ export class RelayServer {
   private handleClose(ws: WebSocket, state: ConnState): void {
     if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
     if (state.authDeadlineTimer) clearTimeout(state.authDeadlineTimer);
-    if (state.authenticated && state.did && this.liveDrains.get(state.did) === ws) {
-      this.liveDrains.delete(state.did);
-    }
+    if (state.authenticated) this.dropLiveAliases(ws, state);
     // No explicit DB "re-enqueue" call needed here: rows this socket sent
     // but never acked were never removed from queueStore in the first
     // place (see the file header) — dropping state.sentPending is enough.
@@ -613,6 +758,21 @@ export class RelayServer {
       res.end(JSON.stringify(key ? { publicKey: key } : { error: "this relay does not push" }));
       return;
     }
+    if (req.method === "POST" && url.pathname === KEY_RECORD_PATH) {
+      const body = await readBounded(req, MAX_KEY_RECORD_BYTES);
+      if (body === null) {
+        if (!res.headersSent) {
+          res.writeHead(413, { "content-type": "application/json", connection: "close" });
+          res.end(JSON.stringify({ ok: false, code: "too_large" }));
+        }
+        req.destroy();
+        return;
+      }
+      const result = this.keyRecord(body);
+      res.writeHead(result.status, { "content-type": "application/json" });
+      res.end(JSON.stringify(result.body));
+      return;
+    }
     if (req.method !== "POST" || url.pathname !== ingressPath) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: `not found: ${req.method ?? ""} ${url.pathname}` }));
@@ -624,7 +784,7 @@ export class RelayServer {
       const buf = chunk as Buffer;
       received += buf.length;
       if (received > this.maxWireBytes) {
-        // DoS hardening: an unauthenticated submitter must not be able to
+        // DoS hardening: a submitter (the body is read before its signature is checked) must not be able to
         // force unbounded buffering. Reject immediately — before anything is
         // parsed or enqueued — once the cap is exceeded. `Connection: close`
         // (rather than destroying the socket mid-read) lets the 413 response
@@ -652,7 +812,7 @@ export class RelayServer {
   }
 
   async close(): Promise<void> {
-    for (const ws of this.liveDrains.values()) ws.terminate();
+    for (const ws of new Set(this.liveDrains.values())) ws.terminate();
     this.liveDrains.clear();
     await new Promise<void>((resolve) => {
       if (!this.wss) {
@@ -666,4 +826,17 @@ export class RelayServer {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }
+}
+
+/** Reads a request body up to `max` bytes; null once it exceeds the cap (the caller answers 413). */
+async function readBounded(req: IncomingMessage, max: number): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let received = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    received += buf.length;
+    if (received > max) return null;
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }

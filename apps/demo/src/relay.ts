@@ -59,6 +59,7 @@ import { signChallenge } from './did'
 import type { Envelope } from './wire'
 import { decodeFromQr, encodeForQr } from './wire'
 import { fromB64u, open, randomBytes, seal, toB64u } from './crypto'
+import { signSend, staleClockOffset } from './relay_send_auth'
 
 const DEFAULT_RELAY_ORIGIN = 'https://questhub.eco'
 const DEFAULT_INGRESS_PATH = '/relay/send'
@@ -220,6 +221,8 @@ export interface RelayChannelOptions {
   wsCtor?: WebSocketCtor
   /** Injectable `fetch`. Defaults to `globalThis.fetch`. */
   fetchImpl?: typeof fetch
+  /** This device's clock (ms epoch) for send signatures. Injectable for tests; defaults to `Date.now`. */
+  now?: () => number
 }
 
 /** The browser's PushSubscription.toJSON(); null withdraws it (TrustWeb wave 11, relay_server.ts handlePush). */
@@ -409,6 +412,7 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
   const connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
   const wsCtor: WebSocketCtor | undefined = opts.wsCtor ?? (globalThis.WebSocket as unknown as WebSocketCtor | undefined)
   const fetchImpl: typeof fetch | undefined = opts.fetchImpl ?? globalThis.fetch?.bind(globalThis)
+  const now = opts.now ?? Date.now
 
   let identity: Identity | null = null
   let ws: RelayWebSocketLike | null = null
@@ -612,6 +616,11 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     const rawWire = buildOuterWire(toDid, identity.did, payload)
 
     const url = new URL(ingressPath, relayOrigin).toString()
+    // Sender auth v2 (relay_send_auth.ts): signed by this identity's DID key,
+    // bound to the origin we actually POST to, so a relay running
+    // RELAY_SENDER_AUTH=required accepts it and no other relay would.
+    const aud = new URL(url).origin
+    const sender = identity
     // A send that never settles is worse than a send that fails.
     //
     // Without this, a stalled connection left the promise pending forever:
@@ -628,9 +637,21 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     // the phone.
     const ac = typeof AbortController !== 'undefined' ? new AbortController() : null
     const timer = ac ? setTimeout(() => ac.abort(), INGRESS_TIMEOUT_MS) : null
+    const post = async (at: number): Promise<{ res: Response; parsed: { routed?: string; reason?: string } }> => {
+      const headers = signSend(sender, rawWire, { aud, now: at })
+      const res = await fetchImpl(url, { method: 'POST', body: rawWire, headers, ...(ac ? { signal: ac.signal } : {}) })
+      const parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string }
+      return { res, parsed }
+    }
     let res: Response
+    let parsed: { routed?: string; reason?: string }
     try {
-      res = await fetchImpl(url, { method: 'POST', body: rawWire, ...(ac ? { signal: ac.signal } : {}) })
+      ;({ res, parsed } = await post(now()))
+      // A phone whose clock is off by more than the relay's window gets 401
+      // `stale`: re-sign ONCE on the relay's own clock (its Date header). The
+      // page is served from the relay's origin, so Date is readable.
+      const offset = staleClockOffset(res, parsed, now())
+      if (offset !== undefined) ({ res, parsed } = await post(now() + offset))
     } catch (err) {
       throw new Error(
         `RelayChannel.${callerLabel}: relay ingress ${url} did not answer within ` +
@@ -639,7 +660,6 @@ export function createRelayChannel(opts: RelayChannelOptions = {}): RelayChannel
     } finally {
       if (timer) clearTimeout(timer)
     }
-    const parsed = (await res.json().catch(() => ({}))) as { routed?: string; reason?: string }
     if (parsed.routed === 'rejected') {
       throw new Error(`RelayChannel.${callerLabel}: relay rejected wire for ${toDid}: ${parsed.reason ?? 'no reason given'}`)
     }

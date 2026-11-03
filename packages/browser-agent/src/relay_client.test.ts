@@ -8,7 +8,7 @@
 // RelayServer — jsdom's fetch/WebSocket shims are partial and not needed
 // here; the browser-vs-Node WebSocket API seam is exactly what `wsCtor`
 // exists to bridge (see relay_client.ts's file header).
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket as WsWebSocket } from "ws";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
@@ -27,6 +27,7 @@ const clients: RelayClient[] = [];
 const rawSockets: WsWebSocket[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const c of clients.splice(0)) c.stop();
   for (const raw of rawSockets.splice(0)) {
     if (raw.readyState === WsWebSocket.OPEN || raw.readyState === WsWebSocket.CONNECTING) raw.terminate();
@@ -34,8 +35,10 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((s) => s.close()));
 });
 
+// Every relay here REQUIRES sender auth, so each accepted send proves the browser's v2 signature (aud = the relay
+// origin; the server derives its expected audience from the Host header fetch sets) verifies on the real server.
 async function bootRelay(): Promise<{ relay: RelayServer; endpoint: string }> {
-  const relay = new RelayServer();
+  const relay = new RelayServer({ senderAuth: "required" });
   servers.push(relay);
   const { port } = await relay.listen(0, "127.0.0.1");
   return { relay, endpoint: `http://127.0.0.1:${port}` };
@@ -95,7 +98,7 @@ describe("createRelayClient — send/onInbound round trip", () => {
   it("send() throws when the relay rejects the wire (no route to the recipient)", async () => {
     const anna = generateIdentity();
     const stranger = generateIdentity();
-    const relay = new RelayServer({ isRoutable: (did) => did !== stranger.did });
+    const relay = new RelayServer({ senderAuth: "required", isRoutable: (did) => did !== stranger.did });
     servers.push(relay);
     const { port } = await relay.listen(0, "127.0.0.1");
     const endpoint = `http://127.0.0.1:${port}`;
@@ -104,6 +107,59 @@ describe("createRelayClient — send/onInbound round trip", () => {
     clients.push(clientA);
 
     await expect(clientA.send(stranger.did, { hello: "world" })).rejects.toThrow(/rejected/);
+  });
+});
+
+describe("createRelayClient — v2 sender auth", () => {
+  /** Counts ingress POSTs (and keeps their headers) while letting them reach the real relay. */
+  function spyOnIngress(): Array<Record<string, string>> {
+    const seen: Array<Record<string, string>> = [];
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      if (init?.method === "POST") seen.push({ ...((init.headers as Record<string, string> | undefined) ?? {}) });
+      return realFetch(input, init);
+    });
+    return seen;
+  }
+
+  it("signs for the relay's origin (x-tw-relay-aud) and the relay requiring auth accepts it", async () => {
+    const anna = generateIdentity();
+    const ben = generateIdentity();
+    const { endpoint } = await bootRelay();
+    const seen = spyOnIngress();
+
+    const clientA = createRelayClient({ identity: anna, relayUrl: endpoint, wsCtor: WsWebSocket });
+    clients.push(clientA);
+    await clientA.send(ben.did, { hello: "v2" });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!["x-tw-relay-aud"]).toBe(endpoint);
+    expect(seen[0]!["x-tw-relay-did"]).toBe(anna.did);
+  });
+
+  it("a client whose clock is 10 minutes fast recovers: 401 stale, then ONE retry on the relay's Date clock", async () => {
+    const anna = generateIdentity();
+    const ben = generateIdentity();
+    const { endpoint } = await bootRelay();
+    const seen = spyOnIngress();
+
+    const skewMs = 10 * 60_000;
+    const clientA = createRelayClient({ identity: anna, relayUrl: endpoint, wsCtor: WsWebSocket, now: () => Date.now() + skewMs });
+    clients.push(clientA);
+    await clientA.send(ben.did, { skewed: true });
+
+    expect(seen).toHaveLength(2);
+    const firstTs = Number(seen[0]!["x-tw-relay-ts"]);
+    const retryTs = Number(seen[1]!["x-tw-relay-ts"]);
+    expect(firstTs - retryTs).toBeGreaterThan(skewMs - 5_000); // moved back by ~the skew (Date has 1 s resolution)
+
+    const received: { from: string; envelope: unknown }[] = [];
+    const clientB = createRelayClient({ identity: ben, relayUrl: endpoint, wsCtor: WsWebSocket });
+    clients.push(clientB);
+    clientB.onInbound((from, envelope) => received.push({ from, envelope }));
+    await clientB.start();
+    await waitFor(() => received.length >= 1);
+    expect(received[0]!).toEqual({ from: anna.did, envelope: { skewed: true } });
   });
 });
 
