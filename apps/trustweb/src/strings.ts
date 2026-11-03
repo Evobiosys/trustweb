@@ -432,6 +432,7 @@ export const S = {
   membraneMoreAria: (zone: string) => `Show everyone in ${zone}`,
   // Wave 28 (trustzones.ts): TrustZones
   zoneFillAria: (zone: string, on: boolean) => on ? `Fold ${zone} back to the closest few` : `Show everyone in ${zone} on the ring`,
+  zoneExpandTitle: 'Expand: show everyone outside the closest rings, too',
   zoneListAria: (zone: string) => `Open the list of ${zone}`,
   zoneTapToAdd: {
     [Ring.Closest]: 'tap to add one of the closest few',

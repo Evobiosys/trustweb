@@ -1,7 +1,7 @@
 /** Wave 7: the rings view geometry and a drop on a ring (rings_layout.ts); the older close_friend name reads as close. */
 import { CLOSENESS_KEY, Ring } from '../../src/model.ts'
 import { S } from '../../src/strings.ts'
-import { YOU_EDGE, CLOSE_GAP, DESIRE_DEFAULT, RING_RADIUS, beyondRings, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry, webSlot, angleFromCentre, angleOf, packLaps, restoreAngles, spaceOut } from '../../src/rings_layout.ts'
+import { BAND_HALF, YOU_EDGE, CLOSE_GAP, DESIRE_DEFAULT, RING_RADIUS, beyondRings, placeOnRing, ringAt, WEB_RINGS, lapRadius, ringsGeometry, webSlot, angleFromCentre, angleOf, packLaps, restoreAngles, spaceOut } from '../../src/rings_layout.ts'
 import { parseRecord } from '../../src/store.ts'
 
 const person = (ring, extra = {}) => ({ id: 'p', name: 'P', context: '', ring, metAt: 0, lines: [], ...extra })
@@ -21,15 +21,34 @@ describe('rings drag', () => {
     expect(ringAt(500)).toBe(Ring.Unsorted)
     expect(ringAt(500, RING_RADIUS, [Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending])).toBe(Ring.Intending)
   })
-  it('a full ring continues on laps outside it and pushes the rings beyond it outward, never inward', () => {
+  it('a crowded ring keeps every dot on its band: no lap sits between rings or beyond the outermost', () => {
+    const n = 400
+    const angles = Array.from({ length: n }, (_, i) => (i * 7) % 360)
+    const g = ringsGeometry({ acquaintance: n, unsorted: n }, { acquaintance: angles, unsorted: angles })
+    for (const ring of [Ring.Acquaintance, Ring.Unsorted]) {
+      expect(Math.max(...g.lapOf[ring])).toBeGreaterThan(1)
+      for (const lap of g.lapOf[ring]) expect(Math.abs(lapRadius(g, ring, lap) - g.radius[ring])).toBeLessThanOrEqual(BAND_HALF)
+    }
+    const outer = Math.max(...g.lapOf.unsorted.map((lap) => lapRadius(g, Ring.Unsorted, lap)))
+    expect(outer + g.dot.unsorted / 2).toBeLessThanOrEqual(g.extent)
+  })
+  it('the Expand button says what it does, not the ring hint', () => {
+    expect(S.zoneExpandTitle).toBe('Expand: show everyone outside the closest rings, too')
+    expect(Object.values(S.zoneTapToAdd)).not.toContain(S.zoneExpandTitle)
+  })
+  it('a ring that fits on one lap draws exactly on its circle', () => {
+    const g = ringsGeometry({ friend: 3 }, { friend: [0, 120, 240] })
+    expect(lapRadius(g, Ring.Friend, 0)).toBe(g.radius.friend)
+  })
+  it('a full ring spreads over lanes in its band and does not push the rings beyond it', () => {
     const few = ringsGeometry({ closest: 3, intending: 2 })
     expect(few.radius.acquaintance).toBe(RING_RADIUS.acquaintance)
     expect(few.perLap.closest).toBeGreaterThanOrEqual(3)
     const g = ringsGeometry({ closest: 7, friend: 15, acquaintance: 255, intending: 238 })
     expect(g.dot.acquaintance).toBe(14)
     expect(g.radius.closest).toBeLessThanOrEqual(RING_RADIUS.closest) // the closest ring hugs the you avatar
-    expect(lapRadius(g, Ring.Acquaintance, 2)).toBeGreaterThan(g.radius.acquaintance)
-    expect(g.radius.intending).toBeGreaterThan(lapRadius(g, Ring.Acquaintance, Math.ceil(255 / g.perLap.acquaintance) - 1))
+    expect(lapRadius(g, Ring.Acquaintance, 2)).toBeLessThanOrEqual(g.radius.acquaintance + BAND_HALF)
+    expect(g.radius.intending).toBeGreaterThan(g.radius.acquaintance)
   })
   it('five placed rings and a grey unsorted ring outside them; no contact tier', () => {
     expect(WEB_RINGS).toEqual([Ring.Closest, Ring.Close, Ring.Friend, Ring.Acquaintance, Ring.Intending, Ring.Unsorted])

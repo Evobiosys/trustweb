@@ -48,12 +48,14 @@ function closeFit(n: number, k: number): { r: number; dot: number } {
 export interface RingsGeometry {
   radius: Record<Ring, number>
   dot: Record<Ring, number>
-  /** People per lap; a full ring continues on laps just outside it, never inside. */
+  /** People per lap; a full ring continues on further lanes inside its band (see lapRadius). */
   perLap: Record<Ring, number>
   /** The rings in play: the unsorted one only when someone is on it. */
   rings: readonly Ring[]
   /** Lap of each person per ring, in the order their angles were given (only when `angles` was given). */
   lapOf: Partial<Record<Ring, number[]>>
+  /** Number of laps each ring needs (drawn as lanes inside its band). */
+  laps: Partial<Record<Ring, number>>
   /** Outer edge of the outermost avatar: the view scales to fit it. */
   extent: number
 }
@@ -112,28 +114,36 @@ export function restoreAngles(s: Pick<AppState, 'people'>, before: ReadonlyMap<s
 
 /** Where each ring sits for `counts` people: a ring that needs more laps pushes the rings outside it outward, so a crowd never lands on an inner tier. With `angles` (per ring, in layout order) the laps follow from where the dots sit. `k` is the view scale (see closeFit). */
 export function ringsGeometry(counts: Record<Ring, number>, angles: Partial<Record<Ring, number[]>> = {}, k = 1): RingsGeometry {
-  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, extent: 0 }
-  let prev = { r: 0, dot: 0, pushed: false }
+  const g: RingsGeometry = { radius: { ...RING_RADIUS }, dot: {} as Record<Ring, number>, perLap: {} as Record<Ring, number>, rings: WEB_RINGS.filter((r) => r !== Ring.Unsorted || counts[r]), lapOf: {}, laps: {}, extent: 0 }
+  let prev = { r: 0, dot: 0, band: 0, pushed: false }
   for (const ring of g.rings) {
     const n = Math.max(counts[ring] ?? 0, 1)
     // The ring keeps its place unless the one inside it overflowed (or was pushed) onto it; the close ring hugs the "you" avatar.
     let { r, dot } = ring === Ring.Closest ? closeFit(n, k) : { r: RING_RADIUS[ring], dot: Math.max(LEAST_DOT, Math.min(FULL_DOT, Math.floor((2 * Math.PI * RING_RADIUS[ring] * RING_FILL) / n))) }
-    if (prev.pushed) r = Math.max(r, prev.r + (prev.dot + dot) / 2 + GAP)
+    if (prev.pushed) r = Math.max(r, prev.r + prev.band + (prev.dot + dot) / 2 + GAP)
     const per = around(r, dot)
     const mine = angles[ring]
     const lapOf = mine && packLaps(mine, r, dot)
     if (lapOf) g.lapOf[ring] = lapOf
     const laps = lapOf ? Math.max(0, ...lapOf) + 1 : Math.ceil(n / per)
-    g.radius[ring] = r; g.dot[ring] = dot; g.perLap[ring] = per
-    prev = { r: r + (laps - 1) * (dot + 1), dot, pushed: laps > 1 || r > RING_RADIUS[ring] }
+    g.radius[ring] = r; g.dot[ring] = dot; g.perLap[ring] = per; g.laps[ring] = laps
+    prev = { r, dot, band: laps > 1 ? BAND_HALF : 0, pushed: r > RING_RADIUS[ring] }
   }
-  const edge = prev.r + prev.dot / 2
+  const edge = prev.r + prev.band + prev.dot / 2
   g.extent = edge
   return g
 }
 
-/** Radius of one lap of a ring: the first sits on the ring, the others just outside it. */
-export const lapRadius = (g: RingsGeometry, ring: Ring, lap: number): number => g.radius[ring] + lap * (g.dot[ring] + 1)
+/** Half-width (layout px) of a ring's band: every dot sits within this of its ring's radius, never between rings or beyond the outermost. */
+export const BAND_HALF = 10
+const MAX_LANES = 5
+
+/** Radius of one lap of a ring: a ring that fits on one lap sits on its circle; a crowded one spreads its laps as lanes across the band, centred on the circle. */
+export function lapRadius(g: RingsGeometry, ring: Ring, lap: number): number {
+  const lanes = Math.min(g.laps[ring] ?? 1, MAX_LANES)
+  if (lanes < 2) return g.radius[ring]
+  return g.radius[ring] - BAND_HALF + (2 * BAND_HALF * (lap % lanes)) / (lanes - 1)
+}
 
 /** The person-field id of Tana's "family" checkbox: a purple accent on the avatar, no ring of its own. */
 export const FAMILY_FIELD = 'LNlpliq4GdNI'
