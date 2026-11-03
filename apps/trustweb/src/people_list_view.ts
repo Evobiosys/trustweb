@@ -16,11 +16,13 @@ export function resetPeopleList(startQuery = ''): void {
   flipped.clear()
 }
 
-export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, autofocus: boolean): HTMLElement {
+export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, autofocus: boolean, rowExtra?: (p: Person) => Node[]): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
-  const row = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
+  const open = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
     el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
   ])
+  // Wave 29: the Map view lists people here too, each with its place box beside the row.
+  const row = (p: Person): HTMLElement => (rowExtra ? el('div', { class: 'map-row', 'data-map-row': p.id }, [open(p), ...rowExtra(p)]) : open(p))
   const draw = (): void => {
     const pinned = pinnedPeople(state(), query)
     groups.replaceChildren(...(pinned.length ? [el('section', { class: 'people-zone people-pinned', 'data-zone': 'pinned' }, [

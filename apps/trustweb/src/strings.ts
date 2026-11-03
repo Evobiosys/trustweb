@@ -1389,6 +1389,7 @@ export const S = {
   chatSimple: 'Simple chat',
   // Wave 28 (messengers-combined): one chat view over TrustWeb, Matrix, Geb and Signal; the pill and the three dots choose which.
   chatViewAll: 'All chats',
+  chatSwitchAria: 'Switch messenger',
   chatViewMenu: 'Choose which chats to show',
   chatViewMore: 'More chat apps',
   chatViewOnly: (label: string) => `Only ${label}`,

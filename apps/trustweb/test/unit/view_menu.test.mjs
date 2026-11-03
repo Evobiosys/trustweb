@@ -56,4 +56,9 @@ describe('view_menu', () => {
     expect(screenViews('events', true).find((v) => v.key === 'solar')?.available).toBe(true)
     expect(screenViews('inventory', false).map((v) => v.key)).toEqual(['list', 'outline'])
   })
+  it('keeps the eye menu on the People page: People is the view that is on, the others stay to switch to', () => {
+    const m = viewMenu('people', true, true, [])
+    expect(m.find((i) => i.on)?.view).toBe('people')
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'map', 'dex', 'compact'])
+  })
 })

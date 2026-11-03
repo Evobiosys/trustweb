@@ -36,6 +36,8 @@ export const ICONS: Record<string, string> = {
   network: '<svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="8" r="2"/><circle cx="8" cy="19" r="2"/><circle cx="17" cy="18" r="2"/><path d="M7 6.5l10 1M6 8l2 9M10 18.5l5-.5M18 10l-1 6"/></svg>',
   map: '<svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
   dnd: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7 12h10"/></svg>',
+  // Wave 29: two opposed arrows, the messenger switch in the Chat header (Lucide arrow-left-right, ISC).
+  switch: '<svg viewBox="0 0 24 24"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
   // "Ask your web": only the sound waves (owner 2026-10-05: "simpler and
   // less confusing"), the call going out and the resonance coming back.
