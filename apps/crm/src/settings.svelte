@@ -14,7 +14,8 @@
   import { S } from './strings'
   import ViewPill from './view_pill.svelte'
   import { flush, sync, unhideInTrustweb } from './sync.svelte'
-  import { notes, syncNotes } from './notes_sync.svelte'
+  import { decideOffer, notes, offerRows, syncNotes } from './notes_sync.svelte'
+  import { Decision } from './notes_offers'
   import { manualItems } from './tana_sync'
   import { canRunSource, isPhone } from './sources_here'
 
@@ -43,6 +44,9 @@
     savePrefs()
     host.setHiddenSources?.(prefs.filters.hideSources)   // the web view follows at once
   }
+
+  /** Join offers: the person picked per offer key (default: the first candidate). */
+  const offerInto = $state<Record<string, string>>({})
 
   let place = $state('')
   /** The Archive row asking "Delete for good?" in place. */
@@ -106,6 +110,25 @@
         </label>
         <button class="btn small" data-action="notes-sync-now" disabled={notes.running} onclick={(): void => { void syncNotes() }}>{notes.running ? S.notesSyncing : S.notesSyncNow}</button>
         {#if notes.last}<p class="muted" data-part="notes-last">{S.notesLast(notes.last)}</p>{/if}
+        {#if notes.offers.length > 0}
+          <h4 class="ring-heading" data-part="offers-title">{S.notesOffersTitle(notes.offers.length)}</h4>
+          <p class="muted">{S.notesOffersHint}</p>
+          {#each offerRows() as { offer, candidates } (offer.key)}
+            <div class="line" data-part="offer" data-offer={offer.key}>
+              <p><strong>{offer.name}</strong> <span class="muted">{S.notesOfferMeta(offer.path, offer.date, offer.facts.length)}</span></p>
+              {#if candidates.length > 0}
+                <select class="field" aria-label={S.notesOfferInto} data-field="offer-into" value={offerInto[offer.key] ?? candidates[0].id}
+                  onchange={(e): void => { offerInto[offer.key] = e.currentTarget.value }}>
+                  {#each candidates as cand (cand.id)}<option value={cand.id}>{cand.name}</option>{/each}
+                </select>
+              {:else}
+                <span class="muted">{S.notesOfferNoCandidate}</span>
+              {/if}
+              <button class="quiet" data-action="offer-join" disabled={candidates.length === 0} onclick={(): void => { void decideOffer(offer.key, Decision.Join, offerInto[offer.key] ?? candidates[0]?.id) }}>{S.notesOfferJoin}</button>
+              <button class="quiet" data-action="offer-dismiss" onclick={(): void => { void decideOffer(offer.key, Decision.Dismiss) }}>{S.notesOfferDismiss}</button>
+            </div>
+          {/each}
+        {/if}
       {/if}
     {/if}
   {/snippet}

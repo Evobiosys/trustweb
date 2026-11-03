@@ -8,7 +8,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm -r --if-present lint",
     "alpha": "bash scripts/alpha_up.sh"
   },
   "devDependencies": {

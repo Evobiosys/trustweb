@@ -7,12 +7,12 @@ import { randomId } from '../../demo/src/crypto'
 import { encodeEventLink, decodeEventLink, linkOrigin } from './event_link'
 import { newEvent } from './events'
 import {
-  LANDING, csv, errorWords, eventPayload, limitsLine, mailto, message, parseInvitees, withSrv,
+  LANDING, csv, errorWords, eventPayload, limitsLine, logoOk, mailto, message, parseInvitees, parseKey, withSrv,
   type OrgEvent, type OrgForm, type OrgLimits,
 } from './organizer_rules'
 
 interface Account { org: string; secret: string; name: string }
-interface Me { plan: string; limits: OrgLimits; events: OrgEvent[] }
+interface Me { name?: string; plan: string; limits: OrgLimits; events: OrgEvent[] }
 interface Reply { status: number; json: any }
 
 const KEY = 'trustweb.org.v1'
@@ -40,6 +40,9 @@ body{display:block;padding:24px 16px 80px}
 .org .card{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .org .card .link{font-family:ui-monospace,monospace;font-size:12.5px;white-space:nowrap}
 .org .impact{font-weight:700;color:var(--teal);margin:6px 0}
+.org .logo-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.org .logo-row input{flex:1 1 200px;width:auto}
+.org img.logo{max-height:48px;max-width:48px;object-fit:contain;border-radius:6px}
+.org .card img.logo{float:right;margin-left:10px}
 `
 document.head.append(style)
 
@@ -84,6 +87,35 @@ wrap.append(hero, accountBox, formBox, eventsBox, footer)
 
 // ---- account
 let fresh = false
+let showKey = false
+const DEFAULT_LIMITS: OrgLimits = { events: 3, invitees: 25 }
+
+/** The key line and its Copy button: shown once after creation, and again on "Show my key". */
+function keyBlock(a: Account, intro: string): HTMLElement[] {
+  const key = JSON.stringify({ org: a.org, secret: a.secret })
+  return [el('p', {}, intro), el('div', { className: 'key' }, key), el('p', { className: 'soft' }, 'Keep it private: whoever has it owns your events.'), el('div', { className: 'actions' }, button('Copy', () => copy(key)))]
+}
+
+/** "Sign in with my key": the key line from another browser, checked by POST /org/me before it is kept. */
+function signInBlock(): HTMLElement {
+  const text = el('textarea', { placeholder: 'paste the key you copied' })
+  text.spellcheck = false
+  const err = el('div', { className: 'err' })
+  return el('div', {}, el('h2', {}, 'Sign in with my key'), field('Your key', text), el('div', { className: 'actions' }, button('Sign in', async () => {
+    err.textContent = ''
+    const key = parseKey(text.value)
+    if (!key) { err.textContent = 'That is not an organizer key. Paste the whole line that starts with {"org":'; return }
+    const r = await post('/org/me', key)
+    if (r.status !== 200 || typeof r.json?.name !== 'string') { err.textContent = errorWords(r.status, r.json?.error ?? '', DEFAULT_LIMITS); return }
+    account = { ...key, name: r.json.name }
+    localStorage.setItem(KEY, JSON.stringify(account))
+    me = r.json
+    fresh = false
+    showKey = false
+    renderAll()
+  })), err)
+}
+
 function renderAccount(): void {
   accountBox.replaceChildren(el('h2', {}, 'Your organizer account'))
   if (!account) {
@@ -94,27 +126,30 @@ function renderAccount(): void {
       const n = name.value.trim()
       if (!n) { err.textContent = 'Type a name first.'; return }
       const r = await post('/org', { name: n })
-      if (r.status !== 201) { err.textContent = errorWords(r.status, r.json?.error ?? '', { events: 3, invitees: 25 }); return }
+      if (r.status !== 201) { err.textContent = errorWords(r.status, r.json?.error ?? '', DEFAULT_LIMITS); return }
       account = { org: r.json.org, secret: r.json.secret, name: n }
       localStorage.setItem(KEY, JSON.stringify(account))
       fresh = true
       renderAll()
       await refresh()
-    })), err)
+    })), err, signInBlock())
     return
   }
   accountBox.append(el('p', {}, el('b', {}, account.name), me ? ` · ${limitsLine(me.plan, me.limits)}` : ''))
-  if (fresh) {
-    const key = JSON.stringify({ org: account.org, secret: account.secret })
-    accountBox.append(el('p', {}, 'Keep this: it is the only key to your events.'), el('div', { className: 'key' }, key), el('div', { className: 'actions' }, button('Copy', () => copy(key))))
-  }
-  accountBox.append(el('div', { className: 'actions' }, button('Forget this browser', () => {
-    localStorage.removeItem(KEY)
-    account = null
-    me = null
-    fresh = false
-    renderAll()
-  }, true)))
+  if (fresh) accountBox.append(...keyBlock(account, 'Keep this: it is the only key to your events.'))
+  else if (showKey) accountBox.append(...keyBlock(account, 'Your key. Paste it under "Sign in with my key" in another browser.'))
+  accountBox.append(el('div', { className: 'actions' },
+    fresh ? '' : button(showKey ? 'Hide my key' : 'Show my key', () => { showKey = !showKey; renderAccount() }, true),
+    button('Forget this browser', () => {
+      localStorage.removeItem(KEY)
+      account = null
+      me = null
+      fresh = false
+      showKey = false
+      editing = null
+      resetForm()
+      renderAll()
+    }, true)))
 }
 
 // ---- form
@@ -129,22 +164,54 @@ const cancel = button('Cancel edit', () => { editing = null; resetForm() }, true
 f.tagName.placeholder = 'Default: the event name'
 f.invitees.placeholder = 'one e-mail per line'
 f.invitees.oninput = () => updateCounter()
+
+// The logo rides on the event at the server (event.logo), never in the link.
+let logo = ''
+const logoFile = input('file')
+logoFile.accept = 'image/png,image/jpeg,image/webp,image/gif'
+const logoPreview = el('img', { className: 'logo', alt: 'Logo preview' })
+const logoRemove = button('Remove logo', () => setLogo(''), true)
+function setLogo(v: string): void {
+  logo = v
+  logoPreview.hidden = !v
+  logoRemove.hidden = !v
+  if (v) logoPreview.src = v
+  else logoPreview.removeAttribute('src')
+  logoFile.value = ''
+}
+logoFile.onchange = () => {
+  const file = logoFile.files?.[0]
+  if (!file) return
+  formErr.textContent = ''
+  const reader = new FileReader()
+  reader.onload = () => {
+    const v = typeof reader.result === 'string' ? reader.result : ''
+    if (logoOk(v)) setLogo(v)
+    else { formErr.textContent = 'That logo does not fit: use a PNG, JPEG, WebP or GIF of up to 24 KB.'; logoFile.value = '' }
+  }
+  reader.onerror = () => { formErr.textContent = 'That file could not be read.'; logoFile.value = '' }
+  reader.readAsDataURL(file)
+}
+
 formBox.append(
   el('h2', {}, 'New event'),
   field('Name *', f.name),
   el('div', { className: 'row' }, field('From *', f.from), field('To', f.to)),
   field('Where *', f.where), field('Conditions', f.conditions), field('Themes (comma separated)', f.themes),
-  field('Tag name (the tag attendees get)', f.tagName), field('Invitees', f.invitees), counter, formErr,
+  field('Tag name (the tag attendees get)', f.tagName),
+  field('Logo (PNG, JPEG, WebP or GIF, up to 24 KB)', el('div', { className: 'logo-row' }, logoFile, logoPreview, logoRemove)),
+  field('Invitees', f.invitees), counter, formErr,
   el('div', { className: 'actions' }, submit, cancel),
 )
 
 function updateCounter(): void {
   const n = parseInvitees(f.invitees.value).emails.length
-  counter.textContent = `${n} of ${me?.limits.invitees ?? 25}`
+  counter.textContent = `${n} of ${me?.limits.invitees ?? DEFAULT_LIMITS.invitees}`
 }
 
 function resetForm(): void {
   for (const k of ['name', 'from', 'to', 'where', 'conditions', 'themes', 'tagName', 'invitees'] as const) f[k].value = ''
+  setLogo('')
   submit.textContent = 'Create event'
   cancel.hidden = true
   formErr.textContent = ''
@@ -161,9 +228,9 @@ async function save(): Promise<void> {
   const form = formValues()
   const { emails, bad } = parseInvitees(form.invitees)
   if (bad.length) { formErr.textContent = `Not an e-mail address: ${bad.join(', ')}`; return }
-  const limits = me?.limits ?? { events: 3, invitees: 25 }
+  const limits = me?.limits ?? DEFAULT_LIMITS
   if (emails.length > limits.invitees) { formErr.textContent = errorWords(409, 'limit_invitees', limits); return }
-  const event = eventPayload(form, account.name)
+  const event = eventPayload(form, account.name, logo)
   const localId = editing?.localId ?? randomId(8)
   const ev = newEvent(event, localId, Date.now())
   if (typeof ev === 'string') { formErr.textContent = FIELD_WORDS[ev]; return }
@@ -187,6 +254,7 @@ function card(e: OrgEvent): HTMLElement {
   const link = el('input', { readOnly: true, value: e.link, className: 'link' })
   link.onfocus = () => link.select()
   return el('div', { className: 'card' },
+    e.event.logo && logoOk(e.event.logo) ? el('img', { className: 'logo', src: e.event.logo, alt: '' }) : '',
     el('b', {}, e.event.name), el('div', { className: 'soft' }, `${when} · ${e.event.where}`),
     el('div', { className: 'row' }, el('div', {}, link), button('Copy', () => copy(e.link), true)),
     el('div', { className: 'soft' }, `${e.invitees.length} invitees`),
@@ -220,6 +288,8 @@ function edit(e: OrgEvent): void {
   f.name.value = v.name; f.from.value = v.from; f.to.value = v.to ?? ''; f.where.value = v.where
   f.conditions.value = v.conditions ?? ''; f.themes.value = (v.themes ?? []).join(', '); f.tagName.value = v.tagName ?? ''
   f.invitees.value = e.invitees.join('\n')
+  setLogo(v.logo && logoOk(v.logo) ? v.logo : '')
+  formErr.textContent = ''
   submit.textContent = 'Save changes'
   cancel.hidden = false
   updateCounter()
@@ -236,7 +306,7 @@ async function refresh(): Promise<void> {
   if (!account) return
   const r = await post('/org/me', { org: account.org, secret: account.secret })
   if (r.status === 200) me = r.json
-  else eventsBox.replaceChildren(el('h2', {}, 'Events'), el('div', { className: 'err' }, errorWords(r.status, r.json?.error ?? '', { events: 3, invitees: 25 })))
+  else eventsBox.replaceChildren(el('h2', {}, 'Events'), el('div', { className: 'err' }, errorWords(r.status, r.json?.error ?? '', DEFAULT_LIMITS)))
   if (r.status === 200) renderAll()
 }
 

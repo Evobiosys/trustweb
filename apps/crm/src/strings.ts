@@ -132,6 +132,14 @@ export const S = {
   notesEveryone: 'Write everyone a page (one shot)',
   notesEveryoneConfirm: (n: number) => `Write one page per person, ${n} pages, under TrustWeb/People in your vault? Pages are rewritten on later syncs; your own text under each stays.`,
   notesLast: (s: string) => `Last sync: ${s}`,
+  // Join offers (owner 2026-11-03): a first name alone in a note creates nobody; the owner says who it is.
+  notesOffersTitle: (n: number) => `Names from your notes to join (${n})`,
+  notesOffersHint: 'A note that names only a first name creates nobody. Pick who it is, or say it is nobody here.',
+  notesOfferJoin: 'Join',
+  notesOfferDismiss: 'Not them',
+  notesOfferNoCandidate: 'nobody with this first name yet',
+  notesOfferMeta: (path: string, date: string, facts: number) => `${path} · ${date} · ${facts === 1 ? '1 fact' : `${facts} facts`}`,
+  notesOfferInto: 'Join into',
   /** Hide by source (Jakob 2026-10-16): only people nothing else knows about. */
   hideOnlyFrom: (label: string) => `Hide people known only from ${label}`,
   advancedTitle: 'Advanced',

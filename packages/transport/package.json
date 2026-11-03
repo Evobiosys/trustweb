@@ -11,7 +11,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:deps": "pnpm --filter \"@resource-web/transport^...\" build",
+    "pretest": "pnpm build:deps",
     "test": "vitest run --passWithNoTests",
+    "pretypecheck": "pnpm build:deps",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

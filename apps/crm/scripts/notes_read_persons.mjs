@@ -2,15 +2,23 @@
 // The reading is done by a model behind ONE prompt so any user can repeat it: the Claude CLI (their own subscription) or a
 // local Ollama model (free, slow, offline). File-only apart from the model call; the vault never leaves the machine with Ollama.
 //   node scripts/notes_read_persons.mjs <vault> <out.jsonl> --reader claude:claude-haiku-5-5 | ollama:qwen3.5:9b
-//        [--include memory,CONNECT,pages,journals] [--limit N] [--concurrency N] [--files list.txt] [--dry-run]
-// Resumable: a note already in out.jsonl for the same reader and mtime is skipped. Failures go to <out>.errors.jsonl and are retried next run.
+//        [--include memory,CONNECT,pages,journals] [--skip-folders speakers,pitches] [--limit N] [--concurrency N] [--files list.txt] [--dry-run]
+// Resumable: a note already in out.jsonl for the same reader and text hash is skipped. Failures go to <out>.errors.jsonl and are retried next run.
 // Output line: { path, date: 'YYYY-MM-DD', reader, chars, people: [{ name, aliases, context, facts, met, confidence }] }
+// What is never read (counted in the summary line, never sent to the reader, so no cost):
+//   `trustweb: no` (or #no-trustweb)  TrustWeb never touches the note: not read, no block written into it (opted out)
+//   `people: skip|no|none|false`      front matter: the note names people but creates none: not read for people (people: skip)
+//   skipped folders                   the same for whole folders (speaker scans, pitch decks): --skip-folders a,b plus
+//                                     <vault>/.trustweb-notes.json { "skipFolders": ["speakers", "pitches"] }, merged. Entries are
+//                                     vault-relative folder paths matched on whole segments from the vault root: "speakers" skips
+//                                     speakers/x.md and speakers/2026/y.md, not a/speakers/z.md (write "a/speakers" for that) nor
+//                                     speakers-old/. A broken config file stops the run (exit 2) rather than read what it meant to skip.
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { MARK_FOLDER, noteCommunities, noteOptOut, stripBlocks } from './notes_page.mjs'
+import { MARK_FOLDER, noteCommunities, noteOptOut, notePeopleSkip, stripBlocks } from './notes_page.mjs'
 
 export const PROMPT = `You extract people from one markdown note written by its owner ("the writer"). Output ONLY a JSON object, no prose:
 {"people":[{"name":"<full name as written>","aliases":["<other spellings or short forms in the note>"],"context":"<how the writer knows them, one sentence, or empty>","facts":["<one short fact per item about THIS person only, close to the note's wording>"],"met":"<YYYY-MM-DD only if the note says when the writer first met them, else empty>","confidence":<0..1>}]}
@@ -152,12 +160,55 @@ export async function readNote(reader, rel, text, date) {
   return { people: mergePeople(results), cost }
 }
 
+export const CONFIG_FILE = '.trustweb-notes.json'
+const cleanFolder = (s) => String(s).trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+
+/** The folders never read: the --skip-folders list plus the vault's .trustweb-notes.json skipFolders, cleaned, unique, flag first. */
+export function skipFolders(vault, flagList = []) {
+  const file = path.join(vault, CONFIG_FILE)
+  let fromFile = []
+  if (existsSync(file)) {
+    let d
+    try { d = JSON.parse(readFileSync(file, 'utf8')) } catch (e) { throw new Error(`${file}: not valid JSON (${e.message})`) }
+    if (d.skipFolders !== undefined && !Array.isArray(d.skipFolders)) throw new Error(`${file}: skipFolders must be a list of folder paths`)
+    fromFile = d.skipFolders ?? []
+  }
+  const out = []
+  for (const f of [...flagList, ...fromFile].map(cleanFolder)) if (f && !out.includes(f)) out.push(f)
+  return out
+}
+
+/** rel (vault-relative, "/") lies in one of the folders: whole path segments from the vault root. */
+export const inSkippedFolder = (rel, folders) => folders.some((f) => rel.startsWith(`${f}/`))
+
+/**
+ * Which notes go to the reader. load(rel) -> { text, mtimeMs } is called only for notes outside the skipped folders.
+ * Order of the rules: folder, too small, opted out, people: skip, already read (done has the noteKey). Stops at `limit` to read.
+ */
+export function selectNotes(rels, load, { done = new Set(), reader = '', limit = Infinity, folders = [] } = {}) {
+  const s = { todo: [], folderSkipped: 0, skippedSmall: 0, optedOut: 0, peopleSkipped: 0 }
+  for (const rel of rels) {
+    if (inSkippedFolder(rel, folders)) { s.folderSkipped++; continue }
+    const { text: raw, mtimeMs } = load(rel)
+    const text = stripBlocks(raw)
+    if (text.trim().length < MIN_CHARS) { s.skippedSmall++; continue }
+    if (noteOptOut(text)) { s.optedOut++; continue }
+    if (notePeopleSkip(text)) { s.peopleSkipped++; continue }
+    const key = noteKey(rel, text, reader)
+    if (done.has(key)) continue
+    s.todo.push({ rel, text, key, date: noteDate(rel, text, mtimeMs), communities: noteCommunities(text) })
+    if (s.todo.length >= limit) break
+  }
+  return s
+}
+
 function parseArgs(argv) {
-  const o = { positional: [], include: [], limit: Infinity, concurrency: 2, files: null, dryRun: false, reader: '' }
+  const o = { positional: [], include: [], skipFolders: [], limit: Infinity, concurrency: 2, files: null, dryRun: false, reader: '' }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--reader') o.reader = argv[++i]
     else if (a === '--include') o.include = argv[++i].split(',').map((s) => s.trim()).filter(Boolean)
+    else if (a === '--skip-folders') o.skipFolders = argv[++i].split(',').map((s) => s.trim()).filter(Boolean)
     else if (a === '--limit') o.limit = Number(argv[++i])
     else if (a === '--concurrency') o.concurrency = Math.max(1, Number(argv[++i]) || 1)
     else if (a === '--files') o.files = argv[++i]
@@ -171,27 +222,17 @@ async function main() {
   const o = parseArgs(process.argv.slice(2))
   const [vault, outPath] = o.positional
   if (!vault || !outPath || (!o.reader && !o.dryRun)) {
-    console.error('usage: notes_read_persons.mjs <vault> <out.jsonl> --reader claude:<model>|ollama:<model> [--include a,b] [--limit N] [--concurrency N] [--files list.txt] [--dry-run]')
+    console.error('usage: notes_read_persons.mjs <vault> <out.jsonl> --reader claude:<model>|ollama:<model> [--include a,b] [--skip-folders a,b] [--limit N] [--concurrency N] [--files list.txt] [--dry-run]')
     process.exit(2)
   }
+  let folders
+  try { folders = skipFolders(vault, o.skipFolders) } catch (e) { console.error(e.message); process.exit(2) }
   const errPath = `${outPath}.errors.jsonl`
   const done = new Set(existsSync(outPath) ? readFileSync(outPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).key) : [])
-  let rels = o.files ? readFileSync(o.files, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean) : listNotes(vault, o.include)
-  const todo = []
-  let skippedSmall = 0
-  let optedOut = 0
-  for (const rel of rels) {
-    const abs = path.join(vault, rel)
-    const st = statSync(abs)
-    const text = stripBlocks(readFileSync(abs, 'utf8'))
-    if (text.trim().length < MIN_CHARS) { skippedSmall++; continue }
-    if (noteOptOut(text)) { optedOut++; continue }
-    const key = noteKey(rel, text, o.reader)
-    if (done.has(key)) continue
-    todo.push({ rel, text, key, date: noteDate(rel, text, st.mtimeMs), communities: noteCommunities(text) })
-    if (todo.length >= o.limit) break
-  }
-  console.log(`${rels.length} notes, ${skippedSmall} too small, ${optedOut} opted out (#no-trustweb), ${done.size} already read, ${todo.length} to read with ${o.reader || '(dry run)'}`)
+  const rels = o.files ? readFileSync(o.files, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean) : listNotes(vault, o.include)
+  const load = (rel) => { const abs = path.join(vault, rel); return { text: readFileSync(abs, 'utf8'), mtimeMs: statSync(abs).mtimeMs } }
+  const { todo, folderSkipped, skippedSmall, optedOut, peopleSkipped } = selectNotes(rels, load, { done, reader: o.reader, limit: o.limit, folders })
+  console.log(`${rels.length} notes, ${folderSkipped} in skipped folders, ${skippedSmall} too small, ${optedOut} opted out (#no-trustweb), ${peopleSkipped} people: skip, ${done.size} already read, ${todo.length} to read with ${o.reader || '(dry run)'}`)
   if (o.dryRun) { for (const t of todo) console.log(`${t.date}  ${t.rel}  (${t.text.length} chars)`); return }
   const reader = readerFor(o.reader)
   let i = 0

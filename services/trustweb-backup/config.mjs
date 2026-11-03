@@ -81,10 +81,15 @@
 //   ORG_MAX_EVENTS, ORG_MAX_INVITEES            3, 25      wave 8: free organizer limits (events per org, invitee e-mails per event)
 //   ORG_HOSTED_MAX_EVENTS, ORG_HOSTED_MAX_INVITEES  50, 500  the same for an org the admin switched to plan "hosted" (POST /admin/org)
 //   ORG_MAX_ORGS                     2000         organizers in total; beyond it POST /org answers 503 full
-//   ORG_DAYS                         365          an org untouched this long may be swept (only the `updated` stamp exists; no sweeper yet)
+//   ORG_DAYS                         365          an org untouched this long is swept with its events (`updated`: organizer writes, and reads per ORG_TOUCH_HOURS)
+//   ORG_SWEEP_MS                     3600000      how often untouched orgs are swept (in the server process; a swept org answers like an unknown one)
+//   ORG_TOUCH_HOURS                  24           how old `updated` must be before POST /org/me refreshes it (in memory, written with the next flush)
+//   ORG_HIT_FLUSH_MS                 5000         hit counters and touches are kept in memory and written at most this often (and on shutdown), not per request
 //   ORG_CREATE_PER_MINUTE, ORG_CREATE_PER_HOUR  6, 30     POST /org per network address (IPv6: /64), in memory
 //   ORG_WRITE_PER_MINUTE, ORG_WRITE_PER_HOUR    20, 200   POST /org/me and /org/event together, per network address
 //   ORG_HIT_PER_MINUTE               60           POST /org/hit per network address (the attendee phones' counter route)
+//   ORG_EVENT_MAX_BYTES              65536        body cap of POST /org/event (room for the event.logo data url); /org, /org/me, /org/hit keep 16 KB (413 above)
+//   ORG_PUBLIC_PER_MINUTE            120          GET /org/event/<id>/public per network address (the join sheet's name + logo)
 //   NAME_CAP                         3            wave 15: names CLAIMED per network address (IPv6: /64) in 30 days (persisted in the connect store); 429 name-cap above
 //   NAME_CAP_ALLOW                   (unset)      wave 15: JSON file of organizers with a higher cap (name_cap.mjs); read at start and on SIGHUP
 //   NAME_CAP_REQUESTS                (unset)      wave 21: JSONL of POST /names/cap-request asks; default name_cap_requests.jsonl beside NAME_CAP_ALLOW (else in BACKUP_DIR)
@@ -284,11 +289,16 @@ export function loadConfig(options = {}) {
     orgHostedMaxInvitees: pick(options, 'orgHostedMaxInvitees', 'ORG_HOSTED_MAX_INVITEES', 500),
     orgMax: pick(options, 'orgMax', 'ORG_MAX_ORGS', 2000),
     orgDays: pick(options, 'orgDays', 'ORG_DAYS', 365),
+    orgSweepMs: pick(options, 'orgSweepMs', 'ORG_SWEEP_MS', 3_600_000),
+    orgTouchMs: pick(options, 'orgTouchHours', 'ORG_TOUCH_HOURS', 24) * 3_600_000,
+    orgHitFlushMs: pick(options, 'orgHitFlushMs', 'ORG_HIT_FLUSH_MS', 5000),
     orgCreatePerMinute: pick(options, 'orgCreatePerMinute', 'ORG_CREATE_PER_MINUTE', 6),
     orgCreatePerHour: pick(options, 'orgCreatePerHour', 'ORG_CREATE_PER_HOUR', 30),
     orgWritePerMinute: pick(options, 'orgWritePerMinute', 'ORG_WRITE_PER_MINUTE', 20),
     orgWritePerHour: pick(options, 'orgWritePerHour', 'ORG_WRITE_PER_HOUR', 200),
     orgHitPerMinute: pick(options, 'orgHitPerMinute', 'ORG_HIT_PER_MINUTE', 60),
+    orgEventMaxBytes: pick(options, 'orgEventMaxBytes', 'ORG_EVENT_MAX_BYTES', 65536),
+    orgPublicPerMinute: pick(options, 'orgPublicPerMinute', 'ORG_PUBLIC_PER_MINUTE', 120),
 
     reservedNames: options.reservedNames ?? parseReservedList(process.env.RESERVED_NAMES),
     adminToken: options.adminToken ?? readAdminToken(),

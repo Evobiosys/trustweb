@@ -54,8 +54,10 @@ State changes also arrive via WS.
 ### POST /api/rooms/:room_id/message `{ "text": string }` → `{ "ok": true }`
 ### GET /api/audit → `{ "entries": [ { ts, decision, detail } ] }`  (human-readable, I6)
 
-Errors: 4xx `{ "error": string }`. CORS (`Access-Control-Allow-Origin: *`, `-Headers: content-type`,
-`-Methods: GET,POST,DELETE,OPTIONS`) is set on **every** response including 4xx/5xx; `OPTIONS` on any
+Errors: 4xx `{ "error": string }`. CORS (`Access-Control-Allow-Origin: *`, `-Headers:
+content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig,x-tw-relay-aud,x-tw-relay-kid`,
+`-Methods: GET,POST,DELETE,OPTIONS`, `Access-Control-Expose-Headers: date` so a browser relay client can
+resync its clock from a `401 stale`) is set on **every** response including 4xx/5xx; `OPTIONS` on any
 path returns `204` with no body. Bind host defaults to `127.0.0.1`; set `API_HOST=0.0.0.0` (or a LAN IP)
 to opt into LAN exposure (Task 5/8's alpha-test mode) — **there is no auth by default**, so this is a
 deliberate, explicit opt-in, never the default.
@@ -172,6 +174,19 @@ persisted. `did`/`endpoint` are present only when `TRANSPORT=didcomm` (Task 11's
 `RelayChannel` targets — a daemonless browser peer scanning this card's connect URL uses it as its
 `createRelayClient({ relayUrl })` base (appends `/relay/send` + `/relay/drain`). Present only when the
 boot layer wires a mediator (`scripts/alpha_server.ts`); absent for mock/matrix.
+
+### Mediator mounts (only when the persona hosts the trust-graph relay)
+
+#### POST /relay/send → `202 { "routed": "accepted" }` | `404 { "routed": "rejected", "reason" }` | `401/403/429/503`
+Body: one opaque DIDComm wire (≤ 128 KiB, `413` over it). Sender authentication per docs/TRANSPORT.md §11
+(headers `x-tw-relay-*`; `401` codes `missing_auth`, `malformed`, `stale`, `bad_audience`,
+`legacy_signature`, `bad_signature`, `replayed`, `unknown_key`, `expired_key`, `revoked`, `rotated`;
+`403` sender not allowed; `429`/`503` nonce budgets). The success body never says live vs queued.
+
+#### POST /relay/keys → `200 { "ok": true, "applied": boolean }` | `400/401/409 { "ok": false, "code" }`
+Body: one signed key record (`rotate`, `revoke`, `device_grant`, `device_revoke`; ≤ 16 KiB, `413` over
+it; `503 no_registry` when the relay runs without a key registry; `404` when this persona hosts no
+mediator). Status and body come straight from `RelayServer.keyRecord` (docs/TRANSPORT.md §11.3).
 
 ## WS `/ws`
 Server → client JSON events, each `{ "type": …, …payload }`:

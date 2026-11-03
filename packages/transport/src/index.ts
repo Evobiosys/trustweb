@@ -54,20 +54,54 @@ export {
 } from "./relay_queue_store.js";
 export { RelayServer, type RelayServerOptions, type SubmitResult, type IngressResult } from "./relay_server.js";
 export { SEND_AUTH_HEADERS, SendAuthVerifier, sendSigningInput, signSend, parseSenderAuthMode, type SendAuthHeaders, type SendAuthResult, type SenderAuthMode } from "./relay_send_auth.js";
+export {
+  DEFAULT_KEY_POLICY,
+  SEND_AUTH_PREFIX_V1,
+  sendSigningInputV2,
+  signSendV1,
+  type KeyLookup,
+  type SendKeyPolicy,
+  type SendAuthFailureCode,
+  type SendAuthVerifierOptions,
+  type SendSigner,
+} from "./relay_send_auth.js";
+export { InMemorySendNonceStore, SqliteSendNonceStore, type SendNonceStore } from "./send_nonce_store.js";
 export { RelayChannel, type RelayChannelOptions, type BackoffOpts } from "./relay_channel.js";
 export {
   IrohRelayChannel,
   DEFAULT_MAX_WIRE_BYTES as IROH_DEFAULT_MAX_WIRE_BYTES,
+  DEFAULT_ATTEMPT_MS as IROH_DEFAULT_ATTEMPT_MS,
+  DEFAULT_MAX_RELAY_ATTEMPTS as IROH_DEFAULT_MAX_RELAY_ATTEMPTS,
   type IrohEndpointLike,
   type IrohPeerAddr,
   type IrohRelayChannelOptions,
+  type IrohRelayAuditEvent,
 } from "./iroh_relay_channel.js";
+export {
+  IrohRelaySelector,
+  DEFAULT_RELAY_COOLDOWN_MS as IROH_DEFAULT_RELAY_COOLDOWN_MS,
+  DEFAULT_RELAY_MAX_COOLDOWN_MS as IROH_DEFAULT_RELAY_MAX_COOLDOWN_MS,
+  type IrohRelaySelectorOptions,
+} from "./iroh_relay_selector.js";
+export {
+  IrohSidecarEndpoint,
+  IrohSidecarError,
+  findIrohSidecar,
+  IROH_SIDECAR_BINARY,
+  IROH_SIDECAR_ENV,
+  DEFAULT_READY_TIMEOUT_MS as IROH_SIDECAR_DEFAULT_READY_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS as IROH_SIDECAR_DEFAULT_REQUEST_TIMEOUT_MS,
+  type IrohSidecarEndpointOptions,
+  type IrohSidecarReady,
+  type IrohSidecarLogLevel,
+} from "./iroh_sidecar_endpoint.js";
 export {
   LadderChannel,
   type LadderRung,
   type LadderRungName,
   type LadderOptions,
   type LadderBudgets,
+  type LadderRungResult,
 } from "./ladder_channel.js";
 export {
   issueVrc,
@@ -89,3 +123,35 @@ export {
   type VouchVerificationResult,
   type VerifyInboundVouchesOptions,
 } from "./inbound_vouch.js";
+// relay env (B)
+export { parseSenderAuthEnv, type SenderAuthEnv } from "./relay_env.js";
+// key rotation / revocation (A2)
+export { encodeEd25519Multibase, decodeEd25519Multibase, type KeyPair } from "./did_identity.js";
+export {
+  KEY_RECORD_PREFIXES,
+  DEFAULT_DEVICE_GRANT_MS,
+  signRotation,
+  signRevocation,
+  signDeviceGrant,
+  signDeviceRevocation,
+  keyRecordSigningInput,
+  keyRecordSigningText,
+  parseKeyRecord,
+  parseKeyRecordStatement,
+  type KeyRecord,
+  type KeyRecordStatement,
+  type RotateRecord,
+  type RevokeRecord,
+  type DeviceGrantRecord,
+  type DeviceRevokeRecord,
+} from "./did_key_records.js";
+export { InMemoryDidKeyStore, SqliteDidKeyStore, type DidKeyStore, type DidStateRow, type DeviceGrantRow } from "./did_key_store.js";
+export {
+  DidKeyRegistry,
+  DEFAULT_KEY_RECORD_WINDOW_MS,
+  type ApplyResult,
+  type ApplyFailureCode,
+  type DidKeyRegistryOptions,
+  type DidKeyStatus,
+} from "./did_key_registry.js";
+export { type KeyRecordResult } from "./relay_server.js";

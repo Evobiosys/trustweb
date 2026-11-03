@@ -37,6 +37,12 @@ export interface RelayMediator {
    * The unauthenticated `submit()` is deliberately NOT part of this interface: the HTTP ingress must not reach it.
    */
   ingress(rawWire: string, headers: IncomingHttpHeaders): { routed: "accepted" | "rejected"; reason?: string; status?: number };
+  /**
+   * Applies one self-authenticating DID key record (rotate / revoke / device_grant / device_revoke, see
+   * transport's did_key_records.ts) to the mediator's key registry. `status`/`body` are sent back verbatim
+   * (503 `no_registry` when the mediator keeps none).
+   */
+  keyRecord(body: string): { status: number; body: unknown };
   /** Mounts the authenticated drain WS onto an existing http.Server (additive `ws` upgrade-path hook). */
   attachDrainWss(httpServer: NodeHttpServer, path?: string): void;
 }
@@ -54,6 +60,9 @@ const RELAY_DRAIN_PATH = "/relay/drain";
  * mid-stream here; reject-before-enqueue there).
  */
 const RELAY_MAX_BODY_BYTES = 128 * 1024;
+
+/** Hard cap on a `POST /relay/keys` body: one key record is a few hundred bytes; equal to RelayServer's own cap. */
+const RELAY_KEYS_MAX_BODY_BYTES = 16 * 1024;
 
 /** Sentinel returned by readBoundedBody when the request body exceeded its cap and a 413 was already written+the socket destroyed — the caller must simply `return`. */
 const BODY_TOO_LARGE = Symbol("body-too-large");
@@ -213,9 +222,13 @@ export interface ServerExtras {
 
 /** CORS headers that never depend on the allowlist mode or the request's origin. */
 const CORS_METHOD_HEADERS: Record<string, string> = {
-  // x-tw-relay-*: the per-DID signature a browser peer attaches to POST /relay/send (relay_send_auth.ts).
-  "Access-Control-Allow-Headers": "content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig",
+  // x-tw-relay-*: the per-DID signature a browser peer attaches to POST /relay/send (relay_send_auth.ts, v2 adds
+  // the audience and the optional device key id).
+  "Access-Control-Allow-Headers": "content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig,x-tw-relay-aud,x-tw-relay-kid",
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+  // A browser sender whose clock is off gets 401 `stale`; it re-signs on the relay's clock, which it can only read
+  // cross-origin when Date is exposed (Date is not a CORS-safelisted response header).
+  "Access-Control-Expose-Headers": "date",
 };
 
 /** Matches http(s)://localhost[:port] and http(s)://127.0.0.1[:port] — the "localhost" CORS allowlist mode. */
@@ -830,6 +843,20 @@ export function startServer(daemon: Daemon, port: number, extras: ServerExtras =
       // likewise uniform (202) so it cannot become a side-channel. Only a
       // `rejected` maps to 404 (lets a RelayChannel caller fall back a rung).
       sendJson(res, result.routed === "rejected" ? (result.status ?? 404) : 202, { routed: result.routed, ...(result.reason ? { reason: result.reason } : {}) });
+      return;
+    }
+
+    // POST /relay/keys — DID key records (rotation / revocation / device keys) for the mediator's key registry,
+    // consulted by send auth and drain auth. Records are self-authenticating, so this route needs no other auth.
+    if (method === "POST" && path === "/relay/keys") {
+      if (!extras.relayServer) {
+        sendJson(res, 404, { error: "relay mediator not enabled on this persona" });
+        return;
+      }
+      const rawRecord = await readBoundedBody(req, res, RELAY_KEYS_MAX_BODY_BYTES, baseCorsHeaders());
+      if (rawRecord === BODY_TOO_LARGE) return; // 413 already written + socket closed
+      const result = extras.relayServer.keyRecord(rawRecord);
+      sendJson(res, result.status, result.body);
       return;
     }
 

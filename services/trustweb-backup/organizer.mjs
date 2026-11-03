@@ -3,14 +3,19 @@
 //   POST /org        {name}                                  mint an organizer: 201 {org, secret, plan, limits}
 //   POST /org/me     {org, secret}                           the organizer's own events and counters
 //   POST /org/event  {org, secret, event, link, invitees, id?} create or update an event; {org, secret, id, delete: true} deletes it
-//   POST /org/hit    {event, kind}                           204 always; counts opened | joined | tagged on a known event (the only route attendees touch)
+//   POST /org/hit    {event, kind}                           204 always; counts opened | joined | tagged on a known event (attendee phones)
+//   GET  /org/event/<id>/public                              200 {name, logo?} for the join sheet (attendee phones); 404 not_found for an unknown id or shape
 //
+// event.logo (optional): a data:image/(png|jpeg|webp|gif);base64 url of at most 32768 characters (LOGO_RE, MAX_LOGO_CHARS), else 400 field event.logo.
 // PRIVACY: the server holds what the organizer already has (event fields, invitee e-mails) plus aggregate counters, never an attendee's identity, web,
-// tags or notes. /org/hit carries no identity and keeps no request data.
+// tags or notes. /org/hit carries no identity and keeps no request data. The public route answers the event name and logo and nothing else (no invitees,
+// counters, link, org or dates), changes nothing and counts as no hit.
 //
-// NO ORACLE: an unknown org and a wrong secret answer with the same 403 (the store hashes and compares either way).
+// NO ORACLE: an unknown org and a wrong secret answer with the same 403 (the store hashes and compares either way). The public route answers an unknown id and
+// a wrongly shaped one with the same 404.
 // LOGGING: none. No logger is passed to this module and server.mjs writes no "METHOD status" line for /org paths.
-// ABUSE: per network address (IPv4 as it is, IPv6 by /64, in memory). Bodies are capped at 16 KB, JSON only, own-host Origin only, never cross-site.
+// ABUSE: per network address (IPv4 as it is, IPv6 by /64, in memory). Bodies are capped at 16 KB (POST /org/event: ORG_EVENT_MAX_BYTES, 64 KB, room for a
+// logo), JSON only, own-host Origin only, never cross-site; the public GET has the same Origin guard and its own limiter (ORG_PUBLIC_PER_MINUTE).
 
 import { CODE_RE } from './connect_names.mjs'
 import { SECRET_RE, newSecret } from './connect_store.mjs'
@@ -28,6 +33,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+$/
 const REQUIRED = [['name', 120], ['from', 200], ['where', 200]]
 const OPTIONAL = [['to', 2000], ['conditions', 2000]]
 const OPTIONAL_AFTER_THEMES = [['tagName', 60], ['organizer', 80]]
+/** The optional event.logo: a base64 data url of one of four raster types, at most MAX_LOGO_CHARS characters, taken as it is (not trimmed). */
+export const LOGO_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/
+export const MAX_LOGO_CHARS = 32768
+const PUBLIC_RE = /^\/org\/event\/([0-9a-f]{16})\/public$/
 
 /** Is `pathname` one of the organizer routes? */
 export const isOrgPath = (pathname) => pathname === '/org' || pathname.startsWith('/org/')
@@ -60,7 +69,12 @@ export function parseEvent(raw) {
     event.themes = themes
   }
   bad = take(OPTIONAL_AFTER_THEMES, 0)
-  return bad === null ? { event } : { field: bad }
+  if (bad !== null) return { field: bad }
+  if (raw.logo !== undefined) {
+    if (typeof raw.logo !== 'string' || raw.logo.length > MAX_LOGO_CHARS || !LOGO_RE.test(raw.logo)) return { field: 'event.logo' }
+    event.logo = raw.logo
+  }
+  return { event }
 }
 
 /** The normalized link when `raw` is an https url of one of `hosts` (no port, no userinfo) whose fragment starts with ev_host=, else null. */
@@ -89,20 +103,28 @@ export function createOrganizer({ cfg, store, clientOf, now = Date.now }) {
   const createLimits = [limiter(cfg.orgCreatePerMinute, 60_000), limiter(cfg.orgCreatePerHour, 3_600_000)]
   const writeLimits = [limiter(cfg.orgWritePerMinute, 60_000), limiter(cfg.orgWritePerHour, 3_600_000)]
   const hitLimits = [limiter(cfg.orgHitPerMinute, 60_000)]
+  const publicLimits = [limiter(cfg.orgPublicPerMinute, 60_000)]
 
-  /** Everything every POST checks before it looks at the fields. Returns {body} or {status} (already answered). The limits count invalid posts too. */
-  async function receive(req, res, limits) {
-    if (req.method !== 'POST') return { status: jsonError(res, 405, 'method_not_allowed', {}, { Allow: 'POST' }) }
-    if (String(req.headers['sec-fetch-site'] ?? '').toLowerCase() === 'cross-site') return { status: jsonError(res, 403, 'forbidden_origin') }
+  /** The method, Origin / Sec-Fetch-Site and rate checks every route makes first. Returns the status it answered, or null to go on. */
+  function guard(req, res, method, limits) {
+    if (req.method !== method) return jsonError(res, 405, 'method_not_allowed', {}, { Allow: method })
+    if (String(req.headers['sec-fetch-site'] ?? '').toLowerCase() === 'cross-site') return jsonError(res, 403, 'forbidden_origin')
     const origin = req.headers.origin
-    if (origin !== undefined && !originAllowed(origin, cfg.linkHosts)) return { status: jsonError(res, 403, 'forbidden_origin') }
+    if (origin !== undefined && !originAllowed(origin, cfg.linkHosts)) return jsonError(res, 403, 'forbidden_origin')
     const key = ipKey(clientOf(req))
     const hits = limits.map((l) => l.hit(key))
-    if (hits.some((h) => h.limited)) return { status: tooManyRequests(res, 'rate_limited', Math.max(...hits.map((h) => h.retryAfter))) }
+    if (hits.some((h) => h.limited)) return tooManyRequests(res, 'rate_limited', Math.max(...hits.map((h) => h.retryAfter)))
+    return null
+  }
+
+  /** Everything every POST checks before it looks at the fields. Returns {body} or {status} (already answered). The limits count invalid posts too. */
+  async function receive(req, res, limits, maxBytes = MAX_BYTES) {
+    const refused = guard(req, res, 'POST', limits)
+    if (refused !== null) return { status: refused }
     if (!/^application\/json(\s*;|$)/i.test(String(req.headers['content-type'] ?? ''))) return { status: refuse(req, res, 415, 'unsupported_media') }
     const declared = Number(req.headers['content-length'])
-    if (Number.isFinite(declared) && declared > MAX_BYTES) return { status: refuse(req, res, 413, 'too_large') }
-    const read = await readJsonObject(req, MAX_BYTES)
+    if (Number.isFinite(declared) && declared > maxBytes) return { status: refuse(req, res, 413, 'too_large') }
+    const read = await readJsonObject(req, maxBytes)
     if (read.error === 'too_large') return { status: refuse(req, res, 413, 'too_large') }
     if (read.error !== undefined) return { status: jsonError(res, read.status, read.error) }
     return { body: read.body }
@@ -170,7 +192,7 @@ export function createOrganizer({ cfg, store, clientOf, now = Date.now }) {
   }
 
   async function event(req, res) {
-    const got = await receive(req, res, writeLimits)
+    const got = await receive(req, res, writeLimits, cfg.orgEventMaxBytes)
     if (got.body === undefined) return got.status
     const { org, secret, id } = got.body
     const bad = badCredentialField(got.body)
@@ -203,10 +225,27 @@ export function createOrganizer({ cfg, store, clientOf, now = Date.now }) {
     return 204
   }
 
+  /** GET /org/event/<id>/public: {name} or {name, logo} of a known event for the join sheet; read-only, no hit. */
+  function publicEvent(req, res, id) {
+    const refused = guard(req, res, 'GET', publicLimits)
+    if (refused !== null) return refused
+    let shown
+    try {
+      shown = store.publicEvent(id)
+    } catch {
+      return jsonError(res, 500, 'server_error')
+    }
+    if (shown === undefined) return jsonError(res, 404, 'not_found')
+    sendJson(res, 200, shown.logo === undefined ? { name: shown.name } : { name: shown.name, logo: shown.logo })
+    return 200
+  }
+
   const routes = new Map([['/org', create], ['/org/me', me], ['/org/event', event], ['/org/hit', hit]])
 
-  /** Dispatches an /org path. Returns the status it answered. */
+  /** Dispatches an /org path. Returns the status it answered. A wrongly shaped public path falls through to the same 404 as an unknown id. */
   function handle(req, res, pathname) {
+    const pub = PUBLIC_RE.exec(pathname)
+    if (pub !== null) return publicEvent(req, res, pub[1])
     const run = routes.get(pathname)
     return run === undefined ? jsonError(res, 404, 'not_found') : run(req, res)
   }

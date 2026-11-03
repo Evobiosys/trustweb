@@ -5,7 +5,7 @@
  */
 import { canAccess } from './check'
 import type { Store, Tuple } from './tuples'
-import type { Zone } from './zones'
+import { ALL_ZONES, type Zone } from './zones'
 
 const YEAR_MS = 365 * 86_400_000
 
@@ -29,10 +29,13 @@ export function scopeTuples(scope: Scope, itemId: string, by: string, since: Dat
   ]
 }
 
-/** Who would see the item under this scope: the same canAccess as enforcement, on the same store plus the scope's tuples. */
-export function previewShare(store: Store, scope: Scope, people: readonly string[], itemId: string, now: Date): { count: number; names: string[] } {
+/**
+ * Who would see the item under this scope: the same canAccess as enforcement, on the same store plus the scope's tuples.
+ * `active` (the rings switched on) is passed through to canAccess, as the other checks take it; all rings when omitted.
+ */
+export function previewShare(store: Store, scope: Scope, people: readonly string[], itemId: string, now: Date, active: readonly Zone[] = ALL_ZONES): { count: number; names: string[] } {
   const augmented = [...store, ...scopeTuples(scope, itemId, 'preview', now)]
-  const names = people.filter((id) => canAccess(augmented, id, itemId, now).allowed)
+  const names = people.filter((id) => canAccess(augmented, id, itemId, now, active).allowed)
   return { count: names.length, names }
 }
 

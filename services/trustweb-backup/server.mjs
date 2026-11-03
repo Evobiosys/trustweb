@@ -24,6 +24,8 @@
 //   unknown path. A successful change logs the single line "admin grant".
 // Added 2026-10-15 (wave 8): organizer accounts, POST /org, /org/me, /org/event, /org/hit (organizer.mjs, organizer_store.mjs; ORG_* settings, store
 //   <BACKUP_DIR>/organizers.json) and the operator-only POST /admin/org (plan switch). Never logged either: the modules have no logger.
+// Added 2026-11-02: the organizer store writes hit counters in the background (ORG_HIT_FLUSH_MS) and on close(), and an in-process sweeper (ORG_SWEEP_MS)
+//   drops orgs untouched for ORG_DAYS. close() is async now: it awaits the store's final write.
 // The three groups answer errors as JSON; /backup keeps its plain-text answers and its on-disk format.
 // The old request deadline of 30 s stays on /backup and /feedback; /hosted and /transcribe get LONG_REQUEST_MS
 // (15 min) because a 20 MB upload from a phone takes minutes.
@@ -175,12 +177,23 @@ export async function startServer(options = {}) {
   // Organizer accounts (wave 8): same rule, a store that cannot open turns the feature off (503 not_configured).
   let orgStore = null
   try {
-    orgStore = await createOrgStore({ file: path.join(cfg.dir, 'organizers.json'), max: cfg.orgMax, limitsOf: (plan) => limitsFor(cfg, plan), now: cfg.now })
+    orgStore = await createOrgStore({
+      file: path.join(cfg.dir, 'organizers.json'),
+      max: cfg.orgMax,
+      limitsOf: (plan) => limitsFor(cfg, plan),
+      now: cfg.now,
+      flushMs: cfg.orgHitFlushMs,
+      touchMs: cfg.orgTouchMs,
+      ttlMs: cfg.orgDays * 86_400_000,
+    })
     if (orgStore.recovered) cfg.log('organizer store unreadable: moved aside, organizers start empty')
   } catch {
     cfg.log('organizer store unavailable: organizers off')
   }
   const organizer = orgStore === null ? null : createOrganizer({ cfg, store: orgStore, clientOf, now: cfg.now })
+  // In-process on purpose, no CLI: the store lives in this process's memory, so a second process editing organizers.json would race it and be overwritten.
+  const orgSweep = orgStore === null ? null : setInterval(() => orgStore.sweep().catch(() => undefined), cfg.orgSweepMs)
+  orgSweep?.unref()
   const admin = createAdmin({ cfg, store: connectStore, orgStore, clientOf, now: cfg.now })
   let boundPort = cfg.port // replaced by the port actually bound once the server listens (tests listen on 0)
 
@@ -477,20 +490,32 @@ export async function startServer(options = {}) {
   return {
     server,
     port: boundPort,
-    close: () =>
-      new Promise((resolve) => {
-        clearInterval(linkSweep)
-        clearInterval(connectSweep)
-        process.off('SIGHUP', nameCapAllow.reload)
+    close: async () => {
+      clearInterval(linkSweep)
+      clearInterval(connectSweep)
+      clearInterval(orgSweep)
+      process.off('SIGHUP', nameCapAllow.reload)
+      await new Promise((resolve) => {
         server.close(() => resolve())
         server.closeAllConnections()
-      }),
+      })
+      await orgStore?.close().catch(() => undefined) // pending hit counters and touches reach the disk
+    },
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startServer()
-    .then(({ port }) => console.log(`trustweb-backup listening on ${process.env.HOST ?? '127.0.0.1'}:${port}`))
+    .then((running) => {
+      console.log(`trustweb-backup listening on ${process.env.HOST ?? '127.0.0.1'}:${running.port}`)
+      // systemd stop: close() writes the organizer counters still in memory (ORG_HIT_FLUSH_MS) before the process ends.
+      const stop = () => {
+        running.close().finally(() => process.exit(0))
+        setTimeout(() => process.exit(0), 5000).unref()
+      }
+      process.once('SIGTERM', stop)
+      process.once('SIGINT', stop)
+    })
     .catch((err) => {
       console.error(String(err.message ?? err))
       process.exit(1)
