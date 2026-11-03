@@ -11,6 +11,7 @@ export function fieldOverviewPanel(s: AppState, on: { live: () => Pick<AppState,
   const o = fieldOverview(s.people)
   return el('section', { class: 'field-overview', 'data-field-overview': '' }, [
     el('h3', {}, [S.fieldOverviewTitle]),
+    el('details', { class: 'field-why', 'data-field-why': '' }, [el('summary', {}, [S.fieldWhyTitle]), el('p', { class: 'meta' }, [S.fieldWhy])]),
     ...o.rows.map((r) => el('div', { class: 'field-row', 'data-field-ring': r.ring }, [
       el('span', { class: 'field-dot', style: `background:${toneVar(r.ring)}`, 'aria-hidden': 'true' }),
       el('span', { class: 'field-name' }, [S.ringLabel[r.ring]]),

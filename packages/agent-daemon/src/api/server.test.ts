@@ -25,7 +25,11 @@ interface BootOpts {
   peerId?: string;
   bus?: InMemoryBus;
   /** When set, the persona hosts the trust-graph mediator: startServer mounts POST /relay/send → relayServer.ingress (Task 10 / finding 2). */
-  relayServer?: { ingress(rawWire: string, headers: Record<string, string | string[] | undefined>): { routed: "accepted" | "rejected"; reason?: string; status?: number }; attachDrainWss(httpServer: unknown, path?: string): void };
+  relayServer?: {
+    ingress(rawWire: string, headers: Record<string, string | string[] | undefined>): { routed: "accepted" | "rejected"; reason?: string; status?: number };
+    keyRecord(body: string): { status: number; body: unknown };
+    attachDrainWss(httpServer: unknown, path?: string): void;
+  };
   /** DID card fields merged into GET /api/card (Task 11's getCardPayload output + Task 5's relay_url). */
   cardExtra?: { did: string; endpoint: string; relays?: string[]; ice_servers?: string[]; relay_url?: string };
   /** Finding 4 (2026-09-06 UH-findings handover): opt-in bearer-token auth. */
@@ -232,7 +236,10 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
     cleanup = () => server.close();
     const res = await fetch(`http://127.0.0.1:${port}/api/state`);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(res.headers.get("access-control-allow-headers")).toBe("content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig");
+    expect(res.headers.get("access-control-allow-headers")).toBe(
+      "content-type,x-tw-relay-did,x-tw-relay-ts,x-tw-relay-nonce,x-tw-relay-sig,x-tw-relay-aud,x-tw-relay-kid"
+    );
+    expect(res.headers.get("access-control-expose-headers")).toBe("date");
     expect(res.headers.get("access-control-allow-methods")).toBe("GET,POST,DELETE,OPTIONS");
   });
 
@@ -263,6 +270,22 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     const text = await res.text();
     expect(text).toBe("");
+  });
+
+  it("the OPTIONS preflight for POST /relay/send allows the v2 send-auth headers (aud, kid) and exposes Date", async () => {
+    const port = nextPort();
+    const { server } = await bootDaemon(port);
+    cleanup = () => server.close();
+    const res = await fetch(`http://127.0.0.1:${port}/relay/send`, {
+      method: "OPTIONS",
+      headers: { origin: "https://app.example", "access-control-request-method": "POST", "access-control-request-headers": "x-tw-relay-aud,x-tw-relay-kid" },
+    });
+    expect(res.status).toBe(204);
+    const allowed = (res.headers.get("access-control-allow-headers") ?? "").split(",");
+    for (const h of ["x-tw-relay-did", "x-tw-relay-kid", "x-tw-relay-aud", "x-tw-relay-ts", "x-tw-relay-nonce", "x-tw-relay-sig"]) {
+      expect(allowed).toContain(h);
+    }
+    expect(res.headers.get("access-control-expose-headers")).toBe("date");
   });
 
   // ------------------------------------------------------------------ trust --
@@ -638,6 +661,9 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
         submitted.push(rawWire);
         return { routed: "accepted" };
       },
+      keyRecord(): { status: number; body: unknown } {
+        return { status: 503, body: { ok: false, code: "no_registry" } };
+      },
       attachDrainWss(): void {
         /* no drain WS needed for this ingress-body test */
       },
@@ -667,6 +693,9 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
       ingress(): { routed: "accepted" | "rejected"; reason?: string } {
         return { routed: "accepted" };
       },
+      keyRecord(): { status: number; body: unknown } {
+        return { status: 503, body: { ok: false, code: "no_registry" } };
+      },
       attachDrainWss(): void {},
     };
     const { server } = await bootDaemon(port, { relayServer });
@@ -688,6 +717,9 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
         seen.push(headers["x-tw-relay-sig"]);
         return headers["x-tw-relay-sig"] === "good" ? { routed: "accepted" } : { routed: "rejected", reason: "sender authentication failed: bad_signature", status: 401 };
       },
+      keyRecord(): { status: number; body: unknown } {
+        return { status: 503, body: { ok: false, code: "no_registry" } };
+      },
       attachDrainWss(): void {},
     };
     const { server } = await bootDaemon(port, { relayServer });
@@ -702,6 +734,67 @@ describe("REST/WS server — Task 5 extended HTTP surface", () => {
     const good = await fetch(`http://127.0.0.1:${port}/relay/send`, { method: "POST", body, headers: { "x-tw-relay-sig": "good" } });
     expect(good.status).toBe(202);
     expect(seen).toEqual(["forged", undefined, "good"]);
+  });
+
+  // ----------------------------------- F5: DID key records (POST /relay/keys) --
+
+  it("POST /relay/keys hands the raw body to keyRecord() and returns its status + body verbatim", async () => {
+    const port = nextPort();
+    const bodies: string[] = [];
+    const relayServer = {
+      ingress(): { routed: "accepted" | "rejected"; reason?: string } {
+        return { routed: "accepted" };
+      },
+      keyRecord(body: string): { status: number; body: unknown } {
+        bodies.push(body);
+        const parsed = JSON.parse(body) as { type?: string };
+        return parsed.type === "revoke" ? { status: 200, body: { ok: true, applied: true } } : { status: 400, body: { ok: false, code: "malformed" } };
+      },
+      attachDrainWss(): void {},
+    };
+    const { server } = await bootDaemon(port, { relayServer });
+    cleanup = () => server.close();
+
+    const record = JSON.stringify({ type: "revoke", did: "did:peer:2.example", at: 1_800_000_000_000, sig: "sig" });
+    const ok = await fetch(`http://127.0.0.1:${port}/relay/keys`, { method: "POST", body: record });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await ok.json()).toEqual({ ok: true, applied: true });
+
+    const bad = await fetch(`http://127.0.0.1:${port}/relay/keys`, { method: "POST", body: JSON.stringify({ type: "nonsense" }) });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ ok: false, code: "malformed" });
+    expect(bodies).toEqual([record, JSON.stringify({ type: "nonsense" })]);
+  });
+
+  it("POST /relay/keys bounds the body at 16 KiB: oversize -> 413 and keyRecord() never runs", async () => {
+    const port = nextPort();
+    let calls = 0;
+    const relayServer = {
+      ingress(): { routed: "accepted" | "rejected"; reason?: string } {
+        return { routed: "accepted" };
+      },
+      keyRecord(): { status: number; body: unknown } {
+        calls++;
+        return { status: 200, body: { ok: true, applied: false } };
+      },
+      attachDrainWss(): void {},
+    };
+    const { server } = await bootDaemon(port, { relayServer });
+    cleanup = () => server.close();
+
+    const oversize = JSON.stringify({ type: "revoke", pad: "x".repeat(17 * 1024) });
+    const res = await fetch(`http://127.0.0.1:${port}/relay/keys`, { method: "POST", body: oversize });
+    expect(res.status).toBe(413);
+    expect(calls).toBe(0);
+  });
+
+  it("POST /relay/keys is 404 when this persona hosts no mediator", async () => {
+    const port = nextPort();
+    const { server } = await bootDaemon(port);
+    cleanup = () => server.close();
+    const res = await fetch(`http://127.0.0.1:${port}/relay/keys`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(404);
   });
 
   // ------------------------------ Task 4 (D18/QR): inbound CONNECT consent --

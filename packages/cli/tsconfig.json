@@ -1,0 +1,29 @@
+{
+  // The CLI imports apps/trustweb/src/share_sink/* (and, through zones.ts, the model's enums) as source, the way the
+  // app's own unit tests do. Those files use extensionless relative imports, so the resolution is "bundler" here and
+  // scripts/register.mjs supplies the same resolution at run time. DOM is in `lib` only because the model's type graph
+  // names browser types; the CLI itself never touches a browser API (scripts/lint.mjs guards the imports).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    // The model's TYPE-ONLY imports reach apps/demo's identity code, which names two browser-bundle libraries. The CLI
+    // never runs that code; these shims stand in for their types so `tsc` needs no browser toolchain installed.
+    "paths": {
+      "@noble/curves/ed25519.js": ["./types/shims/noble_curves_ed25519.d.ts"],
+      "multiformats/bases/base58": ["./types/shims/multiformats_base58.d.ts"]
+    }
+  },
+  "include": ["src", "test", "types"]
+}

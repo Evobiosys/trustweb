@@ -7,7 +7,8 @@
 import { termSimilarity, MATCH_THRESHOLD } from './fuzzy'
 import type { ColourTag } from './colour_tags'
 import { tagsOf } from './colour_tags'
-import type { Person } from './model'
+import { tagLabel } from './events'
+import type { Person, TwEvent } from './model'
 import { canAccess } from './share_sink/check'
 import { appendShare, previewShare, scopeTuples, type Scope, type ShareLine } from './share_sink/share_lines'
 import type { Store, Tuple } from './share_sink/tuples'
@@ -20,8 +21,13 @@ export const ZONE_CHOICES: readonly Zone[] = LADDER.filter((z) => z !== Zone.Sel
 export type ChipRow = 'include' | 'exclude'
 export type PageState = Scope
 
-/** What the checks read: the people, the colour tags (a person's tags) and the record's share lines. */
-export interface Basis { people: readonly Pick<Person, 'id' | 'name' | 'ring' | 'fields'>[]; tags: readonly ColourTag[]; shares?: readonly ShareLine[] }
+/** What the checks read: the people (with their event tags, E3), the colour tags (a person's tags), the record's share lines and the events. */
+export interface Basis {
+  people: readonly (Pick<Person, 'id' | 'name' | 'ring' | 'fields'> & Partial<Pick<Person, 'events'>>)[]
+  tags: readonly ColourTag[]
+  shares?: readonly ShareLine[]
+  events?: readonly Pick<TwEvent, 'id' | 'name' | 'tagName'>[]
+}
 
 export interface Candidate { id: string; label: string }
 
@@ -41,39 +47,42 @@ export const withoutChip = (s: PageState, row: ChipRow, id: string): PageState =
 export const candidates = (b: Basis): Candidate[] => [
   ...b.people.map((p) => ({ id: `person:${p.id}`, label: p.name })),
   ...b.tags.map((t) => ({ id: `tag:${t.id}`, label: t.label ?? t.id })),
+  ...(b.events ?? []).map((ev) => ({ id: `event:${ev.id}`, label: tagLabel(ev) })),
 ]
 
 /**
  * Up to five candidates for what was typed: prefix or substring first, then the fuzzy match; the ones already chosen stay out.
- * No prefix offers people and tags; "@" only people, "#" only tags (a bare "@" or "#" lists that kind).
+ * No prefix offers people and tags; "@" only people, "#" only tags and events (a bare "@" or "#" lists that kind).
  */
 export function suggest(query: string, all: readonly Candidate[], taken: readonly string[], max = 5): Candidate[] {
-  const kind = query.trim().startsWith('@') ? 'person:' : query.trim().startsWith('#') ? 'tag:' : ''
-  const q = (kind ? query.trim().slice(1) : query).trim().toLowerCase()
-  if (!q && !kind) return []
+  const kinds = query.trim().startsWith('@') ? ['person:'] : query.trim().startsWith('#') ? ['tag:', 'event:'] : []
+  const q = (kinds.length ? query.trim().slice(1) : query).trim().toLowerCase()
+  if (!q && !kinds.length) return []
   const score = (c: Candidate): number => {
     const l = c.label.toLowerCase()
     return !q || l.startsWith(q) ? 1 : l.includes(q) ? 0.9 : termSimilarity(q, l)
   }
-  return all.filter((c) => c.id.startsWith(kind) && !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
+  return all.filter((c) => (!kinds.length || kinds.some((k) => c.id.startsWith(k))) && !taken.includes(c.id)).map((c) => ({ c, s: score(c) })).filter((x) => x.s >= MATCH_THRESHOLD)
     .sort((a, b) => b.s - a.s).slice(0, max).map((x) => x.c)
 }
 
 /** The tag chip's hover list shows this many people; "more..." shows all. */
 export const MEMBERS_PEEK = 3
 
-/** The people who carry a tag chip (`tag:<id>`), in record order (the community list). */
-export const membersOf = (b: Basis, tagId: string): Pick<Person, 'id' | 'name'>[] => {
-  const tag = tagId.slice('tag:'.length)
-  return b.people.filter((p) => tagsOf(p, b.tags).some((t) => t.id === tag)).map((p) => ({ id: p.id, name: p.name }))
+/** The people who carry a tag chip (`tag:<id>`) or an event chip (`event:<id>`, E3), in record order (the community list). */
+export const membersOf = (b: Basis, chipId: string): Pick<Person, 'id' | 'name'>[] => {
+  const id = chipId.slice(chipId.indexOf(':') + 1)
+  const carries = (p: Basis['people'][number]): boolean => (chipId.startsWith('event:') ? (p.events ?? []).includes(id) : tagsOf(p, b.tags).some((t) => t.id === id))
+  return b.people.filter(carries).map((p) => ({ id: p.id, name: p.name }))
 }
 
-/** The relation store: each person's zone and tags, plus the scope tuples of the latest share line per item. */
+/** The relation store: each person's zone, colour tags and event tags (`has_tag event:<id>`), plus the scope tuples of the latest share line per item. */
 export function storeOf(b: Basis): Store {
   const since = new Date(0).toISOString()
   const people: Tuple[] = b.people.flatMap((p) => [
     ...(zoneOfPerson(p) === Zone.Public ? [] : [{ subject: `person:${p.id}`, relation: 'in_zone' as const, object: `zone:${zoneOfPerson(p)}`, since, by: BY }]),
     ...tagsOf(p, b.tags).map((t) => ({ subject: `person:${p.id}`, relation: 'has_tag' as const, object: `tag:${t.id}`, since, by: BY })),
+    ...(p.events ?? []).map((id) => ({ subject: `person:${p.id}`, relation: 'has_tag' as const, object: `event:${id}`, since, by: BY })),
   ])
   const latest = new Map<string, Extract<ShareLine, { op: 'share' }>>()
   for (const l of b.shares ?? []) if (l.op === 'share') latest.set(l.id, l)

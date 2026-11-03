@@ -488,3 +488,165 @@ the estimate; the most relevant goal is an overview of who is in your field, not
 - Tana `tw-ring` field: 4 → 5 options by adding `closest`; `intending` stays an option, `unsorted` a placement
   state; no stored value changes meaning. CRM files untouched on this branch (table + value reader only).
 - Flag off: UI byte-identical, nothing written. Flag on: a "Your field" panel under the rings.
+
+## D-dlp-ci-drill (2026-11-02): the restore drill runs monthly in CI on a fixture; a failed scheduled drill is an incident
+- What runs: .github/workflows/dlp-drill.yml (1st of the month 04:23 UTC, manual dispatch, push to the drill paths) runs restore_drill_ci.mjs:
+  fixture, drill, diff, serve, control (a tampered copy must be caught), plus GNU diff -r outside the tool. Node stdlib only, no install.
+- Proves the tool and the restore path (byte-identity, slot ownership); does not prove an off-host backup exists or measure RPO (I7, docs/ops/dlp.md level 0).
+- Alerting: a failed scheduled, manual or main run opens or comments on one issue labelled dlp-drill; step summary with the drill-log row; 90-day report
+  artifact; optional heartbeat (secret DLP_DRILL_HEARTBEAT_URL), needed because GitHub pauses schedules after 60 days without activity.
+- A fixture, not production data: I1 and the synthetic data rule; nothing real ever reaches a GitHub runner. Open: the off-host backup, the host-side weekly check, levels 1 to 3, D-8.
+
+## D-organizer-hardening (2026-11-02): key sign-in, retention sweep, background counters, public event face
+- Sign in with my key: the organizer page restores an account from the pasted key line `{"org","secret"}`, checked against POST /org/me
+  before it is kept; "Show my key" shows the same line again for another browser. The key stays the only credential (no e-mail, no reset).
+- Retention: organizers.json is swept in the server process every ORG_SWEEP_MS; an org whose `updated` is older than ORG_DAYS goes with its
+  events and invitee e-mails. `updated` moves on organizer writes and, at most once per ORG_TOUCH_HOURS, on an organizer read; never on an
+  attendee hit, so attendee activity alone keeps nothing alive. No CLI sweeper: the store is in-memory, a second process would race it.
+- Counters: /org/hit and the read touch only change memory; one timer writes the file every ORG_HIT_FLUSH_MS and on close()/SIGTERM.
+  Honest cost: a crash loses up to ORG_HIT_FLUSH_MS of counters. Gain: the file's mtime no longer follows each attendee's tap.
+- Public face: GET /org/event/<id>/public answers the event name and an optional logo and nothing else, for the join sheet. The logo is a
+  data url (png/jpeg/webp/gif, ≤ 32 KB) stored on our server on purpose: a URL to the organizer's own host would make every attendee's phone
+  fetch it there (address and timing leak, the reason web_search.ts shows no favicons). The route carries no identity, counts as no hit,
+  touches no stamp; an unknown id and a malformed id answer the same 404. POST /org/event's body cap is ORG_EVENT_MAX_BYTES (64 KB) for it.
+
+## D-iroh-live (2026-11-02): iroh rung from stub to working (sidecar, relay failover, operator guide)
+- Problem: D-iroh-rung left `IrohEndpointLike` injected but unimplemented; relays were "interchangeable" only on paper, and nobody had a guide to run one.
+- Decision: the iroh node runs as a separate Rust process, `trustweb-iroh-sidecar`, speaking JSON lines on stdio (docs/IROH-SIDECAR.md); `IrohSidecarEndpoint` implements
+  `IrohEndpointLike` over it. Not a native module: `packages/transport` stays free of native builds (I5), the secret key lives in one small process,
+  and tests skip cleanly when the binary is absent.
+  Failover lives on the host: one relay per `send` (peer's relays first, then ours, de-duplicated), ≤ 3 attempts of 10 s, `IrohRelaySelector`
+  cooldown 60 s doubling to 15 min, success resets; all fail → one error, the ladder falls through. Set `irohMs` ≥ 30 s.
+  Default: no relay unless `--relay-url`; n0's public relays only with `--n0-relays` (I9). `onAudit` (channel) and `onRungResult` (ladder) log every
+  attempt in plain text, never wire bytes (I6). Operator guide for `iroh-relay` in docs/IROH-RELAY.md, EU hosting first, unverified details marked ⚠️.
+- No new privacy claim (I7): relays still see node ids, IPs, timing and sizes; more relays spread that metadata, they do not remove it.
+  "Interchangeable" is narrowed: a relay only reaches peers connected to it.
+- Not covered: sidecar not built/run in CI; iroh address not yet published in did:peer:2 / contact card; offline inbox stays on the mediator rung;
+  no relay-side allowlists; no relay deployed.
+
+## D-device-sync-e2ee (2026-11-02): own-device sync as an append-only log with replay-protected seals (prototype, packages/device-sync)
+- Problem: device sync v3 (sync_core.ts / sync_link.ts) ships the whole record as one bundle, decides by wall-clock stamps, and its only
+  defence against a relay that re-delivers an old wire is `exp` (10 min). A held wire inside that window, or a wire re-addressed by the relay,
+  is applied; a device restored from a backup silently re-uses stamps; the 4-hex fingerprint has 16 bits.
+- Decision: a new package `@resource-web/device-sync` (zero runtime dependencies, WebCrypto only) behind the existing relay interface
+  (`sendRaw` / `onRawWire` of apps/demo relay.ts, structurally typed as `RelayLike`). Design in docs/design/device-sync-e2ee.md.
+  Pairing: one-time secret in the QR / link only (`TWS2~address~pub~secret~exp`), X25519 ECDH from the public key in the code, HKDF into
+  two directional AES-GCM keys, a 6-digit SAS both people compare, Confirm on both sides. Seal: random IV, AAD binds the outer from/to, a
+  per-direction counter (started at the wall clock, so a restore from an older backup never falls behind) with a 1024-wide anti-replay
+  window persisted before the wire is acked. Record: an append-only log of field-level puts and entity tombstones, per-device seq + hash
+  chain + vector clock; merge is a verified set union (malformed / bad-hash / chain-gap / fork / own are rejected and reported, nothing
+  silently dropped; nobody may extend this device's own chain); the record is materialised by causal field-level last-writer-wins,
+  concurrent edits are decided by (at, device) and the loser stays listed for "Review merge". Nothing is ever deleted from the log.
+- Not claimed (I7): no forward secrecy (static ECDH; a stolen device key opens what the relay still holds), no post-quantum, no metadata
+  protection (the relay sees addresses, sizes, timing), no per-device signatures (a compromised paired device can write under a third
+  device's id; it is caught as a fork only once both histories meet). Not wired into apps/trustweb yet: sync_link.ts stays in force; the migration path
+  (derive DeviceKeys from the sync did:peer:2 `E` key, replay the record into a first log) is in the design doc.
+- Tests run on `node --test` (Node >= 22.18 strips types): the package has no dependency to install, and CI runs it as its own step.
+
+## D-device-sync-e2ee-2 (2026-11-03): owner decisions on PR #71 / #68 §10, implemented (packages/device-sync round 2)
+- (1) The per-sync "Receive from <device>?" prompt STAYS: a complete `entries` message goes to `onIncoming`; nothing merges before accept,
+  decline applies nothing and fails the waiting sync with 'declined'; both halves of a round are asked about.
+- (2) Pairing by QR only: the `TWS2~…` code is shown as a QR code and never put into a link (a link is forwarded, logged and previewed;
+  a QR is read in the same room). `pairingLink` / `codeFromLink` are gone.
+- (3) Keys move out of the record blob now: the X25519 private key lives in a KeyStore (`indexedDbKeyStore`, a non-extractable CryptoKey);
+  a v1 blob with `secretKey` is migrated on first start and rewritten as v2 without it (same deviceId). Not claimed: IndexedDB is per
+  origin and not encrypted at rest; code on the unlocked device can use the key, not export it.
+- (4) Forward secrecy before rollout: a symmetric ratchet per pairing and direction (`ratchet.ts`, HKDF chain, one AES-GCM key per
+  counter, deleted after use, up to 1024 skipped keys for out-of-order delivery) replaces the static pair keys and the replay window
+  (`archive/replay.ts`). The counter travels in clear in the wire prefix and in the AAD. The pairing epoch is NOT stored (a `pairId`
+  hash guards stale confirms), so a captured device state re-derives no earlier key. Consequences, stated: no post-compromise security
+  yet (no DH ratchet step; open point); a device restored from an older backup has its first sync dropped on the peer (used counters,
+  logged there) and catches up on the next try because its sending chain moves 32 steps ahead per unanswered `have`; the backup's own
+  keys open the wires of its time. Round-1's wall-clock counter floor is gone with it. Send and receive paths are serialised per peer.
+- PR #68 finding 4 (the relay learns the exact record size): plaintexts are padded to 1 / 4 / 16 / 64 KiB buckets (`seal.ts`); the
+  bucket and the piece count stay visible.
+
+## D-cli (2026-11-02): `trustweb`, a git-like command line over a local record, reusing the share sink as it is
+- Scope: list/create/rename/archive trust zones, persons and tags in and out of zones, "what can this zone/tag/person see",
+  export/import as JSON. `packages/cli`, bin `trustweb`, docs in `docs/cli.md`. Local files only; no network (a test and the lint prove it).
+- Zones stay the fixed TrustZones ladder (D-share-sink). "Create" = set a ladder zone up in this record (switch it on, label it);
+  "archive" = switch it off, which is zones.ts `active`: `canAccess` ignores it, an item shared to it moves one ring in, a person whose
+  only zone it was counts as public. Custom zone names were tempting and refused: `isZone` and `rank` would stop meaning anything.
+- A tag added to a zone is a rule tuple `tag:<t> in_zone zone:<z>`; the CLI unfolds it into derived per-person `in_zone` tuples
+  (marked with the tag) before every check, so the app's `canAccess` stays the single oracle and nothing is re-implemented.
+- The record (`.trustweb/record.json`) is append-only in spirit: a membership ends by `until`, a person or tag by `removedAt`, a share
+  by a revoke line; nothing is deleted; every change writes one human-readable log line (I6). Canonical bytes, so a diff reads.
+- Toolchain: Node's own TypeScript stripping (transform mode) plus a resolve hook for the app's extensionless imports
+  (`scripts/register.mjs`) runs the share sink sources unchanged; `tsc` typechecks them with two type shims for the browser-only
+  libraries the model's type graph names. Zero runtime dependencies; `node:test` for the tests. Node >= 22.13.
+- Licence header on the CLI's files: `LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later`, as the task asked; this repo publishes under AGPL
+  (the OR permits it, `packages/cli/README.md` says AGPL). OPEN for the owner: keep the OR, or narrow the header to AGPL alone.
+- A merge takes nothing back: the same fact closed on either device stays closed, a share line older than our latest word on its
+  item is superseded, the merged tag graph must stay a DAG, and a write dated before the record's last change is refused.
+- Owner decision on PR #72 (2026-11-03): `share --zone` takes a created zone directly, as it stands: the item opens to the zone's
+  current members (and, the ladder nesting, to the zones inside it); no refusal points at `--also`. When the zone's level is wider
+  than the item's current scope, the share goes through and one warning line names who comes in. Refused still: `self`, an
+  archived zone, a zone not set up (each with the command that changes that).
+
+## D-relay-auth-hardening (2026-11-03): audit of the PR #50 send signature; v2 binds the relay, nonces persist, keys rotate
+- Audit (threat model in docs/TRANSPORT.md §11.1): the v1 signature bound sender, time, nonce and body but not the relay, so a capture replayed to every
+  other relay inside the window; the nonce memory died with the process; a relay clock stepping back revived pruned nonces; a client more than
+  5 min off could never recover; did:peer:2 is its key, so nothing let a DID rotate or revoke, and every device had to hold the one root key.
+- Decision: signing scheme v2 (`trustweb-relay-send/v2`, seven lines: did, kid, aud, ts, nonce, sha256(body)); `aud` is the ingress origin and
+  is checked against RELAY_SENDER_AUTH_AUDIENCES or, unset, the request Host (host only: TLS ends at the proxy). v1 verifies only with
+  RELAY_SENDER_AUTH_ALLOW_V1 (default on in `optional`, off in `required`). Replay memory behind `SendNonceStore`, SQLite on the queue db in
+  relay_only; prune runs on a monotonic clock. Clients re-sign once from the `Date` header on `401 stale`.
+- Key registry (`DidKeyRegistry`, `POST /relay/keys`): self-signed `rotate` (both keys sign), `revoke` (terminal), `device_grant` (root + device
+  key sign, expires after one year, I9), `device_revoke`. Send auth and drain auth both consult it; the successor drains the old DID's queue.
+  Records are per relay, not global: no registry beyond the relays a peer already trusts (D-relay-send-auth's "no registry" stays true for keys
+  themselves; the relay stores only statements the DID signed).
+- Kept: default mode `optional` (owner's transition call, PR #50) — relay_only's header had claimed `required`; corrected. The demo client now signs.
+- Not covered: optional mode authenticates nothing; free DID minting bounds only honest senders; a leaked root key races its owner to
+  rotate/revoke (FUTURE.md: pre-committed recovery key); the relay learns the sender DID.
+- Deploy order: the demo and browser clients now sign with `aud` = the page origin, which the relay checks even in `optional` mode. Set
+  RELAY_SENDER_AUTH_AUDIENCES on the relay unit (every origin that proxies /relay/*) and deploy the relay BEFORE the new app build;
+  a proxy hop that rewrites Host otherwise answers 401 bad_audience where unsigned sends used to get 202.
+
+## D-curator-notes-sync (2026-11-03): scheduled pull, cleanup with archive, join offers for first names, people: skip (owner 2026-11-03)
+- Scheduled pull = the existing `notes_sync.mjs pull` (reader resumable by content hash, converter one-shot) under a lock file
+  `<work>/pull.lock` (pid + start time; a dead pid or a lock older than 6 h is stale and taken over; exit 3 while held). A run with
+  nothing new rewrites nothing: the converter leaves a byte-identical record alone and makes no `.bak`. launchd, cron and a systemd
+  user timer are documented in docs/curator-notes-sync.md; the lock is what makes an overlapping firing harmless.
+- Cleanup pass (`notes_sync.mjs cleanup`, `notes_cleanup.mjs`, bridge `POST /cleanup`): a TrustWeb block in a note whose person id is
+  no longer in the record is cut out of the note, but its text is archived first under `<vault>/archive/trustweb-blocks/<day>/` (the
+  folder carries `.trustweb-generated`, so the reader never reads it back) and one JSON line goes to the cleanup log (I6). Nothing is
+  deleted silently; the archive folder is the owner's to prune by hand. An opted-out note (`trustweb: no`) is cleaned too: the block
+  is TrustWeb's own residue, not the owner's text.
+- Join offers: a mention that is only a first name creates no local person any more (it used to). The converter emits a pending offer
+  (`<work>/join-offers.json`: name, note, date, facts, candidates = people with the same first name, diacritics folded) and the
+  Curator lists them under Settings > Obsidian / Logseq as "Names from your notes to join": Join puts the facts on the chosen person
+  as lines with local provenance (the same path as a bullet pulled from the vault), Not them dismisses. Decisions are appended to
+  `<work>/join-decisions.jsonl` through the bridge and honoured by every later pull (idempotent), so the scheduled run and the
+  owner's choices never fight. A full name still joins by exact name as before; a single name never auto-joins anybody.
+- Per-note rules: `trustweb: no` stays "TrustWeb never touches this note" (not read, no block written). New `people: skip` in the
+  front matter = "this note names people but creates none" (not read for people; a block may still be written there). A folder
+  list does the same for whole folders: `--skip-folders a,b` or `<vault>/.trustweb-notes.json` `{ "skipFolders": [...] }`, meant
+  for speaker scans and pitch notes. Skipped notes never reach the reader (no model cost).
+- Verification note: the container building this had no npm registry, so the vitest files were run through a node:test shim
+  (same describe/it/expect surface); CI runs the real gates.
+
+## D-profile-sections (2026-11-03): My profile in sections, each with a share-sink scope; preview as a viewer; name reveal per event (E3)
+- Sections group the profile fields: picture | about (intro, interests) | contact (norms, favourite way) | address | work (website, offers,
+  working) | availability. `interests` and `availability` are new one-line fields (wire keys `r`, `v`; older builds ignore unknown keys).
+- One rule for every section: a share-sink Scope `{zone, include, exclude}` (share_lines.ts scopeTuples) on the item `profile:<section>`,
+  checked with the SAME canAccess the Share page and the person card use (T12). Who may see a section = zone ladder, plus `tag:<id>`,
+  `event:<id>` and `person:<id>` inclusions, minus exclusions (exclusion beats everything, D3). Events join the relation store as tags:
+  storeOf emits `person has_tag event:<id>` from Person.events, so a Resource share can name an event too.
+- The per-field ring audience of wave 19/20 (`MyProfile.audience`) is superseded by the section scope and stays readable as the fallback:
+  a section without a scope takes the LEAST reach among its fields' legacy audiences (`nobody` -> zone self = only me), so nobody sees
+  more than before. Cost accepted: two fields of one section can no longer differ (e.g. offers Friends, website Public); the owner moves
+  the field or the scope. Section defaults equal the old field defaults: picture Friend, address Friend, work Public, the rest Acquaintance.
+  Saving a section's scope retires the legacy audience of its fields (one truth in the record). Three old unit expectations that asserted
+  per-field divergence inside one section were rewritten to the section model, each with a comment.
+- Wave 20's "no zone, no profile" holds: a real person without a ring (Unsorted, None) gets no zone grant, not even Public; only an
+  explicit Also (person, tag, event) opens a section to them. The tag and event preview viewers do see Public sections.
+- Profile scopes are stored on the profile (`MyProfile.sections`), not as share lines: a share line's one-year expiry would silently
+  widen a section set to "only me" back to the default. scopeTuples are built with since = now at check time, so profile rules never lapse.
+- Preview "as seen by": the sheet renders my profile through `theirProfileBlock`, the renderer the receiving phone uses, from
+  `sliceForViewer` — the function that also builds what is sent. A tag or event viewer is the least-trusted member: someone who holds
+  only that tag/event and sits in no ring (public). A person viewer uses their real zone, tags and events. Names are for the owner only (I2).
+- Name reveal per event (`TwEvent.nameReveal`: full | first | hidden, default full = today's behaviour): applied to the `by` part of every
+  event link this device makes (events_view copy/preview, QR, extension event links). `first` sends the first word of the display name
+  and no did; `hidden` drops `by` entirely (name AND did: the did alone would let attendees pair with me). The host link never carried a
+  name. Device-local: never in the link payload (event_link.ts whitelist), kept by localSettings on edit, rides the own-device sync.
+- Not changed: the wire (profile.ts profileText), auto-send on connect/ring change (zone viewer), what a connected card shows.

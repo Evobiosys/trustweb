@@ -178,3 +178,12 @@ describe('five rings: field overview', () => {
     expect(o).toMatchObject({ unsorted: 0, total: 0, leanMoves: 0 })
   })
 })
+
+describe('five rings: why fold', () => {
+  it('has a title and exactly three sentences, never a limit claim', async () => {
+    const { S } = await import('../../src/strings.ts')
+    expect(S.fieldWhyTitle).toBe('Why five rings?')
+    expect(S.fieldWhy.match(/[.!?](\s|$)/g)).toHaveLength(3)
+    expect(S.fieldWhy).toMatch(/average/)
+  })
+})

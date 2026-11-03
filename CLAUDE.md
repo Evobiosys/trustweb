@@ -9,8 +9,10 @@ open. Three remotes are configured: `github`, `ecstatic-world`, `jakobs-branch`.
 
 The licence rule, which is the thing that actually has to hold:
 
-- **This repo is AGPL-3.0-or-later**, because the owner leads it himself. Anything pushed publicly
-  from here must be under AGPL, never AMPL.
+- **This repo is dual licensed `LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later`** (owner decision
+  2026-10-24, confirmed 2026-11-03): every new source, build and test file carries that SPDX line;
+  both LICENSE texts sit in the repo root. Package manifests may state AGPL-3.0-or-later, the OR
+  expression permits it.
 - **A project the owner does not lead defaults to AMPL 1.0.** That is the standing default; AGPL is
   the exception that applies when he is leading.
 - Anyone wanting terms outside AGPL is told to write to connect@japossert.com. Keep that route in
@@ -31,6 +33,7 @@ Do not relicense either way without asking.
 
 ## Architecture
 - pnpm workspaces: `packages/protocol` (zod schemas, envelope v0.1, lifecycle state machine — no I/O), `packages/transport` (MatrixTransport via matrix-bot-sdk, MockTransport), `packages/agent-daemon` (SQLite stores, policy engine, matcher chain, REST/WS for UI), `apps/device-ui` (React 19 + Vite + Tailwind), `apps/dashboard` (side-by-side iframes :8080).
+- `packages/cli` (`trustweb`): a dependency-free command line over a local record file (`.trustweb/record.json`), reusing `apps/trustweb/src/share_sink` for zones, tags, shares and the one `canAccess` check; `src/sink.ts` is its only coupling point to the app. Tests with `node:test`, no network (`docs/cli.md`).
 - One agent-daemon codebase, N persona configs. UI talks only to its own agent (REST/WS, localhost). Agents talk only via TransportAdapter.
 - Matcher chain: embeddings (cosine ≥ 0.60) → LLM adjudication (strict JSON, temp 0) → keyword+synonym fallback. Demo must survive with no LLM at all.
 - Models: host ollama `http://localhost:11434`, `CHAT_MODEL=qwen3:4b`, `EMBED_MODEL=qwen3-embedding:8b` (see DECISIONS.md D4).

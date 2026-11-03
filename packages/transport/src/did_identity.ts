@@ -82,6 +82,23 @@ function decodeMultibaseKey(mb: string, expectedPrefix: Uint8Array): Uint8Array 
   return bytes.slice(expectedPrefix.length);
 }
 
+const ED25519_PUBLIC_KEY_BYTES = 32;
+
+/**
+ * An Ed25519 public key in exactly the did:peer:2 `V` element encoding: multicodec `ed25519-pub` (0xed 0x01) prefix,
+ * multibase base58btc (`z6Mk…`). Used by did_key_records.ts / relay_send_auth.ts as a device key id (`kid`).
+ */
+export function encodeEd25519Multibase(pub: Uint8Array): string {
+  return encodeMultibaseKey(ED25519_PUB_PREFIX, pub);
+}
+
+/** Inverse of encodeEd25519Multibase. Throws unless `mb` is a base58btc multicodec Ed25519 key of exactly 32 bytes. */
+export function decodeEd25519Multibase(mb: string): Uint8Array {
+  const key = decodeMultibaseKey(mb, ED25519_PUB_PREFIX);
+  if (key.length !== ED25519_PUBLIC_KEY_BYTES) throw new Error("Ed25519 multibase key must be 32 bytes");
+  return key;
+}
+
 /** Abbreviated did:peer:2 service block; `t:"dm"` expands to DIDCommMessaging. */
 interface AbbreviatedService {
   t: "dm";
@@ -95,7 +112,7 @@ function encodeServiceElement(endpoint: string): string {
 }
 
 function buildDidPeer2(signingPub: Uint8Array, keyAgreementPub: Uint8Array, endpoint: string): string {
-  const vElement = PURPOSE_VERIFICATION + encodeMultibaseKey(ED25519_PUB_PREFIX, signingPub);
+  const vElement = PURPOSE_VERIFICATION + encodeEd25519Multibase(signingPub);
   const eElement = PURPOSE_KEY_AGREEMENT + encodeMultibaseKey(X25519_PUB_PREFIX, keyAgreementPub);
   const sElement = encodeServiceElement(endpoint);
   return `${DID_PEER_2_PREFIX}.${vElement}.${eElement}.${sElement}`;
@@ -135,7 +152,7 @@ export function resolveDidPeer(did: string): ResolvedDid {
     const code = el[0];
     const value = el.slice(1);
     if (code === PURPOSE_VERIFICATION) {
-      signingPublicKey = decodeMultibaseKey(value, ED25519_PUB_PREFIX);
+      signingPublicKey = decodeEd25519Multibase(value);
     } else if (code === PURPOSE_KEY_AGREEMENT) {
       keyAgreementPublicKey = decodeMultibaseKey(value, X25519_PUB_PREFIX);
     } else if (code === PURPOSE_SERVICE) {

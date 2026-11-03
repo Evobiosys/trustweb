@@ -8,26 +8,40 @@
 // This is the process a reverse proxy (Caddy, nginx, ...) sits in front of.
 // It intentionally binds to 127.0.0.1 only — the standalone deployment shape
 // assumes a TLS-terminating proxy in front, never direct internet exposure of
-// the raw HTTP+WS port. See relay_server.ts's `listen()` doc comment: ingress
-// is unauthenticated store-and-forward, so the size/queue caps (already
-// enforced inside RelayServer) are the only thing standing between an open
-// port and abuse — keep this behind a proxy that at minimum provides TLS and
-// (ideally) rate limiting.
+// the raw HTTP+WS port. Ingress is sender-authenticated only as far as
+// RELAY_SENDER_AUTH says: in the default "optional" mode unsigned sends still
+// pass, and even a signed send only proves WHO sent (anyone can mint a DID),
+// so the size/queue caps enforced inside RelayServer remain the main thing
+// standing between an open port and abuse — keep this behind a proxy that at
+// minimum provides TLS and (ideally) rate limiting.
 //
 // Config via env vars (kept to env, not CLI flags, so a systemd unit's
 // `Environment=` lines are the single source of truth):
 //   RELAY_PORT      - TCP port to listen on (default 4177).
 //   RELAY_HOST      - bind address (default 127.0.0.1 — see above).
-//   RELAY_SENDER_AUTH - required (default) | optional | off: per-DID signature on POST /relay/send
-//                       (relay_send_auth.ts). "optional" only for rolling out old clients.
+//   RELAY_SENDER_AUTH - optional (default today, the transition) | required | off: per-DID v2 signature on
+//                       POST /relay/send (relay_send_auth.ts). "optional": unsigned sends pass, signed ones must
+//                       verify. Switch to "required" once every client signs.
+//   RELAY_SENDER_AUTH_AUDIENCES - comma-separated origins clients post to (e.g. "https://relay.example"). Set
+//                       this behind the proxy: the signed `aud` must be one of them. Unset: `aud`'s host must
+//                       equal the Host header the proxy forwards (relay_env.ts parses both).
+//   RELAY_SENDER_AUTH_ALLOW_V1  - true | false: accept legacy audience-unbound v1 signatures. Unset: true in
+//                       "optional", false in "required".
+//   RELAY_KEY_REGISTRY - "off" disables key rotation / revocation / device keys. Default on: a SQLite
+//                       DidKeyRegistry in the queue db, fed by POST /relay/keys (self-signed records from
+//                       did_key_records.ts) and consulted by both send and drain auth.
 //   RELAY_QUEUE_DB  - path to the SQLite queue file (default
-//                     "<cwd>/queue.db"; pass an absolute path in production).
+//                     "<cwd>/queue.db"; pass an absolute path in production). The send-auth nonce store
+//                     (replay protection that survives a restart) and the key registry live in the same file.
 //   RELAY_VAPID_FILE    - wave 11: the VAPID key file for Web Push wake-ups (web_push.ts). Created on first start
 //                         (mode 0600) when absent. Default: "vapid.json" next to the queue db. Set to "off" to never push.
 //   RELAY_VAPID_SUBJECT - the mailto:/https: contact in every VAPID token (default mailto:hello@trustintheweb.org).
 //   RELAY_APNS_FILE     - wave 12 (iPhone app): Apple push credentials, JSON {keyId, teamId, topic, privateKey (the .p8 PEM),
 //                         sandbox?} (apns_push.ts loadApnsConfig). Default: "apns.json" next to the queue db; absent = iPhones
 //                         are not woken (their token is refused on the drain). Mode 0600, never in git.
+//
+// Routes: POST /relay/send (ingress), WS /relay/drain (drain), POST /relay/keys
+// (key records; 503 when RELAY_KEY_REGISTRY=off), GET /relay/push/key.
 //
 // Deliberately uses RelayServer's DEFAULT ingress/drain paths (/relay/send,
 // /relay/drain) rather than any custom prefix: alpha_server.ts's meet-card
@@ -44,8 +58,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { RelayServer, type RelayPushOptions } from "./relay_server.js";
-import { parseSenderAuthMode } from "./relay_send_auth.js";
+import { parseSenderAuthEnv } from "./relay_env.js";
 import { SqliteRelayQueueStore } from "./relay_queue_store.js";
+import { SqliteSendNonceStore } from "./send_nonce_store.js";
+import { SqliteDidKeyStore } from "./did_key_store.js";
+import { DidKeyRegistry } from "./did_key_registry.js";
 import { SqlitePushSubscriptionStore } from "./push_store.js";
 import { generateVapidKeys, loadVapidKeys, type VapidKeys } from "./web_push.js";
 import { loadApnsConfig } from "./apns_push.js";
@@ -73,12 +90,23 @@ async function main(): Promise<void> {
     const apns = existsSync(apnsFile) ? loadApnsConfig(JSON.parse(readFileSync(apnsFile, "utf8"))) : undefined;
     push = { store: new SqlitePushSubscriptionStore(dbPath), vapid, ...(apns ? { apns } : {}) };
   }
-  const relay = new RelayServer({ queueStore, push, senderAuth: parseSenderAuthMode(process.env.RELAY_SENDER_AUTH) });
+  const senderAuthEnv = parseSenderAuthEnv(process.env);
+  const nonceStore = new SqliteSendNonceStore(dbPath);
+  const keyStore = process.env.RELAY_KEY_REGISTRY === "off" ? null : new SqliteDidKeyStore(dbPath);
+  const relay = new RelayServer({
+    queueStore,
+    push,
+    ...senderAuthEnv,
+    senderNonceStore: nonceStore,
+    ...(keyStore ? { keyRegistry: new DidKeyRegistry({ store: keyStore }) } : {}),
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[relay_only] received ${signal}, closing...`);
     await relay.close();
     queueStore.close();
+    nonceStore.close();
+    keyStore?.close();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
@@ -87,7 +115,8 @@ async function main(): Promise<void> {
   const { port: boundPort } = await relay.listen(port, host);
   console.log(
     `[relay_only] listening on http://${host}:${boundPort} ` +
-      `(ingress POST /relay/send, drain WS /relay/drain, queue db: ${dbPath}, ` +
+      `(ingress POST /relay/send, drain WS /relay/drain, key records POST /relay/keys: ${keyStore ? "on" : "off"}, ` +
+      `sender auth: ${senderAuthEnv.senderAuth}, queue db: ${dbPath}, ` +
       (push ? `push: on, ${push.store.count()} subscribed, key ${vapidFile}, apns: ${push.apns ? "on" : "off"})` : "push: off)"),
   );
 }

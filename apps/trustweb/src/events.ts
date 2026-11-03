@@ -77,9 +77,30 @@ export function eventMatches(ev: Pick<TwEvent, 'name' | 'tagName' | 'where'>, qu
 }
 
 /** The device-local settings an edit of the form must not drop. */
-export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked'> {
-  const { fromLink, hostNamesTags, tagName, tagLocked } = ev
-  return { ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}) }
+export function localSettings(ev: TwEvent): Pick<TwEvent, 'fromLink' | 'hostNamesTags' | 'tagName' | 'tagLocked' | 'nameReveal'> {
+  const { fromLink, hostNamesTags, tagName, tagLocked, nameReveal } = ev
+  return { ...(fromLink ? { fromLink } : {}), ...(hostNamesTags !== undefined ? { hostNamesTags } : {}), ...(tagName ? { tagName } : {}), ...(tagLocked ? { tagLocked } : {}), ...(nameReveal ? { nameReveal } : {}) }
+}
+
+/** E3: how much of my name an event link of mine tells the other attendees. Set per event on this device; never in a link itself. */
+export type NameReveal = 'full' | 'first' | 'hidden'
+export const NAME_REVEALS: readonly NameReveal[] = ['full', 'first', 'hidden']
+/** Keeps today's behaviour: the display name as typed. */
+export const DEFAULT_NAME_REVEAL: NameReveal = 'full'
+export const nameRevealOf = (ev: Pick<TwEvent, 'nameReveal'>): NameReveal => (NAME_REVEALS.includes(ev.nameReveal as NameReveal) ? ev.nameReveal! : DEFAULT_NAME_REVEAL)
+
+/** The first whitespace-separated word, trimmed. */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? ''
+}
+
+/** What an event link may say about me: full -> by as is; first -> the first name only (no did: it would name me fully); hidden -> undefined (no name, no did). */
+export function revealedBy(by: EventBy | undefined, ev: Pick<TwEvent, 'nameReveal'>): EventBy | undefined {
+  if (!by) return undefined
+  const r = nameRevealOf(ev)
+  if (r === 'hidden') return undefined
+  if (r === 'first') { const name = firstName(by.name); return name ? { name } : undefined }
+  return by
 }
 
 export function isPast(ev: TwEvent, now: number): boolean {

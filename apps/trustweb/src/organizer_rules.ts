@@ -1,4 +1,4 @@
-/** Organizer page rules (wave 8): invitee list, link, mail, CSV and limit words. Pure and DOM-free. */
+/** Organizer page rules (wave 8): invitee list, link, mail, CSV, limit words, the key and the logo. Pure and DOM-free. */
 export interface OrgLimits { events: number; invitees: number }
 export interface OrgCounts { opened: number; joined: number; tagged: number }
 export interface OrgEventFields {
@@ -10,6 +10,8 @@ export interface OrgEventFields {
   themes?: string[]
   tagName?: string
   organizer?: string
+  /** A small image as a data URL (logoOk). */
+  logo?: string
 }
 export interface OrgEvent { id: string; event: OrgEventFields; link: string; invitees: string[]; counts: OrgCounts }
 /** The form as typed: every field is text. */
@@ -37,10 +39,30 @@ export function withSrv(link: string, id: string): string {
 }
 
 /** What the server stores as `event`; empty optional fields stay out. */
-export function eventPayload(f: OrgForm, organizer: string): OrgEventFields {
+export function eventPayload(f: OrgForm, organizer: string, logo?: string): OrgEventFields {
   const themes = [...new Set(f.themes.split(',').map((t) => t.trim()).filter(Boolean))]
   const opt = (k: 'to' | 'conditions' | 'tagName' | 'organizer', v: string): Partial<OrgEventFields> => (v.trim() ? { [k]: v.trim() } : {})
-  return { name: f.name.trim(), from: f.from.trim(), where: f.where.trim(), ...opt('to', f.to), ...opt('conditions', f.conditions), ...(themes.length ? { themes } : {}), ...opt('tagName', f.tagName), ...opt('organizer', organizer) }
+  return { name: f.name.trim(), from: f.from.trim(), where: f.where.trim(), ...opt('to', f.to), ...opt('conditions', f.conditions), ...(themes.length ? { themes } : {}), ...opt('tagName', f.tagName), ...opt('organizer', organizer), ...(logo ? { logo } : {}) }
+}
+
+/** The server's shapes (services/trustweb-backup: connect_names.mjs CODE_RE, connect_store.mjs SECRET_RE), mirrored. */
+const ORG_RE = /^[A-Za-z0-9_-]{22}$/
+const SECRET_RE = /^[A-Za-z0-9_-]{43}$/
+
+/** The key line the page shows once ({"org":..,"secret":..}), pasted back. Extra keys are ignored; anything else is null. */
+export function parseKey(text: string): { org: string; secret: string } | null {
+  let o: unknown
+  try { o = JSON.parse(text.trim()) } catch { return null }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null
+  const { org, secret } = o as Record<string, unknown>
+  return typeof org === 'string' && typeof secret === 'string' && ORG_RE.test(org) && SECRET_RE.test(secret) ? { org, secret } : null
+}
+
+/** The logo the server accepts on an event (POST /org/event, field event.logo). */
+export const LOGO_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/
+export const MAX_LOGO_CHARS = 32768
+export function logoOk(dataUrl: string): boolean {
+  return typeof dataUrl === 'string' && dataUrl.length <= MAX_LOGO_CHARS && LOGO_RE.test(dataUrl)
 }
 
 /** The text of the mail and of "Copy message". */

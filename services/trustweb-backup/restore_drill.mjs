@@ -117,13 +117,13 @@ export async function restoreSnapshot(snap, target) {
 }
 
 /** snapshot -> verify -> restore into <work>/restored, then verify the restored copy against the same hashes. */
-export async function runDrill({ live, work, now = () => new Date() }) {
+export async function runDrill({ live, work, now = () => new Date(), clock = Date.now }) {
   const snap = path.join(work, 'snapshot')
   const restored = path.join(work, 'restored')
   const manifest = await snapshotDir(live, snap, { now })
-  const t0 = Date.now()
+  const t0 = clock()
   await restoreSnapshot(snap, restored)
-  const restoreMs = Date.now() - t0
+  const restoreMs = clock() - t0
   const problems = []
   for (const [rel, want] of Object.entries(manifest.files)) {
     if ((await sha256File(path.join(restored, rel)).catch(() => null)) !== want.sha256) problems.push(`restored copy differs: ${rel}`)

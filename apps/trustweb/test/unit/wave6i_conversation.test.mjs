@@ -323,8 +323,12 @@ describe('reask.ts: the rule', () => {
     const calls = main.match(/net\.askAgain\(/g) ?? []
     expect(calls).toHaveLength(2) // changeRing (a raise) and the Advanced button
     expect(main).toMatch(/if \(peer && before !== undefined && ringRaised\(before, ring\) && mayAskAgainWith\(peer\)\) \{ void net\.askAgain\(peer\); return \}/)
-    // every later ring change goes through changeRing (the ring sheet and a note about the person); no other writer of peer.ring sends
-    expect(main.match(/changeRing\(/g).length).toBeGreaterThanOrEqual(3)
+    // every later ring change goes through changeRing (the ring sheet and a note about the person in main.ts; a drop, an unplace and
+    // their undos in web_view.ts, which gets changeRing through its deps and never sends itself); no other writer of peer.ring sends
+    const webView = readFileSync(path.join(HERE, '../../src/web_view.ts'), 'utf8')
+    expect((main.match(/changeRing\(/g).length) + (webView.match(/changeRing\(/g).length)).toBeGreaterThanOrEqual(3)
+    expect(webView).toMatch(/changeRing\(/)
+    expect(webView).not.toMatch(/askAgain/)
     expect(main).not.toMatch(/passOn[^\n]*askAgain/)
   })
   const sentTo = (asks) => asks.reduce((list, a) => addSentAsk(list, a, NOW), [])

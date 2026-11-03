@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync, exists
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { allowed, changes, homeNotes, push, safePath, serve } from '../../scripts/notes_bridge.mjs'
+import { allowed, changes, homeNotes, pendingOffers, push, safePath, serve } from '../../scripts/notes_bridge.mjs'
 
 const NOW = Date.UTC(2026, 9, 16, 9, 30)
 const line = (id, text, extra = {}) => ({ id, text, tag: 'note', audience: 'me', status: 'current', notedAt: Date.UTC(2026, 6, 11, 12), checkedAt: 1, ...extra })
@@ -93,6 +93,45 @@ describe('notes bridge: who may talk to it', () => {
     const pre = await call('/push', null); expect(pre.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:5220')
     expect((await (await call('/changes', { people: people() })).json()).changes).toEqual([])
     expect((await call('/push', { people: 'x' })).status).toBe(400)
+    server.close()
+  })
+})
+
+describe('notes bridge: join offers (owner 2026-11-03)', () => {
+  const offer = (key, name) => ({ key, name, path: 'journals/2026_08_01.md', date: '2026-08-01', context: '', facts: ['Bakes bread'], candidates: [{ id: 'tana-t', name: 'Taro Lindqvist' }] })
+  const offersText = JSON.stringify({ v: 1, generatedAt: '2026-11-03T09:00:00.000Z', offers: [offer('k1', 'Taro'), offer('k2', 'Ines')] })
+  it('pendingOffers: the converter\'s offers minus the keys decided since; missing or broken files are no offers', () => {
+    expect(pendingOffers(offersText, '')).toEqual({ offers: [offer('k1', 'Taro'), offer('k2', 'Ines')], decided: 0 })
+    expect(pendingOffers(offersText, `${JSON.stringify({ key: 'k1', decision: 'dismiss', at: 'x' })}\nbroken\n`)).toEqual({ offers: [offer('k2', 'Ines')], decided: 1 })
+    expect(pendingOffers('', '')).toEqual({ offers: [], decided: 0 })
+    expect(pendingOffers('{not json', '')).toEqual({ offers: [], decided: 0 })
+  })
+  it('over HTTP: GET /offers lists the pending ones, POST /offers appends a decision line; bad bodies are 400, a wrong token 401', async () => {
+    const v = vault()
+    const work = path.join(v, 'assets', 'local-notes')
+    const c = { vault: v, port: 0, token: 't0k3n' }
+    const server = await new Promise((resolve) => serve(c, resolve))
+    const port = server.address().port
+    const call = (p, body, token = 't0k3n') => fetch(`http://127.0.0.1:${port}${p}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:5220' }, body: body ? JSON.stringify(body) : undefined })
+    expect(await (await call('/offers')).json()).toEqual({ offers: [], decided: 0 })
+    writeFileSync(path.join(work, 'join-offers.json'), offersText)
+    expect((await (await call('/offers')).json()).offers.map((o) => o.key)).toEqual(['k1', 'k2'])
+    expect((await call('/offers', null, 'nope')).status).toBe(401)
+    expect(await (await call('/offers', { key: 'k1', decision: 'join', into: 'tana-t' })).json()).toEqual({ ok: true })
+    expect(await (await call('/offers')).json()).toEqual({ offers: [offer('k2', 'Ines')], decided: 1 })
+    for (const bad of [{ key: 'k2', decision: 'join' }, { key: 'k2', decision: 'maybe' }, { decision: 'dismiss' }, { key: 7, decision: 'dismiss' }]) expect((await call('/offers', bad)).status).toBe(400)
+    expect(await (await call('/offers', { key: 'k2', decision: 'dismiss', into: 'ignored' })).json()).toEqual({ ok: true })
+    const lines = readFileSync(path.join(work, 'join-decisions.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+    expect(lines.map(({ at, ...d }) => [d, typeof at])).toEqual([[{ key: 'k1', decision: 'join', into: 'tana-t' }, 'string'], [{ key: 'k2', decision: 'dismiss' }, 'string']])
+    expect(await (await call('/offers')).json()).toEqual({ offers: [], decided: 2 })
+    server.close()
+  })
+  it('POST /offers creates the work folder when the vault has none yet', async () => {
+    const v = mkdtempSync(path.join(tmpdir(), 'vault-'))
+    const server = await new Promise((resolve) => serve({ vault: v, port: 0, token: 't' }, resolve))
+    const r = await fetch(`http://127.0.0.1:${server.address().port}/offers`, { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'k9', decision: 'dismiss' }) })
+    expect(r.status).toBe(200)
+    expect(existsSync(path.join(v, 'assets', 'local-notes', 'join-decisions.jsonl'))).toBe(true)
     server.close()
   })
 })

@@ -19,12 +19,14 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
+import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
 import type { Conflict } from './sync_core'
 import type { TimelineEntry } from './timeline'
 import type { Agreement } from './agreements'
 import type { MyProfile, SharedProfile } from './profile'
+import type { NameReveal } from './events'
 
 export enum Ring {
   /** The top trust zone (wave 25): the few you would call at 3 am. Family keeps its own closeness; this is a ring of its own. */
@@ -346,6 +348,8 @@ export interface TwEvent {
   people?: string[]
   /** Wave 24 (cal6): the UID of the .ics event this was imported from, so a second import updates it. Absent = none. */
   icsUid?: string
+  /** E3 (events.ts revealedBy): how much of my name my links for this event tell other attendees. Absent = 'full'. This device only; never in an event link (event_link.ts whitelist). */
+  nameReveal?: NameReveal
 }
 
 /** A tie that expired and moved one ring outward (engagement.ts); kept until dismissed, so Undo stays possible. */
@@ -950,7 +954,7 @@ export interface AppState {
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
-  shareProfiles?: import('./share_profiles').ShareProfile[]
+  shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
   shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */

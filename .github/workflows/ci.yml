@@ -69,6 +69,57 @@ jobs:
       - name: unit tests (demo)
         working-directory: apps/demo
         run: node_modules/.bin/vitest run
+      # packages/device-sync (docs/design/device-sync-e2ee.md): zero-dependency package, tests run on node:test (Node >= 22.18 strips types itself).
+      - name: device-sync package (typecheck + unit tests)
+        run: pnpm --filter @resource-web/device-sync typecheck && pnpm --filter @resource-web/device-sync test
+      - name: DLP restore drill tool, its CI wrapper and the workflow contract (node:test, stdlib only)
+        run: node --test services/trustweb-backup/test/restore_drill.test.mjs services/trustweb-backup/test/restore_drill_ci.test.mjs services/trustweb-backup/test/dlp_drill_workflow.test.mjs
+  # Full workspace gates from a clean clone (cloud/green-gates, 2026-11-02): what `pnpm typecheck && pnpm lint && pnpm test`
+  # runs locally, every package. `--no-bail` keeps going after a failing package so one run shows the whole inventory;
+  # the step still fails if any package fails.
+  gates:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: workspace packages consumed from dist/ build their deps before typecheck/test
+        run: node --test scripts/test_workspace_build_deps.mjs
+      - name: typecheck (all packages)
+        run: pnpm -r --no-bail typecheck
+      - name: lint (all packages)
+        run: pnpm lint
+      - name: test (all packages)
+        run: pnpm -r --no-bail test
+  # cloud/iroh-relay-live (2026-11-02): packages/transport had no CI coverage at all (the iroh rung, relay failover and the
+  # sidecar endpoint live there). Typecheck + vitest for protocol and transport; the synapse-bound suites self-skip, the iroh
+  # sidecar integration suite self-skips while no `trustweb-iroh-sidecar` binary is on PATH (building it needs cargo + crates.io).
+  transport:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build @resource-web/protocol (transport imports its dist/)
+        run: pnpm --filter @resource-web/protocol build
+      - name: typecheck (protocol, transport)
+        run: pnpm --filter @resource-web/protocol --filter @resource-web/transport typecheck
+      - name: unit tests (protocol, transport)
+        run: pnpm --filter @resource-web/protocol --filter @resource-web/transport test
   # wave 14: trustweb.one/<name> must always end in a real page (a typeless empty 404 showed as a 0-byte download on phones). Hits production, stdlib python only.
   reach-out-link:
     if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'

@@ -85,12 +85,14 @@ describe('format detection and robustness', () => {
     expect(isGoogleCsvHeader(fixture('google_current.csv').split('\r\n')[0])).toBe(true)
     expect(isGoogleCsvHeader(fixture('google_legacy.csv').split('\r\n')[0])).toBe(true)
   })
-  it('parses 5,000 rows under 1 s', () => {
+  it('parses 5,000 rows under 5 s', () => {
     let t = 'First Name,Last Name,E-mail 1 - Value,Phone 1 - Value,Notes\n'
     for (let i = 0; i < 5000; i++) t += `P${i},Q${i},p${i}@example.at,+43 660 ${5550000 + i},"n ""${i}""\nx"\n`
     const t0 = performance.now()
     const r = parseGoogleCsv(t, 'big.csv')
-    expect(performance.now() - t0).toBeLessThan(1000)
+    // Wall-clock budgets in apps/crm are generous on purpose: `pnpm -r test` runs four packages at once on a shared GitHub
+    // runner, where 1 s budgets failed at 1.1-1.5 s (2026-11-02). Super-linear regressions still blow these by far.
+    expect(performance.now() - t0).toBeLessThan(5000)
     expect(r.contacts).toHaveLength(5000)
   })
   it('never throws on random text', () => {
