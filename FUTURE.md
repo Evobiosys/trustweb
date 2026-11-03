@@ -18,6 +18,9 @@
 - In-app offer/gathering composer — v0.1 creates listings via REST/steward text only; a first-class compose-and-preview UI (with the per-item policy/tier picker above) is deferred (D17 stub).
 - `TRANSPORT=matrix` wiring into `agent-daemon/src/main.ts` + WhatsApp/Signal bridge onboarding on matrix.myceli.al — the transport and Synapse profile exist in-tree but the factory throws on `matrix` today (D17 stub, D12 vision).
 - Persist signed VRC trust credentials — v0.1 issues them on-demand at `/api/trust` export, not stored (D17 stub).
+- Publish the iroh address (node id + relay URLs) in the `did:peer:2` service entry / contact card, so `resolvePeer` needs no out-of-band config (D-iroh-live).
+- Build `trustweb-iroh-sidecar` in CI and run `iroh_sidecar.integration.test.ts` there instead of skipping (D-iroh-live).
+- Relay allowlists / per-operator access policy for community iroh relays (who may connect; iroh-relay access config, ⚠️ unverified) (D-iroh-live).
 
 ## Next-phase research tracks (decision inputs — `docs/research/*.md`, untracked, NOT shipping docs)
 

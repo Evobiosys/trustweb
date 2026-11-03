@@ -490,3 +490,17 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   data url (png/jpeg/webp/gif, ≤ 32 KB) stored on our server on purpose: a URL to the organizer's own host would make every attendee's phone
   fetch it there (address and timing leak, the reason web_search.ts shows no favicons). The route carries no identity, counts as no hit,
   touches no stamp; an unknown id and a malformed id answer the same 404. POST /org/event's body cap is ORG_EVENT_MAX_BYTES (64 KB) for it.
+
+## D-iroh-live (2026-11-02): iroh rung from stub to working (sidecar, relay failover, operator guide)
+- Problem: D-iroh-rung left `IrohEndpointLike` injected but unimplemented; relays were "interchangeable" only on paper, and nobody had a guide to run one.
+- Decision: the iroh node runs as a separate Rust process, `trustweb-iroh-sidecar`, speaking JSON lines on stdio (docs/IROH-SIDECAR.md); `IrohSidecarEndpoint` implements
+  `IrohEndpointLike` over it. Not a native module: `packages/transport` stays free of native builds (I5), the secret key lives in one small process,
+  and tests skip cleanly when the binary is absent.
+  Failover lives on the host: one relay per `send` (peer's relays first, then ours, de-duplicated), ≤ 3 attempts of 10 s, `IrohRelaySelector`
+  cooldown 60 s doubling to 15 min, success resets; all fail → one error, the ladder falls through. Set `irohMs` ≥ 30 s.
+  Default: no relay unless `--relay-url`; n0's public relays only with `--n0-relays` (I9). `onAudit` (channel) and `onRungResult` (ladder) log every
+  attempt in plain text, never wire bytes (I6). Operator guide for `iroh-relay` in docs/IROH-RELAY.md, EU hosting first, unverified details marked ⚠️.
+- No new privacy claim (I7): relays still see node ids, IPs, timing and sizes; more relays spread that metadata, they do not remove it.
+  "Interchangeable" is narrowed: a relay only reaches peers connected to it.
+- Not covered: sidecar not built/run in CI; iroh address not yet published in did:peer:2 / contact card; offline inbox stays on the mediator rung;
+  no relay-side allowlists; no relay deployed.

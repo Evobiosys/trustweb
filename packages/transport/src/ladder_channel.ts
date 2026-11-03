@@ -7,7 +7,10 @@
 //
 //   (b) relay      — RelayChannel, a trust-graph mediator (Task 7).
 //   (b') iroh      — IrohRelayChannel, an alternative to (b) over
-//                    interchangeable iroh relays (docs/IROH-RELAY.md).
+//                    interchangeable iroh relays; it fails over across
+//                    relays internally (per-relay attemptMs, cooldown via
+//                    IrohRelaySelector) and rejects only once its relay
+//                    attempts are exhausted (docs/IROH-RELAY.md).
 //   (c) lan_http    — HttpPostChannel, the LAN HTTP floor (Task 1).
 //
 // LadderChannel is itself just another DeliveryChannel (composable, and in
@@ -38,6 +41,11 @@
 // is the single place that absorbs any resulting duplicate, keyed on the
 // cryptographically-authenticated message id. This file only ever fans the
 // same wire to the same sink; it never inspects wire contents.
+//
+// Auditability (I6): the optional `onRungResult` hook is called after every
+// rung attempt with the rung name, outcome, duration and (on failure) the
+// error message — never the wire. It is observation only: it cannot change
+// which rung is tried next, and a throwing hook is ignored.
 import type { DeliveryChannel } from "./delivery_channel.js";
 
 /** T3' scope: exactly these two data-plane rungs. No "webrtc" — see file header. */
@@ -57,10 +65,21 @@ export interface LadderBudgets {
   httpMs?: number;
 }
 
+/** One rung attempt's outcome, for the local audit log (I6). Never carries wire bytes. */
+export interface LadderRungResult {
+  rung: LadderRungName;
+  ok: boolean;
+  ms: number;
+  error?: string;
+  recipientDid: string;
+}
+
 export interface LadderOptions {
   /** Ordered rungs; deliver() tries them in this exact order. Must not be empty. */
   dataRungs: LadderRung[];
   budgets?: LadderBudgets;
+  /** Called after every rung attempt (I6). Observation only; a throwing hook is ignored. */
+  onRungResult?: (ev: LadderRungResult) => void;
 }
 
 function budgetFor(name: LadderRungName, budgets: LadderBudgets): number | undefined {
@@ -97,6 +116,7 @@ async function withBudget<T>(ms: number | undefined, fn: () => Promise<T>): Prom
 export class LadderChannel implements DeliveryChannel {
   private readonly dataRungs: LadderRung[];
   private readonly budgets: LadderBudgets;
+  private readonly onRungResult?: (ev: LadderRungResult) => void;
 
   constructor(opts: LadderOptions) {
     if (opts.dataRungs.length === 0) {
@@ -104,6 +124,15 @@ export class LadderChannel implements DeliveryChannel {
     }
     this.dataRungs = opts.dataRungs;
     this.budgets = opts.budgets ?? {};
+    this.onRungResult = opts.onRungResult;
+  }
+
+  private report(ev: LadderRungResult): void {
+    try {
+      this.onRungResult?.(ev);
+    } catch {
+      // an audit hook must never change delivery behaviour
+    }
   }
 
   /**
@@ -116,12 +145,17 @@ export class LadderChannel implements DeliveryChannel {
   async deliver(recipientDid: string, wire: string): Promise<void> {
     const errors: string[] = [];
     for (const rung of this.dataRungs) {
+      const t0 = Date.now();
       try {
         await withBudget(budgetFor(rung.name, this.budgets), () => rung.channel.deliver(recipientDid, wire));
-        return;
       } catch (err) {
-        errors.push(`${rung.name}: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        errors.push(`${rung.name}: ${message}`);
+        this.report({ rung: rung.name, ok: false, ms: Date.now() - t0, error: message, recipientDid });
+        continue;
       }
+      this.report({ rung: rung.name, ok: true, ms: Date.now() - t0, recipientDid });
+      return;
     }
     throw new Error(
       `LadderChannel.deliver: all rungs failed for ${recipientDid} (${errors.join("; ")})`
