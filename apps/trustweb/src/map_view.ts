@@ -7,6 +7,8 @@
 import { el } from '../../demo/src/ui/dom'
 import { activateKey } from './key_press'
 import type { Person } from './model'
+import { nextMapLoad } from './map_load_state'
+import type { MapLoad } from './map_load_state'
 import { clearPlace, pinGroups, placeSuggest, project, setPlace } from './place_suggest'
 import type { PersonPlace, PlaceHit } from './place_suggest'
 import { S } from './strings'
@@ -45,7 +47,7 @@ function worldPath(): Promise<string> {
   outline ??= import('./data/world_110m.json').then((m) => {
     const fc = (m.default ?? m) as unknown as { features: { geometry: Geometry }[] }
     return fc.features.map((f) => outlinePath(f.geometry)).join('')
-  })
+  }).catch((e: unknown) => { outline = null; throw e })
   return outline
 }
 
@@ -56,7 +58,22 @@ export function createMapView(opts: MapOptions): HTMLElement {
   const dots = svg('g', { class: 'map-dots' })
   const map = svg('svg', { class: 'map-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': S.mapAria }) as SVGSVGElement
   map.append(land, dots)
-  void worldPath().then((d) => land.setAttribute('d', d))
+
+  const notice = el('div', { class: 'map-notice', 'data-map-notice': '', role: 'status' })
+  let state: MapLoad = 'loading'
+  const show = (): void => {
+    notice.classList.toggle('map-notice-done', state === 'ready')
+    if (state === 'loading') notice.replaceChildren(S.mapLoading)
+    else if (state === 'failed') notice.replaceChildren(S.mapLoadFailed, el('button', { class: 'btn btn-sm', type: 'button', 'data-map-retry': '', onclick: () => { state = nextMapLoad(state, 'retry'); show(); load() } }, [S.mapRetry]))
+  }
+  const load = (): void => {
+    void worldPath().then(
+      (d) => { land.setAttribute('d', d); state = nextMapLoad(state, 'loaded'); show() },
+      () => { state = nextMapLoad(state, 'error'); show() },
+    )
+  }
+  show()
+  load()
 
   const drawDots = (): void => {
     dots.replaceChildren(...pinGroups(people).flatMap((g) => {
@@ -101,7 +118,7 @@ export function createMapView(opts: MapOptions): HTMLElement {
     return [input, undo, suggest]
   }
   return el('div', { class: 'map-view', 'data-map-view': '' }, [
-    map as unknown as Node,
+    el('div', { class: 'map-stage' }, [map as unknown as Node, notice]),
     el('p', { class: 'meta map-credit' }, [S.mapCredit]),
     // Wave 29: the flat 'Find someone' list is the People view (ring categories); each row keeps its place box.
     peopleList(placeEditor),
