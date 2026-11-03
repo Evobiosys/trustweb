@@ -541,3 +541,25 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
   keys open the wires of its time. Round-1's wall-clock counter floor is gone with it. Send and receive paths are serialised per peer.
 - PR #68 finding 4 (the relay learns the exact record size): plaintexts are padded to 1 / 4 / 16 / 64 KiB buckets (`seal.ts`); the
   bucket and the piece count stay visible.
+
+## D-cli (2026-11-02): `trustweb`, a git-like command line over a local record, reusing the share sink as it is
+- Scope: list/create/rename/archive trust zones, persons and tags in and out of zones, "what can this zone/tag/person see",
+  export/import as JSON. `packages/cli`, bin `trustweb`, docs in `docs/cli.md`. Local files only; no network (a test and the lint prove it).
+- Zones stay the fixed TrustZones ladder (D-share-sink). "Create" = set a ladder zone up in this record (switch it on, label it);
+  "archive" = switch it off, which is zones.ts `active`: `canAccess` ignores it, an item shared to it moves one ring in, a person whose
+  only zone it was counts as public. Custom zone names were tempting and refused: `isZone` and `rank` would stop meaning anything.
+- A tag added to a zone is a rule tuple `tag:<t> in_zone zone:<z>`; the CLI unfolds it into derived per-person `in_zone` tuples
+  (marked with the tag) before every check, so the app's `canAccess` stays the single oracle and nothing is re-implemented.
+- The record (`.trustweb/record.json`) is append-only in spirit: a membership ends by `until`, a person or tag by `removedAt`, a share
+  by a revoke line; nothing is deleted; every change writes one human-readable log line (I6). Canonical bytes, so a diff reads.
+- Toolchain: Node's own TypeScript stripping (transform mode) plus a resolve hook for the app's extensionless imports
+  (`scripts/register.mjs`) runs the share sink sources unchanged; `tsc` typechecks them with two type shims for the browser-only
+  libraries the model's type graph names. Zero runtime dependencies; `node:test` for the tests. Node >= 22.13.
+- Licence header on the CLI's files: `LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later`, as the task asked; this repo publishes under AGPL
+  (the OR permits it, `packages/cli/README.md` says AGPL). OPEN for the owner: keep the OR, or narrow the header to AGPL alone.
+- A merge takes nothing back: the same fact closed on either device stays closed, a share line older than our latest word on its
+  item is superseded, the merged tag graph must stay a DAG, and a write dated before the record's last change is refused.
+- Owner decision on PR #72 (2026-11-03): `share --zone` takes a created zone directly, as it stands: the item opens to the zone's
+  current members (and, the ladder nesting, to the zones inside it); no refusal points at `--also`. When the zone's level is wider
+  than the item's current scope, the share goes through and one warning line names who comes in. Refused still: `self`, an
+  archived zone, a zone not set up (each with the command that changes that).
