@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
- * Wave 27 (sovereign-switch): Settings > Sovereign Switch, the pure parts. Export everything as files (record.json as stored, log.jsonl
+ * Wave 27 (sovereign-switch): Settings > Sovereign Switch, the pure parts. Wave 28: the page imports FROM other services; export and erasure moved under Advanced. Export everything as files (record.json as stored, log.jsonl
  * one create_node line per node, Logseq-style Markdown per kind, a README), and the other-services checklist with a GDPR Art. 17
  * (erasure) + Art. 20 (portability) request in English or German. The log is the shape the record moves to (append-only JSONL);
  * today every node is one create_node line. No DOM, no network: the file stays on this device until the owner moves it.
@@ -130,4 +130,10 @@ export function markService(s: Sov, id: string, what: 'export' | 'delete', at: n
 /** "Start the switch": the first service with an export link whose export is not ticked yet; null when none is left. */
 export function nextToExport(list: readonly RtbfService[], s: Sov): RtbfService | null {
   return list.find((x) => x.exportUrl && !s.sovereign?.services?.[x.id]?.exportAt) ?? null
+}
+
+/** Wave 28: the sections of the page, top to bottom. Export, be forgotten and erasure requests exist only while Advanced is open. */
+export function pageSections(advancedOpen: boolean): string[] {
+  const base = ['start', 'services', 'watch', 'other', 'sync', 'import', 'advanced']
+  return advancedOpen ? [...base, 'export', 'forget', 'erasure'] : base
 }
