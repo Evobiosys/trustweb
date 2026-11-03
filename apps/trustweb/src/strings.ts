@@ -827,6 +827,13 @@ export const S = {
     [Ring.Family]: 'your family, whatever the closeness',
     [Ring.Unsorted]: 'not on a zone yet',
   } as Record<Ring, string>,
+  // Five-ring prototype (five_rings_view.ts, flag tw-five-rings): the field overview. An average, never a limit.
+  fieldOverviewTitle: 'Your field',
+  fieldUpToHere: (cumulative: number, about: number) => `${cumulative} up to here · most people: about ${about}`,
+  fieldUnsorted: (n: number) => `not yet sorted: ${n}`,
+  fieldLeanRow: (n: number) => `${n} acquaintances lean towards friend`,
+  fieldLeanMove: 'Move them to friends',
+  fieldOverviewFoot: "Dunbar's layers are an average, not a limit. The rings show who is in your field.",
   // The three tiers and "Only me" (wave 2, P22/P26): short, intuitive; each tier includes everyone closer.
   audienceLabel: {
     [Audience.FriendsOfFriends]: 'Acquaintances',

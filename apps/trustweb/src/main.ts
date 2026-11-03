@@ -20,6 +20,8 @@
  */
 import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
+import { FIVE_RINGS_FLAG, fiveRingsOn, flagFromUrl } from './five_rings'
+import { fieldOverviewPanel } from './five_rings_view'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, arcsGradient, loadColourTags, tagColours, tagsOf } from './colour_tags'
@@ -410,6 +412,11 @@ const wantInstall = params.get('install') === '1'
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
+// Five-ring prototype (five_rings.ts): ?five_rings=1|0 switches its flag, remembered before the URL is cleaned.
+{
+  const f = flagFromUrl(location.search)
+  if (f !== null) try { localStorage.setItem(FIVE_RINGS_FLAG, f ? '1' : '0') } catch { /* not remembered */ }
+}
 /** The app on a home screen: a standalone PWA, this session inside the APK (which runs as a tab until the origin vouches for it), or the iPhone app. */
 function installedHere(): boolean {
   return runsAsInstalledApp() || isApkSession() || nativeApp
@@ -2987,6 +2994,7 @@ function screenWeb(): Node[] {
     view === 'network'
       ? createNetworkView({ me: s.me, people: s.people, openPerson: openCardPage, openMe: () => editNameSheet(), ui: { s: st(), tags: loadColourTags(), save } })
       : ringsView(s, askMarks(), undefined, { complete: expanded }),
+    fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : null,
     wantsToConnectSection(),
     reachOutLegendShown(st()) && !hintHidden(HintId.ReachOut) ? el('button', { class: 'hint-i legend-i', 'data-legend-reach-out': '', 'aria-label': S.hintOpen(S.hintLabel[HintId.ReachOut]), onclick: () => openHint(HintId.ReachOut) }, ['i']) : null,
     isEphemeral() ? el('p', { class: 'warn' }, [S.storageEphemeral]) : null,

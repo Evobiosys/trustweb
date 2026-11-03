@@ -221,7 +221,7 @@ like the others and drops the manual item. `intending` stays an option (it is a 
 run; an older sync that does not know `closest` keeps treating it as a manual item.
 
 PROTOTYPE: `RING_FIELD_OPTIONS_V2` (the five-option table, ids = `RINGS` in order, tested) and
-`ringFieldValue` (passes the five ids and the placement states, leaves anything else alone). The CRM files
+`isRingFieldValue` (knows the five ids and the two placement states; anything else is for the Curator to re-file). The CRM files
 are not edited on this branch.
 
 Record migration (lean → ring) is §4: owner-accepted, never automatic.
