@@ -22,6 +22,7 @@ import { intendingReminder, knownWays, lastMessagedAt } from './intending_remind
 import { shortLabel } from './short_label'
 import { limitOf, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
+import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
 import { membraneAll } from './membranes_five_view'
@@ -165,6 +166,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     ringsK = k
     const colourTags = loadColourTags()
     const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
+    const at = new Map<string, { x: number; y: number }>()
     let dragged = false
     if (!desk) {
       wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -236,6 +238,7 @@ export function createWebView(deps: WebViewDeps): WebView {
           st().showRingNames ? el('em', { class: 'lvl' }, [S.ringLabel[p.ring]]) : null,
         ])
         if (!desk) contextPress(b, () => curatorPerson(p.id))
+        at.set(p.id, { x, y })
         b.style.left = x + 'px'
         b.style.top = y + 'px'
         if (arcs) b.style.setProperty('--arcs', arcs)
@@ -250,6 +253,17 @@ export function createWebView(deps: WebViewDeps): WebView {
           wrap.appendChild(z)
         }
       })
+    }
+    // Wave 29: thin dashed lines between contacts who know each other (never to me); dragOnRings moves them with the dot.
+    if (!desk && connectionsShown(s)) {
+      for (const [a, b] of contactPairs(s.me.id, s.people)) {
+        const from = at.get(a), to = at.get(b)
+        if (!from || !to) continue
+        const line = document.createElementNS(NS, 'line')
+        line.setAttribute('x1', String(from.x)); line.setAttribute('y1', String(from.y)); line.setAttribute('x2', String(to.x)); line.setAttribute('y2', String(to.y))
+        line.setAttribute('data-conn', `${a}|${b}`); line.setAttribute('stroke', 'currentColor'); line.setAttribute('stroke-width', '0.7'); line.setAttribute('stroke-dasharray', '2 3'); line.setAttribute('opacity', '0.5')
+        svg.appendChild(line)
+      }
     }
     const you = el('button', { class: 'node you', 'aria-label': S.meNameAria(s.me.displayName), tabindex: desk ? '-1' : false, onclick: () => { if (!desk) editNameSheet(true) } }, [pictured(avatar(s.me.displayName, s.me.id), deps.ownPictureUrl()), el('span', {}, [shortLabel(s.me.displayName)])])
     you.style.left = C + 'px'
@@ -441,6 +455,10 @@ export function createWebView(deps: WebViewDeps): WebView {
         const { x, y } = localPoint(e, wrap.getBoundingClientRect())
         node.style.left = x + 'px'
         node.style.top = y + 'px'
+        for (const l of wrap.querySelectorAll('line[data-conn]')) {
+          const [a, b] = l.getAttribute('data-conn')!.split('|')
+          if (a === p.id) { l.setAttribute('x1', String(x)); l.setAttribute('y1', String(y)) } else if (b === p.id) { l.setAttribute('x2', String(x)); l.setAttribute('y2', String(y)) }
+        }
         const dist = Math.hypot(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2) / ringsK
         angle = angleFromCentre(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
         out = beyondRings(dist, ringsGeo)

@@ -446,6 +446,7 @@ export const S = {
   zoneCommunity: 'Community tag',
   zoneCommunityNone: 'no tag',
   zoneSidebarTitle: 'Tools',
+  zoneConnections: 'Connections between my contacts',
   zoneShowOnly: 'Show only',
   zoneHide: 'Hide',
   zoneZzzAria: (name: string, to: string) => `Quiet for a long time: move ${name} to ${to}`,
