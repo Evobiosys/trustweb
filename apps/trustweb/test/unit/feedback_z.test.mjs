@@ -47,7 +47,7 @@ describe('Z9 your answers + required text', () => {
 describe('Z10 Record Save', () => {
   it('the local recording is saved, not sent', () => {
     expect(S.recSave).toBe('Save')
-    expect(read('main.ts')).toMatch(/roundButton\('send', S\.recSave/)
+    expect(read('main.ts')).toMatch(/roundButton\('save', S\.recSave/)
   })
 })
 

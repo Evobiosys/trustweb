@@ -14,3 +14,9 @@ export function recStartNext(s: RecStart, ev: 'tap' | 'granted' | 'rejected' | '
 export function recStartFailure(err: unknown): string {
   return (err as { name?: string } | null)?.name === 'NotFoundError' ? S.recNoMic : S.recDenied
 }
+
+/** "Who or what was this about?" is optional: an empty name saves as a plain note (wave 28). */
+export function resolveAbout(name: string, plain: boolean): { name: string; plain: boolean } {
+  const n = name.trim()
+  return { name: n, plain: plain || !n }
+}

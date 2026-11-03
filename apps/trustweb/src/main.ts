@@ -224,7 +224,8 @@ import { addToOutbox, transcriptStillComing } from './late_pack'
 import { ICONS } from './icons'
 import { askWebIcon, recordIcon } from './icons/ask_web'
 import { RECORD_TAB_GLYPH, recordTabGlyph } from './record_glyph'
-import { type RecStart, recStartFailure, recStartNext } from './record_start'
+import { PULSE_IDLE_PX, pulseSpreadPx } from './audio_level'
+import { type RecStart, recStartFailure, recStartNext, resolveAbout } from './record_start'
 import { spareRoomExample } from './ask_examples'
 import type { PastFocus } from './past_meetings_view'
 import { DEMO_LIFETIME_MS, DEMO_SUFFIX, demoAccountName, demoFragment, demoPersona, handoverFragment, isDemoPeerRef, isDemoPersona, parseDemoFragment, parseHandoverFragment, timeLeft } from './demo_account'
@@ -560,6 +561,7 @@ let askDecidedLate = false
 let meetFrom: Screen = Screen.Web
 // The recording belongs to the current draft; it is dropped with it, or kept with its stored meeting.
 const recorder = new MeetingRecorder()
+let levelFrame = 0
 // Recordings kept on this phone with their meetings (audio_store.ts), per persona like the record.
 const audioStore = new AudioStore(persona, storeCtx)
 // Every take of the current draft, oldest first: a new take never overwrites one.
@@ -1021,6 +1023,8 @@ function recordOriginOf(s: Screen): RecordOrigin {
 }
 
 function onRecordTap(): void {
+  // On the Record screen, mid-take: the round tab pauses and resumes like the circle (Jakob 2026-11-01).
+  if (recorder.live && screen === recordScreen()) { togglePause(); return }
   // The Record tab never wipes a draft in progress (audio, transcript,
   // who/where), so a live take is never switched; it only starts fresh when
   // nothing is in flight, and then by where the tap came from (record_origin.ts):
@@ -1343,7 +1347,7 @@ function render(): void {
   if (recTab && recTab.dataset.glyph !== recGlyph) {
     recTab.dataset.glyph = recGlyph
     recTab.querySelector('svg')?.remove()
-    recTab.insertAdjacentHTML('afterbegin', recGlyph === 'solo' ? recordIcon() : icon('mic'))
+    recTab.insertAdjacentHTML('afterbegin', recGlyph === 'solo' ? recordIcon() : icon(recGlyph === 'waves' ? 'solo' : 'mic'))
   }
   updateChatBadge()
   host.className = 'screen on ' + screen + (screen === Screen.Web && queryOpen ? ' querying' : '')
@@ -4271,6 +4275,19 @@ function askAgainRow(p: Person): HTMLElement | null {
 // then discard / pause / send. Top right: Meeting.
 // ---------------------------------------------------------------------------
 
+/** Drives the record pulse (circle + tab) from the live microphone level until the take ends; the CSS reads --lvl. */
+function startLevelMeter(): void {
+  if (levelFrame) return
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const tick = (): void => {
+    if (!recorder.live) { levelFrame = 0; return }
+    const spread = reduced ? PULSE_IDLE_PX : pulseSpreadPx(recorder.level())
+    for (const n of document.querySelectorAll<HTMLElement>('.rec-circle.live, .tab-record.live')) n.style.setProperty('--pulse-px', `${spread.toFixed(1)}px`)
+    levelFrame = requestAnimationFrame(tick)
+  }
+  levelFrame = requestAnimationFrame(tick)
+}
+
 function startTicker(): void {
   clearInterval(recTicker)
   recTicker = setInterval(() => {
@@ -4342,6 +4359,7 @@ async function startRecording(): Promise<boolean> {
   }
   recStartState = recStartNext(recStartState, 'granted')
   startTicker()
+  startLevelMeter()
   void keepScreenOn()
   render()
   return true
@@ -4403,7 +4421,7 @@ function aboutSheet(next?: () => void, kind: AboutKind = draft.about): void {
   const input = el('input', { class: 'field', placeholder: who ? S.recWhoPh : S.aboutWhatPh, value: draft.plain ? '' : draft.name, maxlength: '60', 'aria-label': title })
   const done = (): void => {
     const v = input.value.trim()
-    if (!v) { input.focus(); return }
+    if (!v) { none(); return }
     const person = st().people.find((p) => p.name.toLowerCase() === v.toLowerCase())
     const item = st().inventory.find((i) => i.text.toLowerCase() === v.toLowerCase())
     draft.about = person ? AboutKind.Who : item ? AboutKind.What : kind
@@ -5021,9 +5039,9 @@ async function startSolo(): Promise<void> {
 async function sendSolo(): Promise<void> {
   if (recorder.live) await recorder.stop()
   if (!takes.length && !draft.extraLines.length && !draft.generalNotes.trim()) return
-  const next = (): void => { serverAfterTake(); void makeNotes() }
-  if (!draft.name.trim() && !draft.plain) { aboutSheet(next); return }
-  next()
+  Object.assign(draft, resolveAbout(draft.name, draft.plain))
+  serverAfterTake()
+  void makeNotes()
 }
 
 /** The "For the people at <event> ×" chip of a draft started at an event (calendar module); one tap drops the tag. */
@@ -5044,6 +5062,7 @@ function screenRecord(): Node[] {
     onpointerdown: (e: Event) => (e.currentTarget as HTMLElement).classList.add('pressed'),
     onclick: () => { if (live) togglePause(); else if (!asking) void startSolo() },
   })
+  circle.innerHTML = icon(live && !paused ? 'pause' : 'mic')
   const status = asking ? S.recAsking : live ? (paused ? S.recPausedHint : S.recLive) : has ? S.recDone(clock(totalMs()), takes.length) : S.recIdle
   if (pastSearchOpen) return [header(S.recTitle, { right: pastSearchButton(), after: meeting, pill: false }), pastSearchView()]
   return [
@@ -5068,7 +5087,7 @@ function screenRecord(): Node[] {
     el('div', { class: 'memo-controls' }, [
       // The circle above records, pauses and resumes (owner 2026-10-06: no separate play button).
       roundButton('x', S.recDiscard, discardDraft, { disabled: !live && !has && !draft.name.trim() && !draft.generalNotes.trim() && !draft.plain, data: 'data-record-discard' }),
-      roundButton('send', S.recSave, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
+      roundButton('save', S.recSave, () => void sendSolo(), { disabled: !live && !has && !draft.extraLines.length && !draft.generalNotes.trim(), data: 'data-record-send' }),
     ]),
   ]
 }
@@ -5319,7 +5338,7 @@ function screenMeeting(): Node[] {
 }
 
 async function makeNotes(): Promise<void> {
-  if (!draft.name.trim() && !draft.plain) { aboutSheet(() => void makeNotes()); return }
+  Object.assign(draft, resolveAbout(draft.name, draft.plain))
   if (recorder.live) await recorder.stop()
   await transcriber?.stop()
   transcriber = null
