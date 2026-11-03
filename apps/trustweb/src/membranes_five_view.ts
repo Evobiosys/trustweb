@@ -5,6 +5,9 @@ import type { ColourTag } from './colour_tags'
 import { Ring } from './model'
 import type { Person } from './model'
 import { S } from './strings'
+import { editKey } from './tap_edit'
+import { nameEdit } from './ring_hover'
+import { HELLO_NAME_MAX } from './hello'
 
 export interface SmallCardDeps {
   person: Person
@@ -96,5 +99,45 @@ export function membraneAll(zone: string, people: readonly Person[]): HTMLElemen
   return el('div', { class: 'membrane-all', 'data-membrane-all': '', role: 'status' }, [
     el('b', {}, [S.membraneAllTitle(zone)]),
     el('span', {}, [people.map((p) => p.name).join(', ')]),
+  ])
+}
+
+export interface RingCardDeps {
+  /** A name was pressed: open that person. */
+  onOpen: (id: string) => void
+  /** A name was changed (already stored on `p` by the caller); the card stays open and shows it. */
+  onRename: (p: Person, next: string) => void
+}
+
+/** Wave 29: the interactive "Everyone in <ring>" card: each name opens its person, a pencil turns the name into an input (Enter or blur saves, Esc cancels). */
+export function ringCard(zone: string, people: readonly Person[], d: RingCardDeps): HTMLElement {
+  const row = (p: Person): HTMLElement => {
+    const host = el('span', { class: 'ring-card-row', 'data-ring-card-row': p.id })
+    const show = (): void => host.replaceChildren(
+      el('button', { class: 'ring-card-name', 'data-ring-card-open': p.id, onclick: () => d.onOpen(p.id) }, [p.name]),
+      el('button', { class: 'ring-card-edit', 'data-ring-card-edit': p.id, 'aria-label': S.ringCardEditName, title: S.ringCardEditName, onclick: edit }, ['✎']),
+    )
+    const edit = (): void => {
+      const input = el('input', { class: 'field tap-edit-input', 'aria-label': S.zoneRename(p.name), maxlength: String(HELLO_NAME_MAX), 'data-ring-card-input': p.id })
+      input.value = p.name
+      let done = false
+      const finish = (how: 'save' | 'cancel'): void => {
+        if (done) return
+        done = true
+        const r = nameEdit(p.name, input.value, how)
+        if (r.kind === 'commit') d.onRename(p, r.name)
+        show()
+      }
+      input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); finish(a) } })
+      input.addEventListener('blur', () => finish('save'))
+      host.replaceChildren(input)
+      input.focus(); input.select()
+    }
+    show()
+    return host
+  }
+  return el('div', { class: 'ring-card', 'data-ring-card': '', role: 'dialog', 'aria-label': S.membraneAllTitle(zone), onpointerdown: (e: Event) => { e.stopPropagation() } }, [
+    el('b', {}, [S.membraneAllTitle(zone)]),
+    ...people.map(row),
   ])
 }

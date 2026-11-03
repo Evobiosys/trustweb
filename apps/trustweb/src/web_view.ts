@@ -24,8 +24,10 @@ import { limitOf, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
-import { membraneAll } from './membranes_five_view'
-import { onHoverOrLongPress, singleOrDouble } from './press'
+import { ringCard } from './membranes_five_view'
+import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
+import type { HoverEvent } from './ring_hover'
+import { singleOrDouble } from './press'
 import { contextPress } from './context_press'
 import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
@@ -264,20 +266,63 @@ export function createWebView(deps: WebViewDeps): WebView {
       live.className = fresh.className
       live.replaceChildren(...fresh.childNodes)
     }
-    // Hover (desktop) == long press (phone) on a membrane's diamond: everyone in that circle, small names; gone on leave or the next press.
-    const hideAll = (): void => { wrap.querySelector('[data-membrane-all]')?.remove() }
-    const showAll = (r: Ring, top: number): void => {
-      hideAll()
-      const box = membraneAll(S.ringLabel[r], everyone[r] ?? [])
-      box.style.top = top + 14 + 'px'
+    // Wave 29: hover on a ring's handle or band (desktop) == long press on the handle (phone) opens the interactive "Everyone in <ring>" card at the pointer;
+    // it stays while the pointer crosses into it (GRACE_MS), closes when pointer has left handle, band and card, or on Esc. Renames show in the rings on close.
+    let hover = HOVER_IDLE
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
+    let renamed = false
+    const hideAll = (): void => {
+      clearTimeout(graceTimer); hover = HOVER_IDLE
+      wrap.querySelector('[data-ring-card]')?.remove()
+      document.removeEventListener('keydown', onEsc)
+      if (renamed) { renamed = false; render() }
+    }
+    const onEsc = (e: KeyboardEvent): void => { if (e.key === 'Escape') hideAll() }
+    const showAll = (r: Ring, e: { clientX: number; clientY: number }): void => {
+      wrap.querySelector('[data-ring-card]')?.remove()
+      const at = localPoint(e, wrap.getBoundingClientRect())
+      const box = ringCard(S.ringLabel[r], everyone[r] ?? [], {
+        onOpen: (id) => { hideAll(); openWebPage({ kind: 'card', id }) },
+        onRename: (p, next) => { p.name = next; renamed = true; save() },
+      })
+      box.style.left = Math.min(at.x + 12, RINGS_SIZE - 90) + 'px'
+      box.style.top = Math.min(at.y + 12, RINGS_SIZE - 40) + 'px'
+      box.addEventListener('pointerenter', () => step({ type: 'enter-card' }))
+      box.addEventListener('pointerleave', () => step({ type: 'leave' }))
       wrap.appendChild(box)
+      document.addEventListener('keydown', onEsc)
+    }
+    const step = (ev: HoverEvent, e?: { clientX: number; clientY: number }): void => {
+      const before = hover.open
+      hover = hoverStep(hover, ev)
+      clearTimeout(graceTimer)
+      if (hover.grace) graceTimer = setTimeout(() => { hover = hoverStep(hover, { type: 'grace-end' }); if (!hover.open) hideAll() }, GRACE_MS)
+      if (hover.open && e && (ev.type === 'enter-handle' || ev.type === 'enter-ring') && (before !== hover.open || !wrap.querySelector('[data-ring-card]'))) showAll(hover.open, e)
+    }
+    const mouse = (e: Event): boolean => (e as PointerEvent).pointerType === 'mouse'
+    if (!desk) { // the band: the pointer within RING_LINE_HIT of a ring's line (nodes, handles and the card keep their own hover)
+      let onBand: Ring | null = null
+      wrap.addEventListener('pointermove', (e) => {
+        const over = e.target as HTMLElement
+        if (!mouse(e) || over.closest('[data-ring-card], .ring-toggle')) return
+        const t = menuTarget(localPoint(e, wrap.getBoundingClientRect()), ringsGeo, k)
+        const band = t.onLine && !over.closest('.node, .ring-more') ? t.near : null
+        if (band === onBand) return
+        if (band) step({ type: 'enter-ring', ring: band }, e); else if (onBand) step({ type: 'leave' })
+        onBand = band
+      })
+      wrap.addEventListener('pointerleave', () => { if (onBand) { onBand = null; step({ type: 'leave' }) } })
     }
     const column = togglePoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k)
     ringsGeo.rings.forEach((r, i) => {
       const at = column[i]
       const diamond = ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
       wrap.appendChild(diamond)
-      if (!desk) onHoverOrLongPress(diamond, () => showAll(r, at.top), hideAll)
+      if (!desk) {
+        diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: r }, e) })
+        diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) step({ type: 'leave' }) })
+        contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: r, grace: false }; showAll(r, { clientX: b.right, clientY: b.bottom }) })
+      }
       if (!hidden.has(r) && !complete && (rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)) ringMore(r, filled.includes(r), at.top, at.left, (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
     })
     wrap.addEventListener('pointerdown', hideAll)
@@ -290,13 +335,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28b (Jakob): the fill control is the expand glyph, not the outliner triangle (that looks like "play").
     const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
       style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
-    const list = el('button', {
-      class: 'ring-more ring-list', 'data-membrane-list': ring, style: `--rc:${toneVar(ring)}; left:${left + 34}px; top:${top}px`,
-      'aria-label': S.zoneListAria(S.ringLabel[ring]), title: S.zoneListAria(S.ringLabel[ring]),
-      onpointerdown: (e: Event) => { e.stopPropagation() },
-      onclick: (e: Event) => { e.stopPropagation(); openWebPage({ kind: 'more', ring }) },
-    }, ['☰'])
-    return filled ? [fill, list] : [fill]
+    return [fill]
   }
 
   /** Wave 28: the zzz tap(s): these people move one ring outward (their suggestion), nobody else. */
@@ -312,7 +351,7 @@ export function createWebView(deps: WebViewDeps): WebView {
   function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: (btn: HTMLElement) => void): HTMLElement {
     const b = el('button', {
       class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
-      'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), title: S.ringLabel[ring],
+      'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), // no title: the hover card replaces the plain tooltip (Wave 29)
       // The zoom/pan layer captures every pointer on the rings (setPointerCapture), which retargets the click away from this button.
       onpointerdown: (e: Event) => { e.stopPropagation() },
       onclick: (e: Event) => { e.stopPropagation(); onToggle(e.currentTarget as HTMLElement) },
