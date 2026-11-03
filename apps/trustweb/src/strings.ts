@@ -433,6 +433,7 @@ export const S = {
   // Wave 28 (trustzones.ts): TrustZones
   zoneFillAria: (zone: string, on: boolean) => on ? `Fold ${zone} back to the closest few` : `Show everyone in ${zone} on the ring`,
   zoneListAria: (zone: string) => `Open the list of ${zone}`,
+  zoneRename: (name: string) => `Edit the name of ${name}`,   // used again by the wave 29 ring hover card (restored 2026-11-03)
   zoneTapToAdd: {
     [Ring.Closest]: 'tap to add one of the closest few',
     [Ring.Close]: 'tap to add a close friend or ally',
