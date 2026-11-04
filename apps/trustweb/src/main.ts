@@ -192,6 +192,8 @@ import { createSyncView } from './sync_view'
 import { careForCodes } from './sync_codes'
 import { importGroup } from './import_view'
 import { openServicesImport, servicesGroup } from './services_view'
+import { mountOnboardingNotice, onboardingCard } from './onboarding_whatsapp_view'
+import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
@@ -876,6 +878,9 @@ const veil = el('div', { class: 'sheet-veil', onclick: () => closeSheet() })
 const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
+/** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
+const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone }
+mountOnboardingNotice(onboardHooks)
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
   state: st, save, page: (title, body, mark) => pages.open(title, body, mark), toast: (msg) => toast(msg), appUrl: APP_URL,
@@ -2498,6 +2503,7 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
+    onboardingCard(onboardHooks, render),
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'

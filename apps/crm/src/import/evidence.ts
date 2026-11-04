@@ -29,6 +29,8 @@ const DAY_MS = 86_400_000
 export interface Summary {
   /** Rows in the last WINDOW_DAYS days up to `now` (future rows ignored). */
   n365: number
+  /** Distinct UTC days among those rows. */
+  days: number
   in: number
   out: number
   /** Latest row at or before `now`, any age. Absent when there is none. */
@@ -39,16 +41,19 @@ export interface Summary {
 
 export function summarise(list: readonly Evidence[], personKey: string, now: number): Summary {
   const floor = now - WINDOW_DAYS * DAY_MS
-  const s: Summary = { n365: 0, in: 0, out: 0, ids: [] }
+  const s: Summary = { n365: 0, days: 0, in: 0, out: 0, ids: [] }
+  const days = new Set<number>()
   for (const e of list) {
     if (e.personKey !== personKey || e.ts > now) continue
     if (s.lastTs === undefined || e.ts > s.lastTs) s.lastTs = e.ts
     if (e.ts < floor) continue
     s.n365++
+    days.add(Math.floor(e.ts / DAY_MS))
     if (e.dir === 'in') s.in++
     if (e.dir === 'out') s.out++
     s.ids.push(e.id)
   }
+  s.days = days.size
   return s
 }
 
