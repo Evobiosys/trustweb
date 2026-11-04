@@ -4,7 +4,7 @@ import { ICONS } from './icons'
 import { el } from '../../demo/src/ui/dom'
 import type { MessengerSource, ThreadSummary } from './ext/registry'
 import { activateKey, dismissOnOutside } from './key_press'
-import { focusRows, hideNewerThan, listEntries, mergeThreads, parseOff, parseSelection, sourceColor, toggleSource, usableSelection, viewTitle, TRUSTWEB_SOURCE, type SourceEntry, type TaggedThread } from './messenger_combine'
+import { focusRows, hideNewerThan, chatTitle, listEntries, mergeThreads, parseOff, parseSelection, sourceColor, toggleSource, usableSelection, TRUSTWEB_SOURCE, type SourceEntry, type TaggedThread } from './messenger_combine'
 import { ageLabel } from './model'
 import { S } from './strings'
 
@@ -53,15 +53,13 @@ export function chatView(d: CombinedDeps): ChatView {
   const entries = listEntries(d.sources, off, S.chatViaTrustweb)
   const selection = usableSelection(parseSelection(read(SELECTION_KEY)), entries)
   const labels = Object.fromEntries(entries.map((e) => [e.id, e.label]))
-  const usable = entries.filter((e) => e.state === 'on').length
-  const title = viewTitle(selection, labels, S.chatViewAll, usable)
+  const title = chatTitle(d.sources, off, selection, S.chatViewAll, S.chatViaTrustweb)
   const choose = (sel: string[]): void => { write(SELECTION_KEY, JSON.stringify(sel)); focus = null; d.redraw() }
   const wrap = el('span', { class: 'chat-row-wrap chat-source-wrap', 'data-chat-switch': '' })
   const menu = el('div', { class: 'chat-menu chat-source-menu', role: 'menu', 'data-chat-source-menu': '', hidden: '' })
-  // Wave 29: a round ⇄ button in the header's views slot (like the Web's eye); the current service's name sits under it.
+  // Wave 29: a round ⇄ button in the header's views slot (like the Web's eye). The name is the Chat page title (main.ts screenChat).
   const pill = el('button', { class: 'hdr-btn icon-only chat-switch-btn', 'data-chat-source-pill': '', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': S.chatSwitchAria, title: S.chatViewMenu })
   pill.innerHTML = ICONS.switch
-  const name = el('small', { class: 'chat-switch-name', 'data-chat-view-name': '' }, [title])
   const dots = el('button', { class: 'hdr-btn icon-only', 'data-chat-dots': '', 'aria-haspopup': 'menu', 'aria-label': S.chatViewMore, title: S.chatViewMore }, ['⋯'])
   let stop: (() => void) | null = null
   const hide = (): void => { menu.hidden = true; pill.setAttribute('aria-expanded', 'false'); stop?.(); stop = null }
@@ -74,7 +72,7 @@ export function chatView(d: CombinedDeps): ChatView {
   const toggle = (e: Event): void => { e.stopPropagation(); if (menu.hidden) show(); else hide() }
   pill.addEventListener('click', toggle)
   dots.addEventListener('click', toggle)
-  wrap.append(pill, name, menu)
+  wrap.append(pill, menu)
   const simple = selection.length === 1 && selection[0] === TRUSTWEB_SOURCE
   return { selection, simple, title, pill: wrap, dots, body: simple ? null : combinedBody(d, selection, labels) }
 }

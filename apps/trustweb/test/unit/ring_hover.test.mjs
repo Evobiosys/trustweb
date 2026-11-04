@@ -47,3 +47,33 @@ describe('name edit in the card (ring_hover.ts)', () => {
     expect(nameEdit('Peter', 'Pete', 'cancel')).toEqual({ kind: 'cancel' })
   })
 })
+
+import { ROW_VIEW, rowStep } from '../../src/ring_hover.ts'
+
+describe('ring card row edit (rowStep)', () => {
+  const edit = rowStep(ROW_VIEW, { type: 'open' })
+  it('pencil opens the edit', () => expect(edit.editing).toBe(true))
+  it('accept with a new name commits and closes', () => {
+    const r = rowStep(edit, { type: 'accept', current: 'Ann', typed: ' Anna ' })
+    expect(r.editing).toBe(false)
+    expect(r.result).toEqual({ kind: 'commit', name: 'Anna' })
+  })
+  it('accept with empty or unchanged text closes without a rename', () => {
+    expect(rowStep(edit, { type: 'accept', current: 'Ann', typed: 'Ann' }).result).toEqual({ kind: 'cancel' })
+    expect(rowStep(edit, { type: 'accept', current: 'Ann', typed: '  ' }).result).toEqual({ kind: 'cancel' })
+  })
+  it('cancel closes', () => {
+    const r = rowStep(edit, { type: 'cancel' })
+    expect(r.editing).toBe(false)
+    expect(r.result).toEqual({ kind: 'cancel' })
+  })
+  it('archive closes and asks to archive', () => {
+    const r = rowStep(edit, { type: 'archive' })
+    expect(r.editing).toBe(false)
+    expect(r.result).toEqual({ kind: 'archive' })
+  })
+  it('blur is not an event: the edit stays open', () => expect(rowStep(edit, { type: 'blur' })).toBe(edit))
+  it('accept/cancel/archive outside an edit do nothing', () => {
+    expect(rowStep(ROW_VIEW, { type: 'cancel' })).toBe(ROW_VIEW)
+  })
+})

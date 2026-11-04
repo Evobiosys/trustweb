@@ -1,4 +1,5 @@
 /** Dev-only auto-walk: performs a feature's steps in the page (ripple, then a real click or the typed value). A step without a selector shows a yellow card and waits for its Next. Used by dev_preview.ts. */
+import { appScreen, appView, navNote, navPlan, runNav } from './dev_navigate'
 import { parseStep, typedValue } from './dev_preview_rules'
 
 const CSS = `
@@ -8,8 +9,8 @@ const CSS = `
 .twp-step.walk{left:50%;transform:translateX(-50%);bottom:16px;max-width:90vw}`
 
 export interface Walker {
-  /** Do `steps` one after the other; resolves when done, stopped, or an element did not show up within 4 s. */
-  run(steps: string[]): Promise<void>
+  /** Go to `context` (the row's view) first, then do `steps` one after the other; resolves when done, stopped, or an element did not show up within 4 s. */
+  run(steps: string[], context?: string): Promise<void>
   stop(): void
 }
 
@@ -51,12 +52,35 @@ async function glide(dot: HTMLElement, el: Element): Promise<void> {
   await sleep(GLIDE_MS)
 }
 
+/** The walker's hand (wave 31: also the driving Walk card's, dev_steps.ts): scroll to the element, glide there, ripple, then type the
+ *  step's value ("type …"/"paste …") into a field or click it. `hide` takes the round cursor away. */
+export interface Hand { tap(el: Element, text: string): Promise<void>; hide(): void }
+
+export function createHand(): Hand {
+  if (!document.getElementById('twp-walk-css')) document.head.appendChild(Object.assign(document.createElement('style'), { id: 'twp-walk-css', textContent: CSS }))
+  const dot = Object.assign(document.createElement('div'), { className: 'twp-dot' })
+  return {
+    async tap(el, text) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      await sleep(350)
+      await glide(dot, el)
+      ripple(el)
+      await sleep(350)
+      const value = typedValue(text)
+      if (value !== null && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
+        el.focus(); el.value = value
+        el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }))
+      } else (el as HTMLElement).click()
+    },
+    hide() { dot.remove() },
+  }
+}
+
 export function createWalker(toast: (text: string) => void): Walker {
-  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: CSS }))
+  const hand = createHand()
   let token = 0
   let cancel: (() => void) | null = null
 
-  const dot = Object.assign(document.createElement('div'), { className: 'twp-dot' })
   const card = (text: string): Promise<void> => new Promise((done) => {
     const el = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'twp-step walk' }))
     const end = (): void => { el.remove(); cancel = null; done() }
@@ -72,8 +96,17 @@ export function createWalker(toast: (text: string) => void): Walker {
   }
 
   return {
-    async run(steps) {
+    async run(steps, context) {
       const me = ++token
+      const plan = navPlan(context, appScreen(), appView())
+      const went = await runNav(plan, async (t) => {
+        const el = await waitFor(t.selector, me)
+        if (!el || me !== token) return false
+        await hand.tap(el, ''); await sleep(GLIDE_MS)
+        return true
+      })
+      if (me !== token) return
+      if (!went) { hand.hide(); toast(navNote(plan)); return }
       const label = (i: number, text: string): string => `Step ${i + 1} of ${steps.length}: ${text}`
       try { for (const [i, s] of steps.entries()) {
         const { text, selector } = parseStep(s)
@@ -82,23 +115,12 @@ export function createWalker(toast: (text: string) => void): Walker {
         if (me !== token) return
         if (!el) { toast('not found: ' + selector); return }
         const note = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'twp-step walk', textContent: label(i, text) }))
-        try {
-          el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-          await sleep(350)
-          await glide(dot, el)
-          ripple(el)
-          await sleep(350)
-        } finally { if (me !== token) note.remove() }
-        const value = typedValue(text)
-        if (value !== null && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
-          el.focus(); el.value = value
-          el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }))
-        } else (el as HTMLElement).click()
+        try { await hand.tap(el, text) } finally { if (me !== token) note.remove() }
         await sleep(WALK_STEP_MS)
         note.remove()
         if (me !== token) return
-      } } finally { if (me === token) dot.remove() }
+      } } finally { if (me === token) hand.hide() }
     },
-    stop() { token++; cancel?.(); dot.remove(); document.querySelectorAll('.twp-step.walk').forEach((n) => { n.remove() }) },
+    stop() { token++; cancel?.(); hand.hide(); document.querySelectorAll('.twp-step.walk').forEach((n) => { n.remove() }) },
   }
 }

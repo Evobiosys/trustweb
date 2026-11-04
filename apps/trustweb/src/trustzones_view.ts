@@ -13,6 +13,8 @@ import { S } from './strings'
 import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
 import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
+import { groupOpen, setGroupOpen } from './filter_groups'
+import { activeCountLabel, activeFilters } from './filter_active'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
 export const triangle = (open: boolean): string => (open ? '▾' : '▸')
@@ -21,6 +23,17 @@ export const triangle = (open: boolean): string => (open ? '▾' : '▸')
 export function outlinerToggle(open: boolean, label: string, onToggle: (btn: HTMLElement) => void, attrs: Record<string, string> = {}): HTMLElement {
   const b = el('button', { type: 'button', 'aria-expanded': String(open), 'aria-label': label, title: label, ...attrs, class: 'outliner-toggle ' + (attrs.class ?? ''), onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onToggle(b) } }, [triangle(open)])
   return b
+}
+
+/** Wave 30 (U9): one row per active chip ("Only #family ✕") plus "Show everyone"; empty when no filter is on. */
+function activeRows(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>): HTMLElement[] {
+  const active = activeFilters(d.s.uiRings, d.tags, d.s.people)
+  const off = (keep: (chip: string) => boolean): void => { setUi(d.s, 'show', (d.s.uiRings?.show ?? []).filter(keep)); setUi(d.s, 'hide', (d.s.uiRings?.hide ?? []).filter(keep)); d.onChange() }
+  const link = (attrs: Record<string, string>, label: string, onclick: () => void): HTMLElement => el('button', { type: 'button', class: 'btn btn-ghost btn-sm filter-off', ...attrs, onclick }, [label])
+  return active.length ? [
+    ...active.map((a) => el('div', { class: 'filter-active', 'data-filter-active': a.chip }, [el('span', {}, [a.label]), link({ 'data-filter-off': a.chip, 'aria-label': S.filterOff(a.label) }, '✕', () => off((c) => c !== a.chip))])),
+    el('div', { class: 'filter-active' }, [link({ 'data-filter-off-all': '' }, S.tagFilterClear, () => off(() => false))]),
+  ] : []
 }
 
 export interface ZonePanelDeps {
@@ -45,9 +58,23 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
     ...communityTags(d.tags).map((t) => el('option', { value: t.id, ...(t.id === community ? { selected: '' } : {}) }, [t.label ?? t.id])),
   ])
   return el('section', { class: 'zone-filter', 'data-zone-filter-section': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle])]),
-    ...(open ? [...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
+    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
+    ...(open ? [...activeRows(d), ...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
   ])
+}
+
+/** Wave 32: the five ring checkboxes (plus Not yet sorted) under a collapsible "TrustZones" heading, open by default. */
+function trustZonesGroup(d: Pick<ZonePanelDeps, 's' | 'onChange'>): HTMLElement {
+  const check = (ring: Ring): HTMLElement => el('label', { class: 'zone-check' }, [
+    el('input', { type: 'checkbox', 'data-zone-filter': ring, ...(ringShown(d.s, ring) ? { checked: '' } : {}), onchange: (e: Event) => { setRingShown(d.s, ring, (e.target as HTMLInputElement).checked); d.onChange() } }),
+    ' ', S.ringLabel[ring],
+  ])
+  const box = el('details', { class: 'filter-group', 'data-filter-group': 'trustzones', ...(groupOpen(d.s, 'trustzones') ? { open: '' } : {}) }, [
+    el('summary', {}, [S.filterGroupTrustZones]),
+    ...FILTER_RINGS.map(check),
+  ])
+  box.addEventListener('toggle', () => { const o = (box as HTMLDetailsElement).open; if (o !== groupOpen(d.s, 'trustzones')) { setGroupOpen(d.s, 'trustzones', o); d.onChange() } })
+  return box
 }
 
 /** Wave 28b: the two chip inputs of the sidebar's Filters (advanced), the share page's chips and typeahead (share_page.ts): "show only" keeps matches, "hide" removes them and wins. Both filter the dots on the web. */
@@ -109,7 +136,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
       : { class: 'chip', 'data-zone-tag-add-suggest': x.id, onclick: () => add(x) }, ['create' in x ? createLabel(x) : label(x.id)]))))
     input.addEventListener('keydown', (e) => { const first = input.value.trim() ? rows()[0] : undefined; if ((e as KeyboardEvent).key === 'Enter' && first) add(first) })
     const added = addingTo.added.flatMap((id) => d.s.people.filter((p) => p.id === id))
-    return el('div', { class: 'zone-chip-row', 'data-zone-tag-add': tag.id }, [
+    return el('div', { class: 'zone-chip-row zone-add-box', 'data-zone-add-people': '', 'data-zone-tag-add': tag.id }, [
       el('b', {}, [S.filterAddPeople(tag.label)]),
       el('div', { class: 'chips' }, added.map((p) => el('button', {
         class: 'chip on', 'data-zone-tag-added': p.id, 'aria-label': S.filterUntag(p.name, tag.label),
@@ -120,8 +147,8 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
   }
   const open = d.s.uiRings?.showOpen === true
   return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [
-    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'showOpen', !open); d.onChange() }, { 'data-zone-tags-toggle': '' }), el('b', {}, [S.zoneFilterTitle])]),
-    ...(open ? [row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
+    el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'showOpen', !open); d.onChange() }, { 'data-zone-tags-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
+    ...(open ? [...activeRows(d), trustZonesGroup(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
   ])
 }
 

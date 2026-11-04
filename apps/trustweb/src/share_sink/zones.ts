@@ -12,7 +12,7 @@
  *   (no ring yet)            community     (who I met before)
  *   Friend                   friend
  *   Close                    close         (close friends / allies)
- *   (no ring yet)            closest       (closest few)
+ *   Closest (since wave 25)  closest       (closest few)
  *   Family                   by its closeness (fields[CLOSENESS_KEY], Close when unset; ringSlot)
  *   (the owner)              self          (self / root)
  */
@@ -51,6 +51,7 @@ export function effectiveZone(z: Zone, active: readonly Zone[] = ALL_ZONES): Zon
 const FROM_RING: Record<string, Zone> = {
   [Ring.None]: Zone.Public, [Ring.Unsorted]: Zone.Public, [Ring.Intending]: Zone.Intending,
   [Ring.Acquaintance]: Zone.Acquaintance, [Ring.Friend]: Zone.Friend, [Ring.Close]: Zone.Close,
+  [Ring.Closest]: Zone.Closest,
 }
 
 /** The ladder zone of a person in the app's web (table above). */
