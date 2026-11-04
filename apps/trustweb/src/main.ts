@@ -100,9 +100,9 @@ import { seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
-import { availableTabs, resolveRow, setSlot } from './tab_row'
+import { PHONE_MAX, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
-import type { TabId } from './tab_row'
 import { dismissOnOutside } from './key_press'
 import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
@@ -973,30 +973,106 @@ function recordButton(): HTMLElement {
   return b
 }
 
-const TAB_ICON: Record<Exclude<TabId, 'record'>, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', desk: 'list' }
+const TAB_ICON: Record<Exclude<BarId, 'record' | 'ask'>, string> = { web: 'web', chat: 'chat', events: 'calendar', inventory: 'inventory', feed: 'feed', network: 'web', people: 'web', map: 'web' }
 
-function tabFor(id: TabId): HTMLElement {
-  if (id === 'record') return recordButton()
-  const label = S.tabLabel[id]
+/** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
+const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
+
+/** What a bottom-bar view does when tapped. */
+function barOpen(id: BarId): void {
   switch (id) {
-    case 'events': return tabButton(id, label, TAB_ICON[id], () => openEvents())
-    case 'network': return tabButton(id, label, TAB_ICON[id], () => chooseView('network'))
-    case 'desk': return tabButton(id, label, TAB_ICON[id], () => openDeskSheet())
-    default: return tabButton(id, label, TAB_ICON[id])
+    case 'events': openEvents(); break
+    case 'ask': openQuery(); break
+    case 'network': case 'people': case 'map': chooseView(id); break
+    case 'record': onRecordTap(); break
+    default: tabTap(id as Screen)
   }
+}
+
+/** Wave 31: one bottom-bar button. The primary view is the raised round one; a long press or right click takes a view out (with Undo). */
+function barButton(id: BarId, primary: boolean): HTMLElement {
+  if (id === 'record' && primary) return recordButton()
+  const name = S.barNames[id] ?? S.navRecord
+  const b = tabButton(id, S.tabLabel[id] ?? S.navRecord, id === 'record' ? 'mic' : id === 'ask' ? 'query' : TAB_ICON[id], () => barOpen(id))
+  b.setAttribute('aria-label', name)
+  if (id === 'ask') b.querySelector('svg')!.outerHTML = askWebIcon(askIconVariant)
+  if (primary) b.classList.add('tab-primary')
+  if (id !== 'record') contextPress(b, () => removeFromBar(id, name))
+  return b
+}
+
+function barFlags(): BarFlags {
+  // HAS_MAP_VIEW is declared further down (this runs at load), so the Map is simply on.
+  return { ...tabFlags(), people: !state || state.people.length > 0, map: true }
+}
+
+function removeFromBar(id: BarId, name: string): void {
+  const s = st()
+  const before = s.uiBar
+  s.uiBar = toggleBar(before, id, barFlags())
+  save()
+  renderTabs()
+  render()
+  toast(S.barRemoved(name), { onClick: () => { if (before) s.uiBar = before; else delete s.uiBar; save(); renderTabs(); render() } })
 }
 
 function tabFlags(): { events: boolean; feed: boolean; inventory: boolean } {
   return { events: !state || featureOn(state, 'events'), feed: Boolean(state) && feedOn(state as AppState), inventory: !state || featureOn(state, 'inventory') }
 }
 
+/** The bar width the phone allows: six buttons and the ⋮; wider screens show all. */
+function barMax(): number {
+  return window.innerWidth < 600 ? PHONE_MAX : 10
+}
+
 function renderTabs(): void {
-  // Wave 24: the row comes from AppState.tabRow (tab_row.ts), default Membranes | Chat | Record | Events | Resources.
-  tabs.replaceChildren(...resolveRow(state?.tabRow, tabFlags()).map(tabFor))
-  tabs.classList.toggle('four', tabs.children.length > 3)
+  // Wave 31: AppState.uiBar (bottom_bar.ts) decides the buttons; the ⋮ sheet holds the rest. Ask your web in the bar replaces its floating button.
+  const { ids, primary } = resolveBar(state?.uiBar, barFlags())
+  const { shown } = barLayout(ids, primary, barMax())
+  const more = el('button', { class: 'bar-more', 'data-bar-more': '', 'aria-label': S.barMore, onclick: barSheet }, ['⋮'])
+  tabs.replaceChildren(...shown.map((id) => barButton(id, id === primary)), more)
+  tabs.classList.toggle('four', shown.length > 3)
+  tabs.classList.toggle('many', shown.length > 5)
+  phone.classList.toggle('ask-in-bar', shown.includes('ask'))
   updateChatBadge()
 }
 renderTabs()
+
+/** The ⋮ sheet: a checkbox per view, order arrows, "highlight one"; views the phone bar has no room for are marked and open from here. */
+function barSheet(): void {
+  const s = st()
+  const flags = barFlags()
+  const redraw = (next: typeof s.uiBar): void => { if (next) s.uiBar = next; else delete s.uiBar; save(); renderTabs(); render(); barSheet() }
+  const { ids, primary } = resolveBar(s.uiBar, flags)
+  const { overflow } = barLayout(ids, primary, barMax())
+  const arrow = (id: BarId, dir: -1 | 1): HTMLElement => el('button', {
+    class: 'btn btn-ghost btn-sm', 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(S.barNames[id]) : S.barDown(S.barNames[id]),
+    onclick: () => redraw(moveBar(s.uiBar, id, dir, flags)),
+  }, [dir < 0 ? '←' : '→'])
+  openSheet([
+    el('h3', {}, [S.barSheetTitle]),
+    el('p', { class: 'hint' }, [S.barSheetHint]),
+    // The Feed is an opt-in feature: it is always offered here, and ticking it switches the feature on.
+    ...barChoices(s.uiBar, { ...flags, feed: true }).map((c) => (c.id === 'feed' && !flags.feed ? { ...c, on: false } : c)).map(({ id, on }) => el('div', { class: 'bar-opt-row', 'data-bar-row': id }, [
+      el('label', { class: 'radio', 'data-bar-opt': id }, [
+        el('input', { type: 'checkbox', ...(on ? { checked: '' } : {}), onchange: () => {
+          if (id === 'feed' && !flags.feed) { s.feed = { ...s.feed, on: true }; redraw(resolveBar(s.uiBar, { ...flags, feed: true }).ids.includes('feed') ? s.uiBar : toggleBar(s.uiBar, id, { ...flags, feed: true })); return }
+          redraw(toggleBar(s.uiBar, id, flags))
+        } }),
+        el('b', {}, [S.barNames[id]]),
+      ]),
+      on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : null,
+      overflow.includes(id) ? el('button', { class: 'linkbtn', 'data-bar-open': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barOpen]) : null,
+    ])),
+    el('h4', { class: 'eyebrow' }, [S.barHighlight]),
+    el('p', { class: 'meta' }, [S.barHighlightHint]),
+    ...ids.map((id) => el('label', { class: 'radio', 'data-bar-primary': id }, [
+      el('input', { type: 'radio', name: 'bar-primary', ...(id === primary ? { checked: '' } : {}), 'aria-label': S.barHighlightPick(S.barNames[id] ?? S.navRecord), onchange: () => redraw(setPrimary(s.uiBar, id, flags)) }),
+      el('b', {}, [S.barNames[id] ?? S.navRecord]),
+    ])),
+    overflow.length ? el('p', { class: 'meta' }, [S.barOverflow + ': ' + overflow.map((id) => S.barNames[id]).join(', ')]) : null,
+  ])
+}
 
 /** The unread count on the Chat tab: filled in the tab's own colour, never red. */
 function updateChatBadge(): void {
@@ -2700,9 +2776,6 @@ function openQuery(): void {
   if (screen === Screen.Web) render()
   else go(Screen.Web)
 }
-
-/** Dev only (preview or vite dev): ?askicon=plain shows the "?" glyph without the arcs, to compare (wave 25). */
-const askIconVariant = ((typeof __TW_PREVIEW__ !== 'undefined' && __TW_PREVIEW__) || import.meta.env.DEV) && params.get('askicon') === 'plain' ? 'plain' : 'rings'
 
 function queryFab(): HTMLElement {
   const call = queryStyle() === QueryStyle.Call
@@ -6084,20 +6157,9 @@ function featureSwitch(s: AppState, key: 'events' | 'inventory', label: string, 
   }, [el('b', {}, [label]), el('small', {}, [hint])])
 }
 
-/** Settings > Bottom row: one picker per slot; the last slot (Resources) is locked. */
-function tabRowSettings(s: AppState): (Node | null)[] {
-  const flags = tabFlags()
-  const row = resolveRow(s.tabRow, flags)
-  const locked = flags.inventory
-  const free = locked ? row.length - 1 : row.length
-  return [
-    ...row.slice(0, free).map((id, i) => el('label', { class: 'tab-slot', 'data-tab-slot': String(i) }, [
-      el('small', {}, [S.setTabRowSlot(i + 1)]),
-      el('select', { 'aria-label': S.setTabRowSlot(i + 1), onchange: (e: Event) => { s.tabRow = setSlot(row, i, (e.target as HTMLSelectElement).value, flags); save(); renderTabs(); render(); settingsSheet() } },
-        availableTabs(flags).filter((t) => t !== 'inventory').map((t) => el('option', { value: t, ...(t === id ? { selected: '' } : {}) }, [S.tabLabel[t]]))),
-    ])),
-    locked ? el('p', { class: 'meta', 'data-tab-slot-locked': '' }, [S.tabLabel.inventory + ' · ' + S.setTabRowLocked]) : null,
-  ]
+/** Settings > Bottom row: one button into the ⋮ sheet, where the row is arranged (wave 31; the old per-slot pickers are archived in DEVLOG/wave31/archive/bottom-bar). */
+function tabRowSettings(): (Node | null)[] {
+  return [el('button', { class: 'btn btn-ghost', 'data-settings-bar': '', onclick: barSheet }, [S.barOpenSettings])]
 }
 
 function settingsSheet(): void {
@@ -6274,7 +6336,7 @@ function settingsSheet(): void {
     ]),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
-    ...tabRowSettings(s),
+    ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
     ...(solo ? [] : [
       el('h4', { class: 'eyebrow' }, [S.views.layout]),
@@ -6352,7 +6414,7 @@ function settingsSheet(): void {
     s.testOf && demoOfLine(s) ? el('p', { class: 'meta' }, [demoOfLine(s)]) : null,
     keepAskRow(s),
     s.testOf && !s.testOf.handedOverAt ? el('button', { class: 'btn btn-ghost', onclick: handoverSheet }, [S.handTitle]) : null,
-    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveRow(s.tabRow, tabFlags()))),
+    ...settingsGroups(groups, settingsOrder(sectionOfScreen(screen), resolveBar(s.uiBar, barFlags()).ids)),
   ])
   sheet.dataset.kind = 'settings'
 }
