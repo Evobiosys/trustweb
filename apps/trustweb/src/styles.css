@@ -1321,3 +1321,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .bar-opt-row .radio{flex:1 1 140px}
 .bar-opt-acts{display:flex; gap:2px}
 .linkbtn{background:none; border:0; padding:4px; color:var(--violet); text-decoration:underline; cursor:pointer; font:inherit}
+
+/* Wave 31 (zone-share-link): Settings > Sharing links; text buttons underlined, rows wrap at 360 px */
+.zone-link-new{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
+.zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
+
+/* Wave 31: Ask your web, matches in my web + online link; clickable = underlined, never a sideways scroll */
+.ask-web{min-width:0; overflow-wrap:anywhere}
+.ask-web .btn,.ask-web .chip{text-decoration:underline}
+.ask-web-list{margin:4px 0; padding-left:18px}
+.ask-set{display:grid; gap:6px; margin:8px 0}
