@@ -54,7 +54,7 @@ describe('view_menu', () => {
   it('lists the calendar and inventory views; Solar calendar is non-core and greyed until its module is there', () => {
     expect(screenViews('events', false)).toEqual([{ key: 'calendar', core: true, available: true }, { key: 'list', core: true, available: true }, { key: 'solar', core: false, available: false }])
     expect(screenViews('events', true).find((v) => v.key === 'solar')?.available).toBe(true)
-    expect(screenViews('inventory', false).map((v) => v.key)).toEqual(['list', 'outline'])
+    expect(screenViews('inventory', false).map((v) => v.key)).toEqual(['list', 'outline', 'matches'])
   })
   it('keeps the eye menu on the People page: People is the view that is on, the others stay to switch to', () => {
     const m = viewMenu('people', true, true, [])
