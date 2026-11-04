@@ -1213,8 +1213,10 @@ export interface AppState {
   advanced?: { ai?: AiEndpoint }
   /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
   askSets?: AskSet[]
-  /** Wave 31, Ask your web: the "also search online" engine, https with {q} for the words. Absent: DuckDuckGo. */
+  /** Wave 31, Ask your web: your own "also search online" engine, https with {q} for the words. Absent: none (the engine chips only). */
   askEngineUrl?: string
+  /** Wave 31, Ask your web: the engine id picked last (search_engines.ts). Absent: Ecosia. */
+  askEngine?: string
 }
 
 /** A named list of people (and tags) an ask can be narrowed to. */

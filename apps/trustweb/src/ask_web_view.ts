@@ -5,6 +5,7 @@
  */
 import { el } from '../../demo/src/ui/dom'
 import { ALL_SCOPE, SUMMARY_SYSTEM, askScopes, matchWeb, searchEngineUrl, summaryPrompt } from './ask_web_search'
+import { ENGINES, engineById, engineUrl, isAdvanced, type OnlineEngine } from './search_engines'
 import { askEndpointText, configured } from './llm_endpoint'
 import type { AppState } from './model'
 import { S } from './strings'
@@ -12,6 +13,22 @@ import { S } from './strings'
 export interface AskWebHooks { state: () => AppState; save: () => void }
 
 let scope = ALL_SCOPE
+let onlineOpen = false
+
+/** One engine as a chip that opens the words there in a new tab and remembers the choice. */
+function engineChip(h: AskWebHooks, e: OnlineEngine, q: string): HTMLElement {
+  const on = engineById(h.state().askEngine).id === e.id
+  const a = el('a', {
+    class: 'chip' + (on ? ' on' : ''), href: engineUrl(e.id, q), target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer',
+    'data-ask-engine': e.id, 'aria-current': String(on),
+  }, [e.private ? `${e.name} · ${S.askWebPrivate}` : e.name])
+  a.addEventListener('click', () => {
+    h.state().askEngine = e.id
+    h.save()
+    a.parentElement?.parentElement?.querySelectorAll('[data-ask-engine]').forEach((c) => { const me = c === a; c.classList.toggle('on', me); c.setAttribute('aria-current', String(me)) })
+  })
+  return a
+}
 
 /** The block under the ask box; `update(words)` redraws it without touching the typing field. */
 export function askWebPanel(h: AskWebHooks, query: string): { el: HTMLElement; update: (q: string) => void } {
@@ -21,14 +38,14 @@ export function askWebPanel(h: AskWebHooks, query: string): { el: HTMLElement; u
   const draw = (): void => {
     const s = h.state()
     const q = words.trim()
-    if (!q) { root.replaceChildren(); return }
     const scopes = askScopes(s)
     if (!scopes.some((x) => x.id === scope)) scope = ALL_SCOPE
-    const matches = matchWeb(s, q, scope)
-    const url = searchEngineUrl(s.askEngineUrl, q)
+    const matches = q ? matchWeb(s, q, scope) : []
+    const url = s.askEngineUrl ? searchEngineUrl(s.askEngineUrl, q) : null
     const ai = s.advanced?.ai
     const out = el('p', { class: 'meta', 'data-ask-summary': '1', 'aria-live': 'polite' }, [summary])
     root.replaceChildren(
+      ...(q ? [
       ...(scopes.length > 1 ? [el('div', { class: 'chips' }, [
         el('span', { class: 'chips-lbl' }, [S.askWebScope]),
         ...scopes.map((x) => el('button', {
@@ -51,7 +68,19 @@ export function askWebPanel(h: AskWebHooks, query: string): { el: HTMLElement; u
         },
       }, [S.askWebSummarise])] : []),
       out,
-      ...(url ? [el('a', { class: 'btn btn-ghost btn-sm', href: url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer', 'data-ask-online': '1', title: S.askWebOnlineHint }, [S.askWebOnline])] : []),
+      ] : []),
+      el('button', {
+        class: 'btn btn-ghost btn-sm', type: 'button', 'data-ask-online': '1', 'aria-expanded': String(onlineOpen), title: S.askWebOnlineHint,
+        onclick: () => { onlineOpen = !onlineOpen; draw() },
+      }, [S.askWebOnline]),
+      ...(onlineOpen ? [el('div', { class: 'ask-engines' }, [
+        el('div', { class: 'chips' }, ENGINES.filter((e) => !isAdvanced(e.id)).map((e) => engineChip(h, e, q))),
+        el('details', { 'data-ask-engines-advanced': '1' }, [
+          el('summary', {}, [S.askWebAdvanced]),
+          el('div', { class: 'chips' }, ENGINES.filter((e) => isAdvanced(e.id)).map((e) => engineChip(h, e, q))),
+        ]),
+        ...(url ? [el('a', { class: 'btn btn-ghost btn-sm', href: url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer', 'data-ask-own': '1' }, [S.askWebOwnEngine])] : []),
+      ])] : []),
     )
   }
   draw()
@@ -63,7 +92,7 @@ export function askWebSettings(h: AskWebHooks): HTMLElement[] {
   const box = el('div', { class: 'channels', 'data-ask-web-settings': '' })
   const draw = (): void => {
     const s = h.state()
-    const engine = el('input', { class: 'field', type: 'url', placeholder: S.askWebEngine, 'aria-label': S.askWebEngine, value: s.askEngineUrl ?? '', 'data-ask-engine': '' }) as HTMLInputElement
+    const engine = el('input', { class: 'field', type: 'url', placeholder: S.askWebEngine, 'aria-label': S.askWebEngine, value: s.askEngineUrl ?? '', 'data-ask-engine-url': '' }) as HTMLInputElement
     engine.addEventListener('change', () => { const v = engine.value.trim(); if (v) s.askEngineUrl = v; else delete s.askEngineUrl; h.save() })
     box.replaceChildren(
       el('h4', { class: 'eyebrow' }, [S.askWebSettings]),
