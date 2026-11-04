@@ -17,6 +17,8 @@ export interface WhatsAppResult {
   evidence: Evidence[]
   /** 'ambiguous': no date had a day above 12, so `dayFirst` (default true) was used; the caller may ask once. */
   dateOrder: 'dmy' | 'mdy' | 'ambiguous'
+  /** More than one other person wrote in this export: a group chat, not a one-to-one chat. */
+  group: boolean
 }
 
 // "[DD.MM.YY, HH:MM:SS] Name: text" (iOS) and "DD/MM/YYYY, HH:MM - Name: text" (Android); the separators vary by locale.
@@ -75,6 +77,9 @@ export function parseWhatsApp(text: string, file: string, opts: WhatsAppOptions)
       const key = normalizeName(r.sender!)
       if (key && key !== me && !others.has(key)) others.set(key, r.sender!.trim())
     }
+    // Only I wrote: the other person never appears as a sender, so a one-to-one export names them in its file name.
+    const named = others.size === 0 ? /^WhatsApp Chat with (.+?)(?:\.txt)?$/i.exec(file) : null
+    if (named && normalizeName(named[1]) !== me) others.set(normalizeName(named[1]), named[1].trim())
     // A my-message counts as "out" only in a one-to-one chat; in a group the owner's line has no single recipient.
     const oneToOne = others.size === 1
     const evidence: Evidence[] = []
@@ -106,8 +111,8 @@ export function parseWhatsApp(text: string, file: string, opts: WhatsAppOptions)
         labels: [],
       }
     })
-    return { contacts, evidence, dateOrder }
+    return { contacts, evidence, dateOrder, group: !oneToOne }
   } catch {
-    return { contacts: [], evidence: [], dateOrder: 'ambiguous' }
+    return { contacts: [], evidence: [], dateOrder: 'ambiguous', group: false }
   }
 }
