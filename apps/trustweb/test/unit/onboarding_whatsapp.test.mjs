@@ -72,7 +72,7 @@ describe('plan: group flag and distinct days', () => {
 describe('resultOf', () => {
   it('counts both ways, only wrote to, only in groups', () => {
     const rows = [row(), row({ key: 'b', in: 0 }), row({ key: 'c', group: 'G', out: 0 }), row({ key: 'd', out: 0 })]
-    expect(resultOf(rows)).toEqual({ total: 4, both: 1, wroteOnly: 1, groupOnly: 1 })
+    expect(resultOf(rows)).toEqual({ total: 4, both: 1, wroteOnly: 1, groupOnly: 1, chats: 1 })
   })
 })
 
