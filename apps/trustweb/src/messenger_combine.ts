@@ -55,6 +55,12 @@ export function viewTitle(selection: readonly string[], labels: Record<string, s
   return selection.map((id) => labels[id] ?? id).join(' + ')
 }
 
+/** The Chat screen's page title: the name of the view the owner is in, from the sources, what is switched off and the chosen selection. */
+export function chatTitle(sources: readonly Pick<MessengerSource, 'id' | 'label' | 'status'>[], off: ReadonlySet<string>, selection: readonly string[], allName: string, trustwebLabel = 'TrustWeb'): string {
+  const entries = listEntries(sources, off, trustwebLabel)
+  return viewTitle(usableSelection(selection, entries), Object.fromEntries(entries.map((e) => [e.id, e.label])), allName, entries.filter((e) => e.state === 'on').length)
+}
+
 const strings = (raw: string | null): string[] => {
   try {
     const v: unknown = JSON.parse(raw ?? 'null')
