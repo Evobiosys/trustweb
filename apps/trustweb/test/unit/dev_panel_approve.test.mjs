@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-import { APPLY_DELAY_MS, applyOutcome, applyVerdicts, debounce, expandFor, noteText, subtreeKeys, waveState, walkShown, withBox } from '../../src/dev_preview_rules.ts'
+import { APPLY_DELAY_MS, applyOutcome, applyVerdicts, debounce, expandFor, mergedLabel, noteText, remindItems, subtreeKeys, waveState, walkShown, withBox } from '../../src/dev_preview_rules.ts'
 
 const row = (key, requires = [], over = {}) => ({ key, branch: 'b/' + key, title: 'T-' + key, ref: 'abc1234', requires, checked: true, ...over })
 const rows = [row('a'), row('b', ['a']), row('c', ['b']), row('d'), row('e', [], { checked: false })]
@@ -59,5 +59,24 @@ describe('panel approve (wave 28)', () => {
     vi.advanceTimersByTime(300)
     expect(run).toHaveBeenCalledTimes(1); expect(d.waiting()).toBe(false)
     vi.useRealTimers()
+  })
+  it('approving a parent (keys = [key]) leaves the loaded child unapproved and loaded', () => {
+    const next = applyVerdicts(rows, ['a'], 'merge')
+    expect(next.find((f) => f.key === 'a')).toMatchObject({ checked: true, verdict: 'merge' })
+    expect(next.find((f) => f.key === 'b')).toMatchObject({ checked: true, verdict: undefined })
+    expect(next.find((f) => f.key === 'c')).toMatchObject({ checked: true, verdict: undefined })
+  })
+  it('the needs-work reminder lists one {key,title} per row', () => {
+    expect(remindItems([row('a'), row('b')])).toEqual([{ key: 'a', title: 'T-a' }, { key: 'b', title: 'T-b' }])
+    expect(remindItems([])).toEqual([])
+  })
+  it('the merged text: own merged PR shipped; carried-over or no PR "as always"; next keeps the link', () => {
+    const base = { created: '2026-11-04T08:00:00Z', next: undefined }
+    expect(mergedLabel({ ...base, pr: { number: 80, at: '2026-11-04T09:00:00Z', merged: true } })).toEqual({ text: 'PR #80 shipped' })
+    expect(mergedLabel({ ...base, pr: { number: 79, at: '2026-11-01T09:00:00Z', merged: true } })).toEqual({ text: 'as always' })
+    expect(mergedLabel({ ...base, pr: { number: 9, merged: true, mergeCommit: 'abc' } })).toEqual({ text: 'PR #9 shipped' })
+    expect(mergedLabel({ ...base, pr: null })).toEqual({ text: 'as always' })
+    expect(mergedLabel({ ...base, pr: { number: 5, at: '2026-11-04T09:00:00Z' } })).toEqual({ text: 'as always' })
+    expect(mergedLabel({ ...base, pr: { number: 79, merged: true }, next: { id: 'tw2', port: 5301 } })).toEqual({ next: { id: 'tw2', port: 5301 } })
   })
 })
