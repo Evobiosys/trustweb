@@ -7,7 +7,7 @@ import type { AppState, Person } from './model'
 import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
 import { personRow } from './people_row_view'
-import { archiveOf, restoreOf } from './row_edit'
+import { archivePerson, restorePerson } from './archived_people'
 import { BULK_RINGS, clearSelection, restoreSnapshot, selectGroup, snapshot, toggle } from './multi_select'
 import type { Selection } from './multi_select'
 import { webSlot } from './rings_layout'
@@ -58,7 +58,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
     // A touch hold can raise the press twice (hold timer and the browser's context menu): ticking is idempotent.
     pick: (q) => { selecting = true; if (!selected.has(q.id)) selected = toggle(selected, q.id); draw(); swallowTouchClick() },
     rename: (q, name) => { q.name = name; edit.save(); changed() },
-    archive: (q) => { archiveOf(q); edit.save(); changed(); edit.toast(S.rowArchived(q.name), () => { restoreOf(q); edit.save(); changed() }) },
+    archive: (q) => { archivePerson(q); edit.save(); changed(); edit.toast(S.rowArchived(q.name), () => { restorePerson(q); edit.save(); changed() }) },
     move: (q, ring) => {
       const was = q.ring
       const suggested = q.ringSuggested
@@ -113,7 +113,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
   const archiveSelected = (ids: Selection): void => {
     const people = state().people
     const snaps = snapshot(people, ids)
-    for (const q of people) if (ids.has(q.id)) archiveOf(q)
+    for (const q of people) if (ids.has(q.id)) archivePerson(q)
     edit?.save()
     edit?.toast(S.selectArchived(ids.size), () => { restoreSnapshot(people, snaps); edit?.save(); changed() })
   }
