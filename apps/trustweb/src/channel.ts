@@ -164,6 +164,12 @@ function safeDecode(s: string): string | null {
   }
 }
 
+/** The WhatsApp chat link with a prefilled text (wave 30); a share-QR / Business link carries no number, so it stays as it is. */
+export function waLink(value: string, text?: string): string {
+  const link = channelLink(Channel.WhatsApp, value)
+  return text?.trim() && !isWhatsAppQrLink(value) ? `${link}?text=${encodeURIComponent(text)}` : link
+}
+
 /** The link that opens this contact in the messenger. */
 export function channelLink(channel: Channel, value: string): string {
   switch (channel) {
