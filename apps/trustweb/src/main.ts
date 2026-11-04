@@ -165,6 +165,9 @@ import { createUpdateCheck, reloadFresh, shouldReloadOnce } from './app_update'
 import { devicesSectionChildren } from './devices_section'
 import { linkButton, openLinkChange } from './link_change_view'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
+import { devMatchesOn, pollDevMatches, type MatchStatus } from './dev_matches'
+import { mergeIncoming } from './matches'
+import { matchesView } from './matches_view'
 import { devRecordFile, seedDevRecord, seedHostedDevRecord } from './dev_record'
 import { addNetworkDemo } from './network_seed'
 import { demoShown, hideDemoContent, showDemoContent } from './demo_hide'
@@ -1233,7 +1236,7 @@ function go(s: Screen): void {
   // The past-meeting search belongs to Record and Meeting; leaving them closes it.
   if (s !== Screen.Record && s !== Screen.Meeting) pastSearchOpen = false
   if (s !== Screen.Web) web.resetZoom()
-  if (s !== Screen.Inventory) invOnly = null
+  if (s !== Screen.Inventory) { invOnly = null; invMatches = false }
   screen = s
   // Wave 6h/6i: the cards belong to the Web screen (card_stack.ts); render() draws them there.
   closeSheet()
@@ -2429,6 +2432,25 @@ const SOLAR_INSTALLED = false
 let otherViewsOpen = false
 let webViewNow: ViewKey = 'rings'
 let invSearchOpen = false
+/** Wave 31: Resources shows the Matches view (eye menu) and polls the dev endpoint every 10 s while it does. */
+let invMatches = false
+let matchStatus: MatchStatus | null = null
+let matchTimer: ReturnType<typeof setInterval> | null = null
+function pollMatches(): void {
+  void pollDevMatches().then((r) => {
+    if (!r || !invMatches) return
+    matchStatus = r.status
+    const m = mergeIncoming(st().matches ?? [], r.items)
+    if (m.changed) { st().matches = m.items; save() }
+    if (m.changed || r.status) render()
+    if (r.status?.phase === 'done' && matchTimer) { clearInterval(matchTimer); matchTimer = null }
+  })
+}
+function setMatchesView(on: boolean): void {
+  invMatches = on
+  if (matchTimer) { clearInterval(matchTimer); matchTimer = null }
+  if (on && devMatchesOn()) { pollMatches(); matchTimer = setInterval(() => { if (invMatches && screen === Screen.Inventory) pollMatches(); else setMatchesView(false) }, 10000) }
+}
 let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
@@ -2492,10 +2514,10 @@ function viewDrop(current: ViewKey): HTMLElement | null {
 function screenViewDrop(): HTMLElement | null {
   const which = screen === Screen.Events ? 'events' : 'inventory'
   if (!eyeOpen) return null
-  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : zoom.inventory ? 'outline' : 'list'
+  const current = which === 'events' ? (cal && eventsView.atList() ? 'calendar' : 'list') : invMatches ? 'matches' : zoom.inventory ? 'outline' : 'list'
   return el('div', { class: 'view-drop', role: 'menu', 'aria-label': S.viewMenuAria, 'data-view-drop': '' }, screenViews(which, SOLAR_INSTALLED).map((v) => {
     const b = el('button', { class: 'view-opt' + (v.key === current ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(v.key === current), 'data-view': v.key, disabled: !v.available, onclick: () => chooseScreenView(which, v.key) })
-    b.innerHTML = icon(v.key === 'list' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
+    b.innerHTML = icon(v.key === 'list' || v.key === 'matches' ? 'list' : v.key === 'outline' ? 'zoom' : 'calendar')
     b.append(el('b', {}, [v.available ? S.screenViewNames[v.key] : S.viewSolarOff]))
     return b
   }))
@@ -2504,6 +2526,8 @@ function screenViewDrop(): HTMLElement | null {
 function chooseScreenView(which: 'events' | 'inventory', key: string): void {
   eyeOpen = false
   if (which === 'events') { if (key === 'list') eventsView.showList(); else eventsView.open(); render(); return }
+  if (key === 'matches') { setMatchesView(true); render(); return }
+  setMatchesView(false)
   if (key === 'outline' && !zoom.inventory) tabTap(Screen.Inventory)
   else if (key === 'list' && zoom.inventory) history.back()
   else render()
@@ -6563,6 +6587,12 @@ function outlinerItems(s: AppState): Node[] {
 
 function screenInventory(): Node[] {
   const s = st()
+  if (invMatches) {
+    return [
+      header(S.matches.title),
+      el('div', { class: 'scroll pad', 'data-matches': '' }, matchesView(s, { status: matchStatus, nameOf: (id) => { const p = s.people.find((x) => x.id === id); return p ? displayName(p.name).text : null }, openPerson: openCardPage, newId: () => randomId(8), save, render })),
+    ]
+  }
   const input = el('input', { class: 'field', placeholder: S.invAddPh, maxlength: '160', 'aria-label': S.invAddPh })
   const add = (): void => {
     const v = input.value.trim()
