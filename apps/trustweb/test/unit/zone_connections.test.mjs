@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 29: the TrustZones "Connections between my contacts" toggle: no edge touches me, the toggle persists like the filters. */
+/** Wave 29: the TrustZones "Show how my contacts are connected" toggle: no edge touches me, the toggle persists like the filters. */
 import { withoutMe, contactPairs, connectionsShown } from '../../src/zone_connections.ts'
 import { setUi } from '../../src/trustzones.ts'
 
