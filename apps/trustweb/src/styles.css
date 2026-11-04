@@ -1303,6 +1303,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}
 
+/* Wave 30 (person-share-link): the text button is underlined; the received box wraps on a 360 px screen */
+.card-share-link .btn{text-decoration:underline}
+.person-share{margin-top:8px; overflow-wrap:anywhere; text-align:left}
+.person-share ul{margin:4px 0 4px 18px; padding:0}
+
 /* Wave 31: the configurable bottom row. ⋮ sits on the bar line at the far right; a highlighted non-Record view is raised like Record. */
 .bar-more{position:absolute; right:6px; top:-13px; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--tab-bg); color:var(--ink-soft); font-size:16px; line-height:1; padding:0; cursor:pointer; text-decoration:underline}
 .tabs.many .tab{width:auto; flex:1 1 0; min-width:0}
