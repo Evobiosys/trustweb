@@ -1298,6 +1298,10 @@ export interface ImportBatch {
 export interface ServiceRow {
   key: string; name: string; source: string; file: string; since?: number; org?: string
   n365: number; out: number; in: number; lastTs?: number; ids: string[]; dupe?: boolean; sig: string
+  /** Wave 30: distinct days with a message in the last year. */
+  days?: number
+  /** Wave 30: WhatsApp only: the group chat this person was seen in, when never in a one-to-one chat. */
+  group?: string
 }
 /** Wave 27: what the owner did with a row: left it, or accepted it (the person it created or touched, and the ring to restore on undo). */
 export interface ServiceDone { did: 'left' | 'accepted'; personId?: string; created?: boolean; prevRing?: Ring; /** The ring the decision wrote; undo reverts only while the person still has it. */ wrote?: Ring; added?: boolean }
