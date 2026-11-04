@@ -961,6 +961,8 @@ export interface AppState {
   shareProfilesWin?: true
   /** Wave 27: an agent may propose shares. Absent: off. */
   agentsMayPropose?: true
+  /** Wave 31 (peer_items.ts): what we know of a person's resources, one line each. Absent: none. This phone only. */
+  peerItems?: import('./peer_items').PeerItem[]
   peers: Peer[]
   inventory: InventoryItem[]
   log: LogEntry[]

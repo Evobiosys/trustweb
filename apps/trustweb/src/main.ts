@@ -197,6 +197,8 @@ import type { OnboardingHooks } from './onboarding_whatsapp_view'
 import { createCurator, curatorHiddenIds } from './curator'
 import { addReminder, dismissReminder, drawReminders } from './reminders_inbox'
 import { LIMIT_MAX, limitOf, parseLimit, pinnedModeOf, togglePin as togglePersonPin, wholeZone, withTag, collidingLabels } from './membranes_five'
+import { resourceList, recentChip } from './resource_list'
+import { addPeerItem, peerItems } from './peer_items'
 import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './membranes_five_view'
 import { kindKey, visibleVia } from './zone_visibility'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
@@ -2216,8 +2218,18 @@ function webPageScreen(page: WebPage): Node[] {
     onRing: (ring) => placePerson(p.id, ring, true),
     addableTags: tagsAddable(p, tags), onAddTag: (id) => { addTagTo(p, id); save(); render() },
     chat: cardChatButton(p, false),
+    inventory: {
+      list: () => peerItemList(p.id),
+      onAdd: (title, category) => { addPeerItem(st(), p.id, title, category, 'self', Date.now()); save() },
+    },
     onTag: (id) => { tagFilter = id; if (cardExpanded) { cardExpanded = false; history.go(-2) } else back() },
   })])]
+}
+
+/** Wave 31: what we know of a person's resources, in the same list as My Resources (whose = theirs). */
+function peerItemList(personId: string): HTMLElement {
+  const rows = peerItems(st(), personId).map((i) => ({ id: String(i.at) + i.title, title: i.title, chips: [i.category, i.source === 'self' ? null : i.source], at: i.at }))
+  return rows.length ? resourceList('theirs', rows, Date.now()) : el('p', { class: 'meta' }, [S.cardInventoryNone])
 }
 
 /** The system's yes for notifications: iOS's sheet in the iPhone app (native_push.ts), the browser's elsewhere; true where there is no such thing. */
@@ -6385,12 +6397,11 @@ autoBackup = backup
 
 /** Resources zoomed in: one flat outliner over every item, with a search field and a sort; the calendar's rows follow (cal8). */
 function outlinerItems(s: AppState): Node[] {
-  const chip = (t: string): HTMLElement => el('span', { class: 'cal-chip' }, [t])
-  const rows = el('div', { class: 'zoom-rows' })
-  const draw = (): void => rows.replaceChildren(...itemRows(s.inventory, resQuery, resSort).map((i) => el('button', { class: 'prow zoom-row', 'data-item': i.id, onclick: () => itemSheet(i.id) }, [
-    el('b', {}, [i.text]),
-    el('div', { class: 'cal-chips' }, [chip(S.audienceLabel[i.audience]), i.included ? null : chip(S.zoomOff), i.tagAudience?.length ? chip(S.zoomTags(i.tagAudience.length)) : null]),
-  ])))
+  const rows = el('div', { class: 'zoom-rows-host' })
+  const draw = (): void => rows.replaceChildren(resourceList('mine', itemRows(s.inventory, resQuery, resSort).map((i) => ({
+    id: i.id, title: i.text, at: i.createdAt, onOpen: () => itemSheet(i.id),
+    chips: [S.audienceLabel[i.audience], i.included ? null : S.zoomOff, i.tagAudience?.length ? S.zoomTags(i.tagAudience.length) : null],
+  })), Date.now()))
   const input = el('input', { class: 'field', type: 'search', placeholder: S.zoomSearchPh, 'aria-label': S.zoomSearchPh, value: resQuery, oninput: (e: Event) => { resQuery = (e.target as HTMLInputElement).value; draw() } })
   const sort = el('button', { class: 'btn btn-ghost btn-sm', 'data-zoom-sort': '', onclick: () => { resSort = resSort === 'new' ? 'az' : 'new'; sort.textContent = resSort === 'new' ? S.zoomSortNew : S.zoomSortAz; draw() } }, [resSort === 'new' ? S.zoomSortNew : S.zoomSortAz])
   draw()
@@ -6438,6 +6449,7 @@ function screenInventory(): Node[] {
         el('div', { class: 'inv-main' }, [
           el('button', { class: 'inv-text', 'data-item': item.id, onclick: () => itemSheet(item.id) }, [
             item.text, isDemoItem(s, item.id) ? dummyChip() : null,
+            recentChip(item.createdAt, Date.now()),
             provenanceState(item.source) === ProvenanceState.Unreviewed ? el('span', { class: 'tagpill unreviewed-chip', 'data-unreviewed': '1' }, [S.provUnreviewedChip]) : null,
           ]),
           el('div', { class: 'inv-actions' }, [

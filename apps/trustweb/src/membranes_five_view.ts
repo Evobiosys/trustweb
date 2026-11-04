@@ -40,6 +40,8 @@ export interface SmallCardDeps {
   onRing?: (ring: Ring) => void
   /** The primary Chat button of the full card. */
   chat: HTMLElement
+  /** Wave 31: what we know of their resources: the list (resource_list.ts, whose = theirs) and the add action. Absent: no Inventory button. */
+  inventory?: { list: () => HTMLElement; onAdd: (title: string, category: string) => void }
   /** A tag button: the Membranes then show only the people with it. */
   onTag: (id: string) => void
 }
@@ -76,6 +78,21 @@ function sharesLine(d: SmallCardDeps): HTMLElement {
   return el('div', {}, [box, list])
 }
 
+/** The "Inventory" button and the panel it opens: what we know they have, and a form to add a line. */
+function inventoryPanel(id: string, inv: NonNullable<SmallCardDeps['inventory']>): HTMLElement {
+  const host = el('div', { class: 'card-inventory', 'data-card-inventory-panel': id, hidden: true })
+  const title = el('input', { class: 'field', 'data-peer-item-title': '', placeholder: S.cardInventoryTitlePh, 'aria-label': S.cardInventoryTitlePh, maxlength: '160' }) as HTMLInputElement
+  const category = el('input', { class: 'field', placeholder: S.cardInventoryCategoryPh, 'aria-label': S.cardInventoryCategoryPh, maxlength: '60' }) as HTMLInputElement
+  const save = (): void => { if (!title.value.trim()) { title.focus(); return } inv.onAdd(title.value, category.value); title.value = ''; category.value = ''; fill() }
+  title.addEventListener('keydown', (e) => { if (e.key === 'Enter') save() })
+  const form = el('div', { class: 'add-row', hidden: true, 'data-peer-item-form': '' }, [title, category, el('button', { class: 'btn btn-electric btn-sm', 'data-peer-item-save': '', onclick: save }, [S.cardInventorySave])])
+  function fill(): void { host.replaceChildren(inv.list(), el('button', { class: 'btn btn-ghost btn-sm', 'data-peer-item-add': '', onclick: () => { form.hidden = false; title.focus() } }, [S.cardInventoryAdd]), form) }
+  return el('div', {}, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-card-inventory': id, 'aria-expanded': 'false', onclick: (e: Event) => { host.hidden = !host.hidden; (e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!host.hidden)); if (!host.hidden) fill() } }, [S.cardInventory]),
+    host,
+  ])
+}
+
 /** A compact page: name with the pin and QR at the right edge, the chat row, zone (press to move), tags as buttons (+ tag), what we share, Extended; expanded: the rest of the card below. */
 export function smallCard(d: SmallCardDeps): HTMLElement {
   const { person: p } = d
@@ -100,6 +117,7 @@ export function smallCard(d: SmallCardDeps): HTMLElement {
       el('button', { class: 'chip', 'data-tag-add': p.id, 'aria-label': S.cardTagAddAria, onclick: () => { tagPicker.hidden = !tagPicker.hidden } }, [S.cardTagAdd]),
     ]),
     tagPicker,
+    d.inventory ? inventoryPanel(p.id, d.inventory) : null,
     el('div', { class: 'card-actions' }, [
       el('button', { class: 'btn btn-electric btn-sm', 'data-card-open': p.id, 'aria-expanded': String(d.expanded === true), onclick: d.onOpen }, [d.expanded ? S.membraneCardClose : S.membraneCardOpen]),
     ]),
