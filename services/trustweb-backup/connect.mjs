@@ -354,5 +354,5 @@ export function createConnect({ cfg, store, clientOf, now = Date.now, nameCapAll
     return redirect(res, `https://${host}/c/${code}`)
   }
 
-  return { create, name, capRequest, open, who }
+  return { create, name, capRequest, open, who, gate: { receive, readGate } }
 }
