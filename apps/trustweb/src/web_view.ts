@@ -11,7 +11,8 @@ import { arcsGradient, loadColourTags, tagColours } from './colour_tags'
 import { isBlocked, isNonResponsive } from './non_responsive'
 import { DESIRE_DEFAULT, RINGS_LABEL_CAP, angleFromCentre, angleOf, beyondRings, lapRadius, placeOnRing, restoreAngles, ringAt, ringsGeometry, spaceOut, webSlot, WEB_RINGS } from './rings_layout'
 import type { RingsGeometry } from './rings_layout'
-import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, togglePoints, visiblePeople } from './rings_hide'
+import { RINGS_HIDDEN_KEY, guideDimmed, parseHidden, serializeHidden, toggleHidden, visiblePeople } from './rings_hide'
+import { placeHandles, HANDLE, type Disc } from './ring_handles'
 import { displayName } from '../../../packages/person-fields/src/display_name'
 import { isConnected } from './card_view'
 import { HintId, isDemoPerson, Ring, RINGS, REACH_OUT_INK, ringColor } from './model'
@@ -169,6 +170,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     const colourTags = loadColourTags()
     const wrap = el('div', { class: 'rings-wrap' + (s.people.length > RINGS_LABEL_CAP || desk?.compact ? ' compact' : ''), 'data-view': 'rings', ...(complete ? { 'data-complete': '' } : {}), title: desk ? '' : S.hintText[HintId.WebTap] })
     const at = new Map<string, { x: number; y: number }>()
+    const discs: Disc[] = [] // every drawn dot; the ring handles keep clear of them (ring_handles.ts)
     let dragged = false
     if (!desk) {
       wrap.addEventListener('click', (e) => { if (!dragged) onRingsTap(e as MouseEvent, wrap) })
@@ -241,6 +243,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         ])
         if (!desk) contextPress(b, () => curatorPerson(p.id))
         at.set(p.id, { x, y })
+        discs.push({ x, y, r: (dot * k) / 2 })
         b.style.left = x + 'px'
         b.style.top = y + 'px'
         if (arcs) b.style.setProperty('--arcs', arcs)
@@ -327,17 +330,19 @@ export function createWebView(deps: WebViewDeps): WebView {
       })
       wrap.addEventListener('pointerleave', () => { if (onBand) { onBand = null; step({ type: 'leave' }) } })
     }
-    const column = togglePoints(ringsGeo.rings.map((r) => ringsGeo.radius[r]), C, k)
-    ringsGeo.rings.forEach((r, i) => {
-      const at = column[i]
-      const diamond = ringToggle(r, hidden.has(r), at.top, at.left, (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
+    ringsGeo.rings.forEach((r) => {
+      const showMore = !hidden.has(r) && !complete && Boolean(rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)
+      // Wave 30: the handles sit at 12 o'clock when it is free, else on the nearest free arc, else on a tab outside the rings; never over a dot.
+      const h = placeHandles({ centre: C, radius: ringsGeo.radius[r] * k, dots: discs, outer: Math.min(C, ringsGeo.extent * k), size: RINGS_SIZE, more: showMore })
+      discs.push({ x: h.toggle.left, y: h.toggle.top, r: HANDLE / 2 }); if (h.more) discs.push({ x: h.more.left, y: h.more.top, r: HANDLE / 2 })
+      const diamond = ringToggle(r, hidden.has(r), h.toggle.top, h.toggle.left, h.kind === 'tab', (btn) => toggle(toggleHidden(hidden, r), btn.parentElement ?? wrap))
       wrap.appendChild(diamond)
       if (!desk) {
         diamond.addEventListener('pointerenter', (e) => { if (mouse(e)) step({ type: 'enter-handle', ring: r }, e) })
         diamond.addEventListener('pointerleave', (e) => { if (mouse(e)) step({ type: 'leave' }) })
         contextPress(diamond, () => { const b = diamond.getBoundingClientRect(); hover = { open: r, grace: false }; showAll(r, { clientX: b.right, clientY: b.bottom }) })
       }
-      if (!hidden.has(r) && !complete && (rest[r]?.length || filled.includes(r)) && (everyone[r]?.length ?? 0) > limitOf(s)) ringMore(r, filled.includes(r), at.top, at.left, (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
+      if (showMore && h.more) ringMore(r, filled.includes(r), h.more.top, h.more.left, h.kind === 'tab', (btn) => { toggleRing(st(), 'filled', r); s.uiRings = st().uiRings; save(); toggle(hidden, btn.parentElement ?? wrap) }).forEach((n) => wrap.appendChild(n))
     })
     wrap.addEventListener('pointerdown', hideAll)
     // Wave 28b: the floating "+" moved into the TrustZones sidebar (zoneColumn), next to expand all.
@@ -345,10 +350,10 @@ export function createWebView(deps: WebViewDeps): WebView {
   }
 
   /** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
-  function ringMore(ring: Ring, filled: boolean, top: number, left: number, onFill: (btn: HTMLElement) => void): HTMLElement[] {
+  function ringMore(ring: Ring, filled: boolean, top: number, left: number, tab: boolean, onFill: (btn: HTMLElement) => void): HTMLElement[] {
     // Wave 28b (Jakob): the fill control is the expand glyph, not the outliner triangle (that looks like "play").
-    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
-      style: `--rc:${toneVar(ring)}; left:${left + 16}px; top:${top}px`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
+    const fill = el('button', { type: 'button', class: 'ring-more fill-expand' + (filled ? ' on' : '') + (tab ? ' ring-tab' : ''), 'data-membrane-more': ring, 'aria-pressed': String(filled), 'aria-label': filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle, title: filled ? S.zoneFillAria(S.ringLabel[ring], filled) : S.zoneExpandTitle,
+      style: `--rc:${toneVar(ring)}; left:${left}px; top:${top}px`, onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); onFill(fill) } }, ['⛶'])
     return [fill]
   }
 
@@ -362,9 +367,9 @@ export function createWebView(deps: WebViewDeps): WebView {
   }
 
   /** The small round button on a ring's guide circle at 12 o'clock: ⊖ while the ring's people show, ⊕ while they are hidden. */
-  function ringToggle(ring: Ring, off: boolean, top: number, left: number, onToggle: (btn: HTMLElement) => void): HTMLElement {
+  function ringToggle(ring: Ring, off: boolean, top: number, left: number, tab: boolean, onToggle: (btn: HTMLElement) => void): HTMLElement {
     const b = el('button', {
-      class: 'ring-toggle' + (off ? ' off' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
+      class: 'ring-toggle' + (off ? ' off' : '') + (tab ? ' ring-tab' : ''), 'data-hide-ring': ring, 'aria-pressed': String(off), style: `--rc:${ringColor({ ring })}; left:${left}px; top:${top}px`,
       'aria-label': (off ? S.ringShowAria : S.ringHideAria)(S.ringLabel[ring]), // no title: the hover card replaces the plain tooltip (Wave 29)
       // The zoom/pan layer captures every pointer on the rings (setPointerCapture), which retargets the click away from this button.
       onpointerdown: (e: Event) => { e.stopPropagation() },

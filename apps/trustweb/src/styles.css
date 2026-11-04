@@ -149,6 +149,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:0; background:none; color:#fff; font-size:9px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .ring-toggle::before{content:''; position:absolute; box-sizing:border-box; width:8.5px; height:8.5px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
+.ring-toggle.ring-tab::before{border-color:var(--rc); box-shadow:0 0 0 2px #fff}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
 .ring-card{position:absolute; z-index:8; max-width:80%; max-height:60%; overflow:auto; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:12px; color:#3a1d00; display:flex; flex-direction:column; gap:2px}
