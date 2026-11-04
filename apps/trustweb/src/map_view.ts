@@ -7,6 +7,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { activateKey } from './key_press'
 import type { Person } from './model'
+import { toggleMapCredit } from './map_credit_state'
 import { nextMapLoad } from './map_load_state'
 import type { MapLoad } from './map_load_state'
 import { clearPlace, pinGroups, placeSuggest, project, setPlace } from './place_suggest'
@@ -117,9 +118,14 @@ export function createMapView(opts: MapOptions): HTMLElement {
     })
     return [input, undo, suggest]
   }
+  const link = (href: string, text: string): HTMLElement => el('a', { href, target: '_blank', rel: 'noopener' }, [text])
+  const credit = el('p', { class: 'meta map-credit', 'data-map-credit': '' }, ['Places: ', link('https://www.geonames.org', 'GeoNames'), ', CC BY 4.0. Outline: ', link('https://www.naturalearthdata.com', 'Natural Earth'), '.'])
+  credit.hidden = true
+  let creditOpen = false
+  const creditBtn = el('button', { class: 'map-credit-btn', type: 'button', 'aria-label': S.mapCreditLabel, 'aria-expanded': 'false', 'data-map-credit-toggle': '' }, ['ⓘ'])
+  creditBtn.onclick = (): void => { creditOpen = toggleMapCredit(creditOpen); credit.hidden = !creditOpen; creditBtn.setAttribute('aria-expanded', String(creditOpen)) }
   return el('div', { class: 'map-view', 'data-map-view': '' }, [
-    el('div', { class: 'map-stage' }, [map as unknown as Node, notice]),
-    el('p', { class: 'meta map-credit' }, [S.mapCredit]),
+    el('div', { class: 'map-stage' }, [map as unknown as Node, notice, creditBtn, credit]),
     // Wave 29: the flat 'Find someone' list is the People view (ring categories); each row keeps its place box.
     peopleList(placeEditor),
   ])
