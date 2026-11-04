@@ -97,6 +97,8 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { parsePersonShare, personShareLink } from './person_share_link'
+import { parseNoteShare } from './notes_outline'
+import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
 import { zoneLinksSettings } from './zone_share_link_view'
 import { seenBy } from './share_page'
@@ -256,6 +258,7 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings } from './llm_endpoint_view'
+import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
@@ -406,6 +409,8 @@ const viaCard = createViaCard()
 const personShare = pendingConnect ? parsePersonShare(location.hash) : null
 // Wave 31 (zone_share_link.ts): the same link made for a whole zone; the box names the zone and says there is more to ask for.
 const zoneShare = pendingConnect ? parseZoneShare(location.hash, Date.now()) : null
+// Wave 31 (notes_outline.ts): a link may carry an outline note with its provenance; kept on the sender's card after their tap.
+const noteShare = pendingConnect ? parseNoteShare(location.hash) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -1930,6 +1935,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (treeLink?.family) applyFamily(person)
   if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
+  if (noteShare) addReceivedNote(person, noteShare)
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
   if (admitted.legacy) person.connectedVia = 'legacy-code'
@@ -2157,6 +2163,7 @@ function screenStart(): Node[] {
             el('b', {}, solo ? [S.connectInvite(inviter)] : [S.reachOutStartBefore, el('span', { class: 'invite-name' }, [inviter]), S.reachOutStartAfter]),
             solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
+            noteShare ? el('p', { class: 'meta', 'data-note-share-in': '' }, [S.noteShareIn(inviter, noteShare.title)]) : null,
             zoneShare || personShare ? personShareBox(inviter, (zoneShare ?? personShare) as NonNullable<typeof personShare>, zoneShare) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
@@ -3047,7 +3054,7 @@ function cardMore(p: Person): Node[] {
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
-    notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks(p))],
     timeline: () => [timelineSection(p)],
     curate: () => [
       el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
@@ -3056,6 +3063,18 @@ function cardMore(p: Person): Node[] {
   const connected = Boolean(p.peerId)
   const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
   return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
+}
+
+/** Wave 31 (shared_notes_view.ts): what the Notes section of a card needs from the app. */
+function notesHooks(p: Person): Parameters<typeof sharedNotesSection>[1] {
+  const s = st()
+  return {
+    me: { did: s.me.id, name: s.me.displayName },
+    others: activePeople().filter((o) => o.id !== p.id),
+    connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
+    save,
+    toast,
+  }
 }
 
 /** Wave 30: the one link made for a person, kept while the card is open so the WhatsApp message can carry it. */
@@ -6424,6 +6443,7 @@ function settingsSheet(): void {
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
+    ...askWebSettings({ state: st, save }),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6815,7 +6835,9 @@ function resultsView(results: AskResult[], asked: { text: string; at: number }):
 function queryDock(s: AppState): HTMLElement {
   const box = el('textarea', { class: 'field', rows: '2', placeholder: S.queryPh, maxlength: '200', 'aria-label': S.queryTitle })
   box.value = queryText
-  box.addEventListener('input', () => { queryText = box.value })
+  box.setAttribute('data-ask-input', '1')
+  const webHere = askWebPanel({ state: st, save }, queryText)
+  box.addEventListener('input', () => { queryText = box.value; webHere.update(queryText) })
   const busy = Boolean(askRun && !askRun.results)
   // A demo account asks only once its owner allowed it, and not after its end.
   const demoEnded = Boolean(s.testOf && guestEnded(s.testOf, Date.now()))
@@ -6849,6 +6871,7 @@ function queryDock(s: AppState): HTMLElement {
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
+      run ? null : webHere.el,
       run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
         togetherPlace
           ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label || S.togetherHere) + ' ×'])
