@@ -1,20 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** Wave 30: edit a person row in place. Archive and restore, and which ring group a dragged row lands on. Pure, DOM-free; the name edit is `nameEdit` (ring_hover.ts). */
-import { Ring } from './model'
-import type { Person } from './model'
-
-/** Files the person under "Not in my web" (Ring.None), remembering the ring for a restore. */
-export function archiveOf(p: Pick<Person, 'ring' | 'prevRing'>): void {
-  if (p.ring === Ring.None) return
-  p.prevRing = p.ring
-  p.ring = Ring.None
-}
-
-/** Brings an archived person back to the ring they had, else "not placed yet". */
-export function restoreOf(p: Pick<Person, 'ring' | 'prevRing'>): void {
-  p.ring = p.prevRing ?? Ring.Unsorted
-  delete p.prevRing
-}
+/** Wave 30: edit a person row in place. Which ring group a dragged row lands on. Pure, DOM-free; the name edit is `nameEdit` (ring_hover.ts). */
+import type { Ring } from './model'
 
 export interface ZoneBox { ring: Ring; left: number; top: number; right: number; bottom: number }
 

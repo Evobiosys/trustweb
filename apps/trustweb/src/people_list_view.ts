@@ -7,7 +7,7 @@ import type { AppState, Person } from './model'
 import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
 import { personRow } from './people_row_view'
-import { archiveOf, restoreOf } from './row_edit'
+import { archivePerson, restorePerson } from './archived_people'
 
 /** What the list needs from main.ts to edit a row: persist, move a person to a ring (the placePerson path), and a toast whose tap undoes. */
 export interface RowEdit {
@@ -45,7 +45,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
   const open = (p: Person): HTMLElement => !edit ? plain(p) : personRow(p, {
     open: openPerson,
     rename: (q, name) => { q.name = name; edit.save(); changed() },
-    archive: (q) => { archiveOf(q); edit.save(); changed(); edit.toast(S.rowArchived(q.name), () => { restoreOf(q); edit.save(); changed() }) },
+    archive: (q) => { archivePerson(q); edit.save(); changed(); edit.toast(S.rowArchived(q.name), () => { restorePerson(q); edit.save(); changed() }) },
     move: (q, ring) => {
       const was = q.ring
       const suggested = q.ringSuggested
