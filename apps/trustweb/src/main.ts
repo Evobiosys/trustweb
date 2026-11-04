@@ -25,6 +25,7 @@ import { fieldOverviewPanel } from './five_rings_view'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
+import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
@@ -1089,7 +1090,17 @@ function openPeople(query = ''): void {
   go(Screen.People)
 }
 /** Wave 30: what a People / Map row may do to the record (inline name edit, archive, drag to another zone); a tap on the toast undoes. */
-const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }) }
+const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }),
+  tagZones: (rings, name) => {
+    const rec = st()
+    const before = rec.zoneTags
+    const beforeTags = loadColourTags()
+    let tags: readonly ColourTag[] = beforeTags
+    for (const ring of rings) { const out = addZoneTag(rec, tags, ring, name, Date.now()); tags = out.tags }
+    if (tags !== beforeTags) saveColourTags([...tags])
+    save()
+    return () => { rec.zoneTags = before; saveColourTags(beforeTags); save() }
+  } }
 
 function peopleSearchField(): HTMLElement {
   const input = el('input', {
