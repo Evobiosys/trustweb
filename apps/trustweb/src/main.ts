@@ -94,6 +94,8 @@ import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './chan
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
 import { mergeContact } from './contact_share'
 import { parsePersonShare, personShareLink } from './person_share_link'
+import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
+import { zoneLinksSettings } from './zone_share_link_view'
 import { seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
@@ -389,6 +391,8 @@ const viaChannel = pendingConnect ? parseVia(location.hash) : null
 const viaCard = createViaCard()
 // Wave 30 (person_share_link.ts): a link made for one person also carries contact channels and the things their zone may see; shown on the start screen, merged only after their tap.
 const personShare = pendingConnect ? parsePersonShare(location.hash) : null
+// Wave 31 (zone_share_link.ts): the same link made for a whole zone; the box names the zone and says there is more to ask for.
+const zoneShare = pendingConnect ? parseZoneShare(location.hash, Date.now()) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -2103,7 +2107,7 @@ function screenStart(): Node[] {
             el('b', {}, solo ? [S.connectInvite(inviter)] : [S.reachOutStartBefore, el('span', { class: 'invite-name' }, [inviter]), S.reachOutStartAfter]),
             solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
-            personShare ? personShareBox(inviter, personShare) : null,
+            zoneShare || personShare ? personShareBox(inviter, (zoneShare ?? personShare) as NonNullable<typeof personShare>, zoneShare) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
@@ -2985,6 +2989,14 @@ async function buildPersonLink(p: Person): Promise<string> {
   return url
 }
 
+/** A zone link's URL: the connect link, the channels I ticked, and the texts of what its zones see (the same check as enforcement). */
+async function buildZoneLink(l: ZoneLink): Promise<string> {
+  await net.start()
+  const s = st()
+  const texts = zoneItems(basisOf(s), l.zones, new Date()).map((id) => s.inventory.find((i) => i.id === id)?.text ?? '')
+  return zoneShareLink(net.connectLink(CONNECT_URL), s.myChannels, s.contactShare, l, texts)
+}
+
 /** Person card: "Share one link with <name>" (underlined), copy and the phone's share sheet. */
 function personShareRow(p: Person): HTMLElement {
   const name = displayName(p.name).text
@@ -3002,13 +3014,14 @@ function personShareRow(p: Person): HTMLElement {
 }
 
 /** The start screen of a link made for me: what the sender shares with me and the ways to reach them. Nothing is added until I tap. */
-function personShareBox(inviter: string, share: NonNullable<typeof personShare>): HTMLElement {
+function personShareBox(inviter: string, share: NonNullable<typeof personShare>, zone: typeof zoneShare): HTMLElement {
   const channels = share.contact ? Object.keys(share.contact.channels).map((ch) => chName(ch as Channel)).join(', ') : ''
   return el('div', { class: 'person-share', 'data-person-share-in': '' }, [
-    el('b', {}, [S.personShareFrom(inviter)]),
+    el('b', {}, [zone ? S.zoneShareFrom(inviter, S.shareZones[zone.zone][0]) : S.personShareFrom(inviter)]),
     share.items.length ? el('p', { class: 'meta' }, [S.personShareItems]) : null,
     share.items.length ? el('ul', {}, share.items.map((t) => el('li', {}, [t]))) : null,
     channels ? el('p', { class: 'meta' }, [S.personShareContact(channels)]) : null,
+    zone ? el('p', { class: 'meta', 'data-zone-share-more': '' }, [S.zoneShareMore]) : null,
   ])
 }
 
@@ -6167,7 +6180,7 @@ function settingsSheet(): void {
         el('b', {}, [S.viewNames[i.view]]),
       ])),
     ]),
-    settingsSection('sharing', S.setSecSharing, sharingSettings(s, save, settingsSheet)),
+    settingsSection('sharing', S.setSecSharing, [...sharingSettings(s, save, settingsSheet), ...zoneLinksSettings(s, save, settingsSheet, { build: buildZoneLink, toast: (m) => toast(m) })]),
     settingsSection('advanced-web', S.setAdvanced, [
     // Wave 28: the Map is an Advanced setting that can be pinned next to the eye.
     HAS_MAP_VIEW ? el('label', { class: 'radio', 'data-pin-view': 'map' }, [
