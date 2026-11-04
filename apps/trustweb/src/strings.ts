@@ -1388,6 +1388,8 @@ export const S = {
   dvSameLead: 'They become one. Notes, tags and fields of both are kept; if they differ, the one you keep wins. A snapshot is saved first.',
   dvSameKeep: 'Keep this one',
   dvSameSummary: (name: string, lines: number, connected: boolean) => `${name} · ${lines} ${lines === 1 ? 'line' : 'lines'} · ${connected ? 'connected on TrustWeb' : 'not connected'}`,
+  dmOffer: (a: string, b: string) => `Merge ${a} into ${b}?`,
+  dmMerge: 'Merge',
   dvSameDone: (name: string) => `${name} is one person now.`,
   dvOrphanTitle: 'Messages from another device',
   dvOrphanLead: 'Chats with a connection that this device does not have. They stay here, read only.',
