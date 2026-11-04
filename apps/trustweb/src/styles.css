@@ -1302,3 +1302,10 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 }
 .card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}
+
+/* Wave 32: the expanse control (drop a dot on it to hide the dot) and its count badge */
+.expanse-drop{position:absolute; top:4px; right:4px; z-index:4; width:32px; height:32px; padding:0; border:2px solid #e8750a; border-radius:50%; background:#fff3e6; color:#3a1d00; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
+.expanse-drop.drop{background:#e8750a; color:#fff; transform:scale(1.2)}
+.expanse-count{position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; padding:0 3px; box-sizing:border-box; border-radius:8px; background:#e8750a; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center}
+.expanse-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0}
+.expanse-row span{min-width:0; overflow-wrap:anywhere}

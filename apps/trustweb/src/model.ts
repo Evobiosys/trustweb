@@ -1005,6 +1005,8 @@ export interface AppState {
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
   qrProfileOption?: boolean
   /** Wave 28 (trustzones.ts): the TrustZones view state. filled = rings drawn with everyone (absent: acquaintances); acquaintances = shown (absent: on); unsorted = the not-yet-sorted people shown (absent: off); open = list sections unfolded (absent: closest); filterOpen = the Filter (advanced) section unfolded (absent: folded); community = the community tag the friends zone adds (absent: none). Wave 28b: sidebarOpen = the TrustZones sidebar unfolded (absent: open); show / hide = the TrustZones tag filters, chips person:<id> / tag:<id> (absent: none); showOpen = the sidebar's Filters (advanced) unfolded (absent: folded). Local; rides the device sync with the other settings. */
+  /** Wave 32 (expanse.ts): ids of the people hidden from the rings; they keep their ring. Absent: none. */
+  expanse?: string[]
   uiRings?: { filled?: Ring[]; acquaintances?: boolean; unsorted?: boolean; hidden?: Ring[]; open?: Ring[]; filterOpen?: boolean; community?: string; sidebarOpen?: boolean; show?: string[]; hide?: string[]; showOpen?: boolean; connections?: boolean }
   /** Absent: QueryStyle.Call. */
   queryStyle?: QueryStyle

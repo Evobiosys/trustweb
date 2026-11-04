@@ -19,6 +19,7 @@ import type { AppState, Person } from './model'
 import { S } from './strings'
 import type { Curator, LentRings } from './curator'
 import { intendingReminder, knownWays, lastMessagedAt } from './intending_reminder'
+import { bringAllBack, bringBack, expanseList, hideInExpanse, inExpanse, overControl } from './expanse'
 import { shortLabel } from './short_label'
 import { limitOf, pickFive, withTag } from './membranes_five'
 import { communityOf, filledRings, isArchived, inZones, toggleRing, toneVar, zoneFor } from './trustzones'
@@ -115,6 +116,8 @@ export interface WebViewDeps {
   ripple(e: MouseEvent): void
   tagFilter(): string | null
   currentLayout(): Layout
+  openSheet(children: (Node | null)[]): void
+  closeSheet(): void
   solo: boolean
 }
 
@@ -130,7 +133,7 @@ export interface WebView {
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, solo } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, openSheet, closeSheet, solo } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -143,7 +146,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     // Wave 28: archived contacts never; the Desk's lent rings keep every filter off (they are where the unsorted get sorted), the phone's rings follow the saved filters.
     const community = communityOf(s)
     // Wave 28b: the sidebar's tag filters (show only / hide, hide wins) thin the dots of the phone's rings.
-    for (const p of desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [])) (everyone[zoneFor(p, community)] ??= []).push(p)
+    for (const p of (desk ? s.people.filter((x) => !isBlocked(x) && !isArchived(x)) : filterByChips(inZones(s.people, s), loadColourTags(), s.uiRings?.show ?? [], s.uiRings?.hide ?? [])).filter((x) => !inExpanse(s, x.id))) (everyone[zoneFor(p, community)] ??= []).push(p)
     // Wave 25: the closest five per membrane (membranes_five.ts); the complete view and the Desk's lent rings show everyone.
     const complete = opts.complete === true || desk !== undefined
     const members: Partial<Record<Ring, Person[]>> = {}
@@ -271,6 +274,7 @@ export function createWebView(deps: WebViewDeps): WebView {
     you.style.left = C + 'px'
     you.style.top = C + 'px'
     wrap.appendChild(you)
+    if (!desk) wrap.appendChild(expanseControl(s))
     dragOnRings(wrap, s, (v) => { dragged = v }, desk?.onRing)
     // Re-render IN PLACE: the Desk slots this very element (slot name, styles, its fit() transform) and the phone's zoom layer wraps it,
     // so a replaceWith() made the rings vanish from the Desk (Jakob 20:05). `live` = the element the pressed button sits in.
@@ -342,6 +346,30 @@ export function createWebView(deps: WebViewDeps): WebView {
     wrap.addEventListener('pointerdown', hideAll)
     // Wave 28b: the floating "+" moved into the TrustZones sidebar (zoneColumn), next to expand all.
     return wrap
+  }
+
+  /** Wave 32: the orange round ⛶ control in the rings' corner. A dot dropped on it goes into the expanse; a tap opens the list of the hidden. */
+  function expanseControl(s: AppState): HTMLElement {
+    const n = s.expanse?.length ?? 0
+    return el('button', { type: 'button', class: 'expanse-drop', 'data-expanse-drop': '', 'aria-label': n ? S.expanseCount(n) : S.expanseDrop, title: n ? S.expanseOpen : S.expanseDrop,
+      onpointerdown: (e: Event) => { e.stopPropagation() }, onclick: (e: Event) => { e.stopPropagation(); if (expanseList(st()).length) expanseSheet() } },
+      ['⛶', ...(n ? [el('span', { class: 'expanse-count', 'data-expanse-count': String(n) }, [String(n)])] : [])])
+  }
+
+  /** The sheet "In the expanse": the hidden people, each with Bring back, and Bring all back. */
+  function expanseSheet(): void {
+    const people = expanseList(st())
+    if (!people.length) { closeSheet(); return }
+    const back = (fn: () => void): void => { fn(); save(); render(); expanseSheet() }
+    openSheet([
+      el('h3', {}, [S.expanseTitle]),
+      el('p', { class: 'meta' }, [S.expanseHint]),
+      ...people.map((p) => el('div', { class: 'expanse-row' }, [
+        el('span', {}, [displayName(p.name).text]),
+        el('button', { class: 'btn btn-ghost btn-sm', 'data-expanse-restore-one': p.id, onclick: () => back(() => bringBack(st(), p.id)) }, [S.expanseBack]),
+      ])),
+      el('button', { class: 'btn btn-ghost', 'data-expanse-restore': '', onclick: () => back(() => bringAllBack(st())) }, [S.expanseBackAll]),
+    ])
   }
 
   /** Wave 28 (was the "+" that opened the list): beside a membrane's diamond an outliner triangle. The first press fills the ring with everyone in it (a list button appears to its right, the triangle stays in place), the second folds it back to the closest few. */
@@ -486,6 +514,8 @@ export function createWebView(deps: WebViewDeps): WebView {
       let ring = webSlot(p)
       let out = false
       let angle = angleOf(p)
+      let intoExpanse = false
+      const control = wrap.querySelector<HTMLElement>('[data-expanse-drop]')
       // While a person is held, every ring guide shows in full so the drop target is visible.
       const hiddenNow = loadHiddenRings()
       const guides = (dragging: boolean): void => wrap.querySelectorAll<SVGCircleElement>('circle[data-ring]').forEach((c) => { c.style.opacity = guideDimmed(hiddenNow.has(c.getAttribute('data-ring') as Ring), dragging) ? HIDDEN_GUIDE_OPACITY : '' })
@@ -502,7 +532,10 @@ export function createWebView(deps: WebViewDeps): WebView {
         angle = angleFromCentre(x - RINGS_SIZE / 2, y - RINGS_SIZE / 2)
         out = beyondRings(dist, ringsGeo)
         ring = ringAt(dist, ringsGeo.radius, ringsGeo.rings)
-        wrap.classList.toggle('hide-zone', out)
+        const b = control?.getBoundingClientRect()
+        intoExpanse = Boolean(b && overControl(b, e.clientX, e.clientY))
+        control?.classList.toggle('drop', intoExpanse)
+        wrap.classList.toggle('hide-zone', out && !intoExpanse)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
       }
       const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
@@ -527,6 +560,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         guides(false)
         wrap.querySelectorAll('circle.drop').forEach((c) => c.classList.remove('drop'))
         wrap.classList.remove('hide-zone')
+        control?.classList.remove('drop')
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
@@ -536,6 +570,7 @@ export function createWebView(deps: WebViewDeps): WebView {
         end(); lifted = false
         setTimeout(() => setDragged(false), 0)
         if (!was) return
+        if (intoExpanse) { hideInExpanse(s, p.id); save(); render(); done(); return }
         const outcome = dropOutcome(p, ring, out)
         if (outcome === 'hide') { void hideOnRings(p).then(done); return }
         if (outcome === 'family-stays') { render(); done(); return }
