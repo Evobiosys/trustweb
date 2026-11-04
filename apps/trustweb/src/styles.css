@@ -1296,6 +1296,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-side{flex:0 0 auto; max-height:40%; overflow-y:auto; padding:6px 12px; display:flex; flex-direction:column; gap:6px}
 .zone-tools{display:flex; align-items:center; gap:8px}
 .zone-chip-row{display:flex; flex-direction:column; gap:4px; font-size:13px}
+/* Wave 30 (U9/U11): active filter rows, and the Add-people box as its own tinted, bordered box */
+.filter-active{display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; overflow-wrap:anywhere}
+.filter-off{text-decoration:underline}
+.zone-add-box{background:var(--tint-teal); border:1px solid var(--line); border-radius:8px; padding:8px; min-width:0}
+.zone-add-box .field{max-width:100%; box-sizing:border-box}
 @media (min-width:760px){
   .zones-split{flex-direction:row}
   .zone-side{flex:0 0 260px; max-height:none}
