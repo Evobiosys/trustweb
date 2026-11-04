@@ -20,9 +20,12 @@
  */
 import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
+import { FIVE_RINGS_FLAG, fiveRingsOn, flagFromUrl } from './five_rings'
+import { fieldOverviewPanel } from './five_rings_view'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
 import { COLOUR_TAGS_EVENT, loadColourTags, saveColourTags, tagsOf } from './colour_tags'
+import type { ColourTag } from './colour_tags'
 import { askPeers, isBlocked } from './non_responsive'
 import { allowReachOut } from './reach_out_guard'
 import { FAMILY_FIELD, webSlot } from './rings_layout'
@@ -99,7 +102,7 @@ import { availableTabs, resolveRow, setSlot } from './tab_row'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
 import { dismissOnOutside } from './key_press'
-import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { disclosureGlyph } from './disclosure'
@@ -121,6 +124,7 @@ import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
+import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { personImageOk } from './person_image'
 import { migrate } from './schema_version'
@@ -205,6 +209,7 @@ import { kindKey, visibleVia } from './zone_visibility'
 import { addResourceIn, renameResource } from './resource_edit'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
+import { archivedPeopleView } from './archived_people_view'
 import { zoneSidebar } from './trustzones_view'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -410,6 +415,11 @@ const wantInstall = params.get('install') === '1'
 // Wave 11 (apk.ts): opened by the Android app, which names its shell version; remembered for this session before the URL is cleaned.
 const apkLaunch = apkParam(params)
 if (apkLaunch) rememberApkSession(apkLaunch)
+// Five-ring prototype (five_rings.ts): ?five_rings=1|0 switches its flag, remembered before the URL is cleaned.
+{
+  const f = flagFromUrl(location.search)
+  if (f !== null) try { localStorage.setItem(FIVE_RINGS_FLAG, f ? '1' : '0') } catch { /* not remembered */ }
+}
 /** The app on a home screen: a standalone PWA, this session inside the APK (which runs as a tab until the origin vouches for it), or the iPhone app. */
 function installedHere(): boolean {
   return runsAsInstalledApp() || isApkSession() || nativeApp
@@ -1083,6 +1093,19 @@ function openPeople(query = ''): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+/** Wave 30: what a People / Map row may do to the record (inline name edit, archive, drag to another zone); a tap on the toast undoes. */
+const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }),
+  tagZones: (rings, name) => {
+    const rec = st()
+    const before = rec.zoneTags
+    const beforeTags = loadColourTags()
+    let tags: readonly ColourTag[] = beforeTags
+    for (const ring of rings) { const out = addZoneTag(rec, tags, ring, name, Date.now()); tags = out.tags }
+    if (tags !== beforeTags) saveColourTags([...tags])
+    save()
+    return () => { rec.zoneTags = before; saveColourTags(beforeTags); save() }
+  } }
+
 function peopleSearchField(): HTMLElement {
   const input = el('input', {
     class: 'field people-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-people-search': '', value: peopleQuery(),
@@ -1097,7 +1120,7 @@ function screenPeople(): Node[] {
     header(S.peopleTitle, { back: () => history.back() }),
     ...(peopleSearchOpen ? [peopleSearchField()] : []),
     el('div', { class: 'scroll pad' }, [
-      peopleListBody(st, openCardPage, addPersonSheet),
+      peopleListBody(st, openCardPage, addPersonSheet, undefined, rowEdit),
     ]),
   ]
 }
@@ -1223,11 +1246,10 @@ function mountHeaderControls(): void {
   const qr = statusPill && right.contains(statusPill) ? (statusPill.closest('.hdr-right > *') ?? statusPill) : null
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
-  const anyone = st().people.length > 0
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
-    : screen === Screen.People ? viewControls('people', anyone)
+  const views: Node = screen === Screen.Web ? viewControls(webViewNow)
+    : screen === Screen.People ? viewControls('people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1238,7 +1260,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people', anyone) : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -2345,10 +2367,10 @@ function webViewRow(view: WebView): HTMLElement {
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
-function viewControls(current: ViewKey, anyone: boolean): Node {
+function viewControls(current: ViewKey): Node {
   const pins = st().uiPins?.views
   const frag = document.createDocumentFragment()
-  for (const v of pinnedViews(pins, anyone, HAS_MAP_VIEW)) {
+  for (const v of pinnedViews(pins, HAS_MAP_VIEW)) {
     const b = iconButton(viewGlyph[v], S.viewNames[v], () => chooseView(v), 'view-pin' + (v === current ? ' on' : ''))
     b.setAttribute('data-view-pin', v)
     frag.append(b)
@@ -2360,9 +2382,9 @@ function viewControls(current: ViewKey, anyone: boolean): Node {
 }
 
 /** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
-function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
+function viewDrop(current: ViewKey): HTMLElement | null {
   if (!eyeOpen) return null
-  const items = viewMenu(current, anyone, HAS_MAP_VIEW, st().uiPins?.views)
+  const items = viewMenuEntries({ current, hasMap: HAS_MAP_VIEW, pins: st().uiPins?.views })
   const btn = (i: { view: ViewKey; on: boolean }): HTMLElement => {
     const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
     b.innerHTML = icon(viewGlyph[i.view])
@@ -2527,7 +2549,7 @@ function screenWeb(): Node[] {
   const s = full
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
-  const view = webViewOf(stored, s.people.length > 0)
+  const view = webViewOf(stored)
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
@@ -2548,15 +2570,18 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
     webViewRow(view),
-    ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
-    view === 'rings' ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), clip]) : clip,
+    ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
+    // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
+    view === 'rings'
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), fiveRingsOn() ? el('div', { class: 'zones-main' }, [clip, fieldOverviewPanel(s, { live: st, save, render })]) : clip])
+      : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
 }
@@ -6080,10 +6105,11 @@ function settingsSheet(): void {
     web: [
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+      ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
         el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
         el('b', {}, [S.viewNames[i.view]]),
       ])),

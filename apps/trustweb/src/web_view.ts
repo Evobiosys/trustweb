@@ -26,6 +26,7 @@ import { connectionsShown, contactPairs } from './zone_connections'
 import { filterByChips } from './tag_filter'
 import { dueMoves, releaseTies } from './engagement'
 import { ringCard } from './membranes_five_view'
+import { archivePerson } from './archived_people'
 import { GRACE_MS, HOVER_IDLE, hoverStep } from './ring_hover'
 import type { HoverEvent } from './ring_hover'
 import { singleOrDouble } from './press'
@@ -285,9 +286,13 @@ export function createWebView(deps: WebViewDeps): WebView {
     let hover = HOVER_IDLE
     let graceTimer: ReturnType<typeof setTimeout> | undefined
     let renamed = false
+    // The grey "Tap empty space…" hint (native title, touch "i") stays away while a card is open.
+    const hintTitle = wrap.title
+    const cardShown = (on: boolean): void => { wrap.classList.toggle('card-open', on); wrap.title = on ? '' : hintTitle }
     const hideAll = (): void => {
       clearTimeout(graceTimer); hover = HOVER_IDLE
       wrap.querySelector('[data-ring-card]')?.remove()
+      cardShown(false)
       document.removeEventListener('keydown', onEsc)
       if (renamed) { renamed = false; render() }
     }
@@ -298,12 +303,14 @@ export function createWebView(deps: WebViewDeps): WebView {
       const box = ringCard(S.ringLabel[r], everyone[r] ?? [], {
         onOpen: (id) => { hideAll(); openWebPage({ kind: 'card', id }) },
         onRename: (p, next) => { p.name = next; renamed = true; save() },
+        onArchive: (p) => { archivePerson(p); save(); hideAll(); render(); toast(S.archivedInSettings) },
       })
       box.style.left = Math.min(at.x + 12, RINGS_SIZE - 90) + 'px'
       box.style.top = Math.min(at.y + 12, RINGS_SIZE - 40) + 'px'
       box.addEventListener('pointerenter', () => step({ type: 'enter-card' }))
       box.addEventListener('pointerleave', () => step({ type: 'leave' }))
       wrap.appendChild(box)
+      cardShown(true)
       document.addEventListener('keydown', onEsc)
     }
     const step = (ev: HoverEvent, e?: { clientX: number; clientY: number }): void => {
