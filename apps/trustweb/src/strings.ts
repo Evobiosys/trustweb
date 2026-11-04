@@ -2731,4 +2731,7 @@ export const S = {
   agrSendFailed: 'Not sent. Try “Send again” when you are online.',
   agrAccepted: (name: string) => `Agreement with ${name} is now mutual`,
   agrProposedToast: (name: string) => `${name} proposed an agreement`,
+  // Dev preview panel (wave 30): the Walk / ? card when a view switch is missing on this build, and the feature-flag switch.
+  walkNavigateFirst: (where: string) => `navigate to ${where} first`,
+  flagTry: (title: string) => `Try ${title}`,
 } as const
