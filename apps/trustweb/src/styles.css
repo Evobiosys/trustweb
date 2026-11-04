@@ -251,8 +251,8 @@ textarea.field{resize:vertical; line-height:1.5}
 .person-row.tools-on .row-tool-hover,.person-row:focus-within .row-tool-hover{visibility:visible}
 @media (hover:hover){.person-row:hover .row-tool-hover{visibility:visible}}
 /* Wave 32: inline edit confirm green, cancel red (every ✓/✕ pair) */
-.ok-mark{color:#2e9e6a}
-.cancel-mark{color:#d9534f}
+button.ok-mark{color:#2e9e6a}
+button.cancel-mark{color:#d9534f}
 .row-tool:disabled{opacity:.4; text-decoration:none}
 /* The tool bar sticks to the bottom of the list's scroll area, which ends above the tab bar; it wraps, never scrolls sideways. */
 .select-bar{position:sticky; bottom:0; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:6px 8px; margin-top:8px; background:var(--card); box-shadow:0 -2px 10px rgba(0,0,0,.3); border-radius:12px; max-width:100%}
