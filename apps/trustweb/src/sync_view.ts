@@ -67,6 +67,8 @@ export interface SyncView {
   open(): void
   /** The "Same person as..." picker on a person's card. */
   samePersonPicker(personId: string): void
+  /** The "Which one do you keep?" sheet for two persons; `aId` is the preselected one to keep (Enter), `bId` the duplicate. */
+  mergeSheet(aId: string, bId: string): void
 }
 
 const SHEET_KIND = 'devices'
@@ -468,12 +470,13 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     open('devices-same', [
       el('h3', {}, [S.dvSameTitle]),
       el('p', { class: 'meta' }, [S.dvSameLead]),
-      ...[[a, b], [b, a]].map(([kept, dropped]) => el('button', { class: 'radio', 'data-same-keep': kept.id, onclick: () => void keep(kept, dropped) }, [
+      ...[[a, b], [b, a]].map(([kept, dropped], i) => el('button', { class: 'radio', 'data-same-keep': kept.id, ...(i === 0 ? { 'data-merge-approve': '1' } : {}), onclick: () => void keep(kept, dropped) }, [
         el('b', {}, [S.dvSameSummary(kept.name, kept.lines.length, !!kept.peerId)]),
         el('small', {}, [`${S.dvSameKeep}${kept.context ? ' · ' + kept.context : ''}`]),
       ])),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: back }, [S.dvCancel]),
     ])
+    h.sheet.querySelector<HTMLElement>('[data-merge-approve]')?.focus()
   }
 
   function samePersonPicker(personId: string): void {
@@ -510,5 +513,6 @@ export function createSyncView(h: SyncViewHooks): SyncView {
     start,
     open: openDevices,
     samePersonPicker,
+    mergeSheet: (aId, bId) => samePersonSheet(aId, bId, h.closeSheet),
   }
 }

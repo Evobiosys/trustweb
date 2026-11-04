@@ -33,6 +33,7 @@ import { contextPress } from './context_press'
 import { labelScale } from './ring_spacing'
 import { RINGS_ZOOM_HOME, type RingsZoom, type ZoomView, fitZoom, panBy, transformOf, zoomAt } from './rings_zoom'
 import type { Layout } from './layout_pick'
+import { HOLD_MS, type HoldEvent, hitDot, holdStart, holdStep } from './dot_merge'
 
 /** The rings' own layout size (px): the viewBox, and the box a pointer is read against. */
 export const RINGS_SIZE = 352
@@ -106,6 +107,8 @@ export interface WebViewDeps {
   hintHidden(id: HintId): boolean
   touchUi(): boolean
   curatorPerson(personId: string): void
+  /** Opens the "Same person" sheet for two persons (the first is kept first, so Enter keeps it); null on a demo phone, where merging is off. */
+  mergeSheet: ((aId: string, bId: string) => void) | null
   dummyChip(): HTMLElement
   avatar(name: string, id: string, cls?: string): HTMLElement
   pictured(face: HTMLElement, url: string | undefined): HTMLElement
@@ -130,7 +133,7 @@ export interface WebView {
 }
 
 export function createWebView(deps: WebViewDeps): WebView {
-  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, solo } = deps
+  const { st, save, render, toast, showNotice, hideNotice, curator, openWebPage, toggleCardExpanded, editNameSheet, addPersonSheet, openHint, hintHidden, touchUi, curatorPerson, mergeSheet, dummyChip, avatar, pictured, demoPhone, changeRing, ripple, currentLayout, solo } = deps
   /** The drawn rings of the last render: their radii (in layout units) and the factor that fits a crowded web into the view; a drop or tap is read through both. */
   let ringsGeo: RingsGeometry = ringsGeometry({} as Record<Ring, number>)
   let ringsK = 1
@@ -505,6 +508,23 @@ export function createWebView(deps: WebViewDeps): WebView {
         wrap.classList.toggle('hide-zone', out)
         wrap.querySelectorAll('circle').forEach((c) => c.classList.toggle('drop', !out && c.getAttribute('data-ring') === ring))
       }
+      // Hold on another dot: after HOLD_MS a bubble offers to merge the two (dot_merge.ts); only a tap on Merge goes on.
+      let hold = holdStart()
+      let holdTimer: number | undefined
+      const holdApply = (ev: HoldEvent): void => {
+        const was = hold.phase
+        hold = holdStep(hold, ev)
+        if (hold.phase === 'offer' && was !== 'offer') offerMerge(p, hold.over)
+        else if (hold.phase !== 'offer' && was === 'offer') hideNotice()
+      }
+      const holdMove = (e: PointerEvent): void => {
+        if (!mergeSheet) return
+        const dots = [...wrap.querySelectorAll<HTMLElement>('.node:not(.you)')].map((n) => { const r = n.getBoundingClientRect(); return { id: n.dataset.pid ?? '', left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
+        const now = performance.now()
+        clearTimeout(holdTimer)
+        holdApply({ type: 'move', over: hitDot(dots, p.id, e.clientX, e.clientY), at: now })
+        if (hold.phase === 'pending') holdTimer = window.setTimeout(() => holdApply({ type: 'elapsed', at: performance.now() }), Math.max(0, hold.since + HOLD_MS - now))
+      }
       const lift = (): void => { lifted = true; node.classList.add('lifted'); setDragged(true) }
       const timer = down.pointerType === 'mouse' ? 0 : window.setTimeout(lift, 300)
       // A second finger is a pinch: the lift ends without moving the dot.
@@ -517,9 +537,11 @@ export function createWebView(deps: WebViewDeps): WebView {
           lift()
         }
         place(e)
+        holdMove(e)
       }
       const end = (): void => {
         clearTimeout(timer)
+        clearTimeout(holdTimer)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', cancel)
@@ -530,12 +552,15 @@ export function createWebView(deps: WebViewDeps): WebView {
       }
       // The Desk's lent rings redraw from the Desk (settled), the phone's from render() inside each path.
       const done = (): void => settled?.(p.id, p.ring)
-      const cancel = (): void => { const was = lifted; end(); lifted = false; setDragged(false); if (was) { render(); done() } }
+      const cancel = (): void => { const was = lifted; holdApply({ type: 'leave' }); end(); lifted = false; setDragged(false); if (was) { render(); done() } }
       const up = (): void => {
         const was = lifted
+        const offered = hold.phase === 'offer'
         end(); lifted = false
         setTimeout(() => setDragged(false), 0)
         if (!was) return
+        // Released while the merge offer shows: the dot goes back, nothing moves or merges.
+        if (offered) { render(); done(); return }
         const outcome = dropOutcome(p, ring, out)
         if (outcome === 'hide') { void hideOnRings(p).then(done); return }
         if (outcome === 'family-stays') { render(); done(); return }
@@ -549,6 +574,19 @@ export function createWebView(deps: WebViewDeps): WebView {
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', cancel)
     })
+  }
+
+  /** The bubble "Merge A into B?"; Merge opens the Same person sheet, which asks again before anything merges. */
+  function offerMerge(p: Person, otherId: string): void {
+    const other = st().people.find((x) => x.id === otherId)
+    if (!other || !mergeSheet) return
+    const close = (): void => hideNotice()
+    showNotice(S.dmOffer(displayName(p.name).text, displayName(other.name).text), '', [
+      el('span', { 'data-merge-offer': '1' }, [
+        el('button', { class: 'btn btn-electric btn-sm', onclick: () => { close(); mergeSheet(other.id, p.id) } }, [S.dmMerge]),
+        el('button', { class: 'btn btn-ghost btn-sm', onclick: close }, [S.dvCancel]),
+      ]),
+    ], 20000)
   }
 
   /** Right click, or a 500 ms hold that moved under 6 px, on empty web space or a ring line: a small menu to space the dots out equally. */
