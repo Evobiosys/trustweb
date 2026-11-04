@@ -363,6 +363,8 @@ export interface Person {
   name: string
   context: string
   ring: Ring
+  /** Wave 30: the ring before an archive (ring = none); the restore puts them back there. */
+  prevRing?: Ring
   metAt: number
   /** Wave 24b: when an expired tie was undone; counts as contact (engagement.ts). Absent: never. */
   engagementKept?: number

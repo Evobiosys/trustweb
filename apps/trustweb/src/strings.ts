@@ -705,6 +705,13 @@ export const S = {
     [Ring.Unsorted]: 'Not yet sorted',
   } as Record<Ring, string>,
   peopleZoneEmpty: 'No one yet',
+  // Wave 30: edit a person row in place, archive, drag to another zone.
+  rowEdit: 'Edit name',
+  rowAccept: 'Save the name',
+  rowCancel: 'Cancel',
+  rowArchive: 'Archive this person',
+  rowArchived: (name: string) => `${name} archived. Tap to undo.`,
+  rowMoved: (name: string, zone: string) => `${name} moved to ${zone}. Tap to undo.`,
   peopleZoneAdd: (zone: string) => `Add someone to ${zone}`,
   peopleTitle: 'People',
   // Wave 7: the outliner's rows and views.

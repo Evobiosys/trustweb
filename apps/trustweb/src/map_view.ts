@@ -7,6 +7,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { activateKey } from './key_press'
 import type { Person } from './model'
+import { isArchived } from './trustzones'
 import { nextMapLoad } from './map_load_state'
 import type { MapLoad } from './map_load_state'
 import { clearPlace, pinGroups, placeSuggest, project, setPlace } from './place_suggest'
@@ -76,7 +77,7 @@ export function createMapView(opts: MapOptions): HTMLElement {
   load()
 
   const drawDots = (): void => {
-    dots.replaceChildren(...pinGroups(people).flatMap((g) => {
+    dots.replaceChildren(...pinGroups(people.filter((p) => !isArchived(p))).flatMap((g) => {
       const { x, y } = project(g.lat, g.lon, W, H)
       const first = g.people[0]
       const label = g.people.length > 1 ? `${first.name} +${g.people.length - 1}` : first.name
@@ -117,10 +118,13 @@ export function createMapView(opts: MapOptions): HTMLElement {
     })
     return [input, undo, suggest]
   }
-  return el('div', { class: 'map-view', 'data-map-view': '' }, [
+  const root = el('div', { class: 'map-view', 'data-map-view': '' }, [
     el('div', { class: 'map-stage' }, [map as unknown as Node, notice]),
     el('p', { class: 'meta map-credit' }, [S.mapCredit]),
     // Wave 29: the flat 'Find someone' list is the People view (ring categories); each row keeps its place box.
     peopleList(placeEditor),
   ])
+  // Wave 30: a row was renamed, archived or moved in the list below: the dots follow.
+  root.addEventListener('people-changed', drawDots)
+  return root
 }
