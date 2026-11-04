@@ -192,6 +192,19 @@ textarea.field{resize:vertical; line-height:1.5}
 .lean{margin:8px 0}
 .lean .rchips{align-items:center}
 .lean small{font-size:12px}
+/* Five-ring prototype (five_rings_view.ts, flag tw-five-rings): the field overview under the rings. */
+.zones-main{flex:1 1 auto; min-width:0; min-height:0; display:flex; flex-direction:column; overflow-y:auto}
+.zones-main>.scroll{flex:1 0 70%}
+.zones-main>.field-overview{flex:none; width:100%; max-width:720px; box-sizing:border-box; font-size:14px; color:var(--ink,inherit)}
+.field-overview{margin:10px 12px; padding:10px 12px; background:var(--card); border-radius:16px}
+.field-overview h3{margin:0 0 6px; font-size:15px}
+.field-why{margin:0 0 8px; font-size:13px}
+.field-why summary{cursor:pointer; text-decoration:underline}
+.field-row{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; padding:3px 0}
+.field-row .field-dot{width:10px; height:10px; border-radius:50%; flex:none; align-self:center}
+.field-row .field-name{flex:1; min-width:0}
+.field-row small{flex-basis:100%; padding-left:18px; font-size:12px; color:var(--ink-soft,inherit)}
+.field-lean{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0}
 .desire-go{display:flex; gap:8px; justify-content:center}
 .node.you .ava{width:40px; height:40px; box-shadow:0 0 0 2px #fff, 0 0 0 3px rgba(23,143,134,.5)}
 .node.you span{position:absolute; bottom:100%; margin-bottom:4px; white-space:nowrap; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}   /* the label sits above the dot: the avatar centre is the node (and rings) centre */
