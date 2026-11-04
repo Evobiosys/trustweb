@@ -12,6 +12,7 @@ import { contextPress } from './context_press'
 import { dragStarts } from './web_view'
 import { editKey } from './tap_edit'
 import { S } from './strings'
+import { toolsRowAfterTap } from './row_tools'
 
 /** What a row does to the record; the list view owns the redraw, the undo and the toasts. */
 export interface RowActions {
@@ -34,6 +35,23 @@ function zoneBoxes(root: ParentNode): { box: ZoneBox; node: HTMLElement }[] {
   })
 }
 
+// Touch has no hover: a tap opens the tools of that one row, a tap anywhere else closes them.
+let toolsHost: HTMLElement | null = null
+let toolsId: string | null = null
+function tapRow(host: HTMLElement | null, id: string | null): void {
+  toolsId = toolsRowAfterTap(toolsId, id)
+  toolsHost?.classList.remove('tools-on')
+  toolsHost = toolsId ? host : null
+  toolsHost?.classList.add('tools-on')
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || (e.target as Element | null)?.closest('.row-tool')) return
+    const row = (e.target as Element | null)?.closest<HTMLElement>('.person-row') ?? null
+    tapRow(row, row?.dataset.personRow ?? null)
+  }, true)
+}
+
 export function personRow(p: Person, a: RowActions): HTMLElement {
   const host = el('div', { class: 'person-row', 'data-person-row': p.id })
   let lifted = false
@@ -52,8 +70,8 @@ export function personRow(p: Person, a: RowActions): HTMLElement {
     ])
     host.replaceChildren(
       open,
-      el('button', { class: 'row-tool', 'data-row-edit': p.id, 'aria-label': S.rowEdit, title: S.rowEdit, onclick: edit }, ['✎']),
-      el('button', { class: 'row-tool', 'data-row-archive': p.id, 'aria-label': S.rowArchive, title: S.rowArchive, onclick: () => a.archive(p) }, ['🗃']),
+      el('button', { class: 'row-tool row-tool-hover', 'data-row-edit': p.id, 'aria-label': S.rowEdit, title: S.rowEdit, onclick: edit }, ['✎']),
+      el('button', { class: 'row-tool row-tool-hover', 'data-row-archive': p.id, 'aria-label': S.rowArchive, title: S.rowArchive, onclick: () => a.archive(p) }, ['🗃']),
     )
   }
   const edit = (): void => {
@@ -67,8 +85,8 @@ export function personRow(p: Person, a: RowActions): HTMLElement {
     input.addEventListener('keydown', (e) => { const k = editKey(e.key); if (k) { e.preventDefault(); finish(k) } })
     host.replaceChildren(
       input,
-      el('button', { class: 'row-tool', 'data-row-accept': p.id, 'aria-label': S.rowAccept, title: S.rowAccept, onclick: () => finish('save') }, ['✓']),
-      el('button', { class: 'row-tool', 'data-row-cancel': p.id, 'aria-label': S.rowCancel, title: S.rowCancel, onclick: () => finish('cancel') }, ['✕']),
+      el('button', { class: 'row-tool ok-mark', 'data-row-accept': p.id, 'aria-label': S.rowAccept, title: S.rowAccept, onclick: () => finish('save') }, ['✓']),
+      el('button', { class: 'row-tool cancel-mark', 'data-row-cancel': p.id, 'aria-label': S.rowCancel, title: S.rowCancel, onclick: () => finish('cancel') }, ['✕']),
     )
     input.focus(); input.select()
   }
