@@ -63,8 +63,9 @@ describe('panel approve (wave 28)', () => {
   it('approving a parent (keys = [key]) leaves the loaded child unapproved and loaded', () => {
     const next = applyVerdicts(rows, ['a'], 'merge')
     expect(next.find((f) => f.key === 'a')).toMatchObject({ checked: true, verdict: 'merge' })
-    expect(next.find((f) => f.key === 'b')).toMatchObject({ checked: true, verdict: undefined })
-    expect(next.find((f) => f.key === 'c')).toMatchObject({ checked: true, verdict: undefined })
+    expect(next.find((f) => f.key === 'b')).toMatchObject({ checked: true })
+    expect(next.find((f) => f.key === 'c')).toMatchObject({ checked: true })
+    expect(next.filter((f) => f.verdict === 'merge').map((f) => f.key)).toEqual(['a'])
   })
   it('the needs-work reminder lists one {key,title} per row', () => {
     expect(remindItems([row('a'), row('b')])).toEqual([{ key: 'a', title: 'T-a' }, { key: 'b', title: 'T-b' }])
