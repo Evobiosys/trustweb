@@ -16,7 +16,7 @@ import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
 import { approveEach } from './dev_wave_press'
-import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, subtreeKeys, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
+import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, walkShown, withBox, applyStamp, applyStuck, autoApply, applyDue, needsWorkNote, focusStore, focusSplit, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode, mergedLabel, remindItems } from './dev_preview_rules'
 
 
 interface Preview {
@@ -25,7 +25,7 @@ interface Preview {
   assembled: { sha: string; at: string; error: string | null; restart?: boolean; set?: string[] } | null
   pending?: boolean
   compat?: Compat
-  pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean } | null
+  pr: { number: number; url: string; branch?: string; at?: string; sha?: string; merged?: boolean; head?: string; mergeCommit?: string } | null
   next?: { id: string; port: number }
   tested?: Tested | null
   session?: { id: string; path: string }
@@ -51,7 +51,7 @@ const CSS = `
 .twp .loadhead,.twp .remindhead{display:block;width:calc(100% - 20px);margin:2px 10px;text-align:left;background:none;color:#fff;text-decoration:underline;padding:3px 0}
 .twp .adv{margin-top:2px}.twp .adv summary{cursor:pointer;text-decoration:underline;color:#b7a8c9;padding:2px 0}
 @media (max-width:700px){.twp{max-height:calc(100dvh - 330px)}}
-.twp .remind{color:#ffc65c;font-weight:600}
+.twp .remindbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}.twp .remind{color:#ffc65c;font-weight:600}
 .twf-ok .big:disabled{background:#8a8f94;color:#eceeef;opacity:1}.twp header b{cursor:copy}
 .twp .chev{flex:none;width:12px;padding:0;background:none;color:#b7a8c9;font-size:10px;line-height:1;cursor:pointer}.twp .chev.leaf{visibility:hidden}.twp .hid{opacity:.6;font-style:italic}
 .twp .spin{width:9px;height:9px;border:2px solid #4fd7a0;border-right-color:transparent;border-radius:50%;animation:twp-spin .8s linear infinite;align-self:center;flex:none}@keyframes twp-spin{to{transform:rotate(360deg)}}
@@ -238,10 +238,16 @@ export function initDevPreview(): void {
     const loadFirst = v === 'merge' && !p!.features.find((x) => x.key === key)!.checked   // approve on an unticked row ticks it for the owner
     const base = v === 'merge' ? ensureLoaded(p!.features, key) : p!.features
     const next = pillPress(base, key, v)
-    const keys = next === 'needs-work' ? [key] : subtreeKeys(base, key)
+    const keys = [key]   // one row's press touches only that row, never its children or dependants
     individual.set(next === 'merge' ? [...new Set([...individual.get(), ...keys])] : individual.get().filter((k) => !keys.includes(k)))
     write(applyVerdicts(base, keys, next), async () => { if (loadFirst) await call('POST', '', { feature: key, checked: true }); let q: Preview | undefined; for (const k of keys) q = await call('POST', '/verdict', { feature: k, verdict: next }); return q! })
     if (loadFirst || v === 'needs-work') { wanted = true; applyLater() }
+  }
+  const remindLink = (r: { key: string; title: string }): HTMLElement => {
+    const b = h('button', { className: 'remindbtn', textContent: r.title, title: 'Uncheck this row' })
+    b.dataset.remindKey = r.key
+    b.addEventListener('click', () => load(r.key, false))
+    return b
   }
   const pressAll = (): Promise<void> => act(null, () => call('POST', '', { set: selectAll(p!.features, !allLoaded(p!.features)) }))
   const approveAll = (): Promise<void> => act(null, async () => {
@@ -348,7 +354,7 @@ export function initDevPreview(): void {
       void copy(noteText(p!.id, f), 'reference copied')
       glim = f.key; setTimeout(() => { glim = null; render() }, 900)
       if (shownVerdict(f) !== 'merge') press(f.key, 'merge')
-      else { individual.set([...new Set([...individual.get(), ...subtreeKeys(p!.features, f.key)])]); render() }   // approved by the registry before: the note is the owner's own press
+      else { individual.set([...new Set([...individual.get(), f.key])]); render() }   // approved by the registry before: the note is the owner's own press
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
     how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
@@ -397,11 +403,12 @@ export function initDevPreview(): void {
 
   /** A merged PR: the way on to the preview that carries the unshipped boxes, else "shipped". */
   function mergedPart(): HTMLElement {
-    if (p!.next) {
-      const to = h('a', { href: `http://127.0.0.1:${p!.next.port}/`, textContent: `Continue in ${p!.next.id} (port ${p!.next.port})` })
-      return h('div', { className: 'btns' }, to, ...(opening ? [staying(p!.next.id)] : []))
+    const m = mergedLabel(p!)
+    if ('next' in m) {
+      const to = h('a', { href: `http://127.0.0.1:${m.next.port}/`, textContent: `Continue in ${m.next.id} (port ${m.next.port})` })
+      return h('div', { className: 'btns' }, to, ...(opening ? [staying(m.next.id)] : []))
     }
-    return h('div', { className: 'btns' }, h('small', { textContent: `PR #${p!.pr!.number} shipped` }))
+    return h('div', { className: 'btns' }, h('small', { textContent: m.text }))
   }
 
   /** Clipboard API, else a textarea + execCommand('copy'), else the text in a selectable <pre> (the poll re-renders the panel, so it sits beside it). */
@@ -570,7 +577,7 @@ export function initDevPreview(): void {
         ...(flagged.length ? [h('div', { className: 'row flags' }, ...flagged.map(flagSwitch))] : []),
         ...(open ? [h('div', { className: 'btns hdr' }, approveAllBtn, all)] : []),
         ...(waiting.length ? [h('div', { className: 'row remind' }, remindHead, ...(remindOpen.get() ? [h('div', { textContent: waiting.map((f) => f.title).join(', ') })] : []))] : []),
-        ...(rejected.length ? [h('div', { className: 'row remind rej', textContent: `needs work: ${rejected.map((f) => f.title).join(', ')}` })] : []),
+        ...(rejected.length ? [h('div', { className: 'row remind rej' }, 'needs work: ', ...remindItems(rejected).flatMap((r, i) => [...(i ? [', '] : []), remindLink(r)]))] : []),
         h('div', { className: 'loadrow' }, loadHead, assembleNow),
         ...((open || query) && !fs ? allRows(sections(tree(visible(searchRows(shown, query)))).map((s) => ({ sec: h('div', { className: 'sec', textContent: REPO_LABEL[s.repo] }), rows: s.nodes.map((n) => row(n, shown)) }))) : []),
         ...(busy !== null && elapsed() > 90 ? [slow()] : []),

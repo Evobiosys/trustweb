@@ -130,6 +130,20 @@ export function signChallenge(identity: Identity, nonceB64u: string): string {
   return toB64u(sig)
 }
 
+/** Ed25519-signs arbitrary bytes with this identity's signing key; base64url. */
+export function signBytes(identity: Identity, bytes: Uint8Array): string {
+  return toB64u(ed25519.sign(bytes, identity.signing.secretKey))
+}
+
+/** True when `sigB64u` is a valid signature over `bytes` by the signing key inside `did`; false for any malformed input. */
+export function verifyDidSignature(did: string, bytes: Uint8Array, sigB64u: string): boolean {
+  try {
+    return ed25519.verify(fromB64u(sigB64u), bytes, resolveDidPeer(did).signingPublicKey)
+  } catch {
+    return false
+  }
+}
+
 /** On-disk shape for `db.ts`. Secret keys as base64url (alpha plaintext --
  *  same tradeoff did_identity.ts documents for its own on-disk format; a
  *  production build must move this behind a non-exportable key or an

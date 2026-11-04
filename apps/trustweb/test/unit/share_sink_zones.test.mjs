@@ -31,4 +31,9 @@ describe('share sink: zones', () => {
     expect(zoneOfPerson({ ring: Ring.Family, fields: {} })).toBe(Zone.Close)
     expect(zoneOfPerson({ ring: Ring.Family, fields: { [CLOSENESS_KEY]: Ring.Acquaintance } })).toBe(Zone.Acquaintance)
   })
+  it('the closest ring is the closest zone (wave 25), also for family at that closeness', () => {
+    expect(zoneOfPerson({ ring: Ring.Closest })).toBe(Zone.Closest)
+    expect(zoneOfPerson({ ring: Ring.Family, fields: { [CLOSENESS_KEY]: Ring.Closest } })).toBe(Zone.Closest)
+    for (const ring of Object.values(Ring)) expect(LADDER).toContain(zoneOfPerson({ ring }))
+  })
 })

@@ -74,3 +74,16 @@ export async function reloadFresh(d: ReloadDeps): Promise<void> {
   } catch { /* reload anyway */ }
   d.reload()
 }
+
+const RELOADED_KEY = 'trustweb.reloadedFor'
+
+/** True once per release id in this tab session (and marks it), so a failing reload can never loop. Blocked storage: never. */
+export function shouldReloadOnce(release: string, store: Pick<Storage, 'getItem' | 'setItem'>): boolean {
+  try {
+    if (store.getItem(RELOADED_KEY) === release) return false
+    store.setItem(RELOADED_KEY, release)
+    return true
+  } catch {
+    return false
+  }
+}
