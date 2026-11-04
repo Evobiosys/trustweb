@@ -230,6 +230,16 @@ textarea.field{resize:vertical; line-height:1.5}
 .person-row .tap-edit-input{flex:1; min-width:0; margin:0 0 8px}
 .row-tool{border:0; background:none; font:inherit; color:var(--ink-soft); text-decoration:underline; padding:8px 6px; margin:0 0 8px; cursor:pointer}
 .person-row.lifted{z-index:5; cursor:grabbing; touch-action:none; opacity:.85; box-shadow:0 4px 14px rgba(0,0,0,.25); border-radius:14px}
+.row-pick{display:flex; align-items:center; gap:10px; flex:1; min-width:0; background:var(--card); border-radius:14px; padding:10px 12px; margin:0 0 8px; cursor:pointer}
+.row-pick.on{outline:2px solid var(--electric,#3a6cf0)}
+.row-pick small{display:block}
+.row-tool:disabled{opacity:.4; text-decoration:none}
+/* The tool bar sticks to the bottom of the list's scroll area, which ends above the tab bar; it wraps, never scrolls sideways. */
+.select-bar{position:sticky; bottom:0; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:6px 8px; margin-top:8px; background:var(--card); box-shadow:0 -2px 10px rgba(0,0,0,.3); border-radius:12px; max-width:100%}
+.select-bar .field{width:auto; min-width:0; max-width:100%; padding:6px 8px; font-size:14px}
+.select-tagrow{display:flex; align-items:center; gap:4px; min-width:0; flex:1 1 12rem}
+.select-tagrow .field{flex:1; min-width:0}
+.select-count{flex:1 1 100%; font-size:13px; color:var(--ink-soft)}
 .people-zone.drop .people-zone-head{outline:3px solid var(--rc)}
 .map-name{background:none; padding:0; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .map-sug{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px}
