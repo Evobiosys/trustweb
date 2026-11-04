@@ -8,6 +8,7 @@ import { nameEdit } from './ring_hover'
 import { dragMovedTo, dropRing } from './row_edit'
 import type { ZoneBox } from './row_edit'
 import { webSlot } from './rings_layout'
+import { contextPress } from './context_press'
 import { dragStarts } from './web_view'
 import { editKey } from './tap_edit'
 import { S } from './strings'
@@ -18,6 +19,9 @@ export interface RowActions {
   rename(p: Person, name: string): void
   archive(p: Person): void
   move(p: Person, ring: Ring): void
+  /** Multi-select: set while the mode is on (a tap toggles the row, no edit, no drag); `pick` enters it from a right click or a long press. */
+  select?: { checked: boolean; toggle(): void }
+  pick(p: Person): void
 }
 
 const HOLD_MS = 300
@@ -35,6 +39,14 @@ export function personRow(p: Person, a: RowActions): HTMLElement {
   let lifted = false
   let swallow = false
   const show = (): void => {
+    if (a.select) {
+      const { checked, toggle } = a.select
+      host.replaceChildren(el('label', { class: 'row-pick' + (checked ? ' on' : '') }, [
+        el('input', { type: 'checkbox', 'data-row-check': p.id, checked, 'aria-label': p.name, onchange: toggle }),
+        el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
+      ]))
+      return
+    }
     const open = el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => { if (!swallow) a.open(p.id) } }, [
       el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
     ])
@@ -62,8 +74,9 @@ export function personRow(p: Person, a: RowActions): HTMLElement {
   }
   // The page still scrolls until the hold has lifted the row.
   host.addEventListener('touchmove', (e) => { if (lifted) e.preventDefault() }, { passive: false })
+  contextPress(host, () => { if (!a.select) a.pick(p) })
   host.addEventListener('pointerdown', (down) => {
-    if ((down.target as HTMLElement).closest('.row-tool, input') || (down.pointerType === 'mouse' && down.button !== 0)) return
+    if (a.select || (down.target as HTMLElement).closest('.row-tool, input') || (down.pointerType === 'mouse' && down.button !== 0)) return
     const touch = down.pointerType !== 'mouse'
     const root = host.closest('.people-list') ?? document
     let over: HTMLElement | null = null
