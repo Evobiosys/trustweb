@@ -1,4 +1,4 @@
-import { UPDATE_GAP_MS, UpdateResult, createUpdateCheck, isNewer, readRelease, reloadFresh } from '../../src/app_update.ts'
+import { UPDATE_GAP_MS, UpdateResult, createUpdateCheck, isNewer, readRelease, reloadFresh, shouldReloadOnce } from '../../src/app_update.ts'
 
 const SHA_A = 'a'.repeat(40)
 const SHA_B = 'b'.repeat(40)
@@ -102,5 +102,19 @@ describe('reloadFresh', () => {
     await reloadFresh({ reload: () => { n++ } })
     await reloadFresh({ caches: { keys: async () => { throw new Error('x') }, delete: async () => true }, reload: () => { n++ } })
     expect(n).toBe(2)
+  })
+})
+
+describe('shouldReloadOnce', () => {
+  const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v) } }
+  it('reloads once per release, then leaves the banner', () => {
+    const s = memory()
+    expect(shouldReloadOnce('abc', s)).toBe(true)
+    expect(shouldReloadOnce('abc', s)).toBe(false)
+    expect(shouldReloadOnce('def', s)).toBe(true)
+  })
+  it('never with blocked storage (no reload loop)', () => {
+    const blocked = { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } }
+    expect(shouldReloadOnce('abc', blocked)).toBe(false)
   })
 })
