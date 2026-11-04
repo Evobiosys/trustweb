@@ -1307,3 +1307,8 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .card-share-link .btn{text-decoration:underline}
 .person-share{margin-top:8px; overflow-wrap:anywhere; text-align:left}
 .person-share ul{margin:4px 0 4px 18px; padding:0}
+
+/* Wave 31 (zone-share-link): Settings > Sharing links; text buttons underlined, rows wrap at 360 px */
+.zone-link-new{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
+.zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
