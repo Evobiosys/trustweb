@@ -953,6 +953,8 @@ export interface AppState {
   people: Person[]
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
+  /** Wave 31 (zone_share_link.ts): the named links per zone, revoked ones kept. This phone only. Absent: none. */
+  zoneLinks?: import('./zone_share_link').ZoneLink[]
   /** Wave 27 (share page): the zone the Share page starts on (a share_sink Zone value). Absent: acquaintance. */
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
@@ -1004,6 +1006,8 @@ export interface AppState {
   tabOrder?: TabOrder
   /** Wave 24: the bottom row's screen ids, left to right (tab_row.ts resolveRow). Absent: the default five. Stays on this device, like tabOrder did. */
   tabRow?: string[]
+  /** Wave 31 (bottom_bar.ts): the configurable bottom row {order, hidden, primary}. Absent: the default. Syncs with the record. */
+  uiBar?: { order?: string[]; hidden?: string[]; primary?: string }
   /** Wave 27: the views pinned beside the eye (view_menu.ts ViewKey ids). Absent: none. */
   uiPins?: { views: string[]; /** Wave 28 (header_controls.ts): the buttons pinned beneath Settings: 'dnd', 'advanced', 'qr-only'. Absent: Do Not Disturb only. */ header?: string[] }
   /** Wave 28 (qr_modes.ts): offer the "profile" option on a person's QR page. Absent: off. */
