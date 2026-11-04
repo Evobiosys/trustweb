@@ -1113,6 +1113,10 @@ export interface AppState {
   demoOffered?: boolean
   /** Wave 11: the installed app offered notifications once (offerNotifications); the answer is notificationsOn. */
   notifOffered?: boolean
+  /** Wave 31 (features.ts): the version of the newest major feature the notification offer was shown for. */
+  notifFeatureSeen?: string
+  /** Wave 31: "Not now" on the empty-web import card; the card stays away on this phone. */
+  onbDismissed?: boolean
   /** Wave 11 (apk.ts): the Android shell's version this record was last opened by, when the update check last ran, and whether it runs. */
   apkVersion?: string
   apkCheckedAt?: number

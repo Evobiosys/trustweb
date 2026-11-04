@@ -369,6 +369,11 @@ button.share-chip-label{text-decoration:underline}
 .demo-friends .notice-actions,.demo-friends .hint-again{pointer-events:auto}
 /* Wave 16 (apk hint): a long title + two buttons: text on top, buttons in a row under it. */
 .demo-friends.stack{grid-template-columns:1fr}
+/* Wave 31: the notification offer is one line, never a band */
+.demo-friends.line{display:flex; align-items:center; flex-wrap:wrap; gap:4px 14px; padding:6px 34px 6px 12px; border-radius:12px; font-size:12.5px}
+.demo-friends.line span:empty{display:none}
+.demo-friends.line .notice-actions{flex-direction:row; gap:14px}
+.demo-friends.line b{font-size:12.5px}
 .demo-friends.stack .notice-actions{grid-column:1; grid-row:auto; flex-direction:row; flex-wrap:wrap; align-items:center; margin-top:6px}
 .demo-friends b{font-size:14.5px; grid-column:1}
 .demo-friends span{color:var(--ink-soft); grid-column:1}
@@ -1298,8 +1303,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-tools{display:flex; align-items:center; gap:8px}
 .zone-chip-row{display:flex; flex-direction:column; gap:4px; font-size:13px}
 @media (min-width:760px){
-  .zones-split{flex-direction:row}
-  .zone-side{flex:0 0 260px; max-height:none}
+  /* Wave 31: the sidebar floats over the left edge, so the rings stay centred on the screen whether it is open or not */
+  .zones-split{flex-direction:row; position:relative}
+  .zone-side{position:absolute; left:0; top:0; z-index:5; width:260px; max-height:100%}
 }
 .card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}

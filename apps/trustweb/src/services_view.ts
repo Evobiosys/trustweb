@@ -7,6 +7,7 @@ import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { Ring } from './model'
 import type { AppState } from './model'
+import { COMING_SOURCES, VERIFIED_SOURCES } from './import_sources'
 import { failRun, finishRun, IDLE_RUN, startRun, tickRun } from './import_run'
 import type { Run } from './import_run'
 import type { Pages } from './page_view'
@@ -109,6 +110,7 @@ export function servicesGroup(h: ServicesHooks): HTMLElement[] {
       input,
       el('button', { class: 'btn btn-ghost', 'data-svc-open': '1', onclick: () => input.click() }, [S.svcButton]),
       el('p', { class: 'meta' }, [S.svcHint, ' ', info(S.svcInfo)]),
+      el('p', { class: 'meta', 'data-import-sources': '' }, [S.svcVerified(VERIFIED_SOURCES.map((x) => x.label)), ' ', S.svcComing(COMING_SOURCES.map((x) => x.label))]),
       run.phase === 'reading' ? el('p', { class: 'meta', role: 'status', 'data-svc-reading': '1' }, [S.svcReading]) : null,
       run.phase === 'failed' ? el('p', { class: 'warn', 'data-svc-failed': '1' }, [run.error ?? S.svcReadFailed, ' ', el('button', { class: 'btn btn-ghost btn-sm', 'data-svc-retry': '1', onclick: () => input.click() }, [S.svcRetry])]) : null,
       plan && run.phase !== 'reading' ? summary(plan) : null,
