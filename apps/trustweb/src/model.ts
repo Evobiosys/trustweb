@@ -1214,6 +1214,18 @@ export interface AppState {
   features?: { events?: false; inventory?: false }
   /** Settings > Advanced > Your AI: the person's own model endpoint for drafting asks. Absent: drafting off. The key travels with the record. */
   advanced?: { ai?: AiEndpoint }
+  /** Wave 31, Ask your web: named source sets to narrow a search to. Absent: none. */
+  askSets?: AskSet[]
+  /** Wave 31, Ask your web: the "also search online" engine, https with {q} for the words. Absent: DuckDuckGo. */
+  askEngineUrl?: string
+}
+
+/** A named list of people (and tags) an ask can be narrowed to. */
+export interface AskSet {
+  id: string
+  name: string
+  personIds: string[]
+  tags: string[]
 }
 
 export interface AiEndpoint {

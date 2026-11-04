@@ -1327,6 +1327,12 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
 .zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
 
+/* Wave 31: Ask your web, matches in my web + online link; clickable = underlined, never a sideways scroll */
+.ask-web{min-width:0; overflow-wrap:anywhere}
+.ask-web .btn,.ask-web .chip{text-decoration:underline}
+.ask-web-list{margin:4px 0; padding-left:18px}
+.ask-set{display:grid; gap:6px; margin:8px 0}
+
 /* Wave 31 (shared-notes): outline blocks wrap on a 360 px screen; every button is underlined */
 .shared-notes{margin-top:8px; overflow-wrap:anywhere; text-align:left}
 .shared-notes .btn,.shared-notes .note-text{text-decoration:underline}
