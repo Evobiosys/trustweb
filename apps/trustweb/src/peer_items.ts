@@ -6,7 +6,7 @@
 import type { AppState } from './model'
 
 /** One thing we know a person has. `source`: "self" (I saw it) or "told by <name>". */
-export interface PeerItem { kind: 'peer_item'; personId: string; title: string; category: string; source: string; at: number }
+export interface PeerItem { kind: 'peer_item'; personId: string; title: string; category: string; source: string; at: number; /** Wave 31: guessed from a chat, never verified. */ inferred?: true }
 
 export const RECENT_DAYS = 30
 
@@ -18,10 +18,10 @@ export const peerItems = (rec: Pick<AppState, 'peerItems'>, personId: string): P
   (rec.peerItems ?? []).filter((i) => i.personId === personId).sort((a, b) => b.at - a.at)
 
 /** Adds a line about a person; an empty title adds nothing (null). */
-export function addPeerItem(rec: Pick<AppState, 'peerItems'>, personId: string, title: string, category: string, source: string, now: number): PeerItem | null {
+export function addPeerItem(rec: Pick<AppState, 'peerItems'>, personId: string, title: string, category: string, source: string, now: number, inferred = false): PeerItem | null {
   const t = title.trim()
   if (!t) return null
-  const item: PeerItem = { kind: 'peer_item', personId, title: t, category: category.trim(), source, at: now }
+  const item: PeerItem = { kind: 'peer_item', personId, title: t, category: category.trim(), source, at: now, ...(inferred ? { inferred: true as const } : {}) }
   rec.peerItems = [...(rec.peerItems ?? []), item]
   return item
 }

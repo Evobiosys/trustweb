@@ -9,6 +9,7 @@ import type { AppState } from './model'
 import { failRun, finishRun, IDLE_RUN, startRun } from './import_run'
 import type { Run } from './import_run'
 import { exportSteps, isZip, placeAll, resultOf, showOnboarding } from './onboarding_place'
+import { phoneMessageCount } from './phone_export'
 import type { Pages } from './page_view'
 import { commitPlan, planServices } from './services_import'
 import type { ServiceFile, ServicePlan } from './services_import'
@@ -47,7 +48,7 @@ export function onboardingCard(h: OnboardingHooks, redraw: () => void): HTMLElem
   if (!showOnboarding(h.state(), dismissed)) return null
   return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:8px;text-align:center;max-width:420px;margin:0 auto', 'data-onboard-card': '' }, [
     el('p', { class: 'empty' }, [S.onbEmpty]),
-    el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-whatsapp': '', onclick: () => openOnboarding(h) }, [S.onbImport]),
+    el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-whatsapp': '', 'data-wa-import': '', onclick: () => openOnboarding(h) }, [S.onbImport]),
     el('button', { class: 'btn btn-ghost', 'data-onboard-notnow': '', onclick: () => { dismissed = true; redraw() } }, [S.onbNotNow]),
   ])
 }
@@ -69,7 +70,7 @@ async function start(h: OnboardingHooks, list: File[]): Promise<void> {
     for (const f of texts) {
       const text = await f.text()
       files.push({ name: f.name, text })
-      messages += lines(text)
+      messages += text.trimStart().startsWith('{') ? phoneMessageCount(text) : lines(text)
       pct = Math.round((files.length / (texts.length + 1)) * 100)
       emit()
       await tick()
@@ -102,6 +103,9 @@ export function openOnboarding(h: OnboardingHooks): void {
   const steps = { android: S.onbStepsAndroid, iphone: S.onbStepsIphone, desktop: S.onbStepsDesktop }[exportSteps(navigator.userAgent)]
   const input = el('input', { type: 'file', multiple: true, accept: '.txt,.zip,text/*', hidden: true, 'data-onboard-file': '' }) as HTMLInputElement
   input.addEventListener('change', () => { const list = [...(input.files ?? [])]; input.value = ''; void start(h, list) })
+  // Wave 31: the JSON of the phone tool (trustweb-ops/phone) goes through the same start().
+  const phone = el('input', { type: 'file', accept: '.json,application/json', hidden: true, 'data-onboard-phone-file': '' }) as HTMLInputElement
+  phone.addEventListener('change', () => { const list = [...(phone.files ?? [])]; phone.value = ''; void start(h, list) })
   me ||= h.state().me.displayName
   const box = el('div', { 'data-onboard-page': '' })
   const draw = (): void => {
@@ -113,7 +117,9 @@ export function openOnboarding(h: OnboardingHooks): void {
       el('ol', { class: 'meta', 'data-onboard-steps': '' }, steps.map((t) => el('li', {}, [t]))),
       el('label', { class: 'meta' }, [S.onbMeLabel + ' ', el('input', { class: 'field', value: me, 'data-onboard-me': '', onchange: (e: Event) => { me = (e.target as HTMLInputElement).value.trim(); if (plan) { plan = planServices(h.state(), files, { me, now: Date.now() }); emit() } } })]),
       input,
+      phone,
       run.phase !== 'reading' && !r && !placed ? el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-choose': '', onclick: () => input.click() }, [S.onbChoose]) : null,
+      run.phase !== 'reading' && !r && !placed ? el('p', { class: 'meta' }, [el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', 'data-wa-import-phone': '', onclick: () => phone.click() }, [S.onbPhone]), ' ', S.onbPhoneHint]) : null,
       message ? el('p', { class: 'warn', 'data-onboard-message': '' }, [message]) : null,
       run.phase === 'reading' ? el('p', { class: 'meta', role: 'status', 'data-onboard-reading': String(pct) }, [S.onbReading(messages)]) : null,
       run.phase === 'failed' ? el('p', { class: 'warn', 'data-onboard-failed': '' }, [run.error ?? S.svcReadFailed, ' ', el('button', { class: 'btn btn-ghost btn-sm', style: 'text-decoration:underline', onclick: () => input.click() }, [S.svcRetry])]) : null,
