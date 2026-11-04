@@ -1322,6 +1322,11 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .bar-opt-acts{display:flex; gap:2px}
 .linkbtn{background:none; border:0; padding:4px; color:var(--violet); text-decoration:underline; cursor:pointer; font:inherit}
 
+/* Wave 31 (zone-share-link): Settings > Sharing links; text buttons underlined, rows wrap at 360 px */
+.zone-link-new{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
+.zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
+
 .feed-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center}
 .feed-chips .chip{text-decoration:underline}
 .feed-chips .btn{text-decoration:underline; margin-left:auto}
