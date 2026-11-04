@@ -11,6 +11,7 @@
 import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { flagSteps, readFlag } from './dev_navigate'
+import { walkList } from './dev_drive'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
@@ -190,9 +191,12 @@ export function initDevPreview(): void {
   }
 
   createDevice2(p.id, p.stockPort, mode, toast)
-  // Title tap / Walk: the feature's steps as the yellow card over the phone, always (a step may need the reviewer's own tap, which an
-  // automatic click-through gave up on); a feature without steps is only pointed at.
+  // Title tap / Walk: the feature's steps as the yellow card over the phone; wave 31: the card does each tap itself (ring first), a step it
+  // cannot reach waits for the reviewer's own tap; ? shows the steps for the reviewer to tap. A feature without steps is only pointed at.
   const walk = (f: PreviewFeature): void => { if (lit === f.key) lit = null; tap(f, true) }
+
+  // Walk and ? fold the panel while the steps run (wave 31: the driving Walk too, at 360 px the panel covers the app), unless the next step is the panel's flag switch.
+  const foldFor = (f: PreviewFeature): void => { if (steps.active() && !(f.flag && !flagOn(f)) && fold.press(collapsed())) tab.set(true) }
 
   function tap(f: PreviewFeature, walking = false): void {
     seen = tapSeen(seen, f.key, f.ref ?? '')
@@ -203,7 +207,7 @@ export function initDevPreview(): void {
     if (lit) {
       const plan = walking && f.steps?.length ? 'walk' : rowPlan(pointer.set(f.selector), f.steps)
       const own = flagSteps(f, flagOn(f))
-      if (plan === 'walk') void steps.open(own, f.context)
+      if (plan === 'walk') void steps.open(walkList(own, f.title, f.selector), f.context, true)
       else if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
       else if (plan === 'steps') void steps.open([...own, f.selector ? `${f.title} @ ${f.selector}` : f.title], f.context)
     }
@@ -319,7 +323,7 @@ export function initDevPreview(): void {
     const go = h('button', { className: 'mini walk', textContent: walking ? 'Stop' : 'Walk', disabled: !!walkBtn?.disabled && !walking, title: walkBtn?.title ?? '' })
     go.addEventListener('click', (e) => {
       e.stopPropagation()
-      if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f) }
+      if (walking) { lit = null; render() } else { if (!d.checked) load(f.key, true); walk(f); foldFor(f) }
     })
     const pill = (v: 'merge' | 'needs-work', text: string): HTMLButtonElement => {
       const b = h('button', { className: `pill ${v === 'merge' ? 'merge' : 'work'}` + (shownVerdict(f) === v ? ' on' : ''), textContent: text, disabled: loading() })
@@ -336,7 +340,7 @@ export function initDevPreview(): void {
       else { individual.set([...new Set([...individual.get(), f.key])]); render() }   // approved by the registry before: the note is the owner's own press
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
-    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); if (steps.active() && !(f.flag && !flagOn(f)) && fold.press(collapsed())) tab.set(true); render() })
+    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); foldFor(f); render() })
     const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))

@@ -1,6 +1,9 @@
-/** Dev-only step overlay: a yellow card over the phone walks through the steps to a feature, one at a time, the pointer's red ring on each step's element. Used by dev_preview.ts. */
+/** Dev-only step overlay: a yellow card over the phone walks through the steps to a feature, one at a time, the pointer's red ring on each step's element.
+ *  Wave 31: driving (Walk) the card also does each step itself, ring first, then the hand's tap (dev_walk.ts); ? leaves the taps to the reviewer. Used by dev_preview.ts. */
 import type { Pointer } from './dev_pointer'
-import { appScreen, appView, navNote, navPlan, quickTap, runNav } from './dev_navigate'
+import { appScreen, appView, navNote, navPlan, quickTap, runNav, waitVisible, type NavTap } from './dev_navigate'
+import { driveNext, stepMove } from './dev_drive'
+import { createHand } from './dev_walk'
 import { clampCard, parseStep, stepCardPlace, stepCardPosStore } from './dev_preview_rules'
 
 const CSS = `
@@ -10,8 +13,9 @@ const CSS = `
 
 export interface Steps {
   /** Show `steps` one at a time (the last one is the feature itself); replaces an open overlay. A `context` (the row's view) is navigated to
-   *  first, at once; a navigation tap missing on this build makes the card's first line say where to go. */
-  open(steps: string[], context?: string): Promise<void>
+   *  first, at once; a navigation tap missing on this build makes the card's first line say where to go. `drive` (Walk): the card taps every
+   *  step but the last itself, Next does the current step now, Back goes one back and pauses. */
+  open(steps: string[], context?: string, drive?: boolean): Promise<void>
   close(): void
   active(): boolean
   /** The pointer's target of the current step appeared or went away. */
@@ -29,6 +33,13 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   let note = ''
   let opened = 0
   const saved = stepCardPosStore(localStorage)
+  const hand = createHand()
+  let ctx: string | undefined
+  let driving = false     // a Walk (not ?): the card does the taps
+  let auto = false        // the drive goes on by itself (Back and a stuck step pause it)
+  let busy = false        // the drive loop runs
+  let tapping = false     // our own click: not the reviewer's tap
+  let skip: (() => void) | null = null   // Next during the pause between two steps
 
   const button = (text: string, onclick: () => void, className = '', disabled = false): HTMLButtonElement =>
     Object.assign(document.createElement('button'), { textContent: text, onclick, className, disabled })
@@ -52,7 +63,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     const text = last && here ? `👣 Here it is: ${list[at].text}` : `👣 Step ${at + 1} of ${list.length}: ${list[at].text}`
     card = document.body.appendChild(Object.assign(document.createElement('div'), { className: 'twp-step' }))
     const row = document.createElement('div')
-    row.append(button('Back', () => { go(at - 1) }, '', at === 0), ...(last ? [] : [button('Next', () => { go(at + 1) })]), button('Done', onDone, 'alt'))
+    row.append(button('Back', back, '', at === 0), ...(last ? [] : [button('Next', next)]), button('Done', onDone, 'alt'))
     const handle = Object.assign(document.createElement('span'), { className: 'txt', textContent: text, title: 'Drag to move · double-click puts it back at the bottom' })
     handle.addEventListener('pointerdown', (down) => {
       const box = card!.getBoundingClientRect()
@@ -79,15 +90,70 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
     draw()
   }
 
+  function back(): void {
+    if (driving) { const s = driveNext({ at, auto }, 'back', list.length); auto = s.auto; skip = null; note = ''; go(s.at) } else go(at - 1)
+  }
+  function next(): void {
+    if (!driving) { go(at + 1); return }
+    auto = driveNext({ at, auto }, 'next', list.length).auto
+    if (skip) skip(); else void drive(opened)
+  }
+  const pause = (ms: number): Promise<void> => new Promise((done) => {
+    const t = setTimeout(() => { skip = null; done() }, ms)
+    skip = () => { clearTimeout(t); skip = null; done() }
+  })
+
+  /** One tap of the hand on `selector`, the red ring on it first. */
+  async function handTap(selector: string, text: string, me: number): Promise<boolean> {
+    const el = await waitVisible(selector, 1500)
+    if (!el || me !== opened) return false
+    pointer.set(selector)
+    tapping = true
+    try { await hand.tap(el, text) } finally { tapping = false }
+    return me === opened
+  }
+  const navTap = (me: number) => (t: NavTap): Promise<boolean> => handTap(t.selector, '', me)
+
+  /** Walk: do the steps from `at` on, each one ringed and then tapped; the last one is only ringed ("Here it is"). */
+  async function drive(me: number): Promise<void> {
+    if (busy) return
+    busy = true
+    try {
+      while (me === opened && on && auto && at < list.length - 1) {
+        go(at)
+        const step = list[at]
+        let navTried = false
+        for (;;) {
+          const el = step.selector ? await waitVisible(step.selector, navTried ? 4000 : 2500) : null
+          if (me !== opened) return
+          const m = stepMove(step, !!el, navTried, navPlan(ctx, appScreen(), appView()), ctx)
+          if (m.kind === 'tap') { note = ''; break }
+          if (m.kind === 'nav') { navTried = true; note = ''; draw(); await runNav({ taps: m.taps, path: '' }, navTap(me)); if (me !== opened) return; continue }
+          auto = driveNext({ at, auto }, 'stuck', list.length).auto
+          if (m.kind === 'missing') { note = m.note; here = pointer.set(m.ring); draw() }
+          return   // a step without a target waits for Next; a missing one for the reviewer
+        }
+        go(at)
+        await pause(300)
+        if (me !== opened || !auto) return
+        const i = at
+        if (!(await handTap(step.selector!, step.text, me)) || !auto || at !== i) return   // Back while the hand moved: stay there
+        go(driveNext({ at, auto }, 'done', list.length).at)
+        await pause(900)
+      }
+    } finally { busy = false; if (me === opened && (!on || at === list.length - 1)) hand.hide() }
+  }
+
   // A tap on the current step's element moves to the next step (capture: before the app's own handler changes the view).
   const follow = (e: MouseEvent): void => {
     const sel = list[at].selector
-    if (sel && at < list.length - 1 && (e.target as Element).closest(sel)) go(at + 1)
+    if (!tapping && sel && at < list.length - 1 && (e.target as Element).closest(sel)) { note = ''; go(at + 1) }
   }
   const replace = (): void => { place() }
 
   function close(): void {
     on = false; opened++
+    skip?.(); hand.hide()
     card?.remove(); card = null
     document.removeEventListener('click', follow, true)
     window.removeEventListener('resize', replace)
@@ -95,21 +161,24 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   }
 
   return {
-    async open(steps, context) {
+    async open(steps, context, walk = false) {
       close()
       const me = ++opened
       list = steps.map(parseStep)
       on = true
       note = ''
+      ctx = context
+      driving = auto = walk
       if (context) {
         const plan = navPlan(context, appScreen(), appView())
-        if (!(await runNav(plan, quickTap))) note = navNote(plan)
+        if (!(await runNav(plan, driving ? navTap(me) : quickTap))) note = navNote(plan)
         if (me !== opened || !on) return
       }
       document.addEventListener('click', follow, true)
       window.addEventListener('resize', replace)
       document.addEventListener('scroll', replace, true)
       go(0)
+      if (driving) void drive(me)
     },
     close,
     active: () => on,
