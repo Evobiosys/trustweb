@@ -106,6 +106,7 @@ import { disclosureGlyph } from './disclosure'
 import { LAYOUT_KEY, type Layout, isPhone, pickLayout } from './layout_pick'
 import type { ViewKey, WebView } from './view_menu'
 import { firstChatNotice } from './notify_first'
+import { FEATURES, latestFeature, notifSeenOf, shouldOfferNotifications } from './features'
 import type { ChatBook } from './chat'
 import { bindRe, makeRe } from './chat_re'
 import type { ChatRe } from './chat_re'
@@ -151,7 +152,7 @@ import { createBackupView } from './backup_view'
 import type { BackupView } from './backup_view'
 import { RecordOrigin, eventForDraft, recordModeFor } from './record_origin'
 import { aboutGroup } from './about'
-import { UpdateResult, createUpdateCheck, reloadFresh } from './app_update'
+import { createUpdateCheck, reloadFresh, shouldReloadOnce } from './app_update'
 import { devicesSectionChildren } from './devices_section'
 import { linkButton, openLinkChange } from './link_change_view'
 import { devEventsFile, mergeDevEvents, pushDevEvents } from './dev_events'
@@ -882,7 +883,7 @@ const sheet = el('div', { class: 'sheet', role: 'dialog', inert: true })
 /** Wave 25: lists and tools open as a page above the web (Back = browser Back), never as a sheet. */
 const pages = createPages(phone)
 /** Wave 30: Trust Hub onboarding from a WhatsApp export (empty-web card, import page, running notice). */
-const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone }
+const onboardHooks: OnboardingHooks = { state: st, save, toast: (msg) => toast(msg), changed: () => render(), pages, host: phone, more: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }
 mountOnboardingNotice(onboardHooks)
 /** Wave 27: Settings > Sovereign Switch (export everything, be forgotten). */
 const sovereign = createSovereignView({
@@ -1460,7 +1461,7 @@ const friendsFade = fadeHost(friendsEl, () => { friendsEl.hidden = true })
 function hideNotice(): void { friendsFade.close() }
 /** A small card under the header: non-blocking, only its own buttons take taps. */
 function showNotice(title: string, body: string, actions: HTMLElement[], autoHideMs?: number): void {
-  friendsEl.classList.remove('stack')
+  friendsEl.classList.remove('stack', 'line')
   friendsEl.replaceChildren(
     el('b', {}, [title]),
     el('span', {}, [body]),
@@ -1536,16 +1537,18 @@ const isPhoneWidth = (): boolean => window.matchMedia('(max-width: 960px)').matc
  * person went on to do (Settings can still add it).
  */
 /**
- * Wave 11: the installed app (APK or home-screen PWA) asks once, on its first open, whether to turn notifications on.
- * The browser's permission prompt follows the tap (the TWA relays it to Android's own dialog). Not in a browser tab:
- * there Settings > Notifications is the place.
+ * Wave 11: the installed app (APK or home-screen PWA) asks whether to turn notifications on; wave 31 (features.ts): only when a major
+ * new feature shipped since the last time, as one small line. The browser's permission prompt follows the tap (the TWA relays it to
+ * Android's own dialog). Not in a browser tab: there Settings > Notifications is the place.
  */
 function offerNotifications(): void {
   const s = state
-  if (!s || solo || s.notifOffered || s.notificationsOn || !installedHere() || (typeof Notification === 'undefined' && !nativePushAvailable())) return
-  if (!nativeApp && Notification.permission === 'denied') { s.notifOffered = true; save(); return }
+  const latest = latestFeature(FEATURES)
+  if (!s || solo || !latest || s.notificationsOn || !shouldOfferNotifications(notifSeenOf(s), FEATURES) || !installedHere() || (typeof Notification === 'undefined' && !nativePushAvailable())) return
+  if (!nativeApp && Notification.permission === 'denied') { s.notifOffered = true; s.notifFeatureSeen = latest.version; save(); return }
   const answer = async (yes: boolean): Promise<void> => {
     st().notifOffered = true
+    st().notifFeatureSeen = latest.version
     save()
     hideNotice()
     if (!yes) return
@@ -1555,10 +1558,11 @@ function offerNotifications(): void {
     await refreshPush()
     toast(S.notifOnTitle)
   }
-  showNotice(S.notifOfferTitle, S.notifOfferBody, [
-    el('button', { class: 'btn btn-electric btn-sm', 'data-notif-offer': 'yes', onclick: () => void answer(true) }, [S.notifOfferYes]),
-    el('button', { class: 'btn btn-ghost btn-sm', 'data-notif-offer': 'no', onclick: () => void answer(false) }, [S.notifOfferNo]),
+  showNotice(S.notifOfferTitle, '', [
+    el('button', { class: 'notice-dismiss', 'data-notif-offer': 'yes', onclick: () => void answer(true) }, [S.notifOfferYes]),
+    el('button', { class: 'notice-dismiss', 'data-notif-offer': 'no', onclick: () => void answer(false) }, [S.notifOfferNo]),
   ])
+  friendsEl.classList.add('line')
 }
 
 /** Wave 11 (apk.ts): inside the APK, once per six hours, offer a newer shell; the card waits until no other card is up. */
@@ -6363,27 +6367,17 @@ const updates = createUpdateCheck({
     if (!r.ok) throw new Error(String(r.status))
     return r.json()
   },
-  onNewer: () => { updateBanner.hidden = false },
+  // A newer build: reload once per release (at once, unless a recording runs); then the banner is the fallback.
+  onNewer: (info) => { if (recorder.live || !shouldReloadOnce(info.release, sessionStorage)) updateBanner.hidden = false; else void reloadNow() },
 })
 const reloadNow = (): Promise<void> => reloadFresh({ caches: 'caches' in window ? window.caches : undefined, reload: () => location.reload() })
 void updates.auto()
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void updates.auto() })
 
-/** Settings: the build's version and date, and "Check for updates". */
+/** Settings: the build's version and date. No update button: the app updates itself on load (reload once on a new release). */
 function updateRow(): HTMLElement {
-  const status = el('p', { class: 'meta', role: 'status', 'data-update-status': '1' })
   const builtAt = typeof __TW_BUILT_AT__ === 'string' && __TW_BUILT_AT__ ? new Date(__TW_BUILT_AT__).toLocaleString() : ''
-  const button = el('button', {
-    class: 'btn btn-ghost', 'data-check-updates': '1',
-    onclick: async () => {
-      status.textContent = S.updChecking
-      const r = await updates.check()
-      status.textContent = r === UpdateResult.Current ? S.updUpToDate : r === UpdateResult.Newer ? S.updNewer : S.updFailed
-      status.dataset.result = r
-      if (r === UpdateResult.Newer) status.append(' ', el('button', { class: 'btn btn-electric btn-sm', 'data-update-reload': '1', onclick: () => void reloadNow() }, [S.updReload]))
-    },
-  }, [S.updCheck])
-  return el('div', { 'data-update-row': '1' }, [builtAt ? el('p', { class: 'meta' }, [S.updBuilt(builtAt)]) : null, button, status])
+  return el('div', { 'data-update-row': '1' }, [builtAt ? el('p', { class: 'meta' }, [S.updBuilt(builtAt)]) : null])
 }
 
 // ---------------------------------------------------------------------------
