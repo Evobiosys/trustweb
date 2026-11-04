@@ -6,8 +6,18 @@ describe('header_controls', () => {
   it('orders search, views, pins, QR, settings left to right on web, events and inventory', () => {
     for (const s of ['web', 'events', 'inventory']) expect(headerControls(s)).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
   })
-  it('puts the eye left of the QR left of the gear on the People page, which has its own search', () => {
-    expect(headerControls('people')).toEqual(['views', 'pins', 'qr', 'settings'])
+  it('gives People the same search as every first-level screen (wave 30)', () => {
+    expect(headerControls('people')).toEqual(['search', 'views', 'pins', 'qr', 'settings'])
+  })
+  it('puts search first, then views or the chat switch, then QR, then settings on every first-level screen', () => {
+    for (const s of ['web', 'chat', 'people', 'events', 'inventory']) {
+      const c = headerControls(s)
+      const at = (k) => c.indexOf(k)
+      expect(at('search')).toBe(0)
+      expect(at('views') > -1 || at('switch') > -1).toBe(true)
+      expect(Math.max(at('views'), at('switch'))).toBeLessThan(at('qr'))
+      expect(at('qr')).toBeLessThan(at('settings'))
+    }
   })
   it('gives Chat no views (expand) button but the messenger switch', () => {
     expect(headerControls('chat')).toEqual(['search', 'switch', 'pins', 'qr', 'settings'])
