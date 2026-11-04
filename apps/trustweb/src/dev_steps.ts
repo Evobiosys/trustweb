@@ -1,5 +1,6 @@
 /** Dev-only step overlay: a yellow card over the phone walks through the steps to a feature, one at a time, the pointer's red ring on each step's element. Used by dev_preview.ts. */
 import type { Pointer } from './dev_pointer'
+import { appScreen, appView, navNote, navPlan, quickTap, runNav } from './dev_navigate'
 import { clampCard, parseStep, stepCardPlace, stepCardPosStore } from './dev_preview_rules'
 
 const CSS = `
@@ -8,8 +9,9 @@ const CSS = `
 .twp-step .txt{cursor:move;touch-action:none;user-select:none}.twp-step button:disabled{opacity:.4;cursor:default}.twp-step button.alt{background:none;color:#241b2e;border:1px solid #241b2e;margin-left:auto}`
 
 export interface Steps {
-  /** Show `steps` one at a time (the last one is the feature itself); replaces an open overlay. */
-  open(steps: string[]): void
+  /** Show `steps` one at a time (the last one is the feature itself); replaces an open overlay. A `context` (the row's view) is navigated to
+   *  first, at once; a navigation tap missing on this build makes the card's first line say where to go. */
+  open(steps: string[], context?: string): Promise<void>
   close(): void
   active(): boolean
   /** The pointer's target of the current step appeared or went away. */
@@ -24,6 +26,8 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   let here = false
   let card: HTMLElement | null = null
   let on = false
+  let note = ''
+  let opened = 0
   const saved = stepCardPosStore(localStorage)
 
   const button = (text: string, onclick: () => void, className = '', disabled = false): HTMLButtonElement =>
@@ -65,7 +69,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
       }, { once: true })
     })
     handle.addEventListener('dblclick', () => { saved.clear(); place() })
-    card.append(handle, row)
+    card.append(...(note ? [Object.assign(document.createElement('span'), { textContent: note })] : []), handle, row)
     place()
   }
 
@@ -83,7 +87,7 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   const replace = (): void => { place() }
 
   function close(): void {
-    on = false
+    on = false; opened++
     card?.remove(); card = null
     document.removeEventListener('click', follow, true)
     window.removeEventListener('resize', replace)
@@ -91,10 +95,17 @@ export function createSteps(pointer: Pointer, onDone: () => void): Steps {
   }
 
   return {
-    open(steps) {
+    async open(steps, context) {
       close()
+      const me = ++opened
       list = steps.map(parseStep)
       on = true
+      note = ''
+      if (context) {
+        const plan = navPlan(context, appScreen(), appView())
+        if (!(await runNav(plan, quickTap))) note = navNote(plan)
+        if (me !== opened || !on) return
+      }
       document.addEventListener('click', follow, true)
       window.addEventListener('resize', replace)
       document.addEventListener('scroll', replace, true)
