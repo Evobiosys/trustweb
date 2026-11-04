@@ -4,7 +4,7 @@ import { el } from '../../../../demo/src/ui/dom'
 import { nativeApp } from '../../native_app'
 import { S } from '../../strings'
 import type { ExtHooks, MessengerSource } from '../registry'
-import { createWindowOpener } from './window'
+import { WA_URL, createWindowOpener } from './window'
 
 let opener: ReturnType<typeof createWindowOpener> | undefined
 /** Built on first use: module load must not touch `localStorage` (absent outside a browser). */
@@ -36,12 +36,18 @@ export function createWhatsApp(h: ExtHooks): MessengerSource {
   const phone = onPhone()
   function setup(): void {
     const blocked = el('p', { class: 'meta', 'data-wa-blocked': '', hidden: true }, [S.whatsapp.blocked])
+    const hint = el('p', { class: 'meta', 'data-wa-hint': '', hidden: true }, [S.whatsapp.besideHint])
     const go = phone
-      ? el('a', { class: 'btn', href: 'https://wa.me/', target: '_blank', rel: 'noopener', 'data-wa-open': '' }, [S.whatsapp.openPhone])
-      : el('button', { class: 'btn', 'data-wa-open': '', onclick: () => { blocked.hidden = windowOpener().open() !== 'blocked' } }, [S.whatsapp.open])
+      ? [el('a', { class: 'btn', href: 'https://wa.me/', target: '_blank', rel: 'noopener', 'data-wa-open': '' }, [S.whatsapp.openPhone])]
+      : [
+          // noopener makes window.open return null, so a blocked tab cannot be told apart; the browser shows its own notice.
+          el('button', { class: 'btn', 'data-wa-tab': '', onclick: () => { window.open(WA_URL, '_blank', 'noopener') } }, [S.whatsapp.open]),
+          el('button', { class: 'btn btn-sm', 'data-wa-open': '', onclick: () => { const r = windowOpener().open(); blocked.hidden = r !== 'blocked'; hint.hidden = r === 'blocked' } }, [S.whatsapp.openBeside]),
+        ]
     h.page(S.whatsapp.setupTitle, [
-      go,
+      ...go,
       blocked,
+      hint,
       el('details', { class: 'info-hint', 'data-wa-info': '' }, [el('summary', {}, [S.whatsapp.info]), el('p', { class: 'meta' }, [phone ? S.whatsapp.infoPhone : S.whatsapp.infoText])]),
     ], 'whatsapp-window')
   }

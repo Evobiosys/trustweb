@@ -15,6 +15,10 @@ export const besideGeometry = (h: HostWindow): Geometry => ({ left: h.screenX + 
 
 export const featuresString = (g: Geometry): string => `popup=yes,left=${g.left},top=${g.top},width=${g.width},height=${g.height}`
 
+/** Wave 29: 'tab' = a normal new tab of this window (no popup features); 'beside' = the own window at `g`. */
+export type OpenMode = 'tab' | 'beside'
+export const windowFeatures = (mode: OpenMode, g: Geometry): string => (mode === 'tab' ? 'noopener' : featuresString(g))
+
 export function loadGeometry(store: Store): Geometry | null {
   try {
     const g = JSON.parse(store.getItem(WA_KEY) ?? 'null') as Partial<Geometry> | null
@@ -43,7 +47,7 @@ export function createWindowOpener(d: OpenerDeps): { open: (url?: string) => 'op
         return 'reused'
       }
       const g = loadGeometry(d.store) ?? besideGeometry(d.host())
-      win = d.open(url ?? WA_URL, WA_NAME, featuresString(g))
+      win = d.open(url ?? WA_URL, WA_NAME, windowFeatures('beside', g))
       if (!win) return 'blocked'
       saveGeometry(d.store, g)
       return 'opened'
