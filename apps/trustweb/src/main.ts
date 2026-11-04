@@ -34,6 +34,8 @@ import { renderQr } from '../../demo/src/ui/qr'
 import { createShortLinker } from './short_link'
 import type { ShortLinker } from './short_link'
 import { createLinkChooser } from './short_link_view'
+import { aliasUrl, ensureOwnAlias, registerAlias } from './short_alias'
+import { createAliasLine } from './short_alias_view'
 import { canRegister, createConnectKeeper, readConnectRecord } from './connect_code'
 import { createNamesSync } from './names_sync'
 import { sendCapRequest } from './name_cap_request'
@@ -5225,6 +5227,31 @@ function namesSync(): NamesSync {
   return namesSyncer
 }
 
+/** The "Short link" line of Meet (short_alias.ts): the alias is made once per identity, kept in the record, and told to the host (once per visit) with the connect code's secret. */
+function ownAliasLine(): HTMLElement {
+  const line = createAliasLine(copyLink)
+  const did = st().identity?.did
+  if (!did || !connectEligible()) return line.el
+  const made = ensureOwnAlias(st().aliases ?? {}, did, Date.now())
+  if (made.created) { st().aliases = made.aliases; save() }
+  const show = (): void => line.set(aliasUrl(new URL(SERVER_ORIGIN).host, made.token), !!st().aliases?.[made.token]?.registeredAt)
+  show()
+  const record = readConnectRecord(st().connectCode)
+  const entry = st().aliases?.[made.token]
+  if (record && entry && !aliasAsked.has(made.token)) {
+    aliasAsked.add(made.token)
+    void registerAlias({ origin: SERVER_ORIGIN, fetch: (input, init) => fetch(input, init), now: () => Date.now() }, record, made.token, entry).then((ok) => {
+      if (!ok) { aliasAsked.delete(made.token); return }
+      entry.registeredAt = Date.now()
+      save()
+      show()
+    })
+  }
+  return line.el
+}
+/** Tokens already told to the host this visit. */
+const aliasAsked = new Set<string>()
+
 /** Only this phone's own personal account asks for a code: not a demo phone, a demo account's tab, or an embedded frame. */
 function connectEligible(): boolean {
   return !!state && !state.testOf && deviceSyncEligible()
@@ -5391,6 +5418,7 @@ function meetTrustWebPage(): HTMLElement {
     inviteBtn,
     inviteCount,
     view.el,
+    ownAliasLine(),
     advanced.el,
     el('h4', { class: 'eyebrow' }, [S.meetWaysTitle]),
     el('p', { class: 'meta', 'data-ways': 'now' }, [S.meetWaysNow]),

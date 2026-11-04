@@ -19,6 +19,7 @@ import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
 import type { ConnectRecord } from './connect_code'
+import type { Aliases } from './short_alias'
 import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
 import type { ShareSettings } from './contact_share'
@@ -966,6 +967,8 @@ export interface AppState {
   wantsToConnect?: WantsToConnect[]
   me: Me
   identity?: SerializedIdentityV1
+  /** Wave 32 (short_alias.ts): host-scoped short links, token -> {did, createdAt, succession?, registeredAt?}. Absent: none made yet. */
+  aliases?: Aliases
   people: Person[]
   /** Wave 27: the share lines (share, revoke, retract, agree), in order; the scope tuples live in the share sink. Absent: none yet. */
   shares?: import('./share_sink/share_lines').ShareLine[]
