@@ -144,14 +144,14 @@ async function cappedText(res: Response): Promise<string | null> {
   return new TextDecoder().decode(all)
 }
 
-async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
+async function getText(url: string, f: FetchFn, accept: string): Promise<string | FetchProblem> {
   let res: Response
   // A plain controller, not AbortSignal.timeout(): that one is missing on iOS before 16.
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS)
   try {
     // No cookies, no referrer, no redirect to somewhere the person did not type (review-app-b).
-    res = await f(url, { headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: ctl.signal })
+    res = await f(url, { headers: { Accept: accept }, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: ctl.signal })
   } catch {
     clearTimeout(timer)
     return FetchProblem.Unreachable
@@ -161,7 +161,7 @@ async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem>
     if (res.status === 404) return FetchProblem.NotFound
     if (!res.ok) return FetchProblem.Unreachable
     const text = await cappedText(res)
-    return text === null ? FetchProblem.Malformed : JSON.parse(text) as unknown
+    return text === null ? FetchProblem.Malformed : text
   } catch {
     return FetchProblem.Malformed
   } finally {
@@ -169,6 +169,15 @@ async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem>
     clearTimeout(timer)
   }
 }
+
+async function getJson(url: string, f: FetchFn): Promise<unknown | FetchProblem> {
+  const text = await getText(url, f, 'application/json')
+  if (isProblem(text)) return text
+  try { return JSON.parse(text) as unknown } catch { return FetchProblem.Malformed }
+}
+
+/** A public feed (RSS or JSON Feed) as text, or why not; same limits as the API reads. */
+export const fetchFeedText = (url: string, f: FetchFn): Promise<string | FetchProblem> => getText(url, f, 'application/rss+xml, application/feed+json, application/json, */*;q=0.1')
 
 export const isProblem = (v: unknown): v is FetchProblem => typeof v === 'string' && (Object.values(FetchProblem) as string[]).includes(v)
 

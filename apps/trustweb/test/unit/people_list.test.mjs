@@ -60,4 +60,9 @@ describe('people list by trust zone', () => {
     const g = peopleByZone({ people }, 'dora')
     expect(g.map((x) => [x.ring, x.people.map((y) => y.id)])).toEqual([[Ring.Intending, ['d']]])
   })
+  it('an archived person (ring none) is listed nowhere, pinned or not', () => {
+    const gone = p('z', 'Zed', Ring.None, 1 * DAY, { pinned: true })
+    expect(peopleByZone({ people: [...people, gone] }, '').flatMap((x) => x.people.map((y) => y.id))).not.toContain('z')
+    expect(pinnedPeople({ people: [gone] }, '').map((y) => y.id)).toEqual([])
+  })
 })
