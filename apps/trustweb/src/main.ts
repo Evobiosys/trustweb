@@ -122,6 +122,7 @@ import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
 import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
+import type { RowEdit } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { personImageOk } from './person_image'
 import { migrate } from './schema_version'
@@ -203,6 +204,7 @@ import { pinButton, restList, smallCard, tagFilterChip, zoneTagsRow } from './me
 import { kindKey, visibleVia } from './zone_visibility'
 import { addZoneTag, removeZoneTag, suggestZoneTags, zoneTagIds } from './zone_tags'
 import { communityOf, isArchived, zoneFor } from './trustzones'
+import { archivedPeopleView } from './archived_people_view'
 import { zoneSidebar } from './trustzones_view'
 import { ENGAGEMENT_DEFAULT_DAYS, dismissReleases, engagementDays, ensureBaseline, expiringSoon, localDay, noticeDue, parseDays, soonNames, undoAllReleases, undoOffered, undoRelease } from './engagement'
 import { createFeedView } from './feed_view'
@@ -1086,6 +1088,9 @@ function openPeople(query = ''): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+/** Wave 30: what a People / Map row may do to the record (inline name edit, archive, drag to another zone); a tap on the toast undoes. */
+const rowEdit: RowEdit = { save, place: (id, ring) => placePerson(id, ring, true), toast: (msg, undo) => toast(msg, { onClick: undo }) }
+
 function peopleSearchField(): HTMLElement {
   const input = el('input', {
     class: 'field people-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-people-search': '', value: peopleQuery(),
@@ -1100,7 +1105,7 @@ function screenPeople(): Node[] {
     header(S.peopleTitle, { back: () => history.back() }),
     ...(peopleSearchOpen ? [peopleSearchField()] : []),
     el('div', { class: 'scroll pad' }, [
-      peopleListBody(st, openCardPage, addPersonSheet),
+      peopleListBody(st, openCardPage, addPersonSheet, undefined, rowEdit),
     ]),
   ]
 }
@@ -2535,7 +2540,7 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra, rowEdit) } })])
     : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
@@ -6070,6 +6075,7 @@ function settingsSheet(): void {
     web: [
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
+      archivedPeopleView(s.people, () => { save(); render(); settingsSheet() }),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),

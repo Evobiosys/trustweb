@@ -6,6 +6,15 @@ import { Ring } from './model'
 import type { AppState, Person } from './model'
 import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
+import { personRow } from './people_row_view'
+import { archivePerson, restorePerson } from './archived_people'
+
+/** What the list needs from main.ts to edit a row: persist, move a person to a ring (the placePerson path), and a toast whose tap undoes. */
+export interface RowEdit {
+  save(): void
+  place(id: string, ring: Ring): void
+  toast(msg: string, undo: () => void): void
+}
 
 let query = ''
 let redraw: () => void = () => undefined
@@ -26,11 +35,25 @@ export function setPeopleQuery(q: string): void {
   redraw()
 }
 
-export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, rowExtra?: (p: Person) => Node[]): HTMLElement {
+export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, rowExtra?: (p: Person) => Node[], edit?: RowEdit): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
-  const open = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
+  const plain = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
     el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
   ])
+  // Wave 30: with `edit` every row gets the pencil, the archive box and the drag; the Map listens for 'people-changed' to redraw its dots.
+  const changed = (): void => { draw(); groups.dispatchEvent(new CustomEvent('people-changed', { bubbles: true })) }
+  const open = (p: Person): HTMLElement => !edit ? plain(p) : personRow(p, {
+    open: openPerson,
+    rename: (q, name) => { q.name = name; edit.save(); changed() },
+    archive: (q) => { archivePerson(q); edit.save(); changed(); edit.toast(S.rowArchived(q.name), () => { restorePerson(q); edit.save(); changed() }) },
+    move: (q, ring) => {
+      const was = q.ring
+      const suggested = q.ringSuggested
+      edit.place(q.id, ring)
+      changed()
+      edit.toast(S.rowMoved(q.name, S.peopleZone[ring]), () => { edit.place(q.id, was); if (suggested) { q.ringSuggested = true; edit.save() } changed() })
+    },
+  })
   // Wave 29: the Map view lists people here too, each with its place box beside the row.
   const row = (p: Person): HTMLElement => (rowExtra ? el('div', { class: 'map-row', 'data-map-row': p.id }, [open(p), ...rowExtra(p)]) : open(p))
   const draw = (): void => {
