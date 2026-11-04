@@ -472,6 +472,12 @@ export const S = {
   cardSharesVia: (n: number, list: string) => `${n} ${n === 1 ? 'resource is' : 'resources are'} visible to them based on ${list}`,
   cardSharesWeb: 'everyone in your web',
   cardSharesOpen: 'Open in Resources',
+  cardResourceEdit: 'Edit title',
+  cardResourceSave: 'Save',
+  cardResourceCancel: 'Cancel',
+  cardResourceAdd: '+ add',
+  cardResourceAddAria: 'New resource',
+
   cardInventory: 'Their resources',
   cardInventoryNone: 'Nothing known about what they have yet.',
   cardInventoryAdd: '+ add what they have',

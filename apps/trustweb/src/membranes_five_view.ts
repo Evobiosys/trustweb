@@ -9,6 +9,7 @@ import { andSep, type VisibleCategory } from './zone_visibility'
 import { editKey } from './tap_edit'
 import { nameEdit } from './ring_hover'
 import { HELLO_NAME_MAX } from './hello'
+import { RESOURCE_TITLE_MAX } from './resource_edit'
 
 export interface SmallCardDeps {
   person: Person
@@ -21,6 +22,10 @@ export interface SmallCardDeps {
   visible: { count: number; categories: readonly VisibleCategory[] }
   /** Kind label of one resource for the inline list ("typed", "recorded"). */
   kindOf: (item: VisibleCategory['items'][number]) => string
+  /** Wave 30: a resource's title was edited on the card (saved by the caller, which redraws). */
+  onRenameResource?: (id: string, next: string) => void
+  /** Wave 30: a title typed in a category's "+ add" line (the caller adds it with that category's audience and redraws). */
+  onAddResource?: (category: VisibleCategory, title: string) => void
   /** "Open in My Resources" under an expanded category. */
   onOpenResources: (category: VisibleCategory) => void
   /** Extended: expands this card in place (aria-expanded), a second press collapses it. */
@@ -52,29 +57,74 @@ export function pinButton(p: Pick<Person, 'name' | 'pinned'>, onToggle: () => vo
   return el('button', { class: 'btn btn-ghost btn-sm' + (on ? ' on' : ''), 'data-pin': '', 'aria-pressed': String(on), 'aria-label': S.cardPinAria(on, p.name), onclick: onToggle }, [on ? '📌' : '📍', ' ', S.cardPin])
 }
 
-/** "N resources are visible to them based on X, Y, and Z": each category presses open its resources inline (name and kind) with a link into My Resources. The line itself does nothing. */
+/** The category list open on a card, kept across the redraw an edit causes: [person id, category key]. */
+let openShares: [string, string] | null = null
+
+/** An inline one-line editor: Enter or the check saves, Esc or the cross cancels; `done(typed)` runs once, `typed` null on cancel. */
+function inlineEdit(aria: string, value: string, attr: string, done: (typed: string | null) => void): HTMLElement {
+  const input = el('input', { class: 'field tap-edit-input', 'aria-label': aria, maxlength: String(RESOURCE_TITLE_MAX), [attr]: '' })
+  input.value = value
+  let finished = false
+  const finish = (how: 'save' | 'cancel'): void => { if (finished) return; finished = true; done(how === 'save' ? input.value : null) }
+  input.addEventListener('keydown', (e) => { const a = editKey(e.key); if (a) { e.stopPropagation(); finish(a) } })
+  const row = el('span', { class: 'card-res-edit' }, [input,
+    el('button', { class: 'card-res-btn', 'aria-label': S.cardResourceSave, onclick: () => finish('save') }, ['✓']),
+    el('button', { class: 'card-res-btn', 'aria-label': S.cardResourceCancel, onclick: () => finish('cancel') }, ['✕'])])
+  queueMicrotask(() => { input.focus(); input.select() })
+  return row
+}
+
+/** "N resources are visible to them based on X, Y, and Z": each category presses open its resources inline (title with a pencil, kind) with a "+ add" line and a link into My Resources. The line itself does nothing. */
 function sharesLine(d: SmallCardDeps): HTMLElement {
   const { count, categories } = d.visible
   const list = el('div', { class: 'card-shares-list', 'data-card-shares-list': '', hidden: true })
-  let open: string | null = null
-  const toggle = (c: VisibleCategory, btn: HTMLElement): void => {
-    open = open === c.key ? null : c.key
-    box.querySelectorAll('[data-card-shares-cat]').forEach((b) => b.setAttribute('aria-expanded', String(b === btn && open !== null)))
-    list.hidden = open === null
-    list.replaceChildren(...(open === null ? [] : [
-      ...c.items.map((i) => el('div', { class: 'meta', 'data-card-shares-item': i.id }, [i.text, ' · ', d.kindOf(i)])),
+  const draw = (): void => {
+    const c = openShares?.[0] === d.person.id ? categories.find((x) => x.key === openShares?.[1]) : undefined
+    box.querySelectorAll('[data-card-shares-cat]').forEach((b) => b.setAttribute('aria-expanded', String(b.getAttribute('data-card-shares-cat') === c?.key)))
+    list.hidden = !c
+    list.replaceChildren(...(!c ? [] : [
+      ...c.items.map((i) => itemRow(i)),
+      addRow(c),
       el('button', { class: 'btn btn-ghost btn-sm', 'data-card-shares-open': c.key, onclick: () => d.onOpenResources(c) }, [S.cardSharesOpen]),
     ]))
   }
+  const itemRow = (i: VisibleCategory['items'][number]): HTMLElement => {
+    const row = el('div', { class: 'meta card-res-row', 'data-card-shares-item': i.id })
+    const show = (): void => row.replaceChildren(
+      el('span', {}, [i.text, ' · ', d.kindOf(i)]),
+      ...(d.onRenameResource ? [el('button', { class: 'card-res-btn', 'data-card-shares-edit': i.id, 'aria-label': S.cardResourceEdit, title: S.cardResourceEdit, onclick: edit }, ['✎'])] : []),
+    )
+    const edit = (): void => row.replaceChildren(inlineEdit(S.cardResourceEdit, i.text, 'data-card-shares-input', (typed) => {
+      if (typed !== null) d.onRenameResource?.(i.id, typed)
+      else show()
+    }))
+    show()
+    return row
+  }
+  const addRow = (c: VisibleCategory): HTMLElement => {
+    const row = el('div', { class: 'meta card-res-row', 'data-card-shares-add-row': c.key })
+    const show = (): void => row.replaceChildren(el('button', { class: 'card-res-add', 'data-card-shares-add': c.key, onclick: edit }, [S.cardResourceAdd]))
+    const edit = (): void => row.replaceChildren(inlineEdit(S.cardResourceAddAria, '', 'data-card-shares-add-input', (typed) => {
+      if (typed !== null && typed.trim()) d.onAddResource?.(c, typed)
+      else show()
+    }))
+    show()
+    return row
+  }
+  const toggle = (c: VisibleCategory): void => {
+    openShares = openShares?.[0] === d.person.id && openShares[1] === c.key ? null : [d.person.id, c.key]
+    draw()
+  }
   const names: (Node | string)[] = []
   categories.forEach((c, i) => {
-    const btn = el('button', { class: 'card-shares-cat', 'data-card-shares-cat': c.key, 'aria-expanded': 'false', onclick: () => toggle(c, btn) }, [c.label])
+    const btn = el('button', { class: 'card-shares-cat', 'data-card-shares-cat': c.key, 'aria-expanded': 'false', onclick: () => toggle(c) }, [c.label])
     names.push(andSep(i, categories.length), btn)
   })
   const box = el('div', { class: 'card-shares meta', 'data-card-shares': '' }, [
     d.person.ring === Ring.Unsorted ? S.cardSharesUnplaced : count === 0 ? S.cardShares(0, d.zone) : S.cardSharesVia(count, ''),
     ...(d.person.ring === Ring.Unsorted || count === 0 ? [] : names),
   ])
+  draw()
   return el('div', {}, [box, list])
 }
 
