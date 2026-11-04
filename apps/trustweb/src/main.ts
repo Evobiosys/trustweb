@@ -105,7 +105,7 @@ import { availableTabs, resolveRow, setSlot } from './tab_row'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import type { TabId } from './tab_row'
 import { dismissOnOutside } from './key_press'
-import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenu, webViewOf } from './view_menu'
+import { expandedOf, pinnedViews, screenViews, togglePin, viewHeading, viewMenuEntries, webViewOf } from './view_menu'
 import { advancedKeyOf, HEADER_PINS, headerControls, headerPins, qrTarget, togglePinned } from './header_controls'
 import type { HeaderPin } from './header_controls'
 import { disclosureGlyph } from './disclosure'
@@ -1249,11 +1249,10 @@ function mountHeaderControls(): void {
   const qr = statusPill && right.contains(statusPill) ? (statusPill.closest('.hdr-right > *') ?? statusPill) : null
   const gear = iconButton('settings', S.invSettings, settingsSheet)
   gear.dataset.settingsGear = '1'
-  const anyone = st().people.length > 0
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
-  const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
-    : screen === Screen.People ? viewControls('people', anyone)
+  const views: Node = screen === Screen.Web ? viewControls(webViewNow)
+    : screen === Screen.People ? viewControls('people')
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1264,7 +1263,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people', anyone) : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people') : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -2363,10 +2362,10 @@ function webViewRow(view: WebView): HTMLElement {
 }
 
 /** The eye, preceded by the pinned views' glyph buttons, for the header's right end. */
-function viewControls(current: ViewKey, anyone: boolean): Node {
+function viewControls(current: ViewKey): Node {
   const pins = st().uiPins?.views
   const frag = document.createDocumentFragment()
-  for (const v of pinnedViews(pins, anyone, HAS_MAP_VIEW)) {
+  for (const v of pinnedViews(pins, HAS_MAP_VIEW)) {
     const b = iconButton(viewGlyph[v], S.viewNames[v], () => chooseView(v), 'view-pin' + (v === current ? ' on' : ''))
     b.setAttribute('data-view-pin', v)
     frag.append(b)
@@ -2378,9 +2377,9 @@ function viewControls(current: ViewKey, anyone: boolean): Node {
 }
 
 /** The eye's dropdown under the header: Web, Network, People, Map; then "Other views": Dex, Contacts compact. */
-function viewDrop(current: ViewKey, anyone: boolean): HTMLElement | null {
+function viewDrop(current: ViewKey): HTMLElement | null {
   if (!eyeOpen) return null
-  const items = viewMenu(current, anyone, HAS_MAP_VIEW, st().uiPins?.views)
+  const items = viewMenuEntries({ current, hasMap: HAS_MAP_VIEW, pins: st().uiPins?.views })
   const btn = (i: { view: ViewKey; on: boolean }): HTMLElement => {
     const b = el('button', { class: 'view-opt' + (i.on ? ' on' : ''), role: 'menuitemradio', 'aria-checked': String(i.on), 'data-view': i.view, onclick: () => chooseView(i.view) })
     b.innerHTML = icon(viewGlyph[i.view])
@@ -2546,7 +2545,7 @@ function screenWeb(): Node[] {
   const s = full
   let stored: string | null = null
   try { stored = window.localStorage.getItem(WEB_VIEW_KEY) } catch { /* storage blocked: Rings */ }
-  const view = webViewOf(stored, s.people.length > 0)
+  const view = webViewOf(stored)
   let expandStored: string | null = null
   try { expandStored = window.localStorage.getItem(WEB_EXPAND_KEY) } catch { /* storage blocked: closest five */ }
   const expanded = expandedOf(expandStored, view)
@@ -2574,7 +2573,7 @@ function screenWeb(): Node[] {
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
     header(S.webTitle),
     webViewRow(view),
-    ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
+    ...[viewDrop(view)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
       ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : fiveRingsTry()])])
@@ -6168,7 +6167,7 @@ function settingsSheet(): void {
       fiveRingsSwitch(),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
-      ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
+      ...viewMenuEntries({ current: 'rings', hasMap: HAS_MAP_VIEW, pins: s.uiPins?.views }).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [
         el('input', { type: 'checkbox', ...(i.pinned ? { checked: '' } : {}), onchange: () => { s.uiPins = { ...s.uiPins, views: togglePin(s.uiPins?.views, i.view) }; save(); render() } }),
         el('b', {}, [S.viewNames[i.view]]),
       ])),
