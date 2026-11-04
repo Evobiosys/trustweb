@@ -960,6 +960,8 @@ export interface AppState {
   shareDefaultZone?: string
   /** Wave 29 (zone_tags.ts): tag ids per zone (ring value) with a stamp. Absent: none. */
   zoneTags?: Record<string, { ids: string[]; stamp: number }>
+  /** Wave 31 (feed_sources.ts): posts to groups the person is in. Absent: none. */
+  groupPosts?: GroupPost[]
   /** Wave 28 (share_profiles.ts): named groups of people and tags for the Share page's "in addition" list. Absent: none. This phone only. */
   shareProfiles?: ShareProfile[]
   /** Wave 28: Settings > Sharing "Profiles reach people on the don't-share list too". Absent: no (profiles leave them out); only true is stored. */
@@ -1248,7 +1250,14 @@ export interface FeedSettings {
   myInstance?: string
   /** The person's own Pixelfed instance, for "Share to Pixelfed" (host only). */
   myPixelfed?: string
+  /** Wave 31: followed Mastodon accounts / hashtags ("@user@host", "#tag@host"), read through their public RSS. Absent: none. */
+  follows?: string[]
+  /** Wave 31: the news feed (RSS or JSON Feed address, https). Absent: none. */
+  newsUrl?: string
 }
+
+/** Wave 31: a post to a group the person is in, as a record line (shared to that group alone through a share line). */
+export interface GroupPost { id: string; kind: 'post'; group: string; text: string; by: string; at: number }
 
 /** "Ask only my direct contacts" (wave 3): on only when the record says exactly true. */
 export function askDirectOnly(s: Pick<AppState, 'askDirectOnly'>): boolean {

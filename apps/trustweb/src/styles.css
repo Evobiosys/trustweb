@@ -1333,6 +1333,10 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .ask-web-list{margin:4px 0; padding-left:18px}
 .ask-set{display:grid; gap:6px; margin:8px 0}
 
+.feed-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center}
+.feed-chips .chip{text-decoration:underline}
+.feed-chips .btn{text-decoration:underline; margin-left:auto}
+
 /* Wave 31 (shared-notes): outline blocks wrap on a 360 px screen; every button is underlined */
 .shared-notes{margin-top:8px; overflow-wrap:anywhere; text-align:left}
 .shared-notes .btn,.shared-notes .note-text{text-decoration:underline}
