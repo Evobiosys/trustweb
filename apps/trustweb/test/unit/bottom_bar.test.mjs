@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Bottom bar (wave 31): configurable order, hidden views, one primary; pure. */
-import { DEFAULT_ORDER, PHONE_MAX, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar } from '../../src/bottom_bar.ts'
+import { DEFAULT_ORDER, PHONE_MAX, addBar, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar } from '../../src/bottom_bar.ts'
 
 const all = { events: true, feed: true, inventory: true, people: true, map: true }
 
 describe('bottom_bar', () => {
-  it('defaults to Ask, Resources, Web, Feed, Record, Chat, Events', () => {
-    expect(DEFAULT_ORDER).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
+  it('defaults to Ask, Resources, Web, Record, Chat, Events (no Feed)', () => {
+    expect(DEFAULT_ORDER).toEqual(['ask', 'inventory', 'web', 'record', 'chat', 'events'])
     expect(resolveBar(undefined, all).ids).toEqual(DEFAULT_ORDER)
   })
   it('leaves out views whose feature is off', () => {
@@ -29,9 +29,9 @@ describe('bottom_bar', () => {
     expect(resolveBar({ primary: 'feed' }, { ...all, feed: false }).primary).toBe('record')
   })
   it('toggle hides a shown view and brings it back; a new view joins at the end', () => {
-    const hid = toggleBar(undefined, 'feed', all)
-    expect(resolveBar(hid, all).ids).not.toContain('feed')
-    expect(resolveBar(toggleBar(hid, 'feed', all), all).ids).toEqual(DEFAULT_ORDER)
+    const hid = toggleBar(undefined, 'web', all)
+    expect(resolveBar(hid, all).ids).not.toContain('web')
+    expect(resolveBar(toggleBar(hid, 'web', all), all).ids).toEqual(DEFAULT_ORDER)
     const withNet = toggleBar(undefined, 'network', all)
     expect(resolveBar(withNet, all).ids.at(-1)).toBe('network')
   })
@@ -56,15 +56,33 @@ describe('bottom_bar', () => {
     expect(PHONE_MAX).toBe(6)
     const l = barLayout(resolveBar(undefined, all).ids, 'record', PHONE_MAX)
     expect(l.shown).toHaveLength(6)
-    expect(l.shown).toContain('record')
-    expect(l.overflow).toEqual(['events'])
+    expect(l.overflow).toEqual([])
+    const seven = barLayout(resolveBar(addBar(undefined, 'feed', 'web', 'right', all), all).ids, 'record', PHONE_MAX)
+    expect(seven.shown).toHaveLength(6)
+    expect(seven.shown).toContain('record')
+    expect(seven.overflow).toEqual(['events'])
     expect(barLayout(['web', 'chat'], 'record', 6)).toEqual({ shown: ['web', 'chat'], overflow: [] })
   })
   it('choices list every available view with its state', () => {
-    const c = barChoices(toggleBar(undefined, 'feed', all), all)
+    const c = barChoices(undefined, all)
     expect(c.map((x) => x.id)).toEqual(['web', 'feed', 'chat', 'events', 'inventory', 'ask', 'network', 'people', 'map'])
     expect(c.find((x) => x.id === 'feed').on).toBe(false)
     expect(c.find((x) => x.id === 'web').on).toBe(true)
     expect(c.find((x) => x.id === 'network').on).toBe(false)
+  })
+  it('addBar puts a view left or right of a shown view and persists it in order', () => {
+    const r = addBar(undefined, 'feed', 'web', 'right', all)
+    expect(resolveBar(r, all).ids).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
+    expect(r.order).toEqual(['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events'])
+    expect(resolveBar(addBar(undefined, 'feed', 'ask', 'left', all), all).ids[0]).toBe('feed')
+  })
+  it('addBar moves an already shown view, un-hides a hidden one, keeps primary, ignores bad input', () => {
+    expect(resolveBar(addBar(undefined, 'events', 'ask', 'left', all), all).ids[0]).toBe('events')
+    const hid = toggleBar(undefined, 'chat', all)
+    expect(resolveBar(addBar(hid, 'chat', 'ask', 'left', all), all).ids[0]).toBe('chat')
+    expect(addBar({ primary: 'web' }, 'feed', 'ask', 'left', all).primary).toBe('web')
+    expect(addBar(undefined, 'zzz', 'ask', 'left', all)).toEqual(undefined)
+    expect(addBar(undefined, 'feed', 'map', 'left', all)).toEqual(undefined)
+    expect(addBar(undefined, 'feed', 'feed', 'left', all)).toEqual(undefined)
   })
 })

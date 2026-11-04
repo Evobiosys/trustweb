@@ -98,7 +98,7 @@ import { seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
-import { PHONE_MAX, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
+import { PHONE_MAX, addBar, barChoices, barLayout, moveBar, resolveBar, setPrimary, toggleBar, type BarFlags, type BarId } from './bottom_bar'
 import { contextPress } from './context_press'
 import { sectionOfScreen, settingsOrder, type SettingsSection } from './settings_sections'
 import { dismissOnOutside } from './key_press'
@@ -1041,6 +1041,16 @@ function barSheet(): void {
   const redraw = (next: typeof s.uiBar): void => { if (next) s.uiBar = next; else delete s.uiBar; save(); renderTabs(); render(); barSheet() }
   const { ids, primary } = resolveBar(s.uiBar, flags)
   const { overflow } = barLayout(ids, primary, barMax())
+  // "Add" turns into a place picker: left or right of each button now in the bar. Feed is switched on first when it was off.
+  const addPicker = (id: BarId): HTMLElement => el('select', {
+    class: 'bar-add-pos', 'data-bar-add-pos': id, 'aria-label': S.barAddPick(S.barNames[id]),
+    onchange: (e: Event) => {
+      const [side, ref] = (e.target as HTMLSelectElement).value.split(':') as ['left' | 'right', string]
+      const f = id === 'feed' ? { ...flags, feed: true } : flags
+      if (id === 'feed' && !flags.feed) s.feed = { ...s.feed, on: true }
+      redraw(addBar(s.uiBar, id, ref, side, f))
+    },
+  }, [el('option', { value: '' }, [S.barAddPlace]), ...ids.flatMap((ref) => (['left', 'right'] as const).map((side) => el('option', { value: `${side}:${ref}` }, [(side === 'left' ? S.barLeftOf : S.barRightOf)(S.barNames[ref] ?? S.navRecord)])))])
   const arrow = (id: BarId, dir: -1 | 1): HTMLElement => el('button', {
     class: 'btn btn-ghost btn-sm', 'data-bar-move': `${id}:${dir}`, 'aria-label': dir < 0 ? S.barUp(S.barNames[id]) : S.barDown(S.barNames[id]),
     onclick: () => redraw(moveBar(s.uiBar, id, dir, flags)),
@@ -1057,7 +1067,7 @@ function barSheet(): void {
         } }),
         el('b', {}, [S.barNames[id]]),
       ]),
-      on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : null,
+      on ? el('span', { class: 'bar-opt-acts' }, [arrow(id, -1), arrow(id, 1)]) : el('button', { class: 'linkbtn', 'data-bar-add': id, onclick: (e: Event) => (e.currentTarget as HTMLElement).replaceWith(addPicker(id)) }, [S.barAdd]),
       overflow.includes(id) ? el('button', { class: 'linkbtn', 'data-bar-open': id, onclick: () => { closeSheet(); barOpen(id) } }, [S.barOpen]) : null,
     ])),
     el('h4', { class: 'eyebrow' }, [S.barHighlight]),

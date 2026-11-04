@@ -1320,4 +1320,5 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .bar-opt-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .bar-opt-row .radio{flex:1 1 140px}
 .bar-opt-acts{display:flex; gap:2px}
+.bar-add-pos{max-width:100%}
 .linkbtn{background:none; border:0; padding:4px; color:var(--violet); text-decoration:underline; cursor:pointer; font:inherit}

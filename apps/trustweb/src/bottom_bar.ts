@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /**
  * Wave 31: the configurable bottom bar. Stored as AppState.uiBar {order, hidden, primary}; absent = the default
- * (Ask your web, Resources, Web, Feed, Record, Chat, Events). Record cannot be hidden and is the primary (raised)
+ * (Ask your web, Resources, Web, Record, Chat, Events; the Feed is opt-in from the ⋮ sheet). Record cannot be hidden and is the primary (raised)
  * button unless another shown view is chosen. A view this build does not know, or whose feature is off, is skipped.
  * On a phone at most PHONE_MAX buttons show; the rest live in the ⋮ sheet. Pure, no DOM.
  */
@@ -21,7 +21,7 @@ export interface BarFlags {
   map: boolean
 }
 
-export const DEFAULT_ORDER: readonly BarId[] = ['ask', 'inventory', 'web', 'feed', 'record', 'chat', 'events']
+export const DEFAULT_ORDER: readonly BarId[] = ['ask', 'inventory', 'web', 'record', 'chat', 'events']
 export const PHONE_MAX = 6
 
 /** The sheet's checklist, in its order (Record is always on and not listed). */
@@ -65,6 +65,14 @@ export function toggleBar(bar: UiBar | undefined, id: string, f: BarFlags): UiBa
   const next: UiBar = { order, hidden: on ? [...hidden, id] : hidden }
   if (bar?.primary && !(on && bar.primary === id)) next.primary = bar.primary
   return next
+}
+
+/** Shows the view (new, hidden or already shown) left or right of a shown view `ref`; the place is saved in `order`. Bad input changes nothing. */
+export function addBar(bar: UiBar | undefined, id: string, ref: string, side: 'left' | 'right', f: BarFlags): UiBar | undefined {
+  if (!offered(f).includes(id as BarId) || id === 'record' || id === ref || !resolveBar(bar, f).ids.includes(ref as BarId)) return bar
+  const order = baseOrder(bar).filter((x) => x !== id)
+  order.splice(order.indexOf(ref as BarId) + (side === 'right' ? 1 : 0), 0, id as BarId)
+  return { ...bar, order, hidden: (bar?.hidden ?? []).filter((h) => h !== id) }
 }
 
 /** One step left (-1) or right (+1) among the shown views; at the end it stays. */
