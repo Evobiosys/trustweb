@@ -52,9 +52,9 @@ export function readFlag(name: string, search: string, storage: Pick<Storage, 'g
 export function flagSteps(f: { title: string; flag?: string; steps?: string[] }, on: boolean): string[] {
   const steps = f.steps ?? []
   if (!f.flag) return steps
-  const sel = `[data-flag-switch="${f.flag}"]`
-  const rest = steps.filter((s) => !s.endsWith(' @ ' + sel))
-  return on ? rest : [`tap ${S.flagTry(f.title)} @ ${sel}`, ...rest]
+  const sel = `[data-flag-on="${f.flag}"]`
+  const rest = steps.filter((s) => !s.endsWith(' @ ' + sel) && !s.endsWith(` @ [data-flag-switch="${f.flag}"]`))
+  return on ? rest : [`tap ${S.flagOn(f.title)} @ ${sel}`, ...rest]
 }
 
 /** The screen on show: the open Settings sheet, else the class main.ts puts on its screen host ("screen on <screen>"). */

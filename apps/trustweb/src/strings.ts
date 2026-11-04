@@ -2657,4 +2657,8 @@ export const S = {
   walkNavigateFirst: (where: string) => `navigate to ${where} first`,
   walkNotHere: (step: string) => `not on this screen: ${step}`,
   flagTry: (title: string) => `Try ${title}`,
+  flagOn: (title: string) => `Turn on ${title}`,
+  panelAssembleNow: 'Assemble now',
+  panelAssembleNowTip: 'Assemble the checked rows now',
+  panelShowAll: 'show all rows',
 } as const
