@@ -230,6 +230,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .web-view-row{display:flex; gap:8px; align-items:center; margin:6px 16px 0}
 .web-view-row .web-view{flex:1; font-size:13px; font-weight:600; color:var(--ink-soft)}
 .web-view-row .web-search{flex:1; min-width:0}
+.people-search{box-sizing:border-box; width:calc(100% - 32px); margin:8px 16px 0}
 .view-pin.on{color:var(--electric)}
 .view-drop{position:absolute; right:12px; top:56px; z-index:30; min-width:190px; padding:6px; border-radius:12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); box-shadow:0 8px 24px rgba(0,0,0,.18); display:flex; flex-direction:column}
 .view-drop .view-opt{display:flex; align-items:center; gap:10px; padding:9px 10px; border:0; background:none; border-radius:8px; text-align:left; cursor:pointer; color:inherit; font:inherit}
