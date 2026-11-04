@@ -4,8 +4,26 @@ import { CLOSENESS_KEY, LEANS, Ring, RINGS } from '../../src/model.ts'
 import { LADDER, Zone, zoneOfPerson } from '../../src/share_sink/zones.ts'
 import {
   DUNBAR_HINT, FIELD_RINGS, FIVE_RINGS_FLAG, FIVE_RINGS_PARAM, RING_FIELD_OPTIONS_V2,
-  dunbarHint, fieldOverview, fiveRingsOn, flagFromUrl, leanMoves, isRingFieldValue, migrateLean, ringZone, zoneRing,
+  dunbarHint, fieldOverview, fiveRingsOn, flagFromUrl, readFlag, writeFlag, leanMoves, isRingFieldValue, migrateLean, ringZone, zoneRing,
 } from '../../src/five_rings.ts'
+
+describe('five rings: readFlag / writeFlag', () => {
+  it('the query wins, else the stored value; both absent = off', () => {
+    expect(readFlag('?five_rings=1', () => '0')).toBe(true)
+    expect(readFlag('?five_rings=0', () => '1')).toBe(false)
+    expect(readFlag('', () => '1')).toBe(true)
+    expect(readFlag('?x=1', () => '0')).toBe(false)
+    expect(readFlag('', () => null)).toBe(false)
+    expect(readFlag('', () => { throw new Error('blocked') })).toBe(false)
+  })
+  it('writeFlag stores 1 or 0 and survives a throwing storage', () => {
+    const seen = []
+    writeFlag(true, (k, v) => seen.push([k, v]))
+    writeFlag(false, (k, v) => seen.push([k, v]))
+    expect(seen).toEqual([[FIVE_RINGS_FLAG, '1'], [FIVE_RINGS_FLAG, '0']])
+    expect(() => writeFlag(true, () => { throw new Error('blocked') })).not.toThrow()
+  })
+})
 
 const ALL = Object.values(Ring)
 let n = 0

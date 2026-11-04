@@ -20,7 +20,7 @@
  */
 import { createViaCard } from './via_card'
 import { applyFamily, parseTreeFragment, treeUrl } from './family_tree_link'
-import { FIVE_RINGS_FLAG, fiveRingsOn, flagFromUrl } from './five_rings'
+import { fiveRingsOn, flagFromUrl, writeFlag } from './five_rings'
 import { fieldOverviewPanel } from './five_rings_view'
 import './styles.css'
 import { el, clear } from '../../demo/src/ui/dom'
@@ -407,7 +407,7 @@ if (apkLaunch) rememberApkSession(apkLaunch)
 // Five-ring prototype (five_rings.ts): ?five_rings=1|0 switches its flag, remembered before the URL is cleaned.
 {
   const f = flagFromUrl(location.search)
-  if (f !== null) try { localStorage.setItem(FIVE_RINGS_FLAG, f ? '1' : '0') } catch { /* not remembered */ }
+  if (f !== null) writeFlag(f)
 }
 /** The app on a home screen: a standalone PWA, this session inside the APK (which runs as a tab until the origin vouches for it), or the iPhone app. */
 function installedHere(): boolean {
@@ -2510,10 +2510,24 @@ function screenWeb(): Node[] {
     ...[viewDrop(view, s.people.length > 0)].filter((d): d is HTMLElement => d !== null),
     // The field panel sits beside the sidebar, below the zoomed rings layer: the zoom must not scale it.
     view === 'rings'
-      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), fiveRingsOn() ? el('div', { class: 'zones-main' }, [clip, fieldOverviewPanel(s, { live: st, save, render })]) : clip])
+      ? el('div', { class: 'zones-split' }, [zoneColumn(s, expanded), el('div', { class: 'zones-main' }, [clip, fiveRingsOn() ? fieldOverviewPanel(s, { live: st, save, render }) : fiveRingsTry()])])
       : clip,
     queryOpen ? queryDock(s) : queryFab(),
   ]
+}
+
+/** Five rings off: one underlined line under the rings that turns the prototype on. */
+function fiveRingsTry(): HTMLElement {
+  return el('button', { class: 'link-toggle five-rings-try', 'data-five-rings-try': '', onclick: () => { writeFlag(true); render() } }, [S.fiveRingsTry])
+}
+
+/** Settings > Web: the plain switch for the five-ring prototype. */
+function fiveRingsSwitch(): HTMLElement {
+  const on = fiveRingsOn()
+  return el('button', {
+    class: 'radio' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-five-rings-switch': '',
+    onclick: () => { writeFlag(!on); render(); settingsSheet() },
+  }, [el('b', {}, [S.setFiveRings]), el('small', {}, [S.setFiveRingsHint])])
 }
 
 /** Wave 28b (trustzones_view.ts): the one sidebar of the TrustZones view: expand all, add, tag filters. (Wave 28's zone panel, zzz strip and legend stay in trustzones_view.ts, unused here.) */
@@ -6035,6 +6049,7 @@ function settingsSheet(): void {
     settingsSection('web', S.setSecWeb, [
       el('button', { class: 'btn btn-ghost', 'data-settings-curate': '', onclick: curatorSheet }, [S.searchCurate]),
       el('button', { class: 'btn btn-ghost', 'data-people-import': '1', onclick: () => openServicesImport({ state: st, save, toast, changed: render, pages }) }, [S.svcEntry]),
+      fiveRingsSwitch(),
       el('h4', { class: 'eyebrow' }, [S.viewPinsTitle]),
       el('p', { class: 'meta' }, [S.viewPinsHint]),
       ...viewMenu('rings', s.people.length > 0, HAS_MAP_VIEW, s.uiPins?.views).filter((i) => i.view !== 'map').map((i) => el('label', { class: 'radio', 'data-pin-view': i.view }, [

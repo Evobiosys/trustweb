@@ -25,6 +25,16 @@ export function flagFromUrl(search: string): boolean | null {
   return v === '1' ? true : v === '0' ? false : null
 }
 
+/** The flag as the page sees it: the query (?five_rings=1|0) wins, else the stored value (the query is stripped after the first load). */
+export function readFlag(search: string, read: () => string | null = () => localStorage.getItem(FIVE_RINGS_FLAG)): boolean {
+  return flagFromUrl(search) ?? fiveRingsOn(read)
+}
+
+/** Remembers the flag; blocked storage = not remembered. */
+export function writeFlag(on: boolean, write: (k: string, v: string) => void = (k, v) => localStorage.setItem(k, v)): void {
+  try { write(FIVE_RINGS_FLAG, on ? '1' : '0') } catch { /* not remembered */ }
+}
+
 /** The five rings of the field = RINGS, centre out. */
 export const FIELD_RINGS: readonly Ring[] = RINGS
 
