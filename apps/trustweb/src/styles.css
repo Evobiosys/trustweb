@@ -1000,7 +1000,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* Wave 28: the source pill, its menu, and the combined list (a C-shaped bracket on the left edge in the source colour; side by side from 900px). */
 .chat-source-wrap{display:inline-block; margin-left:8px; vertical-align:middle}
 .hdr .chat-source-wrap{position:relative; display:inline-flex; flex-direction:column; align-items:center; margin:0}
-.chat-switch-name{max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; line-height:1.1; margin-top:2px}
 .hdr .chat-source-menu{left:auto; right:0}
 @media (max-width:480px){.hdr [data-chat-dots]{display:none}}
 .chat-source-menu{min-width:240px}

@@ -36,7 +36,7 @@ async function open(ctxOpts, { matrix = true, geb = true, off = null } = {}) {
 try {
   // Phone: real touch.
   const { page, errors } = await open({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true })
-  check('header names the view: TrustWeb', (await page.locator('[data-chat-view-name]').textContent()) === 'TrustWeb')
+  check('header names the view: TrustWeb', (await page.locator('.hdr h2').textContent()) === 'TrustWeb')
   check('simple view shows the TrustWeb chat row', (await page.locator('[data-chat-row="p1"]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/01-simple-390.png` })
   await page.locator('[data-chat-source-pill]').tap(); await page.waitForTimeout(300)
@@ -49,7 +49,7 @@ try {
   check('combined view holds TrustWeb + Matrix + Geb rows', ['trustweb', 'matrix', 'geb'].every((s) => srcs.includes(s)))
   const colors = await page.locator('[data-chat-src]').evaluateAll((els) => [...new Set(els.map((e) => getComputedStyle(e).getPropertyValue('--src') || e.style.getPropertyValue('--src')))])
   check('rows carry 3 different bracket colours', colors.length === 3)
-  check('header names the combined view', (await page.locator('[data-chat-view-name]').textContent()) === 'All chats')
+  check('header names the combined view', (await page.locator('.hdr h2').textContent()) === 'All chats')
   await page.screenshot({ path: `${SHOTS}/03-combined-390.png` })
   await page.locator('[data-chat-only]').first().tap(); await page.waitForTimeout(200)
   check('only this chat: one row left, Show all offered', (await page.locator('[data-chat-src]').count()) === 1 && (await page.locator('[data-chat-show-all]').count()) === 1)
