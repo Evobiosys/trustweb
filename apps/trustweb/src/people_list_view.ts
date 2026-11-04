@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
-/** The people list page (wave 25): a search field, then the trust zones collapsed; rows are drawn only for an opened zone. */
+/** The people list page (wave 25): the trust zones (the header's search field filters them) collapsed; rows are drawn only for an opened zone. */
 import { el } from '../../demo/src/ui/dom'
 import { ringColor } from './model'
 import { Ring } from './model'
@@ -8,6 +8,7 @@ import { peopleByZone, pinnedPeople, zoneOpen } from './people_list'
 import { S } from './strings'
 
 let query = ''
+let redraw: () => void = () => undefined
 const flipped = new Set<Ring>()
 
 /** A fresh visit starts with an empty search and the closest few open, the other zones collapsed. */
@@ -16,7 +17,16 @@ export function resetPeopleList(startQuery = ''): void {
   flipped.clear()
 }
 
-export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, autofocus: boolean, rowExtra?: (p: Person) => Node[]): HTMLElement {
+/** The header magnifier's field filters the list through these (wave 30). */
+export function peopleQuery(): string {
+  return query
+}
+export function setPeopleQuery(q: string): void {
+  query = q
+  redraw()
+}
+
+export function peopleListBody(state: () => AppState, openPerson: (id: string) => void, addTo: (ring: Ring, presetHint?: boolean) => void, rowExtra?: (p: Person) => Node[]): HTMLElement {
   const groups = el('div', { class: 'people-groups' })
   const open = (p: Person): HTMLElement => el('button', { class: 'zoom-row', 'data-person': p.id, onclick: () => openPerson(p.id) }, [
     el('b', {}, [p.name]), p.context ? el('small', { class: 'meta' }, [p.context]) : null,
@@ -46,11 +56,7 @@ export function peopleListBody(state: () => AppState, openPerson: (id: string) =
     ])
   }))
   }
-  const input = el('input', {
-    class: 'field', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.peopleSearchPh, 'data-people-search': '', value: query,
-    oninput: (e: Event) => { query = (e.target as HTMLInputElement).value; draw() },
-  })
+  redraw = draw
   draw()
-  if (autofocus) setTimeout(() => input.focus(), 0)
-  return el('div', { class: 'people-list' }, [input, groups])
+  return el('div', { class: 'people-list' }, [groups])
 }
