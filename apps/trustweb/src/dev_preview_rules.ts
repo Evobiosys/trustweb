@@ -4,7 +4,7 @@ import { MERGE_DONE } from '../dev_preview_rules.mjs'
 
 export type Repo = 'vanilla' | 'private' | 'ops'
 
-export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
+export interface PreviewFeature { key: string; repo?: Repo; ref?: string; branch: string; title: string; requires: string[]; checked: boolean; selector?: string; where?: string; context?: string; steps?: string[]; flag?: string; merged?: boolean; verdict?: Verdict; updated?: boolean; walkOk?: boolean }
 export type Verdict = 'merge' | 'needs-work' | null
 /** The registry's compat record (written by preview_compat.mjs): the base and row refs it was computed for, each row alone, every pair and the full set merged in a scratch tree. */
 export interface Compat { at?: string; state: 'running' | 'ok' | 'conflict'; baseSha?: string; refs?: Record<string, string | null>; singles?: Record<string, string>; pairs?: Record<string, string>; full?: string }
@@ -152,6 +152,18 @@ export function prMerged(p: { pr: { merged?: boolean } | null }): boolean {
   return p.pr?.merged === true
 }
 
+export const AS_ALWAYS = 'as always'
+/** The approve-result text of a merged PR: "PR #n shipped" only when that PR was merged in this preview's run (made at/after the preview, or its merge recorded without a date); a PR carried over from before says "as always" (nothing changed for the row). A `next` preview stays the way on. */
+export function mergedLabel(p: { created: string; pr: { number: number; at?: string; merged?: boolean; head?: string; mergeCommit?: string } | null; next?: { id: string; port: number } }): { next: { id: string; port: number } } | { text: string } {
+  if (p.next) return { next: p.next }
+  const pr = p.pr
+  const own = !!pr && pr.merged === true && (pr.at ? pr.at >= p.created : !!(pr.mergeCommit || pr.head))
+  return { text: own ? `PR #${pr!.number} shipped` : AS_ALWAYS }
+}
+
+/** The rows behind the amber "needs work" reminder, one clickable title each. */
+export const remindItems = (shown: PreviewFeature[]): { key: string; title: string }[] => shown.map((f) => ({ key: f.key, title: f.title }))
+
 export interface Tested { sha: string; at: string; ok: boolean | null; running: boolean; log?: string; tail?: string }
 export type PrGate = 'untested' | 'running' | 'failed' | 'passed'
 
@@ -234,7 +246,7 @@ export function hintParts(hint: string): { head: string; detail: string } {
   return m ? { head: m[1], detail: m[2] } : { head: hint, detail: '' }
 }
 
-/** A row and the loaded rows below it (their `requires` chain): one approve covers them all. */
+/** A row and the loaded rows below it (their `requires` chain). Only for a whole subtree (e.g. unloading a parent); one row's approve is just [key]. */
 export function subtreeKeys(features: PreviewFeature[], key: string): string[] {
   const out: string[] = []
   const walk = (n: TreeNode): void => { if (n.feature.checked) out.push(n.feature.key); n.children.forEach(walk) }

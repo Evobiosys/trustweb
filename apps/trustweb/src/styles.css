@@ -149,11 +149,17 @@ textarea.field{resize:vertical; line-height:1.5}
 .ring-toggle{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:0; background:none; color:#fff; font-size:9px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
 .ring-toggle::before{content:''; position:absolute; box-sizing:border-box; width:8.5px; height:8.5px; background:var(--muted-grey,#8a8f94); border:1.5px solid var(--muted-grey,#8a8f94); transform:rotate(45deg); z-index:-1; transition:box-shadow .15s}
 .ring-toggle:hover::before,.ring-toggle:focus-visible::before{box-shadow:0 0 0 3px var(--muted-grey,#8a8f94)}
+.ring-toggle.ring-tab::before{border-color:var(--rc); box-shadow:0 0 0 2px #fff}
 .ring-toggle.off{color:var(--muted-grey,#8a8f94)}
 .ring-toggle.off::before{background:transparent}
-.ring-card{position:absolute; z-index:8; max-width:80%; max-height:60%; overflow:auto; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:12px; color:#3a1d00; display:flex; flex-direction:column; gap:2px}
-.ring-card-row{display:flex; align-items:center; gap:6px}
-.ring-card-name{padding:0; border:0; background:none; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; text-align:left}
+.ring-card{position:absolute; z-index:8; max-width:min(80%,92vw); max-height:60%; overflow-x:hidden; overflow-y:auto; overflow-wrap:anywhere; box-sizing:border-box; padding:6px 10px; border-radius:10px; background:#fff; border:1px solid var(--muted-grey,#8a8f94); box-shadow:0 2px 8px rgba(0,0,0,.15); font-size:12px; color:#3a1d00; display:flex; flex-direction:column; gap:2px}
+.ring-card-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0}
+.ring-card-btn{min-width:40px; min-height:40px; padding:0 6px; border:0; background:none; color:inherit; font:inherit; font-size:16px; text-decoration:underline; cursor:pointer; display:inline-flex; align-items:center; justify-content:center}
+.ring-card-archive{text-decoration:none}
+.ring-card-btn svg{position:static; width:18px; height:18px; inset:auto; pointer-events:none}
+.ring-card-row .tap-edit-input{flex:1 1 8em; min-width:0}
+.rings-wrap.card-open .rings-hint{display:none}
+.ring-card-name{max-width:100%; word-break:break-word; padding:0; border:0; background:none; color:inherit; font:inherit; text-decoration:underline; cursor:pointer; text-align:left}
 .ring-card-edit{padding:0 2px; border:0; background:none; color:var(--muted-grey,#8a8f94); font-size:11px; cursor:pointer}
 .ring-card-row .tap-edit-input{font-size:12px; padding:1px 4px}
 .ring-more{position:absolute; transform:translate(-50%,-50%); z-index:3; width:16px; height:16px; padding:0; border:1.5px solid var(--rc,#8a8f94); border-radius:50%; background:#fff; color:var(--rc,#8a8f94); font-size:11px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer}
@@ -192,6 +198,19 @@ textarea.field{resize:vertical; line-height:1.5}
 .lean{margin:8px 0}
 .lean .rchips{align-items:center}
 .lean small{font-size:12px}
+/* Five-ring prototype (five_rings_view.ts, flag tw-five-rings): the field overview under the rings. */
+.zones-main{flex:1 1 auto; min-width:0; min-height:0; display:flex; flex-direction:column; overflow-y:auto}
+.zones-main>.scroll{flex:1 0 70%}
+.zones-main>.field-overview{flex:none; width:100%; max-width:720px; box-sizing:border-box; font-size:14px; color:var(--ink,inherit)}
+.field-overview{margin:10px 12px; padding:10px 12px; background:var(--card); border-radius:16px}
+.field-overview h3{margin:0 0 6px; font-size:15px}
+.field-why{margin:0 0 8px; font-size:13px}
+.field-why summary{cursor:pointer; text-decoration:underline}
+.field-row{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; padding:3px 0}
+.field-row .field-dot{width:10px; height:10px; border-radius:50%; flex:none; align-self:center}
+.field-row .field-name{flex:1; min-width:0}
+.field-row small{flex-basis:100%; padding-left:18px; font-size:12px; color:var(--ink-soft,inherit)}
+.field-lean{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0}
 .desire-go{display:flex; gap:8px; justify-content:center}
 .node.you .ava{width:40px; height:40px; box-shadow:0 0 0 2px #fff, 0 0 0 3px rgba(23,143,134,.5)}
 .node.you span{position:absolute; bottom:100%; margin-bottom:4px; white-space:nowrap; z-index:3; text-shadow:-1px 0 var(--linen),1px 0 var(--linen),0 -1px var(--linen),0 1px var(--linen),0 0 4px var(--linen)}   /* the label sits above the dot: the avatar centre is the node (and rings) centre */
@@ -209,11 +228,39 @@ textarea.field{resize:vertical; line-height:1.5}
 .map-dot{cursor:pointer}
 .map-dot circle{fill:var(--electric,#3a6cf0)}
 .map-dot text{font-size:9px; fill:var(--ink)}
-.map-credit{font-size:11px; margin:0}
+.map-credit-btn{position:absolute; left:6px; bottom:6px; z-index:5; width:32px; height:32px; border-radius:50%; border:1px solid currentColor; background:var(--linen); color:var(--ink); font-size:16px; line-height:1; text-decoration:underline; cursor:pointer; padding:0}
+.map-credit{position:absolute; left:44px; bottom:6px; right:6px; z-index:5; font-size:11px; margin:0; padding:6px 8px; border-radius:8px; background:var(--linen); color:var(--ink); box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.map-credit[hidden]{display:none}
+.map-credit a{text-decoration:underline}
 .map-stage{position:relative}
 .map-notice{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; background:color-mix(in srgb, var(--card) 80%, transparent); border-radius:16px; transition:opacity .4s}
 .map-notice.map-notice-done{opacity:0; pointer-events:none}
-.map-row{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 3.5rem; gap:6px 8px; align-items:center}
+.map-row{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 8px; align-items:center}
+.map-row .person-row{grid-column:1/-1}
+.map-row .map-place{grid-column:1}
+/* Wave 30: person row tools and the drag */
+.person-row{display:flex; align-items:center; gap:4px; min-width:0; position:relative}
+.person-row .zoom-row{flex:1; min-width:0; margin:0 0 8px}
+.person-row .tap-edit-input{flex:1; min-width:0; margin:0 0 8px}
+.row-tool{border:0; background:none; font:inherit; color:var(--ink-soft); text-decoration:underline; padding:8px 6px; margin:0 0 8px; cursor:pointer}
+.person-row.lifted{z-index:5; cursor:grabbing; touch-action:none; opacity:.85; box-shadow:0 4px 14px rgba(0,0,0,.25); border-radius:14px}
+.row-pick{display:flex; align-items:center; gap:10px; flex:1; min-width:0; background:var(--card); border-radius:14px; padding:10px 12px; margin:0 0 8px; cursor:pointer}
+.row-pick.on{outline:2px solid var(--electric,#3a6cf0)}
+.row-pick small{display:block}
+.row-tool-hover{visibility:hidden}
+.person-row.tools-on .row-tool-hover,.person-row:focus-within .row-tool-hover{visibility:visible}
+@media (hover:hover){.person-row:hover .row-tool-hover{visibility:visible}}
+/* Wave 32: inline edit confirm green, cancel red (every ✓/✕ pair) */
+button.ok-mark{color:#2e9e6a}
+button.cancel-mark{color:#d9534f}
+.row-tool:disabled{opacity:.4; text-decoration:none}
+/* The tool bar sticks to the bottom of the list's scroll area, which ends above the tab bar; it wraps, never scrolls sideways. */
+.select-bar{position:sticky; bottom:0; z-index:6; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:6px 8px; margin-top:8px; background:var(--card); box-shadow:0 -2px 10px rgba(0,0,0,.3); border-radius:12px; max-width:100%}
+.select-bar .field{width:auto; min-width:0; max-width:100%; padding:6px 8px; font-size:14px}
+.select-tagrow{display:flex; align-items:center; gap:4px; min-width:0; flex:1 1 12rem}
+.select-tagrow .field{flex:1; min-width:0}
+.select-count{flex:1 1 100%; font-size:13px; color:var(--ink-soft)}
+.people-zone.drop .people-zone-head{outline:3px solid var(--rc)}
 .map-name{background:none; padding:0; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .map-sug{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px}
 .map-sug:empty{display:none}
@@ -221,6 +268,7 @@ textarea.field{resize:vertical; line-height:1.5}
 .web-view-row{display:flex; gap:8px; align-items:center; margin:6px 16px 0}
 .web-view-row .web-view{flex:1; font-size:13px; font-weight:600; color:var(--ink-soft)}
 .web-view-row .web-search{flex:1; min-width:0}
+.people-search{box-sizing:border-box; width:calc(100% - 32px); margin:8px 16px 0}
 .view-pin.on{color:var(--electric)}
 .view-drop{position:absolute; right:12px; top:56px; z-index:30; min-width:190px; padding:6px; border-radius:12px; background:var(--card,#fff); border:1px solid var(--line,#ddd); box-shadow:0 8px 24px rgba(0,0,0,.18); display:flex; flex-direction:column}
 .view-drop .view-opt{display:flex; align-items:center; gap:10px; padding:9px 10px; border:0; background:none; border-radius:8px; text-align:left; cursor:pointer; color:inherit; font:inherit}
@@ -368,6 +416,11 @@ button.share-chip-label{text-decoration:underline}
 .demo-friends .notice-actions,.demo-friends .hint-again{pointer-events:auto}
 /* Wave 16 (apk hint): a long title + two buttons: text on top, buttons in a row under it. */
 .demo-friends.stack{grid-template-columns:1fr}
+/* Wave 31: the notification offer is one line, never a band */
+.demo-friends.line{display:flex; align-items:center; flex-wrap:wrap; gap:4px 14px; padding:6px 34px 6px 12px; border-radius:12px; font-size:12.5px}
+.demo-friends.line span:empty{display:none}
+.demo-friends.line .notice-actions{flex-direction:row; gap:14px}
+.demo-friends.line b{font-size:12.5px}
 .demo-friends.stack .notice-actions{grid-column:1; grid-row:auto; flex-direction:row; flex-wrap:wrap; align-items:center; margin-top:6px}
 .demo-friends b{font-size:14.5px; grid-column:1}
 .demo-friends span{color:var(--ink-soft); grid-column:1}
@@ -1000,7 +1053,6 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 /* Wave 28: the source pill, its menu, and the combined list (a C-shaped bracket on the left edge in the source colour; side by side from 900px). */
 .chat-source-wrap{display:inline-block; margin-left:8px; vertical-align:middle}
 .hdr .chat-source-wrap{position:relative; display:inline-flex; flex-direction:column; align-items:center; margin:0}
-.chat-switch-name{max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; line-height:1.1; margin-top:2px}
 .hdr .chat-source-menu{left:auto; right:0}
 @media (max-width:480px){.hdr [data-chat-dots]{display:none}}
 .chat-source-menu{min-width:240px}
@@ -1289,6 +1341,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-name{flex:1; min-width:0}
 .zone-name .tap-edit{background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:text; text-align:left}
 .zone-check{display:flex; align-items:center; gap:6px; font-size:13px}
+.filter-group{margin:6px 0} .filter-group>summary{cursor:pointer; text-decoration:underline; font-weight:600} .filter-group-title{display:block; margin-top:8px}
 .zzz-strip{display:flex; flex-direction:column; gap:4px}
 /* Wave 28b: the TrustZones sidebar (expand all, add, tag filters): above the rings on the phone, left on desktop */
 .ring-more.fill-expand{font-size:10px; background:#fff; color:#3a1d00; border-color:var(--rc)}
@@ -1296,11 +1349,22 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-side{flex:0 0 auto; max-height:40%; overflow-y:auto; padding:6px 12px; display:flex; flex-direction:column; gap:6px}
 .zone-tools{display:flex; align-items:center; gap:8px}
 .zone-chip-row{display:flex; flex-direction:column; gap:4px; font-size:13px}
+/* Wave 30 (U9/U11): active filter rows, and the Add-people box as its own tinted, bordered box */
+.filter-active{display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; overflow-wrap:anywhere}
+.filter-off{text-decoration:underline}
+.zone-add-box{background:var(--tint-teal); border:1px solid var(--line); border-radius:8px; padding:8px; min-width:0}
+.zone-add-box .field{max-width:100%; box-sizing:border-box}
 @media (min-width:760px){
-  .zones-split{flex-direction:row}
-  .zone-side{flex:0 0 260px; max-height:none}
+  /* Wave 31: the sidebar floats over the left edge, so the rings stay centred on the screen whether it is open or not */
+  .zones-split{flex-direction:row; position:relative}
+  .zone-side{position:absolute; left:0; top:0; z-index:5; width:260px; max-height:100%}
 }
 .card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
+.card-res-row{display:flex; align-items:center; gap:6px; min-width:0}
+.card-res-row>span{min-width:0; overflow-wrap:anywhere}
+.card-res-edit{display:flex; align-items:center; gap:6px; width:100%; min-width:0}
+.card-res-edit .field{flex:1; min-width:0}
+.card-res-btn,.card-res-add{background:none; border:0; padding:0 2px; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}
 
 /* Wave 32: the expanse control (drop a dot on it to hide the dot) and its count badge */
@@ -1309,3 +1373,56 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .expanse-count{position:absolute; top:-6px; right:-6px; min-width:16px; height:16px; padding:0 3px; box-sizing:border-box; border-radius:8px; background:#e8750a; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center}
 .expanse-row{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0}
 .expanse-row span{min-width:0; overflow-wrap:anywhere}
+/* Wave 30 (person-share-link): the text button is underlined; the received box wraps on a 360 px screen */
+.card-share-link .btn{text-decoration:underline}
+.person-share{margin-top:8px; overflow-wrap:anywhere; text-align:left}
+.person-share ul{margin:4px 0 4px 18px; padding:0}
+
+/* Wave 31: the configurable bottom row. ⋮ sits on the bar line at the far right; a highlighted non-Record view is raised like Record. */
+.bar-more{position:absolute; right:6px; top:-13px; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:var(--tab-bg); color:var(--ink-soft); font-size:16px; line-height:1; padding:0; cursor:pointer; text-decoration:underline}
+.tabs.many .tab{width:auto; flex:1 1 0; min-width:0}
+.tabs.many .tab-record{flex:0 0 66px}
+.tab.tab-primary{width:66px; height:66px; border-radius:50%; margin-top:-28px; justify-content:center; flex-shrink:0; align-self:flex-start; color:#fff;
+  background:linear-gradient(135deg,var(--coral),var(--violet)); box-shadow:0 8px 24px rgba(23,143,134,.4), 0 0 0 5px var(--linen)}
+.tab.tab-primary.on{box-shadow:0 8px 24px rgba(23,143,134,.55), 0 0 0 5px var(--linen), 0 0 0 8px rgba(23,143,134,.35)}
+.tab.tab-primary svg{stroke:#fff}
+.phone.ask-in-bar [data-open-query]{display:none}
+.bar-opt-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.bar-opt-row .radio{flex:1 1 140px}
+.bar-opt-acts{display:flex; gap:2px}
+.bar-add-pos{max-width:100%}
+.linkbtn{background:none; border:0; padding:4px; color:var(--violet); text-decoration:underline; cursor:pointer; font:inherit}
+
+/* Wave 31 (zone-share-link): Settings > Sharing links; text buttons underlined, rows wrap at 360 px */
+.zone-link-new{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
+.zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
+
+/* Wave 31: Ask your web, matches in my web + online link; clickable = underlined, never a sideways scroll */
+.ask-web{min-width:0; overflow-wrap:anywhere}
+.ask-web .btn,.ask-web .chip{text-decoration:underline}
+.ask-web-list{margin:4px 0; padding-left:18px}
+.ask-set{display:grid; gap:6px; margin:8px 0}
+
+.feed-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center}
+.feed-chips .chip{text-decoration:underline}
+.feed-chips .btn{text-decoration:underline; margin-left:auto}
+
+/* Wave 31 (shared-notes): outline blocks wrap on a 360 px screen; every button is underlined */
+.shared-notes{margin-top:8px; overflow-wrap:anywhere; text-align:left}
+.shared-notes .btn,.shared-notes .note-text{text-decoration:underline}
+.note-text{background:none; border:0; padding:2px 0; font:inherit; color:inherit; text-align:left; cursor:pointer; max-width:100%; overflow-wrap:anywhere}
+.shared-notes ul{margin:2px 0 2px 16px; padding:0; list-style:disc}
+.note-annotation>.note-text{font-style:italic}
+.note-form,.note-share,.note-edit{display:flex; flex-direction:column; gap:6px; margin:6px 0}
+/* Wave 32 (shared-notes): the Notes outliner view; wraps, never scrolls sideways */
+.notes-outline{display:flex; flex-direction:column; gap:2px; text-align:left; overflow-wrap:anywhere}
+.outline-row{display:flex; align-items:baseline; gap:6px; min-width:0}
+.outline-toggle{background:none; border:0; padding:0 2px; width:18px; flex:none; font:inherit; color:inherit; text-align:center; cursor:pointer}
+.outline-text{flex:1 1 8em; min-width:0; box-sizing:border-box; background:none; border:0; padding:3px 0; font:inherit; color:inherit; text-align:left}
+button.outline-text{text-decoration:underline; cursor:pointer}
+.outline-person{font-weight:700}
+.outline-meta{flex:0 1 auto; color:var(--ink-soft); opacity:.7; font-size:12px}
+.note-share .chips{margin:0}
+.note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.shared-notes .field{width:100%; box-sizing:border-box}

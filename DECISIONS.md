@@ -470,6 +470,25 @@ Interchangeable, run-by-anyone relays via an `iroh` ladder rung (`IrohRelayChann
 - OPEN for the owner: the WoT decision 2026-08-25 "channel-linking OK, embedding never" (channel.ts header) and the ask to show Geb
   inside the Chat screen. This branch only adds the slot; embedding is the msg-geb branch's call.
 
+## D-five-rings (2026-11-03): the five rings are the model; Dunbar as a hint, never a cap
+
+Owner frame (Jakob 2026-11-03): not Gorski; Dunbar's layers (5/15/50/150/500) recalibrated from 2020+ data are
+the estimate; the most relevant goal is an overview of who is in your field, not capacity limits. Design in
+`docs/design/five-rings.md`; prototype behind the device-local flag `tw-five-rings` (`apps/trustweb/src/five_rings.ts`).
+
+- The five rings are the shipped `RINGS` (closest, close, friend, acquaintance, intending); the grey "not yet
+  sorted" ring stays a sixth, holding ring (public on the ladder, no estimate, counted separately).
+- One-to-one onto the share-sink ladder (`share_sink/zones.ts`): ring = zone for the five; community stays
+  derived (tag), public = unsorted/none, self = owner. The `FROM_RING` table gained its missing `closest` row
+  (`zoneOfPerson` returned undefined for a closest person since wave 25).
+- Dunbar estimate per ring, cumulative, shown as "most people: about N", never as a limit (I7, I9). Intending
+  carries the 500 as "the pool you draw from", the weakest mapping (confidence 0.5), droppable with one row.
+- The lean (-2..2 on acquaintances) becomes a move the owner accepts: -2/-1 offer "to Friend", 0 and +1/+2
+  offer nothing. Never automatic: a move widens who may ask (I9). `schema_version.ts` untouched.
+- Tana `tw-ring` field: 4 → 5 options by adding `closest`; `intending` stays an option, `unsorted` a placement
+  state; no stored value changes meaning. CRM files untouched on this branch (table + value reader only).
+- Flag off: UI byte-identical, nothing written. Flag on: a "Your field" panel under the rings.
+
 ## D-dlp-ci-drill (2026-11-02): the restore drill runs monthly in CI on a fixture; a failed scheduled drill is an incident
 - What runs: .github/workflows/dlp-drill.yml (1st of the month 04:23 UTC, manual dispatch, push to the drill paths) runs restore_drill_ci.mjs:
   fixture, drill, diff, serve, control (a tampered copy must be caught), plus GNU diff -r outside the tool. Node stdlib only, no install.
