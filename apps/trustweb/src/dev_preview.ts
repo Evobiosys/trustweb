@@ -11,6 +11,7 @@
 import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
 import { flagSteps, readFlag } from './dev_navigate'
+import { walkList } from './dev_drive'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
 import { S } from './strings'
@@ -190,8 +191,8 @@ export function initDevPreview(): void {
   }
 
   createDevice2(p.id, p.stockPort, mode, toast)
-  // Title tap / Walk: the feature's steps as the yellow card over the phone, always (a step may need the reviewer's own tap, which an
-  // automatic click-through gave up on); a feature without steps is only pointed at.
+  // Title tap / Walk: the feature's steps as the yellow card over the phone; wave 31: the card does each tap itself (ring first), a step it
+  // cannot reach waits for the reviewer's own tap; ? shows the steps for the reviewer to tap. A feature without steps is only pointed at.
   const walk = (f: PreviewFeature): void => { if (lit === f.key) lit = null; tap(f, true) }
 
   function tap(f: PreviewFeature, walking = false): void {
@@ -203,7 +204,7 @@ export function initDevPreview(): void {
     if (lit) {
       const plan = walking && f.steps?.length ? 'walk' : rowPlan(pointer.set(f.selector), f.steps)
       const own = flagSteps(f, flagOn(f))
-      if (plan === 'walk') void steps.open(own, f.context)
+      if (plan === 'walk') void steps.open(walkList(own, f.title, f.selector), f.context, true)
       else if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
       else if (plan === 'steps') void steps.open([...own, f.selector ? `${f.title} @ ${f.selector}` : f.title], f.context)
     }
