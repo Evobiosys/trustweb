@@ -96,9 +96,10 @@ import { mergeContact } from './contact_share'
 import { parsePersonShare, personShareLink } from './person_share_link'
 import { parseNoteShare } from './notes_outline'
 import { addReceivedNote, sharedNotesSection } from './shared_notes_view'
+import { notesOutlineView } from './notes_view'
 import { parseZoneShare, zoneItems, zoneShareLink, type ZoneLink } from './zone_share_link'
 import { zoneLinksSettings } from './zone_share_link_view'
-import { seenBy } from './share_page'
+import { candidates, seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
@@ -280,6 +281,8 @@ enum Screen {
   Chat = 'chat',
   /** Wave 25: the people list page (search, trust zones), opened from the Web screen with Back. */
   People = 'people',
+  /** Wave 32: the Notes outliner (eye menu), a page like People. */
+  Notes = 'notes',
 }
 
 /** Recording by myself is the default; a meeting recording needs the other person's yes. */
@@ -1101,6 +1104,7 @@ function recordOriginOf(s: Screen): RecordOrigin {
     case Screen.Events:
     case Screen.Chat:
     case Screen.People:
+    case Screen.Notes:
       return RecordOrigin.Web
     case Screen.Inventory:
       return RecordOrigin.Inventory
@@ -1161,6 +1165,19 @@ function openPeople(query = ''): void {
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+/** Wave 32: the Notes outliner opens as a page the same way. */
+function openNotes(): void {
+  peoplePage = true
+  history.pushState({ twPage: 'people' }, '')
+  go(Screen.Notes)
+}
+function screenNotes(): Node[] {
+  const s = st()
+  return [
+    header(S.viewNames.notes, { back: () => history.back() }),
+    el('div', { class: 'scroll pad' }, [notesOutlineView({ people: () => st().people, me: { did: s.me.id, name: s.me.displayName }, save })]),
+  ]
+}
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
@@ -1180,9 +1197,10 @@ function zoomGlyph(tab: ZoomTab): HTMLElement {
 }
 
 function go(s: Screen): void {
-  if (s !== Screen.People && peoplePage) { peoplePage = false; history.back() }
+  const onPage = (x: Screen): boolean => x === Screen.People || x === Screen.Notes
+  if (!onPage(s) && peoplePage) { peoplePage = false; history.back() }
   // The people page sits on top of a zoomed Web: going there, and Back from it to the Web, keep the zoom.
-  if (s !== screen && zoomedIn() && s !== Screen.People && !(screen === Screen.People && s === Screen.Web)) { zoom = zoomBack(); history.back() }
+  if (s !== screen && zoomedIn() && !onPage(s) && !(onPage(screen) && s === Screen.Web)) { zoom = zoomBack(); history.back() }
   // Coming to Record from Inventory means "what", from Web "who" (owner
   // 2026-10-06), whichever of Record or Meeting the tap opens; only while
   // nothing has been named or recorded yet.
@@ -1295,6 +1313,7 @@ function mountHeaderControls(): void {
   find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
     : screen === Screen.People ? viewControls('people', anyone)
+    : screen === Screen.Notes ? viewControls('notes', anyone)
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
   const pins = headerPins(st().uiPins?.header).map((id) => {
     const b = id === 'dnd' ? dndButton() : iconButton(PIN_ACTIONS[id].icon, S.headerPinNames[id], PIN_ACTIONS[id].run, 'hdr-pin')
@@ -1305,7 +1324,7 @@ function mountHeaderControls(): void {
   const chatSwitch = screen === Screen.Chat ? right.querySelector('[data-chat-switch]') : null // wave 29: the messenger switch takes the eye's slot
   const parts: Record<string, (Node | null)[]> = { search: [find], views: [views, dots], switch: [chatSwitch], pins, qr: [qr], settings: [gear] }
   right.replaceChildren(...order.flatMap((c) => parts[c]).filter((n): n is Node => n !== null))
-  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people', anyone) : null
+  const drop = screen === Screen.Events || screen === Screen.Inventory ? screenViewDrop() : screen === Screen.People ? viewDrop('people', anyone) : screen === Screen.Notes ? viewDrop('notes', anyone) : null
   if (drop) host.querySelector('.hdr')?.after(drop)
 }
 
@@ -1428,7 +1447,7 @@ function render(): void {
     const target = b.getAttribute('data-go')
     const on = target === screen
       || (target === Screen.Record && (screen === Screen.Meeting || screen === Screen.Review || screen === Screen.Place))
-      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People))
+      || (target === Screen.Web && (screen === Screen.StillTrue || screen === Screen.People || screen === Screen.Notes))
     b.classList.toggle('on', on)
   })
   tabs.querySelector('.tab-record')?.classList.toggle('live', recorder.live && !recorder.paused)
@@ -1459,6 +1478,7 @@ function render(): void {
       case Screen.Events: { const b = cal && eventsView.atList() ? cal.body() : eventsView.body(); return [...b.slice(0, 1), ...reminderRows(), ...b.slice(1)] }
       case Screen.Chat: return screenChat()
       case Screen.People: return screenPeople()
+      case Screen.Notes: return screenNotes()
     }
   })()
   host.replaceChildren(...(frame ? [frame] : []), ...body)
@@ -2380,7 +2400,7 @@ let invQuery = ''
 /** Wave 29: Resources limited to the items one card category grants (membranes_five_view sharesLine); the chip clears it. */
 let invOnly: { label: string; ids: Set<string> } | null = null
 
-const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', map: 'map', dex: 'curator', compact: 'list' }
+const viewGlyph: Record<string, string> = { rings: 'web', network: 'network', people: 'users', notes: 'list', map: 'map', dex: 'curator', compact: 'list' }
 
 /** The web-view-row: the heading of the chosen view or the search field (the magnifier sits in the header, wave 28; expand all sits in the TrustZones sidebar, wave 28b). */
 function webViewRow(view: WebView): HTMLElement {
@@ -2464,6 +2484,7 @@ function toggleExpand(expanded: boolean): void {
 function chooseView(view: ViewKey): void {
   eyeOpen = false
   if (view === 'people') { if (screen === Screen.People) render(); else openPeople(); return }
+  if (view === 'notes') { if (screen === Screen.Notes) render(); else openNotes(); return }
   if (view === 'dex') { openDeskSheet(UiView.Dex); return }
   if (view === 'compact') { openDeskSheet(UiView.Classic); return }
   try { window.localStorage.setItem(WEB_VIEW_KEY, view) } catch { /* not remembered */ }
@@ -2966,7 +2987,7 @@ function cardMore(p: Person): Node[] {
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
       seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
-    notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks(p))],
+    notes: () => [curator.person(p.id, closeSheet, { embedded: true }), sharedNotesSection(p, notesHooks())],
     timeline: () => [timelineSection(p)],
     curate: () => [
       el('button', { class: 'btn btn-ghost card-curate-open', 'data-card-curate': p.id, onclick: () => curatePage(p) }, [S.cardCurate]),
@@ -2978,11 +2999,11 @@ function cardMore(p: Person): Node[] {
 }
 
 /** Wave 31 (shared_notes_view.ts): what the Notes section of a card needs from the app. */
-function notesHooks(p: Person): Parameters<typeof sharedNotesSection>[1] {
+function notesHooks(): Parameters<typeof sharedNotesSection>[1] {
   const s = st()
   return {
     me: { did: s.me.id, name: s.me.displayName },
-    others: activePeople().filter((o) => o.id !== p.id),
+    candidates: candidates({ people: activePeople(), tags: loadColourTags() }),
     connectLink: async () => { await net.start(); return net.connectLink(CONNECT_URL) },
     save,
     toast,

@@ -1274,6 +1274,7 @@ export const S = {
   notePermAnnotate: 'Can add notes',
   noteMakeLink: 'Make the link',
   noteExported: 'Note copied as plain text.',
+  notesViewEmpty: 'No notes yet. Open a card and tap New note.',
   noteShareIn: (name: string, title: string) => `${name} shares a note with you: ${title}`,
   // Wave 31 (zone-share-link): a named link per zone, in Settings > Sharing links
   zoneLinksTitle: 'Sharing links',
@@ -1409,7 +1410,7 @@ export const S = {
   viewMenuAria: 'Choose a view',
   // unused since wave27 review, archive candidate
   viewMenuTitle: 'View',
-  viewNames: { rings: 'Web', network: 'Network', people: 'People', map: 'Map', dex: 'Dex', compact: 'Contacts compact' } as Record<string, string>,
+  viewNames: { rings: 'Web', network: 'Network', people: 'People', notes: 'Notes', map: 'Map', dex: 'Dex', compact: 'Contacts compact' } as Record<string, string>,
   viewOther: 'Other views',
   viewAlt: 'Alternative UI (beta)',
   viewSolar: 'Solar calendar',

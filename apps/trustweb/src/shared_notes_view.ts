@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 31 (shared-notes): the Notes section of a person card: new / pasted notes, blocks edited in place, notes under a block, Share, Pass on, Export. DOM only; rules in notes_outline.ts. */
 import { el } from '../../demo/src/ui/dom'
+import { chipInput } from './chip_input'
 import type { Person } from './model'
 import { annotate, canAnnotate, editBlock, forward, newNote, noteShareLink, provenanceLine, serializeOutline, type NoteBlock, type NoteBy, type NotePerm, type SharedNote } from './notes_outline'
+import { suggest, type Candidate } from './share_page'
 import { S } from './strings'
 
 export interface SharedNotesHooks {
   me: NoteBy
-  /** The record's other people a note can be passed on to. */
-  others: Person[]
+  /** People (`person:<id>`) and tags (`tag:<id>`) the Share picker offers: the Web filter's candidates. */
+  candidates: Candidate[]
   /** My connect link (no note in it yet). */
   connectLink: () => Promise<string>
   save: () => void
@@ -34,6 +36,7 @@ export function sharedNotesSection(p: Person, h: SharedNotesHooks): HTMLElement 
   let form: 'new' | 'import' | null = null
   let openBlock = ''
   let sharing = ''
+  const audience = new Map<string, string[]>()
   const notes = (): SharedNote[] => p.sharedNotes ?? []
   const change = (id: string, fn: (n: SharedNote) => SharedNote): void => {
     p.sharedNotes = notes().map((n) => (n.id === id ? fn(n) : n))
@@ -85,18 +88,24 @@ export function sharedNotesSection(p: Person, h: SharedNotesHooks): HTMLElement 
   }
 
   const shareBox = (n: SharedNote): HTMLElement => {
-    const to = el('select', { class: 'field', 'aria-label': S.notePassTo, 'data-note-pass-to': n.id }, [
-      el('option', { value: p.id }, [S.noteShareHere(p.name)]),
-      ...h.others.map((o) => el('option', { value: o.id }, [o.name])),
-    ]) as HTMLSelectElement
+    const chosen = audience.get(n.id) ?? []
+    const label = (id: string): string => (id.startsWith('person:') ? '@' : '#') + (h.candidates.find((c) => c.id === id)?.label ?? id)
+    const set = (ids: string[]): void => { audience.set(n.id, ids); draw(); setTimeout(() => root.querySelector<HTMLInputElement>('[data-note-audience-input]')?.focus(), 0) }
+    const { input, hits } = chipInput({
+      placeholder: S.shareChipPh, aria: S.notePassTo, attrs: { 'data-note-audience-input': n.id },
+      hits: (text) => suggest(text, h.candidates, chosen).map((c) => ({ label: label(c.id), attrs: { 'data-note-audience-suggest': c.id }, pick: () => set([...chosen, c.id]) })),
+    })
     const perm = el('select', { class: 'field', 'aria-label': S.notePerm, 'data-note-perm': n.id }, [
       el('option', { value: 'read' }, [S.notePermRead]), el('option', { value: 'annotate' }, [S.notePermAnnotate]),
     ]) as HTMLSelectElement
     return el('div', { class: 'note-share' }, [
-      to, perm,
+      el('div', { class: 'chips', 'data-note-audience': n.id }, chosen.map((id) => el('button', {
+        class: 'chip on', 'data-note-audience-chip': id, 'aria-label': S.shareChipRemove(label(id)), onclick: () => set(chosen.filter((x) => x !== id)),
+      }, [label(id) + ' ×']))),
+      input, hits, perm,
       el('button', { class: 'btn btn-electric btn-sm', 'data-note-link': n.id, onclick: () => {
-        const target = [p, ...h.others].find((x) => x.id === to.value) ?? p
-        void h.connectLink().then((base) => send(noteShareLink(base, forward(n, target.name, h.me, Date.now(), perm.value as NotePerm)), h))
+        const to = chosen.length ? chosen.map(label).join(', ') : p.name
+        void h.connectLink().then((base) => send(noteShareLink(base, forward(n, to, h.me, Date.now(), perm.value as NotePerm)), h))
       } }, [S.noteMakeLink]),
     ])
   }

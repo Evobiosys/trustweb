@@ -5,7 +5,7 @@ import { viewMenu, pinnedViews, togglePin, viewHeading, webViewOf, expandedOf, s
 describe('view_menu', () => {
   it('lists Web, Network, People, then Other views: Dex, Contacts compact; the current one is on', () => {
     const m = viewMenu('rings', true, true, [])
-    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'map', 'dex', 'compact'])
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'notes', 'map', 'dex', 'compact'])
     expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact'])
     expect(m.find((i) => i.on)?.view).toBe('rings')
     expect(viewMenu('dex', true, true, []).find((i) => i.on)?.view).toBe('dex')
@@ -48,7 +48,7 @@ describe('view_menu', () => {
   })
   it('groups Contacts compact under Other views and Dex under Alternative UI (beta)', () => {
     const m = viewMenu('rings', true, true, [])
-    expect(m.map((i) => i.group)).toEqual(['main', 'main', 'main', 'main', 'alt', 'other'])
+    expect(m.map((i) => i.group)).toEqual(['main', 'main', 'main', 'main', 'main', 'alt', 'other'])
     expect(m.filter((i) => i.other).map((i) => i.view)).toEqual(['dex', 'compact'])
   })
   it('lists the calendar and inventory views; Solar calendar is non-core and greyed until its module is there', () => {
@@ -59,6 +59,6 @@ describe('view_menu', () => {
   it('keeps the eye menu on the People page: People is the view that is on, the others stay to switch to', () => {
     const m = viewMenu('people', true, true, [])
     expect(m.find((i) => i.on)?.view).toBe('people')
-    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'map', 'dex', 'compact'])
+    expect(m.map((i) => i.view)).toEqual(['rings', 'network', 'people', 'notes', 'map', 'dex', 'compact'])
   })
 })

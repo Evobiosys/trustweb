@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AMPL-1.0 OR AGPL-3.0-or-later
 /** Wave 31 (shared-notes): outliner text <-> blocks, annotations, provenance, passing a note on, the share link. */
 import {
-  annotate, canAnnotate, editBlock, forward, newNote, noteShareLink, parseNoteShare, parseOutline, provenanceLine, serializeOutline,
+  addSibling, annotate, canAnnotate, editBlock, forward, indentBlock, newNote, outdentBlock, outlineRows, rowNeighbour, pruneEmpty, noteShareLink, parseNoteShare, parseOutline, provenanceLine, serializeOutline,
 } from '../../src/notes_outline.ts'
 
 const ANNA = { did: 'did:anna', name: 'Anna' }
@@ -145,5 +145,88 @@ describe('noteShareLink / parseNoteShare', () => {
     expect(got.perms).toBe('read')
     expect(got.title.length).toBeLessThanOrEqual(120)
     expect(got.title).not.toContain('\u202E')
+  })
+})
+
+describe('outliner view of notes', () => {
+  const note = (by, text, at = T0) => newNote({ title: 'T', text, by, at })
+  const ids = (bs) => bs.map((b) => b.text)
+
+  it('indent makes a block the last child of its previous sibling; the first sibling stays', () => {
+    const n = note(ME, '- a\n- b\n- c')
+    const [a, b] = n.blocks
+    const once = indentBlock(n.blocks, b.id, ME)
+    expect(ids(once)).toEqual(['a', 'c'])
+    expect(ids(once[0].children)).toEqual(['b'])
+    expect(indentBlock(n.blocks, a.id, ME)).toBe(n.blocks)
+  })
+
+  it('outdent puts a child right after its parent', () => {
+    const n = note(ME, '- a\n  - b\n- c')
+    const out = outdentBlock(n.blocks, n.blocks[0].children[0].id, ME)
+    expect(ids(out)).toEqual(['a', 'b', 'c'])
+    expect(out[0].children).toEqual([])
+    expect(outdentBlock(n.blocks, n.blocks[0].id, ME)).toBe(n.blocks)
+  })
+
+  it('only the author changes the structure; indent stops at the depth limit', () => {
+    const n = note(ANNA, '- a\n- b')
+    expect(indentBlock(n.blocks, n.blocks[1].id, ME)).toBe(n.blocks)
+    let m = note(ME, '- a\n- b')
+    for (let i = 0; i < 12; i++) m = { ...m, blocks: indentBlock(m.blocks, m.blocks.at(-1).id, ME) }
+    const depth = (bs) => (bs.length ? 1 + Math.max(...bs.map((b) => depth(b.children))) : 0)
+    expect(depth(m.blocks)).toBeLessThanOrEqual(6)
+  })
+
+  it('Enter adds an empty sibling after the block, authored by me; annotation on someone else\'s note', () => {
+    const n = note(ME, '- a\n  - b\n- c')
+    const r = addSibling(n.blocks, n.blocks[0].children[0].id, ME, T0 + 5, false)
+    expect(ids(r.blocks[0].children)).toEqual(['b', ''])
+    const added = r.blocks[0].children[1]
+    expect(added.id).toBe(r.id)
+    expect(added.by).toEqual(ME)
+    expect(added.annotation).toBeUndefined()
+    expect(addSibling(n.blocks, n.blocks[1].id, ME, T0 + 6, true).blocks[2].annotation).toBe(true)
+    const ids2 = new Set([...JSON.stringify(addSibling(r.blocks, r.id, ME, T0 + 7, false).blocks).matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]))
+    expect(ids2.size).toBe(5)
+  })
+
+  it('pruneEmpty drops blocks without words, keeping their filled children in place', () => {
+    const n = note(ME, '- a\n- b')
+    const r = addSibling(n.blocks, n.blocks[0].id, ME, T0 + 1, false)
+    expect(ids(pruneEmpty(r.blocks))).toEqual(['a', 'b'])
+    expect(pruneEmpty(n.blocks)).toBe(n.blocks)
+  })
+
+  it('rows: person > note > blocks, grey provenance, collapse hides the subtree, people without notes stay out', () => {
+    const anna = { id: 'pa', name: 'Anna', sharedNotes: [note(ANNA, '- a\n  - a1\n- b', T0)] }
+    const ben = { id: 'pb', name: 'Ben' }
+    const mine = { id: 'pm', name: 'Cy', sharedNotes: [note(ME, '- m', T0 + 1)] }
+    const all = outlineRows([anna, ben, mine], ME, new Set())
+    expect(all.map((r) => [r.kind, r.depth, r.text])).toEqual([
+      ['person', 0, 'Anna'], ['note', 1, 'T'], ['block', 2, 'a'], ['block', 3, 'a1'], ['block', 2, 'b'],
+      ['person', 0, 'Cy'], ['note', 1, 'T'], ['block', 2, 'm'],
+    ])
+    expect(all[1].meta).toBe('from Anna')
+    expect(all[7].meta).toBe('')
+    expect(all[2].hasKids && all[2].open).toBe(true)
+    const folded = outlineRows([anna, ben, mine], ME, new Set([all[2].key]))
+    expect(folded.map((r) => r.text)).toEqual(['Anna', 'T', 'a', 'b', 'Cy', 'T', 'm'])
+    expect(folded[2].open).toBe(false)
+    expect(outlineRows([anna], ME, new Set([all[0].key])).map((r) => r.text)).toEqual(['Anna'])
+  })
+
+  it('a block by another author than the note starter shows its author at the line end', () => {
+    const n = annotate(note(ANNA, '- a'), note(ANNA, '- a').blocks[0].id, 'tip', BEN, T0 + 1)
+    const r = outlineRows([{ id: 'pa', name: 'Anna', sharedNotes: [n] }], ME, new Set()).filter((x) => x.kind === 'block')
+    expect(r.map((x) => x.meta)).toEqual(['', 'Ben'])
+  })
+
+  it('arrows: next and previous visible row; the ends stay', () => {
+    const rows = outlineRows([{ id: 'pa', name: 'Anna', sharedNotes: [note(ANNA, '- a\n- b')] }], ME, new Set())
+    expect(rowNeighbour(rows, rows[0].key, 1)).toBe(rows[1].key)
+    expect(rowNeighbour(rows, rows[1].key, -1)).toBe(rows[0].key)
+    expect(rowNeighbour(rows, rows[0].key, -1)).toBe(rows[0].key)
+    expect(rowNeighbour(rows, rows.at(-1).key, 1)).toBe(rows.at(-1).key)
   })
 })

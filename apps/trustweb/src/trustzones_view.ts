@@ -3,6 +3,7 @@
 import { el } from '../../demo/src/ui/dom'
 import { randomId } from '../../demo/src/crypto'
 import { type ColourTag, saveColourTags } from './colour_tags'
+import { chipInput } from './chip_input'
 import { candidates, initial, withChip, withoutChip } from './share_page'
 import { createPerson, createTag, suggestOrCreate, tagPerson, untagPerson } from './tag_create'
 import type { CreateRow } from './tag_create'
@@ -71,14 +72,14 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
   }
   const row = (r: ChipRow): HTMLElement => {
     const name = r === 'include' ? S.zoneShowOnly : S.zoneHide
-    const hits = el('div', { class: 'share-hits' })
-    const input = el('input', { class: 'field', placeholder: S.shareChipPh, 'aria-label': name, autocomplete: 'off', 'data-zone-chip-input': r }) as HTMLInputElement
-    const rows = (): ReturnType<typeof suggestOrCreate> => suggestOrCreate(input.value, cands, [...page().include, ...page().exclude])
-    const pickRow = (x: ReturnType<typeof suggestOrCreate>[number]): void => choose(r, 'create' in x ? create(x) : x.id)
-    input.addEventListener('input', () => hits.replaceChildren(...rows().map((x) => el('button', 'create' in x
-      ? { class: 'chip', 'data-zone-chip-create': x.create, onclick: () => pickRow(x) }
-      : { class: 'chip', 'data-zone-chip-suggest': x.id, onclick: () => pickRow(x) }, ['create' in x ? createLabel(x) : label(x.id)]))))
-    input.addEventListener('keydown', (e) => { const first = rows()[0]; if ((e as KeyboardEvent).key === 'Enter' && first) pickRow(first) })
+    const { input, hits } = chipInput({
+      placeholder: S.shareChipPh, aria: name, attrs: { 'data-zone-chip-input': r },
+      hits: (text) => suggestOrCreate(text, cands, [...page().include, ...page().exclude]).map((x) => ({
+        label: 'create' in x ? createLabel(x) : label(x.id),
+        attrs: { [('create' in x ? 'data-zone-chip-create' : 'data-zone-chip-suggest')]: 'create' in x ? x.create : x.id },
+        pick: () => choose(r, 'create' in x ? create(x) : x.id),
+      })),
+    })
     return el('div', { class: 'zone-chip-row', 'data-zone-chip-row': r }, [
       el('b', {}, [name]),
       el('div', { class: 'chips' }, page()[r].map((id) => el('button', {

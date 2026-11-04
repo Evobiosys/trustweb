@@ -1344,5 +1344,14 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .shared-notes ul{margin:2px 0 2px 16px; padding:0; list-style:disc}
 .note-annotation>.note-text{font-style:italic}
 .note-form,.note-share,.note-edit{display:flex; flex-direction:column; gap:6px; margin:6px 0}
+/* Wave 32 (shared-notes): the Notes outliner view; wraps, never scrolls sideways */
+.notes-outline{display:flex; flex-direction:column; gap:2px; text-align:left; overflow-wrap:anywhere}
+.outline-row{display:flex; align-items:baseline; gap:6px; min-width:0}
+.outline-toggle{background:none; border:0; padding:0 2px; width:18px; flex:none; font:inherit; color:inherit; text-align:center; cursor:pointer}
+.outline-text{flex:1 1 8em; min-width:0; box-sizing:border-box; background:none; border:0; padding:3px 0; font:inherit; color:inherit; text-align:left}
+button.outline-text{text-decoration:underline; cursor:pointer}
+.outline-person{font-weight:700}
+.outline-meta{flex:0 1 auto; color:var(--ink-soft); opacity:.7; font-size:12px}
+.note-share .chips{margin:0}
 .note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .shared-notes .field{width:100%; box-sizing:border-box}

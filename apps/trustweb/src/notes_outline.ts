@@ -109,6 +109,118 @@ export function provenanceLine(note: SharedNote, me: NoteBy): string {
   return `from ${who(note.origin.by)}${passers.length ? `, passed on by ${passers.join(', ')}` : ''}`
 }
 
+const heightOf = (b: NoteBlock): number => 1 + Math.max(0, ...b.children.map(heightOf))
+const findBlock = (bs: readonly NoteBlock[], id: string): NoteBlock | undefined => {
+  for (const b of bs) { const hit = b.id === id ? b : findBlock(b.children, id); if (hit) return hit }
+  return undefined
+}
+
+/** Outliner Tab: the block becomes the last child of the sibling above it. Returns `blocks` itself when nothing may change (first sibling, not the author, too deep). */
+export function indentBlock(blocks: readonly NoteBlock[], id: string, by: NoteBy, level = 0): NoteBlock[] {
+  const i = blocks.findIndex((b) => b.id === id)
+  if (i < 0) {
+    for (const [k, b] of blocks.entries()) {
+      const kids = indentBlock(b.children, id, by, level + 1)
+      if (kids !== b.children) return [...blocks.slice(0, k), { ...b, children: kids }, ...blocks.slice(k + 1)]
+    }
+    return blocks as NoteBlock[]
+  }
+  const moved = blocks[i]
+  if (i === 0 || moved.by.did !== by.did || level + 1 + heightOf(moved) > DEPTH_MAX) return blocks as NoteBlock[]
+  const prev = blocks[i - 1]
+  return [...blocks.slice(0, i - 1), { ...prev, children: [...prev.children, moved] }, ...blocks.slice(i + 1)]
+}
+
+/** Outliner Shift-Tab: the block becomes the sibling right after its parent. Returns `blocks` itself when nothing may change. */
+export function outdentBlock(blocks: readonly NoteBlock[], id: string, by: NoteBy): NoteBlock[] {
+  for (const [k, b] of blocks.entries()) {
+    const j = b.children.findIndex((c) => c.id === id)
+    if (j >= 0) {
+      const moved = b.children[j]
+      if (moved.by.did !== by.did) return blocks as NoteBlock[]
+      return [...blocks.slice(0, k), { ...b, children: b.children.filter((_, x) => x !== j) }, moved, ...blocks.slice(k + 1)]
+    }
+    const kids = outdentBlock(b.children, id, by)
+    if (kids !== b.children) return [...blocks.slice(0, k), { ...b, children: kids }, ...blocks.slice(k + 1)]
+  }
+  return blocks as NoteBlock[]
+}
+
+/** Outliner Enter: an empty block after `id` on the same level, written by `by` (marked an annotation on a note that is not theirs). `id` of the new block is returned. */
+export function addSibling(blocks: readonly NoteBlock[], id: string, by: NoteBy, at: number, annotation: boolean): { blocks: NoteBlock[]; id: string } {
+  const fresh: NoteBlock = { id: `s${at.toString(36)}-${countBlocks(blocks) + 1}`, text: '', children: [], by, at, ...(annotation ? { annotation: true as const } : {}) }
+  const put = (bs: readonly NoteBlock[]): NoteBlock[] | null => {
+    const i = bs.findIndex((b) => b.id === id)
+    if (i >= 0) return [...bs.slice(0, i + 1), fresh, ...bs.slice(i + 1)]
+    for (const [k, b] of bs.entries()) {
+      const kids = put(b.children)
+      if (kids) return [...bs.slice(0, k), { ...b, children: kids }, ...bs.slice(k + 1)]
+    }
+    return null
+  }
+  const out = countBlocks(blocks) < BLOCKS_TOTAL_MAX ? put(blocks) : null
+  return out ? { blocks: out, id: fresh.id } : { blocks: blocks as NoteBlock[], id }
+}
+
+/** Drops blocks without words (an Enter that was never filled); their children move up in their place. Returns `blocks` itself when none is empty. */
+export function pruneEmpty(blocks: readonly NoteBlock[]): NoteBlock[] {
+  if (!countEmpty(blocks)) return blocks as NoteBlock[]
+  return blocks.flatMap((b) => { const kids = pruneEmpty(b.children); return b.text ? [{ ...b, children: kids }] : kids })
+}
+const countEmpty = (bs: readonly NoteBlock[]): number => bs.reduce((n, b) => n + (b.text ? 0 : 1) + countEmpty(b.children), 0)
+
+export interface OutlineRow {
+  key: string
+  kind: 'person' | 'note' | 'block'
+  depth: number
+  text: string
+  /** The grey end of the line: where the note came from, or who wrote this block when not the note's starter. */
+  meta: string
+  hasKids: boolean
+  open: boolean
+  /** A block I wrote (only those can be edited, indented or moved). */
+  mine?: true
+  personId: string
+  noteId?: string
+  blockId?: string
+}
+export interface OutlinePerson { id: string; name: string; sharedNotes?: SharedNote[] }
+
+/** The Notes view as visible rows: person > notes > blocks. Keys in `collapsed` hide their subtree; people without notes stay out. */
+export function outlineRows(people: readonly OutlinePerson[], me: NoteBy, collapsed: ReadonlySet<string>): OutlineRow[] {
+  const rows: OutlineRow[] = []
+  const who = (b: NoteBy): string => (b.did === me.did ? 'you' : b.name)
+  const blockRows = (pid: string, n: SharedNote, bs: readonly NoteBlock[], depth: number): void => {
+    for (const b of bs) {
+      const key = `b:${pid}/${n.id}/${b.id}`
+      const open = !collapsed.has(key)
+      rows.push({ key, kind: 'block', depth, text: b.text, meta: b.by.did === n.origin.by.did ? '' : who(b.by), hasKids: b.children.length > 0, open, ...(b.by.did === me.did ? { mine: true as const } : {}), personId: pid, noteId: n.id, blockId: b.id })
+      if (open) blockRows(pid, n, b.children, depth + 1)
+    }
+  }
+  for (const p of people) {
+    const notes = p.sharedNotes ?? []
+    if (!notes.length) continue
+    const pkey = `p:${p.id}`
+    const popen = !collapsed.has(pkey)
+    rows.push({ key: pkey, kind: 'person', depth: 0, text: p.name, meta: '', hasKids: true, open: popen, personId: p.id })
+    if (!popen) continue
+    for (const n of notes) {
+      const key = `n:${p.id}/${n.id}`
+      const open = !collapsed.has(key)
+      rows.push({ key, kind: 'note', depth: 1, text: n.title, meta: provenanceLine(n, me), hasKids: n.blocks.length > 0, open, personId: p.id, noteId: n.id })
+      if (open) blockRows(p.id, n, n.blocks, 2)
+    }
+  }
+  return rows
+}
+
+/** Arrow up / down: the key of the next visible row; at either end the same row. */
+export function rowNeighbour(rows: readonly OutlineRow[], key: string, step: 1 | -1): string {
+  const i = rows.findIndex((r) => r.key === key)
+  return rows[Math.min(rows.length - 1, Math.max(0, i + step))]?.key ?? key
+}
+
 const toB64 = (s: string): string => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 const fromB64 = (s: string): string => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)))
 
