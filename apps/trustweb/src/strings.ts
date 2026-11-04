@@ -448,6 +448,8 @@ export const S = {
     [Ring.Unsorted]: 'tap to add someone not yet sorted',
   } as Record<Ring, string>,
   zoneFilterTitle: 'Filter (advanced)',
+  filterGroupTrustZones: 'TrustZones',
+  filterTagsTitle: 'Tags',
   addPresetHint: "Preset: Acquaintances, because people you sort out of 'Not yet sorted' usually land there; pick another ring any time.",
   zoneCommunity: 'Community tag',
   zoneCommunityNone: 'no tag',
