@@ -119,7 +119,7 @@ import { extractLines } from './notes'
 import { S } from './strings'
 import { createNetworkView } from './network_view'
 import { createMapView } from './map_view'
-import { peopleListBody, resetPeopleList } from './people_list_view'
+import { peopleListBody, resetPeopleList, peopleQuery, setPeopleQuery } from './people_list_view'
 import { knowsRow } from './knows_view'
 import { personImageOk } from './person_image'
 import { migrate } from './schema_version'
@@ -1065,17 +1065,30 @@ window.addEventListener('popstate', (e) => { if (peoplePage && ((t) => t === 'pe
 
 /** Wave 25: the people list is a page, not a sheet; opening it pushes one history entry so Back (browser, phone or the ‹) returns to the Web. */
 let peoplePage = false
+/** Wave 30: the header magnifier's filter field under the People header; it filters the list as you type, Escape clears and closes it. */
+let peopleSearchOpen = false
 function openPeople(query = ''): void {
   resetPeopleList(query)
+  peopleSearchOpen = query !== ''
   peoplePage = true
   history.pushState({ twPage: 'people' }, '')
   go(Screen.People)
 }
+function peopleSearchField(): HTMLElement {
+  const input = el('input', {
+    class: 'field people-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-people-search': '', value: peopleQuery(),
+    oninput: (e: Event) => setPeopleQuery((e.target as HTMLInputElement).value),
+    onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === 'Escape') { peopleSearchOpen = false; setPeopleQuery(''); render() } },
+  })
+  setTimeout(() => input.focus(), 0)
+  return input
+}
 function screenPeople(): Node[] {
   return [
     header(S.peopleTitle, { back: () => history.back() }),
+    ...(peopleSearchOpen ? [peopleSearchField()] : []),
     el('div', { class: 'scroll pad' }, [
-      peopleListBody(st, openCardPage, addPersonSheet, !window.matchMedia('(pointer: coarse)').matches),
+      peopleListBody(st, openCardPage, addPersonSheet),
     ]),
   ]
 }
@@ -1167,6 +1180,7 @@ function tagQr(tag: string, plain = false): void {
 function headerSearch(): void {
   if (screen === Screen.Web) { webSearchOpen = !webSearchOpen; render() }
   else if (screen === Screen.Chat) document.querySelector<HTMLInputElement>('[data-chat-search]')?.focus()
+  else if (screen === Screen.People) { peopleSearchOpen = !peopleSearchOpen; if (!peopleSearchOpen) setPeopleQuery(''); render() }
   else if (screen === Screen.Events) { eventsView.showList(); window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-event-filter]')?.focus(), 0) }
   else { invSearchOpen = !invSearchOpen; if (!invSearchOpen) invQuery = ''; render() }
 }
@@ -1202,7 +1216,7 @@ function mountHeaderControls(): void {
   gear.dataset.settingsGear = '1'
   const anyone = st().people.length > 0
   const find = iconButton('search', S.headerSearchAria, headerSearch, 'web-search-btn')
-  find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : invSearchOpen && screen === Screen.Inventory))
+  find.setAttribute('aria-expanded', String(screen === Screen.Web ? webSearchOpen : screen === Screen.People ? peopleSearchOpen : invSearchOpen && screen === Screen.Inventory))
   const views: Node = screen === Screen.Web ? viewControls(webViewNow, anyone)
     : screen === Screen.People ? viewControls('people', anyone)
     : iconButton('eye', S.viewMenuAria, () => { eyeOpen = !eyeOpen; render() }, 'view-menu-btn')
@@ -2294,6 +2308,7 @@ function webViewRow(view: WebView): HTMLElement {
   const mid = webSearchOpen
     ? el('input', {
       class: 'field web-search', type: 'search', placeholder: S.peopleSearchPh, 'aria-label': S.viewSearchAria, 'data-web-search': '',
+      oninput: (e: Event) => { if (view === 'map') setPeopleQuery((e.target as HTMLInputElement).value) }, // wave 30: the Map's people list filters as you type
       onkeydown: (ev: Event) => {
         const e = ev as KeyboardEvent
         const input = e.target as HTMLInputElement
@@ -2509,7 +2524,7 @@ function screenWeb(): Node[] {
   ])
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
-    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, false, extra) } })])
+    ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, extra) } })])
     : el('div', { class: 'scroll' }, [layer])
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
