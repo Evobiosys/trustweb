@@ -10,8 +10,10 @@
  */
 import { conflictNodes, pollStatus, type ApprovalStatus } from './dev_feature'
 import { createDevice2, DEVICE2_CSS } from './dev_device2'
+import { flagSteps, readFlag } from './dev_navigate'
 import { createPointer } from './dev_pointer'
 import { createSteps } from './dev_steps'
+import { S } from './strings'
 import { approveEach } from './dev_wave_press'
 import { APPLY_DELAY_MS, compatFresh, compatLine, ensureLoaded, hintParts, remindOpenStore, searchRows, unapproved, type Compat, applyOutcome, applyVerdicts, debounce, foldStore, individualStore, loadOpenStore, noteText, mergedLabel, remindItems, walkShown, withBox, applyStamp, applyStuck, autoApply, reloadMark, scrollStore, shouldReload, ciLine, collapseStore, stepFold, descendants, devLabel, devUrl, needsHint, prGate, prMerged, prRunning, testLine, allLoaded, pillPress, selectAll, shownVerdict, rowPlan, relatedRows, stepText, readSeen, REPO_LABEL, sections, seenState, tapped, tapSeen, tree, visible, type PreviewFeature, type Tested, type TreeNode } from './dev_preview_rules'
 
@@ -60,7 +62,7 @@ const CSS = `
 .twp .btns{display:grid;gap:5px;padding:4px 10px 8px}.twp .btns.hdr{display:flex}.twp a{color:#4fd7a0}
 .twp button:disabled{opacity:.45;cursor:not-allowed}
 .twp pre.log{margin:0;max-height:8.5em;overflow:auto;font:10px/1.3 ui-monospace,monospace;background:#16101d;padding:4px;border-radius:6px;white-space:pre-wrap}
-.twp .pills{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:3px;padding-left:31px;box-sizing:border-box}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
+.twp .flags{display:flex;flex-wrap:wrap;gap:3px;padding:0 10px 4px}.twp .pills{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:3px;padding-left:31px;box-sizing:border-box}.twp .pill{padding:1px 6px;font-size:10px;background:none;color:#b7a8c9;border:1px solid #7a6a8c;text-decoration:underline}
 .twp .pill.on.merge{background:#4fd7a0;color:#241b2e;border-color:#4fd7a0}.twp .pill.on.work{background:#e5484d;color:#fff;border-color:#e5484d}
 .twp .bar{position:sticky;bottom:0;margin:4px 0 0;padding:6px 10px;background:#3a2c48;display:grid;gap:5px;border-top:1px solid #7a6a8c}.twp .bar div{display:flex;gap:6px;align-items:center}.twp .bar button{text-decoration:underline}
 .twp .upd{margin-left:4px;padding:0 4px;border-radius:4px;background:#ffbf47;color:#241b2e;font-weight:700}
@@ -74,6 +76,9 @@ const POS = 'twp-pos'
 const folded = (id: string): string[] => foldStore(sessionStorage, id).get()
 const setFolded = (id: string, keys: string[]): void => { foldStore(sessionStorage, id).set(keys) }
 const seenKey = (id: string): string => 'twp-seen-' + id
+const flagOn = (f: PreviewFeature): boolean => !!f.flag && readFlag(f.flag, location.search, localStorage)
+/** Wave 30 (P5): a walk interrupted by its flag switch's reload goes on after it (sessionStorage, the row's key). */
+const RESUME = 'twp-walk-resume'
 const store = {
   get: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } },
   set: (k: string, v: string): void => { try { localStorage.setItem(k, v) } catch { /* private mode: not remembered */ } },
@@ -197,9 +202,10 @@ export function initDevPreview(): void {
     // The ring shows when the selector matches; else the steps overlay walks to it, the last step being the feature itself.
     if (lit) {
       const plan = walking && f.steps?.length ? 'walk' : rowPlan(pointer.set(f.selector), f.steps)
-      if (plan === 'walk') steps.open(f.steps!)
+      const own = flagSteps(f, flagOn(f))
+      if (plan === 'walk') void steps.open(own, f.context)
       else if (plan === 'none') { lit = null; toast('nothing to point at for this feature') }
-      else if (plan === 'steps') steps.open([...f.steps!, f.selector ? `${f.title} @ ${f.selector}` : f.title])
+      else if (plan === 'steps') void steps.open([...own, f.selector ? `${f.title} @ ${f.selector}` : f.title], f.context)
     }
     render()
   }
@@ -330,7 +336,7 @@ export function initDevPreview(): void {
       else { individual.set([...new Set([...individual.get(), f.key])]); render() }   // approved by the registry before: the note is the owner's own press
     })
     const how = h('button', { className: 'mini alt', textContent: '?', title: 'Show the steps by hand' })
-    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); if (steps.active() && fold.press(collapsed())) tab.set(true); render() })
+    how.addEventListener('click', (e) => { e.stopPropagation(); tap(f); if (steps.active() && !(f.flag && !flagOn(f)) && fold.press(collapsed())) tab.set(true); render() })
     const label = h('div', { className: 'feat' + (off ? ' off' : '') + (mark.italic ? ' seen' : '') + (lit === f.key ? ' lit twp-active' : '') + (related.has(f.key) ? ' twp-related' : '') + (shownVerdict(f) === 'needs-work' ? ' rej' : '') + (glim === f.key ? ' glim' : '') }, chev, box, h('span', {}, mark.prefix + f.title, ' ', h('small', {}, f.branch + (hint ? ' · ' + hint : '')), ...(f.updated ? [h('small', { className: 'upd', textContent: 'updated' })] : []), ...(closed ? [' ', h('small', { className: 'hid' }, `(${descendants(n)} hidden)`)] : []), ...(f.where ? [h('small', { className: 'where', textContent: f.where })] : [])), lit === f.key && pointing ? h('i') : '', h('span', { className: 'pills' }, h('span', { className: 'pillbox' }, pill('merge', '✓ approve'), note), pill('needs-work', 'needs work'), ...(f.steps?.length ? [...(walkBtn ? [go] : []), how] : [])))
     label.addEventListener('click', (e) => { if (e.target === box || e.target === chev) return; if (lit === f.key) { lit = null; render() } else walk(f) })
     return h('div', {}, label, ...(n.children.length && !closed ? [h('div', { className: 'kids' }, ...n.children.map((c) => row(c, shown)))] : []))
@@ -454,6 +460,23 @@ export function initDevPreview(): void {
     if (now - idClickAt < 400) { idClickAt = 0; copyId(id) } else idClickAt = now
   }
 
+  /** Wave 30 (P5): "Try <title>" for every loaded row with a flag: sets or clears the flag (localStorage and the URL) and reloads; an open walk of that row goes on after the reload. */
+  function flagSwitch(f: PreviewFeature): HTMLButtonElement {
+    const on = flagOn(f)
+    const b = h('button', { className: 'pill' + (on ? ' on merge' : ''), textContent: (on ? '✓ ' : '') + S.flagTry(f.title), title: on ? 'On: tap to switch it off' : 'Off: tap to switch it on' })
+    b.dataset.flagSwitch = f.flag
+    b.setAttribute('aria-pressed', String(on))
+    b.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (lit === f.key && steps.active()) sessionStorage.setItem(RESUME, f.key)
+      if (on) localStorage.removeItem('twp-flag-' + f.flag!); else store.set('twp-flag-' + f.flag!, '1')
+      const url = new URL(location.href)
+      if (on) url.searchParams.delete(f.flag!); else url.searchParams.set(f.flag!, '1')
+      location.assign(url)
+    })
+    return b
+  }
+
   /** All feature rows, section by section; the panel scrolls (max-height from the viewport) when there are more than fit. */
   const allRows = (secs: { sec: HTMLElement; rows: HTMLElement[] }[]): HTMLElement[] => secs.map((s) => h('div', { className: 'row' }, s.sec, ...s.rows))
 
@@ -495,6 +518,7 @@ export function initDevPreview(): void {
       const loadHead = h('button', { className: 'loadhead', textContent: `${open ? '▾' : '▸'} Load (${visible(shown).filter((f) => f.checked).length} of ${visible(shown).length} loaded)`, title: open ? 'Collapse' : 'Expand' })
       loadHead.addEventListener('click', () => { loadOpen.set(!open); render() })
       const waiting = unapproved(q.features)
+      const flagged = visible(shown).filter((f) => f.flag && f.checked)
       const remindHead = h('button', { className: 'loadhead', textContent: `${waiting.length} loaded, not yet approved ${remindOpen.get() ? '▾' : '▸'}`, title: remindOpen.get() ? 'Collapse' : 'Expand' })
       remindHead.addEventListener('click', () => { remindOpen.set(!remindOpen.get()); render() })
       const searchBtn = h('button', { className: 'srchbtn', textContent: '🔍', title: 'Search the rows' })
@@ -512,6 +536,7 @@ export function initDevPreview(): void {
         h('div', { className: 'row' }, h('small', { textContent: `${q.branch} @ ${q.assembled?.sha.slice(0, 7) ?? '?'} · ${hhmm(q.created)} · base ${q.base}@${q.baseSha}` }), searchBtn),
         ...(searching ? [searchBox] : []),
         ...(compat ? [compat] : []),
+        ...(flagged.length ? [h('div', { className: 'row flags' }, ...flagged.map(flagSwitch))] : []),
         ...(open ? [h('div', { className: 'btns hdr' }, approveAllBtn, all)] : []),
         ...(waiting.length ? [h('div', { className: 'row remind' }, remindHead, ...(remindOpen.get() ? [h('div', { textContent: waiting.map((f) => f.title).join(', ') })] : []))] : []),
         ...(rejected.length ? [h('div', { className: 'row remind rej' }, 'needs work: ', ...remindItems(rejected).flatMap((r, i) => [...(i ? [', '] : []), remindLink(r)]))] : []),
@@ -552,5 +577,9 @@ export function initDevPreview(): void {
     render()
     if (autoApply(q, applying)) void apply()
     setInterval(() => { void watch() }, 2000)
+    const resume = sessionStorage.getItem(RESUME)
+    sessionStorage.removeItem(RESUME)
+    const f = resume ? q.features.find((x) => x.key === resume) : undefined
+    if (f) walk(f)
   }).catch(() => { /* the file is gone: keep what the serve start saw */ })
 }
