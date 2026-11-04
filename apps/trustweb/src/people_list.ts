@@ -5,6 +5,7 @@ import type { AppState, Person } from './model'
 import { webSlot } from './rings_layout'
 import { isPinned, pinnedModeOf, pinnedOrder } from './membranes_five'
 import { rank, threadStats } from './search_rank'
+import { isArchived } from './trustzones'
 
 export interface ZoneGroup {
   ring: Ring
@@ -31,7 +32,7 @@ function listed(s: ListState, query: string, keep: (p: Person) => boolean, now: 
   const q = query.trim().toLowerCase()
   const last = new Map(s.people.map((p) => [p.id, lastContact(s, p)]))
   const hits = s.people
-    .filter((p) => keep(p) && (!q || p.name.toLowerCase().includes(q) || p.context.toLowerCase().includes(q)))
+    .filter((p) => !isArchived(p) && keep(p) && (!q || p.name.toLowerCase().includes(q) || p.context.toLowerCase().includes(q)))
     .sort((a, b) => (last.get(b.id) ?? 0) - (last.get(a.id) ?? 0))
   if (!q) return hits
   // Wave 27 sovereign-switch: a typed search is ordered by search_rank.ts (zone, tags, recency, reciprocity, fuzzy text); newest contact breaks ties.
