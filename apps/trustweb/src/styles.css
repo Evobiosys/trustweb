@@ -1316,3 +1316,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .bar-opt-row .radio{flex:1 1 140px}
 .bar-opt-acts{display:flex; gap:2px}
 .linkbtn{background:none; border:0; padding:4px; color:var(--violet); text-decoration:underline; cursor:pointer; font:inherit}
+
+.feed-chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center}
+.feed-chips .chip{text-decoration:underline}
+.feed-chips .btn{text-decoration:underline; margin-left:auto}
