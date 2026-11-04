@@ -85,13 +85,16 @@ import { Net } from './net'
 import { stripUnsafe } from './safe_text'
 import type { AskResult, IncomingAsk, RelayStatus } from './net'
 import { AboutKind, ageLabel, archivedInvite, askDirectOnly, Audience, AUDIENCES, Channel, CHANNELS, DEFAULT_RECORDINGS, DefaultRecording, defaultRecording, demoAccountScope, demoOnlyForDemoAccounts, enginePlan, featureOn, feedOn, setFeature, HintId, HINTS, isDemoItem, LEANS, LineStatus, pastMeetings, ProvenanceState, QueryStyle, RECORD_LINE_AUDIENCE, Ring, RINGS, reachOutLegendShown, ringColor, ServerJobState, Tag, TAGS, threadIsDemo, ENGINE_CHOICES, TranscriptionChoice, transcriptionChoice } from './model'
-import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle } from './channel'
+import { CONSENSUAL_AGREEMENTS_LINK, channelLink, normalizeHandle, waLink } from './channel'
 import {
   REQUESTABLE, answerPlan, buildContactPayload, chatOnConsensual, consensualReachable, contactText, holdContact, mayAnswerRequest, mayAskAgain, parseRequestText, primaryReachable, reachableChannels,
   receiveContactText, requestText, settleDefaultTick, sharedReachables, takeContact, withTick,
 } from './contact_share'
 import { messengerLinksShown, shownChannels, toggleMessengerLinks } from './channel_visibility'
 import type { HeldContacts, Reachable, ShareSettings } from './contact_share'
+import { mergeContact } from './contact_share'
+import { parsePersonShare, personShareLink } from './person_share_link'
+import { seenBy } from './share_page'
 import { CHAT_TEXT_MAX, TextKind, markRead, peersWithPending, receiveText, removeThread, routeText, unreadTotal } from './chat'
 import { chatFindRows, chatListRows, chatPickerRows, messengerSymbols } from './chat_list'
 import type { ChatListPerson } from './chat_list'
@@ -384,6 +387,8 @@ const sharedNotes = (new URLSearchParams(location.hash.slice(1)).get('n') ?? '')
 // A TrustWeb + Signal / WhatsApp link names its channel (#via=SIGNAL, share_modes.ts): connecting on that messenger is one more tap.
 const viaChannel = pendingConnect ? parseVia(location.hash) : null
 const viaCard = createViaCard()
+// Wave 30 (person_share_link.ts): a link made for one person also carries contact channels and the things their zone may see; shown on the start screen, merged only after their tap.
+const personShare = pendingConnect ? parsePersonShare(location.hash) : null
 // A demo-account link (QR > Demo account on the inviter's phone, 2026-10-06):
 // the account name and, optionally, the demo inventory peer, also in the fragment.
 const demoLink = pendingConnect ? parseDemoFragment(location.hash) : null
@@ -1794,6 +1799,7 @@ async function completePendingConnect(picked?: { name: string; ring: Ring }): Pr
   }
   if (reachOut && person.ring === Ring.Intending) person.reachedOut = 'sent'
   if (treeLink?.family) applyFamily(person)
+  if (personShare?.contact) mergeContact(person, personShare.contact, Date.now())
   // The scanning phone shares its slice at connect too (Jakob 2026-10-23 21:42: "the public slice can be shown immediately").
   autoShareToPerson(person)
   if (admitted.legacy) person.connectedVia = 'legacy-code'
@@ -2021,6 +2027,7 @@ function screenStart(): Node[] {
             el('b', {}, solo ? [S.connectInvite(inviter)] : [S.reachOutStartBefore, el('span', { class: 'invite-name' }, [inviter]), S.reachOutStartAfter]),
             solo ? null : el('p', { class: 'meta', 'data-reach-out-note': '' }, [S.reachOutStartNote]),
             sharedNotes ? el('p', {}, [S.connectInviteNotes(inviter)]) : null,
+            personShare ? personShareBox(inviter, personShare) : null,
           ])
         : el('p', { class: 'lead' }, [S.startLead]),
     !invite && window.top === window
@@ -2388,7 +2395,8 @@ function chatPeople(): ChatListPerson[] {
 function messengerChips(p: ChatListPerson): HTMLElement {
   const label = { trustweb: S.chatViaTrustweb, signal: 'Signal', whatsapp: 'WhatsApp' }
   return el('span', { class: 'msgr' }, messengerSymbols(p).map((m) => {
-    const href = m.href && safeHref(m.href)
+    const person = m.kind === 'whatsapp' ? st().people.find((x) => x.id === p.id) : undefined
+    const href = m.href && safeHref(person ? waLink(m.href, waDraft(person)) : m.href)
     const text = label[m.kind].charAt(0)
     return href
       ? el('a', { class: 'msgr-ico ' + m.kind, href, target: '_blank', rel: 'noopener', 'data-messenger': m.kind, 'aria-label': S.chatOnMessenger(p.name, label[m.kind]), onclick: (e: Event) => e.stopPropagation() }, [text])
@@ -2873,7 +2881,7 @@ function cardMore(p: Person): Node[] {
     knows: () => [knowsRow(p, activePeople(), save, () => personSheet(p.id), (id) => openWebPage({ kind: 'card', id }), personFace)],
     other: () => [
       undoOffered(st(), p.id, Date.now()) ? el('button', { class: 'btn btn-ghost btn-sm', 'data-release-undo-person': p.id, onclick: () => { undoRelease(st(), p.id, Date.now()); save(); render() } }, [S.engagementUndoRelease]) : null,
-      seenLine(st(), p.id), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
+      seenLine(st(), p.id), personShareRow(p), askAgainRow(p), leanRow(p), eventChipsRow(p), theirProfileBlock(p.name, p.theirProfile, Date.now()), p.peerId ? sendProfileRow(p) : null,
     ],
     notes: () => [curator.person(p.id, closeSheet, { embedded: true })],
     timeline: () => [timelineSection(p)],
@@ -2884,6 +2892,51 @@ function cardMore(p: Person): Node[] {
   const connected = Boolean(p.peerId)
   const sections = cardSections({ connected, canAskLinks: askLinksRow(p) !== null })
   return sections.flatMap((id) => rows[id]?.() ?? []).filter((n): n is Node => n !== null)
+}
+
+/** Wave 30: the one link made for a person, kept while the card is open so the WhatsApp message can carry it. */
+const personLinks = new Map<string, string>()
+
+/** The first WhatsApp message to a person: a greeting, and the person's one link once it is made. */
+const waDraft = (p: Person): string => S.personWaDraft(displayName(p.name).text, personLinks.get(p.id))
+
+/** The connect link, the channels I ticked, and the texts of the things this person's zone may see (the same check as enforcement). */
+async function buildPersonLink(p: Person): Promise<string> {
+  await net.start()
+  const s = st()
+  const texts = seenBy(basisOf(s), p.id, new Date()).map((id) => s.inventory.find((i) => i.id === id)?.text ?? '')
+  const url = personShareLink(net.connectLink(CONNECT_URL), s.myChannels, s.contactShare, texts)
+  personLinks.set(p.id, url)
+  // The WhatsApp buttons already drawn on this card get the message with the link in it.
+  for (const a of document.querySelectorAll<HTMLAnchorElement>(`a[data-wa-person="${p.id}"]`)) a.href = waLink(a.href.split('?')[0], waDraft(p))
+  return url
+}
+
+/** Person card: "Share one link with <name>" (underlined), copy and the phone's share sheet. */
+function personShareRow(p: Person): HTMLElement {
+  const name = displayName(p.name).text
+  const link = async (): Promise<string> => personLinks.get(p.id) ?? buildPersonLink(p)
+  void link().catch(() => undefined)
+  return el('div', { class: 'card-share-link', 'data-person-share': p.id }, [
+    el('button', { class: 'btn btn-ghost btn-sm', 'data-person-share-copy': p.id, onclick: () => {
+      void link().then(async (url) => {
+        if (typeof navigator.share === 'function') await navigator.share({ text: url }).catch(() => undefined)
+        else await navigator.clipboard.writeText(url).then(() => toast(S.meetCopied))
+      })
+    } }, [S.personShareRow(name)]),
+    infoNote(S.personShareInfo),
+  ])
+}
+
+/** The start screen of a link made for me: what the sender shares with me and the ways to reach them. Nothing is added until I tap. */
+function personShareBox(inviter: string, share: NonNullable<typeof personShare>): HTMLElement {
+  const channels = share.contact ? Object.keys(share.contact.channels).map((ch) => chName(ch as Channel)).join(', ') : ''
+  return el('div', { class: 'person-share', 'data-person-share-in': '' }, [
+    el('b', {}, [S.personShareFrom(inviter)]),
+    share.items.length ? el('p', { class: 'meta' }, [S.personShareItems]) : null,
+    share.items.length ? el('ul', {}, share.items.map((t) => el('li', {}, [t]))) : null,
+    channels ? el('p', { class: 'meta' }, [S.personShareContact(channels)]) : null,
+  ])
 }
 
 /** The channels this person has, each a link with its value; a value I typed is edited by tapping it (card_view.ts channelEdit). */
@@ -2900,7 +2953,7 @@ function cardChannelsRow(p: Person): HTMLElement | null {
       })
     }
     return el('div', { class: 'card-ch', 'data-card-ch': r.channel }, [
-      el('a', { class: 'btn btn-ghost btn-sm', href: r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel }, [chName(r.channel)]),
+      el('a', { class: 'btn btn-ghost btn-sm', href: r.channel === Channel.WhatsApp ? waLink(r.value, waDraft(p)) : r.link, target: '_blank', rel: 'noopener noreferrer', 'data-message-on': r.channel, ...(r.channel === Channel.WhatsApp ? { 'data-wa-person': p.id } : {}) }, [chName(r.channel)]),
       val,
     ])
   }))
@@ -2918,7 +2971,9 @@ function messengerStrip(p: Person): HTMLElement | null {
     const attrs = { class: 'msg-glyph' + (g.connected ? '' : ' linked'), 'data-msg-glyph': g.id, 'aria-label': label, title: label }
     const node = g.connected || !g.service.url
       ? el('button', { ...attrs, onclick: () => chatSheet(p.id) })
-      : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
+      : g.service.channel === Channel.WhatsApp
+        ? el('a', { ...attrs, href: waLink(g.service.url, waDraft(p)), target: '_blank', rel: 'noopener noreferrer', 'data-wa-person': p.id })
+        : el('a', { ...attrs, href: g.service.url, target: '_blank', rel: 'noopener noreferrer' })
     node.innerHTML = serviceIcon(g.service)
     return node
   }))
