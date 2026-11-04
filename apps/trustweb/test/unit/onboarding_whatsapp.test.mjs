@@ -46,6 +46,15 @@ describe('plan: group flag and distinct days', () => {
     expect(by('Gerd').group).toBe('Family chat')
     expect(by('Mira').group).toBeUndefined()
   })
+  it('a person in a direct chat and in a group stays on Acquaintances (group evidence never raises a ring)', () => {
+    const s = { people: [], serviceImports: [] }
+    const anna = { name: 'WhatsApp Chat with Anna Both.txt', text: ['[03.10.2026, 18:20:11] Ben: Hallo Anna', '[03.10.2026, 18:25:40] Anna Both: Gut', '[05.10.2026, 09:10:00] Anna Both: Gerne'].join('\n') }
+    const gr = { name: 'WhatsApp Chat with Wandergruppe.txt', text: ['[15.10.2026, 20:00:00] Ben: Wer kommt', '[15.10.2026, 20:02:00] Gerda Group: Ich', '[15.10.2026, 20:03:00] Anna Both: Ich auch'].join('\n') }
+    const p = planServices(s, [anna, gr], { me: 'Ben', now: NOW })
+    commitPlan(s, p, 'b2', NOW)
+    placeAll(s, NOW, () => `id${Math.random()}`)
+    expect(s.people.find((x) => x.name === 'Anna Both').ring).toBe(Ring.Acquaintance)
+  })
   it('placeAll writes the rings and the notes, once', () => {
     const s = { people: [], serviceImports: [] }
     commitPlan(s, plan, 'b1', NOW)

@@ -6,6 +6,7 @@
  */
 import { Ring } from './model'
 import type { AppState, ServiceRow } from './model'
+import { normalizeName } from '../../crm/src/import/dedup'
 import { decide, pendingProposals } from './services_import'
 import { S } from './strings'
 
@@ -43,8 +44,9 @@ export function placeAll(s: State, now: number, newId: () => string): { placed: 
   const out = { placed: 0, close: 0 }
   for (const { batchId, row } of pendingProposals(s, now)) {
     const pl = placementFor(row)
-    // A name already in the web keeps its ring: only the source stamp is added.
-    decide(s, batchId, row.key, row.dupe ? { do: 'accept' } : { do: 'change', ring: pl.ring }, now, newId)
+    // A name already in the web keeps its ring: only the source stamp is added. (row.dupe also marks one person met in several chats: that one is placed.)
+    const known = s.people.some((p) => p.sources?.some((x) => x.key === row.key) || normalizeName(p.name) === normalizeName(row.name))
+    decide(s, batchId, row.key, known ? { do: 'accept' } : { do: 'change', ring: pl.ring }, now, newId)
     const done = s.serviceImports?.find((b) => b.id === batchId)?.done[row.key]
     const person = done?.created ? s.people.find((p) => p.id === done.personId) : undefined
     if (!person) continue

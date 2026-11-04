@@ -45,7 +45,7 @@ const emit = (): void => { for (const f of [...listeners]) f() }
 /** The empty-web card: one primary button and a muted Not now (for this session). Null when it should not show. */
 export function onboardingCard(h: OnboardingHooks, redraw: () => void): HTMLElement | null {
   if (!showOnboarding(h.state(), dismissed)) return null
-  return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:8px;text-align:center', 'data-onboard-card': '' }, [
+  return el('div', { class: 'conn-row', style: 'flex-direction:column;align-items:stretch;gap:8px;text-align:center;max-width:420px;margin:0 auto', 'data-onboard-card': '' }, [
     el('p', { class: 'empty' }, [S.onbEmpty]),
     el('button', { class: 'btn btn-electric', style: 'text-decoration:underline', 'data-onboard-whatsapp': '', onclick: () => openOnboarding(h) }, [S.onbImport]),
     el('button', { class: 'btn btn-ghost', 'data-onboard-notnow': '', onclick: () => { dismissed = true; redraw() } }, [S.onbNotNow]),

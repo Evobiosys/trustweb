@@ -2503,7 +2503,6 @@ function screenWeb(): Node[] {
     // Wave 6i: the cards sit here, in the flow, above the rings (card_stack.ts); not while the dock needs the room.
     queryOpen ? null : cardStackEl,
     s.people.length === 0 ? el('p', { class: 'empty' }, [S.webEmpty]) : null,
-    onboardingCard(onboardHooks, render),
     passOnNotice(),
     tagFilter ? tagFilterChip(loadColourTags().find((x) => x.id === tagFilter)?.label ?? tagFilter, () => { tagFilter = null; render() }) : null,
     view === 'network'
@@ -2516,7 +2515,7 @@ function screenWeb(): Node[] {
   // The Map has text boxes: no zoom layer (it would capture their pointers).
   const clip = view === 'map'
     ? el('div', { class: 'scroll' }, [createMapView({ people: s.people, openPerson: openCardPage, save, peopleList: (extra) => { resetPeopleList(); return peopleListBody(st, openCardPage, addPersonSheet, false, extra) } })])
-    : el('div', { class: 'scroll' }, [layer])
+    : el('div', { class: 'scroll' }, [onboardingCard(onboardHooks, render), layer])   // the card sits beside the zoom layer: scaled with the rings it left the desktop screen (wave 30 fix)
   if (view !== 'map') web.zoomOnWeb(clip, layer)
   return [
     // Wave 28: the header's controls (search, eye with its pinned views, QR, settings) are mounted by mountHeaderControls.
