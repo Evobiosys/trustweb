@@ -1289,6 +1289,7 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-name{flex:1; min-width:0}
 .zone-name .tap-edit{background:none; border:0; padding:2px 0; color:inherit; font:inherit; cursor:text; text-align:left}
 .zone-check{display:flex; align-items:center; gap:6px; font-size:13px}
+.filter-group{margin:6px 0} .filter-group>summary{cursor:pointer; text-decoration:underline; font-weight:600} .filter-group-title{display:block; margin-top:8px}
 .zzz-strip{display:flex; flex-direction:column; gap:4px}
 /* Wave 28b: the TrustZones sidebar (expand all, add, tag filters): above the rings on the phone, left on desktop */
 .ring-more.fill-expand{font-size:10px; background:#fff; color:#3a1d00; border-color:var(--rc)}

@@ -12,6 +12,7 @@ import { S } from './strings'
 import { FILTER_RINGS, ringShown, setRingShown } from './rings_filter'
 import { communityOf, communityTags, filterOpen, setUi } from './trustzones'
 import { connectionsShown } from './zone_connections'
+import { groupOpen, setGroupOpen } from './filter_groups'
 import { activeCountLabel, activeFilters } from './filter_active'
 
 /** The one outliner glyph (G2): a triangle pointing right while folded, down while unfolded. */
@@ -59,6 +60,20 @@ export function filterSection(d: Pick<ZonePanelDeps, 's' | 'tags' | 'onChange'>)
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'filterOpen', !open); d.onChange() }, { 'data-zone-filter-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
     ...(open ? [...activeRows(d), ...FILTER_RINGS.map(check), el('label', { class: 'zone-check' }, [S.zoneCommunity, ' ', pick])] : []),
   ])
+}
+
+/** Wave 32: the five ring checkboxes (plus Not yet sorted) under a collapsible "TrustZones" heading, open by default. */
+function trustZonesGroup(d: Pick<ZonePanelDeps, 's' | 'onChange'>): HTMLElement {
+  const check = (ring: Ring): HTMLElement => el('label', { class: 'zone-check' }, [
+    el('input', { type: 'checkbox', 'data-zone-filter': ring, ...(ringShown(d.s, ring) ? { checked: '' } : {}), onchange: (e: Event) => { setRingShown(d.s, ring, (e.target as HTMLInputElement).checked); d.onChange() } }),
+    ' ', S.ringLabel[ring],
+  ])
+  const box = el('details', { class: 'filter-group', 'data-filter-group': 'trustzones', ...(groupOpen(d.s, 'trustzones') ? { open: '' } : {}) }, [
+    el('summary', {}, [S.filterGroupTrustZones]),
+    ...FILTER_RINGS.map(check),
+  ])
+  box.addEventListener('toggle', () => { const o = (box as HTMLDetailsElement).open; if (o !== groupOpen(d.s, 'trustzones')) { setGroupOpen(d.s, 'trustzones', o); d.onChange() } })
+  return box
 }
 
 /** Wave 28b: the two chip inputs of the sidebar's Filters (advanced), the share page's chips and typeahead (share_page.ts): "show only" keeps matches, "hide" removes them and wins. Both filter the dots on the web. */
@@ -132,7 +147,7 @@ function tagFilters(d: Pick<ZonePanelDeps, 's' | 'people' | 'tags' | 'onChange'>
   const open = d.s.uiRings?.showOpen === true
   return el('section', { class: 'zone-filter', 'data-zone-tag-filters': '' }, [
     el('div', { class: 'zone-head' }, [outlinerToggle(open, S.zoneFilterTitle, () => { setUi(d.s, 'showOpen', !open); d.onChange() }, { 'data-zone-tags-toggle': '' }), el('b', {}, [S.zoneFilterTitle + (open ? '' : activeCountLabel(activeFilters(d.s.uiRings, d.tags, d.s.people).length))])]),
-    ...(open ? [...activeRows(d), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
+    ...(open ? [...activeRows(d), trustZonesGroup(d), el('b', { class: 'filter-group-title', 'data-filter-group-title': 'tags' }, [S.filterTagsTitle]), row('include'), row('exclude'), addRow()].filter((x): x is HTMLElement => x !== null) : []),
   ])
 }
 
