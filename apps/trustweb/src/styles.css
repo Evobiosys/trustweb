@@ -1312,3 +1312,13 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 .zone-link-new{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
 .zone-link{display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:6px 0; overflow-wrap:anywhere}
 .zone-link .btn,.zone-link-new .btn,[data-settings-sharelinks]{text-decoration:underline}
+
+/* Wave 31 (shared-notes): outline blocks wrap on a 360 px screen; every button is underlined */
+.shared-notes{margin-top:8px; overflow-wrap:anywhere; text-align:left}
+.shared-notes .btn,.shared-notes .note-text{text-decoration:underline}
+.note-text{background:none; border:0; padding:2px 0; font:inherit; color:inherit; text-align:left; cursor:pointer; max-width:100%; overflow-wrap:anywhere}
+.shared-notes ul{margin:2px 0 2px 16px; padding:0; list-style:disc}
+.note-annotation>.note-text{font-style:italic}
+.note-form,.note-share,.note-edit{display:flex; flex-direction:column; gap:6px; margin:6px 0}
+.note-actions{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+.shared-notes .field{width:100%; box-sizing:border-box}

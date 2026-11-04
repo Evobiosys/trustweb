@@ -18,6 +18,7 @@ import type { Watch } from './export_watch'
 import type { SignalProvider } from './channel'
 import type { ChatPrefs } from './chat_row'
 import type { ChatBook } from './chat'
+import type { SharedNote } from './notes_outline'
 import type { ConnectRecord } from './connect_code'
 import type { ShareProfile } from './share_profiles'
 import type { SeenNonce } from './connect_freshness'
@@ -395,6 +396,8 @@ export interface Person {
    * a provenance entry or any share or contact payload (test/unit/general_notes.test.mjs guards every place that names it). Absent: none.
    */
   generalNote?: string
+  /** Wave 31 (notes_outline.ts): outline notes shared with or received from this person, each with its provenance. Local record; leaves only in a link the owner makes. Absent: none. */
+  sharedNotes?: SharedNote[]
   /** Wave 6e: no longer chosen or shown; still read from older records and ignored. */
   signalProvider?: SignalProvider
   /**
