@@ -237,6 +237,7 @@ import { fillFromPrefs, liveTogetherPrefs, rememberTogether } from './together_p
 import { draftOrPlain, readTogetherRequest } from './together_request'
 import { askEndpoint, configured } from './llm_endpoint'
 import { aiSettings } from './llm_endpoint_view'
+import { askWebPanel, askWebSettings } from './ask_web_view'
 import type { TogetherRequest } from './together_request'
 import { answerTitle, cascadeInfoButton, cascadeInfoContent, degreesChooser, degreesPill, onOffSwitch, passOnRow, reachChooser, throughTag } from './hops_view'
 import { createWebView, RINGS_SIZE } from './web_view'
@@ -6205,6 +6206,7 @@ function settingsSheet(): void {
       el('b', {}, [S.qrProfileSetting]), el('small', {}, [S.qrProfileSettingHint]),
     ]),
     ...aiSettings({ state: st, save, toast, devRecord: Boolean(devRecordFile()) }),
+    ...askWebSettings({ state: st, save }),
     el('h4', { class: 'eyebrow' }, [S.setTabRow]),
     ...tabRowSettings(s),
     el('p', { class: 'meta' }, [S.setTabsHint]),
@@ -6600,7 +6602,9 @@ function resultsView(results: AskResult[], asked: { text: string; at: number }):
 function queryDock(s: AppState): HTMLElement {
   const box = el('textarea', { class: 'field', rows: '2', placeholder: S.queryPh, maxlength: '200', 'aria-label': S.queryTitle })
   box.value = queryText
-  box.addEventListener('input', () => { queryText = box.value })
+  box.setAttribute('data-ask-input', '1')
+  const webHere = askWebPanel({ state: st, save }, queryText)
+  box.addEventListener('input', () => { queryText = box.value; webHere.update(queryText) })
   const busy = Boolean(askRun && !askRun.results)
   // A demo account asks only once its owner allowed it, and not after its end.
   const demoEnded = Boolean(s.testOf && guestEnded(s.testOf, Date.now()))
@@ -6634,6 +6638,7 @@ function queryDock(s: AppState): HTMLElement {
       s.peers.length === 0 ? el('p', { class: 'warn' }, [S.queryNoPeers]) : null,
       demoEnded ? el('p', { class: 'warn' }, [S.demoEndedLine]) : demoWaiting && s.testOf ? el('p', { class: 'warn' }, [S.demoWaitingAsk(s.testOf.name)]) : null,
       box,
+      run ? null : webHere.el,
       run ? null : el('div', { class: 'chips', 'data-together-place': '1' }, [
         togetherPlace
           ? el('button', { class: 'chip', 'data-together-place-chosen': '1', title: S.togetherPickClear, onclick: () => { togetherPlace = null; render() } }, [S.togetherPicked(togetherPlace.label || S.togetherHere) + ' ×'])

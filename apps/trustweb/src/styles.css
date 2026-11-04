@@ -1302,3 +1302,9 @@ button.inv-text:focus-visible{outline:3px solid var(--electric); outline-offset:
 }
 .card-shares-cat{background:none; border:0; padding:0; font:inherit; color:inherit; text-decoration:underline; cursor:pointer}
 .card-shares-list{display:flex; flex-direction:column; gap:4px; margin:4px 0 8px}
+
+/* Wave 31: Ask your web, matches in my web + online link; clickable = underlined, never a sideways scroll */
+.ask-web{min-width:0; overflow-wrap:anywhere}
+.ask-web .btn,.ask-web .chip{text-decoration:underline}
+.ask-web-list{margin:4px 0; padding-left:18px}
+.ask-set{display:grid; gap:6px; margin:8px 0}
